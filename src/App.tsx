@@ -116,6 +116,7 @@ export function App() {
     const withOnboarding: AppConfig = { ...next, onboardingCompleted: true };
     saveConfig(withOnboarding);
     setConfig(withOnboarding);
+    setSettingsOpen(false);
   }, []);
 
   const handleModeChange = useCallback(

@@ -276,10 +276,7 @@ export function SettingsDialog({
             type="button"
             className="primary"
             disabled={!canSave}
-            onClick={() => {
-              onSave(cfg);
-              onClose();
-            }}
+            onClick={() => onSave(cfg)}
           >
             {welcome ? t('settings.getStarted') : t('common.save')}
           </button>
