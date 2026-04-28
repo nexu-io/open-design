@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { detectAgents, getAgentDef } from './agents.js';
+import { detectAgents, getAgentDef, resolveOnPath } from './agents.js';
 import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
@@ -802,11 +802,26 @@ export async function startServer({ port = 7456 } = {}) {
 
     let child;
     try {
-      child = spawn(def.bin, args, {
+      const exactBin = resolveOnPath(def.bin) || def.bin;
+      // When the agent definition sets `promptViaStdin`, we pipe the composed
+      // prompt through stdin rather than embedding it in argv.  This bypasses
+      // the OS command-line length limit (Windows CreateProcess caps at ~32 KB)
+      // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
+      const stdinMode = def.promptViaStdin ? 'pipe' : 'ignore';
+      // Do NOT use `shell: true` on Windows. cmd.exe caps the command line at
+      // ~8 191 chars — far below Node's direct-spawn limit and below even
+      // modest OD prompts. resolveOnPath() already walks PATHEXT and returns
+      // the absolute path (e.g. C:\…\gemini.cmd), so Node can exec it directly
+      // without a shell intermediary on every platform.
+      child = spawn(exactBin, args, {
         env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
       });
+      if (def.promptViaStdin && child.stdin) {
+        child.stdin.write(composed, 'utf8');
+        child.stdin.end();
+      }
     } catch (err) {
       send('error', { message: `spawn failed: ${err.message}` });
       return res.end();

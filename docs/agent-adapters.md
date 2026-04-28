@@ -154,11 +154,19 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 ### 5.5 Gemini CLI
 
-- Invocation: `gemini --prompt "<prompt>" --cwd <dir>`.
-- Streaming: yes, but less structured tool events. Expect fewer surgical-edit capabilities.
+- Invocation: `gemini` with the composed prompt delivered via **stdin** (no `-p` flag).
+  Gemini CLI enters headless mode automatically when stdin is a pipe and no `-p` flag is
+  supplied — verified with `gemini@0.1.x`.
+- Streaming: yes, plain text to stdout.
 - Skill loading: prompt injection only.
 - Surgical edits: regenerate whole file.
-- **Gotcha:** Gemini's tool-use format is distinct; we translate our file-write tool to its `file_tool` equivalent.
+- **Gotcha — `spawn ENAMETOOLONG` on Windows:** Passing the full composed prompt as a
+  `-p <string>` CLI argument hits Windows' `CreateProcess` hard limit of ~32 KB for the
+  entire command line. The fix is to set `promptViaStdin: true` in the agent definition
+  and write the prompt to `child.stdin` after spawning. The daemon's `/api/chat` handler
+  checks this flag and opens stdin as a pipe instead of `'ignore'`.
+- **Gotcha:** Gemini's tool-use format is distinct; we translate our file-write tool to its
+  `file_tool` equivalent when that feature is implemented.
 
 ### 5.6 OpenCode / OpenClaw
 
@@ -254,5 +262,8 @@ Each adapter is a separate module so community contributions can add new ones wi
 
 - **Nested agents.** What if Claude Code's agent itself spawns a subagent? We receive events from the outer process only. v1 policy: surface only top-level events; summarize subagent activity as "sub-task" placeholder.
 - **Billing awareness.** Some agents bill per message, some per token. OD doesn't track cost in MVP; v1 adds an optional "usage" event from adapters that expose it.
-- **Windows support.** PATH scanning and `spawn` semantics differ on Windows. v1 targets macOS and Linux; Windows is best-effort.
+- **Windows support.** PATH scanning and `spawn` semantics differ on Windows. v1 targets
+  macOS and Linux; Windows is best-effort. Known issue fixed: `spawn ENAMETOOLONG` when
+  running Gemini CLI (and other plain-text agents) on Windows — resolved by routing the
+  composed prompt through stdin instead of as a CLI argument (see §5.5).
 - **Docker-contained agents.** Some users run Claude Code in a container. Adapter needs a "remote" mode — probably same interface but talks over SSH. Phase 2+.

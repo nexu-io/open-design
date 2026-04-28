@@ -48,7 +48,9 @@ export const AGENT_DEFS = [
     name: 'Codex CLI',
     bin: 'codex',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['exec', prompt],
+    // prompt delivered via stdin to avoid ENAMETOOLONG on Windows
+    buildArgs: () => ['exec', '-'],
+    promptViaStdin: true,
     streamFormat: 'plain',
   },
   {
@@ -56,7 +58,11 @@ export const AGENT_DEFS = [
     name: 'Gemini CLI',
     bin: 'gemini',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', prompt],
+    // Gemini reads from stdin when -p is omitted and stdin is a pipe.
+    // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG
+    // on Windows (CreateProcess limit ~32 KB) for any non-trivial prompt.
+    buildArgs: () => [],
+    promptViaStdin: true,
     streamFormat: 'plain',
   },
   {
@@ -64,7 +70,8 @@ export const AGENT_DEFS = [
     name: 'OpenCode',
     bin: 'opencode',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['run', prompt],
+    buildArgs: () => ['run', '-'],
+    promptViaStdin: true,
     streamFormat: 'plain',
   },
   {
@@ -72,7 +79,8 @@ export const AGENT_DEFS = [
     name: 'Cursor Agent',
     bin: 'cursor-agent',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', prompt],
+    buildArgs: () => ['-'],
+    promptViaStdin: true,
     streamFormat: 'plain',
   },
   {
@@ -80,12 +88,13 @@ export const AGENT_DEFS = [
     name: 'Qwen Code',
     bin: 'qwen',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', prompt],
+    buildArgs: () => ['-'],
+    promptViaStdin: true,
     streamFormat: 'plain',
   },
 ];
 
-function resolveOnPath(bin) {
+export function resolveOnPath(bin) {
   const exts =
     process.platform === 'win32'
       ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
@@ -117,6 +126,7 @@ function stripFns(def) {
   const { buildArgs, ...rest } = def;
   return rest;
 }
+
 
 export async function detectAgents() {
   return Promise.all(AGENT_DEFS.map(probe));
