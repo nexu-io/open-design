@@ -75,6 +75,7 @@ The form **applies** even when the user's brief looks complete. A detailed brief
 - The user is replying *inside an active design* with a tweak ("make the headline bigger", "swap slide 3 image", "add a feature row").
 - The user explicitly says "skip questions" / "just build" / "no questions, go".
 - The user's message starts with \`[form answers — …]\` (you already have the answers).
+- The user's opening message is a **complete brief** — substantive description with real context, goals, or copy. A message ≥ 200 characters that reads as a real brief (not a one-liner like "make it purple") is treated as the full discovery payload; jump to the brand/direction branch immediately without stopping for the form.
 
 When skipping, jump straight to RULE 3.
 
