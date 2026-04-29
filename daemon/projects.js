@@ -10,6 +10,7 @@ import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/p
 import path from 'node:path';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
+const MANIFEST_VERSION = 1;
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
@@ -48,7 +49,9 @@ async function collectFiles(dir, relDir, out) {
       continue;
     }
     if (!e.isFile()) continue;
+    if (e.name.endsWith('.artifact.json')) continue;
     const st = await stat(full);
+    const manifest = await readManifestForPath(dir, rel);
     out.push({
       name: rel,
       path: rel,
@@ -57,6 +60,8 @@ async function collectFiles(dir, relDir, out) {
       mtime: st.mtimeMs,
       kind: kindFor(rel),
       mime: mimeFor(rel),
+      artifactKind: manifest?.kind,
+      artifactManifest: manifest,
     });
   }
 }
@@ -67,6 +72,7 @@ export async function readProjectFile(projectsRoot, projectId, name) {
   const buf = await readFile(file);
   const st = await stat(file);
   const rel = toProjectPath(path.relative(dir, file));
+  const manifest = await readManifestForPath(dir, rel);
   return {
     buffer: buf,
     name: rel,
@@ -75,6 +81,8 @@ export async function readProjectFile(projectsRoot, projectId, name) {
     mtime: st.mtimeMs,
     mime: mimeFor(rel),
     kind: kindFor(rel),
+    artifactKind: manifest?.kind,
+    artifactManifest: manifest,
   };
 }
 
@@ -83,7 +91,7 @@ export async function writeProjectFile(
   projectId,
   name,
   body,
-  { overwrite = true } = {},
+  { overwrite = true, artifactManifest = null } = {},
 ) {
   const dir = await ensureProject(projectsRoot, projectId);
   const safeName = sanitizePath(name);
@@ -98,7 +106,16 @@ export async function writeProjectFile(
   }
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, body);
+  if (artifactManifest && typeof artifactManifest === 'object') {
+    const manifestFileName = artifactManifestNameFor(safeName);
+    const manifestTarget = resolveSafe(dir, manifestFileName);
+    const nextManifest = normalizeManifest(artifactManifest, safeName);
+    if (nextManifest) {
+      await writeFile(manifestTarget, JSON.stringify(nextManifest, null, 2));
+    }
+  }
   const st = await stat(target);
+  const persistedManifest = await readManifestForPath(dir, safeName);
   return {
     name: safeName,
     path: safeName,
@@ -106,7 +123,79 @@ export async function writeProjectFile(
     mtime: st.mtimeMs,
     kind: kindFor(safeName),
     mime: mimeFor(safeName),
+    artifactKind: persistedManifest?.kind,
+    artifactManifest: persistedManifest,
   };
+}
+
+function artifactManifestNameFor(name) {
+  return name.replace(/\.[^/.]+$/, '') + '.artifact.json';
+}
+
+async function readManifestForPath(projectDirPath, relPath) {
+  const manifestPath = path.join(projectDirPath, artifactManifestNameFor(relPath));
+  try {
+    const raw = await readFile(manifestPath, 'utf8');
+    const parsed = parseManifest(raw);
+    if (parsed) return parsed;
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') {
+      // ignore malformed/invalid manifests and fallback to inference
+    }
+  }
+  return inferLegacyManifest(relPath);
+}
+
+function parseManifest(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== MANIFEST_VERSION) return null;
+    if (typeof parsed.entry !== 'string' || !parsed.entry) return null;
+    if (typeof parsed.title !== 'string') return null;
+    if (!Array.isArray(parsed.exports)) return null;
+    if (typeof parsed.kind !== 'string' || typeof parsed.renderer !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeManifest(manifest, entry) {
+  if (!manifest || typeof manifest !== 'object') return null;
+  const exports = Array.isArray(manifest.exports)
+    ? manifest.exports.filter((x) => typeof x === 'string')
+    : [];
+  if (typeof manifest.kind !== 'string' || typeof manifest.renderer !== 'string') return null;
+  if (exports.length === 0) return null;
+  const title = typeof manifest.title === 'string' && manifest.title ? manifest.title : entry;
+  const now = new Date().toISOString();
+  return {
+    ...manifest,
+    version: MANIFEST_VERSION,
+    title,
+    entry,
+    exports,
+    updatedAt: now,
+    createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : now,
+  };
+}
+
+function inferLegacyManifest(entry) {
+  const lower = entry.toLowerCase();
+  const ext = path.extname(lower);
+  const isDeck = ext === '.html' && (lower.includes('deck') || lower.includes('slides') || lower.includes('pitch'));
+  if (ext === '.html' || ext === '.htm') {
+    return {
+      version: MANIFEST_VERSION,
+      kind: isDeck ? 'deck' : 'html',
+      title: entry,
+      entry,
+      renderer: isDeck ? 'deck-html' : 'html',
+      exports: isDeck ? ['html', 'pdf', 'pptx', 'zip'] : ['html', 'pdf', 'zip'],
+      metadata: { inferred: true },
+    };
+  }
+  return null;
 }
 
 export async function deleteProjectFile(projectsRoot, projectId, name) {

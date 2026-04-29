@@ -7,6 +7,7 @@ import type {
   SkillDetail,
   SkillSummary,
 } from '../types';
+import type { ArtifactManifest } from '../artifacts/types';
 
 export async function fetchAgents(): Promise<AgentInfo[]> {
   try {
@@ -114,12 +115,13 @@ export async function writeProjectTextFile(
   projectId: string,
   name: string,
   content: string,
+  options?: { artifactManifest?: ArtifactManifest },
 ): Promise<ProjectFile | null> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, content }),
+      body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
     });
     if (!resp.ok) return null;
     const json = (await resp.json()) as { file: ProjectFile };

@@ -767,7 +767,7 @@ export async function startServer({ port = 7456 } = {}) {
           fs.promises.unlink(req.file.path).catch(() => {});
           return res.json({ file: meta });
         }
-        const { name, content, encoding } = req.body || {};
+        const { name, content, encoding, artifactManifest } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return res.status(400).json({ error: 'name and content required' });
         }
@@ -775,7 +775,9 @@ export async function startServer({ port = 7456 } = {}) {
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf);
+        const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf, {
+          artifactManifest,
+        });
         res.json({ file: meta });
       } catch (err) {
         res.status(500).json({ error: 'upload failed' });

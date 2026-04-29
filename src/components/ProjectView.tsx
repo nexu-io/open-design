@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createHtmlArtifactManifest } from '../artifacts/manifest';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
@@ -552,7 +553,19 @@ export function ProjectView({
       }
       if (savedArtifactRef.current === fileName) return;
       savedArtifactRef.current = fileName;
-      const file = await writeProjectTextFile(project.id, fileName, art.html);
+      const manifest = createHtmlArtifactManifest({
+        entry: fileName,
+        title: art.title || art.identifier || fileName,
+        sourceSkillId: project.skillId ?? undefined,
+        designSystemId: project.designSystemId,
+        metadata: {
+          identifier: art.identifier,
+          inferred: false,
+        },
+      });
+      const file = await writeProjectTextFile(project.id, fileName, art.html, {
+        artifactManifest: manifest,
+      });
       if (file) {
         setFilesRefresh((n) => n + 1);
         // Auto-open the freshly-persisted artifact as a tab so the user

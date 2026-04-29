@@ -1,3 +1,5 @@
+import type { ArtifactKind, ArtifactManifest } from './artifacts/types';
+
 export type ExecMode = 'daemon' | 'api';
 
 // Per-CLI model + reasoning the user picked in the model menu. Each agent
@@ -166,6 +168,8 @@ export interface ProjectFile {
   mtime: number;
   kind: ProjectFileKind;
   mime: string;
+  artifactKind?: ArtifactKind;
+  artifactManifest?: ArtifactManifest;
 }
 
 // Per-project metadata captured at creation time. The agent reads this
