@@ -1,5 +1,5 @@
 /* ============================================================
-   Open Design — visual language modeled on claude.ai/design
+   OneShot Design - visual language modeled on claude.ai/design
    ============================================================ */
 :root {
   /* Surface palette — warmer paper, hairline borders, soft shadows.
@@ -1784,6 +1784,273 @@ code {
   overflow-y: auto;
   padding: 22px 28px 32px;
   background: var(--bg);
+}
+
+/* OneShot Design workflow layer --------------------------------------- */
+.oneshot-workflows {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.oneshot-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(420px, 0.9fr);
+  gap: 24px;
+  align-items: stretch;
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.9), rgba(246,242,235,0.92)),
+    var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.oneshot-hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.oneshot-hero-copy h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--serif);
+  font-size: 44px;
+  line-height: 0.98;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.oneshot-hero-copy p {
+  margin: 0;
+  max-width: 680px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.oneshot-hero-system {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: center;
+}
+
+.oneshot-gate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.72);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.oneshot-gate span {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.oneshot-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.oneshot-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.oneshot-section-head h2 {
+  margin: 0 0 5px;
+  color: var(--text-strong);
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.oneshot-section-head p {
+  margin: 0;
+  max-width: 700px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.oneshot-stack-meter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 420px;
+}
+
+.oneshot-stack-meter span {
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.oneshot-workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.oneshot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 286px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+
+.oneshot-card-top,
+.oneshot-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.oneshot-card-category {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.oneshot-card-outcome {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 560;
+  text-align: right;
+}
+
+.oneshot-card h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.oneshot-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.oneshot-card-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.oneshot-card-checks span {
+  padding: 4px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.oneshot-card-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.oneshot-card-foot > span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.oneshot-card-foot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 1080px) {
+  .oneshot-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .oneshot-hero-system {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .oneshot-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .oneshot-stack-meter {
+    justify-content: flex-start;
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .oneshot-workflows {
+    gap: 18px;
+  }
+
+  .oneshot-hero {
+    padding: 18px;
+  }
+
+  .oneshot-hero-copy h1 {
+    font-size: 34px;
+  }
+
+  .oneshot-hero-system {
+    grid-template-columns: 1fr;
+  }
+
+  .oneshot-workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .oneshot-card {
+    min-height: auto;
+  }
+
+  .oneshot-card-top,
+  .oneshot-card-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .oneshot-card-outcome {
+    text-align: left;
+  }
 }
 
 .tab-panel {

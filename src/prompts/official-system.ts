@@ -1,8 +1,8 @@
 /**
- * The base system prompt for Open Design.
+ * The base system prompt for OneShot Design.
  *
  * Adapted from claude.ai/design's "expert designer" prompt — same identity,
- * workflow, and content philosophy, retargeted to the tools an OD-managed
+ * workflow, and content philosophy, retargeted to the tools a OneShot-managed
  * agent actually has (Claude Code's Read / Edit / Write / Bash / Glob / Grep
  * / TodoWrite, plus the project folder as cwd).
  *

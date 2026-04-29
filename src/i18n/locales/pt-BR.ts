@@ -37,13 +37,13 @@ export const ptBR: Dict = {
   'common.daysShort': '{n} d',
   'common.untitled': 'Sem título',
 
-  'app.brand': 'Open Design',
-  'app.brandPill': 'Prévia de pesquisa',
-  'app.brandSubtitle': 'por Nexu Labs',
+  'app.brand': 'OneShot Design',
+  'app.brandPill': 'Prévia de produção',
+  'app.brandSubtitle': 'um prompt, artefato final',
   'app.welcomeLoading': 'Carregando área de trabalho…',
 
   'settings.welcomeKicker': 'Bem-vindo',
-  'settings.welcomeTitle': 'Configure o Open Design',
+  'settings.welcomeTitle': 'Configure o OneShot Design',
   'settings.welcomeSubtitle':
     'Escolha como você quer executar as gerações. Você pode mudar isso a qualquer momento no botão Configurações da barra superior.',
   'settings.kicker': 'Configurações',
@@ -91,6 +91,7 @@ export const ptBR: Dict = {
   'settings.modelCustomLabel': 'Id do modelo personalizado',
   'settings.modelCustomPlaceholder': 'ex.: anthropic/claude-sonnet-4-6',
 
+  'entry.tabWorkflows': 'Fluxos',
   'entry.tabDesigns': 'Designs',
   'entry.tabExamples': 'Exemplos',
   'entry.tabDesignSystems': 'Sistemas de design',

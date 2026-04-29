@@ -37,13 +37,13 @@ export const zhCN: Dict = {
   'common.daysShort': '{n}天',
   'common.untitled': '未命名',
 
-  'app.brand': 'Open Design',
-  'app.brandPill': '研究预览版',
-  'app.brandSubtitle': '由 Nexu Labs 出品',
+  'app.brand': 'OneShot Design',
+  'app.brandPill': '生产预览版',
+  'app.brandSubtitle': '一次提示，完成交付物',
   'app.welcomeLoading': '正在加载工作区…',
 
   'settings.welcomeKicker': '欢迎',
-  'settings.welcomeTitle': '初始化 Open Design',
+  'settings.welcomeTitle': '初始化 OneShot Design',
   'settings.welcomeSubtitle':
     '选择你希望使用的执行方式。后续可以随时从顶部「设置」按钮中修改。',
   'settings.kicker': '设置',
@@ -90,6 +90,7 @@ export const zhCN: Dict = {
   'settings.modelCustomLabel': '自定义模型 id',
   'settings.modelCustomPlaceholder': '例如 anthropic/claude-sonnet-4-6',
 
+  'entry.tabWorkflows': 'Workflows',
   'entry.tabDesigns': '我的设计',
   'entry.tabExamples': '示例',
   'entry.tabDesignSystems': '设计体系',

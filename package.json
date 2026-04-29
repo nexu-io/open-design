@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "type": "module",
-  "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
+  "description": "OneShot Design: local-first professional artifact studio powered by workflow packs, design skills, design systems, and your installed code-agent CLI.",
   "license": "Apache-2.0",
   "bin": {
     "od": "./daemon/cli.js"

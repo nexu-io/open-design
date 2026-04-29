@@ -1,6 +1,6 @@
-# Quickstart
+# OneShot Design Quickstart
 
-Run the full product locally.
+Run the full OneShot Design product locally. This repository may still be cloned as `open-design`, but the app shell and workflow launcher are branded as OneShot Design.
 
 ## One-shot (dev mode)
 

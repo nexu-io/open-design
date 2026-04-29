@@ -102,6 +102,7 @@ export interface Dict {
   'settings.modelCustomPlaceholder': string;
 
   // Entry view / tabs
+  'entry.tabWorkflows': string;
   'entry.tabDesigns': string;
   'entry.tabExamples': string;
   'entry.tabDesignSystems': string;

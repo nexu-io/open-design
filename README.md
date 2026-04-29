@@ -1,9 +1,13 @@
-# Open Design
+# OneShot Design
+
+> **One prompt, structured brief, polished artifact, critique score, verified export, saved for reuse.** OneShot Design is a local-first, web-deployable professional artifact studio built on the Open Design engine. The app now opens on a production Workflow launcher for BSA proposals, roofing pitch decks, CoverVisionOS book-cover run packets, dashboard mockups, PRDs, and motion explainers.
+
+> Repository note: the GitHub remote may still be named `nexu-io/open-design` while the product is being renamed. The running product, app chrome, workflow launcher, and export copy now use **OneShot Design**.
 
 > **The open-source alternative to [Claude Design][cd].** Local-first, web-deployable, BYOK at every layer — your existing coding agent (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI) becomes the design engine, driven by **19 composable Skills** and **71 brand-grade Design Systems**.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
+  <img src="docs/assets/banner.png" alt="OneShot Design editorial cover: design with the agent on your laptop" width="100%" />
 </p>
 
 <p align="center">
@@ -20,9 +24,11 @@
 
 ## Why this exists
 
+The new default screen is a Workflows launcher. Instead of starting from a blank prompt, users can start from a production pack: BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, or Motion Explainer. Each pack seeds the project type, skill, design-system preference, quality gates, export expectations, and a professional prompt.
+
 Anthropic's [Claude Design][cd] (released 2026-04-17, Opus 4.7) showed what happens when an LLM stops writing prose and starts shipping design artifacts. It went viral — and stayed closed-source, paid-only, cloud-only, locked to Anthropic's model and Anthropic's skills. There is no checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 
-**Open Design (OD) is the open-source alternative.** Same loop, same artifact-first mental model, none of the lock-in. We don't ship an agent — the strongest coding agents already live on your laptop. We wire them into a skill-driven design workflow that runs on `pnpm dev`, deploys to Vercel, and stays BYOK at every layer.
+**OneShot Design is the professional, production-oriented version of that open alternative.** Same artifact-first mental model, none of the lock-in. We don't ship an agent — the strongest coding agents already live on your laptop. We wire them into a skill-driven design workflow that runs on `pnpm dev`, deploys to Vercel, and stays BYOK at every layer.
 
 Type `make me a magazine-style pitch deck for our seed round`. The interactive question form pops up before the model improvises a single pixel. The agent picks one of five curated visual directions. A live `TodoWrite` plan streams into the UI. The daemon builds a real on-disk project folder with a seed template, layout library, and self-check checklist. The agent reads them — pre-flight enforced — runs a five-dimensional critique against its own output, and emits a single `<artifact>` that renders in a sandboxed iframe seconds later.
 
@@ -468,7 +474,7 @@ The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf
 
 ## Comparison
 
-| Axis | [Claude Design][cd] (Anthropic) | [Open CoDesign][ocod] | **Open Design** |
+| Axis | [Claude Design][cd] (Anthropic) | [Open CoDesign][ocod] | **OneShot Design** |
 |---|---|---|---|
 | License | Closed | MIT | **Apache-2.0** |
 | Form factor | Web (claude.ai) | Desktop (Electron) | **Web app + local daemon** |
@@ -551,7 +557,7 @@ This is an early implementation — the closed loop (detect → pick skill + des
 ## Star us
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Star OneShot Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 If this saved you thirty minutes — give it a ★. Stars don't pay rent, but they tell the next designer, agent, and contributor that this experiment is worth their attention. One click, three seconds, real signal: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).

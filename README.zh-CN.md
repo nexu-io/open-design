@@ -1,9 +1,11 @@
-# Open Design
+# OneShot Design
+
+> Repository note: the GitHub remote may still be named `nexu-io/open-design` while the product is being renamed. The running product, app chrome, workflow launcher, and export copy now use **OneShot Design**.
 
 > **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— 你机器上已经装好的 coding agent（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI）就是设计引擎，由 **19 个可组合 Skills** 和 **71 套品牌级 Design System** 驱动。
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design 封面：与本地 AI 智能体共同设计" width="100%" />
+  <img src="docs/assets/banner.png" alt="OneShot Design 封面：与本地 AI 智能体共同设计" width="100%" />
 </p>
 
 <p align="center">
@@ -22,7 +24,7 @@
 
 Anthropic 的 [Claude Design][cd]（2026-04-17 发布，基于 Opus 4.7）让大家第一次看到：当一个 LLM 不再写废话、开始直接交付设计成品，会是什么样子。它瞬间出圈 —— 然后保持**闭源**、付费、只跑在云上、绑定 Anthropic 的模型和 Anthropic 的内部 skill。没有 checkout，没有自托管，没有 Vercel 部署，也换不了自己的 agent。
 
-**Open Design（OD）就是它的开源替代品。** 同一套 loop、同一种「artifact-first」心智模型，但没有锁定。我们不做 agent —— 你笔记本上最强的 coding agent 已经装好了。我们要做的，是把它接进一个 skill 驱动的设计工作流，跑在一个普通的 Web 应用里：本地 `pnpm dev`，云端 `vercel deploy`，每一层都 BYOK（自带 Key）。
+**OneShot Design 是这个开源替代方案的专业生产版。** 同一种「artifact-first」心智模型，但没有锁定。我们不做 agent —— 你笔记本上最强的 coding agent 已经装好了。我们要做的，是把它接进一个 skill 驱动的设计工作流，跑在一个普通的 Web 应用里：本地 `pnpm dev`，云端 `vercel deploy`，每一层都 BYOK（自带 Key）。
 
 输入「帮我做一份杂志风的种子轮 pitch deck」。在模型挥洒第一个像素之前，**初始化问题表单**已经先跳出来。Agent 从 5 套精挑的视觉方向里选一个。一张活的 `TodoWrite` 计划卡片实时流入 UI。Daemon 在磁盘上构建出一个真实的项目目录，里面有 seed 模板、布局库、自检 checklist。Agent **强制 pre-flight** 读取它们，对自己的输出跑一轮**五维评审**，几秒后吐出一个 `<artifact>`，渲染在沙盒 iframe 里。
 
@@ -468,7 +470,7 @@ open-design/
 
 ## 横向对比
 
-| 维度 | [Claude Design][cd]（Anthropic） | [Open CoDesign][ocod] | **Open Design** |
+| 维度 | [Claude Design][cd]（Anthropic） | [Open CoDesign][ocod] | **OneShot Design** |
 |---|---|---|---|
 | License | 闭源 | MIT | **Apache-2.0** |
 | 形态 | Web (claude.ai) | 桌面 (Electron) | **Web 应用 + 本地 daemon** |
@@ -551,7 +553,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 ## 给我们点个 Star
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="给 Open Design 点个 Star —— github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="给 OneShot Design 点个 Star —— github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 如果这套东西帮你省了半小时，给它一个 ★。Star 不付房租，但它告诉下一个设计师、Agent 和贡献者：这个实验值得他们的注意力。一次点击、三秒钟、真实信号：[github.com/nexu-io/open-design](https://github.com/nexu-io/open-design)。

@@ -18,6 +18,10 @@ const isProd = process.env.NODE_ENV !== 'development';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  turbopack: {
+    root: process.cwd(),
+  },
   // Keep the bundle output predictable so the daemon's STATIC_DIR can point
   // at it without any glob trickery.
   distDir: isProd ? 'out' : '.next',

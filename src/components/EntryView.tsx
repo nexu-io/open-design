@@ -18,8 +18,9 @@ import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
 import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
+import { OneShotWorkflows } from './OneShotWorkflows';
 
-type TopTab = 'designs' | 'examples' | 'design-systems';
+type TopTab = 'workflows' | 'designs' | 'examples' | 'design-systems';
 
 interface Props {
   skills: SkillSummary[];
@@ -72,7 +73,7 @@ export function EntryView({
   onOpenSettings,
 }: Props) {
   const t = useT();
-  const [topTab, setTopTab] = useState<TopTab>('designs');
+  const [topTab, setTopTab] = useState<TopTab>('workflows');
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [resizing, setResizing] = useState(false);
@@ -217,6 +218,7 @@ export function EntryView({
       <main className="entry-main">
         <div className="entry-header">
           <div className="entry-tabs" role="tablist">
+            <TopTabButton current={topTab} value="workflows" label={t('entry.tabWorkflows')} onClick={setTopTab} />
             <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
             <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
             <TopTabButton
@@ -250,6 +252,14 @@ export function EntryView({
             <CenteredLoader label={t('entry.loadingWorkspace')} />
           ) : (
             <>
+              {topTab === 'workflows' ? (
+                <OneShotWorkflows
+                  skills={skills}
+                  designSystems={designSystems}
+                  defaultDesignSystemId={defaultDesignSystemId}
+                  onCreateProject={onCreateProject}
+                />
+              ) : null}
               {topTab === 'designs' ? (
                 <DesignsTab
                   projects={projects}
