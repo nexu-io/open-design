@@ -129,7 +129,7 @@ export async function writeProjectFile(
 }
 
 function artifactManifestNameFor(name) {
-  return name.replace(/\.[^/.]+$/, '') + '.artifact.json';
+  return `${name}.artifact.json`;
 }
 
 async function readManifestForPath(projectDirPath, relPath) {

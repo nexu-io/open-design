@@ -32,7 +32,7 @@ function exportsForKind(kind: ArtifactKind): ArtifactExportKind[] {
 }
 
 export function artifactManifestNameFor(entry: string): string {
-  return entry.replace(/\.[^/.]+$/, '') + '.artifact.json';
+  return `${entry}.artifact.json`;
 }
 
 export function createHtmlArtifactManifest(input: {
