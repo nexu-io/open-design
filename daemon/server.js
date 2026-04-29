@@ -31,6 +31,7 @@ import {
   sanitizeName,
   writeProjectFile,
 } from './projects.js';
+import { validateArtifactManifestInput } from './artifact-manifest.js';
 import {
   deleteConversation,
   deleteProject as dbDeleteProject,
@@ -770,6 +771,12 @@ export async function startServer({ port = 7456 } = {}) {
         const { name, content, encoding, artifactManifest } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return res.status(400).json({ error: 'name and content required' });
+        }
+        if (artifactManifest !== undefined && artifactManifest !== null) {
+          const validated = validateArtifactManifestInput(artifactManifest, name);
+          if (!validated.ok) {
+            return res.status(400).json({ error: `invalid artifactManifest: ${validated.error}` });
+          }
         }
         const buf =
           encoding === 'base64'

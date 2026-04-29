@@ -15,6 +15,7 @@
     "dev:all": "node scripts/dev-all.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
     "start": "npm run build && node daemon/cli.js"
   },
@@ -32,7 +33,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.0.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=20 <23"

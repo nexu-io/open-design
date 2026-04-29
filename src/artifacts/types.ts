@@ -37,6 +37,10 @@ export interface ArtifactManifest {
   entry: string;
   renderer: ArtifactRendererId;
   exports: ArtifactExportKind[];
+  /**
+   * Reserved for future multi-file artifact packaging.
+   * Current generators only persist a single entry file, so this is not yet populated.
+   */
   supportingFiles?: string[];
   createdAt?: string;
   updatedAt?: string;

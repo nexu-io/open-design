@@ -6,6 +6,38 @@ import type {
 } from './types';
 
 const MANIFEST_VERSION = 1;
+const ALLOWED_KINDS: ReadonlySet<ArtifactKind> = new Set([
+  'html',
+  'deck',
+  'react-component',
+  'markdown-document',
+  'svg',
+  'diagram',
+  'code-snippet',
+  'mini-app',
+  'design-system',
+]);
+const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
+  'html',
+  'deck-html',
+  'react-component',
+  'markdown',
+  'svg',
+  'diagram',
+  'code',
+  'mini-app',
+  'design-system',
+]);
+const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
+  'html',
+  'pdf',
+  'zip',
+  'pptx',
+  'jsx',
+  'md',
+  'svg',
+  'txt',
+]);
 
 function normalizeExt(name: string): string {
   const i = name.lastIndexOf('.');
@@ -67,12 +99,37 @@ export function parseArtifactManifest(raw: string): ArtifactManifest | null {
     const parsed = JSON.parse(raw) as Partial<ArtifactManifest>;
     if (parsed?.version !== MANIFEST_VERSION) return null;
     if (typeof parsed.entry !== 'string' || !parsed.entry) return null;
-    if (typeof parsed.title !== 'string') return null;
+    if (typeof parsed.title !== 'string' || !parsed.title) return null;
     if (!Array.isArray(parsed.exports)) return null;
     if (typeof parsed.kind !== 'string' || typeof parsed.renderer !== 'string') {
       return null;
     }
-    return parsed as ArtifactManifest;
+    if (!ALLOWED_KINDS.has(parsed.kind as ArtifactKind)) return null;
+    if (!ALLOWED_RENDERERS.has(parsed.renderer as ArtifactRendererId)) return null;
+    if (parsed.exports.length === 0) return null;
+    if (parsed.exports.some((value) => !ALLOWED_EXPORTS.has(value as ArtifactExportKind))) return null;
+    return {
+      version: MANIFEST_VERSION,
+      kind: parsed.kind as ArtifactKind,
+      title: parsed.title,
+      entry: parsed.entry,
+      renderer: parsed.renderer as ArtifactRendererId,
+      exports: parsed.exports as ArtifactExportKind[],
+      supportingFiles: Array.isArray(parsed.supportingFiles)
+        ? parsed.supportingFiles.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : undefined,
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : undefined,
+      sourceSkillId: typeof parsed.sourceSkillId === 'string' ? parsed.sourceSkillId : undefined,
+      designSystemId:
+        typeof parsed.designSystemId === 'string' || parsed.designSystemId === null
+          ? parsed.designSystemId
+          : undefined,
+      metadata:
+        parsed.metadata && typeof parsed.metadata === 'object' && !Array.isArray(parsed.metadata)
+          ? parsed.metadata
+          : undefined,
+    };
   } catch {
     return null;
   }

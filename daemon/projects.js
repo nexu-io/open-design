@@ -8,9 +8,13 @@
 
 import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  inferLegacyManifest,
+  parsePersistedManifest,
+  validateArtifactManifestInput,
+} from './artifact-manifest.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
-const MANIFEST_VERSION = 1;
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
@@ -109,8 +113,9 @@ export async function writeProjectFile(
   if (artifactManifest && typeof artifactManifest === 'object') {
     const manifestFileName = artifactManifestNameFor(safeName);
     const manifestTarget = resolveSafe(dir, manifestFileName);
-    const nextManifest = normalizeManifest(artifactManifest, safeName);
-    if (nextManifest) {
+    const validated = validateArtifactManifestInput(artifactManifest, safeName);
+    if (validated.ok && validated.value) {
+      const nextManifest = validated.value;
       await writeFile(manifestTarget, JSON.stringify(nextManifest, null, 2));
     }
   }
@@ -147,55 +152,7 @@ async function readManifestForPath(projectDirPath, relPath) {
 }
 
 function parseManifest(raw) {
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== MANIFEST_VERSION) return null;
-    if (typeof parsed.entry !== 'string' || !parsed.entry) return null;
-    if (typeof parsed.title !== 'string') return null;
-    if (!Array.isArray(parsed.exports)) return null;
-    if (typeof parsed.kind !== 'string' || typeof parsed.renderer !== 'string') return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeManifest(manifest, entry) {
-  if (!manifest || typeof manifest !== 'object') return null;
-  const exports = Array.isArray(manifest.exports)
-    ? manifest.exports.filter((x) => typeof x === 'string')
-    : [];
-  if (typeof manifest.kind !== 'string' || typeof manifest.renderer !== 'string') return null;
-  if (exports.length === 0) return null;
-  const title = typeof manifest.title === 'string' && manifest.title ? manifest.title : entry;
-  const now = new Date().toISOString();
-  return {
-    ...manifest,
-    version: MANIFEST_VERSION,
-    title,
-    entry,
-    exports,
-    updatedAt: now,
-    createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : now,
-  };
-}
-
-function inferLegacyManifest(entry) {
-  const lower = entry.toLowerCase();
-  const ext = path.extname(lower);
-  const isDeck = ext === '.html' && (lower.includes('deck') || lower.includes('slides') || lower.includes('pitch'));
-  if (ext === '.html' || ext === '.htm') {
-    return {
-      version: MANIFEST_VERSION,
-      kind: isDeck ? 'deck' : 'html',
-      title: entry,
-      entry,
-      renderer: isDeck ? 'deck-html' : 'html',
-      exports: isDeck ? ['html', 'pdf', 'pptx', 'zip'] : ['html', 'pdf', 'zip'],
-      metadata: { inferred: true },
-    };
-  }
-  return null;
+  return parsePersistedManifest(raw, '');
 }
 
 export async function deleteProjectFile(projectsRoot, projectId, name) {
