@@ -30,6 +30,11 @@ export interface DaemonStreamOptions {
   // daemon resolves them inside the project folder, validates they
   // exist, and stitches them into the user message as `@<path>` hints.
   attachments?: string[];
+  // Per-CLI model + reasoning the user picked in the model menu. Both are
+  // optional; the daemon validates them against the agent's declared
+  // options and falls back to the CLI default when missing.
+  model?: string | null;
+  reasoning?: string | null;
 }
 
 export async function streamViaDaemon({
@@ -40,6 +45,8 @@ export async function streamViaDaemon({
   handlers,
   projectId,
   attachments,
+  model,
+  reasoning,
 }: DaemonStreamOptions): Promise<void> {
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
@@ -53,6 +60,8 @@ export async function streamViaDaemon({
     message: transcript,
     projectId: projectId ?? null,
     attachments: attachments ?? [],
+    model: model ?? null,
+    reasoning: reasoning ?? null,
   });
 
   let acc = '';

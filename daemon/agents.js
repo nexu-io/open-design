@@ -6,25 +6,82 @@ import path from 'node:path';
 
 const execFileP = promisify(execFile);
 
-// Each entry defines how to invoke the agent in non-interactive "one-shot" mode.
-// `buildArgs(prompt, imagePaths, extraAllowedDirs)` returns argv for the child
-// process. `extraAllowedDirs` is a list of absolute directories the agent must
-// be permitted to read files from (skill seeds, design-system specs) that live
+// Per-agent model picker.
+//
+//   - `listModels`         : optional spec for fetching the model list from
+//                            the CLI itself ({ args, parse, timeoutMs }).
+//                            When defined we run it during agent detection
+//                            (best-effort, with a timeout) and use the
+//                            result. If the listing fails we fall back to
+//                            `fallbackModels` so the UI still has something
+//                            to show.
+//   - `fallbackModels`     : static hint list. Used as the source of truth
+//                            for CLIs that don't expose a listing command
+//                            (Claude Code, Codex, Gemini CLI, Qwen Code)
+//                            and as the fallback for the others.
+//   - `reasoningOptions`   : optional reasoning-effort presets (currently
+//                            only Codex exposes this knob).
+//   - `buildArgs(prompt, imagePaths, extraAllowedDirs, options)` returns
+//     argv for the child process. `options = { model, reasoning }` carries
+//     whatever the user picked in the model menu — agents that don't take a
+//     model flag ignore them.
+//
+// Every model list is prefixed with a synthetic `'default'` entry meaning
+// "let the CLI pick" — the agent runs with no `--model` flag, so the
+// user's local CLI config wins.
+//
+// `extraAllowedDirs` is a list of absolute directories the agent must be
+// permitted to read files from (skill seeds, design-system specs) that live
 // outside the project cwd. Currently only Claude Code wires this through
 // (`--add-dir`); other agents either inherit broader access or run with cwd
 // boundaries we can't widen via flags.
+//
 // `streamFormat` hints to the daemon how to interpret stdout:
 //   - 'claude-stream-json' : line-delimited JSON emitted by Claude Code's
 //     `--output-format stream-json`. Daemon parses it into typed events
 //     (text / thinking / tool_use / tool_result / status) for the UI.
 //   - 'plain' (default)    : raw text, forwarded chunk-by-chunk.
+
+const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
+
+// Parse one-id-per-line stdout from `<cli> models` and prepend the synthetic
+// default option. Used by opencode / cursor-agent.
+function parseLineSeparatedModels(stdout) {
+  const ids = String(stdout || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
+  // De-dupe while preserving order — some CLIs print near-duplicates.
+  const seen = new Set();
+  const out = [DEFAULT_MODEL_OPTION];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, label: id });
+  }
+  return out;
+}
+
 export const AGENT_DEFS = [
   {
     id: 'claude',
     name: 'Claude Code',
     bin: 'claude',
     versionArgs: ['--version'],
-    buildArgs: (prompt, _imagePaths, extraAllowedDirs = []) => {
+    // `claude` has no list-models subcommand; the CLI accepts both short
+    // aliases (sonnet/opus/haiku) and the full ids, so we ship both as
+    // hints. Users who want a non-shipped model can paste it via the
+    // Settings dialog's custom-model input.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'sonnet', label: 'Sonnet (alias)' },
+      { id: 'opus', label: 'Opus (alias)' },
+      { id: 'haiku', label: 'Haiku (alias)' },
+      { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
+      { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
+      { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+    ],
+    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [
         '-p',
         prompt,
@@ -33,6 +90,9 @@ export const AGENT_DEFS = [
         '--verbose',
         '--include-partial-messages',
       ];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );
@@ -48,8 +108,38 @@ export const AGENT_DEFS = [
     name: 'Codex CLI',
     bin: 'codex',
     versionArgs: ['--version'],
-    // prompt delivered via stdin to avoid ENAMETOOLONG on Windows
-    buildArgs: () => ['exec', '-'],
+    // Codex doesn't have a `models` subcommand; ship the most common ids
+    // as a hint. Users can supply other ids via the custom-model input.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'gpt-5-codex', label: 'gpt-5-codex' },
+      { id: 'gpt-5', label: 'gpt-5' },
+      { id: 'o3', label: 'o3' },
+      { id: 'o4-mini', label: 'o4-mini' },
+    ],
+    reasoningOptions: [
+      { id: 'default', label: 'Default' },
+      { id: 'minimal', label: 'Minimal' },
+      { id: 'low', label: 'Low' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'high', label: 'High' },
+    ],
+    // Prompt delivered via stdin (`codex exec -`) to avoid Windows
+    // `spawn ENAMETOOLONG` — CreateProcess caps argv at ~32 KB and the
+    // composed prompt easily exceeds that.
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+      const args = ['exec'];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      if (options.reasoning && options.reasoning !== 'default') {
+        // Codex accepts `-c key=value` config overrides; reasoning effort
+        // is exposed as `model_reasoning_effort`.
+        args.push('-c', `model_reasoning_effort="${options.reasoning}"`);
+      }
+      args.push('-');
+      return args;
+    },
     promptViaStdin: true,
     streamFormat: 'plain',
   },
@@ -58,10 +148,21 @@ export const AGENT_DEFS = [
     name: 'Gemini CLI',
     bin: 'gemini',
     versionArgs: ['--version'],
-    // Gemini reads from stdin when -p is omitted and stdin is a pipe.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
+      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+    ],
+    // Gemini reads from stdin when `-p` is omitted and stdin is a pipe.
     // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG
     // on Windows (CreateProcess limit ~32 KB) for any non-trivial prompt.
-    buildArgs: () => [],
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+      const args = [];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      return args;
+    },
     promptViaStdin: true,
     streamFormat: 'plain',
   },
@@ -70,7 +171,28 @@ export const AGENT_DEFS = [
     name: 'OpenCode',
     bin: 'opencode',
     versionArgs: ['--version'],
-    buildArgs: () => ['run', '-'],
+    // `opencode models` prints `provider/model` per line.
+    listModels: {
+      args: ['models'],
+      parse: parseLineSeparatedModels,
+      timeoutMs: 8000,
+    },
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'anthropic/claude-sonnet-4-5', label: 'anthropic/claude-sonnet-4-5' },
+      { id: 'openai/gpt-5', label: 'openai/gpt-5' },
+      { id: 'google/gemini-2.5-pro', label: 'google/gemini-2.5-pro' },
+    ],
+    // Prompt delivered via stdin (`opencode run -`) to avoid Windows
+    // `spawn ENAMETOOLONG` for large composed prompts.
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+      const args = ['run'];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      args.push('-');
+      return args;
+    },
     promptViaStdin: true,
     streamFormat: 'plain',
   },
@@ -79,7 +201,35 @@ export const AGENT_DEFS = [
     name: 'Cursor Agent',
     bin: 'cursor-agent',
     versionArgs: ['--version'],
-    buildArgs: () => ['-'],
+    // `cursor-agent models` prints account-bound model ids per line. When
+    // the user isn't authed it prints "No models available for this
+    // account." — that's not a model list, so we detect it and fall back.
+    listModels: {
+      args: ['models'],
+      timeoutMs: 5000,
+      parse: (stdout) => {
+        const trimmed = String(stdout || '').trim();
+        if (!trimmed || /no models available/i.test(trimmed)) return null;
+        return parseLineSeparatedModels(trimmed);
+      },
+    },
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'auto', label: 'auto' },
+      { id: 'sonnet-4', label: 'sonnet-4' },
+      { id: 'sonnet-4-thinking', label: 'sonnet-4-thinking' },
+      { id: 'gpt-5', label: 'gpt-5' },
+    ],
+    // Prompt delivered via stdin (`cursor-agent -`) to avoid Windows
+    // `spawn ENAMETOOLONG` for large composed prompts.
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+      const args = [];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      args.push('-');
+      return args;
+    },
     promptViaStdin: true,
     streamFormat: 'plain',
   },
@@ -88,7 +238,21 @@ export const AGENT_DEFS = [
     name: 'Qwen Code',
     bin: 'qwen',
     versionArgs: ['--version'],
-    buildArgs: () => ['-'],
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'qwen3-coder-plus', label: 'qwen3-coder-plus' },
+      { id: 'qwen3-coder-flash', label: 'qwen3-coder-flash' },
+    ],
+    // Prompt delivered via stdin (`qwen -`) to avoid Windows
+    // `spawn ENAMETOOLONG` for large composed prompts.
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+      const args = [];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      args.push('-');
+      return args;
+    },
     promptViaStdin: true,
     streamFormat: 'plain',
   },
@@ -109,9 +273,36 @@ export function resolveOnPath(bin) {
   return null;
 }
 
+async function fetchModels(def, resolvedBin) {
+  if (!def.listModels) return def.fallbackModels;
+  try {
+    const { stdout } = await execFileP(resolvedBin, def.listModels.args, {
+      timeout: def.listModels.timeoutMs ?? 5000,
+      // Models lists from popular CLIs (e.g. opencode) easily exceed the
+      // default 1MB buffer once you include every openrouter model. Bump
+      // it so we don't truncate the listing.
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    const parsed = def.listModels.parse(stdout);
+    // Empty / null parse result means the CLI didn't actually return a
+    // usable list (e.g. cursor-agent's "No models available"); fall back
+    // to the static hint so the picker isn't stuck on Default-only.
+    if (!parsed || parsed.length === 0) return def.fallbackModels;
+    return parsed;
+  } catch {
+    return def.fallbackModels;
+  }
+}
+
 async function probe(def) {
   const resolved = resolveOnPath(def.bin);
-  if (!resolved) return { ...stripFns(def), available: false };
+  if (!resolved) {
+    return {
+      ...stripFns(def),
+      models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
+      available: false,
+    };
+  }
   let version = null;
   try {
     const { stdout } = await execFileP(resolved, def.versionArgs, { timeout: 3000 });
@@ -119,19 +310,76 @@ async function probe(def) {
   } catch {
     // binary exists but --version failed; still mark available
   }
-  return { ...stripFns(def), available: true, path: resolved, version };
+  const models = await fetchModels(def, resolved);
+  return {
+    ...stripFns(def),
+    models,
+    available: true,
+    path: resolved,
+    version,
+  };
 }
 
 function stripFns(def) {
-  const { buildArgs, ...rest } = def;
+  // Drop the buildArgs / listModels closures but keep declarative metadata
+  // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
+  // populated separately by `fetchModels`, so we strip the static
+  // `fallbackModels` slot here too.
+  const { buildArgs, listModels, fallbackModels, ...rest } = def;
   return rest;
 }
 
 
 export async function detectAgents() {
-  return Promise.all(AGENT_DEFS.map(probe));
+  const results = await Promise.all(AGENT_DEFS.map(probe));
+  // Refresh the validation cache from whatever we just surfaced to the UI
+  // so /api/chat can accept any model the user could have just picked,
+  // including ones that only showed up after a CLI re-auth.
+  for (const agent of results) {
+    rememberLiveModels(agent.id, agent.models);
+  }
+  return results;
 }
 
 export function getAgentDef(id) {
   return AGENT_DEFS.find((a) => a.id === id) || null;
+}
+
+// Daemon's /api/chat needs to validate the user's model pick against the
+// list we last surfaced to the UI. We keep a per-agent cache of the most
+// recent live list (refreshed every detectAgents() call) and additionally
+// trust any value present in the static fallback. A model that's neither
+// gets rejected so a stale or hostile value can't smuggle arbitrary flags.
+const liveModelCache = new Map();
+
+export function rememberLiveModels(agentId, models) {
+  if (!Array.isArray(models)) return;
+  liveModelCache.set(
+    agentId,
+    new Set(models.map((m) => m && m.id).filter((id) => typeof id === 'string')),
+  );
+}
+
+export function isKnownModel(def, modelId) {
+  if (!modelId) return false;
+  const live = liveModelCache.get(def.id);
+  if (live && live.has(modelId)) return true;
+  if (Array.isArray(def.fallbackModels)) {
+    return def.fallbackModels.some((m) => m.id === modelId);
+  }
+  return false;
+}
+
+// Permit user-typed model ids that didn't appear in either the live
+// listing or the static fallback (e.g. the user is on a brand-new model
+// the CLI's `models` command hasn't surfaced yet). The CLI gets the value
+// as a child-process arg — not a shell string — so injection isn't a
+// concern, but we still reject anything that could be misread as a flag
+// by a downstream CLI or that contains whitespace / control chars.
+export function sanitizeCustomModel(id) {
+  if (typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  if (trimmed.length === 0 || trimmed.length > 200) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) return null;
+  return trimmed;
 }
