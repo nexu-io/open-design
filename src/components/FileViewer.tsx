@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { useT } from '../i18n';
 import { fetchProjectFileText, projectFileUrl, projectRawUrl } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
@@ -24,13 +25,18 @@ export function FileViewer({
   onExportAsPptx,
   streaming,
 }: Props) {
-  if (file.kind === 'html') {
+  const rendererMatch = artifactRendererRegistry.resolve({
+    file,
+    isDeckHint: Boolean(isDeck),
+  });
+
+  if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') {
     return (
       <HtmlViewer
         projectId={projectId}
         file={file}
         liveHtml={liveHtml}
-        isDeck={Boolean(isDeck)}
+        isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
       />
