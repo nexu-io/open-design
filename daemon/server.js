@@ -79,9 +79,9 @@ const CMD_BAT_RE = /\.(cmd|bat)$/i;
 const PROMPT_TEMP_FILE = () =>
   '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
 const promptFileBootstrap = (fp) =>
-  `Read the file at ${fp.replace(/\\/g, '/')} for your complete instructions ` +
-  '(system prompt, design system, skill workflow, and user request). ' +
-  'Follow every instruction in that file exactly. ' +
+  `Your full instructions are stored in the file: ${fp.replace(/\\/g, '/')}. ` +
+  'Open that file first and follow every instruction in it exactly — ' +
+  'it contains the system prompt, design system, skill workflow, and user request. ' +
   'Do not begin your response until you have read the entire file.';
 
 const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
@@ -1019,7 +1019,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     // ^^^ idempotency: promptFileCleaned is set synchronously BEFORE the
     // async fs.unlink callback, so a second call never races past the guard.
     if (needsFilePrompt) {
-      promptFilePath = path.join(cwd, PROMPT_TEMP_FILE);
+      promptFilePath = path.join(cwd, PROMPT_TEMP_FILE());
       try {
         fs.writeFileSync(promptFilePath, composed, 'utf8');
         effectivePrompt = promptFileBootstrap(promptFilePath);
@@ -1101,14 +1101,14 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       // prompt through stdin instead of embedding it in argv. Bypasses the
       // OS command-line length limit (Windows CreateProcess caps at ~32 KB)
       // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
-      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || needsFilePrompt ? 'pipe' : 'ignore';
       child = spawn(resolvedBin, args, {
         env: { ...process.env },
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
         shell: useShell,
       });
-      if (def.promptViaStdin && child.stdin) {
+      if ((def.promptViaStdin || needsFilePrompt) && child.stdin) {
         // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
         // launch) would otherwise surface as an unhandled stream error and
         // crash the daemon. Swallow it — the regular exit/close handlers
