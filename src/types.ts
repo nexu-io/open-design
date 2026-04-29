@@ -1,5 +1,14 @@
 export type ExecMode = 'daemon' | 'api';
 
+// Per-CLI model + reasoning the user picked in the model menu. Each agent
+// keeps its own slot so flipping between Codex and Gemini doesn't reset the
+// other one's choice. Missing entries fall back to the agent's first
+// declared model (`'default'` — let the CLI pick).
+export interface AgentModelChoice {
+  model?: string;
+  reasoning?: string;
+}
+
 export interface AppConfig {
   mode: ExecMode;
   apiKey: string;
@@ -12,6 +21,10 @@ export interface AppConfig {
   // least once (saved or skipped). Bootstrap skips the auto-popup when
   // this is set so refreshing the page doesn't re-prompt.
   onboardingCompleted?: boolean;
+  // Per-CLI model picker state, keyed by agent id (e.g. `gemini`, `codex`).
+  // Pre-existing configs without this field fall through to the agent's
+  // declared default.
+  agentModels?: Record<string, AgentModelChoice>;
 }
 
 export type AgentEvent =
@@ -63,6 +76,11 @@ export interface ExamplePreview {
   html: string;
 }
 
+export interface AgentModelOption {
+  id: string;
+  label: string;
+}
+
 export interface AgentInfo {
   id: string;
   name: string;
@@ -70,6 +88,12 @@ export interface AgentInfo {
   available: boolean;
   path?: string;
   version?: string | null;
+  // Models surfaced in the model picker for this CLI. The first entry is
+  // treated as the default (typically the synthetic `'default'` option,
+  // meaning "let the CLI use whatever's in its own config").
+  models?: AgentModelOption[];
+  // Reasoning-effort presets — currently only Codex exposes this.
+  reasoningOptions?: AgentModelOption[];
 }
 
 export interface SkillSummary {

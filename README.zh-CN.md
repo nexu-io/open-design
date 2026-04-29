@@ -248,7 +248,7 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 | 层 | 技术栈 |
 |---|---|
 | 前端 | Vite 5 + React 18 + TypeScript |
-| Daemon | Node 18+ · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
+| Daemon | Node 20–22 · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
 | Agent 传输层 | `child_process.spawn`，Claude Code 走 `claude-stream-json` 解析器、Copilot CLI 走 `copilot-stream-json`，其余走 line-buffered plain stdout |
 | 存储 | 纯文件 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 启动自建） |
 | 预览 | 沙盒 iframe（`srcdoc`）+ 每个 skill 的 `<artifact>` parser |
@@ -259,7 +259,9 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install         # 或 npm install
+nvm use              # 使用 .nvmrc 中的 Node 22
+corepack enable
+pnpm install
 pnpm dev:all         # daemon (:7456) + Vite (:5173) 一起起
 open http://localhost:5173
 ```

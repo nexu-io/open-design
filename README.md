@@ -248,7 +248,7 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 | Layer | Stack |
 |---|---|
 | Frontend | Vite 5 + React 18 + TypeScript |
-| Daemon | Node 18+ · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
+| Daemon | Node 20–22 · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
 | Agent transport | `child_process.spawn` with typed-event parsers for Claude Code (`claude-stream-json`) and Copilot CLI (`copilot-stream-json`); line-buffered plain stdout for the rest |
 | Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/db.sqlite` (gitignored) |
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser |
@@ -259,7 +259,9 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install         # or npm install
+nvm use              # uses Node 22 from .nvmrc
+corepack enable
+pnpm install
 pnpm dev:all         # daemon (:7456) + Vite (:5173)
 open http://localhost:5173
 ```
