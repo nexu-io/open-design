@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -51,6 +51,7 @@ export function DesignFilesPanel({
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -101,6 +102,7 @@ export function DesignFilesPanel({
 
   function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
     ev.preventDefault();
+    dragDepthRef.current = 0;
     setDraggingFiles(false);
     const dropped = Array.from(ev.dataTransfer.files ?? []);
     if (dropped.length > 0) onUploadFiles(dropped);
@@ -204,6 +206,7 @@ export function DesignFilesPanel({
             className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
             onDragEnter={(ev) => {
               ev.preventDefault();
+              dragDepthRef.current += 1;
               setDraggingFiles(true);
             }}
             onDragOver={(ev) => {
@@ -212,8 +215,12 @@ export function DesignFilesPanel({
             }}
             onDragLeave={(ev) => {
               if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+                dragDepthRef.current = 0;
                 setDraggingFiles(false);
+                return;
               }
+              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+              if (dragDepthRef.current === 0) setDraggingFiles(false);
             }}
             onDrop={handleDrop}
           >

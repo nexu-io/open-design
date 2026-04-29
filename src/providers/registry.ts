@@ -175,22 +175,54 @@ export async function uploadProjectFile(
 // follow-up listFiles round-trip.
 const PROJECT_UPLOAD_BATCH_SIZE = 12;
 
+export interface ProjectUploadFailure {
+  name: string;
+  code?: string;
+  error?: string;
+}
+
+export interface UploadProjectFilesResult {
+  uploaded: ChatAttachment[];
+  failed: ProjectUploadFailure[];
+  error?: string;
+}
+
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
-): Promise<ChatAttachment[]> {
-  if (files.length === 0) return [];
-  try {
-    const uploaded: ChatAttachment[] = [];
-    for (let i = 0; i < files.length; i += PROJECT_UPLOAD_BATCH_SIZE) {
-      const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
-      const form = new FormData();
-      for (const f of batch) form.append('files', f);
+): Promise<UploadProjectFilesResult> {
+  if (files.length === 0) return { uploaded: [], failed: [] };
+
+  const uploaded: ChatAttachment[] = [];
+  const failed: ProjectUploadFailure[] = [];
+  let error: string | undefined;
+
+  for (let i = 0; i < files.length; i += PROJECT_UPLOAD_BATCH_SIZE) {
+    const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
+    const remaining = files.slice(i + PROJECT_UPLOAD_BATCH_SIZE);
+    const form = new FormData();
+    for (const f of batch) form.append('files', f);
+
+    try {
       const resp = await fetch(
         `/api/projects/${encodeURIComponent(projectId)}/upload`,
         { method: 'POST', body: form },
       );
-      if (!resp.ok) return uploaded;
+
+      if (!resp.ok) {
+        const payload = (await resp.json().catch(() => null)) as
+          | { code?: string; error?: string }
+          | null;
+        error = payload?.error ?? `upload failed (${resp.status})`;
+        for (const f of batch) {
+          failed.push({ name: f.name, code: payload?.code, error: error });
+        }
+        for (const f of remaining) {
+          failed.push({ name: f.name, code: payload?.code, error: error });
+        }
+        break;
+      }
+
       const json = (await resp.json()) as {
         files: { name: string; path: string; size?: number; originalName?: string }[];
       };
@@ -198,15 +230,37 @@ export async function uploadProjectFiles(
         ...(json.files ?? []).map((f) => ({
           path: f.path,
           name: f.originalName ?? f.name,
-          kind: looksLikeImage(f.name) ? 'image' as const : 'file' as const,
+          kind: looksLikeImage(f.name) ? ('image' as const) : ('file' as const),
           size: f.size,
         })),
       );
+      const uploadedNames = new Map<string, number>();
+      for (const f of json.files ?? []) {
+        const key = f.originalName ?? f.name;
+        uploadedNames.set(key, (uploadedNames.get(key) ?? 0) + 1);
+      }
+      for (const f of batch) {
+        const count = uploadedNames.get(f.name) ?? 0;
+        if (count > 0) {
+          uploadedNames.set(f.name, count - 1);
+          continue;
+        }
+        error ??= 'some files could not be stored';
+        failed.push({ name: f.name, error: error });
+      }
+    } catch {
+      error = 'upload request failed';
+      for (const f of batch) {
+        failed.push({ name: f.name, error });
+      }
+      for (const f of remaining) {
+        failed.push({ name: f.name, error });
+      }
+      break;
     }
-    return uploaded;
-  } catch {
-    return [];
   }
+
+  return { uploaded, failed, error };
 }
 
 // Stable URL that serves a project file with its original mime — for

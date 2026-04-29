@@ -69,6 +69,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       cursor: number;
     } | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const [importOpen, setImportOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -136,6 +137,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function reset() {
       setDraft("");
       setStaged([]);
+      setUploadError(null);
       setMention(null);
     }
 
@@ -149,9 +151,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const id = await ensureProject();
       if (!id) return;
       setUploading(true);
+      setUploadError(null);
       try {
-        const attachments = await uploadProjectFiles(id, files);
-        setStaged((s) => [...s, ...attachments]);
+        const result = await uploadProjectFiles(id, files);
+        if (result.uploaded.length > 0) {
+          setStaged((s) => [...s, ...result.uploaded]);
+        }
+        if (result.failed.length > 0) {
+          const failedCount = result.failed.length;
+          const uploadedCount = result.uploaded.length;
+          const detail = result.error ? ` (${result.error})` : '';
+          setUploadError(
+            uploadedCount > 0
+              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.`
+              : `Attachment upload failed for ${failedCount} file(s)${detail}.`,
+          );
+          console.warn('Some attachments failed to upload', result.failed);
+        }
       } finally {
         setUploading(false);
       }
@@ -376,6 +392,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             )}
           </div>
         </div>
+        {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
         <span className="composer-hint">{t('chat.composerHint')}</span>
       </div>
     );

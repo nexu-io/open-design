@@ -97,10 +97,43 @@ const projectUpload = multer({
 function handleProjectUpload(req, res, next) {
   projectUpload.array('files', 12)(req, res, (err) => {
     if (err) {
-      return res.status(400).json({ error: err.message || String(err) });
+      return sendMulterError(res, err);
     }
     next();
   });
+}
+
+function sendMulterError(res, err) {
+  if (err instanceof multer.MulterError) {
+    const code = err.code || 'UPLOAD_ERROR';
+    const statusByCode = {
+      LIMIT_FILE_SIZE: 413,
+      LIMIT_FILE_COUNT: 400,
+      LIMIT_UNEXPECTED_FILE: 400,
+      LIMIT_PART_COUNT: 400,
+      LIMIT_FIELD_KEY: 400,
+      LIMIT_FIELD_VALUE: 400,
+      LIMIT_FIELD_COUNT: 400,
+    };
+    const errorByCode = {
+      LIMIT_FILE_SIZE: 'file too large',
+      LIMIT_FILE_COUNT: 'too many files',
+      LIMIT_UNEXPECTED_FILE: 'unexpected file field',
+      LIMIT_PART_COUNT: 'too many form parts',
+      LIMIT_FIELD_KEY: 'field name too long',
+      LIMIT_FIELD_VALUE: 'field value too long',
+      LIMIT_FIELD_COUNT: 'too many form fields',
+    };
+    const status = statusByCode[code] ?? 400;
+    const message = errorByCode[code] ?? 'upload failed';
+    return res.status(status).json({ code, error: message });
+  }
+
+  if (err) {
+    return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
+  }
+
+  return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
 }
 
 export async function startServer({ port = 7456 } = {}) {
@@ -617,7 +650,12 @@ export async function startServer({ port = 7456 } = {}) {
   // uses both depending on the file source.
   app.post(
     '/api/projects/:id/files',
-    upload.single('file'),
+    (req, res, next) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) return sendMulterError(res, err);
+        next();
+      });
+    },
     async (req, res) => {
       try {
         await ensureProject(PROJECTS_DIR, req.params.id);
@@ -644,7 +682,7 @@ export async function startServer({ port = 7456 } = {}) {
         const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf);
         res.json({ file: meta });
       } catch (err) {
-        res.status(400).json({ error: String(err) });
+        res.status(500).json({ error: 'upload failed' });
       }
     },
   );
@@ -686,7 +724,7 @@ export async function startServer({ port = 7456 } = {}) {
         }
         res.json({ files: out });
       } catch (err) {
-        res.status(400).json({ error: String(err) });
+        res.status(500).json({ error: 'upload failed' });
       }
     },
   );
