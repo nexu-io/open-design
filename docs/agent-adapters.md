@@ -171,6 +171,7 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Streaming: `--output-format json` emits JSONL with the same expressive shape as Claude Code's stream-json (`assistant.reasoning_delta`, `assistant.message_delta`, `tool.execution_start/complete`, `result`). `daemon/copilot-stream.js` maps these onto the same UI events as `claude-stream.js`.
 - Skill loading: prompt injection only. Github Copilot's tool catalog includes a `skill` tool — native format worth reverse-engineering later.
 - Surgical edits: dedicated `edit` tool.
+- Detection assumes Copilot is already authenticated, via one of: `copilot login` (subcommand, OAuth device flow), the interactive `/login` slash command inside `copilot` with no args.
 
 ## 6. Capability-driven UI
 
