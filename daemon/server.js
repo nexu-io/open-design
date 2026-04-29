@@ -99,6 +99,11 @@ export async function startServer({ port = 7456 } = {}) {
   app.use(express.json({ limit: '4mb' }));
   const db = openDatabase(PROJECT_ROOT);
 
+  // Warm agent-capability probes (e.g. whether the installed Claude Code
+  // build advertises --include-partial-messages) so the first /api/chat
+  // hits a populated cache even if /api/agents hasn't been called yet.
+  void detectAgents().catch(() => {});
+
   if (fs.existsSync(STATIC_DIR)) {
     app.use(express.static(STATIC_DIR));
   }

@@ -1,9 +1,10 @@
 /**
- * Parses Claude Code's `--output-format stream-json --verbose
- * --include-partial-messages` JSONL stream into a small set of UI-friendly
- * events. The Claude stream is rich (message_start, content_block_start/stop,
- * deltas, tool_use, tool_result, status, result) but the UI only needs to
- * know five things:
+ * Parses Claude Code's `--output-format stream-json --verbose` JSONL stream
+ * (with or without `--include-partial-messages`) into a small set of
+ * UI-friendly events. With partial messages on, text arrives as
+ * `stream_event` deltas; without it (older builds <1.0.86, or any build
+ * where the flag isn't passed) text arrives only in the final `assistant`
+ * wrapper. We handle both. The UI only needs to know five things:
  *
  *   - status        : high-level lifecycle ("initializing", "requesting",
  *                     "thinking")
@@ -26,6 +27,13 @@ export function createClaudeStreamHandler(onEvent) {
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
   let currentMessageId = null;
+  // Message ids that already streamed text via `stream_event` deltas.
+  // When `--include-partial-messages` is OFF (older Claude Code, e.g. 1.0.84
+  // pre-flag), no deltas arrive — only the final `assistant` wrapper carries
+  // text. The fallback below emits that text once, but we must skip it for
+  // newer builds that already streamed deltas, otherwise the message would
+  // duplicate.
+  const textStreamed = new Set();
 
   function blockKey(index) {
     return `${currentMessageId ?? 'anon'}:${index}`;
@@ -85,9 +93,14 @@ export function createClaudeStreamHandler(onEvent) {
 
     // `assistant` messages are the "block finished" signal for the current
     // content block. For tool_use blocks whose input finished assembling,
-    // emit tool_use now with the final parsed input.
+    // emit tool_use now with the final parsed input. For text blocks, emit
+    // the text as a single delta — but only if no streaming deltas already
+    // covered it (older Claude Code without --include-partial-messages
+    // delivers text only here; newer builds stream it and would duplicate).
     if (obj.type === 'assistant' && obj.message?.content) {
       currentMessageId = obj.message.id ?? currentMessageId;
+      const msgId = obj.message.id ?? null;
+      const alreadyStreamed = msgId ? textStreamed.has(msgId) : false;
       for (const block of obj.message.content) {
         if (block.type === 'tool_use') {
           onEvent({
@@ -96,6 +109,20 @@ export function createClaudeStreamHandler(onEvent) {
             name: block.name,
             input: block.input ?? null,
           });
+        } else if (
+          !alreadyStreamed &&
+          block.type === 'text' &&
+          typeof block.text === 'string' &&
+          block.text.length > 0
+        ) {
+          onEvent({ type: 'text_delta', delta: block.text });
+        } else if (
+          !alreadyStreamed &&
+          block.type === 'thinking' &&
+          typeof block.thinking === 'string' &&
+          block.thinking.length > 0
+        ) {
+          onEvent({ type: 'thinking_delta', delta: block.thinking });
         }
       }
       return;
@@ -153,10 +180,12 @@ export function createClaudeStreamHandler(onEvent) {
       const delta = ev.delta;
 
       if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+        if (currentMessageId) textStreamed.add(currentMessageId);
         onEvent({ type: 'text_delta', delta: delta.text });
         return;
       }
       if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+        if (currentMessageId) textStreamed.add(currentMessageId);
         onEvent({ type: 'thinking_delta', delta: delta.thinking });
         return;
       }

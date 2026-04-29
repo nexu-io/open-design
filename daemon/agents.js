@@ -6,6 +6,13 @@ import path from 'node:path';
 
 const execFileP = promisify(execFile);
 
+// Capability flags detected at probe time (per agent id). buildArgs consults
+// this map so we only pass flags the installed CLI actually advertises in
+// `--help`. Falls back to "off" when probing failed or hasn't run yet — that
+// keeps the spawn safe across older Claude Code releases that pre-date a
+// given flag (e.g. `--include-partial-messages`, added in 1.0.86).
+const agentCapabilities = new Map();
+
 // Each entry defines how to invoke the agent in non-interactive "one-shot" mode.
 // `buildArgs(prompt, imagePaths, extraAllowedDirs)` returns argv for the child
 // process. `extraAllowedDirs` is a list of absolute directories the agent must
@@ -24,19 +31,34 @@ export const AGENT_DEFS = [
     name: 'Claude Code',
     bin: 'claude',
     versionArgs: ['--version'],
+    helpArgs: ['--help'],
+    capabilityFlags: {
+      // Flag string -> capability key. After probing `--help`, we set
+      // `agentCapabilities[id][key] = true` for each substring that matches.
+      '--include-partial-messages': 'partialMessages',
+      '--add-dir': 'addDir',
+    },
     buildArgs: (prompt, _imagePaths, extraAllowedDirs = []) => {
+      const caps = agentCapabilities.get('claude') || {};
       const args = [
         '-p',
         prompt,
         '--output-format',
         'stream-json',
         '--verbose',
-        '--include-partial-messages',
       ];
+      // `--include-partial-messages` lands richer streaming events but only
+      // exists in newer Claude Code builds. Older installs reject it with
+      // "unknown option" and exit 1, killing the chat. Gate on the probe.
+      if (caps.partialMessages) {
+        args.push('--include-partial-messages');
+      }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );
-      if (dirs.length > 0) {
+      // `--add-dir` is older but still gate it for symmetry — old/forked
+      // builds may lack it.
+      if (dirs.length > 0 && caps.addDir !== false) {
         args.push('--add-dir', ...dirs);
       }
       return args;
@@ -110,11 +132,29 @@ async function probe(def) {
   } catch {
     // binary exists but --version failed; still mark available
   }
+  // Probe `--help` once per agent and record which flags the installed CLI
+  // advertises. Cached on `agentCapabilities` for buildArgs to consult.
+  if (def.helpArgs && def.capabilityFlags) {
+    const caps = {};
+    try {
+      const { stdout } = await execFileP(resolved, def.helpArgs, {
+        timeout: 5000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+      for (const [flag, key] of Object.entries(def.capabilityFlags)) {
+        caps[key] = stdout.includes(flag);
+      }
+    } catch {
+      // If --help fails, leave caps empty — buildArgs falls back to the safe
+      // baseline (no optional flags).
+    }
+    agentCapabilities.set(def.id, caps);
+  }
   return { ...stripFns(def), available: true, path: resolved, version };
 }
 
 function stripFns(def) {
-  const { buildArgs, ...rest } = def;
+  const { buildArgs, helpArgs, capabilityFlags, ...rest } = def;
   return rest;
 }
 
