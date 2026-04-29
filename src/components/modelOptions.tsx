@@ -64,7 +64,7 @@ export function isCustomModel(
   modelId: string | null | undefined,
   models: AgentModelOption[],
 ): boolean {
-  if (modelId === undefined || modelId === null) return false;
+  if (modelId == null) return false;
   return !models.some((m) => m.id === modelId);
 }
 
