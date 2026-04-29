@@ -156,7 +156,7 @@ function sendMulterError(res, err) {
   return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
 }
 
-export async function startServer({ port = 7456 } = {}) {
+export async function startServer({ host = '127.0.0.1', port = 7456 } = {}) {
   const app = express();
   app.use(express.json({ limit: '4mb' }));
   const db = openDatabase(PROJECT_ROOT);
@@ -1084,7 +1084,10 @@ export async function startServer({ port = 7456 } = {}) {
   }
 
   return new Promise((resolve) => {
-    app.listen(port, '127.0.0.1', () => resolve(`http://localhost:${port}`));
+    app.listen(port, host, () => {
+      const displayHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
+      resolve(`http://${displayHost}:${port}`);
+    });
   });
 }
 
