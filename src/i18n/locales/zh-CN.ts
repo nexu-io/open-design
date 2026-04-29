@@ -63,7 +63,7 @@ export const zhCN: Dict = {
   'settings.rescan': '↻ 重新扫描',
   'settings.rescanTitle': '重新扫描 PATH',
   'settings.noAgentsDetected':
-    '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent 或 Qwen 中的一个，然后点击「重新扫描」。',
+    '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen 或 GitHub Copilot CLI 中的一个，然后点击「重新扫描」。',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API Key',
   'settings.showKey': '显示 Key',

@@ -41,6 +41,13 @@ const execFileP = promisify(execFile);
 //     `--output-format stream-json`. Daemon parses it into typed events
 //     (text / thinking / tool_use / tool_result / status) for the UI.
 //   - 'plain' (default)    : raw text, forwarded chunk-by-chunk.
+//
+// Permission posture: the daemon spawns each CLI with cwd pinned to the
+// project folder (`.od/projects/<id>/`), and the web app has no terminal
+// to surface an interactive approve/deny prompt. So every agent runs with
+// its non-interactive/auto-approve switch on — otherwise Write/Edit hangs
+// or errors and the model has to hallucinate a permission button the UI
+// never shows.
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
@@ -99,6 +106,7 @@ export const AGENT_DEFS = [
       if (dirs.length > 0) {
         args.push('--add-dir', ...dirs);
       }
+      args.push('--permission-mode', 'bypassPermissions');
       return args;
     },
     streamFormat: 'claude-stream-json',
@@ -126,9 +134,11 @@ export const AGENT_DEFS = [
     ],
     // Prompt delivered via stdin (`codex exec -`) to avoid Windows
     // `spawn ENAMETOOLONG` — CreateProcess caps argv at ~32 KB and the
-    // composed prompt easily exceeds that.
+    // composed prompt easily exceeds that. `--full-auto` keeps Codex in
+    // its workspace-write sandbox while skipping interactive permission
+    // prompts in the no-TTY web UI.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = ['exec'];
+      const args = ['exec', '--full-auto'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -154,10 +164,11 @@ export const AGENT_DEFS = [
       { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
     ],
     // Gemini reads from stdin when `-p` is omitted and stdin is a pipe.
-    // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG
-    // on Windows (CreateProcess limit ~32 KB) for any non-trivial prompt.
+    // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG on
+    // Windows (CreateProcess limit ~32 KB) for any non-trivial prompt.
+    // `--yolo` skips interactive approval prompts in the no-TTY web UI.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = [];
+      const args = ['--yolo'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -221,9 +232,10 @@ export const AGENT_DEFS = [
       { id: 'gpt-5', label: 'gpt-5' },
     ],
     // Prompt delivered via stdin (`cursor-agent -`) to avoid Windows
-    // `spawn ENAMETOOLONG` for large composed prompts.
+    // `spawn ENAMETOOLONG` for large composed prompts. `--force` skips
+    // interactive approval prompts in the no-TTY web UI.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = [];
+      const args = ['--force'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -244,9 +256,10 @@ export const AGENT_DEFS = [
       { id: 'qwen3-coder-flash', label: 'qwen3-coder-flash' },
     ],
     // Prompt delivered via stdin (`qwen -`) to avoid Windows
-    // `spawn ENAMETOOLONG` for large composed prompts.
+    // `spawn ENAMETOOLONG` for large composed prompts. Qwen Code is a
+    // Gemini-CLI fork and supports the same `--yolo` non-interactive mode.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = [];
+      const args = ['--yolo'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -255,6 +268,53 @@ export const AGENT_DEFS = [
     },
     promptViaStdin: true,
     streamFormat: 'plain',
+  },
+  {
+    id: 'copilot',
+    name: 'GitHub Copilot CLI',
+    bin: 'copilot',
+    versionArgs: ['--version'],
+    // `--allow-all-tools` is required for non-interactive runs: without it
+    // the CLI blocks waiting for human approval on every tool call. Unlike
+    // Codex (where `exec` is a dedicated headless subcommand with
+    // auto-approve baked in) or Claude Code (which inherits its permission
+    // policy from the user's settings.json), Copilot's `-p` mode always
+    // prompts unless this flag is passed explicitly.
+    //
+    // `--output-format json` produces JSONL that copilot-stream.js parses
+    // into the same typed events as claude-stream.js.
+    //
+    // `--add-dir` (repeatable, same flag as Claude Code's) widens Copilot's
+    // path-level sandbox to skill seeds + design-system specs outside the
+    // project cwd.
+    //
+    // No `models` subcommand; the CLI accepts whatever the user's Copilot
+    // subscription exposes. Ship a small evidence-based hint list — the
+    // default we observed in the JSON stream and the example from
+    // `copilot --help`. Users can paste any other id via Settings.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
+      { id: 'gpt-5.2', label: 'GPT-5.2' },
+    ],
+    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+      const args = [
+        '-p',
+        prompt,
+        '--allow-all-tools',
+        '--output-format',
+        'json',
+      ];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && d.length > 0,
+      );
+      for (const d of dirs) args.push('--add-dir', d);
+      return args;
+    },
+    streamFormat: 'copilot-stream-json',
   },
 ];
 
@@ -343,6 +403,16 @@ export async function detectAgents() {
 
 export function getAgentDef(id) {
   return AGENT_DEFS.find((a) => a.id === id) || null;
+}
+
+// Resolve the absolute path of an agent's binary on the current PATH.
+// Used by the chat handler so spawn() gets the same executable that
+// detection reported as available — fixes Windows ENOENT when the bare
+// bin name isn't on the child process's PATH (issue #10).
+export function resolveAgentBin(id) {
+  const def = getAgentDef(id);
+  if (!def?.bin) return null;
+  return resolveOnPath(def.bin);
 }
 
 // Daemon's /api/chat needs to validate the user's model pick against the

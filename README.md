@@ -1,6 +1,6 @@
 # Open Design
 
-> **The open-source alternative to [Claude Design][cd].** Local-first, web-deployable, BYOK at every layer — your existing coding agent (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, Qwen) becomes the design engine, driven by **19 composable Skills** and **71 brand-grade Design Systems**.
+> **The open-source alternative to [Claude Design][cd].** Local-first, web-deployable, BYOK at every layer — your existing coding agent (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI) becomes the design engine, driven by **19 composable Skills** and **71 brand-grade Design Systems**.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
-  <a href="#supported-coding-agents"><img alt="Agents" src="https://img.shields.io/badge/agents-Claude%20%7C%20Codex%20%7C%20Cursor%20%7C%20Gemini%20%7C%20OpenCode%20%7C%20Qwen-black" /></a>
+  <a href="#supported-coding-agents"><img alt="Agents" src="https://img.shields.io/badge/agents-Claude%20%7C%20Codex%20%7C%20Cursor%20%7C%20Gemini%20%7C%20OpenCode%20%7C%20Qwen%20%7C%20Copilot-black" /></a>
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-71-orange" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-19-teal" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green" /></a>
@@ -39,7 +39,7 @@ OD stands on four open-source shoulders:
 
 | | What you get |
 |---|---|
-| **Coding agents supported** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Anthropic API (BYOK fallback) |
+| **Coding agents supported** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Anthropic API (BYOK fallback) |
 | **Design systems built-in** | **71** — 2 hand-authored starters + 69 product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, …) imported from [`awesome-design-md`][acd2] |
 | **Skills built-in** | **19** — prototype, deck, mobile, dashboard, pricing, docs, blog, SaaS landing, plus 10 document/work-product templates (PM spec, weekly update, OKRs, runbook, kanban, …) |
 | **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Tech Utility · Brutalist · Soft Warm) — each ships a deterministic OKLch palette + font stack |
@@ -180,7 +180,7 @@ Adding a skill takes one folder. Read [`docs/skills-protocol.md`](docs/skills-pr
 
 ### 1 · We don't ship an agent. Yours is good enough.
 
-The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), and [`qwen`](https://github.com/QwenLM/qwen-code) on startup. Whichever it finds becomes the design engine — driven via stdio, with one adapter per CLI. Inspired by [`multica`](https://github.com/multica-ai/multica) and [`cc-switch`](https://github.com/farion1231/cc-switch). No CLI? `Anthropic API · BYOK` is the same pipeline minus the spawn.
+The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), and [`copilot`](https://github.com/features/copilot/cli) on startup. Whichever it finds becomes the design engine — driven via stdio, with one adapter per CLI. Inspired by [`multica`](https://github.com/multica-ai/multica) and [`cc-switch`](https://github.com/farion1231/cc-switch). No CLI? `Anthropic API · BYOK` is the same pipeline minus the spawn.
 
 ### 2 · Skills are files, not plugins.
 
@@ -239,17 +239,17 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
    └─────────┬────────────┘
              │ spawn(cli, [...], { cwd: .od/projects/<id> })
              ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │  claude · codex · cursor-agent · gemini · opencode · qwen│
-   │  reads SKILL.md + DESIGN.md, writes artifacts to disk    │
-   └──────────────────────────────────────────────────────────┘
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  claude · codex · cursor-agent · gemini · opencode · qwen · copilot│
+   │  reads SKILL.md + DESIGN.md, writes artifacts to disk              │
+   └────────────────────────────────────────────────────────────────────┘
 ```
 
 | Layer | Stack |
 |---|---|
 | Frontend | Vite 5 + React 18 + TypeScript |
-| Daemon | Node 18+ · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
-| Agent transport | `child_process.spawn` with `claude-stream-json` parser for Claude Code, line-buffered plain stdout for the rest |
+| Daemon | Node 20–22 · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
+| Agent transport | `child_process.spawn` with typed-event parsers for Claude Code (`claude-stream-json`) and Copilot CLI (`copilot-stream-json`); line-buffered plain stdout for the rest |
 | Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/db.sqlite` (gitignored) |
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser |
 | Export | HTML (inline assets) · PDF (browser print) · PPTX (skill-defined) · ZIP (archiver) |
@@ -259,7 +259,9 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install         # or npm install
+nvm use              # uses Node 22 from .nvmrc
+corepack enable
+pnpm install
 pnpm dev:all         # daemon (:7456) + Vite (:5173)
 open http://localhost:5173
 ```
@@ -499,6 +501,7 @@ Auto-detected from `PATH` on daemon boot. No config required.
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | line-buffered | `gemini -p` |
 | [OpenCode](https://opencode.ai/) | `opencode` | line-buffered | `opencode run` |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | line-buffered | `qwen -p` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `--output-format json` (typed events) | `copilot -p <prompt> --allow-all-tools --output-format json` |
 | Anthropic API · BYOK | n/a | SSE direct | Browser fallback when no CLI is on PATH |
 
 Adding a new CLI is one entry in [`daemon/agents.js`](daemon/agents.js). Streaming format is one of `claude-stream-json` (typed events) or `plain` (raw text).

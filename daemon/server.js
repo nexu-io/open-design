@@ -10,12 +10,13 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
-  resolveOnPath,
+  resolveAgentBin,
   sanitizeCustomModel,
 } from './agents.js';
 import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { createCopilotStreamHandler } from './copilot-stream.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
@@ -816,9 +817,54 @@ export async function startServer({ port = 7456 } = {}) {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
+    // Resolve the agent's bin to its absolute path. Detection (`/api/agents`)
+    // already locates the executable via PATH, but spawning the bare name here
+    // fails on Windows (ENOENT) when the child process's PATH doesn't contain
+    // the user's npm-global / shim directory — see issue #10.
+    //
+    // If detection can't find the binary, surface a friendly SSE error
+    // pointing at /api/agents instead of silently falling back to
+    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
+    // from issue #10 the rest of this block is meant to prevent.
+    const resolvedBin = resolveAgentBin(agentId);
+    if (!resolvedBin) {
+      send('error', {
+        message:
+          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+          'Install it and refresh the agent list (GET /api/agents) before retrying.',
+      });
+      return res.end();
+    }
+    // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
+    // those without `shell: true` (CVE-2024-27980). When `shell: true` is set
+    // on Windows, Node escapes argv items for the cmd.exe shell — that
+    // escape is what currently keeps user-controlled prompt text in `args`
+    // (composed via `def.buildArgs(prompt, ...)` above) from being
+    // interpreted as shell metacharacters. Two caveats this leaves on the
+    // table for a future contributor to be aware of:
+    //   1. Defensibility relies on Node's escaper staying correct. The
+    //      stronger fix is to keep user text out of argv entirely by piping
+    //      the composed prompt through child stdin instead of passing it
+    //      as a `-p $prompt`-style flag. Do NOT add a new prompt-bearing
+    //      flag in `buildArgs` thinking shell:true makes it safe — route
+    //      it through stdin instead.
+    //   2. cmd.exe caps the full command line at ~8191 chars (well below
+    //      Node's direct-spawn argv cap), so long prompts can fail with an
+    //      ENAMETOOLONG-class error here. Same mitigation: stdin.
+    //
+    // We only flip shell:true for `.cmd`/`.bat` because those are the only
+    // PATHEXT entries that strictly require cmd.exe to launch. `.exe`/`.com`
+    // launch directly (no shell needed); `.ps1`/`.vbs` etc. would need a
+    // different host (powershell / wscript) — `shell: true` (which uses
+    // cmd.exe) wouldn't actually help those, so we don't pretend it would.
+    // In practice npm-installed CLIs ship as `.cmd` shims, which is the
+    // case this branch covers.
+    const useShell =
+      process.platform === 'win32' && /\.(cmd|bat)$/i.test(resolvedBin);
+
     send('start', {
       agentId,
-      bin: def.bin,
+      bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
       projectId: typeof projectId === 'string' ? projectId : null,
       cwd,
@@ -828,25 +874,28 @@ export async function startServer({ port = 7456 } = {}) {
 
     let child;
     try {
-      const exactBin = resolveOnPath(def.bin) || def.bin;
-      // When the agent definition sets `promptViaStdin`, we pipe the composed
-      // prompt through stdin rather than embedding it in argv.  This bypasses
-      // the OS command-line length limit (Windows CreateProcess caps at ~32 KB)
+      // When the agent definition sets `promptViaStdin`, pipe the composed
+      // prompt through stdin instead of embedding it in argv. Bypasses the
+      // OS command-line length limit (Windows CreateProcess caps at ~32 KB)
       // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
       const stdinMode = def.promptViaStdin ? 'pipe' : 'ignore';
-      // Do NOT use `shell: true` on Windows. cmd.exe caps the command line at
-      // ~8 191 chars — far below Node's direct-spawn limit and below even
-      // modest OD prompts. resolveOnPath() already walks PATHEXT and returns
-      // the absolute path (e.g. C:\…\gemini.cmd), so Node can exec it directly
-      // without a shell intermediary on every platform.
-      child = spawn(exactBin, args, {
+      child = spawn(resolvedBin, args, {
         env: { ...process.env },
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
+        shell: useShell,
       });
       if (def.promptViaStdin && child.stdin) {
-        child.stdin.write(composed, 'utf8');
-        child.stdin.end();
+        // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
+        // launch) would otherwise surface as an unhandled stream error and
+        // crash the daemon. Swallow it — the regular exit/close handlers
+        // below already route the underlying failure to SSE via stderr.
+        child.stdin.on('error', (err) => {
+          if (err.code !== 'EPIPE') {
+            send('error', { message: `stdin: ${err.message}` });
+          }
+        });
+        child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
       send('error', { message: `spawn failed: ${err.message}` });
@@ -864,6 +913,10 @@ export async function startServer({ port = 7456 } = {}) {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'copilot-stream-json') {
+      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      child.stdout.on('data', (chunk) => copilot.feed(chunk));
+      child.on('close', () => copilot.flush());
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
