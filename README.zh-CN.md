@@ -248,7 +248,7 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 | 层 | 技术栈 |
 |---|---|
 | 前端 | Vite 5 + React 18 + TypeScript |
-| Daemon | Node 18+ · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
+| Daemon | Node 20–22 · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
 | Agent 传输层 | `child_process.spawn`，Claude Code 走 `claude-stream-json` 解析器，其余走 line-buffered plain stdout |
 | 存储 | 纯文件 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 启动自建） |
 | 预览 | 沙盒 iframe（`srcdoc`）+ 每个 skill 的 `<artifact>` parser |
@@ -259,7 +259,9 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install         # 或 npm install
+nvm use              # 使用 .nvmrc 中的 Node 22
+corepack enable
+pnpm install
 pnpm dev:all         # daemon (:7456) + Vite (:5173) 一起起
 open http://localhost:5173
 ```
@@ -537,6 +539,14 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 ## 项目状态
 
 这是一个早期实现 —— 闭环（检测 → 选 skill + design system → 对话 → 解析 `<artifact>` → 预览 → 保存）已经端到端跑通。提示词栈和 skill 库是价值最重的部分，目前已稳定。组件级 UI 仍在每天迭代。
+
+## 给我们点个 Star
+
+<p align="center">
+  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="给 Open Design 点个 Star —— github.com/nexu-io/open-design" width="100%" /></a>
+</p>
+
+如果这套东西帮你省了半小时，给它一个 ★。Star 不付房租，但它告诉下一个设计师、Agent 和贡献者：这个实验值得他们的注意力。一次点击、三秒钟、真实信号：[github.com/nexu-io/open-design](https://github.com/nexu-io/open-design)。
 
 ## 贡献
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
+import { renderModelOptions } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
 
 interface Props {
@@ -10,6 +11,10 @@ interface Props {
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
+  onAgentModelChange: (
+    id: string,
+    choice: { model?: string; reasoning?: string },
+  ) => void;
   onOpenSettings: () => void;
   onRefreshAgents: () => void;
   onBack?: () => void;
@@ -26,6 +31,7 @@ export function AvatarMenu({
   daemonLive,
   onModeChange,
   onAgentChange,
+  onAgentModelChange,
   onOpenSettings,
   onRefreshAgents,
   onBack,
@@ -58,6 +64,19 @@ export function AvatarMenu({
 
   const installedAgents = agents.filter((a) => a.available);
 
+  // Resolve the user's model + reasoning pick for the active agent. Falls
+  // back to the agent's first declared option (`'default'`) when the user
+  // hasn't touched the picker yet so the labels don't read as empty.
+  const currentChoice =
+    (config.agentId && config.agentModels?.[config.agentId]) || {};
+  const currentModelId =
+    currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
+  const currentReasoningId =
+    currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
+  const currentModelLabel = currentAgent?.models?.find(
+    (m) => m.id === currentModelId,
+  )?.label;
+
   return (
     <div className="avatar-menu" ref={wrapRef}>
       <button
@@ -88,7 +107,7 @@ export function AvatarMenu({
               {config.mode === 'api'
                 ? safeHost(config.baseUrl)
                 : currentAgent
-                  ? `${currentAgent.name}${currentAgent.version ? ` · ${currentAgent.version}` : ''}`
+                  ? `${currentAgent.name}${currentAgent.version ? ` · ${currentAgent.version}` : ''}${currentModelLabel && currentModelId !== 'default' ? ` · ${currentModelLabel}` : ''}`
                   : t('avatar.noAgentSelected')}
             </span>
           </div>
@@ -133,18 +152,7 @@ export function AvatarMenu({
 
           {config.mode === 'daemon' && installedAgents.length > 0 ? (
             <>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  color: 'var(--text-faint)',
-                  fontWeight: 600,
-                  padding: '8px 10px 4px',
-                }}
-              >
-                {t('avatar.codeAgent')}
-              </div>
+              <div className="avatar-section-label">{t('avatar.codeAgent')}</div>
               {installedAgents.map((a) => (
                 <button
                   type="button"
@@ -152,7 +160,8 @@ export function AvatarMenu({
                   className="avatar-item"
                   onClick={() => {
                     onAgentChange(a.id);
-                    setOpen(false);
+                    // Keep the popover open so the user can immediately
+                    // pick a model for the agent they just chose.
                   }}
                 >
                   <AgentIcon id={a.id} size={18} />
@@ -166,6 +175,71 @@ export function AvatarMenu({
                   ) : null}
                 </button>
               ))}
+              {currentAgent &&
+              currentAgent.available &&
+              ((currentAgent.models && currentAgent.models.length > 0) ||
+                (currentAgent.reasoningOptions &&
+                  currentAgent.reasoningOptions.length > 0)) ? (
+                <div className="avatar-model-section">
+                  <div className="avatar-section-label">
+                    {t('avatar.modelSection')}
+                  </div>
+                  {currentAgent.models && currentAgent.models.length > 0 ? (
+                    <label className="avatar-select-row">
+                      <span className="avatar-select-label">
+                        {t('avatar.modelLabel')}
+                      </span>
+                      <select
+                        className="avatar-select"
+                        value={currentModelId ?? ''}
+                        onChange={(e) =>
+                          onAgentModelChange(currentAgent.id, {
+                            model: e.target.value,
+                          })
+                        }
+                      >
+                        {renderModelOptions(currentAgent.models)}
+                        {/* When the user has typed a custom id in
+                            Settings, surface it here too so the dropdown
+                            actually shows the active selection rather
+                            than collapsing to "Default". */}
+                        {currentModelId &&
+                        !currentAgent.models.some(
+                          (m) => m.id === currentModelId,
+                        ) ? (
+                          <option value={currentModelId}>
+                            {currentModelId}{' '}
+                            {t('avatar.customSuffix')}
+                          </option>
+                        ) : null}
+                      </select>
+                    </label>
+                  ) : null}
+                  {currentAgent.reasoningOptions &&
+                  currentAgent.reasoningOptions.length > 0 ? (
+                    <label className="avatar-select-row">
+                      <span className="avatar-select-label">
+                        {t('avatar.reasoningLabel')}
+                      </span>
+                      <select
+                        className="avatar-select"
+                        value={currentReasoningId ?? ''}
+                        onChange={(e) =>
+                          onAgentModelChange(currentAgent.id, {
+                            reasoning: e.target.value,
+                          })
+                        }
+                      >
+                        {currentAgent.reasoningOptions.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="avatar-item"

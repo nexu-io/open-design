@@ -2,6 +2,7 @@
   "name": "open-design",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.9",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
@@ -11,7 +12,7 @@
   "scripts": {
     "daemon": "node daemon/cli.js --no-open",
     "dev": "vite",
-    "dev:all": "concurrently -k -n daemon,web -c cyan,magenta \"npm:daemon\" \"npm:dev\"",
+    "dev:all": "node scripts/dev-all.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
@@ -34,7 +35,7 @@
     "vite": "^5.4.11"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <23"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

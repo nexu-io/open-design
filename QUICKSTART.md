@@ -5,8 +5,10 @@ Run the full product locally.
 ## One-shot (dev mode)
 
 ```bash
-npm install
-npm run dev:all        # starts daemon (:7456) + Vite (:5173) together
+nvm use                # uses Node 22 from .nvmrc
+corepack enable
+pnpm install
+pnpm dev:all           # starts daemon (:7456) + Vite (:5173) together
 open http://localhost:5173
 ```
 
@@ -24,12 +26,14 @@ Pair a skill with a design system and a single prompt produces a layout-appropri
 ## Other scripts
 
 ```bash
-npm run daemon         # just the daemon (no web UI build)
-npm run dev            # just Vite (fails /api calls unless daemon is up)
-npm run build          # production build of the frontend → dist/
-npm run start          # build + daemon serving dist/ (single-process prod mode)
-npm run typecheck      # tsc -b --noEmit
+pnpm daemon            # just the daemon (no web UI build)
+pnpm dev               # just Vite (fails /api calls unless daemon is up)
+pnpm build             # production build of the frontend → dist/
+pnpm start             # build + daemon serving dist/ (single-process prod mode)
+pnpm typecheck         # tsc -b --noEmit
 ```
+
+Use Node 20–22. The repo pins pnpm via `packageManager`; Node 24 is not supported because `better-sqlite3` may lack matching prebuilt binaries and fall back to native compilation.
 
 For the daemon-only production mode, the daemon serves the built SPA itself at `http://localhost:7456`, so no proxy involved.
 

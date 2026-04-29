@@ -16,3 +16,8 @@ dist
 tsconfig.tsbuildinfo
 
 .claude-sessions/*
+
+.cursor/*
+
+# Commander task scratchpad; keep local task notes out of git by default.
+.task/

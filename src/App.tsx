@@ -116,6 +116,7 @@ export function App() {
     const withOnboarding: AppConfig = { ...next, onboardingCompleted: true };
     saveConfig(withOnboarding);
     setConfig(withOnboarding);
+    setSettingsOpen(false);
   }, []);
 
   const handleModeChange = useCallback(
@@ -130,6 +131,18 @@ export function App() {
   const handleAgentChange = useCallback(
     (agentId: string) => {
       const next = { ...config, agentId };
+      saveConfig(next);
+      setConfig(next);
+    },
+    [config],
+  );
+
+  const handleAgentModelChange = useCallback(
+    (agentId: string, choice: { model?: string; reasoning?: string }) => {
+      const prev = config.agentModels?.[agentId] ?? {};
+      const merged = { ...prev, ...choice };
+      const nextAgentModels = { ...(config.agentModels ?? {}), [agentId]: merged };
+      const next = { ...config, agentModels: nextAgentModels };
       saveConfig(next);
       setConfig(next);
     },
@@ -271,6 +284,7 @@ export function App() {
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
           onAgentChange={handleAgentChange}
+          onAgentModelChange={handleAgentModelChange}
           onRefreshAgents={refreshAgents}
           onOpenSettings={openSettings}
           onBack={handleBack}

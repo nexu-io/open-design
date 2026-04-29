@@ -6,7 +6,12 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { detectAgents, getAgentDef } from './agents.js';
+import {
+  detectAgents,
+  getAgentDef,
+  isKnownModel,
+  sanitizeCustomModel,
+} from './agents.js';
 import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
@@ -690,6 +695,8 @@ export async function startServer({ port = 7456 } = {}) {
       imagePaths = [],
       projectId,
       attachments = [],
+      model,
+      reasoning,
     } = req.body || {};
     const def = getAgentDef(agentId);
     if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
@@ -769,7 +776,33 @@ export async function startServer({ port = 7456 } = {}) {
       safeImages.length ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}` : '',
     ].join('');
 
-    const args = def.buildArgs(composed, safeImages);
+    // Skill seeds (`skills/<id>/assets/template.html`) and design-system
+    // specs (`design-systems/<id>/DESIGN.md`) live outside the project cwd.
+    // The composed system prompt asks the agent to Read them via absolute
+    // paths in the skill-root preamble — without an explicit allowlist,
+    // Claude Code blocks those reads (issue #6: "no permission to read
+    // skills template"). We surface both roots so any agent that honours
+    // `--add-dir` can resolve those side files.
+    const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter(
+      (d) => fs.existsSync(d),
+    );
+    // Per-agent model + reasoning the user picked in the model menu.
+    // Trust the value when it matches the most recent /api/agents listing
+    // (live or fallback). Otherwise allow it through if it passes a
+    // permissive sanitizer — that's the path for user-typed custom model
+    // ids the CLI's listing didn't surface yet.
+    const safeModel =
+      typeof model === 'string'
+        ? isKnownModel(def, model)
+          ? model
+          : sanitizeCustomModel(model)
+        : null;
+    const safeReasoning =
+      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
+        ? def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null
+        : null;
+    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const args = def.buildArgs(composed, safeImages, extraAllowedDirs, agentOptions);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -788,6 +821,8 @@ export async function startServer({ port = 7456 } = {}) {
       streamFormat: def.streamFormat ?? 'plain',
       projectId: typeof projectId === 'string' ? projectId : null,
       cwd,
+      model: safeModel,
+      reasoning: safeReasoning,
     });
 
     let child;

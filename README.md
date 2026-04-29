@@ -248,7 +248,7 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 | Layer | Stack |
 |---|---|
 | Frontend | Vite 5 + React 18 + TypeScript |
-| Daemon | Node 18+ · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
+| Daemon | Node 20–22 · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
 | Agent transport | `child_process.spawn` with `claude-stream-json` parser for Claude Code, line-buffered plain stdout for the rest |
 | Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/db.sqlite` (gitignored) |
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser |
@@ -259,7 +259,9 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install         # or npm install
+nvm use              # uses Node 22 from .nvmrc
+corepack enable
+pnpm install
 pnpm dev:all         # daemon (:7456) + Vite (:5173)
 open http://localhost:5173
 ```
@@ -537,6 +539,14 @@ Phased delivery → [`docs/roadmap.md`](docs/roadmap.md).
 ## Status
 
 This is an early implementation — the closed loop (detect → pick skill + design system → chat → parse `<artifact>` → preview → save) runs end-to-end. The prompt stack and skill library are where most of the value lives, and they're stable. The component-level UI is shipping daily.
+
+## Star us
+
+<p align="center">
+  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+</p>
+
+If this saved you thirty minutes — give it a ★. Stars don't pay rent, but they tell the next designer, agent, and contributor that this experiment is worth their attention. One click, three seconds, real signal: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
 
 ## Contributing
 
