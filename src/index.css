@@ -752,6 +752,9 @@ code {
   gap: 18px;
   max-height: calc(100vh - 64px);
 }
+@media (max-height: 600px) {
+  .modal-settings { max-height: 90vh; }
+}
 .modal-settings .modal-body {
   overflow-y: auto;
   display: flex;
