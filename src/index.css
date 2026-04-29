@@ -745,7 +745,15 @@ code {
   50% { opacity: 0.6; transform: scale(0.85); }
 }
 
-.modal-settings { width: 600px; padding: 24px; gap: 18px; }
+.modal-settings { width: 600px; padding: 24px; gap: 18px; max-height: calc(100vh - 64px); }
+.modal-settings .modal-body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0 -24px;
+  padding: 0 24px;
+}
 .modal-head { display: flex; flex-direction: column; gap: 4px; }
 .modal-head .kicker {
   font-size: 11px;
