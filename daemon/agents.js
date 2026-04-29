@@ -13,6 +13,13 @@ const execFileP = promisify(execFile);
 //     `--output-format stream-json`. Daemon parses it into typed events
 //     (text / thinking / tool_use / tool_result / status) for the UI.
 //   - 'plain' (default)    : raw text, forwarded chunk-by-chunk.
+//
+// Permission posture: the daemon spawns each CLI with cwd pinned to the
+// project folder (`.od/projects/<id>/`), and the web app has no terminal
+// to surface an interactive approve/deny prompt. So every agent runs with
+// its "auto-approve tools inside cwd" switch on — otherwise Write/Edit
+// hangs or errors and the model has to hallucinate a permission button
+// the UI never shows.
 export const AGENT_DEFS = [
   {
     id: 'claude',
@@ -26,6 +33,10 @@ export const AGENT_DEFS = [
       'stream-json',
       '--verbose',
       '--include-partial-messages',
+      // No interactive approval surface in the web UI; the daemon already
+      // sandboxes the agent to the project's cwd, so let it write freely.
+      '--permission-mode',
+      'bypassPermissions',
     ],
     streamFormat: 'claude-stream-json',
   },
@@ -34,7 +45,9 @@ export const AGENT_DEFS = [
     name: 'Codex CLI',
     bin: 'codex',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['exec', prompt],
+    // `--full-auto` = workspace-write sandbox + auto-approve, the closest
+    // match to "trusted local daemon" without dropping the OS-level sandbox.
+    buildArgs: (prompt) => ['exec', '--full-auto', prompt],
     streamFormat: 'plain',
   },
   {
@@ -42,7 +55,7 @@ export const AGENT_DEFS = [
     name: 'Gemini CLI',
     bin: 'gemini',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', prompt],
+    buildArgs: (prompt) => ['--yolo', '-p', prompt],
     streamFormat: 'plain',
   },
   {
@@ -58,7 +71,7 @@ export const AGENT_DEFS = [
     name: 'Cursor Agent',
     bin: 'cursor-agent',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', prompt],
+    buildArgs: (prompt) => ['-p', '--force', prompt],
     streamFormat: 'plain',
   },
   {
@@ -66,7 +79,8 @@ export const AGENT_DEFS = [
     name: 'Qwen Code',
     bin: 'qwen',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', prompt],
+    // Qwen Code is a Gemini-CLI fork and inherits the same `--yolo` switch.
+    buildArgs: (prompt) => ['--yolo', '-p', prompt],
     streamFormat: 'plain',
   },
 ];
