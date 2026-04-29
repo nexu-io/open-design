@@ -100,10 +100,14 @@ export function createCopilotStreamHandler(onEvent) {
 
       case 'result':
         // `result` puts usage / exitCode at the top level, not under `data`.
+        // Treat a missing exitCode as success when `success: true` is set —
+        // strict `=== 0` would otherwise mis-flag turns where Copilot emits
+        // usage without a numeric exit code as `error`.
         onEvent({
           type: 'usage',
           usage: obj.usage ?? null,
-          stopReason: obj.exitCode === 0 ? 'completed' : 'error',
+          stopReason:
+            obj.success === true || obj.exitCode === 0 ? 'completed' : 'error',
           durationMs: obj.usage?.sessionDurationMs ?? null,
         });
         return;
