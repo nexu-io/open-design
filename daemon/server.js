@@ -72,9 +72,10 @@ fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
 // Windows ENAMETOOLONG mitigation constants
 const CMD_BAT_RE = /\.(cmd|bat)$/i;
-const PROMPT_TEMP_FILE = '.od-prompt.md';
+const PROMPT_TEMP_FILE = () =>
+  '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
 const promptFileBootstrap = (fp) =>
-  `Read the file at ${fp} for your complete instructions ` +
+  `Read the file at ${fp.replace(/\\/g, '/')} for your complete instructions ` +
   '(system prompt, design system, skill workflow, and user request). ' +
   'Follow every instruction in that file exactly. ' +
   'Do not begin your response until you have read the entire file.';
