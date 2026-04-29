@@ -12,6 +12,9 @@ will read it as part of its system prompt.
   [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)
   (the [`getdesign@latest`](https://www.npmjs.com/package/getdesign) npm
   package, MIT-licensed). One folder per brand:
+- **57 design skills**, sourced from
+  [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills)
+  and added directly as normalized 9-section `DESIGN.md` files.
 
   | Category | Systems |
   |---|---|
@@ -73,3 +76,6 @@ The 69 product systems are sourced from
 [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)
 (MIT, © VoltAgent contributors). They are aesthetic *inspirations* — none
 of them are official assets of the brands they reference.
+
+The 57 design skills are sourced from
+[`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills).

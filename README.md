@@ -40,7 +40,7 @@ OD stands on four open-source shoulders:
 | | What you get |
 |---|---|
 | **Coding agents supported** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Anthropic API (BYOK fallback) |
-| **Design systems built-in** | **71** — 2 hand-authored starters + 69 product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, …) imported from [`awesome-design-md`][acd2] |
+| **Design systems built-in** | **71 + 57** — 2 hand-authored starters + 69 product systems from [`awesome-design-md`][acd2], plus 57 design skills sourced from [`awesome-design-skills`][ads] and added directly under `design-systems/` |
 | **Skills built-in** | **19** — prototype, deck, mobile, dashboard, pricing, docs, blog, SaaS landing, plus 10 document/work-product templates (PM spec, weekly update, OKRs, runbook, kanban, …) |
 | **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Tech Utility · Brutalist · Soft Warm) — each ships a deterministic OKLch palette + font stack |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across screens |
@@ -49,6 +49,7 @@ OD stands on four open-source shoulders:
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
+[ads]: https://github.com/bergside/awesome-design-skills
 
 ## Demo
 
@@ -188,7 +189,7 @@ Following Claude Code's [`SKILL.md` convention](https://docs.anthropic.com/en/do
 
 ### 3 · Design Systems are portable Markdown, not theme JSON.
 
-The 9-section `DESIGN.md` schema from [`VoltAgent/awesome-design-md`][acd2] — color, typography, spacing, layout, components, motion, voice, brand, anti-patterns. Every artifact reads from the active system. Switch system → next render uses the new tokens. The dropdown ships with **Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Apple, Anthropic, Cursor, Supabase, Figma, Resend, Raycast, Lovable, Cohere, Mistral, ElevenLabs, X.AI, Spotify, Webflow, Sanity, PostHog, Sentry, MongoDB, ClickHouse, Cal, Replicate, Clay, Composio…** — 71 in total.
+The 9-section `DESIGN.md` schema from [`VoltAgent/awesome-design-md`][acd2] — color, typography, spacing, layout, components, motion, voice, brand, anti-patterns. Every artifact reads from the active system. Switch system → next render uses the new tokens. The dropdown ships with **Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Apple, Anthropic, Cursor, Supabase, Figma, Resend, Raycast, Lovable, Cohere, Mistral, ElevenLabs, X.AI, Spotify, Webflow, Sanity, PostHog, Sentry, MongoDB, ClickHouse, Cal, Replicate, Clay, Composio…** — plus 57 design skills sourced from [`awesome-design-skills`][ads].
 
 ### 4 · The interactive question form prevents 80% of redirects.
 
@@ -439,7 +440,7 @@ open-design/
 
 </details>
 
-The library is imported via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs) from [`VoltAgent/awesome-design-md`][acd2]. Re-run to refresh.
+The product-system library is imported via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs) from [`VoltAgent/awesome-design-md`][acd2]. The 57 design skills are sourced from [`bergside/awesome-design-skills`][ads] and added directly in `design-systems/`.
 
 ## Visual directions
 
@@ -525,6 +526,7 @@ Every external project this repo borrows from. Each link goes to the source so y
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection. UX patterns on our roadmap: comment-mode surgical edits, AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
 | [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | Source of the 9-section `DESIGN.md` schema and 69 product systems imported via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs). |
+| [`bergside/awesome-design-skills`][ads] | Source of 57 design skills added directly as normalized `DESIGN.md` files under `design-systems/`. |
 | [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | Inspiration for symlink-based skill distribution across multiple agent CLIs. |
 | [Claude Code skills][skill] | The `SKILL.md` convention adopted verbatim — any Claude Code skill drops into `skills/` and is picked up by the daemon. |
 
