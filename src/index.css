@@ -757,13 +757,15 @@ code {
 }
 .modal-settings .modal-body {
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
   margin: 0 calc(var(--modal-padding) * -1);
   padding: 0 var(--modal-padding);
 }
-.modal-head { display: flex; flex-direction: column; gap: 4px; }
+.modal-head { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 .modal-head .kicker {
   font-size: 11px;
   text-transform: uppercase;
@@ -791,6 +793,7 @@ code {
   padding-top: 8px;
   border-top: 1px solid var(--border);
   margin-top: 4px;
+  flex-shrink: 0;
 }
 
 /* Segmented control */
