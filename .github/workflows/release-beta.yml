@@ -1,0 +1,17 @@
+name: release-beta
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    name: Release beta placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note pending release-beta implementation
+        run: |
+          echo "release-beta workflow placeholder"
+          echo "TODO: wire build, packaging, e2e, and beta publishing after release boundaries are defined."
