@@ -71,7 +71,7 @@ export const AGENT_DEFS = [
     name: 'Cursor Agent',
     bin: 'cursor-agent',
     versionArgs: ['--version'],
-    buildArgs: (prompt) => ['-p', '--force', prompt],
+    buildArgs: (prompt) => ['--force', '-p', prompt],
     streamFormat: 'plain',
   },
   {
