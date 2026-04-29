@@ -137,6 +137,18 @@ export function App() {
     [config],
   );
 
+  const handleAgentModelChange = useCallback(
+    (agentId: string, choice: { model?: string; reasoning?: string }) => {
+      const prev = config.agentModels?.[agentId] ?? {};
+      const merged = { ...prev, ...choice };
+      const nextAgentModels = { ...(config.agentModels ?? {}), [agentId]: merged };
+      const next = { ...config, agentModels: nextAgentModels };
+      saveConfig(next);
+      setConfig(next);
+    },
+    [config],
+  );
+
   const handleChangeDefaultDesignSystem = useCallback(
     (designSystemId: string) => {
       const next = { ...config, designSystemId };
@@ -272,6 +284,7 @@ export function App() {
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
           onAgentChange={handleAgentChange}
+          onAgentModelChange={handleAgentModelChange}
           onRefreshAgents={refreshAgents}
           onOpenSettings={openSettings}
           onBack={handleBack}

@@ -108,6 +108,23 @@ const VISUALS: Record<string, Visual> = {
       );
     },
   },
+  // GitHub Copilot — GitHub-dark with the Copilot two-eye mark.
+  copilot: {
+    bg: 'linear-gradient(135deg, #0d1117 0%, #1f2937 100%)',
+    fg: '#ffffff',
+    glyph: (s) => {
+      const c = s / 2;
+      const eyeOff = s * 0.14;
+      const eyeRx = s * 0.075;
+      const eyeRy = s * 0.12;
+      return (
+        <g fill="#ffffff">
+          <ellipse cx={c - eyeOff} cy={c} rx={eyeRx} ry={eyeRy} />
+          <ellipse cx={c + eyeOff} cy={c} rx={eyeRx} ry={eyeRy} />
+        </g>
+      );
+    },
+  },
   // Qwen — Alibaba indigo with stylized Q.
   qwen: {
     bg: 'linear-gradient(135deg, #615ced 0%, #8b5cf6 100%)',

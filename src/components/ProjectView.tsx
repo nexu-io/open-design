@@ -53,6 +53,10 @@ interface Props {
   daemonLive: boolean;
   onModeChange: (mode: AppConfig['mode']) => void;
   onAgentChange: (id: string) => void;
+  onAgentModelChange: (
+    id: string,
+    choice: { model?: string; reasoning?: string },
+  ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: () => void;
   onBack: () => void;
@@ -72,6 +76,7 @@ export function ProjectView({
   daemonLive,
   onModeChange,
   onAgentChange,
+  onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
   onBack,
@@ -490,6 +495,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
+        const choice = config.agentModels?.[config.agentId];
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -498,6 +504,8 @@ export function ProjectView({
           handlers,
           projectId: project.id,
           attachments: attachments.map((a) => a.path),
+          model: choice?.model ?? null,
+          reasoning: choice?.reasoning ?? null,
         });
       } else {
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
@@ -728,6 +736,7 @@ export function ProjectView({
             daemonLive={daemonLive}
             onModeChange={onModeChange}
             onAgentChange={onAgentChange}
+            onAgentModelChange={onAgentModelChange}
             onOpenSettings={onOpenSettings}
             onRefreshAgents={onRefreshAgents}
             onBack={onBack}

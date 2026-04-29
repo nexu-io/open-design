@@ -63,7 +63,7 @@ export const zhCN: Dict = {
   'settings.rescan': '↻ 重新扫描',
   'settings.rescanTitle': '重新扫描 PATH',
   'settings.noAgentsDetected':
-    '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent 或 Qwen 中的一个，然后点击「重新扫描」。',
+    '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen 或 GitHub Copilot CLI 中的一个，然后点击「重新扫描」。',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API Key',
   'settings.showKey': '显示 Key',
@@ -82,6 +82,13 @@ export const zhCN: Dict = {
   'settings.noAgentSelected': '尚未选择代理',
   'settings.language': '界面语言',
   'settings.languageHint': '切换界面语言，设置仅保存在当前浏览器。',
+  'settings.modelPicker': '模型',
+  'settings.reasoningPicker': '推理强度',
+  'settings.modelPickerHint':
+    '当 CLI 提供 `models` 命令时会自动拉取。选择「默认」则沿用 CLI 自身的配置；选择「自定义」可手动输入任何 CLI 支持的模型 id。',
+  'settings.modelCustom': '自定义（在下方填写）…',
+  'settings.modelCustomLabel': '自定义模型 id',
+  'settings.modelCustomPlaceholder': '例如 anthropic/claude-sonnet-4-6',
 
   'entry.tabDesigns': '我的设计',
   'entry.tabExamples': '示例',
@@ -208,6 +215,10 @@ export const zhCN: Dict = {
   'avatar.metaOffline': '未运行',
   'avatar.metaSelected': '已选',
   'avatar.noAgentSelected': '尚未选择代理',
+  'avatar.modelSection': '模型',
+  'avatar.modelLabel': '模型',
+  'avatar.reasoningLabel': '推理',
+  'avatar.customSuffix': '（自定义）',
 
   'project.backToProjects': '返回项目列表',
   'project.metaFreeform': '自由设计',

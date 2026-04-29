@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   skillId: null,
   designSystemId: null,
   onboardingCompleted: false,
+  agentModels: {},
 };
 
 export function loadConfig(): AppConfig {

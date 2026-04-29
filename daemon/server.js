@@ -6,10 +6,17 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { detectAgents, getAgentDef } from './agents.js';
+import {
+  detectAgents,
+  getAgentDef,
+  isKnownModel,
+  resolveAgentBin,
+  sanitizeCustomModel,
+} from './agents.js';
 import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { createCopilotStreamHandler } from './copilot-stream.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
@@ -695,6 +702,8 @@ export async function startServer({ port = 7456 } = {}) {
       imagePaths = [],
       projectId,
       attachments = [],
+      model,
+      reasoning,
     } = req.body || {};
     const def = getAgentDef(agentId);
     if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
@@ -784,7 +793,23 @@ export async function startServer({ port = 7456 } = {}) {
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter(
       (d) => fs.existsSync(d),
     );
-    const args = def.buildArgs(composed, safeImages, extraAllowedDirs);
+    // Per-agent model + reasoning the user picked in the model menu.
+    // Trust the value when it matches the most recent /api/agents listing
+    // (live or fallback). Otherwise allow it through if it passes a
+    // permissive sanitizer — that's the path for user-typed custom model
+    // ids the CLI's listing didn't surface yet.
+    const safeModel =
+      typeof model === 'string'
+        ? isKnownModel(def, model)
+          ? model
+          : sanitizeCustomModel(model)
+        : null;
+    const safeReasoning =
+      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
+        ? def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null
+        : null;
+    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const args = def.buildArgs(composed, safeImages, extraAllowedDirs, agentOptions);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -797,20 +822,68 @@ export async function startServer({ port = 7456 } = {}) {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
+    // Resolve the agent's bin to its absolute path. Detection (`/api/agents`)
+    // already locates the executable via PATH, but spawning the bare name here
+    // fails on Windows (ENOENT) when the child process's PATH doesn't contain
+    // the user's npm-global / shim directory — see issue #10.
+    //
+    // If detection can't find the binary, surface a friendly SSE error
+    // pointing at /api/agents instead of silently falling back to
+    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
+    // from issue #10 the rest of this block is meant to prevent.
+    const resolvedBin = resolveAgentBin(agentId);
+    if (!resolvedBin) {
+      send('error', {
+        message:
+          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+          'Install it and refresh the agent list (GET /api/agents) before retrying.',
+      });
+      return res.end();
+    }
+    // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
+    // those without `shell: true` (CVE-2024-27980). When `shell: true` is set
+    // on Windows, Node escapes argv items for the cmd.exe shell — that
+    // escape is what currently keeps user-controlled prompt text in `args`
+    // (composed via `def.buildArgs(prompt, ...)` above) from being
+    // interpreted as shell metacharacters. Two caveats this leaves on the
+    // table for a future contributor to be aware of:
+    //   1. Defensibility relies on Node's escaper staying correct. The
+    //      stronger fix is to keep user text out of argv entirely by piping
+    //      the composed prompt through child stdin instead of passing it
+    //      as a `-p $prompt`-style flag. Do NOT add a new prompt-bearing
+    //      flag in `buildArgs` thinking shell:true makes it safe — route
+    //      it through stdin instead.
+    //   2. cmd.exe caps the full command line at ~8191 chars (well below
+    //      Node's direct-spawn argv cap), so long prompts can fail with an
+    //      ENAMETOOLONG-class error here. Same mitigation: stdin.
+    //
+    // We only flip shell:true for `.cmd`/`.bat` because those are the only
+    // PATHEXT entries that strictly require cmd.exe to launch. `.exe`/`.com`
+    // launch directly (no shell needed); `.ps1`/`.vbs` etc. would need a
+    // different host (powershell / wscript) — `shell: true` (which uses
+    // cmd.exe) wouldn't actually help those, so we don't pretend it would.
+    // In practice npm-installed CLIs ship as `.cmd` shims, which is the
+    // case this branch covers.
+    const useShell =
+      process.platform === 'win32' && /\.(cmd|bat)$/i.test(resolvedBin);
+
     send('start', {
       agentId,
-      bin: def.bin,
+      bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
       projectId: typeof projectId === 'string' ? projectId : null,
       cwd,
+      model: safeModel,
+      reasoning: safeReasoning,
     });
 
     let child;
     try {
-      child = spawn(def.bin, args, {
+      child = spawn(resolvedBin, args, {
         env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe'],
         cwd: cwd || undefined,
+        shell: useShell,
       });
     } catch (err) {
       send('error', { message: `spawn failed: ${err.message}` });
@@ -828,6 +901,10 @@ export async function startServer({ port = 7456 } = {}) {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'copilot-stream-json') {
+      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      child.stdout.on('data', (chunk) => copilot.feed(chunk));
+      child.on('close', () => copilot.flush());
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }

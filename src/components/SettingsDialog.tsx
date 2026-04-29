@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import { AgentIcon } from './AgentIcon';
+import {
+  CUSTOM_MODEL_SENTINEL,
+  isCustomModel,
+  renderModelOptions,
+} from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
 
 interface Props {
@@ -183,6 +188,108 @@ export function SettingsDialog({
                 })}
               </div>
             )}
+            {(() => {
+              const selected = agents.find(
+                (a) => a.id === cfg.agentId && a.available,
+              );
+              if (!selected) return null;
+              const hasModels =
+                Array.isArray(selected.models) && selected.models.length > 0;
+              const hasReasoning =
+                Array.isArray(selected.reasoningOptions) &&
+                selected.reasoningOptions.length > 0;
+              if (!hasModels && !hasReasoning) return null;
+              const choice = cfg.agentModels?.[selected.id] ?? {};
+              const setChoice = (
+                next: { model?: string; reasoning?: string },
+              ) => {
+                setCfg((c) => {
+                  const prev = c.agentModels?.[selected.id] ?? {};
+                  return {
+                    ...c,
+                    agentModels: {
+                      ...(c.agentModels ?? {}),
+                      [selected.id]: { ...prev, ...next },
+                    },
+                  };
+                });
+              };
+              const modelValue =
+                choice.model ?? selected.models?.[0]?.id ?? '';
+              const reasoningValue =
+                choice.reasoning ??
+                selected.reasoningOptions?.[0]?.id ?? '';
+              const customActive =
+                hasModels && isCustomModel(modelValue, selected.models!);
+              const selectValue = customActive
+                ? CUSTOM_MODEL_SENTINEL
+                : modelValue;
+              return (
+                <div className="agent-model-row">
+                  {hasModels ? (
+                    <label className="field">
+                      <span className="field-label">
+                        {t('settings.modelPicker')}
+                      </span>
+                      <select
+                        value={selectValue}
+                        onChange={(e) => {
+                          if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                            // Switching to "Custom…" should clear the
+                            // value so the input below opens empty for
+                            // typing — keeping the previous live id
+                            // would defeat the point.
+                            setChoice({ model: '' });
+                          } else {
+                            setChoice({ model: e.target.value });
+                          }
+                        }}
+                      >
+                        {renderModelOptions(selected.models!)}
+                        <option value={CUSTOM_MODEL_SENTINEL}>
+                          {t('settings.modelCustom')}
+                        </option>
+                      </select>
+                    </label>
+                  ) : null}
+                  {customActive ? (
+                    <label className="field">
+                      <span className="field-label">
+                        {t('settings.modelCustomLabel')}
+                      </span>
+                      <input
+                        type="text"
+                        value={modelValue}
+                        placeholder={t('settings.modelCustomPlaceholder')}
+                        onChange={(e) =>
+                          setChoice({ model: e.target.value.trim() })
+                        }
+                      />
+                    </label>
+                  ) : null}
+                  {hasReasoning ? (
+                    <label className="field">
+                      <span className="field-label">
+                        {t('settings.reasoningPicker')}
+                      </span>
+                      <select
+                        value={reasoningValue}
+                        onChange={(e) =>
+                          setChoice({ reasoning: e.target.value })
+                        }
+                      >
+                        {selected.reasoningOptions!.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <p className="hint">{t('settings.modelPickerHint')}</p>
+                </div>
+              );
+            })()}
           </section>
         ) : (
           <section className="settings-section">

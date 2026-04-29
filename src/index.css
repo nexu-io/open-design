@@ -293,6 +293,45 @@ code {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.avatar-section-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 8px 10px 4px;
+}
+.avatar-model-section {
+  padding: 2px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px dashed var(--border-soft);
+  margin-top: 4px;
+}
+.avatar-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.avatar-select-label {
+  flex-shrink: 0;
+  min-width: 64px;
+}
+.avatar-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.avatar-select:focus { outline: 2px solid var(--accent-soft, var(--border-strong)); }
 
 /* Environment pill — only used in entry view header now */
 .env-pill {
@@ -827,6 +866,23 @@ code {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .agent-card-meta .muted { color: var(--text-soft); font-style: italic; }
+.agent-model-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.agent-model-row .field { gap: 4px; }
+.agent-model-row .field-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.agent-model-row .hint { margin: 0; font-size: 11.5px; }
 .status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
