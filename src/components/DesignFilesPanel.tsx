@@ -14,6 +14,7 @@ interface Props {
   onOpenFile: (name: string) => void;
   onDeleteFile: (name: string) => void;
   onUpload: () => void;
+  onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
   onNewSketch: () => void;
 }
@@ -43,11 +44,13 @@ export function DesignFilesPanel({
   onOpenFile,
   onDeleteFile,
   onUpload,
+  onUploadFiles,
   onPaste,
   onNewSketch,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -94,6 +97,13 @@ export function DesignFilesPanel({
     } finally {
       setRefreshing(false);
     }
+  }
+
+  function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
+    ev.preventDefault();
+    setDraggingFiles(false);
+    const dropped = Array.from(ev.dataTransfer.files ?? []);
+    if (dropped.length > 0) onUploadFiles(dropped);
   }
 
   return (
@@ -190,7 +200,23 @@ export function DesignFilesPanel({
               </div>
             ))
           )}
-          <div className="df-drop">
+          <div
+            className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
+            onDragEnter={(ev) => {
+              ev.preventDefault();
+              setDraggingFiles(true);
+            }}
+            onDragOver={(ev) => {
+              ev.preventDefault();
+              ev.dataTransfer.dropEffect = 'copy';
+            }}
+            onDragLeave={(ev) => {
+              if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+                setDraggingFiles(false);
+              }
+            }}
+            onDrop={handleDrop}
+          >
             <span className="label">{t('designFiles.dropTitle')}</span>
             <span className="desc">{t('designFiles.dropDesc')}</span>
           </div>

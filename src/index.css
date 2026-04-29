@@ -2001,6 +2001,10 @@ code {
   transition: background 120ms ease, color 120ms ease;
 }
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
+.ws-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .ws-tab.active {
   background: var(--bg-subtle);
   color: var(--text);
@@ -2250,6 +2254,11 @@ code {
   gap: 6px;
   text-align: center;
   color: var(--text-muted);
+}
+.df-drop.dragging {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  color: var(--text);
 }
 .df-drop .label {
   font-size: 11px;

@@ -288,7 +288,7 @@ export const en: Dict = {
   'workspace.designFilesLink': 'Design Files',
   'workspace.loadingSketch': 'Loading sketch…',
   'designFiles.title': 'Design Files',
-  'designFiles.upload': 'Upload image',
+  'designFiles.upload': 'Upload files',
   'designFiles.pasteText': 'Paste as text file',
   'designFiles.newSketch': 'New sketch',
   'designFiles.empty':
@@ -305,7 +305,7 @@ export const en: Dict = {
   'designFiles.dropTitle': '⤓ Drop files here',
   'designFiles.dropDesc':
     'Images, docs, references, Figma links, or folders — Claude will use them as context.',
-  'designFiles.upload.title': 'Upload an image',
+  'designFiles.upload.title': 'Upload files',
   'designFiles.paste.title': 'Paste text as a file',
   'designFiles.upload.label': 'Upload',
   'designFiles.paste.label': 'Paste',

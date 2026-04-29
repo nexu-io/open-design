@@ -4,6 +4,7 @@ import {
   deleteProjectFile,
   fetchProjectFileText,
   uploadProjectFile,
+  uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
 import type { OpenTabsState, ProjectFile } from '../types';
@@ -142,13 +143,27 @@ export function FileWorkspace({
   }
 
   async function handleFilePicked(ev: React.ChangeEvent<HTMLInputElement>) {
-    const f = ev.target.files?.[0];
-    if (!f) return;
-    const result = await uploadProjectFile(projectId, f);
+    const picked = Array.from(ev.target.files ?? []);
     ev.target.value = '';
-    if (result) {
+    await uploadFiles(picked);
+  }
+
+  async function uploadFiles(picked: File[]) {
+    if (picked.length === 0) return;
+    if (picked.length === 1) {
+      const result = await uploadProjectFile(projectId, picked[0]!);
+      if (result) {
+        await onRefreshFiles();
+        openFile(result.name);
+      }
+      return;
+    }
+
+    const uploaded = await uploadProjectFiles(projectId, picked);
+    if (uploaded.length > 0) {
       await onRefreshFiles();
-      openFile(result.name);
+      const lastUploaded = uploaded[uploaded.length - 1];
+      if (lastUploaded?.path) openFile(lastUploaded.path);
     }
   }
 
@@ -318,6 +333,7 @@ export function FileWorkspace({
             onOpenFile={openFile}
             onDeleteFile={(name) => void handleDelete(name)}
             onUpload={() => fileInputRef.current?.click()}
+            onUploadFiles={(picked) => void uploadFiles(picked)}
             onPaste={() => setShowPasteDialog(true)}
             onNewSketch={startNewSketch}
           />
@@ -363,7 +379,7 @@ export function FileWorkspace({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        multiple
         style={{ display: 'none' }}
         onChange={handleFilePicked}
       />
@@ -402,12 +418,18 @@ function Tab({
   const t = useT();
   const iconName = kindIconName(kind);
   return (
-    <button
-      type="button"
+    <div
       className={`ws-tab ${active ? 'active' : ''}`}
       onClick={onActivate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
       role="tab"
       aria-selected={active}
+      tabIndex={0}
     >
       {iconName ? (
         <span className="tab-icon" aria-hidden>
@@ -428,7 +450,7 @@ function Tab({
           <Icon name="close" size={11} />
         </button>
       ) : null}
-    </button>
+    </div>
   );
 }
 

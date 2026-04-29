@@ -94,6 +94,15 @@ const projectUpload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
+function handleProjectUpload(req, res, next) {
+  projectUpload.array('files', 12)(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || String(err) });
+    }
+    next();
+  });
+}
+
 export async function startServer({ port = 7456 } = {}) {
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -656,7 +665,7 @@ export async function startServer({ port = 7456 } = {}) {
   // without a separate refetch.
   app.post(
     '/api/projects/:id/upload',
-    projectUpload.array('files', 12),
+    handleProjectUpload,
     async (req, res) => {
       try {
         const incoming = Array.isArray(req.files) ? req.files : [];

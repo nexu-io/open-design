@@ -173,28 +173,37 @@ export async function uploadProjectFile(
 // picker. Each file lands flat in the project folder; the response is
 // reshaped into ChatAttachments so the composer can stage them without a
 // follow-up listFiles round-trip.
+const PROJECT_UPLOAD_BATCH_SIZE = 12;
+
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
 ): Promise<ChatAttachment[]> {
   if (files.length === 0) return [];
   try {
-    const form = new FormData();
-    for (const f of files) form.append('files', f);
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/upload`,
-      { method: 'POST', body: form },
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as {
-      files: { name: string; path: string; size?: number; originalName?: string }[];
-    };
-    return (json.files ?? []).map((f) => ({
-      path: f.path,
-      name: f.originalName ?? f.name,
-      kind: looksLikeImage(f.name) ? 'image' : 'file',
-      size: f.size,
-    }));
+    const uploaded: ChatAttachment[] = [];
+    for (let i = 0; i < files.length; i += PROJECT_UPLOAD_BATCH_SIZE) {
+      const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
+      const form = new FormData();
+      for (const f of batch) form.append('files', f);
+      const resp = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/upload`,
+        { method: 'POST', body: form },
+      );
+      if (!resp.ok) return uploaded;
+      const json = (await resp.json()) as {
+        files: { name: string; path: string; size?: number; originalName?: string }[];
+      };
+      uploaded.push(
+        ...(json.files ?? []).map((f) => ({
+          path: f.path,
+          name: f.originalName ?? f.name,
+          kind: looksLikeImage(f.name) ? 'image' as const : 'file' as const,
+          size: f.size,
+        })),
+      );
+    }
+    return uploaded;
   } catch {
     return [];
   }
