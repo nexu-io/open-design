@@ -40,6 +40,7 @@ export interface ComposeInput {
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?: 'prototype' | 'deck' | 'template' | 'design-system' | undefined;
+  artifactKind?: 'prototype' | 'deck' | 'template' | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
   // Project-level metadata captured by the new-project panel. Drives the
@@ -51,26 +52,38 @@ export interface ComposeInput {
   // Snapshot of HTML files that the agent should treat as a starting
   // reference rather than a fixed deliverable.
   template?: ProjectTemplate | undefined;
+  // Phase flag: 'discovery' (default) runs the full discovery+philosophy
+  // layer on every turn; 'execution' skips it once discovery is locked
+  // and the agent has started real work (TodoWrite / artifact generation).
+  phase?: 'discovery' | 'execution' | undefined;
 }
 
 export function composeSystemPrompt({
   skillBody,
   skillName,
   skillMode,
+  artifactKind,
   designSystemBody,
   designSystemTitle,
   metadata,
   template,
+  phase,
 }: ComposeInput): string {
-  // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
-  // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
-  // checklist + critique before <artifact>) win precedence over softer
-  // wording later in the official base prompt.
-  const parts: string[] = [
-    DISCOVERY_AND_PHILOSOPHY,
-    '\n\n---\n\n# Identity and workflow charter (background)\n\n',
-    BASE_SYSTEM_PROMPT,
-  ];
+  const isExecution = phase === 'execution';
+
+  // Discovery + philosophy goes FIRST (when in discovery mode) so its hard
+  // rules ("emit a form on turn 1", "branch on brand on turn 2",
+  // "TodoWrite on turn 3", run checklist + critique before <artifact>)
+  // win precedence over softer wording later in the official base prompt.
+  // In execution mode we skip it entirely — discovery is locked and the
+  // agent should focus on building, not re-triggering the form flow.
+  const parts: string[] = isExecution
+    ? []
+    : [
+        DISCOVERY_AND_PHILOSOPHY,
+        '\n\n---\n\n# Identity and workflow charter (background)\n\n',
+        BASE_SYSTEM_PROMPT,
+      ];
 
   if (designSystemBody && designSystemBody.trim().length > 0) {
     parts.push(
@@ -92,22 +105,15 @@ export function composeSystemPrompt({
   // stylesheet for PDF stitching). Pin it last so it overrides any softer
   // wording earlier in the stack ("write a script that handles arrows…").
   //
-  // We fire on either (a) the active skill is a deck skill OR (b) the
-  // project metadata declares kind=deck. Case (b) catches projects created
-  // without a skill (skill_id null) — without this, a deck-kind project
-  // with no bound skill gets neither a skill seed nor the framework
-  // skeleton, and the agent writes scaling / nav / print logic from scratch
-  // with the same buggy `place-items: center` + transform pattern we keep
-  // having to fix at runtime. Skill seeds (when present) win — they
-  // already define their own opinionated framework (simple-deck's
-  // scroll-snap, guizang-ppt's magazine layout) and re-pinning the generic
-  // skeleton would conflict. The skill-seed path takes over via
+  // We fire when `artifactKind === 'deck'`. When the active skill ships its
+  // own seed (skill body references `assets/template.html`), we defer to
+  // that seed and skip the generic skeleton — the skill's framework wins to
+  // avoid double-injection. The skill-seed path takes over via
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
-  const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (isDeckProject && !hasSkillSeed) {
+  if (artifactKind === 'deck' && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
   }
 
@@ -163,12 +169,17 @@ function renderMetadataBlock(
     for (const f of template.files) {
       // Cap each file at ~12k chars so a giant template doesn't blow out
       // the system prompt budget. The agent gets enough to read structure.
-      const truncated =
-        f.content.length > 12000
-          ? `${f.content.slice(0, 12000)}\n<!-- … truncated (${f.content.length - 12000} chars omitted) -->`
-          : f.content;
+      const isTruncated = f.content.length > 12000;
+      const truncated = isTruncated
+        ? `${f.content.slice(0, 12000)}\n<!-- … truncated (${f.content.length - 12000} chars omitted) -->`
+        : f.content;
       lines.push('');
       lines.push(`#### \`${f.name}\``);
+      if (isTruncated) {
+        lines.push(
+          `⚠️ Template source "${f.name}" truncated — ${f.content.length - 12000} chars omitted. Key structures copied; adapt freely.`,
+        );
+      }
       lines.push('```html');
       lines.push(truncated);
       lines.push('```');

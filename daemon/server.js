@@ -88,16 +88,16 @@ const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: UPLOAD_DIR,
-    filename: (_req, file, cb) => {
-      const safe = file.originalname.replace(/[^\w.\-]/g, '_');
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
-    },
-  }),
-  limits: { fileSize: 20 * 1024 * 1024 },
-});
+// P0 completion markers (case-insensitive, anchored to content not tool calls).
+const P0_PATTERNS = [
+  /P0:\s*all\s+pass/i,
+  /P0:\s*pass/i,
+  /P0\s*[-—]\s*all\s+items\s+passed/i,
+  /checklist:\s*P0\s+pass/i,
+];
+function hasP0Completion(content) {
+  return P0_PATTERNS.some((re) => re.test(content));
+}
 
 const importUpload = multer({
   storage: multer.diskStorage({
@@ -1038,10 +1038,51 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
-    const send = (event, data) => {
+    const rawSend = (event, data) => {
       res.write(`event: ${event}\n`);
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
+
+    // P0 artifact gate: buffers text_delta on each turn and applies the gate
+    // before releasing it on 'usage' (end-of-turn). Only gates the FIRST
+    // artifact per session (messageCount.value <= 1 at streaming start).
+    // Never blocks iterative tweaks.
+    const messageCount = { value: 0 };
+    let bufferedText = '';
+    let pendingArtifact = false;
+    const sendAgent = (ev) => {
+      if (ev.type === 'status' && ev.label === 'streaming') {
+        bufferedText = '';
+        pendingArtifact = messageCount.value <= 1;
+      }
+      if (ev.type === 'text_delta') {
+        bufferedText += ev.delta;
+        return;
+      }
+      if (ev.type === 'thinking_delta') {
+        rawSend('agent', ev);
+        return;
+      }
+      if (ev.type === 'usage') {
+        messageCount.value++;
+        if (pendingArtifact && bufferedText.includes('</artifact>') && !hasP0Completion(bufferedText)) {
+          const idx = bufferedText.lastIndexOf('</artifact>');
+          const prefix = bufferedText.slice(0, idx).trim();
+          rawSend('agent', { type: 'text_delta', delta: prefix });
+          rawSend('agent', {
+            type: 'text_delta',
+            delta: `\n\nBefore presenting the artifact above, confirm: did you run \`references/checklist.md\` and pass all P0 items? Report your findings explicitly before the artifact.`,
+          });
+        } else if (bufferedText.length > 0) {
+          rawSend('agent', { type: 'text_delta', delta: bufferedText });
+        }
+        rawSend('agent', ev);
+        bufferedText = '';
+        return;
+      }
+      rawSend('agent', ev);
+    };
+    const send = rawSend;
 
     // resolvedBin was already looked up above for the ENAMETOOLONG check.
     // If detection can't find the binary, surface a friendly SSE error
@@ -1134,11 +1175,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
     if (def.streamFormat === 'claude-stream-json') {
-      const claude = createClaudeStreamHandler((ev) => send('agent', ev));
+      const claude = createClaudeStreamHandler((ev) => sendAgent(ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
-      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      const copilot = createCopilotStreamHandler((ev) => sendAgent(ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'acp-json-rpc') {
@@ -1147,11 +1188,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         prompt: composed,
         cwd: cwd || PROJECT_ROOT,
         model: safeModel,
-        send,
+        send: sendAgent,
       });
     } else if (def.streamFormat === 'json-event-stream') {
       const handler = createJsonEventStreamHandler(def.eventParser || def.id, (ev) =>
-        send('agent', ev),
+        sendAgent(ev),
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());

@@ -127,6 +127,11 @@ export function ProjectView({
   // "live" tab that was causing flicker against manual opens.
   const pendingWritesRef = useRef<Map<string, string>>(new Map());
 
+  // Once the agent emits its first TodoWrite (or first substantive HTML
+  // artifact chunk), discovery is locked and we're in execution mode.
+  // Flip this flag once — it stays true for the rest of the session.
+  const didAgentStartWorkRef = useRef(false);
+
   // Load conversations on project switch. If none exist (older projects
   // pre-conversations, or a freshly created one whose default seed got
   // dropped), create one on the fly.
@@ -265,14 +270,12 @@ export function ProjectView({
   const composedSystemPrompt = useCallback(async (): Promise<string> => {
     let skillBody: string | undefined;
     let skillName: string | undefined;
-    let skillMode: SkillSummary['mode'] | undefined;
     let designSystemBody: string | undefined;
     let designSystemTitle: string | undefined;
 
     if (project.skillId) {
       const summary = skills.find((s) => s.id === project.skillId);
       skillName = summary?.name;
-      skillMode = summary?.mode;
       const cached = skillCache.current.get(project.skillId);
       if (cached !== undefined) {
         skillBody = cached;
@@ -312,14 +315,18 @@ export function ProjectView({
         }
       }
     }
+    const skillMode = skills.find((s) => s.id === project.skillId)?.mode as 'prototype' | 'deck' | 'template' | 'design-system' | undefined;
+    const artifactKind = (skillMode ?? project.metadata?.kind) as 'prototype' | 'deck' | 'template' | undefined;
     return composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
+      artifactKind,
       designSystemBody,
       designSystemTitle,
       metadata: project.metadata,
       template,
+      phase: didAgentStartWorkRef.current ? 'execution' : 'discovery',
     });
   }, [
     project.skillId,
@@ -416,6 +423,10 @@ export function ProjectView({
             const base = filePath.split('/').pop() || filePath;
             pendingWritesRef.current.set(ev.id, base);
           }
+        }
+        // Detect first TodoWrite → discovery is done, we're in execution mode.
+        if (!didAgentStartWorkRef.current && ev.kind === 'tool_use' && ev.name === 'TodoWrite') {
+          didAgentStartWorkRef.current = true;
         }
         if (ev.kind === 'tool_result') {
           const base = pendingWritesRef.current.get(ev.toolUseId);
