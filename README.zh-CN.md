@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— 你机器上已经装好的 coding agent（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen）就是设计引擎，由 **19 个可组合 Skills** 和 **71 套品牌级 Design System** 驱动。
+> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— 你机器上已经装好的 coding agent（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI）就是设计引擎，由 **19 个可组合 Skills** 和 **71 套品牌级 Design System** 驱动。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design 封面：与本地 AI 智能体共同设计" width="100%" />
@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
-  <a href="#支持的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-Claude%20%7C%20Codex%20%7C%20Cursor%20%7C%20Gemini%20%7C%20OpenCode%20%7C%20Qwen-black" /></a>
+  <a href="#支持的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-Claude%20%7C%20Codex%20%7C%20Cursor%20%7C%20Gemini%20%7C%20OpenCode%20%7C%20Qwen%20%7C%20Copilot-black" /></a>
   <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-71-orange" /></a>
   <a href="#内置-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-19-teal" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green" /></a>
@@ -39,7 +39,7 @@ OD 站在四个开源项目的肩膀上：
 
 | | 你拿到的 |
 |---|---|
-| **支持的 coding agent** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Anthropic API（BYOK 兜底） |
+| **支持的 coding agent** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Anthropic API（BYOK 兜底） |
 | **内置 design system** | **71 套** —— 2 套手写起手 + 69 套从 [`awesome-design-md`][acd2] 导入的产品系统（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma…） |
 | **内置 skill** | **19 个** —— 原型 / deck / 移动端 / dashboard / pricing / docs / blog / SaaS landing，外加 10 个文档与办公产物模板（PM 规范、周报、OKR、runbook、看板…） |
 | **视觉方向** | 5 套精选流派（Editorial Monocle · Modern Minimal · Tech Utility · Brutalist · Soft Warm），每一套自带 OKLch 色板 + 字体栈 |
@@ -180,7 +180,7 @@ OD 站在四个开源项目的肩膀上：
 
 ### 1 · 我们不带 agent，你的就够好
 
-Daemon 启动时扫 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)。哪个在就用哪个 —— 通过 stdio 驱动，每个 CLI 一个 adapter。灵感来自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一个 CLI 都没有？`Anthropic API · BYOK` 就是同一条管线减去 spawn。
+Daemon 启动时扫 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)。哪个在就用哪个 —— 通过 stdio 驱动，每个 CLI 一个 adapter。灵感来自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一个 CLI 都没有？`Anthropic API · BYOK` 就是同一条管线减去 spawn。
 
 ### 2 · Skill 是文件，不是插件
 
@@ -239,17 +239,17 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
    └─────────┬────────────┘
              │ spawn(cli, [...], { cwd: .od/projects/<id> })
              ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │  claude · codex · cursor-agent · gemini · opencode · qwen│
-   │  读 SKILL.md + DESIGN.md，把 artifact 写到磁盘            │
-   └──────────────────────────────────────────────────────────┘
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  claude · codex · cursor-agent · gemini · opencode · qwen · copilot│
+   │  读 SKILL.md + DESIGN.md，把 artifact 写到磁盘                     │
+   └────────────────────────────────────────────────────────────────────┘
 ```
 
 | 层 | 技术栈 |
 |---|---|
 | 前端 | Vite 5 + React 18 + TypeScript |
 | Daemon | Node 18+ · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
-| Agent 传输层 | `child_process.spawn`，Claude Code 走 `claude-stream-json` 解析器，其余走 line-buffered plain stdout |
+| Agent 传输层 | `child_process.spawn`，Claude Code 走 `claude-stream-json` 解析器、Copilot CLI 走 `copilot-stream-json`，其余走 line-buffered plain stdout |
 | 存储 | 纯文件 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 启动自建） |
 | 预览 | 沙盒 iframe（`srcdoc`）+ 每个 skill 的 `<artifact>` parser |
 | 导出 | HTML（内联资源）· PDF（浏览器打印）· PPTX（skill 自定义）· ZIP（archiver） |
@@ -499,6 +499,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | line-buffered | `gemini -p` |
 | [OpenCode](https://opencode.ai/) | `opencode` | line-buffered | `opencode run` |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | line-buffered | `qwen -p` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `--output-format json`（类型化事件） | `copilot -p <prompt> --allow-all-tools --output-format json` |
 | Anthropic API · BYOK | n/a | SSE 直连 | 没装任何 CLI 时的浏览器兜底 |
 
 加一个新 CLI = 在 [`daemon/agents.js`](daemon/agents.js) 里加一项。流式格式从 `claude-stream-json`（类型化事件）和 `plain`（原始文本）两种里选一个。

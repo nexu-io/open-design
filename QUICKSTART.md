@@ -61,7 +61,7 @@ open-design/
 ├── daemon/                    # Node/Express — spawns local agents + serves APIs
 │   ├── cli.js                 # `od` bin entry (also used by npm scripts)
 │   ├── server.js              # /api/agents /api/skills /api/design-systems /api/chat /api/upload /api/artifacts/save
-│   ├── agents.js              # PATH scanner for claude/codex/gemini/opencode/cursor-agent/qwen
+│   ├── agents.js              # PATH scanner for claude/codex/gemini/opencode/cursor-agent/qwen/copilot
 │   ├── skills.js              # SKILL.md loader (frontmatter parser)
 │   ├── design-systems.js      # DESIGN.md loader
 │   └── frontmatter.js         # tiny YAML-subset parser (no deps)
@@ -105,7 +105,7 @@ open-design/
 
 ## Troubleshooting
 
-- **"no agents found on PATH"** — install one of: `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `qwen`. Or switch to "Anthropic API · BYOK" in the top bar and paste a key in **Settings**.
+- **"no agents found on PATH"** — install one of: `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Or switch to "Anthropic API · BYOK" in the top bar and paste a key in **Settings**.
 - **daemon 500 on /api/chat** — check the daemon terminal for the stderr tail; usually the CLI rejected its args. Different CLIs take different argv shapes; see `daemon/agents.js` `buildArgs` if you need to tweak.
 - **artifact never renders** — the model produced text without wrapping in `<artifact>`. Confirm the system prompt is going through (check daemon log) and consider switching to a more capable model or a stricter skill.
 
