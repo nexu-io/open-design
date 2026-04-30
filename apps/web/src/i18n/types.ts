@@ -169,6 +169,12 @@ export interface Dict {
   'designs.deleteTitle': string;
   'designs.deleteConfirm': string;
   'designs.cardFreeform': string;
+  'designs.status.notStarted': string;
+  'designs.status.queued': string;
+  'designs.status.running': string;
+  'designs.status.succeeded': string;
+  'designs.status.failed': string;
+  'designs.status.canceled': string;
 
   // Examples tab
   'examples.typeLabel': string;

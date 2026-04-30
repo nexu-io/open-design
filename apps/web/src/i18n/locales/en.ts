@@ -158,6 +158,12 @@ export const en: Dict = {
   'designs.deleteTitle': 'Delete project',
   'designs.deleteConfirm': 'Delete "{name}"?',
   'designs.cardFreeform': 'freeform',
+  'designs.status.notStarted': 'Not started',
+  'designs.status.queued': 'Queued',
+  'designs.status.running': 'Running',
+  'designs.status.succeeded': 'Completed',
+  'designs.status.failed': 'Failed',
+  'designs.status.canceled': 'Canceled',
 
   'examples.typeLabel': 'Type',
   'examples.scenarioLabel': 'Scenario',

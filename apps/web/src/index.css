@@ -2015,6 +2015,23 @@ code {
 .design-card-meta .ds {
   color: var(--accent);
 }
+.design-card-status {
+  font-weight: 500;
+}
+.design-card-status-running {
+  color: var(--accent);
+}
+.design-card-status-queued,
+.design-card-status-not_started,
+.design-card-status-canceled {
+  color: var(--text-muted);
+}
+.design-card-status-succeeded {
+  color: var(--green);
+}
+.design-card-status-failed {
+  color: var(--red);
+}
 .design-card-close {
   position: absolute;
   top: 8px;

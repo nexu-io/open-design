@@ -144,6 +144,32 @@ export function listProjects(db) {
   return rows.map(normalizeProject);
 }
 
+export function listLatestProjectRunStatuses(db) {
+  const rows = db
+    .prepare(
+      `SELECT c.project_id AS projectId,
+              m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.run_status IS NOT NULL
+        ORDER BY updatedAt DESC`,
+    )
+    .all();
+  const latestByProject = new Map();
+  for (const row of rows) {
+    if (!latestByProject.has(row.projectId)) {
+      latestByProject.set(row.projectId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return latestByProject;
+}
+
 export function getProject(db, id) {
   const row = db
     .prepare(`SELECT ${PROJECT_COLS} FROM projects WHERE id = ?`)
@@ -222,6 +248,21 @@ function normalizeProject(row) {
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };
+}
+
+function normalizeProjectRunStatus(status) {
+  if (status === 'starting') return 'running';
+  if (status === 'cancelled') return 'canceled';
+  if (
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'succeeded' ||
+    status === 'failed' ||
+    status === 'canceled'
+  ) {
+    return status;
+  }
+  return 'not_started';
 }
 
 // ---------- templates ----------

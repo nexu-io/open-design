@@ -155,6 +155,12 @@ export const zhCN: Dict = {
   'designs.deleteTitle': '删除项目',
   'designs.deleteConfirm': '确定删除「{name}」？',
   'designs.cardFreeform': '自由设计',
+  'designs.status.notStarted': '未开始',
+  'designs.status.queued': '等待中',
+  'designs.status.running': '运行中',
+  'designs.status.succeeded': '已完成',
+  'designs.status.failed': '失败',
+  'designs.status.canceled': '已取消',
 
   'examples.typeLabel': '类型',
   'examples.scenarioLabel': '场景',

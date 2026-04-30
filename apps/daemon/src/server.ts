@@ -49,6 +49,7 @@ import {
   insertProject,
   insertTemplate,
   listConversations,
+  listLatestProjectRunStatuses,
   listMessages,
   listProjects,
   listTabs,
@@ -320,13 +321,46 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   app.get('/api/projects', (_req, res) => {
     try {
+      const latestRunStatuses = listLatestProjectRunStatuses(db);
+      const activeRunStatuses = new Map();
+      for (const run of design.runs.list()) {
+        if (!run.projectId) continue;
+        const runStatus = projectStatusFromRun(run);
+        if (design.runs.isTerminal(run.status)) {
+          const existing = latestRunStatuses.get(run.projectId);
+          if (!existing || run.updatedAt > (existing.updatedAt ?? 0)) {
+            latestRunStatuses.set(run.projectId, runStatus);
+          }
+        } else {
+          const existing = activeRunStatuses.get(run.projectId);
+          if (!existing || run.updatedAt > (existing.updatedAt ?? 0)) {
+            activeRunStatuses.set(run.projectId, runStatus);
+          }
+        }
+      }
       /** @type {import('@open-design/contracts').ProjectsResponse} */
-      const body = { projects: listProjects(db) };
+      const body = {
+        projects: listProjects(db).map((project) => ({
+          ...project,
+          status:
+            activeRunStatuses.get(project.id) ??
+            latestRunStatuses.get(project.id) ??
+            { value: 'not_started' },
+        })),
+      };
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
     }
   });
+
+  function projectStatusFromRun(run) {
+    return {
+      value: run.status === 'starting' ? 'running' : run.status,
+      updatedAt: run.updatedAt,
+      runId: run.id,
+    };
+  }
 
   app.post('/api/projects', async (req, res) => {
     try {

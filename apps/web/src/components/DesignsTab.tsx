@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useT } from '../i18n';
-import type { DesignSystemSummary, Project, SkillSummary } from '../types';
+import type { DesignSystemSummary, Project, ProjectDisplayStatus, SkillSummary } from '../types';
 import { Icon } from './Icon';
 
 type SubTab = 'recent' | 'yours';
@@ -80,6 +80,7 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
           {filtered.map((p) => {
             const skill = skillName(p.skillId);
             const ds = dsName(p.designSystemId);
+            const status = p.status?.value ?? 'not_started';
             return (
               <div
                 key={p.id}
@@ -114,7 +115,10 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
                     )}
                     {skill ? ` · ${skill}` : ''}
                     {' · '}
-                    {relativeTime(p.updatedAt, t)}
+                    <span className={`design-card-status design-card-status-${status}`}>
+                      {statusLabel(status, t)}
+                    </span>
+                    {p.status?.updatedAt ? ` · ${relativeTime(p.status.updatedAt, t)}` : ''}
                   </div>
                 </div>
               </div>
@@ -124,6 +128,18 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
       )}
     </div>
   );
+}
+
+function statusLabel(status: ProjectDisplayStatus, t: ReturnType<typeof useT>): string {
+  const keyByStatus = {
+    not_started: 'designs.status.notStarted',
+    queued: 'designs.status.queued',
+    running: 'designs.status.running',
+    succeeded: 'designs.status.succeeded',
+    failed: 'designs.status.failed',
+    canceled: 'designs.status.canceled',
+  } as const satisfies Record<ProjectDisplayStatus, Parameters<typeof t>[0]>;
+  return t(keyByStatus[status]);
 }
 
 function relativeTime(ts: number, t: ReturnType<typeof useT>): string {

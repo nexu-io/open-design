@@ -155,6 +155,12 @@ export const zhTW: Dict = {
   'designs.deleteTitle': '刪除專案',
   'designs.deleteConfirm': '確定刪除「{name}」？',
   'designs.cardFreeform': '自由設計',
+  'designs.status.notStarted': '未開始',
+  'designs.status.queued': '等待中',
+  'designs.status.running': '執行中',
+  'designs.status.succeeded': '已完成',
+  'designs.status.failed': '失敗',
+  'designs.status.canceled': '已取消',
 
   'examples.typeLabel': '類型',
   'examples.scenarioLabel': '情境',

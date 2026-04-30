@@ -2,6 +2,20 @@ import type { ChatMessage } from './chat';
 
 export type ProjectKind = 'prototype' | 'deck' | 'template' | 'other';
 
+export type ProjectDisplayStatus =
+  | 'not_started'
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'canceled';
+
+export interface ProjectStatusInfo {
+  value: ProjectDisplayStatus;
+  updatedAt?: number;
+  runId?: string;
+}
+
 export interface ProjectMetadata {
   kind: ProjectKind;
   fidelity?: 'wireframe' | 'high-fidelity';
@@ -22,6 +36,7 @@ export interface Project {
   designSystemId: string | null;
   createdAt: number;
   updatedAt: number;
+  status?: ProjectStatusInfo;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
 }

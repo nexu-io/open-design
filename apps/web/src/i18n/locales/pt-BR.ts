@@ -158,6 +158,12 @@ export const ptBR: Dict = {
   'designs.deleteTitle': 'Excluir projeto',
   'designs.deleteConfirm': 'Excluir "{name}"?',
   'designs.cardFreeform': 'livre',
+  'designs.status.notStarted': 'Não iniciado',
+  'designs.status.queued': 'Na fila',
+  'designs.status.running': 'Em execução',
+  'designs.status.succeeded': 'Concluído',
+  'designs.status.failed': 'Falhou',
+  'designs.status.canceled': 'Cancelado',
 
   'examples.typeLabel': 'Tipo',
   'examples.scenarioLabel': 'Cenário',
