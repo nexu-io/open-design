@@ -72,6 +72,22 @@ export function PreviewModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose, fullscreen]);
 
+  // Mirror native fullscreen state into React. Without this, a user in
+  // browser fullscreen has to press Esc twice: the first Esc exits the
+  // native fullscreen element (consumed by the browser; in some browsers no
+  // keydown is delivered) while our `fullscreen` state stays true and the
+  // overlay keeps its `ds-modal-fullscreen` class. Listening to
+  // fullscreenchange lets one Esc dismiss both layers in lock-step.
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) {
+        setFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
   // Close share popover on outside click / Escape.
   useEffect(() => {
     if (!shareOpen) return;
