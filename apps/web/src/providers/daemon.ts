@@ -134,7 +134,7 @@ export async function streamViaDaemon({
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
-      let sawEvent = false;
+      let sawStreamProgress = false;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -145,8 +145,13 @@ export async function streamViaDaemon({
           const frame = buf.slice(0, idx);
           buf = buf.slice(idx + 2);
           const parsed = parseSseFrame(frame);
-          if (!parsed || parsed.kind !== 'event') continue;
-          sawEvent = true;
+          if (!parsed) continue;
+          if (parsed.kind === 'comment') {
+            sawStreamProgress = true;
+            continue;
+          }
+          if (parsed.kind !== 'event') continue;
+          sawStreamProgress = true;
           if (parsed.id) lastEventId = parsed.id;
 
           const event = parsed as unknown as ChatSseEvent;
@@ -199,7 +204,7 @@ export async function streamViaDaemon({
           }
         }
       }
-      reconnects = sawEvent ? 0 : reconnects + 1;
+      reconnects = sawStreamProgress ? 0 : reconnects + 1;
     }
 
     if (endStatus === null) {

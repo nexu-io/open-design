@@ -203,6 +203,31 @@ describe('streamViaDaemon', () => {
     });
     expect(handlers.onDone).toHaveBeenCalledWith('hello');
   });
+
+  it('keeps reconnecting when quiet resumed streams only receive keepalives', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledWith('');
+  });
 });
 
 describe('streamMessageOpenAI', () => {
