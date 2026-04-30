@@ -519,12 +519,18 @@ export function ProjectView({
             updateMessageById(message.id, (prev) => ({ ...prev, lastRunEventId }));
             persistSoon();
           },
-        }).finally(() => {
-          if (persistTimer) clearTimeout(persistTimer);
-          reattachControllersRef.current.delete(runId);
-          if (abortRef.current === controller) abortRef.current = null;
-          if (cancelRef.current === cancelController) cancelRef.current = null;
-        });
+        })
+          .catch((err) => {
+            if ((err as Error).name !== 'AbortError') {
+              setError(err instanceof Error ? err.message : String(err));
+            }
+          })
+          .finally(() => {
+            if (persistTimer) clearTimeout(persistTimer);
+            reattachControllersRef.current.delete(runId);
+            if (abortRef.current === controller) abortRef.current = null;
+            if (cancelRef.current === cancelController) cancelRef.current = null;
+          });
       }
     };
 
