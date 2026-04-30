@@ -61,7 +61,7 @@ export function FileViewer({
     return <MarkdownViewer projectId={projectId} file={file} />;
   }
   if (rendererMatch?.renderer.id === 'svg') {
-    return <ImageViewer projectId={projectId} file={file} />;
+    return <SvgViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'image') {
     return <ImageViewer projectId={projectId} file={file} />;
@@ -1185,6 +1185,122 @@ function AudioViewer({
           <div className="audio-card-name">{file.name}</div>
           <audio src={url} controls preload="metadata" />
         </div>
+      </div>
+    </div>
+  );
+}
+
+type SvgViewerMode = 'preview' | 'source';
+
+interface SvgViewerProps {
+  projectId: string;
+  file: ProjectFile;
+  initialMode?: SvgViewerMode;
+  initialSource?: string | null | undefined;
+}
+
+export function SvgViewer({
+  projectId,
+  file,
+  initialMode = 'preview',
+  initialSource,
+}: SvgViewerProps) {
+  const t = useT();
+  const [mode, setMode] = useState<SvgViewerMode>(initialMode);
+  const [source, setSource] = useState<string | null>(initialSource ?? null);
+  const [loadingSource, setLoadingSource] = useState(false);
+  const [sourceError, setSourceError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`;
+
+  useEffect(() => {
+    if (mode !== 'source') return;
+    if (initialSource !== undefined && reloadKey === 0) return;
+    let cancelled = false;
+    setLoadingSource(true);
+    setSourceError(false);
+    void fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      cacheBustKey: `${Math.round(file.mtime)}-${reloadKey}`,
+    }).then((next) => {
+      if (cancelled) return;
+      if (next === null) {
+        setSource('');
+        setSourceError(true);
+      } else {
+        setSource(next);
+      }
+      setLoadingSource(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.name, file.mtime, initialSource, mode, reloadKey]);
+
+  return (
+    <div className="viewer svg-viewer">
+      <div className="viewer-toolbar">
+        <div className="viewer-toolbar-left">
+          <span className="viewer-meta">
+            {t('fileViewer.imageMeta', { size: humanSize(file.size) })}
+          </span>
+        </div>
+        <div className="viewer-toolbar-actions">
+          <div className="viewer-tabs">
+            <button
+              type="button"
+              className={`viewer-tab ${mode === 'preview' ? 'active' : ''}`}
+              aria-pressed={mode === 'preview'}
+              onClick={() => setMode('preview')}
+            >
+              {t('fileViewer.preview')}
+            </button>
+            <button
+              type="button"
+              className={`viewer-tab ${mode === 'source' ? 'active' : ''}`}
+              aria-pressed={mode === 'source'}
+              onClick={() => setMode('source')}
+            >
+              {t('fileViewer.source')}
+            </button>
+          </div>
+          <span className="viewer-divider" aria-hidden />
+          <button
+            type="button"
+            className="viewer-action"
+            onClick={() => setReloadKey((n) => n + 1)}
+            title={t('fileViewer.reloadDisk')}
+          >
+            <Icon name="reload" size={13} />
+            <span>{t('fileViewer.reload')}</span>
+          </button>
+          <a
+            className="ghost-link"
+            href={projectFileUrl(projectId, file.name)}
+            download={file.name}
+          >
+            {t('fileViewer.download')}
+          </a>
+          <a
+            className="ghost-link"
+            href={projectFileUrl(projectId, file.name)}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {t('fileViewer.open')}
+          </a>
+        </div>
+      </div>
+      <div className={`viewer-body ${mode === 'preview' ? 'image-body' : ''}`}>
+        {mode === 'preview' ? (
+          <img alt={file.name} src={url} />
+        ) : loadingSource ? (
+          <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        ) : sourceError ? (
+          <div className="viewer-empty">{t('fileViewer.previewUnavailable')}</div>
+        ) : (
+          <pre className="viewer-source">{source ?? ''}</pre>
+        )}
       </div>
     </div>
   );

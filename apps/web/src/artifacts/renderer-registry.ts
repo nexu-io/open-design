@@ -68,7 +68,7 @@ export const MarkdownRenderer: ArtifactRenderer = {
 
 export const SvgRenderer: ArtifactRenderer = {
   id: 'svg',
-  supportsStreaming: true,
+  supportsStreaming: false,
   canRender: ({ file }) => {
     const manifest = resolveManifest(file);
     if (!manifest) return false;

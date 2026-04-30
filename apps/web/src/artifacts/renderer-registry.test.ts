@@ -110,7 +110,7 @@ describe('RendererRegistry', () => {
     expect(MarkdownRenderer.supportsStreaming).toBe(true);
     expect(MarkdownRenderer.renderPartial).toBe(renderMarkdownToSafeHtml);
 
-    expect(SvgRenderer.supportsStreaming).toBe(true);
+    expect(SvgRenderer.supportsStreaming).toBe(false);
     expect(SvgRenderer.renderPartial).toBeUndefined();
   });
 

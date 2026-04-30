@@ -234,9 +234,16 @@ export async function fetchProjectFilePreview(
 export async function fetchProjectFileText(
   projectId: string,
   name: string,
+  options?: { cache?: RequestCache; cacheBustKey?: string | number },
 ): Promise<string | null> {
   try {
-    const resp = await fetch(projectFileUrl(projectId, name));
+    const url = projectFileUrl(projectId, name);
+    const cacheBustKey = options?.cacheBustKey;
+    const requestUrl =
+      cacheBustKey == null
+        ? url
+        : `${url}${url.includes('?') ? '&' : '?'}cacheBust=${encodeURIComponent(String(cacheBustKey))}`;
+    const resp = await fetch(requestUrl, options?.cache ? { cache: options.cache } : undefined);
     if (!resp.ok) return null;
     return await resp.text();
   } catch {
