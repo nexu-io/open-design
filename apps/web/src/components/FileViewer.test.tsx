@@ -79,7 +79,10 @@ describe('FileViewer SVG artifacts', () => {
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
     const file = baseFile({ name: 'unsafe.svg', path: 'unsafe.svg', mime: 'image/svg+xml' });
-    const unsafeSource = '<svg onload="alert(1)"><script>alert(2)</script><text>Logo</text></svg>';
+    const unsafeSource = [
+      '<svg onload="alert(1)"><script>alert(2)</script><text>Logo</text></svg>',
+      '<svg><![CDATA[<script>alert(3)</script>]]></svg>',
+    ].join('\n');
 
     const markup = renderToStaticMarkup(
       <SvgViewer
@@ -92,8 +95,10 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(markup).toContain('&lt;svg onload=&quot;alert(1)&quot;&gt;');
     expect(markup).toContain('&lt;script&gt;alert(2)&lt;/script&gt;');
+    expect(markup).toContain('&lt;![CDATA[&lt;script&gt;alert(3)&lt;/script&gt;]]&gt;');
     expect(markup).not.toContain('<svg onload');
     expect(markup).not.toContain('<script>');
+    expect(markup).not.toContain('<![CDATA[');
     expect(markup).not.toContain('dangerouslySetInnerHTML');
   });
 });
