@@ -865,6 +865,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     try {
       const relPath = req.params[0];
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath);
+      // srcdoc iframes are the only legitimate senders of Origin: "null".
+      // Respond with the CORS header only for them; real cross-origin sites
+      // (including a potentially malicious page on a remote server) remain blocked.
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
