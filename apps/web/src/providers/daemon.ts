@@ -104,12 +104,13 @@ export async function streamViaDaemon({
       canceled = true;
       void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
     };
-    if (signal.aborted) {
-      cancelRun();
-      return;
-    }
     abortListener = cancelRun;
     signal.addEventListener('abort', cancelRun, { once: true });
+    if (signal.aborted) {
+      cancelRun();
+      signal.removeEventListener('abort', abortListener);
+      return;
+    }
 
     for (let reconnects = 0; endStatus === null && reconnects < 5;) {
       const qs = lastEventId ? `?after=${encodeURIComponent(lastEventId)}` : '';

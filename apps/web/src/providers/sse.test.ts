@@ -150,6 +150,55 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
+  it('cancels the daemon run when abort fires after the post-create aborted check', async () => {
+    const handlers = createDaemonHandlers();
+    const controller = new AbortController();
+    const abortedGetter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')?.get;
+    let triggeredAbortRace = false;
+
+    Object.defineProperty(controller.signal, 'aborted', {
+      configurable: true,
+      get() {
+        if (!triggeredAbortRace) {
+          triggeredAbortRace = true;
+          controller.abort();
+          return false;
+        }
+        return abortedGetter?.call(this) ?? true;
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/cancel') return jsonResponse({ ok: true });
+      if (url === '/api/runs/run-1/events') throw new DOMException('aborted', 'AbortError');
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: controller.signal,
+      handlers,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/runs', expect.objectContaining({
+      method: 'POST',
+      signal: controller.signal,
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/runs/run-1/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/runs/run-1/events', {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    expect(handlers.onDone).not.toHaveBeenCalled();
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
   it('passes the caller signal to the initial create-run request', async () => {
     const handlers = createDaemonHandlers();
     const controller = new AbortController();
