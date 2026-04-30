@@ -156,18 +156,31 @@ export function composeSystemPrompt({
   // directs the LLM to wire all booking/contact forms on the generated page to
   // POST lead data directly into the Lumina iMessage agent handoff endpoint.
   const wedgeEndpoint = process.env['LUMINA_WEDGE_ENDPOINT']?.trim();
-  if (wedgeEndpoint) {
+  const wedgeTenantId = process.env['LUMINA_WEDGE_TENANT_ID']?.trim();
+  if (wedgeEndpoint && wedgeTenantId) {
+    // Fail-fast URL validation — prevents placeholder values from reaching the LLM.
+    try {
+      const u = new URL(wedgeEndpoint);
+      if (!['http:', 'https:'].includes(u.protocol)) {
+        throw new Error(`LUMINA_WEDGE_ENDPOINT must be http(s): got ${u.protocol}`);
+      }
+    } catch (err) {
+      throw new Error(`Invalid LUMINA_WEDGE_ENDPOINT: ${err instanceof Error ? err.message : String(err)}`);
+    }
     parts.push(
       `\n\n## Lumina lead handoff (REQUIRED for forms)\n\n` +
       `The booking/contact form on this page must have:\n` +
       `- action="${wedgeEndpoint}"\n` +
       `- method="POST"\n` +
       `- Hidden inputs:\n` +
-      `  - tenant_id: "ericedmeades"\n` +
+      `  - tenant_id: "${wedgeTenantId}"\n` +
       `  - source_url: the page's own canonical URL\n\n` +
       `Do NOT use JavaScript for form submission. The form posts directly to the endpoint, ` +
       `which will route the lead into the customer's Lumina iMessage agent for real-time follow-up.`,
     );
+  } else if (wedgeEndpoint && !wedgeTenantId) {
+    // Half-configured guard — LUMINA_WEDGE_ENDPOINT set without tenant id is a misconfiguration.
+    throw new Error('LUMINA_WEDGE_ENDPOINT set without LUMINA_WEDGE_TENANT_ID — both required for wedge injection');
   }
 
   return parts.join('');
