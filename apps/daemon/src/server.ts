@@ -1962,7 +1962,25 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.post('/api/proxy/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
+    let { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
+
+    // ---- Lumina gateway override (spec 100) ---------------------------------
+    // When LUMINA_GATEWAY_URL + LUMINA_GATEWAY_TOKEN are set, the daemon proxy
+    // routes 100% of AI calls through the Lumina gateway, ignoring any user-
+    // supplied apiKey/baseUrl. This is the production posture for forked
+    // open-design — BYOK UI is hidden client-side via VITE_LUMINA_PROXY_MODE.
+    // See: README.lumina.md + spec 100 plan.md UC4 (minimal-surface variant).
+    const luminaGatewayUrl = process.env.LUMINA_GATEWAY_URL;
+    const luminaGatewayToken = process.env.LUMINA_GATEWAY_TOKEN;
+    if (luminaGatewayUrl && luminaGatewayToken) {
+      baseUrl = luminaGatewayUrl;
+      apiKey = luminaGatewayToken;
+      console.log('[proxy] Lumina gateway override active');
+    } else if (luminaGatewayUrl || luminaGatewayToken) {
+      // Half-configured — explicit fail so we don't silently leak to user creds.
+      return sendApiError(res, 502, 'CONFIG_ERROR', 'LUMINA_GATEWAY_URL and LUMINA_GATEWAY_TOKEN must both be set or both unset');
+    }
+
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }

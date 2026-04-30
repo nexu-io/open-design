@@ -100,6 +100,13 @@ export function App() {
         // Pop the onboarding modal only on the first run. Once the user has
         // saved or skipped past it once, we trust their stored config and
         // let them re-open Settings explicitly via the env pill.
+        // Lumina fork (spec 100): when VITE_LUMINA_PROXY_MODE=true, the daemon
+        // routes all AI calls server-side via LUMINA_GATEWAY_URL/_TOKEN.
+        // BYOK is invisible to the user — auto-mark onboarding complete so the
+        // welcome modal never appears. See README.lumina.md.
+        if (import.meta.env.VITE_LUMINA_PROXY_MODE === 'true') {
+          next.onboardingCompleted = true;
+        }
         if (!next.onboardingCompleted) {
           setSettingsWelcome(true);
           setSettingsOpen(true);
