@@ -18,7 +18,8 @@ for platform in "${expected[@]}"; do
   os="${platform%/*}"
   arch="${platform#*/}"
   if ! jq -e --arg os "$os" --arg arch "$arch" '
-    .mediaType == "application/vnd.docker.distribution.manifest.list.v2+json" and
+    (.mediaType == "application/vnd.docker.distribution.manifest.list.v2+json" or
+     .mediaType == "application/vnd.oci.image.index.v1+json") and
     any(.manifests[]?; .platform.os == $os and .platform.architecture == $arch)
   ' >/dev/null <<<"$inspect_output"; then
     echo "missing platform in manifest: $platform" >&2

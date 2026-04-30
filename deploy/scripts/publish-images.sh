@@ -16,6 +16,8 @@ INSPECT_AFTER_PUSH="${INSPECT_AFTER_PUSH:-1}"
 SKOPEO_AUTHFILE="${SKOPEO_AUTHFILE:-$HOME/.docker/config.json}"
 EFFECTIVE_SKOPEO_AUTHFILE="$SKOPEO_AUTHFILE"
 TEMP_SKOPEO_AUTHFILE=""
+TEMP_AUTH_ROOT=""
+TEMP_ROOT=""
 IMAGE="${IMAGE:-}"
 
 HTTP_PROXY="${HTTP_PROXY:-${http_proxy:-}}"
@@ -29,6 +31,66 @@ cleanup_temp_artifacts() {
   if [[ -n "$TEMP_SKOPEO_AUTHFILE" && -f "$TEMP_SKOPEO_AUTHFILE" ]]; then
     rm -f "$TEMP_SKOPEO_AUTHFILE"
   fi
+
+  if [[ -n "$TEMP_AUTH_ROOT" && -d "$TEMP_AUTH_ROOT" ]]; then
+    case "$TEMP_AUTH_ROOT" in
+      /dev/shm/publish-auth.*|"${TMPDIR:-/tmp}"/publish-auth.*|/tmp/publish-auth.*)
+        rm -rf "$TEMP_AUTH_ROOT"
+        ;;
+    esac
+  fi
+
+  if [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]]; then
+    case "$TEMP_ROOT" in
+      "${TMPDIR:-/tmp}"/publish-images.*|/tmp/publish-images.*)
+        rm -rf "$TEMP_ROOT"
+        ;;
+    esac
+  fi
+}
+
+ensure_temp_root() {
+  if [[ -n "$TEMP_ROOT" ]]; then
+    return 0
+  fi
+
+  TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/publish-images.XXXXXX")"
+  chmod 700 "$TEMP_ROOT"
+}
+
+ensure_temp_auth_root() {
+  if [[ -n "$TEMP_AUTH_ROOT" ]]; then
+    return 0
+  fi
+
+  if [[ -d /dev/shm && -w /dev/shm ]]; then
+    TEMP_AUTH_ROOT="$(mktemp -d /dev/shm/publish-auth.XXXXXX)"
+  else
+    TEMP_AUTH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/publish-auth.XXXXXX")"
+  fi
+  chmod 700 "$TEMP_AUTH_ROOT"
+}
+
+make_temp_dir() {
+  local target_var="$1"
+  local template="$2"
+  local temp_dir
+
+  ensure_temp_root
+  temp_dir="$(mktemp -d "$TEMP_ROOT/${template}.XXXXXX")"
+  chmod 700 "$temp_dir"
+  printf -v "$target_var" '%s' "$temp_dir"
+}
+
+make_temp_auth_file() {
+  local target_var="$1"
+  local template="$2"
+  local temp_file
+
+  ensure_temp_auth_root
+  temp_file="$(mktemp "$TEMP_AUTH_ROOT/${template}.XXXXXX")"
+  chmod 600 "$temp_file"
+  printf -v "$target_var" '%s' "$temp_file"
 }
 
 trap cleanup_temp_artifacts EXIT
@@ -91,13 +153,58 @@ detect_proxy_if_available() {
 
 normalize_proxy_for_build() {
   local proxy_url="${1:-}"
+  local scheme
+  local host
+  local port=""
 
   if [[ -z "$proxy_url" ]]; then
     printf '%s' ""
     return 0
   fi
 
-  printf '%s' "$proxy_url" | perl -pe 's#(https?://)(?:127\.0\.0\.1|localhost)(:\d+)?#$1host.docker.internal$2#g'
+  if [[ ! "$proxy_url" =~ ^(https?)://([a-zA-Z0-9._-]+)(:([0-9]+))?$ ]]; then
+    die "proxy URL must be http(s)://host[:port] with no path, query, or credentials: $proxy_url"
+  fi
+
+  scheme="${BASH_REMATCH[1]}"
+  host="${BASH_REMATCH[2]}"
+  port="${BASH_REMATCH[3]:-}"
+
+  if [[ -n "$port" ]]; then
+    local port_number="${port#:}"
+    if (( 10#$port_number < 1 || 10#$port_number > 65535 )); then
+      die "proxy URL port out of range: $proxy_url"
+    fi
+  fi
+
+  case "$host" in
+    localhost|127.0.0.1)
+      host="host.docker.internal"
+      ;;
+  esac
+
+  printf '%s://%s%s' "$scheme" "$host" "$port"
+}
+
+build_proxy_requires_host_gateway() {
+  [[ "$BUILD_HTTP_PROXY" == *'://host.docker.internal'* || "$BUILD_HTTPS_PROXY" == *'://host.docker.internal'* ]]
+}
+
+should_use_preloaded_base_images() {
+  [[ "$PRELOAD_BASE_IMAGES" == "1" && "$PUSH_STRATEGY" == "skopeo" ]]
+}
+
+validate_image_name_component() {
+  local label="$1"
+  local value="$2"
+
+  [[ -n "$value" ]] || die "$label must not be empty"
+  [[ "$value" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || die "$label must use lowercase Docker name components only: $value"
+}
+
+validate_image_ref_parts() {
+  validate_image_name_component "image namespace" "$IMAGE_NAMESPACE"
+  validate_image_name_component "image repository" "$IMAGE_REPOSITORY"
 }
 
 normalize_arch_to_platform() {
@@ -157,7 +264,7 @@ runtime_local_base_image() {
 
 node_image_for_platform() {
   local platform="$1"
-  if [[ "$PRELOAD_BASE_IMAGES" == "1" ]]; then
+  if should_use_preloaded_base_images; then
     node_local_base_image "$platform"
   else
     printf '%s' "$NODE_BASE_IMAGE"
@@ -166,7 +273,7 @@ node_image_for_platform() {
 
 runtime_image_for_platform() {
   local platform="$1"
-  if [[ "$PRELOAD_BASE_IMAGES" == "1" ]]; then
+  if should_use_preloaded_base_images; then
     runtime_local_base_image "$platform"
   else
     printf '%s' "$RUNTIME_BASE_IMAGE"
@@ -218,10 +325,22 @@ ensure_skopeo() {
     [[ -n "$secret" ]] || die "failed to resolve Docker registry secret from $helper_bin"
 
     auth="$(printf '%s:%s' "$username" "$secret" | base64 | tr -d '\n')"
-    TEMP_SKOPEO_AUTHFILE="$(mktemp "${TMPDIR:-/tmp}/skopeo-auth.XXXXXX")"
-    printf '{ "auths": { "%s": { "auth": "%s" } } }\n' "$registry_key" "$auth" >"$TEMP_SKOPEO_AUTHFILE"
+    make_temp_auth_file TEMP_SKOPEO_AUTHFILE skopeo-auth
+    jq -n --arg registry_key "$registry_key" --arg auth "$auth" \
+      '{auths: {($registry_key): {auth: $auth}}}' >"$TEMP_SKOPEO_AUTHFILE"
     EFFECTIVE_SKOPEO_AUTHFILE="$TEMP_SKOPEO_AUTHFILE"
   fi
+}
+
+skopeo_inspect_raw() {
+  local image="$1"
+  skopeo inspect --authfile "$EFFECTIVE_SKOPEO_AUTHFILE" --raw "docker://${image}" >/dev/null
+}
+
+skopeo_copy_to_registry() {
+  local archive_path="$1"
+  local image="$2"
+  skopeo copy --dest-authfile "$EFFECTIVE_SKOPEO_AUTHFILE" "docker-archive:$archive_path" "docker://$image"
 }
 
 preload_base_image() {
@@ -233,7 +352,7 @@ preload_base_image() {
   local archive_path
 
   arch="$(platform_to_arch "$platform")" || die "unsupported platform '$platform'"
-  archive_dir="$(mktemp -d "${TMPDIR:-/tmp}/publish-base.XXXXXX")"
+  make_temp_dir archive_dir publish-base
   archive_path="$archive_dir/image.tar"
 
   if docker_image_exists "$destination_image"; then
@@ -245,22 +364,18 @@ preload_base_image() {
     --override-arch "$arch" \
     "docker://$source_image" \
     "docker-archive:$archive_path:$destination_image"; then
-    rm -rf "$archive_dir"
     die "failed to preload base image '$source_image' for $platform"
   fi
 
   if ! docker load -i "$archive_path" >/dev/null; then
-    rm -rf "$archive_dir"
     die "failed to docker load preloaded base image '$destination_image'"
   fi
-
-  rm -rf "$archive_dir"
 }
 
 ensure_base_images_preloaded() {
   local platform="$1"
 
-  [[ "$PRELOAD_BASE_IMAGES" == "1" ]] || return 0
+  should_use_preloaded_base_images || return 0
   [[ "$DRY_RUN" == "1" ]] && return 0
 
   preload_base_image "$platform" "$NODE_BASE_IMAGE" "$(node_local_base_image "$platform")"
@@ -272,7 +387,7 @@ inspect_remote_image() {
   [[ "$INSPECT_AFTER_PUSH" == "1" ]] || return 0
 
   if [[ "$PUSH_STRATEGY" == "skopeo" ]]; then
-    skopeo inspect --raw "docker://${image}" >/dev/null
+    skopeo_inspect_raw "$image"
   else
     docker buildx imagetools inspect "$image" >/dev/null
   fi
@@ -283,16 +398,11 @@ push_local_image_with_skopeo() {
   local archive_dir
   local archive_path
 
-  archive_dir="$(mktemp -d "${TMPDIR:-/tmp}/publish-image.XXXXXX")"
+  make_temp_dir archive_dir publish-image
   archive_path="$archive_dir/image.tar"
 
   docker save -o "$archive_path" "$image"
-  skopeo copy \
-    --dest-authfile "$EFFECTIVE_SKOPEO_AUTHFILE" \
-    "docker-archive:$archive_path" \
-    "docker://$image"
-
-  rm -rf "$archive_dir"
+  skopeo_copy_to_registry "$archive_path" "$image"
 }
 
 print_build_cmd() {
@@ -300,18 +410,23 @@ print_build_cmd() {
   local platform="$2"
   shift 2
   local args=("$@")
+  local host_arg=""
+
+  if build_proxy_requires_host_gateway; then
+    host_arg=' --add-host host.docker.internal=host-gateway'
+  fi
 
   if [[ "$PUSH_STRATEGY" == "skopeo" ]]; then
-    printf 'docker buildx build --platform %s -t %s %s --load %s\n' \
-      "$platform" "$image" "${args[*]}" "$ROOT_DIR"
+    printf 'docker buildx build --platform %s%s -t %s %s --load %s\n' \
+      "$platform" "$host_arg" "$image" "${args[*]}" "$ROOT_DIR"
     printf 'docker save -o <archive> %s\n' "$image"
     printf 'skopeo copy --dest-authfile %s docker-archive:<archive> docker://%s\n' \
       "$EFFECTIVE_SKOPEO_AUTHFILE" "$image"
     return 0
   fi
 
-  printf 'docker buildx build --platform %s -t %s %s --push %s\n' \
-    "$platform" "$image" "${args[*]}" "$ROOT_DIR"
+  printf 'docker buildx build --platform %s%s -t %s %s --push %s\n' \
+    "$platform" "$host_arg" "$image" "${args[*]}" "$ROOT_DIR"
 }
 
 run_build() {
@@ -319,6 +434,11 @@ run_build() {
   local platform="$2"
   shift 2
   local args=("$@")
+  local host_args=()
+
+  if build_proxy_requires_host_gateway; then
+    host_args=(--add-host "host.docker.internal=host-gateway")
+  fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
     print_build_cmd "$image" "$platform" "${args[@]}"
@@ -328,7 +448,7 @@ run_build() {
   if [[ "$PUSH_STRATEGY" == "skopeo" ]]; then
     docker buildx build \
       --platform "$platform" \
-      --add-host "host.docker.internal=host-gateway" \
+      "${host_args[@]}" \
       -t "$image" \
       "${args[@]}" \
       --load \
@@ -337,7 +457,7 @@ run_build() {
   else
     docker buildx build \
       --platform "$platform" \
-      --add-host "host.docker.internal=host-gateway" \
+      "${host_args[@]}" \
       -t "$image" \
       "${args[@]}" \
       --push \
@@ -354,7 +474,11 @@ merge_manifest_for_image() {
 
   if [[ "$DRY_RUN" == "1" ]]; then
     printf 'docker buildx imagetools create --tag %s %s\n' "$final_image" "${source_images[*]}"
-    printf 'skopeo inspect --raw docker://%s\n' "$final_image"
+    if [[ "$PUSH_STRATEGY" == "skopeo" ]]; then
+      printf 'skopeo inspect --authfile %s --raw docker://%s\n' "$EFFECTIVE_SKOPEO_AUTHFILE" "$final_image"
+    else
+      printf 'docker buildx imagetools inspect %s\n' "$final_image"
+    fi
     return 0
   fi
 
@@ -364,6 +488,7 @@ merge_manifest_for_image() {
 
 refresh_image_ref() {
   if [[ -z "$IMAGE" ]]; then
+    validate_image_ref_parts
     IMAGE="${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}"
   fi
 }

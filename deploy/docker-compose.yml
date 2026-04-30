@@ -17,6 +17,11 @@ services:
       - "${OPEN_DESIGN_PORT:-7456}:7456"
     volumes:
       - open_design_data:/app/.od
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     mem_limit: ${OPEN_DESIGN_MEM_LIMIT:-384m}
     pids_limit: 256
     healthcheck:

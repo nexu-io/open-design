@@ -44,4 +44,5 @@ The script defaults to:
 - preloading base images through `skopeo` to reduce Docker Hub pull flakiness
 
 If `127.0.0.1:7890` is available and no proxy is already set, the script uses it
-for registry access and passes `host.docker.internal:7890` into Docker builds.
+for registry access and passes `host.docker.internal:7890` into Docker builds. The
+host-gateway alias is only added for builds that need this local proxy mapping.

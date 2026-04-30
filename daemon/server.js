@@ -156,6 +156,11 @@ function sendMulterError(res, err) {
   return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
 }
 
+function formatListenHost(host) {
+  const displayHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
+  return displayHost.includes(':') && !displayHost.startsWith('[') ? `[${displayHost}]` : displayHost;
+}
+
 export async function startServer({ host = '127.0.0.1', port = 7456 } = {}) {
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -1085,8 +1090,7 @@ export async function startServer({ host = '127.0.0.1', port = 7456 } = {}) {
 
   return new Promise((resolve) => {
     app.listen(port, host, () => {
-      const displayHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
-      resolve(`http://${displayHost}:${port}`);
+      resolve(`http://${formatListenHost(host)}:${port}`);
     });
   });
 }

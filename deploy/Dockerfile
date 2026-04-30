@@ -31,7 +31,6 @@ COPY public ./public
 RUN pnpm build && \
     pnpm prune --prod && \
     pnpm store prune && \
-    (find node_modules -type f -name "*.node" -exec strip --strip-unneeded '{}' + || true) && \
     rm -rf \
       /root/.cache \
       /root/.local/share/pnpm/store \
@@ -76,8 +75,8 @@ COPY --chown=open-design:open-design skills ./skills
 COPY --chown=open-design:open-design design-systems ./design-systems
 COPY --chown=open-design:open-design assets/frames ./assets/frames
 
-RUN mkdir -p /app/.od /tmp/od-uploads && \
-    chown -R open-design:open-design /app /tmp/od-uploads
+RUN mkdir -p /app/.od && \
+    chown -R open-design:open-design /app
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
