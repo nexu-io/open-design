@@ -41,6 +41,7 @@ export function SettingsDialog({
   const [cfg, setCfg] = useState<AppConfig>(initial);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
+  const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
   // If the daemon goes offline mid-edit, force API mode so the UI doesn't
@@ -53,6 +54,11 @@ export function SettingsDialog({
 
   useEffect(() => {
     if (!languageOpen) return;
+    const updateRect = () => {
+      const button = languageRef.current?.querySelector('button');
+      setLanguageMenuRect(button?.getBoundingClientRect() ?? null);
+    };
+    updateRect();
     function onDown(e: MouseEvent) {
       if (languageRef.current?.contains(e.target as Node)) return;
       setLanguageOpen(false);
@@ -62,9 +68,13 @@ export function SettingsDialog({
     }
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', updateRect);
+    window.addEventListener('scroll', updateRect, true);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', updateRect);
+      window.removeEventListener('scroll', updateRect, true);
     };
   }, [languageOpen]);
 
@@ -411,8 +421,16 @@ export function SettingsDialog({
                 </span>
                 <Icon name="chevron-down" size={16} />
               </button>
-              {languageOpen ? (
-                <div className="settings-language-menu" role="menu">
+              {languageOpen && languageMenuRect ? (
+                <div
+                  className="settings-language-menu"
+                  role="menu"
+                  style={{
+                    bottom: window.innerHeight - languageMenuRect.top + 6,
+                    left: languageMenuRect.left,
+                    width: languageMenuRect.width,
+                  }}
+                >
                   {LOCALES.map((code) => {
                     const active = locale === code;
                     return (
