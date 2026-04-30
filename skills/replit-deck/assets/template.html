@@ -28,7 +28,9 @@
     4. no `scrollIntoView` (it yanks the parent page if the iframe is
        embedded — we compute offsets manually instead)
     5. position persistence (reloading the iframe would reset to slide 1;
-       we persist current index in sessionStorage keyed by pathname)
+       we persist the current slide index in localStorage, keyed by
+       pathname — so two decks on the same origin don't steal each
+       other's position)
   See `skills/simple-deck/assets/template.html` for the derivation.
   Rewriting the script reintroduces all five bugs in the daemon preview.
 -->
@@ -428,7 +430,7 @@
       var slides   = document.querySelectorAll('.slide');
       var counter  = document.getElementById('deck-counter');
       var progress = document.getElementById('deck-progress');
-      var KEY      = 'od-deck-pos';
+      var KEY      = 'od-deck-pos:' + (location.pathname || '/');
       var active   = 0;
 
       function scroller() {

@@ -421,7 +421,7 @@
       var slides   = document.querySelectorAll('.slide');
       var counter  = document.getElementById('deck-counter');
       var progress = document.getElementById('deck-progress');
-      var KEY      = 'od-deck-pos';
+      var KEY      = 'od-deck-pos:' + (location.pathname || '/');
       var active   = 0;
 
       function scroller() {
