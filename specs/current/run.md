@@ -8,54 +8,25 @@ The frontend owns presentation state. The daemon owns execution state. SSE owns 
 
 ## Concept Model
 
-```mermaid
-erDiagram
-  PROJECT ||--o{ CONVERSATION : contains
-  CONVERSATION ||--o{ MESSAGE : contains
-  MESSAGE ||--o| RUN : "assistant message may have"
-  PROJECT ||--o{ RUN : scopes
-  CONVERSATION ||--o{ RUN : groups
-  RUN ||--o| AGENT_PROCESS : starts
+A project is the top-level design workspace. It contains conversations, owns artifacts, and provides the daemon working directory for agent execution.
 
-  PROJECT {
-    string id
-    string name
-    string skillId
-    string designSystemId
-  }
+A conversation is a thread inside a project. It contains ordered messages and provides the UI context for multi-turn work.
 
-  CONVERSATION {
-    string id
-    string projectId
-  }
+A message is user-visible conversation content. A user message records the request. An assistant message records the generated response and can be backed by one run while generation is active or recoverable.
 
-  MESSAGE {
-    string id
-    string conversationId
-    string role
-    string content
-    string runId
-    string runStatus
-    number lastRunEventId
-  }
+A run is a daemon-owned execution instance. It belongs to one project and one conversation, and it targets one assistant message. The run starts and supervises one agent process, records execution status, and stores replayable SSE events.
 
-  RUN {
-    string id
-    string projectId
-    string conversationId
-    string assistantMessageId
-    string agentId
-    string status
-    number createdAt
-    number updatedAt
-  }
+The intended cardinality is:
 
-  AGENT_PROCESS {
-    number pid
-    string command
-    string cwd
-  }
-```
+- One project contains many conversations.
+- One conversation contains many messages.
+- One project can have many runs.
+- One conversation can have many runs.
+- One assistant message can have zero or one run.
+- One run belongs to one project, one conversation, and one assistant message.
+- One run can start one agent process during active execution.
+
+The recovery path follows the user-visible hierarchy: open a project, load a conversation, find assistant messages with active run metadata, then reattach to the daemon run.
 
 ## Concept Responsibilities
 
@@ -116,11 +87,11 @@ sequenceDiagram
   Daemon->>Daemon: Create run with status=queued
   Daemon->>Agent: Spawn agent in project workspace
   Daemon->>Daemon: Mark run status=running
-  Daemon-->>API: 202 { runId }
-  API-->>Web: 202 { runId }
+  Daemon-->>API: 202 runId
+  API-->>Web: 202 runId
 
   Web->>Store: Persist runId on assistant message
-  Web->>API: GET /api/runs/{runId}/events
+  Web->>API: GET run events
   API->>Daemon: Attach SSE client
   Daemon-->>Web: SSE start event with id
 
@@ -149,29 +120,29 @@ sequenceDiagram
   participant Agent as Agent Process
   participant Store as Message Store
 
-  Web1->>API: GET /api/runs/{runId}/events
+  Web1->>API: GET run events
   API->>Daemon: Attach SSE client
   Daemon-->>Web1: SSE events
 
   Web1-xAPI: Page refresh closes browser subscription
-  Note over Daemon,Agent: Run continues in daemon; agent process keeps running.
+  Note over Daemon,Agent: Run continues in daemon and agent process keeps running
   Agent-->>Daemon: More output while page is unavailable
   Daemon->>Daemon: Buffer events with increasing IDs
 
   Web2->>Store: Load project conversations and messages
   Store-->>Web2: Assistant message with runId, runStatus, lastRunEventId
-  Web2->>API: GET /api/runs/{runId}
+  Web2->>API: GET run status
   API->>Daemon: Fetch run status
   Daemon-->>Web2: Run status
 
   alt Run is active
-    Web2->>API: GET /api/runs/{runId}/events?after={lastRunEventId}
+    Web2->>API: GET run events after lastRunEventId
     API->>Daemon: Reattach SSE client after last applied event
     Daemon-->>Web2: Replay missed events
     Daemon-->>Web2: Continue live SSE events
     Web2->>Store: Persist resumed content and lastRunEventId
   else Run is terminal
-    Web2->>API: GET /api/runs/{runId}/events?after={lastRunEventId}
+    Web2->>API: GET run events after lastRunEventId
     API->>Daemon: Request remaining buffered events
     Daemon-->>Web2: Replay remaining events and end
     Web2->>Store: Persist terminal runStatus
@@ -191,12 +162,12 @@ sequenceDiagram
 
   Web->>Store: Load messages for project and conversation
   Store-->>Web: Assistant message with runStatus=running and no runId
-  Web->>API: GET /api/runs?projectId={projectId}&conversationId={conversationId}&status=active
+  Web->>API: GET active runs for project and conversation
   API->>Daemon: Query active runs
   Daemon-->>Web: Active runs with assistantMessageId
   Web->>Web: Match run.assistantMessageId to assistant message ID
   Web->>Store: Persist recovered runId on assistant message
-  Web->>API: GET /api/runs/{runId}/events?after={lastRunEventId}
+  Web->>API: GET run events after lastRunEventId
   API->>Daemon: Reattach SSE client
   Daemon-->>Web: Replay and live events
 ```
@@ -214,7 +185,7 @@ sequenceDiagram
   participant Store as Message Store
 
   Web->>Web: User clicks Stop
-  Web->>API: POST /api/runs/{runId}/cancel
+  Web->>API: POST cancel run
   API->>Daemon: Forward cancel request
   Daemon->>Daemon: Mark cancelRequested=true
   Daemon->>Agent: Send SIGTERM
