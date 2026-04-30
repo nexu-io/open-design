@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { AGENT_DEFS } from '../src/agents.js';
 
 const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
+const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 
 afterEach(() => {
@@ -48,4 +49,19 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', (
   assert.equal(args.includes('--disable'), false);
   assert.equal(args.includes('plugins'), false);
   assert.equal(args.at(-1), '-');
+});
+
+test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
+  const args = cursorAgent.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+
+  assert.deepEqual(args, [
+    '--print',
+    '--output-format',
+    'stream-json',
+    '--stream-partial-output',
+    '--force',
+    '--trust',
+    '--workspace',
+    '/tmp/od-project',
+  ]);
 });

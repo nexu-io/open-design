@@ -311,8 +311,10 @@ export const AGENT_DEFS = [
       { id: 'sonnet-4-thinking', label: 'sonnet-4-thinking' },
       { id: 'gpt-5', label: 'gpt-5' },
     ],
-    // Prompt delivered via stdin (`cursor-agent -`) to avoid Windows
-    // `spawn ENAMETOOLONG` while preserving Cursor Agent's structured stream.
+    // Cursor Agent does not use `-` as a "read prompt from stdin" sentinel.
+    // Passing it makes the CLI treat the dash as the literal user prompt,
+    // which then surfaces as "your message only contains '-'". Keep stdin
+    // piped for prompt delivery, but do not append a fake prompt arg.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = [];
       args.push('--print', '--output-format', 'stream-json', '--stream-partial-output', '--force', '--trust');
@@ -322,7 +324,6 @@ export const AGENT_DEFS = [
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
-      args.push('-');
       return args;
     },
     promptViaStdin: true,
