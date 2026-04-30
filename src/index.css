@@ -394,19 +394,34 @@ code {
   text-align: left;
 }
 
-.oneshot-saved-delete {
+.oneshot-saved-actions {
   align-self: stretch;
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  border-left: 1px solid var(--border-soft);
+}
+
+.oneshot-saved-action {
   display: inline-grid;
   place-items: center;
-  width: 34px;
+  width: 30px;
   border: 0;
-  border-left: 1px solid var(--border-soft);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-right: 1px solid var(--border-soft);
   background: transparent;
   color: var(--text-soft);
 }
 
-.oneshot-saved-delete:hover {
+.oneshot-saved-action:last-child {
+  border-right: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.oneshot-saved-action:hover {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.oneshot-saved-action.danger:hover {
   color: var(--red);
   background: var(--red-bg);
 }

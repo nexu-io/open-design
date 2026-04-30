@@ -52,3 +52,20 @@ export function deleteSavedBlueprint(id: string): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
 }
+
+export function renameSavedBlueprint(id: string, name: string): void {
+  const next = listSavedBlueprints().map((item) =>
+    item.id === id ? { ...item, name } : item,
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
+}
+
+export function promoteSavedBlueprint(id: string): void {
+  const promotedAt = Date.now();
+  const next = listSavedBlueprints().map((item) =>
+    item.id === id ? { ...item, createdAt: promotedAt } : item,
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
+}

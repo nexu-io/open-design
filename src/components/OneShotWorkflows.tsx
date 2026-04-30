@@ -8,7 +8,12 @@ import type {
   WorkflowExportPackageItem,
   WorkflowHandoff,
 } from '../types';
-import { deleteSavedBlueprint, listSavedBlueprints } from '../state/blueprints';
+import {
+  deleteSavedBlueprint,
+  listSavedBlueprints,
+  promoteSavedBlueprint,
+  renameSavedBlueprint,
+} from '../state/blueprints';
 import { Icon } from './Icon';
 
 type WorkflowKind = 'prototype' | 'deck' | 'template' | 'other';
@@ -554,21 +559,46 @@ export function OneShotWorkflows({
                   <span>
                     {[blueprint.metadata.workflowCategory, blueprint.metadata.workflowOutcome]
                       .filter(Boolean)
-                      .join(' · ') || 'Reusable workflow prompt'}
+                      .join(' - ') || 'Reusable workflow prompt'}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  className="oneshot-saved-delete"
-                  aria-label={`Delete ${blueprint.name} blueprint`}
-                  title={`Delete ${blueprint.name} blueprint`}
-                  onClick={() => {
-                    if (!window.confirm(`Delete the saved "${blueprint.name}" blueprint?`)) return;
-                    deleteSavedBlueprint(blueprint.id);
-                  }}
-                >
-                  <Icon name="close" size={12} />
-                </button>
+                <div className="oneshot-saved-actions" aria-label={`${blueprint.name} blueprint actions`}>
+                  <button
+                    type="button"
+                    className="oneshot-saved-action"
+                    aria-label={`Move ${blueprint.name} blueprint to top`}
+                    title={`Move ${blueprint.name} blueprint to top`}
+                    onClick={() => promoteSavedBlueprint(blueprint.id)}
+                  >
+                    <Icon name="arrow-up" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="oneshot-saved-action"
+                    aria-label={`Rename ${blueprint.name} blueprint`}
+                    title={`Rename ${blueprint.name} blueprint`}
+                    onClick={() => {
+                      const nextName = window.prompt('Rename saved blueprint', blueprint.name);
+                      const cleanedName = nextName?.trim();
+                      if (!cleanedName || cleanedName === blueprint.name) return;
+                      renameSavedBlueprint(blueprint.id, cleanedName);
+                    }}
+                  >
+                    <Icon name="edit" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="oneshot-saved-action danger"
+                    aria-label={`Delete ${blueprint.name} blueprint`}
+                    title={`Delete ${blueprint.name} blueprint`}
+                    onClick={() => {
+                      if (!window.confirm(`Delete the saved "${blueprint.name}" blueprint?`)) return;
+                      deleteSavedBlueprint(blueprint.id);
+                    }}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
               </article>
             ))}
           </div>

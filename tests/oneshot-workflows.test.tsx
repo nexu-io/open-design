@@ -286,6 +286,110 @@ describe('OneShotWorkflows', () => {
     );
   });
 
+  it('renames a saved blueprint', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Custom Cover Packet');
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename OneShot Cover Run blueprint' }));
+
+    expect(window.prompt).toHaveBeenCalledWith('Rename saved blueprint', 'OneShot Cover Run');
+    expect(listSavedBlueprints()[0]?.name).toBe('Custom Cover Packet');
+    expect(screen.getByText('Custom Cover Packet')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^OneShot Cover Run/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps a saved blueprint name when rename is blank', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename OneShot Cover Run blueprint' }));
+
+    expect(listSavedBlueprints()[0]?.name).toBe('OneShot Cover Run');
+    expect(
+      screen.getByRole('button', { name: /^OneShot Cover Run/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('moves a saved blueprint to the top of the library', () => {
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(2000)
+      .mockReturnValueOnce(3000);
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'prototype',
+        workflowId: 'dashboard-mockup',
+        workflowTitle: 'Dashboard Mockup',
+      },
+      prompt: 'Use the OneShot workflow blueprint: Dashboard Mockup.',
+      skillId: 'dashboard',
+      designSystemId: 'linear-app',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template'), skill('dashboard', 'prototype')]}
+        designSystems={[designSystem('warm-editorial'), designSystem('linear-app')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    expect(listSavedBlueprints()[0]?.name).toBe('Dashboard Mockup');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move OneShot Cover Run blueprint to top' }));
+
+    expect(listSavedBlueprints()[0]?.name).toBe('OneShot Cover Run');
+  });
+
   it('deletes a saved blueprint after confirmation', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     saveWorkflowBlueprint({
