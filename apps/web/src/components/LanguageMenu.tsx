@@ -41,7 +41,7 @@ export function LanguageMenu() {
         onClick={() => setOpen((v) => !v)}
         title={LOCALE_LABEL[locale]}
       >
-        <Icon name="grid" size={12} />
+        <Icon name="languages" size={12} />
         <span>{LOCALE_LABEL[locale]}</span>
         <Icon name="chevron-down" size={11} />
       </button>

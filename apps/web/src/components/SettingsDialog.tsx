@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import { AgentIcon } from './AgentIcon';
+import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
   isCustomModel,
@@ -39,6 +40,8 @@ export function SettingsDialog({
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const languageRef = useRef<HTMLDivElement | null>(null);
 
   // If the daemon goes offline mid-edit, force API mode so the UI doesn't
   // pretend Local CLI is selectable.
@@ -47,6 +50,23 @@ export function SettingsDialog({
       setCfg((c) => ({ ...c, mode: 'api' }));
     }
   }, [daemonLive, cfg.mode]);
+
+  useEffect(() => {
+    if (!languageOpen) return;
+    function onDown(e: MouseEvent) {
+      if (languageRef.current?.contains(e.target as Node)) return;
+      setLanguageOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setLanguageOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [languageOpen]);
 
   const installedCount = useMemo(
     () => agents.filter((a) => a.available).length,
@@ -372,27 +392,55 @@ export function SettingsDialog({
                 <p className="hint">{t('settings.languageHint')}</p>
               </div>
             </div>
-            <div
-              className="seg-control"
-              role="tablist"
-              aria-label={t('settings.language')}
-            >
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={'seg-btn' + (active ? ' active' : '')}
-                    onClick={() => setLocale(code as Locale)}
-                  >
-                    <span className="seg-title">{LOCALE_LABEL[code]}</span>
-                    <span className="seg-meta">{code}</span>
-                  </button>
-                );
-              })}
+            <div className="settings-language-picker" ref={languageRef}>
+              <button
+                type="button"
+                className="settings-language-button"
+                aria-haspopup="menu"
+                aria-expanded={languageOpen}
+                onClick={() => setLanguageOpen((v) => !v)}
+              >
+                <span className="settings-language-icon" aria-hidden="true">
+                  <Icon name="languages" size={22} strokeWidth={1.8} />
+                </span>
+                <span className="settings-language-text">
+                  <span className="settings-language-title">
+                    {LOCALE_LABEL[locale]}
+                  </span>
+                  <span className="settings-language-code">{locale}</span>
+                </span>
+                <Icon name="chevron-down" size={16} />
+              </button>
+              {languageOpen ? (
+                <div className="settings-language-menu" role="menu">
+                  {LOCALES.map((code) => {
+                    const active = locale === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        className={`settings-language-option${active ? ' active' : ''}`}
+                        onClick={() => {
+                          setLocale(code as Locale);
+                          setLanguageOpen(false);
+                        }}
+                      >
+                        <span>
+                          <span className="settings-language-option-title">
+                            {LOCALE_LABEL[code]}
+                          </span>
+                          <span className="settings-language-option-code">
+                            {code}
+                          </span>
+                        </span>
+                        {active ? <Icon name="check" size={16} /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </section>
         </div>

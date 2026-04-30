@@ -21,6 +21,7 @@ type IconName =
   | 'history'
   | 'image'
   | 'import'
+  | 'languages'
   | 'link'
   | 'mic'
   | 'minus'
@@ -209,6 +210,17 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <path d="m17 8-5-5-5 5" />
           <path d="M12 3v12" />
+        </svg>
+      );
+    case 'languages':
+      return (
+        <svg {...common}>
+          <path d="m5 8 6 6" />
+          <path d="m4 14 6-6 2-3" />
+          <path d="M2 5h12" />
+          <path d="M7 2h1" />
+          <path d="m22 22-5-10-5 10" />
+          <path d="M14 18h6" />
         </svg>
       );
     case 'link':
