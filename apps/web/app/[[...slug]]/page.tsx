@@ -7,7 +7,7 @@ import { ClientApp } from './client-app';
 //
 // For `output: 'export'` we return a single empty `slug` so Next.js emits
 // one shell HTML at out/index.html; the daemon's SPA fallback (see
-// apps/daemon/server.js) serves it for any unknown non-API path so deep links
+// apps/daemon/src/server.ts) serves it for any unknown non-API path so deep links
 // still hydrate to the right view. In dev we leave `dynamicParams` at its
 // default (true) so `next dev` happily renders /projects/<id> directly.
 export function generateStaticParams() {

@@ -1,0 +1,29 @@
+{
+  "name": "@open-design/tools-dev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tools-dev": "./bin/tools-dev.mjs"
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs",
+    "dev": "tsx ./src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/platform": "workspace:0.1.0",
+    "@open-design/sidecar": "workspace:0.1.0",
+    "@open-design/sidecar-proto": "workspace:0.1.0",
+    "cac": "6.7.14"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.27.7",
+    "tsx": "4.21.0",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

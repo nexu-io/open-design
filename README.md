@@ -14,7 +14,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ko.md">한국어</a></p>
 
 ---
 
@@ -22,7 +22,7 @@
 
 Anthropic's [Claude Design][cd] (released 2026-04-17, Opus 4.7) showed what happens when an LLM stops writing prose and starts shipping design artifacts. It went viral — and stayed closed-source, paid-only, cloud-only, locked to Anthropic's model and Anthropic's skills. There is no checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 
-**Open Design (OD) is the open-source alternative.** Same loop, same artifact-first mental model, none of the lock-in. We don't ship an agent — the strongest coding agents already live on your laptop. We wire them into a skill-driven design workflow that runs locally with `pnpm dev:all`, can deploy the web layer to Vercel, and stays BYOK at every layer.
+**Open Design (OD) is the open-source alternative.** Same loop, same artifact-first mental model, none of the lock-in. We don't ship an agent — the strongest coding agents already live on your laptop. We wire them into a skill-driven design workflow that runs locally with `pnpm tools-dev`, can deploy the web layer to Vercel, and stays BYOK at every layer.
 
 Type `make me a magazine-style pitch deck for our seed round`. The interactive question form pops up before the model improvises a single pixel. The agent picks one of five curated visual directions. A live `TodoWrite` plan streams into the UI. The daemon builds a real on-disk project folder with a seed template, layout library, and self-check checklist. The agent reads them — pre-flight enforced — runs a five-dimensional critique against its own output, and emits a single `<artifact>` that renders in a sandboxed iframe seconds later.
 
@@ -45,7 +45,7 @@ OD stands on four open-source shoulders:
 | **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Tech Utility · Brutalist · Soft Warm) — each ships a deterministic OKLch palette + font stack |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across screens |
 | **Agent runtime** | Local daemon spawns the CLI in your project folder — agent gets real `Read`, `Write`, `Bash`, `WebFetch` against a real on-disk environment |
-| **Deployable to** | Local (`pnpm dev:all`) · Vercel web layer · Single-process prod (`pnpm start`) |
+| **Deployable to** | Local (`pnpm tools-dev`) · Vercel web layer |
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -262,8 +262,8 @@ cd open-design
 corepack enable
 corepack pnpm --version   # should print 10.33.2
 pnpm install
-pnpm dev:all         # daemon (:7456) + Next dev (:3000)
-open http://localhost:3000
+pnpm tools-dev run web
+# open the web URL printed by tools-dev
 ```
 
 Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optional helpers only; if you use one, run `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` before `pnpm install`.
@@ -291,7 +291,7 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 | Want to… | Do this |
 |---|---|
 | Inspect what's in there | `ls -la .od && sqlite3 .od/app.sqlite '.tables'` |
-| Reset to a clean slate | stop the daemon, `rm -rf .od`, run `pnpm dev:all` again |
+| Reset to a clean slate | `pnpm tools-dev stop`, `rm -rf .od`, run `pnpm tools-dev run web` again |
 | Move it elsewhere | not supported yet — the path is hard-coded relative to the repo |
 
 Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md).
@@ -373,7 +373,7 @@ open-design/
 │   └── deck-framework.html        ← deck baseline (nav / counter / print)
 │
 ├── scripts/
-│   └── sync-design-systems.mjs    ← re-import upstream awesome-design-md tarball
+│   └── sync-design-systems.ts     ← re-import upstream awesome-design-md tarball
 │
 ├── docs/
 │   ├── spec.md                    ← product spec, scenarios, differentiation
@@ -423,7 +423,7 @@ open-design/
 
 </details>
 
-The library is imported via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs) from [`VoltAgent/awesome-design-md`][acd2]. Re-run to refresh.
+The library is imported via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts) from [`VoltAgent/awesome-design-md`][acd2]. Re-run to refresh.
 
 ## Visual directions
 
@@ -495,7 +495,7 @@ Auto-detected from `PATH` on daemon boot. No config required.
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `--output-format json` (typed events) | `copilot -p <prompt> --allow-all-tools --output-format json` |
 | Anthropic API · BYOK | n/a | SSE direct | Browser fallback when no CLI is on PATH |
 
-Adding a new CLI is one entry in [`apps/daemon/agents.js`](apps/daemon/agents.js). Streaming format is one of `claude-stream-json` (typed events) or `plain` (raw text).
+Adding a new CLI is one entry in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Streaming format is one of `claude-stream-json` (typed events) or `plain` (raw text).
 
 ## References & lineage
 
@@ -508,7 +508,7 @@ Every external project this repo borrows from. Each link goes to the source so y
 | [**`op7418/guizang-ppt-skill`**][guizang] | Magazine-web-PPT skill bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved. Default for deck mode. P0/P1/P2 checklist culture borrowed for every other skill. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection. UX patterns on our roadmap: comment-mode surgical edits, AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
-| [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | Source of the 9-section `DESIGN.md` schema and 69 product systems imported via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs). |
+| [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | Source of the 9-section `DESIGN.md` schema and 69 product systems imported via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). |
 | [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | Inspiration for symlink-based skill distribution across multiple agent CLIs. |
 | [Claude Code skills][skill] | The `SKILL.md` convention adopted verbatim — any Claude Code skill drops into `skills/` and is picked up by the daemon. |
 
@@ -546,7 +546,7 @@ Issues, PRs, new skills, and new design systems are all welcome. The highest-lev
 
 - **Add a skill** — drop a folder into [`skills/`](skills/) following the [`SKILL.md`][skill] convention.
 - **Add a design system** — drop a `DESIGN.md` into [`design-systems/<brand>/`](design-systems/) using the 9-section schema.
-- **Wire up a new coding-agent CLI** — one entry in [`apps/daemon/agents.js`](apps/daemon/agents.js).
+- **Wire up a new coding-agent CLI** — one entry in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts).
 
 Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([简体中文](CONTRIBUTING.zh-CN.md)).
 

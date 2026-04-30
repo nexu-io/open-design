@@ -29,7 +29,7 @@ Other docs:
 
 | # | Bet | [Anthropic Claude Design][cd] | [Open CoDesign][ocod] | OD |
 |---|---|---|---|---|
-| 1 | Where the product runs | claude.ai only | Local Electron app | **Next.js web app + local daemon** — `pnpm dev:all`, Vercel web deploy, or single-process daemon serving the built web app |
+| 1 | Where the product runs | claude.ai only | Local Electron app | **Next.js web app + local daemon + desktop loop** — `pnpm tools-dev`, Vercel web deploy |
 | 2 | Who owns the agent loop | Anthropic, closed | [Open CoDesign][ocod] itself, via [`pi-ai`][piai] | **The user's existing code agent CLI** (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, OpenClaw); direct Anthropic API as fallback |
 | 3 | What "design skills" are | Proprietary internal tools | TypeScript modules baked into the app | **File-based skills** that follow Claude Code's `SKILL.md` spec — forkable, versionable, shareable, installable by symlink |
 | 4 | How design systems are authored | Implicit in prompt | N/A | **`DESIGN.md` files** following the [awesome-claude-design][acd] 9-section schema |
@@ -126,7 +126,7 @@ In short: Claude Design is a product; OD is a **substrate**.
 
 ## 9. Success criteria for v1
 
-- One developer can `git clone && corepack enable && pnpm install && pnpm dev:all`, point at their Claude Code install, and produce a prototype in under 5 minutes.
+- One developer can `git clone && corepack enable && pnpm install && pnpm tools-dev run web`, point at their Claude Code install, and produce a prototype in under 5 minutes.
 - A third party can author a skill in a separate git repo, publish it, and have a user install it by running `od skill add <git-url>` without touching OD's source.
 - A design system author can write a `DESIGN.md`, point OD at it, and have the style propagate across prototype / deck / template outputs.
 - Deploying to Vercel with a local daemon works end-to-end (the daemon is reachable via localhost tunnel or a user-provided URL).

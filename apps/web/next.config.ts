@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
+import { dirname, isAbsolute, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// Daemon port the local Express server binds to (see apps/daemon/cli.js). The
+// Daemon port the local Express server binds to (see apps/daemon/src/cli.ts). The
 // dev-all launcher overrides OD_PORT after probing for a free port; we read
 // the same env so /api, /artifacts, and /frames always reach the right
 // daemon instance during `next dev`.
@@ -16,12 +18,31 @@ const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
 // view.
 const isProd = process.env.NODE_ENV !== 'development';
 
+const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
+
+function resolveDevDistDir() {
+  const configured = process.env.OD_WEB_DIST_DIR;
+  if (!configured) return '.next';
+  return isAbsolute(configured) ? relative(WEB_ROOT, configured) || '.' : configured;
+}
+
+const DEV_DIST_DIR = resolveDevDistDir();
+
+function resolveDevTsconfigPath() {
+  const configured = process.env.OD_WEB_TSCONFIG_PATH;
+  if (!configured) return undefined;
+  return isAbsolute(configured) ? relative(WEB_ROOT, configured) || 'tsconfig.json' : configured;
+}
+
+const DEV_TSCONFIG_PATH = resolveDevTsconfigPath();
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
   reactStrictMode: true,
+  ...(DEV_TSCONFIG_PATH ? { typescript: { tsconfigPath: DEV_TSCONFIG_PATH } } : {}),
   // Keep the bundle output predictable so the daemon's STATIC_DIR can point
   // at it without any glob trickery.
-  distDir: isProd ? 'out' : '.next',
+  distDir: isProd ? 'out' : DEV_DIST_DIR,
   ...(isProd
     ? {
         output: 'export' as const,
@@ -42,6 +63,9 @@ const nextConfig: NextConfig = {
             { source: '/artifacts/:path*', destination: `${DAEMON_ORIGIN}/artifacts/:path*` },
             { source: '/frames/:path*', destination: `${DAEMON_ORIGIN}/frames/:path*` },
           ];
+        },
+        devIndicators: {
+          position: 'bottom-right',
         },
       }),
 };

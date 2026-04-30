@@ -14,7 +14,7 @@ This guide tells you exactly where to look for each type of contribution and wha
 |---|---|---|---|
 | Make OD render a new kind of artifact (an invoice, an iOS Settings screen, a one-pager…) | a **Skill** | [`skills/<your-skill>/`](skills/) | one folder, ~2 files |
 | Make OD speak a new brand's visual language | a **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | one Markdown file |
-| Hook up a new coding-agent CLI | an **Agent adapter** | [`apps/daemon/agents.js`](apps/daemon/agents.js) | ~10 lines in one array |
+| Hook up a new coding-agent CLI | an **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | ~10 lines in one array |
 | Add a feature, fix a bug, lift a UX pattern from [`open-codesign`][ocod] | code | `apps/web/src/`, `apps/daemon/` | normal PR |
 | Improve docs, port a section to 中文, fix typos | docs | `README.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | one PR |
 
@@ -31,7 +31,7 @@ git clone https://github.com/nexu-io/open-design.git
 cd open-design
 corepack enable           # selects the pinned pnpm from packageManager
 pnpm install
-pnpm dev:all              # daemon (:7456) + Next dev (:3000)
+pnpm tools-dev run web    # daemon + web foreground loop
 pnpm typecheck            # tsc -b --noEmit
 pnpm build                # production build
 ```
@@ -164,13 +164,13 @@ The 9-section schema is fixed — that's what skill bodies grep for. The first H
 4. **No marketing fluff.** The brand's tagline is not a design token. Cut it.
 5. **Slug uses ASCII** — `linear.app` becomes `linear-app`, `x.ai` becomes `x-ai`. The 69 imported systems already follow this convention; mirror it.
 
-The 69 product systems we ship are imported from [`VoltAgent/awesome-design-md`][acd2] via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs). If your brand belongs upstream, **send the PR there first** — we'll pick it up automatically on the next sync. The `design-systems/` folder is for systems that don't fit upstream, plus our two hand-authored starters.
+The 69 product systems we ship are imported from [`VoltAgent/awesome-design-md`][acd2] via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). If your brand belongs upstream, **send the PR there first** — we'll pick it up automatically on the next sync. The `design-systems/` folder is for systems that don't fit upstream, plus our two hand-authored starters.
 
 ---
 
 ## Adding a new coding-agent CLI
 
-Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`apps/daemon/agents.js`](apps/daemon/agents.js):
+Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts):
 
 ```javascript
 {
@@ -183,7 +183,7 @@ Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`
 }
 ```
 
-That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`apps/daemon/claude-stream.js`](apps/daemon/claude-stream.js) and set `streamFormat: 'claude-stream-json'`.
+That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`apps/daemon/src/claude-stream.ts`](apps/daemon/src/claude-stream.ts) and set `streamFormat: 'claude-stream-json'`.
 
 Bar for merging:
 
@@ -226,7 +226,7 @@ We don't enforce a CLA. Apache-2.0 covers us; your contribution is licensed unde
 
 Open an issue with:
 
-- What you ran (the exact `pnpm dev:all` / `pnpm start` invocation).
+- What you ran (the exact `pnpm tools-dev ...` invocation).
 - Which agent CLI was selected (or whether you were on the BYOK path).
 - The skill + design system pair that triggered it.
 - The relevant **daemon stderr tail** — most "the artifact never rendered" reports get diagnosed in 30 seconds when we can see `spawn ENOENT` or the CLI's actual error.

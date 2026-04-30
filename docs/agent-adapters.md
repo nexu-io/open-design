@@ -176,7 +176,7 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 ### 5.7 GitHub Copilot CLI
 
 - Invocation: `copilot -p "<prompt>" --allow-all-tools --output-format json --add-dir <skills> --add-dir <design-systems>`. `--allow-all-tools` is mandatory in non-interactive mode — without it the CLI blocks waiting for human approval on every tool call. Unlike Codex (where `exec` is a dedicated headless subcommand with auto-approve baked in) or Claude Code (which inherits its permission policy from `~/.claude/settings.json`), Copilot's `-p` mode always prompts unless this flag is passed explicitly. `--add-dir` (repeatable) widens the path-level sandbox so Copilot can read skill seeds and design-system specs that live outside the project cwd.
-- Streaming: `--output-format json` emits JSONL with the same expressive shape as Claude Code's stream-json (`assistant.reasoning_delta`, `assistant.message_delta`, `tool.execution_start/complete`, `result`). `apps/daemon/copilot-stream.js` maps these onto the same UI events as `claude-stream.js`.
+- Streaming: `--output-format json` emits JSONL with the same expressive shape as Claude Code's stream-json (`assistant.reasoning_delta`, `assistant.message_delta`, `tool.execution_start/complete`, `result`). `apps/daemon/src/copilot-stream.ts` maps these onto the same UI events as `claude-stream.ts`.
 - Skill loading: prompt injection only. Github Copilot's tool catalog includes a `skill` tool — native format worth reverse-engineering later.
 - Surgical edits: dedicated `edit` tool.
 - Detection assumes Copilot is already authenticated, via one of: `copilot login` (subcommand, OAuth device flow), the interactive `/login` slash command inside `copilot` with no args.
@@ -222,7 +222,7 @@ The user explicitly opts in to fallback — we don't silently switch, because a 
 First run:
 
 ```
-$ pnpm dev:all
+$ pnpm tools-dev run web
 [od] daemon starting on :7456
 [od] detecting agents…
 [od]   ✓ claude-code v0.6.3 (auth: ok, skills dir linked)

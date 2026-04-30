@@ -1,43 +1,121 @@
-# AGENTS.md
+# Directory guide
 
-## Project shape
+This file is the single source of truth for agents entering this repository. Read this file first; after entering `apps/`, `packages/`, or `tools/`, read that layer's `AGENTS.md` for module-level details. Do not copy module details back into the root file; root stays focused on cross-repository boundaries, workflow, and commands.
 
-- pnpm workspace with packages from `pnpm-workspace.yaml`: `apps/web`, `apps/daemon`, and `e2e`.
-- Runtime target is Node `~24` with `pnpm@10.33.2`; use Corepack so the pinned pnpm version from `package.json` is selected.
-- `apps/web` is a Next.js 16 App Router + React 18 client. Entrypoints: `apps/web/app/`, main client shell `apps/web/src/App.tsx`.
-- `apps/daemon` is the local Express + SQLite process and the `od` bin (`apps/daemon/cli.js`). It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
-- `e2e` contains both Playwright UI specs (`e2e/specs`) and Vitest/jsdom integration tests (`e2e/tests`).
+## Core documentation index
 
-## Commands
+- Product and onboarding: `README.md`, `README.zh-CN.md`, `QUICKSTART.md`.
+- Contribution and environment: `CONTRIBUTING.md`, `CONTRIBUTING.zh-CN.md`.
+- Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
+- Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `specs/current/maintainability-roadmap.md`.
+- Directory-level agent guidance: `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`.
 
-- Install: `corepack enable && pnpm install`
-- Full local dev: `pnpm dev:all` — starts daemon and Next together. Defaults are daemon `:7456`, web `:3000`; busy ports are probed forward and exported as `OD_PORT` / `NEXT_PORT`.
-- Web only: `pnpm dev` from the root starts Next; pair it with `pnpm daemon` when API routes are needed.
-- Production local path: `pnpm build` writes the static Next export to `apps/web/out/`; `pnpm start` builds and serves that export through the daemon.
-- Main verification: `pnpm typecheck && pnpm test && pnpm build`
-- Package tests: `pnpm --filter @open-design/web test`, `pnpm --filter @open-design/daemon test`, `pnpm --filter @open-design/e2e test`
-- Focused Vitest: `pnpm --dir apps/web exec vitest run -c vitest.config.ts src/providers/sse.test.ts` (adjust package dir and test path as needed).
-- Playwright UI: `pnpm test:ui`; headed: `pnpm test:ui:headed`. Playwright starts `pnpm dev:all` with isolated data under `e2e/.od-data` and strict dynamic ports.
-- Live adapter smoke: `pnpm test:e2e:live` runs `e2e/scripts/runtime-adapter.e2e.live.test.mjs`.
+## Workspace directories
 
-## Runtime data and ports
+- Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
+- `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
+- `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
+- `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
+- `packages/contracts` is the pure TypeScript web/daemon app contract layer.
+- `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
+- `tools/dev` is the only currently active local development lifecycle control plane.
+- `e2e` contains Playwright UI specs and Vitest/jsdom integration tests.
 
-- The daemon auto-creates local data under `.od/` by default: SQLite at `.od/app.sqlite`, per-project agent CWDs at `.od/projects/<id>/`, saved renders at `.od/artifacts/`.
-- Keep `.od/`, `e2e/.od-data`, Playwright reports, and agent scratch dirs out of git; `.gitignore` already covers them.
-- `OD_DATA_DIR` relocates daemon data relative to the repo root; Playwright uses this for isolated runs.
-- In development, `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to the daemon port. In production, the daemon serves `apps/web/out/` directly.
+## Inactive or placeholder directories
 
-## Agent, skill, and design-system wiring
+- `apps/nextjs` and `packages/shared` have been removed; do not recreate or reference them.
+- `apps/packaged` is only a placeholder for future packaged app assembly; do not add active code there in this round.
+- `tools/pack` is only a placeholder for future `tools-pack`; do not add commands or packaging logic there in this round.
+- `.od/`, `.tmp/`, `e2e/.od-data`, Playwright reports, and agent scratch directories are local runtime data and must stay out of git.
 
-- The daemon scans `PATH` for local CLIs in `apps/daemon/agents.js` and spawns them with `cwd` pinned to `.od/projects/<id>/`.
-- Agent stdout parsing is per transport: Claude stream JSON, Copilot stream JSON, ACP JSON-RPC, or plain text. Changes to CLI args belong in `apps/daemon/agents.js` and matching parser tests.
-- Skills are folder bundles under `skills/` with `SKILL.md`; extended `od:` frontmatter is parsed by `apps/daemon/skills.js`. Restart the daemon after adding or changing skill folders.
-- Design systems are `design-systems/*/DESIGN.md`; `scripts/sync-design-systems.mjs` re-imports upstream systems.
-- Prompt composition lives in `apps/web/src/prompts/system.ts`, `discovery.ts`, and `directions.ts`; artifacts are parsed/rendered through `apps/web/src/artifacts/` and `apps/web/src/runtime/`.
+# Development workflow
 
-## Testing notes
+## Environment baseline
 
-- Web Vitest includes `apps/web/src/**/*.test.{ts,tsx,js,mjs,cjs}` in a Node environment.
-- Daemon Vitest includes `apps/daemon/**/*.test.{ts,tsx,js,mjs,cjs}` in a Node environment.
-- E2E Vitest includes `e2e/tests/**/*.test.{ts,tsx}` in jsdom with automatic React JSX.
-- Playwright uses Chromium only, writes reports under `e2e/reports/`, and reuses an existing server outside CI.
+- Runtime target is Node `~24` and `pnpm@10.33.2`; use Corepack so the pnpm version pinned in `package.json` is selected.
+- New project-owned entrypoints, modules, scripts, tests, reporters, and configs should default to TypeScript.
+- Residual JavaScript is limited to generated output, vendored dependencies, explicitly documented compatibility build artifacts, and the allowlist in `scripts/check-residual-js.ts`.
+
+## Local lifecycle
+
+- Use `pnpm tools-dev` as the only local development lifecycle entry point.
+- Do not add or restore root lifecycle aliases: `pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, or `pnpm start`.
+- Ports are governed by `tools-dev` flags: `--daemon-port` and `--web-port`.
+- `tools-dev` exports `OD_PORT` for the web proxy target and `OD_WEB_PORT` for the web listener; do not use `NEXT_PORT`.
+
+## Boundary constraints
+
+- App business logic must not know about sidecar/control-plane concepts. Keep sidecar awareness in `apps/<app>/sidecar` or the desktop sidecar entry wrapper.
+- Shared web/daemon app contracts belong in `packages/contracts`; that package must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
+- Sidecar process stamps must have exactly five fields: `app`, `mode`, `namespace`, `ipc`, and `source`.
+- Orchestration layers (`tools-dev`, future `tools-pack`, packaged launchers) must call package primitives; do not hand-build `--od-stamp-*` args or process-scan regexes.
+- Default runtime files live under `<project-root>/.tmp/<source>/<namespace>/...`; POSIX IPC sockets are fixed at `/tmp/open-design/ipc/<namespace>/<app>.sock`.
+
+## Validation strategy
+
+- After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
+- Before marking regular work ready, run at least `pnpm typecheck` and `pnpm test`; run `pnpm build` as well when build boundaries are involved.
+- For the web/e2e loop, prefer `pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
+- On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
+- Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
+- Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
+
+# Common commands
+
+```bash
+pnpm install
+pnpm tools-dev
+pnpm tools-dev start web
+pnpm tools-dev run web --daemon-port 17456 --web-port 17573
+pnpm tools-dev status --json
+pnpm tools-dev logs --json
+pnpm tools-dev inspect desktop status --json
+pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
+pnpm tools-dev stop
+pnpm tools-dev check
+```
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm test:ui
+pnpm test:ui:headed
+pnpm test:e2e:live
+pnpm check:residual-js
+```
+
+```bash
+pnpm --filter @open-design/web typecheck
+pnpm --filter @open-design/daemon test
+pnpm --filter @open-design/desktop build
+pnpm --filter @open-design/tools-dev build
+pnpm -r --if-present run typecheck
+pnpm -r --if-present run test
+```
+
+# FAQ
+
+## Why is there no root `pnpm dev` / `pnpm start`?
+
+To avoid starting daemon, web, and desktop through inconsistent env, port, namespace, or log paths. All local lifecycle flows must go through `pnpm tools-dev`.
+
+## Why should `apps/nextjs` not be restored?
+
+The current web runtime is `apps/web`. The historical `apps/nextjs` layout has been removed from the active repo shape; restoring it would reintroduce duplicate app boundaries and stale scripts.
+
+## How does desktop discover the web URL?
+
+Desktop queries runtime status through sidecar IPC. The web URL comes from `tools-dev` launch status, not from desktop guessing ports or reading web internals.
+
+## How are sidecar-proto, sidecar, and platform split?
+
+`@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
+
+## Where is data written?
+
+The daemon writes `.od/` by default: SQLite at `.od/app.sqlite`, agent CWDs under `.od/projects/<id>/`, and saved renders under `.od/artifacts/`. `OD_DATA_DIR` can relocate data relative to the repo root; Playwright uses it to isolate test data.
+
+## When is `pnpm install` required?
+
+Run `pnpm install` after changing package manifests, workspace layout, command entrypoints, bin/link-related content, or after adding/removing workspace packages.

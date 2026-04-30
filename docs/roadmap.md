@@ -83,7 +83,7 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 
 ### MVP exit criteria
 
-1. `corepack enable && pnpm install && pnpm dev:all` works on clean macOS and Linux with Node 24.
+1. `corepack enable && pnpm install && pnpm tools-dev run web` works on clean macOS and Linux with Node 24.
 2. With Claude Code installed: prototype + deck generation works end-to-end.
 3. Without Claude Code installed: API-fallback produces prototypes (not decks — guizang-ppt-skill needs native skill loading).
 4. A user can drop a DESIGN.md into the project root and subsequent generations respect it.

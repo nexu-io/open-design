@@ -7,22 +7,22 @@
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
   "bin": {
-    "od": "./apps/daemon/cli.js"
+    "od": "./apps/daemon/dist/cli.js"
   },
   "scripts": {
-    "daemon": "pnpm --filter @open-design/daemon daemon",
-    "dev": "pnpm --filter @open-design/web dev",
-    "dev:all": "node scripts/dev-all.mjs",
+    "postinstall": "node ./scripts/postinstall.mjs",
+    "tools-dev": "pnpm exec tools-dev",
     "build": "pnpm --filter @open-design/web build",
-    "preview": "pnpm run build && pnpm --filter @open-design/daemon daemon",
+    "check:residual-js": "node --experimental-strip-types scripts/check-residual-js.ts",
     "test:e2e:live": "pnpm --filter @open-design/e2e test:e2e:live",
-    "test": "pnpm --filter @open-design/web test && pnpm --filter @open-design/daemon test && pnpm --filter @open-design/e2e test",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present run test",
     "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
     "test:ui": "pnpm --filter @open-design/e2e test:ui",
     "test:ui:headed": "pnpm --filter @open-design/e2e test:ui:headed",
-    "typecheck": "pnpm --filter @open-design/web typecheck",
-    "start": "pnpm run build && pnpm --filter @open-design/daemon start",
-    "test:run": "pnpm run test"
+    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && pnpm --filter @open-design/daemon build && pnpm check:residual-js"
+  },
+  "devDependencies": {
+    "@open-design/tools-dev": "workspace:0.1.0"
   },
   "engines": {
     "node": "~24",
@@ -30,7 +30,9 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "electron",
+      "esbuild"
     ]
   }
 }

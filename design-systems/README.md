@@ -61,7 +61,7 @@ to the latest hashes:
 ```bash
 curl -sL $(npm view getdesign dist.tarball) -o /tmp/getdesign.tgz
 tar -xzf /tmp/getdesign.tgz -C /tmp
-node scripts/sync-design-systems.mjs   # planned helper — see roadmap
+node --experimental-strip-types scripts/sync-design-systems.ts
 ```
 
 For now, the original importer lives at the top of the
