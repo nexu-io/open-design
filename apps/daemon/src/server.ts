@@ -69,9 +69,14 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export function resolveProjectRoot(moduleDir: string): string {
-  const daemonDir = path.basename(moduleDir) === 'dist'
-    ? path.dirname(moduleDir)
-    : moduleDir;
+  // When compiled, moduleDir is apps/daemon/dist → daemonDir is apps/daemon → root is ../../
+  // When tsx runs source, moduleDir is apps/daemon/src → daemonDir is apps/daemon → root is ../../
+  // In both cases we need to go 2 levels above the daemon package dir.
+  const basename = path.basename(moduleDir);
+  const daemonDir =
+    basename === 'dist' || basename === 'src'
+      ? path.dirname(moduleDir)
+      : moduleDir;
   return path.resolve(daemonDir, '../..');
 }
 
