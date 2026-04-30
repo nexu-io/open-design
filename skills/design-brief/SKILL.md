@@ -117,6 +117,21 @@ Produce a DESIGN.md following Open Design conventions:
 - Cards: surface bg, subtle border, 12px radius
 - Inputs: transparent bg, bottom border only
 
+## Responsive Behavior
+- Breakpoints: 640px (sm), 768px (md), 1024px (lg), 1280px (xl)
+- Mobile: single column, stack all sections vertically
+- Tablet: allow 2-column feature grids
+- Desktop: full layout with max-width constraint
+- Images: fluid, max-width 100%, maintain aspect ratio
+
+## Do's and Don'ts
+- DO use the declared color tokens exclusively.
+- DO maintain consistent section spacing.
+- DO ensure all text meets WCAG AA contrast ratio.
+- DON'T invent colors outside the palette.
+- DON'T add decorative shadows unless Depth & Elevation allows them.
+- DON'T use more than 2 typefaces.
+
 ## Agent Prompt Guide
 - Do NOT invent colors outside this palette.
 - Do NOT add box-shadows unless specified above.
