@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotWorkflows } from '../src/components/OneShotWorkflows';
-import { saveWorkflowBlueprint } from '../src/state/blueprints';
+import { listSavedBlueprints, saveWorkflowBlueprint } from '../src/state/blueprints';
 import type { DesignSystemSummary, SkillSummary } from '../src/types';
 
 function skill(id: string, mode: SkillSummary['mode']): SkillSummary {
@@ -41,6 +41,7 @@ describe('OneShotWorkflows', () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it('renders the production workflow launcher', () => {
@@ -269,7 +270,7 @@ describe('OneShotWorkflows', () => {
     );
 
     expect(screen.getByLabelText('Saved blueprints')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /OneShot Cover Run/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^OneShot Cover Run/i }));
 
     expect(onCreateProject).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -283,5 +284,62 @@ describe('OneShotWorkflows', () => {
         }),
       }),
     );
+  });
+
+  it('deletes a saved blueprint after confirmation', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete OneShot Cover Run blueprint' }));
+
+    expect(window.confirm).toHaveBeenCalledWith('Delete the saved "OneShot Cover Run" blueprint?');
+    expect(listSavedBlueprints()).toHaveLength(0);
+    expect(screen.queryByLabelText('Saved blueprints')).not.toBeInTheDocument();
+  });
+
+  it('keeps a saved blueprint when deletion is cancelled', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete OneShot Cover Run blueprint' }));
+
+    expect(listSavedBlueprints()).toHaveLength(1);
+    expect(screen.getByLabelText('Saved blueprints')).toBeInTheDocument();
   });
 });

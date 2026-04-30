@@ -371,29 +371,60 @@ code {
 }
 
 .oneshot-saved-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  min-width: 0;
+  gap: 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.oneshot-saved-launch {
+  align-items: flex-start;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
   gap: 3px;
+  min-width: 0;
   padding: 10px 12px;
+  border: 0;
+  background: transparent;
   text-align: left;
 }
 
-.oneshot-saved-item strong,
-.oneshot-saved-item span {
+.oneshot-saved-delete {
+  align-self: stretch;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  border: 0;
+  border-left: 1px solid var(--border-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.oneshot-saved-delete:hover {
+  color: var(--red);
+  background: var(--red-bg);
+}
+
+.oneshot-saved-launch strong,
+.oneshot-saved-launch span {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.oneshot-saved-item strong {
+.oneshot-saved-launch strong {
   color: var(--text);
   font-size: 12.5px;
 }
 
-.oneshot-saved-item span {
+.oneshot-saved-launch span {
   color: var(--text-muted);
   font-size: 11.5px;
 }

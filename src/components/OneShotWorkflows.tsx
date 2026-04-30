@@ -8,7 +8,7 @@ import type {
   WorkflowExportPackageItem,
   WorkflowHandoff,
 } from '../types';
-import { listSavedBlueprints } from '../state/blueprints';
+import { deleteSavedBlueprint, listSavedBlueprints } from '../state/blueprints';
 import { Icon } from './Icon';
 
 type WorkflowKind = 'prototype' | 'deck' | 'template' | 'other';
@@ -533,27 +533,43 @@ export function OneShotWorkflows({
           </div>
           <div className="oneshot-saved-list">
             {savedBlueprints.slice(0, 4).map((blueprint) => (
-              <button
+              <article
                 key={blueprint.id}
-                type="button"
                 className="oneshot-saved-item"
-                onClick={() => {
-                  onCreateProject({
-                    name: blueprint.name,
-                    skillId: blueprint.skillId,
-                    designSystemId: blueprint.designSystemId,
-                    metadata: blueprint.metadata,
-                    pendingPrompt: blueprint.prompt,
-                  });
-                }}
               >
-                <strong>{blueprint.name}</strong>
-                <span>
-                  {[blueprint.metadata.workflowCategory, blueprint.metadata.workflowOutcome]
-                    .filter(Boolean)
-                    .join(' · ') || 'Reusable workflow prompt'}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  className="oneshot-saved-launch"
+                  onClick={() => {
+                    onCreateProject({
+                      name: blueprint.name,
+                      skillId: blueprint.skillId,
+                      designSystemId: blueprint.designSystemId,
+                      metadata: blueprint.metadata,
+                      pendingPrompt: blueprint.prompt,
+                    });
+                  }}
+                >
+                  <strong>{blueprint.name}</strong>
+                  <span>
+                    {[blueprint.metadata.workflowCategory, blueprint.metadata.workflowOutcome]
+                      .filter(Boolean)
+                      .join(' · ') || 'Reusable workflow prompt'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="oneshot-saved-delete"
+                  aria-label={`Delete ${blueprint.name} blueprint`}
+                  title={`Delete ${blueprint.name} blueprint`}
+                  onClick={() => {
+                    if (!window.confirm(`Delete the saved "${blueprint.name}" blueprint?`)) return;
+                    deleteSavedBlueprint(blueprint.id);
+                  }}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </article>
             ))}
           </div>
         </section>

@@ -46,3 +46,9 @@ export function saveWorkflowBlueprint(input: {
   window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
   return blueprint;
 }
+
+export function deleteSavedBlueprint(id: string): void {
+  const next = listSavedBlueprints().filter((item) => item.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
+}
