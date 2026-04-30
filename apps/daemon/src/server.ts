@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { composeSystemPrompt } from '@open-design/contracts';
 import {
   detectAgents,
   getAgentDef,
@@ -1010,6 +1011,48 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
 
+  const composeDaemonSystemPrompt = async ({ projectId, skillId, designSystemId }) => {
+    const project = typeof projectId === 'string' && projectId ? getProject(db, projectId) : null;
+    const effectiveSkillId = typeof skillId === 'string' && skillId ? skillId : project?.skillId;
+    const effectiveDesignSystemId = typeof designSystemId === 'string' && designSystemId ? designSystemId : project?.designSystemId;
+    const metadata = project?.metadata;
+
+    let skillBody;
+    let skillName;
+    let skillMode;
+    if (effectiveSkillId) {
+      const skill = (await listSkills(SKILLS_DIR)).find((s) => s.id === effectiveSkillId);
+      if (skill) {
+        skillBody = skill.body;
+        skillName = skill.name;
+        skillMode = skill.mode;
+      }
+    }
+
+    let designSystemBody;
+    let designSystemTitle;
+    if (effectiveDesignSystemId) {
+      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const summary = systems.find((s) => s.id === effectiveDesignSystemId);
+      designSystemTitle = summary?.title;
+      designSystemBody = await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId) ?? undefined;
+    }
+
+    const template = metadata?.kind === 'template' && typeof metadata.templateId === 'string'
+      ? getTemplate(db, metadata.templateId) ?? undefined
+      : undefined;
+
+    return composeSystemPrompt({
+      skillBody,
+      skillName,
+      skillMode,
+      designSystemBody,
+      designSystemTitle,
+      metadata,
+      template,
+    });
+  };
+
   const startChatRun = async (chatBody, run) => {
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
@@ -1022,6 +1065,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       conversationId,
       assistantMessageId,
       clientRequestId,
+      skillId,
+      designSystemId,
       attachments = [],
       model,
       reasoning,
@@ -1101,9 +1146,14 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
+    const daemonSystemPrompt = await composeDaemonSystemPrompt({ projectId, skillId, designSystemId });
+    const instructionPrompt = [daemonSystemPrompt, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
     const composed = [
-      systemPrompt && systemPrompt.trim()
-        ? `# Instructions (read first)\n\n${systemPrompt.trim()}${cwdHint}\n\n---\n`
+      instructionPrompt
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}\n\n---\n`
         : cwdHint
           ? `# Instructions${cwdHint}\n\n---\n`
           : '',

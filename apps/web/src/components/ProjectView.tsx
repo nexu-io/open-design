@@ -15,7 +15,7 @@ import {
   fetchSkill,
   writeProjectTextFile,
 } from '../providers/registry';
-import { composeSystemPrompt } from '../prompts/system';
+import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName } from '../utils/agentLabels';
 import type { TodoItem } from '../runtime/todos';
@@ -689,8 +689,6 @@ export function ProjectView({
       const cancelController = new AbortController();
       abortRef.current = controller;
       cancelRef.current = cancelController;
-      const systemPrompt = await composedSystemPrompt();
-
       const handlers = {
         onDelta: appendContent,
         onAgentEvent: pushEvent,
@@ -764,7 +762,6 @@ export function ProjectView({
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
-          systemPrompt,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
           handlers,
@@ -772,6 +769,8 @@ export function ProjectView({
           conversationId: activeConversationId,
           assistantMessageId: assistantId,
           clientRequestId: crypto.randomUUID(),
+          skillId: project.skillId ?? null,
+          designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
@@ -795,6 +794,7 @@ export function ProjectView({
           },
         });
       } else {
+        const systemPrompt = await composedSystemPrompt();
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         void streamMessage(config, systemPrompt, nextHistory, controller.signal, {
           onDelta: (delta) => {

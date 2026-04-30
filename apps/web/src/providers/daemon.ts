@@ -1,5 +1,5 @@
 /**
- * Daemon provider — fetch-based SSE client for /api/chat. The daemon can
+ * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
  *   - 'agent'   : typed events emitted by Claude Code's stream-json parser
  *                 (status, text_delta, thinking_delta, tool_use, tool_result,
@@ -31,7 +31,8 @@ export interface DaemonStreamHandlers extends StreamHandlers {
 export interface DaemonStreamOptions {
   agentId: string;
   history: ChatMessage[];
-  systemPrompt: string;
+  /** Legacy field accepted by older tests/callers. Daemon-owned prompt composition ignores it. */
+  systemPrompt?: string;
   /** Stops the current browser-side SSE subscription. The daemon run continues. */
   signal: AbortSignal;
   /** Explicit user cancellation signal. This maps to POST /api/runs/:id/cancel. */
@@ -44,6 +45,8 @@ export interface DaemonStreamOptions {
   conversationId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
+  skillId?: string | null;
+  designSystemId?: string | null;
   // Project-relative paths the user has staged for this turn. The
   // daemon resolves them inside the project folder, validates they
   // exist, and stitches them into the user message as `@<path>` hints.
@@ -72,7 +75,6 @@ export interface DaemonReattachOptions {
 export async function streamViaDaemon({
   agentId,
   history,
-  systemPrompt,
   signal,
   cancelSignal,
   handlers,
@@ -80,6 +82,8 @@ export async function streamViaDaemon({
   conversationId,
   assistantMessageId,
   clientRequestId,
+  skillId,
+  designSystemId,
   attachments,
   model,
   reasoning,
@@ -96,12 +100,13 @@ export async function streamViaDaemon({
     .join('\n\n');
   const request: ChatRequest = {
     agentId,
-    systemPrompt,
     message: transcript,
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
+    skillId: skillId ?? null,
+    designSystemId: designSystemId ?? null,
     attachments: attachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,

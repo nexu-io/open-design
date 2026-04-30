@@ -1,5 +1,5 @@
-import type { OkResponse } from '../common';
-import type { ArtifactKind, ArtifactManifest } from './artifacts';
+import type { OkResponse } from '../common.js';
+import type { ArtifactKind, ArtifactManifest } from './artifacts.js';
 
 export type ProjectFileKind =
   | 'html'

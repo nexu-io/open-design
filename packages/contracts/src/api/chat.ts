@@ -1,4 +1,4 @@
-import type { ProjectFile } from './files';
+import type { ProjectFile } from './files.js';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -10,6 +10,8 @@ export interface ChatRequest {
   conversationId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
+  skillId?: string | null;
+  designSystemId?: string | null;
   attachments?: string[];
   model?: string | null;
   reasoning?: string | null;

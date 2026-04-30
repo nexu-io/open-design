@@ -21,7 +21,7 @@
  * op7418/guizang-ppt-skill (pre-flight asset reads, P0 self-check,
  * theme-rhythm rules).
  */
-import { renderDirectionFormBody, renderDirectionSpecBlock } from './directions';
+import { renderDirectionFormBody, renderDirectionSpecBlock } from './directions.js';
 
 export const DISCOVERY_AND_PHILOSOPHY = `# OD core directives (read first — these override anything later in this prompt)
 
