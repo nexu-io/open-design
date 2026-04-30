@@ -4,7 +4,7 @@
 
 这份指南会告诉你：每种贡献该往哪里看、合并之前 PR 需要过哪些线。
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <b>简体中文</b> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
