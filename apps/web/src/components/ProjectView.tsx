@@ -908,24 +908,29 @@ export function ProjectView({
   );
 
   const handleStop = useCallback(() => {
+    const stoppedAt = Date.now();
     cancelRef.current?.abort();
     cancelRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(false);
     setMessages((curr) => {
-      const next = curr.map((m) =>
-        m.role === 'assistant' && m.endedAt === undefined
-          ? { ...m, endedAt: Date.now() }
-          : m,
-      );
-      const finalized = next.find(
-        (m) =>
-          m.role === 'assistant' &&
-          m.endedAt !== undefined &&
-          !curr.find((x) => x.id === m.id && x.endedAt !== undefined),
-      );
-      if (finalized) persistMessage(finalized);
+      const finalized: ChatMessage[] = [];
+      const next = curr.map((m) => {
+        if (m.role !== 'assistant') return m;
+        if (isActiveRunStatus(m.runStatus)) {
+          const updated = { ...m, runStatus: 'canceled' as const, endedAt: m.endedAt ?? stoppedAt };
+          finalized.push(updated);
+          return updated;
+        }
+        if (m.endedAt === undefined) {
+          const updated = { ...m, endedAt: stoppedAt };
+          finalized.push(updated);
+          return updated;
+        }
+        return m;
+      });
+      for (const message of finalized) persistMessage(message);
       return next;
     });
   }, [persistMessage]);
