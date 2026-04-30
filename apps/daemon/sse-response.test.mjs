@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createSseResponse } from './server.js';
+import { createCompatApiErrorResponse, createSseResponse } from './server.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -56,6 +56,33 @@ describe('createSseResponse', () => {
     expect(sse.writeKeepAlive()).toBe(false);
     expect(sse.send('end', {})).toBe(false);
     expect(res.writes).toEqual([]);
+  });
+});
+
+describe('createCompatApiErrorResponse', () => {
+  it('wraps legacy string errors in the shared ApiError response shape', () => {
+    expect(createCompatApiErrorResponse('BAD_REQUEST', 'message required')).toEqual({
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'message required',
+      },
+    });
+  });
+
+  it('preserves shared ApiError metadata fields', () => {
+    expect(
+      createCompatApiErrorResponse('AGENT_UNAVAILABLE', 'missing agent', {
+        retryable: true,
+        details: { legacyCode: 'ENOENT' },
+      }),
+    ).toEqual({
+      error: {
+        code: 'AGENT_UNAVAILABLE',
+        message: 'missing agent',
+        retryable: true,
+        details: { legacyCode: 'ENOENT' },
+      },
+    });
   });
 });
 

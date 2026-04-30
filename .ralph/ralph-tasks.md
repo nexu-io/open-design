@@ -1,6 +1,6 @@
 # Ralph Tasks
 - [x] Implement active change spec Plan Step 1: Establish shared contracts package
-- [ ] Implement active change spec Plan Step 2: Adopt contracts in web and daemon boundary code
+- [x] Implement active change spec Plan Step 2: Adopt contracts in web and daemon boundary code
 - [ ] Implement active change spec Plan Step 3: Add daemon TypeScript foundation
 - [ ] Implement active change spec Plan Step 4: Migrate daemon modules to TypeScript
 - [ ] Implement active change spec Plan Step 5: Migrate scripts and e2e support to TypeScript

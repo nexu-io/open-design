@@ -85,6 +85,34 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledWith('hello');
   });
+
+  it('reads unified SSE error payload messages', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse(
+          [
+            'event: error',
+            'data: {"message":"legacy message","error":{"code":"AGENT_UNAVAILABLE","message":"typed message"}}',
+            '',
+            '',
+          ].join('\n'),
+        ),
+      ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('typed message'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
 });
 
 describe('streamMessageOpenAI', () => {

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@open-design/contracts": "workspace:*",
     "next": "^16.2.4",
     "openai": "^6.35.0",
     "react": "^18.3.1",

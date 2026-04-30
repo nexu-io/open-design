@@ -237,11 +237,11 @@ Flow:
   - [x] Substep 1.3 Implement: Define HTTP DTOs for chat, proxy stream, projects, conversations, messages, files, agents, skills, design systems, artifacts, and health.
   - [x] Substep 1.4 Implement: Define `/api/chat` and `/api/proxy/stream` SSE event unions and normalized agent payload unions.
   - [x] Substep 1.5 Verify: Run contracts typecheck and root package graph install/type resolution checks.
-- [ ] Step 2: Adopt contracts in web and daemon boundary code
-  - [ ] Substep 2.1 Implement: Import shared chat/proxy/file/project DTOs in web provider and app types while keeping UI-only unions local.
-  - [ ] Substep 2.2 Implement: Type daemon response envelopes, chat request body reads, proxy stream request body reads, and SSE send helpers.
-  - [ ] Substep 2.3 Implement: Add compatibility error helpers and adopt them in chat, upload, project/file, and proxy stream paths.
-  - [ ] Substep 2.4 Verify: Run web typecheck, daemon tests, and targeted SSE/error compatibility tests.
+- [x] Step 2: Adopt contracts in web and daemon boundary code
+  - [x] Substep 2.1 Implement: Import shared chat/proxy/file/project DTOs in web provider and app types while keeping UI-only unions local.
+  - [x] Substep 2.2 Implement: Type daemon response envelopes, chat request body reads, proxy stream request body reads, and SSE send helpers.
+  - [x] Substep 2.3 Implement: Add compatibility error helpers and adopt them in chat, upload, project/file, and proxy stream paths.
+  - [x] Substep 2.4 Verify: Run web typecheck, daemon tests, and targeted SSE/error compatibility tests.
 - [ ] Step 3: Add daemon TypeScript foundation
   - [ ] Substep 3.1 Implement: Add daemon `tsconfig.json`, `typecheck` script, and required TypeScript/Node/Express type dependencies.
   - [ ] Substep 3.2 Implement: Configure transitional `allowJs` checking for current daemon modules.
@@ -280,6 +280,13 @@ Flow:
 - `packages/contracts/src/sse/*.ts` - added typed SSE event helpers plus `/api/chat` and `/api/proxy/stream` event unions with protocol constants.
 - `packages/contracts/src/examples.ts` - added tsc-checked example payloads for key contracts.
 - `packages/contracts/src/index.ts` - added the public export surface.
+- `apps/web/package.json` and `apps/daemon/package.json` - added workspace dependencies on `@open-design/contracts` for boundary type adoption.
+- `apps/web/src/types.ts` - re-exported shared chat, registry, project, file, and conversation DTOs while keeping UI/config-only types local.
+- `apps/web/src/providers/daemon.ts` - typed `/api/chat` request construction, chat SSE frame handling, daemon agent payload translation, and unified SSE error payload reading with shared contracts.
+- `apps/daemon/server.js` - added JSDoc contract imports, typed project/file response envelopes, typed chat/proxy request body reads, typed SSE send events, and shared-shape compatibility error helpers.
+- `apps/daemon/server.js` - adopted `ApiErrorResponse`/`SseErrorPayload` shapes for chat, upload, project/file, and proxy stream error paths while preserving runtime behavior.
+- `apps/web/src/providers/sse.test.ts` - added coverage for unified daemon SSE error payload handling.
+- `apps/daemon/sse-response.test.mjs` - added coverage for compatibility `ApiErrorResponse` construction.
 
 ### Verification
 
@@ -287,3 +294,8 @@ Flow:
 - `corepack pnpm --filter @open-design/contracts typecheck` - passed.
 - `corepack pnpm --filter @open-design/web typecheck` - passed as a package graph/type resolution sanity check.
 - `corepack pnpm typecheck` - attempted; failed because the root script invokes `pnpm` from PATH version 10.28.0 while the repo requires `>=10.33.2 <11`. The Corepack package-level equivalent above passed.
+- `corepack pnpm install` - passed after adding app dependencies on `@open-design/contracts`; lockfile links web and daemon to the workspace package.
+- `corepack pnpm --filter @open-design/contracts typecheck` - passed after Step 2 adoption.
+- `corepack pnpm --filter @open-design/web typecheck` - passed after Step 2 adoption.
+- `corepack pnpm --filter @open-design/web test -- src/providers/sse.test.ts` - passed; Vitest also ran existing artifact manifest tests in the web package.
+- `corepack pnpm --filter @open-design/daemon test -- sse-response.test.mjs` - passed; Vitest also ran existing daemon artifact manifest and json event stream tests.

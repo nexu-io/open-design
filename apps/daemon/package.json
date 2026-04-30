@@ -13,6 +13,7 @@
     "test": "vitest run -c vitest.config.ts"
   },
   "dependencies": {
+    "@open-design/contracts": "workspace:*",
     "better-sqlite3": "^11.10.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",

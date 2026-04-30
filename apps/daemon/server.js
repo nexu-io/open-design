@@ -57,6 +57,14 @@ import {
   upsertMessage,
 } from './db.js';
 
+/** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
+/** @typedef {import('@open-design/contracts').ApiError} ApiError */
+/** @typedef {import('@open-design/contracts').ApiErrorResponse} ApiErrorResponse */
+/** @typedef {import('@open-design/contracts').ChatRequest} ChatRequest */
+/** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
+/** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
+/** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -84,6 +92,46 @@ const promptFileBootstrap = (fp) =>
   'it contains the system prompt, design system, skill workflow, and user request. ' +
   'Do not begin your response until you have read the entire file.';
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
+
+/**
+ * @param {ApiErrorCode} code
+ * @param {string} message
+ * @param {Omit<ApiError, 'code' | 'message'>} [init]
+ * @returns {ApiError}
+ */
+export function createCompatApiError(code, message, init = {}) {
+  return { code, message, ...init };
+}
+
+/**
+ * @param {ApiErrorCode} code
+ * @param {string} message
+ * @param {Omit<ApiError, 'code' | 'message'>} [init]
+ * @returns {ApiErrorResponse}
+ */
+export function createCompatApiErrorResponse(code, message, init = {}) {
+  return { error: createCompatApiError(code, message, init) };
+}
+
+/**
+ * @param {import('express').Response} res
+ * @param {number} status
+ * @param {ApiErrorCode} code
+ * @param {string} message
+ * @param {Omit<ApiError, 'code' | 'message'>} [init]
+ */
+function sendApiError(res, status, code, message, init = {}) {
+  return res.status(status).json(createCompatApiErrorResponse(code, message, init));
+}
+
+/**
+ * @param {ApiErrorCode} code
+ * @param {string} message
+ * @param {Omit<ApiError, 'code' | 'message'>} [init]
+ */
+function createSseErrorPayload(code, message, init = {}) {
+  return { message, error: createCompatApiError(code, message, init) };
+}
 
 const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -168,14 +216,20 @@ function sendMulterError(res, err) {
     };
     const status = statusByCode[code] ?? 400;
     const message = errorByCode[code] ?? 'upload failed';
-    return res.status(status).json({ code, error: message });
+    return sendApiError(
+      res,
+      status,
+      code === 'LIMIT_FILE_SIZE' ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST',
+      message,
+      { details: { legacyCode: code } },
+    );
   }
 
   if (err) {
-    return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
+    return sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
   }
 
-  return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
+  return sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
 }
 
 export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {}) {
@@ -211,6 +265,7 @@ export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INT
   res.on('finish', cleanup);
 
   return {
+    /** @param {ChatSseEvent['event'] | ProxySseEvent['event'] | string} event */
     send(event, data) {
       if (!canWrite()) return false;
       res.write(`event: ${event}\n`);
@@ -250,9 +305,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   app.get('/api/projects', (_req, res) => {
     try {
-      res.json({ projects: listProjects(db) });
+      /** @type {import('@open-design/contracts').ProjectsResponse} */
+      const body = { projects: listProjects(db) };
+      res.json(body);
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
     }
   });
 
@@ -261,10 +318,10 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const { id, name, skillId, designSystemId, pendingPrompt, metadata } =
         req.body || {};
       if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) {
-        return res.status(400).json({ error: 'invalid project id' });
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
       if (typeof name !== 'string' || !name.trim()) {
-        return res.status(400).json({ error: 'name required' });
+        return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
       const now = Date.now();
       const project = insertProject(db, {
@@ -317,9 +374,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
           }
         }
       }
-      res.json({ project, conversationId: cid });
+      /** @type {import('@open-design/contracts').CreateProjectResponse} */
+      const body = { project, conversationId: cid };
+      res.json(body);
     } catch (err) {
-      res.status(400).json({ error: String(err) });
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
@@ -375,18 +434,22 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   app.get('/api/projects/:id', (req, res) => {
     const project = getProject(db, req.params.id);
-    if (!project) return res.status(404).json({ error: 'not found' });
-    res.json({ project });
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    /** @type {import('@open-design/contracts').ProjectResponse} */
+    const body = { project };
+    res.json(body);
   });
 
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
       const project = updateProject(db, req.params.id, patch);
-      if (!project) return res.status(404).json({ error: 'not found' });
-      res.json({ project });
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      /** @type {import('@open-design/contracts').ProjectResponse} */
+      const body = { project };
+      res.json(body);
     } catch (err) {
-      res.status(400).json({ error: String(err) });
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
@@ -394,9 +457,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     try {
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      res.json({ ok: true });
+      /** @type {import('@open-design/contracts').OkResponse} */
+      const body = { ok: true };
+      res.json(body);
     } catch (err) {
-      res.status(400).json({ error: String(err) });
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
@@ -776,9 +841,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
       const files = await listFiles(PROJECTS_DIR, req.params.id);
-      res.json({ files });
+      /** @type {import('@open-design/contracts').ProjectFilesResponse} */
+      const body = { files };
+      res.json(body);
     } catch (err) {
-      res.status(400).json({ error: String(err) });
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
@@ -788,18 +855,20 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath);
       res.type(file.mime).send(file.buffer);
     } catch (err) {
-      const code = err && err.code === 'ENOENT' ? 404 : 400;
-      res.status(code).json({ error: String(err) });
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
   app.delete('/api/projects/:id/raw/*', async (req, res) => {
     try {
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0]);
-      res.json({ ok: true });
+      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
+      const body = { ok: true };
+      res.json(body);
     } catch (err) {
-      const code = err && err.code === 'ENOENT' ? 404 : 400;
-      res.status(code).json({ error: String(err) });
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
@@ -810,7 +879,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       res.json(preview);
     } catch (err) {
       const status = err && err.statusCode ? err.statusCode : err && err.code === 'ENOENT' ? 404 : 400;
-      res.status(status).json({ error: err?.message || 'preview unavailable' });
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', err?.message || 'preview unavailable');
     }
   });
 
@@ -819,8 +888,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
       res.type(file.mime).send(file.buffer);
     } catch (err) {
-      const code = err && err.code === 'ENOENT' ? 404 : 400;
-      res.status(code).json({ error: String(err) });
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
@@ -848,16 +917,18 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
             buf,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
-          return res.json({ file: meta });
+          /** @type {import('@open-design/contracts').ProjectFileResponse} */
+          const body = { file: meta };
+          return res.json(body);
         }
         const { name, content, encoding, artifactManifest } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
-          return res.status(400).json({ error: 'name and content required' });
+          return sendApiError(res, 400, 'BAD_REQUEST', 'name and content required');
         }
         if (artifactManifest !== undefined && artifactManifest !== null) {
           const validated = validateArtifactManifestInput(artifactManifest, name);
           if (!validated.ok) {
-            return res.status(400).json({ error: `invalid artifactManifest: ${validated.error}` });
+            return sendApiError(res, 400, 'BAD_REQUEST', `invalid artifactManifest: ${validated.error}`);
           }
         }
         const buf =
@@ -867,9 +938,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf, {
           artifactManifest,
         });
-        res.json({ file: meta });
+        /** @type {import('@open-design/contracts').ProjectFileResponse} */
+        const body = { file: meta };
+        res.json(body);
       } catch (err) {
-        res.status(500).json({ error: 'upload failed' });
+        sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
   );
@@ -877,10 +950,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
-      res.json({ ok: true });
+      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
+      const body = { ok: true };
+      res.json(body);
     } catch (err) {
-      const code = err && err.code === 'ENOENT' ? 404 : 400;
-      res.status(code).json({ error: String(err) });
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
@@ -909,14 +984,18 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
             // skip files that vanished mid-flight
           }
         }
-        res.json({ files: out });
+        /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
+        const body = { files: out };
+        res.json(body);
       } catch (err) {
-        res.status(500).json({ error: 'upload failed' });
+        sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
   );
 
   app.post('/api/chat', async (req, res) => {
+    /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
+    const chatBody = req.body || {};
     const {
       agentId,
       message,
@@ -926,12 +1005,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       attachments = [],
       model,
       reasoning,
-    } = req.body || {};
+    } = chatBody;
     const def = getAgentDef(agentId);
-    if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
-    if (!def.bin) return res.status(400).json({ error: 'agent has no binary' });
+    if (!def) return sendApiError(res, 400, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
+    if (!def.bin) return sendApiError(res, 400, 'AGENT_UNAVAILABLE', 'agent has no binary');
     if (typeof message !== 'string' || !message.trim()) {
-      return res.status(400).json({ error: 'message required' });
+      return sendApiError(res, 400, 'BAD_REQUEST', 'message required');
     }
 
     // Resolve the project working directory (creating the folder if it
@@ -1093,11 +1172,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     // from issue #10 the rest of this block is meant to prevent.
     if (!resolvedBin) {
       cleanPromptFile();
-      send('error', {
-        message:
-          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+      send('error', createSseErrorPayload(
+        'AGENT_UNAVAILABLE',
+        `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
           'Install it and refresh the agent list (GET /api/agents) before retrying.',
-      });
+        { retryable: true },
+      ));
       return sse.end();
     }
     // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
@@ -1158,14 +1238,14 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         // below already route the underlying failure to SSE via stderr.
         child.stdin.on('error', (err) => {
           if (err.code !== 'EPIPE') {
-            send('error', { message: `stdin: ${err.message}` });
+            send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `stdin: ${err.message}`));
           }
         });
         child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
       cleanPromptFile();
-      send('error', { message: `spawn failed: ${err.message}` });
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
       return sse.end();
     }
 
@@ -1211,7 +1291,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     });
 
     child.on('error', (err) => {
-      send('error', { message: err.message });
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       sse.end();
     });
     child.on('close', (code, signal) => {
@@ -1229,9 +1309,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   // providers (MiMo, DeepSeek, Groq, etc.).
 
   app.post('/api/proxy/stream', async (req, res) => {
-    const { baseUrl, apiKey, model, systemPrompt, messages } = req.body || {};
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
-      return res.status(400).json({ error: 'baseUrl, apiKey, and model are required' });
+      return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
 
     // Validate baseUrl — only allow http/https and block internal IPs (SSRF).
@@ -1239,10 +1321,10 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     try {
       parsed = new URL(baseUrl.replace(/\/+$/, ''));
     } catch {
-      return res.status(400).json({ error: 'Invalid baseUrl' });
+      return sendApiError(res, 400, 'BAD_REQUEST', 'Invalid baseUrl');
     }
     if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return res.status(400).json({ error: 'Only http/https allowed' });
+      return sendApiError(res, 400, 'BAD_REQUEST', 'Only http/https allowed');
     }
     if (
       ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
@@ -1251,7 +1333,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       /^192\.168\./.test(parsed.hostname) ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)
     ) {
-      return res.status(400).json({ error: 'Internal IPs blocked' });
+      return sendApiError(res, 400, 'FORBIDDEN', 'Internal IPs blocked');
     }
 
     // Build the upstream URL. If the base URL already ends with /v1 (or
@@ -1295,7 +1377,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         body,
       });
     } catch (fetchErr) {
-      send('error', { message: `fetch failed: ${fetchErr.message}` });
+      send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', `fetch failed: ${fetchErr.message}`, { retryable: true }));
       return sse.end();
     }
 
@@ -1303,7 +1385,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const errText = await upstream.text().catch(() => '');
       const safeErr = errText.slice(0, 500).replace(/Bearer [A-Za-z0-9_\-\.]+/g, 'Bearer [REDACTED]');
       console.error(`[proxy] upstream ${upstream.status}: ${safeErr.slice(0, 200)}`);
-      send('error', { message: `upstream ${upstream.status}: ${safeErr}` });
+      send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', `upstream ${upstream.status}: ${safeErr}`, { retryable: upstream.status >= 500 }));
       return sse.end();
     }
 
