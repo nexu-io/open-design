@@ -14,4 +14,10 @@ describe('resolveProjectRoot', () => {
 
     expect(resolveProjectRoot(path.join(root, 'apps', 'daemon', 'dist'))).toBe(root);
   });
+
+  it('resolves the repository root from the daemon src directory (tsx entry)', () => {
+    const root = path.resolve(import.meta.dirname, '../../..');
+
+    expect(resolveProjectRoot(path.join(root, 'apps', 'daemon', 'src'))).toBe(root);
+  });
 });
