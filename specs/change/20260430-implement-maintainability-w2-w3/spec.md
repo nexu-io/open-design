@@ -9,19 +9,19 @@ created: '2026-04-30'
 
 ### Problem Statement
 
-`apps/web` and `apps/daemon` need the next maintainability-roadmap workstreams implemented: W2 and W3 from `specs/current/maintainability-roadmap.md`.
+`apps/web` and `apps/daemon` need the next maintainability-roadmap workstreams implemented: W2 and W3 from `specs/current/maintainability-roadmap.md`. This spec targets a full project migration to TypeScript as the end state; the implementation plan can still use incremental steps so each step is easy to validate.
 
 ### Goals
 
 - Implement W2: define shared API, SSE, and error contracts covering R2, R7, and R8.
-- Implement W3: add gradual TypeScript support for `apps/daemon` covering R1.
+- Implement W3 as a full TypeScript migration for project-owned JavaScript entrypoints, modules, scripts, tests, and reporters, covering R1 and related maintainability risk across the repository.
 - Provide shared request/response types, an SSE event union, and an error model that can be imported by both web and daemon code.
-- Configure daemon TypeScript with `allowJs` so existing JavaScript can be typed gradually while new modules can be written in TypeScript.
+- Configure TypeScript so all migrated project code is checked consistently, with migration steps ordered for safe verification.
 
 ### Scope
 
 - Create or update the shared contract layer for web/daemon request, response, error, and SSE event types.
-- Add daemon TypeScript configuration and integration needed for gradual adoption.
+- Add TypeScript configuration and package/script integration needed to migrate daemon, repository scripts, and test support code to TypeScript.
 - Keep the existing architecture boundary from the roadmap: `apps/web` remains the Next.js frontend and thin BFF/proxy layer; `apps/daemon` remains the local runtime/backend.
 
 ### Constraints
@@ -33,14 +33,15 @@ created: '2026-04-30'
 ### Success Criteria
 
 - Web and daemon can import the same contract types.
-- Daemon has a TypeScript configuration that supports gradual migration with `allowJs`.
+- Project-owned source, scripts, tests, and reporters have a TypeScript migration path with a typed end state.
+- Typecheck covers the shared contracts, web, daemon, scripts, and test support code included in this spec.
 - The new contracts explicitly cover HTTP payloads, SSE events, and the unified error model.
 
 ## Research
 
 ### Existing System
 
-- W2 covers the implicit web/daemon API contract, inconsistent error handling, and under-specified SSE protocol; W3 covers gradual TypeScript support for the daemon. Source: `specs/current/maintainability-roadmap.md:57-58`
+- W2 covers the implicit web/daemon API contract, inconsistent error handling, and under-specified SSE protocol; the roadmap's W3 text names daemon TypeScript support as the original output. Source: `specs/current/maintainability-roadmap.md:57-58`
 - W1 defines the shared boundary as pure JavaScript or TypeScript usable by both web and daemon, with API DTO types, runtime schemas, task states, SSE event names, and error codes as allowed shared contents. Source: `specs/current/architecture-boundaries.md:41-56`
 - `apps/web` communicates with daemon-owned capabilities through API DTOs and streaming events, while privileged local filesystem, SQLite, agent CLI, task lifecycle, logs, and artifacts stay daemon-owned. Source: `specs/current/architecture-boundaries.md:13-40`
 - The workspace currently has no `packages/*` workspace entries; `pnpm-workspace.yaml` includes `apps/*` and `e2e` only. Source: `pnpm-workspace.yaml:1-3`
@@ -64,14 +65,18 @@ created: '2026-04-30'
 - `apps/web` has TypeScript configured with `strict`, `noUncheckedIndexedAccess`, `allowJs`, `noEmit`, and a `typecheck` script using `tsc -b --noEmit`. Source: `apps/web/tsconfig.json:2-23`, `apps/web/package.json:6-10`
 - `apps/daemon` is ESM, starts with `node cli.js`, tests with `vitest run -c vitest.config.ts`, and currently has no `typecheck` script. Source: `apps/daemon/package.json:1-23`
 - The daemon test config is TypeScript and includes `**/*.test.{ts,tsx,js,mjs,cjs}` under a Node test environment. Source: `apps/daemon/vitest.config.ts:1-8`
+- `apps/daemon` currently contains JavaScript and MJS project code alongside TypeScript test/config files: `cli.js`, `server.js`, `db.js`, `agents.js`, stream parsers, project/design-system helpers, artifact helpers, `json-event-stream.test.mjs`, `artifact-manifest.test.ts`, and `vitest.config.ts`. Source: file search `apps/daemon/**/*.{js,mjs,cjs,ts,tsx}`
+- `apps/web` source and config files are TypeScript/TSX, including `next.config.ts`, `app/**/*.tsx`, `src/**/*.ts`, `src/**/*.tsx`, and `vitest.config.ts`. Source: file search `apps/web/**/*.{js,mjs,cjs,ts,tsx}`
+- `e2e` is mixed: Playwright and Vitest config/tests are TypeScript, while runtime/support scripts and reporters include `.mjs` and `.cjs` files. Source: `e2e/package.json:6-12`, `e2e/playwright.config.ts:1-58`, `e2e/vitest.config.ts:1-12`, file search `e2e/**/*.{js,mjs,cjs,ts,tsx}`
+- Root scripts are currently MJS files: `scripts/resolve-dev-ports.mjs`, `scripts/dev-all.mjs`, and `scripts/sync-design-systems.mjs`. Source: file search `scripts/**/*.{js,mjs,cjs,ts,tsx}`
 
 ### Available Approaches
 
 - **Add a new shared workspace package**: create a workspace package for contracts and add it to the pnpm workspace so both `apps/web` and `apps/daemon` can import pure shared TypeScript. This matches the roadmap output of a shared contract layer and the W1 shared-boundary rules. Source: `specs/current/maintainability-roadmap.md:57-58`, `specs/current/architecture-boundaries.md:41-56`, `pnpm-workspace.yaml:1-3`
 - **Keep shared contracts inside an existing app**: moving contract types under `apps/web` would reuse the current location of many UI-adjacent types, but W1 says shared code should contain pure DTOs and avoid framework or environment-specific APIs. Source: `apps/web/src/types.ts:32-101`, `specs/current/architecture-boundaries.md:41-56`
 - **Start with type-only contracts**: W2 can define request/response, SSE event, and error model types first, while runtime schemas remain in the later W4 workstream. Source: `specs/current/maintainability-roadmap.md:57-60`
-- **Include daemon TypeScript through gradual checking**: W3 can add daemon `tsconfig` with `allowJs` and type-check new `.ts` modules while existing `.js` entrypoints keep running through Node. Source: `apps/daemon/package.json:9-13`, `apps/daemon/vitest.config.ts:1-8`, `specs/current/maintainability-roadmap.md:58`
-- **Broaden root typecheck**: root `typecheck` currently targets only web, so adding daemon contract checking requires either a daemon `typecheck` script or root script expansion. Source: `package.json:23`, `apps/daemon/package.json:9-13`
+- **Migrate repository code to a typed end state in phases**: W3 can add TypeScript configs and package scripts first, then convert daemon modules, root scripts, and e2e support files in bounded batches while running typecheck/test verification after each batch. Source: `apps/daemon/package.json:9-13`, `apps/daemon/vitest.config.ts:1-8`, `e2e/package.json:6-12`, file search `apps/daemon/**/*.{js,mjs,cjs,ts,tsx}`, file search `scripts/**/*.{js,mjs,cjs,ts,tsx}`
+- **Broaden root typecheck**: root `typecheck` currently targets only web, so full project TypeScript verification requires daemon, shared package, scripts, and e2e/support coverage. Source: `package.json:23`, `apps/daemon/package.json:9-13`, `e2e/package.json:6-12`
 
 ### Constraints & Dependencies
 
@@ -83,6 +88,7 @@ created: '2026-04-30'
 - Current daemon SSE lifecycle has no heartbeat or version field in emitted events. Source: `apps/daemon/server.js:1035-1044`, `apps/daemon/server.js:1087-1180`
 - Current error responses and SSE errors do not use a unified model with `code`, `message`, `details`, `retryable`, and `requestId/taskId`. Source: `apps/daemon/server.js:147-177`, `apps/daemon/server.js:200-205`, `apps/daemon/server.js:868-884`, `apps/daemon/server.js:1170-1180`
 - Daemon package devDependencies currently include `vitest` only; TypeScript and Node/Express type packages are available in web but not daemon. Source: `apps/daemon/package.json:21-23`, `apps/web/package.json:19-24`
+- Full-project TypeScript migration includes CommonJS/MJS operational edges such as Playwright reporter loading and Node test/script execution. Source: `e2e/playwright.config.ts:22-37`, `e2e/package.json:8-12`, `package.json:14-15`
 
 ### Key References
 
@@ -100,6 +106,7 @@ created: '2026-04-30'
 - `apps/daemon/json-event-stream.js:35-91` - normalized agent JSON event output.
 - `apps/daemon/package.json:9-23` - daemon scripts and dependencies.
 - `apps/web/tsconfig.json:2-23` - web TypeScript baseline.
+- `e2e/package.json:6-12` - e2e test scripts that currently execute TS config plus MJS runtime support.
 - `pnpm-workspace.yaml:1-3` - current workspace package globs.
 
 ## Design
