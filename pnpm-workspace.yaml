@@ -1,3 +1,4 @@
 packages:
+  - packages/*
   - apps/*
   - e2e

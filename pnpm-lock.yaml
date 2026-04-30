@@ -88,6 +88,12 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@20.19.39)(jsdom@29.1.0)
 
+  packages/contracts:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
 packages:
 
   '@anthropic-ai/sdk@0.32.1':

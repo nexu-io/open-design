@@ -231,12 +231,12 @@ Flow:
 
 ## Plan
 
-- [ ] Step 1: Establish shared contracts package
-  - [ ] Substep 1.1 Implement: Add `packages/contracts` workspace package, exports, and strict TypeScript config.
-  - [ ] Substep 1.2 Implement: Define `ApiError`, error codes, task states, and common response envelope helpers.
-  - [ ] Substep 1.3 Implement: Define HTTP DTOs for chat, proxy stream, projects, conversations, messages, files, agents, skills, design systems, artifacts, and health.
-  - [ ] Substep 1.4 Implement: Define `/api/chat` and `/api/proxy/stream` SSE event unions and normalized agent payload unions.
-  - [ ] Substep 1.5 Verify: Run contracts typecheck and root package graph install/type resolution checks.
+- [x] Step 1: Establish shared contracts package
+  - [x] Substep 1.1 Implement: Add `packages/contracts` workspace package, exports, and strict TypeScript config.
+  - [x] Substep 1.2 Implement: Define `ApiError`, error codes, task states, and common response envelope helpers.
+  - [x] Substep 1.3 Implement: Define HTTP DTOs for chat, proxy stream, projects, conversations, messages, files, agents, skills, design systems, artifacts, and health.
+  - [x] Substep 1.4 Implement: Define `/api/chat` and `/api/proxy/stream` SSE event unions and normalized agent payload unions.
+  - [x] Substep 1.5 Verify: Run contracts typecheck and root package graph install/type resolution checks.
 - [ ] Step 2: Adopt contracts in web and daemon boundary code
   - [ ] Substep 2.1 Implement: Import shared chat/proxy/file/project DTOs in web provider and app types while keeping UI-only unions local.
   - [ ] Substep 2.2 Implement: Type daemon response envelopes, chat request body reads, proxy stream request body reads, and SSE send helpers.
@@ -270,8 +270,20 @@ Flow:
 
 ### Implementation
 
-<!-- Files created/modified, decisions made during coding, deviations from design -->
+- `pnpm-workspace.yaml` - added `packages/*` so shared packages participate in the workspace graph.
+- `packages/contracts/package.json` - added `@open-design/contracts` package metadata, source exports, and `typecheck` script.
+- `packages/contracts/tsconfig.json` - added strict TypeScript configuration for shared contracts.
+- `packages/contracts/src/common.ts` - added JSON, nullable, and response envelope helper types.
+- `packages/contracts/src/errors.ts` - added `ApiError`, error codes, compatibility response types, SSE error payloads, and small pure construction helpers.
+- `packages/contracts/src/tasks.ts` - added shared task state and task status contracts.
+- `packages/contracts/src/api/*.ts` - added HTTP DTOs for chat, proxy stream, projects, conversations, messages, files, agents, skills, design systems, artifacts, and health.
+- `packages/contracts/src/sse/*.ts` - added typed SSE event helpers plus `/api/chat` and `/api/proxy/stream` event unions with protocol constants.
+- `packages/contracts/src/examples.ts` - added tsc-checked example payloads for key contracts.
+- `packages/contracts/src/index.ts` - added the public export surface.
 
 ### Verification
 
-<!-- How the feature was verified: tests written, manual testing steps, results -->
+- `corepack pnpm install` - passed; workspace graph recognized all 5 projects and updated lockfile state.
+- `corepack pnpm --filter @open-design/contracts typecheck` - passed.
+- `corepack pnpm --filter @open-design/web typecheck` - passed as a package graph/type resolution sanity check.
+- `corepack pnpm typecheck` - attempted; failed because the root script invokes `pnpm` from PATH version 10.28.0 while the repo requires `>=10.33.2 <11`. The Corepack package-level equivalent above passed.

@@ -1,0 +1,13 @@
+{
+  "active": true,
+  "iteration": 1,
+  "minIterations": 1,
+  "maxIterations": 50,
+  "completionPromise": "COMPLETE",
+  "tasksMode": true,
+  "taskPromise": "READY_FOR_NEXT_TASK",
+  "prompt": "# Implement: Build the Feature\n\nRun Zest Dev **Implement** phase workflow.\n\n**Language rule:** Respond in the user's language by default, if user's language is not English.\n\n**Arguments:** Note: this project lacks automatic testing, so use your intelligence to verify in different ways to find possible bugs earlier when implementing eveny step.\n",
+  "startedAt": "2026-04-30T04:03:56.254Z",
+  "model": "openai/gpt-5.5",
+  "agent": "opencode"
+}
