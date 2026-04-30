@@ -52,78 +52,78 @@ The first-principles maintainability goals are:
 The optimization work should proceed in dependency order. Some items can run in parallel once their prerequisites are stable.
 
 ```text
-A. Confirm architecture and capability boundaries
+W1. Confirm architecture and capability boundaries
    Covers: R4, R15
    Output: written ownership rules for web, daemon, shared contracts, and dangerous local capabilities.
 
-B. Define API, SSE, and error contracts
+W2. Define API, SSE, and error contracts
    Covers: R2, R7, R8
-   Depends on: A
+   Depends on: W1
    Output: shared request/response types, SSE event union, and error model.
 
-C. Add gradual TypeScript support
+W3. Add gradual TypeScript support
    Covers: R1
-   Depends on: B for highest-value shared types
+   Depends on: W2 for highest-value shared types
    Output: daemon TS config, `allowJs`, typed new modules, typed contracts imported by web and daemon.
 
-D. Add runtime validation at daemon boundaries
+W4. Add runtime validation at daemon boundaries
    Covers: R3, R4
-   Depends on: B
+   Depends on: W2
    Output: schemas for HTTP requests, paths, agents, models, uploads, task IDs, and command args.
 
-E. Modularize `server.js`
+W5. Modularize `server.js`
    Covers: R6
-   Depends on: B, C, D
+   Depends on: W2, W3, W4
    Output: thin route handlers plus services/adapters for agents, DB, FS, streams, and artifacts.
 
-F. Introduce agent process/task manager
+W6. Introduce agent process/task manager
    Covers: R5, R8, R11
-   Depends on: B, E
+   Depends on: W2, W5
    Output: task state machine, cancellation, timeout, cleanup, exit handling, and concurrency controls.
 
-G. Strengthen SQLite migrations
+W7. Strengthen SQLite migrations
    Covers: R9
-   Depends on: E or a clear DB adapter boundary
+   Depends on: W5 or a clear DB adapter boundary
    Output: migration table, ordered migrations, startup checks, backup strategy, migration tests.
 
-H. Build the daemon test pyramid
+W8. Build the daemon test pyramid
    Covers: R10
-   Depends on: B, D, E
+   Depends on: W2, W4, W5
    Output: contract tests, route integration tests, service unit tests, migration tests, SSE tests, and mocked agent-process tests.
 
-I. Add structured logs and observability
+W9. Add structured logs and observability
    Covers: R11
-   Depends on: B, F
+   Depends on: W2, W6
    Output: correlated request/task logs, sanitized agent output, durations, exit status, and diagnostic context.
 
-J. Harden config, port, and readiness behavior
+W10. Harden config, port, and readiness behavior
    Covers: R12
-   Depends on: A
+   Depends on: W1
    Output: centralized config, `/health`, readiness checks, deterministic port behavior.
 
-K. Harden cross-platform behavior
+W11. Harden cross-platform behavior
    Covers: R13
-   Depends on: D, F, E
+   Depends on: W4, W6, W5
    Output: platform-specific process handling, path normalization rules, supported-platform CI.
 
-L. Revisit HTTP framework choice
+W12. Revisit HTTP framework choice
    Covers: R14
-   Depends on: B, C, D, E, H
+   Depends on: W2, W3, W4, W5, W8
    Output: evidence-based decision on whether Express remains adequate or Fastify provides clear net value.
 
-M. Complete operational documentation
+W13. Complete operational documentation
    Covers: R16
-   Depends on: A through K as sections stabilize
+   Depends on: W1 through W11 as sections stabilize
    Output: current-state docs, runbooks, troubleshooting guides, and recovery procedures.
 ```
 
 ## Recommended Execution Order
 
 ```text
-Phase 1: A -> B -> C -> D
-Phase 2: E -> F -> G -> H
-Phase 3: I -> J -> K -> M
-Phase 4: L
+Phase 1: W1 -> W2 -> W3 -> W4
+Phase 2: W5 -> W6 -> W7 -> W8
+Phase 3: W9 -> W10 -> W11 -> W13
+Phase 4: W12
 ```
 
 The core principle is to reduce risk before changing framework foundations: establish contracts, types, validation, and module boundaries first; then evaluate whether Express remains the right transport layer.
