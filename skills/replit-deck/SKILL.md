@@ -44,6 +44,9 @@ od:
       default: 6
       min: 3
       max: 20
+      # 6 is a board-update baseline. Memos and campaign decks usually land
+      # at 3–4 (see example-holm / example-bluehouse). Long-form chapters
+      # (atlas) can run 8–12. Don't pad to hit the default.
 ---
 
 # Replit Deck Skill
@@ -89,7 +92,7 @@ Write out loud (in the TodoWrite or plan section) which theme and why. Once pick
 | `vance` | Art portfolio, design catalog, photographer / sculptor |
 | `bevel` | Fashion campaign, lookbook, Y2K / editorial attitude |
 | `world-dark` | Policy report, finance analysis, premium dark |
-| `world-mint` | Same report, lighter sections / section dividers |
+| `world-mint` | Lighter companion of world-dark — ESG, wellness finance, sustainability |
 | `atlas` | Long-form narrative, chapter deck, museum / archive aesthetic |
 | `bluehouse` | Consumer product, real estate, lifestyle, colorful cards |
 
@@ -123,7 +126,9 @@ Tag each slide with `data-screen-label="01 Cover"`, `"02 Metrics"`, etc., in pre
 
 ### Step 5 — Self-check
 
-Run `references/checklist.md`. The **P0 theme-lock gate** is non-negotiable:
+Run `references/checklist.md` silently before emit: the **P0 theme-lock gate** plus the five-dimension 1–5 critique (Philosophy / Hierarchy / Execution / Specificity / Restraint). Any dimension ≤ 3 → re-do before emit.
+
+The P0 theme-lock grep is non-negotiable:
 
 ```bash
 grep -E 'data-theme|style="--' index.html | head
@@ -146,9 +151,83 @@ One sentence before the artifact. Stop after `</artifact>`.
 
 - **One theme per deck.** `data-theme` set on `<body>` — never override per-slide.
 - **Numbers are real or absent.** No invented metrics. Use `—` or a grey block as an honest placeholder.
-- **Display face follows theme.** helix/atlas/bluehouse use the sans Display; holm/vance use the serif Display; bevel uses the Y2K display. Do not swap.
+- **Display face follows theme.** helix/world-dark/world-mint/bluehouse use the sans Display; holm/vance/atlas use the serif Display; bevel uses the Y2K display. Do not swap. (Authoritative source: the `--font-display` token of each theme in `assets/template.html` — if this list ever disagrees with the template, the template wins.)
 - **Accent appears 1–2× per slide max.** Never a gradient-spam.
 - **Never rewrite the nav script.** Five iframe bugs it solves are not obvious.
 - **Keep it one HTML file.** Inline all CSS. No external fonts — the system stack in each theme is deliberate.
 - **`data-screen-label` on every slide.**
 - **No Replit logo / brand lockup.** These are template styles, not a Replit-brand deck.
+
+---
+
+## When to pick `replit-deck` vs. peer skills
+
+| Skill | Pick when |
+|---|---|
+| `simple-deck` | Plain, single-theme deck bound to the project's `DESIGN.md` tokens. When the deck should *match* the host brand, not assert its own. (`designSystemRequired: true`.) |
+| `magazine-web-ppt` | Editorial "magazine × e-ink" aesthetic (WebGL fluid background, serif titles, chapter plates). When the brief asks for a keynote / launch / sharing-style deck and calls out Monocle / WIRED / Kinfolk / Domus. |
+| `replit-deck` | The brief explicitly asks for Replit-Slides gallery aesthetic, or needs one of the 8 token-frozen visual identities (SaaS board, editorial memo, gallery catalog, Y2K campaign, policy report, museum chapter, consumer cards). No dependency on `DESIGN.md`. |
+
+If the user just says "make me a deck" without further guidance, default to `simple-deck` — it respects their design system. Pick `replit-deck` only when the brief is explicit about the aesthetic or names a theme.
+
+---
+
+## Scope & provenance
+
+- **Eight themes = the full replit.com/slides landing-page gallery at the time of snapshot.** Not a curated subset — every theme card currently published on replit.com/slides is represented here (helix, holm, vance, bevel, world-dark, world-mint, atlas, bluehouse). If Replit ships a ninth template, it is **not** automatically reflected in this skill.
+- **Snapshot date: 2026-04-29.** All hex values were sampled from the actual replit.com/slides PNGs on that date with ImageMagick — no guessed colors, no memory substitutions. See `references/themes.md` → *Contributing a new theme* for the exact sampling procedure.
+- **Maintenance: one-time snapshot, not tracked.** Replit Slides is a live product and may drift. This skill does not auto-sync. If you notice Replit has updated colors or added a theme and want it reflected here, open an issue on `nexu-io/open-design` titled `replit-deck: re-sync to replit.com/slides (YYYY-MM-DD)` and attach the updated screenshots. There is no designated owner monitoring the upstream.
+- **No Replit branding.** These are gallery-style templates, not a Replit-brand deck. The checklist (P0) forbids inserting a Replit logo or wordmark.
+
+---
+
+## Browser / runtime support
+
+- **Target**: modern evergreen desktop browsers (Chrome 110+ / Safari 16+ / Firefox 115+) and modern mobile Safari / Chrome.
+- **Features used**: CSS scroll-snap (horizontal), `color-mix()`, CSS custom properties, `text-wrap: balance`. All ≥ 93% Baseline.
+- **Not supported**: IE 11, Safari < 15, any browser without `color-mix()` (would need a fallback `--accent-soft` if you want to support older Safari; out of scope for this skill).
+- **Mobile**: horizontal scroll-snap works on iOS Safari 16+ and Android Chrome. Keyboard nav is desktop-only by design.
+- **Nav script behavior**: reused verbatim from `skills/simple-deck` — survives iframe embedding (the daemon preview surface), dual listener races, focus loss, and position persistence across reloads. **Do not rewrite it.**
+
+---
+
+## Verification
+
+The skill auto-registers with the daemon on filesystem scan (no manual wiring). Confirmed against a running daemon on `localhost:7456` after adding this skill:
+
+```bash
+$ curl -s localhost:7456/api/skills \
+    | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf-8')); \
+               console.log(JSON.stringify(d.skills.find(s=>s.id==='replit-deck'), null, 2));"
+{
+  "id": "replit-deck",
+  "name": "replit-deck",
+  "description": "Single-file horizontal-swipe HTML deck in the style of Replit Slides's\nlanding-page template gallery. Eight distinct themes …",
+  "triggers": [
+    "replit deck",
+    "replit slides",
+    "replit 风格 ppt",
+    "replit style deck",
+    "helix deck",
+    "holm memo",
+    "atlas chapter",
+    "bluehouse",
+    "bevel campaign"
+  ],
+  "mode": "deck",
+  "platform": null,
+  "scenario": "product",
+  "previewType": "html",
+  "designSystemRequired": false,
+  "defaultFor": [],
+  "upstream": null,
+  "featured": null,
+  "fidelity": null,
+  "speakerNotes": null,
+  "animations": null,
+  "examplePrompt": "Single-file horizontal-swipe HTML deck in the style of Replit Slides's landing-page template gallery.",
+  "hasBody": true
+}
+```
+
+All four example decks (`examples/example-{helix,holm,atlas,bluehouse}.html`) open directly in a browser. Keyboard nav (← / → / Space / Home / End) and horizontal scroll-snap work in Chrome 129 and Safari 18.

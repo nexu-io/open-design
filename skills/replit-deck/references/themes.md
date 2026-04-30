@@ -2,7 +2,7 @@
 
 Eight complete visual systems captured from **replit.com/slides**. Each theme is a commitment — once the deck picks a theme, every slide inherits from that theme's token set via `<body data-theme="…">`. Do not override per-slide.
 
-All hex values were sampled from the actual Replit Slides landing-page PNGs with ImageMagick. Don't guess, don't substitute "similar" colors from memory.
+All hex values were sampled from the actual Replit Slides landing-page PNGs with ImageMagick on **2026-04-29** (see `SKILL.md` → *Scope & provenance*). Don't guess, don't substitute "similar" colors from memory. To add or refresh a theme, follow the procedure in *Contributing a new theme* at the bottom of this file.
 
 ---
 
@@ -15,11 +15,13 @@ All hex values were sampled from the actual Replit Slides landing-page PNGs with
 | art, sculpture, photography, catalog, portfolio, gallery | `vance` |
 | fashion, campaign, lookbook, SS26, jewelry, editorial | `bevel` |
 | policy, macro, finance report, world economy, dark mood | `world-dark` |
-| same report, lighter dividers or secondary sections | `world-mint` |
+| lighter companion deck for a world-dark topic (ESG, wellness finance, sustainability) | `world-mint` |
 | history, chapter, archive, long-form narrative, museum | `atlas` |
 | consumer product, real estate, lifestyle, playful | `bluehouse` |
 
-Never mix two themes in one deck. If you genuinely need contrast within a deck (rare), use `world-dark` + `world-mint` as alternating slides — they are the only sibling pair designed to interleave.
+**Never mix two themes in one deck.** `<body data-theme="…">` is the single source of truth for the whole deck — one value, no per-slide overrides. This is enforced as a P0 gate in `checklist.md`.
+
+If the brief really needs two visual registers (e.g. chapters vs. data), either pick the theme that already carries that internal contrast (`bluehouse` has gradient cards; `atlas` has chapter plates vs. data strips), or split the content into two separate decks. `world-dark` and `world-mint` are stylistic siblings (same palette, inverted surface), so if you need a companion deck in a different mood they are the most coherent pair — but **still one theme per file**.
 
 ---
 
@@ -180,7 +182,7 @@ Reference: replit slide-9.
 
 Exact mirror of `world-dark`: swap `--bg` with `--fg`. Deep green becomes the type color; mint becomes the surface. Yellow accent stays identical.
 
-Use `world-mint` for **section divider** slides inside a `world-dark` deck, or as a full deck when the topic is gentler (ESG report, wellness finance, sustainability).
+Use `world-mint` as a **standalone deck** when the topic is gentler (ESG report, wellness finance, sustainability). If a `world-dark` deck wants a lighter companion piece for a separate audience, make it a **separate deck file** with `data-theme="world-mint"` — do not alternate slides inside one deck (see one-theme rule above).
 
 **Do / Don't**: same as world-dark.
 
@@ -262,3 +264,63 @@ Reference: replit slide-12.
 - No rounded left-border cards with a hex-shift accent (generic AI card).
 - Invented metrics are forbidden. Use `—` or a muted rectangle when the number doesn't exist yet.
 - The display face is a **theme setting**, not a slide setting. Never mix serif and Y2K in one deck.
+
+---
+
+## Contributing a new theme
+
+If replit.com/slides ships a new template you want reflected here, or you want to propose a fork theme, follow this procedure so colors stay honest (no memory guesses, no "looks about right").
+
+### 1. Capture the source PNG
+
+Screenshot the replit.com/slides card at **2× device pixel ratio** (macOS: `Cmd+Shift+4` on a HiDPI display captures 2×). Save as `reference-<theme>.png`. Crop to just the template card — exclude chrome and shadows.
+
+### 2. Extract the dominant colors
+
+```bash
+# Install once (macOS): brew install imagemagick
+magick reference-<theme>.png \
+  -resize 200x200 \
+  -colors 8 \
+  -unique-colors txt:- \
+  | tail -n +2 \
+  | awk '{print $3}' \
+  | sort -u
+```
+
+This quantizes to 8 dominant colors and prints their hex values. The top few will be surface / type / border; the rare one is usually the accent.
+
+For a specific point (e.g. sampling the accent from a known pixel):
+
+```bash
+magick reference-<theme>.png -format "%[pixel:p{420,280}]" info:
+```
+
+### 3. Map to the 6-token palette
+
+Every theme uses the same 6 tokens plus a display font. Fill in:
+
+```
+--bg         surface (largest area, ≥ 50% coverage)
+--fg         type color (largest area inside text blocks)
+--muted      secondary text (~40% alpha feel)
+--border     hairline dividers, 1px
+--accent     chromatic accent (≤ 5% coverage — the rare color)
+--font-display  sans / serif / Y2K display — see the three allowed families in template.html
+```
+
+If the source uses two near-identical grays, collapse to one `--border`. Don't invent new tokens; every theme must map cleanly to this set so `data-theme` switching stays lossless.
+
+### 4. Add the theme block
+
+1. Append a new `body[data-theme="<name>"] { … }` block to `assets/template.html` in the theme tokens section. Mirror an existing block's token order.
+2. Add the theme row to the `od.inputs.theme.values` enum in `SKILL.md` (frontmatter).
+3. Add a "When to pick" row to the pick-table in `SKILL.md` and to the table in this file.
+4. Write a new `## <theme> — <name>` section below (palette block + Do / Don't / Best layouts), matching the shape of the other eight.
+5. Add a P1 theme-specific must to `checklist.md` (one bullet describing the theme's non-negotiable visual tell).
+6. Add a row to the reviewer screenshot-mapping table in the PR description so future contributors can reconcile drift.
+
+### 5. Verify
+
+- Render a one-slide example with the new theme and compare side-by-side with the source PNG. If the `--accent` looks off, re-sample with a larger `-colors` count (try `16`) and pick the one whose coverage matches the source.
+- Add an `example-<theme>.html` to `examples/` if the new theme is visually contrasting from the existing four (helix / holm / atlas / bluehouse). Otherwise a preview via `examples/README.md`'s instructions is enough.

@@ -17,9 +17,20 @@
     atlas       Museum · black + ivory + vermilion + serif
     bluehouse   Consumer · deep navy + peach/coral gradient cards
 
-  DO NOT rewrite the script at the bottom. It solves five iframe-specific
-  bugs (real scroller, dual listeners, auto-focus, no scrollIntoView,
-  position persistence). See `skills/simple-deck` for the same pattern.
+  DO NOT rewrite the `<script>` at the bottom. It reuses the five-rule
+  pattern from `skills/simple-deck` that solves:
+    1. real-scroller detection (the deck root is the scroller, not window —
+       inside the daemon's iframe, window.scroll* is a different surface)
+    2. dual listeners (keydown fires on window AND document; without
+       deduping, one press advances two slides)
+    3. auto-focus (iframe must grab focus on load, or keyboard nav dies
+       silently until the user clicks inside the deck)
+    4. no `scrollIntoView` (it yanks the parent page if the iframe is
+       embedded — we compute offsets manually instead)
+    5. position persistence (reloading the iframe would reset to slide 1;
+       we persist current index in sessionStorage keyed by pathname)
+  See `skills/simple-deck/assets/template.html` for the derivation.
+  Rewriting the script reintroduces all five bugs in the daemon preview.
 -->
 <html lang="en">
 <head>

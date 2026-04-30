@@ -132,7 +132,7 @@ You do not author these. The seed ships with:
 | A single number | `.num` alone, centered |
 | A row of metrics | `.num-label` + `.num` + `.num-delta`, grid-6 |
 | A brand wordmark | plain `<span>` in meta-bar, serif display, 22-32px |
-| A section divider | centered `.h-hero` on a slide of its own, theme flipped if available (`world-mint` inside `world-dark`) |
+| A section divider | centered `.h-hero` on a slide of its own (same theme — never swap `data-theme` mid-deck) |
 | A call-out stat with context | `.num` (big) + `.lead` (small) paired |
 | A pull-quote | `.h-xl` in display serif, `— Attribution` in mono small-caps |
 
