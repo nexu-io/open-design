@@ -9,6 +9,12 @@ describe('resolveProjectRoot', () => {
     expect(resolveProjectRoot(path.join(root, 'apps', 'daemon'))).toBe(root);
   });
 
+  it('resolves the repository root from the live TypeScript source directory', () => {
+    const root = path.resolve(import.meta.dirname, '../../..');
+
+    expect(resolveProjectRoot(path.join(root, 'apps', 'daemon', 'src'))).toBe(root);
+  });
+
   it('resolves the repository root from the compiled daemon dist directory', () => {
     const root = path.resolve(import.meta.dirname, '../../..');
 
