@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "bin": {
-    "od": "./cli.js"
+    "od": "./dist/cli.js"
   },
   "scripts": {
-    "daemon": "node cli.js --no-open",
-    "dev": "node cli.js --no-open",
-    "start": "node cli.js",
+    "build": "tsc -p tsconfig.json",
+    "daemon": "pnpm run build && node dist/cli.js --no-open",
+    "dev": "pnpm run build && node dist/cli.js --no-open",
+    "start": "pnpm run build && node dist/cli.js",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

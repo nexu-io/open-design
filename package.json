@@ -7,7 +7,7 @@
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
   "bin": {
-    "od": "./apps/daemon/cli.js"
+    "od": "./apps/daemon/dist/cli.js"
   },
   "scripts": {
     "daemon": "pnpm --filter @open-design/daemon daemon",

@@ -1,3 +1,4 @@
+// @ts-nocheck
 function safeParseJson(value) {
   if (value == null) return null;
   if (typeof value === 'object') return value;

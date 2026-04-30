@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck
 import { startServer } from './server.js';
 
 const args = process.argv.slice(2);

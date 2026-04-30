@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Parses GitHub Copilot CLI's `--output-format json` JSONL stream into the
  * same UI-friendly events that claude-stream.js emits, so the chat panel

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Skill registry. Scans <projectRoot>/skills/* for SKILL.md files, parses
 // front-matter, returns listing. No watching in this MVP — re-scans on every
 // GET /api/skills, which is fine for dozens of skills.

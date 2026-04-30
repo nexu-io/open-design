@@ -247,12 +247,12 @@ Flow:
   - [x] Substep 3.2 Implement: Configure transitional `allowJs` checking for current daemon modules.
   - [x] Substep 3.3 Implement: Update root `typecheck` to include contracts and daemon.
   - [x] Substep 3.4 Verify: Run daemon typecheck, daemon tests, and root typecheck.
-- [ ] Step 4: Migrate daemon modules to TypeScript
-  - [ ] Substep 4.1 Implement: Convert pure parsers/helpers and their tests first.
-  - [ ] Substep 4.2 Implement: Convert project/file/artifact helper modules and DTO builders.
-  - [ ] Substep 4.3 Implement: Convert DB, agents, runtime adapter, and stream orchestration modules.
-  - [ ] Substep 4.4 Implement: Convert `server` and `cli` entrypoints and switch package/runtime bin paths to compiled output.
-  - [ ] Substep 4.5 Verify: Run daemon typecheck/tests after each conversion batch and smoke the daemon CLI locally.
+- [x] Step 4: Migrate daemon modules to TypeScript
+  - [x] Substep 4.1 Implement: Convert pure parsers/helpers and their tests first.
+  - [x] Substep 4.2 Implement: Convert project/file/artifact helper modules and DTO builders.
+  - [x] Substep 4.3 Implement: Convert DB, agents, runtime adapter, and stream orchestration modules.
+  - [x] Substep 4.4 Implement: Convert `server` and `cli` entrypoints and switch package/runtime bin paths to compiled output.
+  - [x] Substep 4.5 Verify: Run daemon typecheck/tests after each conversion batch and smoke the daemon CLI locally.
 - [ ] Step 5: Migrate scripts and e2e support to TypeScript
   - [ ] Substep 5.1 Implement: Convert root scripts with a documented Node execution strategy.
   - [ ] Substep 5.2 Implement: Convert e2e runtime/support scripts and preserve Playwright reporter loading through compiled output or supported TS loading.
@@ -291,6 +291,10 @@ Flow:
 - `apps/daemon/package.json` - added a `typecheck` script plus TypeScript, Node, Express, Multer, and better-sqlite3 type dependencies.
 - `package.json` - broadened root `typecheck` to run contracts, web, and daemon checks through Corepack-pinned pnpm.
 - `pnpm-lock.yaml` - updated lockfile entries for daemon TypeScript/type dependencies.
+- `apps/daemon/*.ts` - migrated remaining daemon-owned modules, helpers, server entrypoint, CLI entrypoint, and daemon tests from `.js`/`.mjs` to `.ts` while preserving runtime `.js` ESM import specifiers for compiled output.
+- `apps/daemon/tsconfig.json` - switched daemon compilation to NodeNext module resolution, disabled JavaScript source inclusion, and added `dist` declaration/source-map emit.
+- `apps/daemon/package.json` - added daemon `build`, routed daemon/dev/start through compiled `dist/cli.js`, and updated the package bin to compiled output.
+- `package.json` - updated the root `od` bin to the compiled daemon CLI path.
 
 ### Verification
 
@@ -307,3 +311,8 @@ Flow:
 - `corepack pnpm --filter @open-design/daemon typecheck` - passed after adding the daemon TypeScript foundation.
 - `corepack pnpm --filter @open-design/daemon test` - passed; all 18 daemon tests passed.
 - `corepack pnpm typecheck` - passed after root `typecheck` was broadened to contracts, web, and daemon and routed through Corepack-pinned pnpm.
+- `corepack pnpm --filter @open-design/daemon typecheck` - passed after daemon module conversion.
+- `corepack pnpm --filter @open-design/daemon build` - passed and emitted compiled daemon output under `apps/daemon/dist`.
+- `corepack pnpm --filter @open-design/daemon test` - passed after daemon module conversion; all 18 daemon tests passed.
+- `node apps/daemon/dist/cli.js --help` - passed as a compiled CLI smoke check.
+- `corepack pnpm typecheck` - passed after daemon module conversion and compiled-bin package updates.

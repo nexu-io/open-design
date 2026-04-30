@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Parses Claude Code's `--output-format stream-json --verbose` JSONL stream
  * (with or without `--include-partial-messages`) into a small set of

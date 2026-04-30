@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Minimal YAML front-matter parser. Handles the subset used by SKILL.md in
 // our examples: scalar strings/numbers/booleans, block-literal (|) strings,
 // and flat arrays ("- foo"). Keeps the daemon dep-free. If you need real

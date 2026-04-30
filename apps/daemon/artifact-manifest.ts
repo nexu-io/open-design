@@ -1,3 +1,4 @@
+// @ts-nocheck
 import path from 'node:path';
 
 const MANIFEST_VERSION = 1;

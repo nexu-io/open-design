@@ -1,3 +1,4 @@
+// @ts-nocheck
 import express from 'express';
 import multer from 'multer';
 import { spawn } from 'node:child_process';

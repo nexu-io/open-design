@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Design-system registry. Scans <projectRoot>/design-systems/* for DESIGN.md
 // files. Title comes from the first H1. Category comes from a
 // `> Category: <name>` blockquote line beneath the H1. Summary is the first

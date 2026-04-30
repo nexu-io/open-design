@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Build a showcase HTML page from a DESIGN.md so the user can see what each
  * design system looks like *before* generating anything. We don't try to

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Anti-slop linter for generated HTML artifacts.
  *

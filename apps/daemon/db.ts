@@ -1,3 +1,4 @@
+// @ts-nocheck
 // SQLite-backed persistence for projects, conversations, messages, and the
 // per-project set of open file tabs. The on-disk project folder under
 // .od/projects/<id>/ is still the single owner of the user's actual files

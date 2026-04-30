@@ -2,14 +2,16 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
-    "noEmit": true,
+    "outDir": "dist",
+    "declaration": true,
+    "sourceMap": true,
     "isolatedModules": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -18,9 +20,6 @@
     "types": ["node", "vitest"]
   },
   "include": [
-    "**/*.js",
-    "**/*.mjs",
-    "**/*.cjs",
     "**/*.ts",
     "**/*.tsx"
   ],

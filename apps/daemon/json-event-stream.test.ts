@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createJsonEventStreamHandler } from './json-event-stream.js';

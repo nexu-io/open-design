@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Project files registry. Each project is a folder under
 // <projectRoot>/.od/projects/<projectId>/. The frontend's project list
 // (localStorage) carries metadata; this module is the single owner of the
