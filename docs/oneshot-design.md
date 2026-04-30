@@ -11,6 +11,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Workflow-created projects preserve their workflow identity in metadata, show the selected production path in the project header, and inject workflow gates/export expectations into the agent prompt stack.
 - Workflow scorecards are now structured metadata, so each production path carries its own critique rubric into the agent prompt even after the starter prompt changes.
 - Workflow export packages are structured metadata, visible on the workflow cards, and injected into the agent prompt as concrete deliverable contracts.
+- OneShot Cover Run now carries a CoverVisionOS handoff contract with production stages, expected files, and downstream router commands.
 - The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, and Motion Explainer.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
 - The Liquid Glass system includes `design-systems/ios-26-liquid-glass/assets/reference-prototype.html`, a compact visual reference for lock screen widgets, Control Center tiles, app chrome, modal sheets, and reduced-brightness behavior.
@@ -32,5 +33,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Wire OneShot Cover Run into the CoverVisionOS handoff path for professional book-cover production.
-2. Add a history/reuse surface so strong prompts, scorecards, and export packets can become reusable templates.
+1. Add a history/reuse surface so strong prompts, scorecards, export packets, and handoff contracts can become reusable templates.

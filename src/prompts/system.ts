@@ -162,6 +162,25 @@ function renderMetadataBlock(
       `- **workflowScorecard**: ${metadata.workflowScorecard.join(', ')} - before final output, critique the work against each dimension and fix any weak dimension instead of merely reporting it.`,
     );
   }
+  if (metadata.workflowHandoff) {
+    lines.push('');
+    lines.push(`### ${metadata.workflowHandoff.system} handoff`);
+    lines.push(
+      'Treat this handoff as the downstream production bridge. Preserve artifact names and stage order so the output can move into the external production pipeline without reinterpretation.',
+    );
+    if (metadata.workflowHandoff.stages.length > 0) {
+      lines.push(`- **stages**: ${metadata.workflowHandoff.stages.join(' -> ')}`);
+    }
+    if (metadata.workflowHandoff.artifacts.length > 0) {
+      lines.push(`- **artifacts**: ${metadata.workflowHandoff.artifacts.join(', ')}`);
+    }
+    if (
+      metadata.workflowHandoff.commands &&
+      metadata.workflowHandoff.commands.length > 0
+    ) {
+      lines.push(`- **commands**: ${metadata.workflowHandoff.commands.join(', ')}`);
+    }
+  }
 
   if (metadata.kind === 'prototype') {
     lines.push(

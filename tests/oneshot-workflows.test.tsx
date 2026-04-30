@@ -56,6 +56,7 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
     expect(screen.getByText('7 workflow packs')).toBeInTheDocument();
     expect(screen.getByText('HTML + PNG + Markdown')).toBeInTheDocument();
+    expect(screen.getByText('CoverVisionOS handoff')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
   });
 
@@ -115,6 +116,33 @@ describe('OneShotWorkflows', () => {
             'Rights/disclosure risk',
             'Print readiness',
           ],
+          workflowHandoff: {
+            system: 'CoverVisionOS',
+            stages: [
+              'Intake brief',
+              'Genre intelligence',
+              'Art direction shortlist',
+              'Prompt packet',
+              'Layout package',
+              'Production specs',
+              'ComfyUI workflow preparation',
+              'Generation preflight',
+            ],
+            artifacts: [
+              'layout_handoff.md',
+              'layout_handoff_manifest.json',
+              'production_specs.md',
+              'preflight_report.json',
+              'front-spine-back checklist',
+            ],
+            commands: [
+              'shortlist',
+              'layout-package',
+              'production-specs',
+              'prepare-workflow',
+              'preflight',
+            ],
+          },
         }),
         pendingPrompt: expect.stringContaining('CoverVisionOS standard'),
       }),

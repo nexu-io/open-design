@@ -5,6 +5,7 @@ import type {
   ProjectMetadata,
   SkillSummary,
   WorkflowExportPackageItem,
+  WorkflowHandoff,
 } from '../types';
 import { Icon } from './Icon';
 
@@ -24,6 +25,7 @@ interface WorkflowDefinition {
   exports: string[];
   exportPackage: WorkflowExportPackageItem[];
   scorecard: string[];
+  handoff?: WorkflowHandoff;
 }
 
 interface Props {
@@ -228,6 +230,33 @@ Use speaker notes for sales talk tracks. Include a pre-export critique scorecard
       'Rights/disclosure risk',
       'Print readiness',
     ],
+    handoff: {
+      system: 'CoverVisionOS',
+      stages: [
+        'Intake brief',
+        'Genre intelligence',
+        'Art direction shortlist',
+        'Prompt packet',
+        'Layout package',
+        'Production specs',
+        'ComfyUI workflow preparation',
+        'Generation preflight',
+      ],
+      artifacts: [
+        'layout_handoff.md',
+        'layout_handoff_manifest.json',
+        'production_specs.md',
+        'preflight_report.json',
+        'front-spine-back checklist',
+      ],
+      commands: [
+        'shortlist',
+        'layout-package',
+        'production-specs',
+        'prepare-workflow',
+        'preflight',
+      ],
+    },
     prompt: `Create a OneShot Cover production run packet using the CoverVisionOS standard.
 
 This is for professional book-cover production, not a generic image prompt.
@@ -588,6 +617,12 @@ function WorkflowCard({
         <Icon name="download" size={12} />
         <span>{workflow.exportPackage.map((item) => item.format).join(' + ')}</span>
       </div>
+      {workflow.handoff ? (
+        <div className="oneshot-card-handoff" aria-label={`${workflow.title} handoff`}>
+          <Icon name="folder" size={12} />
+          <span>{workflow.handoff.system} handoff</span>
+        </div>
+      ) : null}
       <div className="oneshot-card-foot">
         <span>{workflow.exports.join(' / ')}</span>
         <button type="button" className="primary" onClick={onLaunch}>
@@ -612,6 +647,14 @@ function workflowSearchText(workflow: WorkflowDefinition) {
       item.artifact,
       item.instructions,
     ]),
+    ...(workflow.handoff
+      ? [
+          workflow.handoff.system,
+          ...workflow.handoff.stages,
+          ...workflow.handoff.artifacts,
+          ...(workflow.handoff.commands ?? []),
+        ]
+      : []),
     ...workflow.skillCandidates,
     ...workflow.designSystemCandidates,
     ...workflow.scorecard,
@@ -631,6 +674,7 @@ function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {
     workflowExports: workflow.exports,
     workflowExportPackage: workflow.exportPackage,
     workflowScorecard: workflow.scorecard,
+    workflowHandoff: workflow.handoff,
   };
 }
 

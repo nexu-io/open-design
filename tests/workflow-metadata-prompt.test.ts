@@ -40,4 +40,25 @@ describe('workflow metadata prompt context', () => {
     expect(prompt).toContain('- **workflowScorecard**: iOS fit, Glass tier discipline');
     expect(prompt).toContain('fix any weak dimension instead of merely reporting it');
   });
+
+  it('injects CoverVisionOS handoff stages, artifacts, and commands', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'template',
+        workflowTitle: 'OneShot Cover Run',
+        workflowHandoff: {
+          system: 'CoverVisionOS',
+          stages: ['Layout package', 'Production specs', 'Generation preflight'],
+          artifacts: ['layout_handoff.md', 'production_specs.md', 'preflight_report.json'],
+          commands: ['layout-package', 'production-specs', 'preflight'],
+        },
+      },
+    });
+
+    expect(prompt).toContain('### CoverVisionOS handoff');
+    expect(prompt).toContain('Treat this handoff as the downstream production bridge.');
+    expect(prompt).toContain('- **stages**: Layout package -> Production specs -> Generation preflight');
+    expect(prompt).toContain('- **artifacts**: layout_handoff.md, production_specs.md, preflight_report.json');
+    expect(prompt).toContain('- **commands**: layout-package, production-specs, preflight');
+  });
 });

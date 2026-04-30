@@ -189,6 +189,13 @@ export interface WorkflowExportPackageItem {
   instructions: string;
 }
 
+export interface WorkflowHandoff {
+  system: string;
+  stages: string[];
+  artifacts: string[];
+  commands?: string[];
+}
+
 export interface ProjectMetadata {
   kind: ProjectKind;
   // OneShot workflow identity. Captured by the launcher so reloads,
@@ -201,6 +208,7 @@ export interface ProjectMetadata {
   workflowExports?: string[];
   workflowExportPackage?: WorkflowExportPackageItem[];
   workflowScorecard?: string[];
+  workflowHandoff?: WorkflowHandoff;
   // Prototype: 'wireframe' | 'high-fidelity'. Drives the visual ambition.
   fidelity?: 'wireframe' | 'high-fidelity';
   // Slide deck: whether the user wants speaker notes (less text per slide).

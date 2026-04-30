@@ -2164,6 +2164,31 @@ code {
   white-space: nowrap;
 }
 
+.oneshot-card-handoff {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 11.5px;
+  font-weight: 640;
+}
+
+.oneshot-card-handoff svg {
+  flex: 0 0 auto;
+}
+
+.oneshot-card-handoff span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .oneshot-card-foot {
   padding-top: 12px;
   border-top: 1px solid var(--border-soft);
