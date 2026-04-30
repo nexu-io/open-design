@@ -1,4 +1,4 @@
-import type { ChatMessage } from './chat.js';
+import type { ChatMessage } from './chat';
 
 export type ProjectKind = 'prototype' | 'deck' | 'template' | 'other';
 

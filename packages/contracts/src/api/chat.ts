@@ -1,4 +1,4 @@
-import type { ProjectFile } from './files.js';
+import type { ProjectFile } from './files';
 
 export type ChatRole = 'user' | 'assistant';
 

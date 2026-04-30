@@ -1,4 +1,4 @@
-import type { JsonValue } from './common.js';
+import type { JsonValue } from './common';
 
 export const API_ERROR_CODES = [
   'BAD_REQUEST',

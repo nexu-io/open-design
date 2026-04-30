@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { composeSystemPrompt } from '@open-design/contracts';
+import { composeSystemPrompt } from './prompts/system.js';
 import {
   detectAgents,
   getAgentDef,

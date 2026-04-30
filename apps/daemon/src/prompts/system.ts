@@ -29,10 +29,20 @@
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
  */
-import type { ProjectMetadata, ProjectTemplate } from '../api/projects';
-import { OFFICIAL_DESIGNER_PROMPT } from './official-system';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery';
-import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework';
+import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
+import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
+
+type ProjectMetadata = {
+  kind?: string;
+  fidelity?: string | null;
+  speakerNotes?: boolean | null;
+  animations?: boolean | null;
+  templateId?: string | null;
+  templateLabel?: string | null;
+  inspirationDesignSystemIds?: string[];
+};
+type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
