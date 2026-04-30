@@ -4,6 +4,7 @@ import type {
   DesignSystemSummary,
   ProjectMetadata,
   SkillSummary,
+  WorkflowExportPackageItem,
 } from '../types';
 import { Icon } from './Icon';
 
@@ -21,6 +22,7 @@ interface WorkflowDefinition {
   prompt: string;
   checkpoints: string[];
   exports: string[];
+  exportPackage: WorkflowExportPackageItem[];
   scorecard: string[];
 }
 
@@ -44,6 +46,23 @@ const WORKFLOWS: WorkflowDefinition[] = [
     metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
     checkpoints: ['Layer model', 'Glass tiers', 'Safe areas', 'Accessibility'],
     exports: ['HTML', 'PNG', 'Prototype brief'],
+    exportPackage: [
+      {
+        format: 'HTML',
+        artifact: 'Interactive iPhone prototype',
+        instructions: 'Ship a responsive HTML prototype that demonstrates the primary iOS 26 workflow and states.',
+      },
+      {
+        format: 'PNG',
+        artifact: 'Review capture',
+        instructions: 'Prepare a clean still capture target for stakeholder review and visual QA.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Prototype brief',
+        instructions: 'Summarize screens, interaction states, accessibility notes, and export readiness.',
+      },
+    ],
     scorecard: [
       'iOS fit',
       'Glass tier discipline',
@@ -80,6 +99,23 @@ Keep it professional, native-feeling, and specific. Do not use generic frosted-g
     metadata: { kind: 'deck', speakerNotes: true },
     checkpoints: ['Brief lock', 'Offer fit', 'Scope clarity', 'Follow-up'],
     exports: ['PPTX', 'PDF', 'Markdown'],
+    exportPackage: [
+      {
+        format: 'PPTX',
+        artifact: 'Client proposal deck',
+        instructions: 'Structure slides so they can be exported or rebuilt as an editable sales deck.',
+      },
+      {
+        format: 'PDF',
+        artifact: 'Proposal and SOW packet',
+        instructions: 'Keep proposal, scope, assumptions, exclusions, and next steps ready for PDF handoff.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Follow-up and owner checklist',
+        instructions: 'Include reusable email copy, acceptance criteria, and decision checklist text.',
+      },
+    ],
     scorecard: [
       'Clarity',
       'Usefulness',
@@ -112,6 +148,23 @@ Keep it practical, revenue-focused, specific to local service businesses, and re
     metadata: { kind: 'deck', speakerNotes: true },
     checkpoints: ['Hook', 'Proof', 'ROI', 'Owner decision'],
     exports: ['PPTX', 'PDF', 'HTML'],
+    exportPackage: [
+      {
+        format: 'PPTX',
+        artifact: 'Sales pitch deck',
+        instructions: 'Organize the story as editable slides with speaker-ready talk tracks.',
+      },
+      {
+        format: 'PDF',
+        artifact: 'Shareable deck PDF',
+        instructions: 'Preserve the same slide sequence, visual hierarchy, and owner decision flow for sharing.',
+      },
+      {
+        format: 'HTML',
+        artifact: 'Live deck prototype',
+        instructions: 'Keep the HTML deck navigable, responsive, and ready for review before export.',
+      },
+    ],
     scorecard: [
       'Clarity',
       'Credibility',
@@ -148,7 +201,24 @@ Use speaker notes for sales talk tracks. Include a pre-export critique scorecard
     designSystemCandidates: ['warm-editorial', 'theverge', 'wired', 'default'],
     metadata: { kind: 'template', animations: false },
     checkpoints: ['Genre fit', 'Art direction', 'Typography', 'Print specs'],
-    exports: ['Run packet', 'PDF', 'Markdown'],
+    exports: ['Run packet', 'PDF', 'Markdown', 'ZIP'],
+    exportPackage: [
+      {
+        format: 'Markdown',
+        artifact: 'CoverVisionOS run packet',
+        instructions: 'Capture intake, genre intelligence, art directions, prompts, QA, and handoff notes.',
+      },
+      {
+        format: 'PDF',
+        artifact: 'Production review packet',
+        instructions: 'Prepare a client-readable packet for art direction, typography, and print-spec review.',
+      },
+      {
+        format: 'ZIP',
+        artifact: 'Layout handoff bundle',
+        instructions: 'List the files, specs, prompt packet, and front/spine/back checklist needed for downstream production.',
+      },
+    ],
     scorecard: [
       'Genre signal',
       'Scroll-stop power',
@@ -184,6 +254,23 @@ If exact book metadata is missing, create a clearly marked fill-in packet instea
     metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
     checkpoints: ['Information density', 'Decision flow', 'Audit trail', 'Responsiveness'],
     exports: ['HTML', 'PNG', 'ZIP'],
+    exportPackage: [
+      {
+        format: 'HTML',
+        artifact: 'Operational dashboard prototype',
+        instructions: 'Ship an interactive dashboard surface with selected states and responsive behavior.',
+      },
+      {
+        format: 'PNG',
+        artifact: 'Executive review capture',
+        instructions: 'Prepare a polished still view of the default dashboard state.',
+      },
+      {
+        format: 'ZIP',
+        artifact: 'Prototype handoff bundle',
+        instructions: 'Keep source HTML, assets, notes, and export instructions ready to package together.',
+      },
+    ],
     scorecard: [
       'Scanability',
       'Hierarchy',
@@ -220,6 +307,23 @@ Before final, run a quality scorecard for scanability, hierarchy, information de
     metadata: { kind: 'template', animations: false },
     checkpoints: ['Problem', 'Requirements', 'UX flow', 'Acceptance tests'],
     exports: ['Markdown', 'PDF', 'Prototype brief'],
+    exportPackage: [
+      {
+        format: 'Markdown',
+        artifact: 'Build-ready PRD',
+        instructions: 'Produce a structured spec with requirements, risks, UX flow, and acceptance tests.',
+      },
+      {
+        format: 'PDF',
+        artifact: 'Stakeholder review version',
+        instructions: 'Keep sections cleanly formatted for a readable PDF handoff.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Prototype brief',
+        instructions: 'Include the design/prototype prompt and implementation phases as reusable build input.',
+      },
+    ],
     scorecard: [
       'Completeness',
       'Ambiguity',
@@ -255,6 +359,23 @@ Ask only for missing facts that materially change the spec; otherwise make clear
     metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
     checkpoints: ['Narrative', 'Scene rhythm', 'Caption clarity', 'Export plan'],
     exports: ['HTML', 'MP4 brief', 'Storyboard'],
+    exportPackage: [
+      {
+        format: 'HTML',
+        artifact: 'Motion-frame prototype',
+        instructions: 'Create an animated HTML plan or frame sequence that can be reviewed in-browser.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'MP4 production brief',
+        instructions: 'Specify duration, shot list, captions, narration, sound, and export notes.',
+      },
+      {
+        format: 'Storyboard',
+        artifact: 'Scene-by-scene storyboard',
+        instructions: 'Describe each scene, visual beat, motion cue, and caption/narration moment.',
+      },
+    ],
     scorecard: [
       'Clarity',
       'Pacing',
@@ -463,6 +584,10 @@ function WorkflowCard({
           {designSystemLabel}
         </span>
       </div>
+      <div className="oneshot-card-package" aria-label={`${workflow.title} export package`}>
+        <Icon name="download" size={12} />
+        <span>{workflow.exportPackage.map((item) => item.format).join(' + ')}</span>
+      </div>
       <div className="oneshot-card-foot">
         <span>{workflow.exports.join(' / ')}</span>
         <button type="button" className="primary" onClick={onLaunch}>
@@ -482,6 +607,11 @@ function workflowSearchText(workflow: WorkflowDefinition) {
     workflow.description,
     ...workflow.checkpoints,
     ...workflow.exports,
+    ...workflow.exportPackage.flatMap((item) => [
+      item.format,
+      item.artifact,
+      item.instructions,
+    ]),
     ...workflow.skillCandidates,
     ...workflow.designSystemCandidates,
     ...workflow.scorecard,
@@ -499,6 +629,7 @@ function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {
     workflowOutcome: workflow.outcome,
     workflowCheckpoints: workflow.checkpoints,
     workflowExports: workflow.exports,
+    workflowExportPackage: workflow.exportPackage,
     workflowScorecard: workflow.scorecard,
   };
 }

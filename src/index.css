@@ -2139,6 +2139,31 @@ code {
   color: var(--accent);
 }
 
+.oneshot-card-package {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint);
+  color: var(--accent-hover);
+  font-size: 11.5px;
+  font-weight: 640;
+}
+
+.oneshot-card-package svg {
+  flex: 0 0 auto;
+}
+
+.oneshot-card-package span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .oneshot-card-foot {
   padding-top: 12px;
   border-top: 1px solid var(--border-soft);

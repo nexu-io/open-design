@@ -145,6 +145,18 @@ function renderMetadataBlock(
       `- **workflowExports**: ${metadata.workflowExports.join(', ')} - keep these export formats in mind when choosing structure, dimensions, and file outputs.`,
     );
   }
+  if (metadata.workflowExportPackage && metadata.workflowExportPackage.length > 0) {
+    lines.push('');
+    lines.push('### Workflow export package');
+    lines.push(
+      'Prepare the work so these deliverables can be created from the project. When the requested format is possible in the current environment, create the actual file; otherwise produce the exact handoff content and name the missing tool or input.',
+    );
+    for (const item of metadata.workflowExportPackage) {
+      lines.push(
+        `- **${item.format}**: ${item.artifact} - ${item.instructions}`,
+      );
+    }
+  }
   if (metadata.workflowScorecard && metadata.workflowScorecard.length > 0) {
     lines.push(
       `- **workflowScorecard**: ${metadata.workflowScorecard.join(', ')} - before final output, critique the work against each dimension and fix any weak dimension instead of merely reporting it.`,

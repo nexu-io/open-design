@@ -55,6 +55,7 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByText('BSA Proposal + SOW')).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
     expect(screen.getByText('7 workflow packs')).toBeInTheDocument();
+    expect(screen.getByText('HTML + PNG + Markdown')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
   });
 
@@ -87,7 +88,24 @@ describe('OneShotWorkflows', () => {
           workflowCategory: 'Book cover production',
           workflowOutcome: 'CoverVisionOS run packet',
           workflowCheckpoints: ['Genre fit', 'Art direction', 'Typography', 'Print specs'],
-          workflowExports: ['Run packet', 'PDF', 'Markdown'],
+          workflowExports: ['Run packet', 'PDF', 'Markdown', 'ZIP'],
+          workflowExportPackage: [
+            {
+              format: 'Markdown',
+              artifact: 'CoverVisionOS run packet',
+              instructions: 'Capture intake, genre intelligence, art directions, prompts, QA, and handoff notes.',
+            },
+            {
+              format: 'PDF',
+              artifact: 'Production review packet',
+              instructions: 'Prepare a client-readable packet for art direction, typography, and print-spec review.',
+            },
+            {
+              format: 'ZIP',
+              artifact: 'Layout handoff bundle',
+              instructions: 'List the files, specs, prompt packet, and front/spine/back checklist needed for downstream production.',
+            },
+          ],
           workflowScorecard: [
             'Genre signal',
             'Scroll-stop power',
@@ -133,6 +151,23 @@ describe('OneShotWorkflows', () => {
           workflowOutcome: 'Liquid Glass iPhone concept',
           workflowCheckpoints: ['Layer model', 'Glass tiers', 'Safe areas', 'Accessibility'],
           workflowExports: ['HTML', 'PNG', 'Prototype brief'],
+          workflowExportPackage: [
+            {
+              format: 'HTML',
+              artifact: 'Interactive iPhone prototype',
+              instructions: 'Ship a responsive HTML prototype that demonstrates the primary iOS 26 workflow and states.',
+            },
+            {
+              format: 'PNG',
+              artifact: 'Review capture',
+              instructions: 'Prepare a clean still capture target for stakeholder review and visual QA.',
+            },
+            {
+              format: 'Markdown',
+              artifact: 'Prototype brief',
+              instructions: 'Summarize screens, interaction states, accessibility notes, and export readiness.',
+            },
+          ],
           workflowScorecard: [
             'iOS fit',
             'Glass tier discipline',

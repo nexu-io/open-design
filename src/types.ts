@@ -183,6 +183,12 @@ export interface ProjectFile {
 // any field that's missing. Each `kind` carries a different shape.
 export type ProjectKind = 'prototype' | 'deck' | 'template' | 'other';
 
+export interface WorkflowExportPackageItem {
+  format: string;
+  artifact: string;
+  instructions: string;
+}
+
 export interface ProjectMetadata {
   kind: ProjectKind;
   // OneShot workflow identity. Captured by the launcher so reloads,
@@ -193,6 +199,7 @@ export interface ProjectMetadata {
   workflowOutcome?: string;
   workflowCheckpoints?: string[];
   workflowExports?: string[];
+  workflowExportPackage?: WorkflowExportPackageItem[];
   workflowScorecard?: string[];
   // Prototype: 'wireframe' | 'high-fidelity'. Drives the visual ambition.
   fidelity?: 'wireframe' | 'high-fidelity';
