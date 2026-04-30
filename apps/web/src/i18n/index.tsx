@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { en } from './locales/en';
+import { fa } from './locales/fa';
 import { ptBR } from './locales/pt-BR';
 import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
@@ -27,6 +28,7 @@ const DICTS: Record<Locale, Dict> = {
   'zh-TW': zhTW,
   'pt-BR': ptBR,
   'ru': ru,
+  'fa': fa,
 };
 
 const LS_KEY = 'open-design:locale';
