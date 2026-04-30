@@ -27,7 +27,7 @@ export type DaemonSidecarHandle = {
 function parsePort(value: string | undefined): number {
   if (value == null || value.trim().length === 0) return 0;
   const port = Number(value);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error(`${DAEMON_PORT_ENV} must be an integer between 1 and 65535`);
   }
   return port;
