@@ -31,7 +31,7 @@ RUN corepack enable && \
 
 COPY apps ./apps
 RUN pnpm --filter @open-design/web build && \
-    pnpm --filter @open-design/daemon deploy --prod /app/deploy/daemon && \
+    pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
       /root/.cache \
