@@ -41,6 +41,7 @@
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
     "multer": "^1.4.5-lts.1",
+    "nanoid": "^3.3.11",
     "zod": "^3.23.8"
   },
   "devDependencies": {

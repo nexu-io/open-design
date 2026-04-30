@@ -1,13 +1,13 @@
 // @ts-nocheck
-// Spec 100 — T015: TDD (RED) test for LUMINA_WEDGE_ENDPOINT system prompt injection.
+// Spec 100 T015 + Spec 101 T021 — LUMINA wedge injection in composeSystemPrompt().
 //
-// Asserts that when LUMINA_WEDGE_ENDPOINT env var is set, composeSystemPrompt()
-// appends a system instruction directing the LLM to set the generated page's form
-// action to the wedge endpoint URL, use method="POST", and include hidden fields
-// for tenant_id and source_url.
+// Two paths under test:
+//   - Legacy single-tenant: process.env.LUMINA_WEDGE_ENDPOINT + LUMINA_WEDGE_TENANT_ID
+//     (used when ctx is undefined, e.g. TENANT_REGISTRY_PATH unset boot mode).
+//   - Multi-tenant (spec 101): ctx.wedge_endpoint + ctx.tenant_id passed per-request.
 //
-// This test is INTENTIONALLY FAILING before T016 wires the implementation.
-// After T016 lands, all three tests must pass.
+// Both paths must emit the same form-action directive so generated pages POST
+// lead data into the customer's Lumina iMessage agent handoff endpoint.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -15,65 +15,90 @@ const ORIGINAL_ENV = { ...process.env };
 
 afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
-  // Clear module registry so the env var is re-read on next import.
-  // Vitest re-imports modules per test file by default; explicit cache bust
-  // here guards against shared-module caching between test cases within this
-  // file.
 });
 
-describe('composeSystemPrompt — LUMINA_WEDGE_ENDPOINT injection (spec 100 T015)', () => {
+describe('composeSystemPrompt — LUMINA_WEDGE_ENDPOINT injection (env-fallback path)', () => {
   beforeEach(() => {
     delete process.env.LUMINA_WEDGE_ENDPOINT;
+    delete process.env.LUMINA_WEDGE_TENANT_ID;
   });
 
-  it('includes wedge form-action block when LUMINA_WEDGE_ENDPOINT is set', async () => {
+  it('includes wedge form-action block when both env vars are set', async () => {
     const endpoint = 'https://ericedmeades.holalumina.com/api/open-design/lead-handoff';
     process.env.LUMINA_WEDGE_ENDPOINT = endpoint;
+    process.env.LUMINA_WEDGE_TENANT_ID = 'ericedmeades';
 
-    // Dynamic import so the module picks up the mutated env var.
     const { composeSystemPrompt } = await import('../src/prompts/system.js');
     const result = composeSystemPrompt({});
 
-    // Must contain the wedge endpoint as a form action directive.
     expect(result).toContain(endpoint);
-
-    // Must instruct the LLM to use method="POST".
     expect(result).toMatch(/method\s*[=:]\s*["']?POST["']?/i);
-
-    // Must mention tenant_id hidden field.
     expect(result).toContain('tenant_id');
-
-    // Must mention source_url hidden field.
+    expect(result).toContain('ericedmeades');
     expect(result).toContain('source_url');
-
-    // Must mention Lumina lead handoff section (the block header).
     expect(result).toContain('Lumina lead handoff');
   });
 
-  it('does NOT include wedge block when LUMINA_WEDGE_ENDPOINT is unset', async () => {
-    delete process.env.LUMINA_WEDGE_ENDPOINT;
-
+  it('does NOT include wedge block when env vars are unset', async () => {
     const { composeSystemPrompt } = await import('../src/prompts/system.js');
     const result = composeSystemPrompt({});
 
-    // The wedge section header must be absent.
     expect(result).not.toContain('Lumina lead handoff');
-
-    // No stray tenant_id injection (unlikely to appear in base prompt without wedge).
     expect(result).not.toContain('tenant_id');
   });
 
   it('uses the exact LUMINA_WEDGE_ENDPOINT value as the form action URL', async () => {
     const customEndpoint = 'https://custom-tenant.holalumina.com/api/open-design/lead-handoff';
     process.env.LUMINA_WEDGE_ENDPOINT = customEndpoint;
+    process.env.LUMINA_WEDGE_TENANT_ID = 'custom-tenant';
 
     const { composeSystemPrompt } = await import('../src/prompts/system.js');
     const result = composeSystemPrompt({});
 
-    // The exact endpoint must appear in the output, not a placeholder.
     expect(result).toContain(customEndpoint);
-
-    // Must NOT contain the literal placeholder string from the env.example.
     expect(result).not.toContain('YOUR_WEDGE_ENDPOINT_URL_HERE');
+  });
+
+  it('throws when LUMINA_WEDGE_ENDPOINT is set without LUMINA_WEDGE_TENANT_ID', async () => {
+    process.env.LUMINA_WEDGE_ENDPOINT = 'https://x.holalumina.com/api/open-design/lead-handoff';
+
+    const { composeSystemPrompt } = await import('../src/prompts/system.js');
+    expect(() => composeSystemPrompt({})).toThrow(/LUMINA_WEDGE_TENANT_ID/);
+  });
+});
+
+describe('composeSystemPrompt — ctx-based wedge injection (multi-tenant path)', () => {
+  beforeEach(() => {
+    // Env vars must NOT leak into ctx-based runs — ctx wins unconditionally.
+    delete process.env.LUMINA_WEDGE_ENDPOINT;
+    delete process.env.LUMINA_WEDGE_TENANT_ID;
+  });
+
+  it('uses ctx.wedge_endpoint + ctx.tenant_id when ctx supplied', async () => {
+    const endpoint = 'https://ericedmeades.holalumina.com/api/open-design/lead-handoff';
+    const { composeSystemPrompt } = await import('../src/prompts/system.js');
+    const result = composeSystemPrompt({
+      ctx: { wedge_endpoint: endpoint, tenant_id: 'ericedmeades' },
+    });
+
+    expect(result).toContain(endpoint);
+    expect(result).toContain('Lumina lead handoff');
+    expect(result).toContain('ericedmeades');
+    expect(result).toMatch(/method\s*[=:]\s*["']?POST["']?/i);
+    expect(result).toContain('source_url');
+  });
+
+  it('ctx wins over process.env', async () => {
+    process.env.LUMINA_WEDGE_ENDPOINT = 'https://env.holalumina.com/api/open-design/lead-handoff';
+    process.env.LUMINA_WEDGE_TENANT_ID = 'env-tenant';
+    const ctxEndpoint = 'https://ctx.holalumina.com/api/open-design/lead-handoff';
+
+    const { composeSystemPrompt } = await import('../src/prompts/system.js');
+    const result = composeSystemPrompt({
+      ctx: { wedge_endpoint: ctxEndpoint, tenant_id: 'ctx-tenant' },
+    });
+
+    expect(result).toContain(ctxEndpoint);
+    expect(result).not.toContain('https://env.holalumina.com/api/open-design/lead-handoff');
   });
 });

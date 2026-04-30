@@ -2,7 +2,7 @@
 import express from 'express';
 import multer from 'multer';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -80,6 +80,7 @@ import {
   upsertMessage,
 } from './db.js';
 import {
+  assertProjectIdValid,
   buildDeployFileSet,
   checkDeploymentUrl,
   DeployError,
@@ -92,6 +93,16 @@ import {
 import { loadTenantRegistry, RegistryBootError } from './tenants/registry-loader.js';
 import { tenantResolverMiddleware } from './tenants/resolver.js';
 import { devTenantBypassMiddleware } from './dev-tenant-bypass.js';
+import {
+  getTenantContextOptional,
+  runWithTenantContext,
+  type RequestTenantContext,
+} from './auth/tenant-context.js';
+import {
+  emitDeployCompleted,
+  emitGenerationCompleted,
+  emitGenerationStarted,
+} from './observability/tenant-usage.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -455,6 +466,39 @@ export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INT
       }
     },
   };
+}
+
+// Spec 101 T028 — synthetic ctx for legacy single-tenant mode.
+//
+// `deployToVercel` requires a `ctx` with non-empty `tenant_id`. When the daemon
+// runs without TENANT_REGISTRY_PATH (spec 100 BYOK / Lumina gateway override
+// mode) there is no per-request tenant context, so we synthesize a sentinel
+// ctx with `tenant_id: 'legacy'`. The `legacy` sentinel is used downstream to
+// gate tenant-usage emitters off (those would throw without an ALS scope).
+function buildLegacyDeployCtx(vercelTeamSlug: string): RequestTenantContext {
+  return {
+    tenant_id: 'legacy',
+    request_id: '00000000-0000-0000-0000-000000000000',
+    clerk_user_id: '',
+    clerk_session_id: '',
+    clerk_org_slug: '',
+    design_system: 'default',
+    wedge_endpoint: '',
+    vercel_team: vercelTeamSlug || 'default',
+    data_dir: '',
+  };
+}
+
+function isRealTenantCtx(ctx: RequestTenantContext | undefined): ctx is RequestTenantContext {
+  return !!ctx && ctx.tenant_id !== 'legacy' && ctx.tenant_id !== '';
+}
+
+// Spec 101 T028 — short, deterministic prompt fingerprint for usage events.
+// Uses node:crypto (already imported as randomUUID source) for sha256. The
+// emitter accepts an opaque string, so a 16-char hex prefix is enough to
+// dedupe without bloating logs.
+function hashPromptForUsage(prompt: string): string {
+  return 'sha256:' + createHash('sha256').update(prompt).digest('hex').slice(0, 16);
 }
 
 export async function startServer({ port = 7456, returnServer = false } = {}) {
@@ -1189,13 +1233,44 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
 
+      // Spec 101 T028 — boundary guard: validate project id shape before any
+      // filesystem or Vercel API call.
+      assertProjectIdValid(req.params.id);
+
       const prior = getDeployment(db, req.params.id, fileName, providerId);
       const files = await buildDeployFileSet(PROJECTS_DIR, req.params.id, fileName);
+      const vercelConfig = await readVercelConfig();
+      // Spec 101 T028 — wire ctx into deploy. Multi-tenant (TENANT_REGISTRY_PATH
+      // set) → ctx populated by middleware. Legacy single-tenant → synthetic
+      // 'legacy' ctx so deployToVercel's ctx-required guard is satisfied while
+      // tenant usage emitters stay gated off.
+      const ctx = getTenantContextOptional() ?? buildLegacyDeployCtx(
+        vercelConfig.teamSlug || vercelConfig.teamId || '',
+      );
+      const deployStartedAt = Date.now();
       const result = await deployToVercel({
-        config: await readVercelConfig(),
+        config: vercelConfig,
         files,
         projectId: req.params.id,
+        ctx,
       });
+      if (isRealTenantCtx(ctx)) {
+        try {
+          await runWithTenantContext(ctx, () => {
+            emitDeployCompleted({
+              project_id: req.params.id,
+              vercel_deployment_id: result.deploymentId ?? '',
+              live_url: result.url ?? '',
+              status: result.status === 'error' ? 'failed' : 'success',
+              duration_ms: Date.now() - deployStartedAt,
+            });
+          });
+        } catch (emitErr) {
+          // Observability is non-fatal — never block the deploy response.
+          // eslint-disable-next-line no-console
+          console.warn('[od] tenant-usage emit failed:', emitErr);
+        }
+      }
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -1607,7 +1682,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
 
-  const composeDaemonSystemPrompt = async ({ projectId, skillId, designSystemId }) => {
+  const composeDaemonSystemPrompt = async ({ projectId, skillId, designSystemId, tenantCtx }) => {
     const project = typeof projectId === 'string' && projectId ? getProject(db, projectId) : null;
     const effectiveSkillId = typeof skillId === 'string' && skillId ? skillId : project?.skillId;
     const effectiveDesignSystemId = typeof designSystemId === 'string' && designSystemId ? designSystemId : project?.designSystemId;
@@ -1638,6 +1713,18 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       ? getTemplate(db, metadata.templateId) ?? undefined
       : undefined;
 
+    // Spec 101 T028 — thread per-request tenant ctx into the prompt composer
+    // so the wedge form-action injection uses the registry-resolved
+    // wedge_endpoint + tenant_id instead of falling back to LUMINA_WEDGE_*
+    // env vars. Legacy mode (tenantCtx undefined) still falls back via the
+    // composer's own env-var path.
+    const promptCtx = isRealTenantCtx(tenantCtx)
+      ? {
+          tenant_id: tenantCtx.tenant_id,
+          wedge_endpoint: tenantCtx.wedge_endpoint,
+        }
+      : undefined;
+
     return composeSystemPrompt({
       skillBody,
       skillName,
@@ -1646,6 +1733,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       designSystemTitle,
       metadata,
       template,
+      ctx: promptCtx,
     });
   };
 
@@ -1672,6 +1760,16 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     if (typeof assistantMessageId === 'string' && assistantMessageId) run.assistantMessageId = assistantMessageId;
     if (typeof clientRequestId === 'string' && clientRequestId) run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+
+    // Spec 101 T028 — capture per-request tenant context at the moment the run
+    // starts. The AsyncLocalStorage scope dies the instant Express returns; by
+    // the time `child.on('close')` fires for auto-deploy, getTenantContext()
+    // would throw. Snapshot it onto the run so the deploy chain (and the usage
+    // emitters) can re-establish the scope via runWithTenantContext.
+    const tenantCtx = getTenantContextOptional();
+    run.tenantCtx = tenantCtx;
+    run.startedAt = Date.now();
+
     const def = getAgentDef(agentId);
     if (!def) return design.runs.fail(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
     if (!def.bin) return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
@@ -1679,6 +1777,25 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+
+    // Spec 101 T028 — emit generation_started after request validation so we
+    // don't bill tenants for malformed payloads. Wrapped in
+    // runWithTenantContext because the emitter calls getTenantContext()
+    // internally and AsyncLocalStorage doesn't propagate into design.runs.start.
+    if (isRealTenantCtx(tenantCtx) && typeof run.projectId === 'string' && run.projectId) {
+      try {
+        const promptHash = hashPromptForUsage(message);
+        await runWithTenantContext(tenantCtx, () => {
+          emitGenerationStarted({
+            project_id: run.projectId,
+            prompt_hash: promptHash,
+          });
+        });
+      } catch (emitErr) {
+        // eslint-disable-next-line no-console
+        console.warn('[od] tenant-usage emit failed (generation_started):', emitErr);
+      }
+    }
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
@@ -1742,7 +1859,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
-    const daemonSystemPrompt = await composeDaemonSystemPrompt({ projectId, skillId, designSystemId });
+    const daemonSystemPrompt = await composeDaemonSystemPrompt({
+      projectId,
+      skillId,
+      designSystemId,
+      tenantCtx: run.tenantCtx,
+    });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -1993,6 +2115,27 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
           ? 'succeeded'
           : 'failed';
 
+      // Spec 101 T028 — emit generation_completed for every terminal run when
+      // a real tenant ctx was captured at run creation. Wrapped in
+      // runWithTenantContext because the original Express ALS scope is gone.
+      const runTenantCtx = run.tenantCtx;
+      const generationDurationMs = run.startedAt ? Date.now() - run.startedAt : 0;
+      const emitGenerationCompletedSafe = () => {
+        if (!isRealTenantCtx(runTenantCtx) || !run.projectId) return;
+        try {
+          void runWithTenantContext(runTenantCtx, () => {
+            emitGenerationCompleted({
+              project_id: run.projectId,
+              duration_ms: generationDurationMs,
+              success: status === 'succeeded',
+            });
+          });
+        } catch (emitErr) {
+          // eslint-disable-next-line no-console
+          console.warn('[od] tenant-usage emit failed (generation_completed):', emitErr);
+        }
+      };
+
       // ---- Lumina auto-deploy on artifact-finalized (spec 100 T009) ----------
       // When a run succeeds and the project has a primary HTML artifact, auto-
       // deploy it to Vercel and emit a "deploy-status" SSE event so the web UI
@@ -2000,6 +2143,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       // (status === 'succeeded'), never during streaming. Minimal change: single
       // async IIFE that resolves after finish() so no SSE clients miss the event.
       if (status === 'succeeded' && run.projectId) {
+        emitGenerationCompletedSafe();
         void (async () => {
           try {
             const projectFiles = await listFiles(PROJECTS_DIR, run.projectId);
@@ -2008,15 +2152,41 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
               const vercelConfig = await readVercelConfig();
               if (vercelConfig.token) {
                 const files = await buildDeployFileSet(PROJECTS_DIR, run.projectId, htmlFile.name);
+                // Spec 101 T028 — pass ctx to deployToVercel. Use the run's
+                // captured tenant ctx in multi-tenant mode; synthesize a
+                // 'legacy' ctx in single-tenant mode so the ctx-required
+                // guard is satisfied without forcing single-tenant users
+                // into the registry pipeline.
+                const deployCtx = isRealTenantCtx(runTenantCtx)
+                  ? runTenantCtx
+                  : buildLegacyDeployCtx(vercelConfig.teamSlug || vercelConfig.teamId || '');
+                const deployStartedAt = Date.now();
                 const deployResult = await deployToVercel({
                   config: vercelConfig,
                   files,
                   projectId: run.projectId,
+                  ctx: deployCtx,
                 });
                 design.runs.emit(run, 'deploy-status', {
                   status: deployResult.status,
                   url: deployResult.url,
                 });
+                if (isRealTenantCtx(runTenantCtx)) {
+                  try {
+                    await runWithTenantContext(runTenantCtx, () => {
+                      emitDeployCompleted({
+                        project_id: run.projectId,
+                        vercel_deployment_id: deployResult.deploymentId ?? '',
+                        live_url: deployResult.url ?? '',
+                        status: deployResult.status === 'error' ? 'failed' : 'success',
+                        duration_ms: Date.now() - deployStartedAt,
+                      });
+                    });
+                  } catch (emitErr) {
+                    // eslint-disable-next-line no-console
+                    console.warn('[od] tenant-usage emit failed (deploy_completed):', emitErr);
+                  }
+                }
               }
             }
           } catch (deployErr) {
@@ -2034,6 +2204,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
       // -------------------------------------------------------------------------
 
+      emitGenerationCompletedSafe();
       design.runs.finish(run, status, code, signal);
     });
   };

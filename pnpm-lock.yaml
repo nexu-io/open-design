@@ -47,6 +47,9 @@ importers:
       multer:
         specifier: ^1.4.5-lts.1
         version: 1.4.5-lts.2
+      nanoid:
+        specifier: ^3.3.11
+        version: 3.3.11
       zod:
         specifier: ^3.23.8
         version: 3.25.76

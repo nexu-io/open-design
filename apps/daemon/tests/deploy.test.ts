@@ -5,12 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { afterEach, beforeEach, vi } from 'vitest';
 import {
+  assertProjectIdValid,
   buildDeployFileSet,
   checkDeploymentUrl,
   deploymentUrlCandidates,
+  deployToVercel,
+  DeployError,
   extractCssReferences,
   extractHtmlReferences,
+  generateProjectId,
   injectDeployHookScript,
   isVercelProtectedResponse,
   normalizeDeployHookScriptUrl,
@@ -352,5 +357,205 @@ describe('deployment link readiness', () => {
       'set-cookie': '_vercel_sso_nonce=test',
     });
     expect(isVercelProtectedResponse({ headers }, 'Authentication Required')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spec 101 — Wave F-3 (T025 RED) / Wave G-1 (T026 GREEN)
+// Multi-tenant ctx refactor for deployToVercel.
+// ---------------------------------------------------------------------------
+
+describe('deployToVercel — multi-tenant ctx refactor (spec 101 T025/T026)', () => {
+  type FetchCall = { url: string; init?: RequestInit };
+  let calls: FetchCall[];
+
+  function makeFetchMock(opts: { ready?: boolean } = {}) {
+    return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push({ url, init });
+
+      if (url.startsWith('https://api.vercel.com/v13/deployments') && (init?.method ?? 'GET') === 'POST') {
+        return new Response(
+          JSON.stringify({
+            id: 'dpl_test_1',
+            uid: 'dpl_test_1',
+            url: 'od-test-abc.vercel.app',
+            readyState: opts.ready === false ? 'INITIALIZING' : 'READY',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // poll lookup or other GETs — return ready immediately.
+      if (url.startsWith('https://api.vercel.com/v13/deployments/')) {
+        return new Response(
+          JSON.stringify({
+            id: 'dpl_test_1',
+            url: 'od-test-abc.vercel.app',
+            readyState: 'READY',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // public-url reachability probe (HEAD/GET on the deployment URL).
+      return new Response('ok', { status: 200 });
+    });
+  }
+
+  const baseFiles = [
+    {
+      file: 'index.html',
+      data: Buffer.from('<!doctype html><h1>hi</h1>', 'utf8'),
+      contentType: 'text/html',
+      sourcePath: 'index.html',
+    },
+  ];
+  const baseConfig = { token: 'tok_test', teamId: '', teamSlug: '' };
+
+  beforeEach(() => {
+    calls = [];
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('(a) composes project name as od-<tenant_id>-<projectId> (ericedmeades)', async () => {
+    vi.stubGlobal('fetch', makeFetchMock());
+
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: 'abc123',
+      ctx: { tenant_id: 'ericedmeades', vercel_team: 'ceremonia-89dd9b81' },
+    });
+
+    const createCall = calls.find((c) => (c.init?.method ?? 'GET') === 'POST');
+    expect(createCall).toBeDefined();
+    const body = JSON.parse(String(createCall!.init!.body));
+    expect(body.name).toBe('od-ericedmeades-abc123');
+  });
+
+  it('(b) composes project name as od-<tenant_id>-<projectId> (ceremonia)', async () => {
+    vi.stubGlobal('fetch', makeFetchMock());
+
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: 'abc123',
+      ctx: { tenant_id: 'ceremonia', vercel_team: 'ceremonia-89dd9b81' },
+    });
+
+    const createCall = calls.find((c) => (c.init?.method ?? 'GET') === 'POST');
+    const body = JSON.parse(String(createCall!.init!.body));
+    expect(body.name).toBe('od-ceremonia-abc123');
+  });
+
+  it('(c) ctx.vercel_team takes precedence over config.teamId/teamSlug', async () => {
+    vi.stubGlobal('fetch', makeFetchMock());
+
+    await deployToVercel({
+      config: { token: 'tok_test', teamId: 'team_from_config', teamSlug: 'slug_from_config' },
+      files: baseFiles,
+      projectId: 'abc123',
+      ctx: { tenant_id: 'ceremonia', vercel_team: 'ceremonia-89dd9b81' },
+    });
+
+    const createCall = calls.find((c) => (c.init?.method ?? 'GET') === 'POST');
+    expect(createCall!.url).toContain('slug=ceremonia-89dd9b81');
+    expect(createCall!.url).not.toContain('team_from_config');
+    expect(createCall!.url).not.toContain('slug_from_config');
+  });
+
+  it('(d) defense-in-depth: project name is always od-<tenant>-<id>, sanitized via safeVercelProjectName', async () => {
+    vi.stubGlobal('fetch', makeFetchMock());
+
+    // assertProjectIdValid will reject the malicious projectId at the boundary —
+    // proving the guard prevents bypass even if a caller forgot to validate.
+    await expect(
+      deployToVercel({
+        config: baseConfig,
+        files: baseFiles,
+        projectId: 'malicious/../../injection',
+        ctx: { tenant_id: 'ericedmeades', vercel_team: 'ceremonia-89dd9b81' },
+      }),
+    ).rejects.toBeInstanceOf(DeployError);
+
+    // For a legitimate projectId, the name composition is server-side:
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: 'malicious-injection',
+      ctx: { tenant_id: 'ericedmeades', vercel_team: 'ceremonia-89dd9b81' },
+    });
+    const createCall = calls.find((c) => (c.init?.method ?? 'GET') === 'POST');
+    const body = JSON.parse(String(createCall!.init!.body));
+    expect(body.name).toBe('od-ericedmeades-malicious-injection');
+  });
+
+  it('(e) tenant-A ctx cannot deploy under tenant-B project namespace', async () => {
+    vi.stubGlobal('fetch', makeFetchMock());
+
+    // Even though caller may try to manipulate projectId so the resulting URL
+    // looks like od-tenant-b-..., assertProjectIdValid rejects path-traversal
+    // / control chars; for valid characters the prefix is locked to ctx.tenant_id.
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: 'b-foo',
+      ctx: { tenant_id: 'ericedmeades', vercel_team: 'ceremonia-89dd9b81' },
+    });
+
+    const createCall = calls.find((c) => (c.init?.method ?? 'GET') === 'POST');
+    const body = JSON.parse(String(createCall!.init!.body));
+    expect(body.name.startsWith('od-ericedmeades-')).toBe(true);
+    expect(body.name.startsWith('od-tenant-b-')).toBe(false);
+  });
+
+  it('(f) generateProjectId() returns a 12-char nanoid (URL-safe alphabet)', () => {
+    const id = generateProjectId();
+    expect(id).toHaveLength(12);
+    // nanoid default alphabet: A-Za-z0-9_-
+    expect(id).toMatch(/^[A-Za-z0-9_-]{12}$/);
+
+    // Two consecutive calls produce different ids.
+    expect(generateProjectId()).not.toBe(id);
+
+    // assertProjectIdValid accepts generated ids without throwing.
+    expect(() => assertProjectIdValid(id)).not.toThrow();
+  });
+
+  it('(g) missing ctx throws DeployError 400 with "tenant context required"', async () => {
+    vi.stubGlobal('fetch', makeFetchMock());
+
+    await expect(
+      // @ts-expect-error — intentionally missing ctx for the test
+      deployToVercel({ config: baseConfig, files: baseFiles, projectId: 'abc123' }),
+    ).rejects.toMatchObject({
+      name: 'DeployError',
+      status: 400,
+      message: expect.stringContaining('tenant context required'),
+    });
+
+    await expect(
+      deployToVercel({
+        config: baseConfig,
+        files: baseFiles,
+        projectId: 'abc123',
+        ctx: { tenant_id: '', vercel_team: '' },
+      }),
+    ).rejects.toMatchObject({
+      name: 'DeployError',
+      status: 400,
+      message: expect.stringContaining('tenant context required'),
+    });
+  });
+
+  it('assertProjectIdValid rejects path separators, null bytes, and empty strings', () => {
+    expect(() => assertProjectIdValid('')).toThrow(DeployError);
+    expect(() => assertProjectIdValid('a/b')).toThrow(DeployError);
+    expect(() => assertProjectIdValid('a b')).toThrow(DeployError);
+    expect(() => assertProjectIdValid('../etc/passwd')).toThrow(DeployError);
+    expect(() => assertProjectIdValid('valid_id-123')).not.toThrow();
   });
 });

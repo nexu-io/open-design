@@ -33,6 +33,28 @@ import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import type { RequestTenantContext } from '../auth/tenant-context.js';
+
+/**
+ * Phase 4 placeholder. Shape will be filled in when the design-system token
+ * pipeline lands. Kept optional so the system-prompt composer can accept it
+ * today without breaking callers that don't yet have the data.
+ */
+export interface DesignSystemTokens {
+  voice_tokens?: string[];
+  voice_avoid?: string[];
+}
+
+/**
+ * The slice of `RequestTenantContext` the system-prompt composer needs.
+ * Multi-tenant callers pass their per-request snapshot here; legacy
+ * single-tenant boot code can leave `ctx` undefined and fall back to env vars.
+ */
+export type TenantPromptContext = Partial<
+  Pick<RequestTenantContext, 'wedge_endpoint' | 'tenant_id'>
+> & {
+  design_system?: DesignSystemTokens;
+};
 
 type ProjectMetadata = {
   kind?: string;
@@ -80,6 +102,11 @@ export interface ComposeInput {
   // Snapshot of HTML files that the agent should treat as a starting
   // reference rather than a fixed deliverable.
   template?: ProjectTemplate | undefined;
+  // Per-request tenant context (spec 101 multi-tenant). When present, drives
+  // wedge form-action injection and (Phase 4) design-system voice tokens.
+  // When undefined, the composer falls back to LUMINA_WEDGE_* env vars for
+  // legacy single-tenant boot mode.
+  ctx?: TenantPromptContext | undefined;
 }
 
 export function composeSystemPrompt({
@@ -90,6 +117,7 @@ export function composeSystemPrompt({
   designSystemTitle,
   metadata,
   template,
+  ctx,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -151,21 +179,42 @@ export function composeSystemPrompt({
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
-  // T016 — Lumina wedge form-action injection.
-  // When LUMINA_WEDGE_ENDPOINT is set, append a system instruction block that
-  // directs the LLM to wire all booking/contact forms on the generated page to
-  // POST lead data directly into the Lumina iMessage agent handoff endpoint.
-  const wedgeEndpoint = process.env['LUMINA_WEDGE_ENDPOINT']?.trim();
-  const wedgeTenantId = process.env['LUMINA_WEDGE_TENANT_ID']?.trim();
+  // Lumina wedge form-action injection.
+  //
+  // Spec 101 (multi-tenant): when `ctx` is supplied by the caller, take the
+  // wedge endpoint + tenant id from the per-request RequestTenantContext
+  // snapshot. ctx wins unconditionally — env vars are NOT consulted.
+  //
+  // Spec 100 (legacy single-tenant): when `ctx` is undefined, fall back to
+  // LUMINA_WEDGE_ENDPOINT / LUMINA_WEDGE_TENANT_ID env vars. This preserves
+  // backward compatibility for boot modes where the tenant registry is not
+  // mounted (TENANT_REGISTRY_PATH unset).
+  let wedgeEndpoint: string | undefined;
+  let wedgeTenantId: string | undefined;
+  let wedgeSource: 'ctx' | 'env';
+  if (ctx !== undefined) {
+    wedgeEndpoint = ctx.wedge_endpoint?.trim();
+    wedgeTenantId = ctx.tenant_id?.trim();
+    wedgeSource = 'ctx';
+  } else {
+    wedgeEndpoint = process.env['LUMINA_WEDGE_ENDPOINT']?.trim();
+    wedgeTenantId = process.env['LUMINA_WEDGE_TENANT_ID']?.trim();
+    wedgeSource = 'env';
+  }
+
   if (wedgeEndpoint && wedgeTenantId) {
     // Fail-fast URL validation — prevents placeholder values from reaching the LLM.
+    // HTTPS is required (the wedge endpoint always lives behind TLS in any
+    // real deployment). http: is NOT permitted any longer; this protects
+    // against accidental plaintext lead-handoff in a dev mirror.
     try {
       const u = new URL(wedgeEndpoint);
-      if (!['http:', 'https:'].includes(u.protocol)) {
-        throw new Error(`LUMINA_WEDGE_ENDPOINT must be http(s): got ${u.protocol}`);
+      if (u.protocol !== 'https:') {
+        throw new Error(`wedge_endpoint must be https: got ${u.protocol}`);
       }
     } catch (err) {
-      throw new Error(`Invalid LUMINA_WEDGE_ENDPOINT: ${err instanceof Error ? err.message : String(err)}`);
+      const label = wedgeSource === 'ctx' ? 'ctx.wedge_endpoint' : 'LUMINA_WEDGE_ENDPOINT';
+      throw new Error(`Invalid ${label}: ${err instanceof Error ? err.message : String(err)}`);
     }
     parts.push(
       `\n\n## Lumina lead handoff (REQUIRED for forms)\n\n` +
@@ -179,7 +228,10 @@ export function composeSystemPrompt({
       `which will route the lead into the customer's Lumina iMessage agent for real-time follow-up.`,
     );
   } else if (wedgeEndpoint && !wedgeTenantId) {
-    // Half-configured guard — LUMINA_WEDGE_ENDPOINT set without tenant id is a misconfiguration.
+    // Half-configured guard — endpoint set without tenant id is a misconfiguration.
+    if (wedgeSource === 'ctx') {
+      throw new Error('ctx.wedge_endpoint set without ctx.tenant_id — both required for wedge injection');
+    }
     throw new Error('LUMINA_WEDGE_ENDPOINT set without LUMINA_WEDGE_TENANT_ID — both required for wedge injection');
   }
 

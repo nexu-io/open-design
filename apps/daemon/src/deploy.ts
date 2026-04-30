@@ -4,7 +4,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { nanoid } from 'nanoid';
 import { readProjectFile, validateProjectPath } from './projects.js';
+
+// Spec 101 — multi-tenant project IDs.
+// Project IDs are server-generated (NEVER from request body) and validated
+// on every API boundary. The regex matches data-paths.ts PROJECT_ID_RE.
+const PROJECT_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
@@ -19,6 +25,27 @@ export class DeployError extends Error {
     this.name = 'DeployError';
     this.status = status;
     this.details = details;
+  }
+}
+
+/**
+ * Generate a server-side project id. 12-char nanoid (URL-safe alphabet).
+ * Callers MUST use this — never trust a project id from the request body.
+ */
+export function generateProjectId() {
+  return nanoid(12);
+}
+
+/**
+ * Defense-in-depth guard: throw DeployError(400) if `id` violates the
+ * project-id shape. Mirrors data-paths.ts PROJECT_ID_RE.
+ */
+export function assertProjectIdValid(id) {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new DeployError('projectId must be a non-empty string.', 400);
+  }
+  if (!PROJECT_ID_RE.test(id)) {
+    throw new DeployError('projectId contains invalid characters.', 400);
   }
 }
 
@@ -163,19 +190,28 @@ export async function buildDeployFileSet(projectsRoot, projectId, entryName, opt
   return Array.from(files.values());
 }
 
-export async function deployToVercel({ config, files, projectId }) {
+export async function deployToVercel({ config, files, projectId, ctx }) {
+  if (!ctx || typeof ctx.tenant_id !== 'string' || !ctx.tenant_id) {
+    throw new DeployError('tenant context required for deploy.', 400);
+  }
   if (!config?.token) {
     throw new DeployError('Vercel token is required.', 400);
   }
+  // Defense-in-depth: even if a malicious caller passes a hand-crafted
+  // projectId, safeVercelProjectName sanitizes it. Validate shape first.
+  assertProjectIdValid(projectId);
 
-  const createResp = await fetch(`${VERCEL_API}/v13/deployments${vercelTeamQuery(config)}`, {
+  const createResp = await fetch(`${VERCEL_API}/v13/deployments${vercelTeamQuery(config, ctx)}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: safeVercelProjectName(`od-${projectId}`),
+      // Project name is composed server-side from ctx.tenant_id (trusted,
+      // resolved from subdomain + Clerk JWT) plus the server-generated
+      // projectId. Never derived from request body.
+      name: safeVercelProjectName(`od-${ctx.tenant_id}-${projectId}`),
       files: files.map((f) => ({
         file: f.file,
         data: Buffer.from(f.data).toString('base64'),
@@ -191,7 +227,7 @@ export async function deployToVercel({ config, files, projectId }) {
   const deploymentId = created.id || created.uid;
   const initialUrl = deploymentUrl(created);
   const ready = deploymentId
-    ? await pollVercelDeployment(config, deploymentId)
+    ? await pollVercelDeployment(config, deploymentId, ctx)
     : created;
   if (ready?.readyState === 'ERROR') {
     throw new DeployError(ready?.error?.message || 'Vercel deployment failed.', 502, ready);
@@ -421,12 +457,12 @@ function referenceSuffix(raw) {
   return suffixIdx === -1 ? '' : raw.slice(suffixIdx);
 }
 
-async function pollVercelDeployment(config, id) {
+async function pollVercelDeployment(config, id, ctx) {
   let last = null;
   for (let i = 0; i < 30; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, i < 5 ? 1000 : 2000));
     const resp = await fetch(
-      `${VERCEL_API}/v13/deployments/${encodeURIComponent(id)}${vercelTeamQuery(config)}`,
+      `${VERCEL_API}/v13/deployments/${encodeURIComponent(id)}${vercelTeamQuery(config, ctx)}`,
       { headers: { Authorization: `Bearer ${config.token}` } },
     );
     const json = await readVercelJson(resp);
@@ -576,10 +612,17 @@ export function normalizeDeploymentUrl(url) {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
-function vercelTeamQuery(config) {
+function vercelTeamQuery(config, ctx) {
   const params = new URLSearchParams();
-  if (config.teamId) params.set('teamId', config.teamId);
-  else if (config.teamSlug) params.set('slug', config.teamSlug);
+  // ctx.vercel_team (server-side, registry-derived) wins over config —
+  // never trust a request body to choose which team to deploy into.
+  if (ctx && typeof ctx.vercel_team === 'string' && ctx.vercel_team) {
+    params.set('slug', ctx.vercel_team);
+  } else if (config.teamId) {
+    params.set('teamId', config.teamId);
+  } else if (config.teamSlug) {
+    params.set('slug', config.teamSlug);
+  }
   const s = params.toString();
   return s ? `?${s}` : '';
 }
