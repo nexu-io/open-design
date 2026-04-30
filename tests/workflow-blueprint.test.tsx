@@ -1,7 +1,10 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { WorkflowBlueprint } from '../src/components/WorkflowBlueprint';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  WorkflowBlueprint,
+  buildReusableBlueprintPrompt,
+} from '../src/components/WorkflowBlueprint';
 
 describe('WorkflowBlueprint', () => {
   afterEach(() => cleanup());
@@ -38,6 +41,7 @@ describe('WorkflowBlueprint', () => {
 
     expect(screen.getByLabelText('Reusable workflow blueprint')).toBeInTheDocument();
     expect(screen.getByText('Reusable blueprint')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy prompt' })).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
     expect(screen.getByText('Genre fit')).toBeInTheDocument();
     expect(screen.getByText('Markdown')).toBeInTheDocument();
@@ -50,5 +54,62 @@ describe('WorkflowBlueprint', () => {
     const { container } = render(<WorkflowBlueprint metadata={{ kind: 'other' }} />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('copies a reusable prompt to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(
+      <WorkflowBlueprint
+        metadata={{
+          kind: 'prototype',
+          workflowTitle: 'iOS 26 App Prototype',
+          workflowCategory: 'Mobile app',
+          workflowOutcome: 'Liquid Glass iPhone concept',
+          workflowCheckpoints: ['Layer model'],
+          workflowExportPackage: [
+            {
+              format: 'HTML',
+              artifact: 'Interactive iPhone prototype',
+              instructions: 'Ship a responsive HTML prototype.',
+            },
+          ],
+          workflowScorecard: ['iOS fit'],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]?.[0]).toContain('Use the OneShot workflow blueprint: iOS 26 App Prototype.');
+    expect(writeText.mock.calls[0]?.[0]).toContain('HTML: Interactive iPhone prototype');
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  it('formats handoff metadata into reusable prompt text', () => {
+    const prompt = buildReusableBlueprintPrompt({
+      kind: 'template',
+      workflowTitle: 'OneShot Cover Run',
+      workflowCategory: 'Book cover production',
+      workflowOutcome: 'CoverVisionOS run packet',
+      workflowCheckpoints: ['Genre fit'],
+      workflowScorecard: ['Print readiness'],
+      workflowHandoff: {
+        system: 'CoverVisionOS',
+        stages: ['Layout package'],
+        artifacts: ['layout_handoff.md'],
+        commands: ['layout-package'],
+      },
+    });
+
+    expect(prompt).toContain('Workflow context: Book cover production - CoverVisionOS run packet.');
+    expect(prompt).toContain('Handoff system: CoverVisionOS.');
+    expect(prompt).toContain('- layout_handoff.md');
+    expect(prompt).toContain('- layout-package');
   });
 });
