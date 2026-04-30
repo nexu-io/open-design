@@ -50,10 +50,11 @@ describe('OneShotWorkflows', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'OneShot Design' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(6);
+    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(7);
+    expect(screen.getByText('iOS 26 App Prototype')).toBeInTheDocument();
     expect(screen.getByText('BSA Proposal + SOW')).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
-    expect(screen.getByText('6 workflow packs')).toBeInTheDocument();
+    expect(screen.getByText('7 workflow packs')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
   });
 
@@ -80,6 +81,33 @@ describe('OneShotWorkflows', () => {
         designSystemId: 'warm-editorial',
         metadata: { kind: 'template', animations: false },
         pendingPrompt: expect.stringContaining('CoverVisionOS standard'),
+      }),
+    );
+  });
+
+  it('seeds the iOS 26 workflow with the Liquid Glass design system', () => {
+    const onCreateProject = vi.fn();
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('mobile-app', 'prototype')]}
+        designSystems={[designSystem('ios-26-liquid-glass')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    const iosCard = screen.getByText('iOS 26 App Prototype').closest('.oneshot-card');
+    expect(iosCard).not.toBeNull();
+    fireEvent.click((iosCard as HTMLElement).querySelector('button') as HTMLButtonElement);
+
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'iOS 26 App Prototype',
+        skillId: 'mobile-app',
+        designSystemId: 'ios-26-liquid-glass',
+        metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
+        pendingPrompt: expect.stringContaining('iOS 26 Liquid Glass'),
       }),
     );
   });

@@ -32,6 +32,32 @@ interface Props {
 
 const WORKFLOWS: WorkflowDefinition[] = [
   {
+    id: 'ios-26-app-prototype',
+    title: 'iOS 26 App Prototype',
+    category: 'Mobile app',
+    outcome: 'Liquid Glass iPhone concept',
+    description:
+      'Turn an app idea into a high-fidelity iOS 26 Liquid Glass prototype with layered surfaces, tab chrome, widgets, sheets, and accessibility states.',
+    skillCandidates: ['mobile-app', 'mobile-onboarding', 'web-prototype'],
+    designSystemCandidates: ['ios-26-liquid-glass', 'apple', 'default'],
+    metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
+    checkpoints: ['Layer model', 'Glass tiers', 'Safe areas', 'Accessibility'],
+    exports: ['HTML', 'PNG', 'Prototype brief'],
+    prompt: `Create a high-fidelity iOS 26 Liquid Glass mobile app prototype.
+
+Use the iOS 26 Liquid Glass design system as the visual source of truth.
+
+Required output:
+1. Brief lock: app purpose, target user, core job, required screens, primary workflow, and missing facts.
+2. iPhone-first prototype using safe areas, Dynamic Island awareness, SF-style typography, layered background/content, and floating Liquid Glass surfaces.
+3. Use the four-layer model: background, glass, solid focus surface, and dynamic state.
+4. Include at least one Chrome glass tab bar or navigation surface, Regular glass cards/widgets, and one Thick glass modal sheet or action panel.
+5. Include a reduced-brightness or reduced-motion accessibility state in the design notes.
+6. Run a quality scorecard for iOS fit, glass tier discipline, hierarchy, contrast, accessibility, interaction readiness, and export readiness.
+
+Keep it professional, native-feeling, and specific. Do not use generic frosted-glass web cards or admin-dashboard density.`,
+  },
+  {
     id: 'bsa-proposal-sow',
     title: 'BSA Proposal + SOW',
     category: 'Business artifact',
