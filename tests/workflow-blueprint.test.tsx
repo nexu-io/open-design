@@ -7,7 +7,11 @@ import {
 } from '../src/components/WorkflowBlueprint';
 
 describe('WorkflowBlueprint', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
 
   it('renders reusable workflow metadata for launched OneShot projects', () => {
     render(
@@ -42,6 +46,7 @@ describe('WorkflowBlueprint', () => {
     expect(screen.getByLabelText('Reusable workflow blueprint')).toBeInTheDocument();
     expect(screen.getByText('Reusable blueprint')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy prompt' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save blueprint' })).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
     expect(screen.getByText('Genre fit')).toBeInTheDocument();
     expect(screen.getByText('Markdown')).toBeInTheDocument();
@@ -89,6 +94,35 @@ describe('WorkflowBlueprint', () => {
     expect(writeText.mock.calls[0]?.[0]).toContain('Use the OneShot workflow blueprint: iOS 26 App Prototype.');
     expect(writeText.mock.calls[0]?.[0]).toContain('HTML: Interactive iPhone prototype');
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  it('saves a reusable blueprint to local storage', async () => {
+    render(
+      <WorkflowBlueprint
+        skillId="digital-eguide"
+        designSystemId="warm-editorial"
+        metadata={{
+          kind: 'template',
+          workflowId: 'oneshot-cover-run',
+          workflowTitle: 'OneShot Cover Run',
+          workflowCategory: 'Book cover production',
+          workflowOutcome: 'CoverVisionOS run packet',
+          workflowCheckpoints: ['Genre fit'],
+          workflowScorecard: ['Print readiness'],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save blueprint' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument();
+    });
+    const raw = localStorage.getItem('oneshot:saved-blueprints');
+    expect(raw).toBeTruthy();
+    expect(raw).toContain('OneShot Cover Run');
+    expect(raw).toContain('digital-eguide');
+    expect(raw).toContain('warm-editorial');
   });
 
   it('formats handoff metadata into reusable prompt text', () => {

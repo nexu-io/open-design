@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotWorkflows } from '../src/components/OneShotWorkflows';
+import { saveWorkflowBlueprint } from '../src/state/blueprints';
 import type { DesignSystemSummary, SkillSummary } from '../src/types';
 
 function skill(id: string, mode: SkillSummary['mode']): SkillSummary {
@@ -37,7 +38,10 @@ function designSystem(id: string): DesignSystemSummary {
 }
 
 describe('OneShotWorkflows', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
 
   it('renders the production workflow launcher', () => {
     render(
@@ -237,5 +241,47 @@ describe('OneShotWorkflows', () => {
 
     expect(screen.getByText('Roofing Pitch Deck')).toBeInTheDocument();
     expect(screen.queryByText('Dashboard Mockup')).not.toBeInTheDocument();
+  });
+
+  it('starts a project from a saved blueprint', () => {
+    const onCreateProject = vi.fn();
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+        workflowCategory: 'Book cover production',
+        workflowOutcome: 'CoverVisionOS run packet',
+        workflowCheckpoints: ['Genre fit'],
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    expect(screen.getByLabelText('Saved blueprints')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /OneShot Cover Run/i }));
+
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'OneShot Cover Run',
+        skillId: 'digital-eguide',
+        designSystemId: 'warm-editorial',
+        pendingPrompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+        metadata: expect.objectContaining({
+          workflowId: 'oneshot-cover-run',
+          workflowTitle: 'OneShot Cover Run',
+        }),
+      }),
+    );
   });
 });

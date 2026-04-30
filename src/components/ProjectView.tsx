@@ -816,7 +816,11 @@ export function ProjectView({
           />
         </div>
       </div>
-      <WorkflowBlueprint metadata={project.metadata} />
+      <WorkflowBlueprint
+        metadata={project.metadata}
+        skillId={project.skillId}
+        designSystemId={project.designSystemId}
+      />
       <div className="split">
         <ChatPane
           // The conversation id is part of the key so switching conversations

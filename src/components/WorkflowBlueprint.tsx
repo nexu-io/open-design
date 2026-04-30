@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react';
 import type { ProjectMetadata } from '../types';
+import { saveWorkflowBlueprint } from '../state/blueprints';
 import { Icon } from './Icon';
 
 interface Props {
   metadata?: ProjectMetadata;
+  skillId?: string | null;
+  designSystemId?: string | null;
 }
 
-export function WorkflowBlueprint({ metadata }: Props) {
+export function WorkflowBlueprint({ metadata, skillId = null, designSystemId = null }: Props) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
   const reusablePrompt = useMemo(
     () => (metadata ? buildReusableBlueprintPrompt(metadata) : ''),
     [metadata],
@@ -41,6 +45,24 @@ export function WorkflowBlueprint({ metadata }: Props) {
       >
         <Icon name="copy" size={12} />
         {copied ? 'Copied' : 'Copy prompt'}
+      </button>
+      <button
+        type="button"
+        className="project-blueprint-copy"
+        onClick={() => {
+          if (!metadata || !reusablePrompt) return;
+          saveWorkflowBlueprint({
+            metadata,
+            prompt: reusablePrompt,
+            skillId,
+            designSystemId,
+          });
+          setSaved(true);
+          window.setTimeout(() => setSaved(false), 1400);
+        }}
+      >
+        <Icon name="plus" size={12} />
+        {saved ? 'Saved' : 'Save blueprint'}
       </button>
       <BlueprintGroup label="Gates" items={metadata.workflowCheckpoints} />
       <BlueprintGroup label="Exports" items={exportFormats} />

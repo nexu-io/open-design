@@ -284,6 +284,7 @@ code {
 .project-blueprint-copy {
   color: var(--text);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .project-blueprint-copy:hover {
@@ -342,6 +343,59 @@ code {
   font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.oneshot-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.oneshot-saved-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.oneshot-saved-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.oneshot-saved-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 3px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.oneshot-saved-item strong,
+.oneshot-saved-item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oneshot-saved-item strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.oneshot-saved-item span {
+  color: var(--text-muted);
+  font-size: 11.5px;
 }
 
 /* -------- Avatar menu (replaces in-topbar agent picker) ------------- */

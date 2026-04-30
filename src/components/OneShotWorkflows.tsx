@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CreateInput } from './NewProjectPanel';
 import type {
   DesignSystemSummary,
   ProjectMetadata,
+  SavedWorkflowBlueprint,
   SkillSummary,
   WorkflowExportPackageItem,
   WorkflowHandoff,
 } from '../types';
+import { listSavedBlueprints } from '../state/blueprints';
 import { Icon } from './Icon';
 
 type WorkflowKind = 'prototype' | 'deck' | 'template' | 'other';
@@ -449,6 +451,20 @@ export function OneShotWorkflows({
 }: Props) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORIES);
+  const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
+
+  useEffect(() => {
+    function refreshSavedBlueprints() {
+      setSavedBlueprints(listSavedBlueprints());
+    }
+    refreshSavedBlueprints();
+    window.addEventListener('oneshot:blueprints-changed', refreshSavedBlueprints);
+    window.addEventListener('storage', refreshSavedBlueprints);
+    return () => {
+      window.removeEventListener('oneshot:blueprints-changed', refreshSavedBlueprints);
+      window.removeEventListener('storage', refreshSavedBlueprints);
+    };
+  }, []);
 
   const categories = useMemo(
     () => [
@@ -508,6 +524,40 @@ export function OneShotWorkflows({
           ))}
         </div>
       </section>
+
+      {savedBlueprints.length > 0 ? (
+        <section className="oneshot-saved" aria-label="Saved blueprints">
+          <div className="oneshot-saved-head">
+            <Icon name="history" size={14} />
+            <span>Saved blueprints</span>
+          </div>
+          <div className="oneshot-saved-list">
+            {savedBlueprints.slice(0, 4).map((blueprint) => (
+              <button
+                key={blueprint.id}
+                type="button"
+                className="oneshot-saved-item"
+                onClick={() => {
+                  onCreateProject({
+                    name: blueprint.name,
+                    skillId: blueprint.skillId,
+                    designSystemId: blueprint.designSystemId,
+                    metadata: blueprint.metadata,
+                    pendingPrompt: blueprint.prompt,
+                  });
+                }}
+              >
+                <strong>{blueprint.name}</strong>
+                <span>
+                  {[blueprint.metadata.workflowCategory, blueprint.metadata.workflowOutcome]
+                    .filter(Boolean)
+                    .join(' · ') || 'Reusable workflow prompt'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="oneshot-section">
         <div className="oneshot-section-head">

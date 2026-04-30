@@ -253,6 +253,16 @@ export interface Project {
   metadata?: ProjectMetadata;
 }
 
+export interface SavedWorkflowBlueprint {
+  id: string;
+  name: string;
+  prompt: string;
+  skillId: string | null;
+  designSystemId: string | null;
+  metadata: ProjectMetadata;
+  createdAt: number;
+}
+
 export interface ProjectTemplate {
   id: string;
   name: string;
