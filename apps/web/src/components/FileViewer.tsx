@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+// @ts-expect-error — qrcode.react ships ESM; types resolved at build time via pnpm install
+import { QRCodeSVG } from 'qrcode.react';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -243,6 +245,10 @@ function HtmlViewer({
   const [teamSlug, setTeamSlug] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Lumina T010: live deploy URL received via od:deploy-status postMessage.
+  // Hidden until status==='ready' arrives from the auto-deploy pipeline (T009).
+  const [liveDeployUrl, setLiveDeployUrl] = useState<string | null>(null);
+  const [qrCopied, setQrCopied] = useState(false);
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
   // controls in the toolbar and reflects the count beside them.
@@ -319,6 +325,21 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [effectiveDeck]);
+
+  // T010 — listen for deploy-status SSE events forwarded by T009 auto-deploy
+  // pipeline. The daemon emits { type: 'od:deploy-status', status, url } via
+  // window.postMessage so the QR panel stays decoupled from React prop drilling.
+  useEffect(() => {
+    function onDeployStatus(ev: MessageEvent) {
+      const data = ev?.data as { type?: string; status?: string; url?: string } | null;
+      if (!data || data.type !== 'od:deploy-status') return;
+      if (data.status === 'ready' && typeof data.url === 'string' && data.url.trim()) {
+        setLiveDeployUrl(data.url.trim());
+      }
+    }
+    window.addEventListener('message', onDeployStatus);
+    return () => window.removeEventListener('message', onDeployStatus);
+  }, []);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
@@ -553,6 +574,27 @@ function HtmlViewer({
     }
     setCopiedDeployLink(true);
     window.setTimeout(() => setCopiedDeployLink(false), 1800);
+  }
+
+  // T010 — copy handler for the QR panel link
+  async function copyQrLink(url: string) {
+    const safeUrl = url.trim();
+    if (!safeUrl) return;
+    try {
+      await navigator.clipboard.writeText(safeUrl);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = safeUrl;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setQrCopied(true);
+    window.setTimeout(() => setQrCopied(false), 1800);
   }
 
   function presentInThisTab() {
@@ -930,6 +972,40 @@ function HtmlViewer({
             <Icon name="close" size={13} /> {t('fileViewer.exitPresentation')}
           </button>
           <iframe title="present" sandbox="allow-scripts" srcDoc={srcDoc} />
+        </div>
+      ) : null}
+      {/* T010 — QR code + live URL panel. Hidden until od:deploy-status with status='ready'. */}
+      {liveDeployUrl ? (
+        <div
+          className="lumina-qr-panel"
+          data-testid="lumina-qr-panel"
+          role="complementary"
+          aria-label="Open on phone"
+        >
+          <div className="lumina-qr-inner">
+            <div className="lumina-qr-code">
+              <QRCodeSVG value={liveDeployUrl} size={96} level="M" />
+            </div>
+            <div className="lumina-qr-body">
+              <p className="lumina-qr-cta">Open on phone — scan or tap</p>
+              <a
+                href={liveDeployUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="lumina-qr-url"
+              >
+                {liveDeployUrl}
+              </a>
+              <button
+                type="button"
+                className="viewer-action"
+                onClick={() => { void copyQrLink(liveDeployUrl); }}
+              >
+                <Icon name="copy" size={13} />
+                <span>{qrCopied ? 'Copied!' : 'Copy link'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {deployModalOpen ? (

@@ -151,6 +151,25 @@ export function composeSystemPrompt({
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
+  // T016 — Lumina wedge form-action injection.
+  // When LUMINA_WEDGE_ENDPOINT is set, append a system instruction block that
+  // directs the LLM to wire all booking/contact forms on the generated page to
+  // POST lead data directly into the Lumina iMessage agent handoff endpoint.
+  const wedgeEndpoint = process.env['LUMINA_WEDGE_ENDPOINT']?.trim();
+  if (wedgeEndpoint) {
+    parts.push(
+      `\n\n## Lumina lead handoff (REQUIRED for forms)\n\n` +
+      `The booking/contact form on this page must have:\n` +
+      `- action="${wedgeEndpoint}"\n` +
+      `- method="POST"\n` +
+      `- Hidden inputs:\n` +
+      `  - tenant_id: "ericedmeades"\n` +
+      `  - source_url: the page's own canonical URL\n\n` +
+      `Do NOT use JavaScript for form submission. The form posts directly to the endpoint, ` +
+      `which will route the lead into the customer's Lumina iMessage agent for real-time follow-up.`,
+    );
+  }
+
   return parts.join('');
 }
 
