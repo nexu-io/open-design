@@ -20,7 +20,7 @@
     "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
     "test:ui": "pnpm --filter @open-design/e2e test:ui",
     "test:ui:headed": "pnpm --filter @open-design/e2e test:ui:headed",
-    "typecheck": "pnpm --filter @open-design/web typecheck",
+    "typecheck": "corepack pnpm --filter @open-design/contracts typecheck && corepack pnpm --filter @open-design/web typecheck && corepack pnpm --filter @open-design/daemon typecheck",
     "start": "pnpm run build && pnpm --filter @open-design/daemon start",
     "test:run": "pnpm run test"
   },

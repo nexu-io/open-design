@@ -242,11 +242,11 @@ Flow:
   - [x] Substep 2.2 Implement: Type daemon response envelopes, chat request body reads, proxy stream request body reads, and SSE send helpers.
   - [x] Substep 2.3 Implement: Add compatibility error helpers and adopt them in chat, upload, project/file, and proxy stream paths.
   - [x] Substep 2.4 Verify: Run web typecheck, daemon tests, and targeted SSE/error compatibility tests.
-- [ ] Step 3: Add daemon TypeScript foundation
-  - [ ] Substep 3.1 Implement: Add daemon `tsconfig.json`, `typecheck` script, and required TypeScript/Node/Express type dependencies.
-  - [ ] Substep 3.2 Implement: Configure transitional `allowJs` checking for current daemon modules.
-  - [ ] Substep 3.3 Implement: Update root `typecheck` to include contracts and daemon.
-  - [ ] Substep 3.4 Verify: Run daemon typecheck, daemon tests, and root typecheck.
+- [x] Step 3: Add daemon TypeScript foundation
+  - [x] Substep 3.1 Implement: Add daemon `tsconfig.json`, `typecheck` script, and required TypeScript/Node/Express type dependencies.
+  - [x] Substep 3.2 Implement: Configure transitional `allowJs` checking for current daemon modules.
+  - [x] Substep 3.3 Implement: Update root `typecheck` to include contracts and daemon.
+  - [x] Substep 3.4 Verify: Run daemon typecheck, daemon tests, and root typecheck.
 - [ ] Step 4: Migrate daemon modules to TypeScript
   - [ ] Substep 4.1 Implement: Convert pure parsers/helpers and their tests first.
   - [ ] Substep 4.2 Implement: Convert project/file/artifact helper modules and DTO builders.
@@ -287,6 +287,10 @@ Flow:
 - `apps/daemon/server.js` - adopted `ApiErrorResponse`/`SseErrorPayload` shapes for chat, upload, project/file, and proxy stream error paths while preserving runtime behavior.
 - `apps/web/src/providers/sse.test.ts` - added coverage for unified daemon SSE error payload handling.
 - `apps/daemon/sse-response.test.mjs` - added coverage for compatibility `ApiErrorResponse` construction.
+- `apps/daemon/tsconfig.json` - added a strict daemon TypeScript foundation with `allowJs` for the current JavaScript/MJS transition and bundler resolution for workspace contract source imports.
+- `apps/daemon/package.json` - added a `typecheck` script plus TypeScript, Node, Express, Multer, and better-sqlite3 type dependencies.
+- `package.json` - broadened root `typecheck` to run contracts, web, and daemon checks through Corepack-pinned pnpm.
+- `pnpm-lock.yaml` - updated lockfile entries for daemon TypeScript/type dependencies.
 
 ### Verification
 
@@ -299,3 +303,7 @@ Flow:
 - `corepack pnpm --filter @open-design/web typecheck` - passed after Step 2 adoption.
 - `corepack pnpm --filter @open-design/web test -- src/providers/sse.test.ts` - passed; Vitest also ran existing artifact manifest tests in the web package.
 - `corepack pnpm --filter @open-design/daemon test -- sse-response.test.mjs` - passed; Vitest also ran existing daemon artifact manifest and json event stream tests.
+- `corepack pnpm install` - passed after adding daemon TypeScript/type dependencies.
+- `corepack pnpm --filter @open-design/daemon typecheck` - passed after adding the daemon TypeScript foundation.
+- `corepack pnpm --filter @open-design/daemon test` - passed; all 18 daemon tests passed.
+- `corepack pnpm typecheck` - passed after root `typecheck` was broadened to contracts, web, and daemon and routed through Corepack-pinned pnpm.
