@@ -1,10 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rootDirectory": "apps/web",
   "buildCommand": "cd ../.. && pnpm install && pnpm --filter @open-design/web build",
   "installCommand": "pnpm install",
-  "outputDirectory": "apps/web/out",
-  "framework": null,
-  "rewrites": [
-    { "source": "/((?!_next|favicon.ico).*)", "destination": "/index.html" }
-  ]
+  "outputDirectory": "out",
+  "framework": null
 }
