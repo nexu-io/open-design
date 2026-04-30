@@ -1160,18 +1160,39 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
+    // SSE keep-alive. The dev-mode `next.config.ts` rewrites `/api/:path*` to
+    // this daemon, and Next.js's dev rewrite proxy abandons an upstream
+    // connection that goes idle for ~30 s — long thinking turns and large
+    // tool-input serializations regularly cross that threshold. When the
+    // proxy abandons the request the browser's EventSource closes, which
+    // cascades into `res.on('close')` below and SIGTERMs the agent
+    // mid-generation (observed: `code=143` exits at exactly Δ30 s). A
+    // standard SSE comment frame on a 20 s cadence keeps the byte stream
+    // active so the proxy never sees an idle window. The frame is invisible
+    // to clients (per the EventSource spec, lines starting with `:` are
+    // ignored) and harmless under the production daemon path.
+    const keepAlive = setInterval(() => {
+      if (!res.writableEnded) {
+        try { res.write(': keep-alive\n\n'); } catch { /* socket already gone */ }
+      }
+    }, 20000);
+    keepAlive.unref?.();
+
     const kill = () => {
       if (child && !child.killed) child.kill('SIGTERM');
     };
     res.on('close', () => {
+      clearInterval(keepAlive);
       if (!res.writableEnded) kill();
     });
 
     child.on('error', (err) => {
+      clearInterval(keepAlive);
       send('error', { message: err.message });
       res.end();
     });
     child.on('close', (code, signal) => {
+      clearInterval(keepAlive);
       if (acpSession?.hasFatalError()) {
         return res.end();
       }
