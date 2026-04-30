@@ -22,6 +22,7 @@ import {
 const HOST = "127.0.0.1";
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
+const SHUTDOWN_TIMEOUT_MS = 3000;
 const require = createRequire(import.meta.url);
 const createNextServer = require("next") as (options: { dev: boolean; dir: string }) => {
   close?: () => Promise<void>;
@@ -98,6 +99,31 @@ async function closeHttpServer(server: Server): Promise<void> {
   });
 }
 
+async function settleShutdownTask(task: Promise<unknown> | undefined): Promise<void> {
+  if (task == null) return;
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      task.catch(() => undefined),
+      new Promise<void>((resolveTimeout) => {
+        timeout = setTimeout(resolveTimeout, SHUTDOWN_TIMEOUT_MS);
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    if (timeout != null) clearTimeout(timeout);
+  }
+}
+
+function stopThenExit(stop: () => Promise<void>): void {
+  const hardExit = setTimeout(() => process.exit(0), SHUTDOWN_TIMEOUT_MS + 1000);
+  hardExit.unref();
+  void stop().finally(() => {
+    clearTimeout(hardExit);
+    process.exit(0);
+  });
+}
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -114,7 +140,7 @@ function attachParentMonitor(stop: () => Promise<void>): void {
   const timer = setInterval(() => {
     if (isProcessAlive(parentPid)) return;
     clearInterval(timer);
-    void stop().finally(() => process.exit(0));
+    stopThenExit(stop);
   }, 1000);
   timer.unref();
 }
@@ -150,9 +176,9 @@ export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStam
     stopped = true;
     state.state = "stopped";
     state.updatedAt = new Date().toISOString();
-    await ipcServer?.close().catch(() => undefined);
-    await closeHttpServer(httpServer).catch(() => undefined);
-    await (app as unknown as { close?: () => Promise<void> }).close?.().catch(() => undefined);
+    await settleShutdownTask(ipcServer?.close());
+    await settleShutdownTask(closeHttpServer(httpServer));
+    await settleShutdownTask((app as unknown as { close?: () => Promise<void> }).close?.());
     resolveStopped();
   }
 
@@ -167,7 +193,7 @@ export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStam
           return { ...state };
         case SIDECAR_MESSAGES.SHUTDOWN:
           setImmediate(() => {
-            void stop().finally(() => process.exit(0));
+            stopThenExit(stop);
           });
           return { accepted: true };
       }
@@ -176,7 +202,7 @@ export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStam
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void stop().finally(() => process.exit(0));
+      stopThenExit(stop);
     });
   }
 

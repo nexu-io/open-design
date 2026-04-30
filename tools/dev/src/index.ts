@@ -821,7 +821,14 @@ async function runForeground(config: ToolDevConfig, appName: string | undefined,
       if (shuttingDown) return;
       shuttingDown = true;
       clearInterval(keepAlive);
-      void runSequential(stopOrderFor(targets), (target) => stopApp(config, target)).finally(resolveDone);
+      process.stderr.write("\nStopping Open Design dev server...\n");
+      void runSequential(stopOrderFor(targets), (target) => stopApp(config, target)).finally(() => {
+        for (const sig of ["SIGINT", "SIGTERM"] as const) {
+          process.off(sig, shutdown);
+        }
+        process.exitCode = 0;
+        resolveDone();
+      });
     };
     for (const sig of ["SIGINT", "SIGTERM"] as const) {
       process.on(sig, shutdown);
