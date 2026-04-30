@@ -105,6 +105,7 @@ export function ChatPane({
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
+  const didInitialScrollRef = useRef(false);
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
@@ -126,6 +127,20 @@ export function ChatPane({
     }
     return map;
   })();
+
+  useEffect(() => {
+    didInitialScrollRef.current = false;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el || didInitialScrollRef.current || messages.length === 0) return;
+    didInitialScrollRef.current = true;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+      setScrolledFromBottom(false);
+    });
+  }, [messages.length]);
 
   useEffect(() => {
     const el = logRef.current;
