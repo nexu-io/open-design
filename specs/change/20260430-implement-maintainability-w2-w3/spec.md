@@ -1,7 +1,7 @@
 ---
 id: 20260430-implement-maintainability-w2-w3
 name: Implement Maintainability W2 W3
-status: researched
+status: designed
 created: '2026-04-30'
 ---
 
@@ -111,34 +111,152 @@ created: '2026-04-30'
 
 ## Design
 
-<!-- Technical approach, architecture decisions, and test strategy. Each design decision should cite a fact source. -->
+### Architecture Overview
+
+```mermaid
+flowchart LR
+  Web[apps/web\nUI + thin BFF/proxy]
+  Contracts[packages/contracts\npure TypeScript DTOs\nSSE unions\nerror model]
+  Daemon[apps/daemon\nlocal capability server]
+  Scripts[scripts + e2e\nTypeScript-covered operational code]
+
+  Web -->|imports HTTP/SSE/error types| Contracts
+  Daemon -->|imports HTTP/SSE/error types| Contracts
+  Web -->|/api/* JSON + SSE| Daemon
+  Scripts -->|typechecked execution helpers| Contracts
+```
+
+### Design Decisions
+
+- Decision: Add a new `packages/contracts` workspace package for W2. The package exports pure TypeScript types for daemon HTTP DTOs, SSE event unions, task states, and error codes; this aligns with the shared-boundary allowed contents and the roadmap's shared-contract output. Source: `specs/current/architecture-boundaries.md:41-56`, `specs/current/maintainability-roadmap.md:57-58`, `pnpm-workspace.yaml:1-3`
+- Decision: Keep `apps/web/src/types.ts` as the UI/application type layer and move only daemon-facing DTOs/events/errors into `packages/contracts`. Web owns UI state and communicates with daemon through API DTOs and streaming events; current UI `AgentEvent` is a presentation union. Source: `specs/current/architecture-boundaries.md:13-27`, `apps/web/src/types.ts:32-39`, `apps/web/src/types.ts:150-179`, `apps/web/src/types.ts:215-252`
+- Decision: Model the current daemon API before tightening behavior. Start with type contracts for `/api/chat`, `/api/proxy/stream`, project routes, conversation/message routes, file routes, artifacts, health, agents, skills, and design systems, then add runtime schemas in W4. Source: `specs/current/maintainability-roadmap.md:57-60`, `apps/daemon/server.js:200-269`, `apps/daemon/server.js:725-864`, `apps/daemon/server.js:868-884`, `apps/daemon/server.js:1188-1303`
+- Decision: Define separate transport-level SSE unions and UI-level event unions. `/api/chat` transport events cover `start`, `agent`, `stdout`, `stderr`, `error`, and `end`; normalized agent payloads cover `status`, `text_delta`, `thinking_delta`, `thinking_start`, `tool_use`, `tool_result`, `usage`, and `raw`; web translation remains liberal for forward compatibility. Source: `apps/daemon/server.js:1035-1044`, `apps/daemon/server.js:1087-1180`, `apps/web/src/providers/daemon.ts:85-151`, `apps/web/src/providers/daemon.ts:178-228`, `apps/daemon/json-event-stream.js:35-91`
+- Decision: Define a versioned SSE contract shape for future W8/W6 compatibility while preserving the existing event names during W2 adoption. Include a protocol version constant and typed event payloads; heartbeat, cancellation, and canonical task lifecycle events remain future extensions. Source: `specs/current/maintainability-roadmap.md:40-41`, `specs/current/maintainability-roadmap.md:57-64`, `apps/daemon/server.js:1035-1044`, `apps/daemon/server.js:1087-1180`
+- Decision: Introduce a unified `ApiError` and `SseErrorEvent` type with `code`, `message`, `details`, `retryable`, `requestId`, and `taskId`, plus compatibility helpers for existing `{ error }` and `{ code, error }` responses. Current routes return multiple ad hoc shapes; W2 should make the target contract explicit. Source: `specs/current/maintainability-roadmap.md:39-40`, `apps/daemon/server.js:147-177`, `apps/daemon/server.js:200-205`, `apps/daemon/server.js:868-884`, `apps/daemon/server.js:1170-1180`
+- Decision: Treat machine absolute paths as daemon-internal in public contracts. DTOs should use project-relative or logical paths; the existing `/api/chat` `start` event's `cwd` field should be typed as legacy/internal and removed from web-facing assumptions during adoption. Source: `specs/current/architecture-boundaries.md:58-64`, `apps/daemon/server.js:1087-1095`
+- Decision: W3's end state is a compiled TypeScript daemon runtime with a transitional `allowJs` phase. The daemon currently runs `node cli.js` and exposes `./cli.js` as its bin, so TypeScript entrypoint migration needs a deliberate build output and script/bin update. Source: `apps/daemon/package.json:6-13`, `package.json:9-24`
+- Decision: Broaden typechecking from web-only to contracts, daemon, scripts, and e2e support. Root `typecheck` currently filters only `@open-design/web`; daemon has tests but no typecheck script; e2e already uses TypeScript configs and MJS/CJS operational files. Source: `package.json:19-25`, `apps/daemon/package.json:9-23`, `apps/web/tsconfig.json:2-23`, `e2e/package.json:6-12`, `e2e/playwright.config.ts:1-58`
+- Decision: Migrate JavaScript/MJS/CJS files in dependency order: pure parsers/helpers, project/artifact helpers, DB/agent modules, server/CLI entrypoints, root scripts, then e2e scripts/reporters. This keeps each step verifiable and limits runtime-loader risk around Playwright reporter loading. Source: `apps/daemon/vitest.config.ts:1-8`, `apps/daemon/json-event-stream.js:35-91`, `e2e/playwright.config.ts:22-37`, `e2e/package.json:8-12`, `package.json:14-15`
+
+### Why this design
+
+- A dedicated shared package makes the web/daemon boundary explicit while preserving the existing product architecture: web handles UI/proxy behavior and daemon owns local runtime capabilities. Source: `specs/current/architecture-boundaries.md:13-40`
+- Type-only W2 contracts deliver immediate drift protection and give W4 a stable target for runtime schemas. Source: `specs/current/maintainability-roadmap.md:57-60`
+- Separating transport events from UI events keeps daemon protocol evolution independent from rendering concerns and preserves the current liberal parser behavior. Source: `apps/web/src/providers/daemon.ts:85-151`, `apps/web/src/providers/daemon.ts:178-228`
+- A compiled daemon TypeScript target is the safest full migration end state for the package bin and root `od` entrypoint. Source: `apps/daemon/package.json:6-13`, `package.json:9-10`
+
+### Implementation Steps
+
+1. Create `packages/contracts`, add it to the pnpm workspace, and expose typed exports for API DTOs, SSE events, errors, task states, and shared constants.
+2. Add package-level and root-level TypeScript configuration so contracts typecheck independently and participate in root `pnpm run typecheck`.
+3. Replace duplicated web daemon-facing types with imports from `packages/contracts`, keeping UI-only state and presentation unions in `apps/web/src/types.ts`.
+4. Type daemon request handlers, response envelopes, SSE send helpers, and normalized JSON event parsing against the shared contracts while preserving current runtime behavior.
+5. Introduce compatibility error helpers and adopt the unified error model first in `/api/chat`, upload errors, project/file routes, and proxy stream errors.
+6. Add daemon TypeScript config and scripts, migrate daemon modules in dependency order, and switch runtime/bin scripts to compiled JavaScript output once `cli.ts` and `server.ts` are converted.
+7. Convert root scripts and e2e support scripts/reporters with an explicit execution strategy for Node scripts and Playwright reporter loading.
+8. Broaden root verification to contracts, web, daemon, scripts, and e2e support, then run targeted daemon/web/e2e tests.
+
+### Test Strategy
+
+- Contracts: run `pnpm --filter @open-design/contracts typecheck`; add lightweight type-level coverage via exported example payloads or `tsc`-checked fixture files. Source: `specs/current/maintainability-roadmap.md:57-58`
+- Web adoption: run `pnpm --filter @open-design/web typecheck` and existing web tests after importing shared DTO/SSE/error types. Source: `apps/web/package.json:6-10`, `apps/web/tsconfig.json:2-23`
+- Daemon adoption: add and run `pnpm --filter @open-design/daemon typecheck`, then `pnpm --filter @open-design/daemon test`; daemon already uses Vitest with TypeScript config. Source: `apps/daemon/package.json:9-23`, `apps/daemon/vitest.config.ts:1-8`
+- SSE compatibility: add or update parser/translator tests around `/api/chat` `start`, `agent`, `stdout`, `stderr`, `error`, and `end` frames plus normalized agent payloads. Source: `apps/web/src/providers/daemon.ts:85-151`, `apps/daemon/json-event-stream.js:35-91`
+- Error model compatibility: add daemon route/helper tests for existing `{ error }` and `{ code, error }` inputs mapping into the new `ApiError` shape. Source: `apps/daemon/server.js:147-177`, `apps/daemon/server.js:200-205`, `apps/daemon/server.js:868-884`
+- Runtime migration: after each TypeScript conversion batch, run daemon tests and root typecheck; after script/e2e migration, run `pnpm --filter @open-design/e2e test` and a Playwright reporter smoke run when feasible. Source: `package.json:19-25`, `e2e/package.json:6-12`, `e2e/playwright.config.ts:22-37`
+
+### Pseudocode
+
+Flow:
+  Add shared package
+  Export contract modules
+    api/chat.ts
+    api/projects.ts
+    api/files.ts
+    sse/chat.ts
+    sse/proxy.ts
+    errors.ts
+  Web imports contracts
+    build typed request body
+    parse transport SSE frame
+    translate typed transport event to UI AgentEvent
+  Daemon imports contracts
+    type request body reads
+    type response envelopes
+    type send(event, data)
+    wrap legacy errors into ApiError shape
+  TypeScript migration proceeds by dependency order
+    helpers/parsers
+    DTO builders
+    services/adapters
+    server/CLI
+    scripts/e2e
+
+### File Structure
+
+- `packages/contracts/package.json` - new workspace package metadata, exports, and typecheck script.
+- `packages/contracts/tsconfig.json` - strict declaration-emitting TypeScript config for shared contracts.
+- `packages/contracts/src/index.ts` - public export surface.
+- `packages/contracts/src/api/*.ts` - HTTP request/response DTOs and response envelopes.
+- `packages/contracts/src/sse/*.ts` - chat/proxy SSE event unions and protocol constants.
+- `packages/contracts/src/errors.ts` - error codes, `ApiError`, `ApiErrorResponse`, and SSE error payload types.
+- `packages/contracts/src/tasks.ts` - task state/lifecycle constants shared with later W6/W8 work.
+- `apps/web/src/types.ts` - keep UI/application types; import shared daemon DTOs where applicable.
+- `apps/web/src/providers/daemon.ts` - consume shared chat request and SSE event types; retain UI translator.
+- `apps/daemon/tsconfig.json` - new daemon TypeScript config with transitional `allowJs` and strict checking target.
+- `apps/daemon/package.json` - add `typecheck`, build/runtime scripts, and TypeScript/type dependencies as migration steps require.
+- `apps/daemon/**/*.ts` - migrated daemon modules, server, CLI, parsers, and helpers.
+- `scripts/**/*.ts` - migrated root operational scripts.
+- `e2e/**/*.ts` - migrated e2e support scripts and reporter strategy.
+
+### Interfaces / APIs
+
+- `ChatRequest`: `{ agentId, message, systemPrompt?, projectId?, attachments?, model?, reasoning? }`, matching web post body and daemon handler reads. Source: `apps/web/src/providers/daemon.ts:57-77`, `apps/daemon/server.js:868-884`
+- `ChatSseEvent`: discriminated union for `start`, `agent`, `stdout`, `stderr`, `error`, and `end`, with `cwd` treated as legacy/internal on `start`. Source: `apps/daemon/server.js:1035-1044`, `apps/daemon/server.js:1087-1180`
+- `DaemonAgentPayload`: discriminated union for normalized agent payloads emitted inside `agent` events. Source: `apps/web/src/providers/daemon.ts:178-228`, `apps/daemon/json-event-stream.js:35-91`
+- `ProxyStreamRequest` and `ProxySseEvent`: request fields `baseUrl`, `apiKey`, `model`, `systemPrompt`, and `messages`; events `start`, `delta`, `error`, and `end`. Source: `apps/daemon/server.js:1188-1303`
+- `ApiError`: `{ code, message, details?, retryable?, requestId?, taskId? }`; `ApiErrorResponse`: `{ error: ApiError }`; compatibility helpers accept legacy string errors during migration. Source: `specs/current/maintainability-roadmap.md:39-40`, `apps/daemon/server.js:147-177`, `apps/daemon/server.js:200-205`
+- Response envelopes: projects, conversations, messages, files, and file mutation responses should mirror the current daemon JSON shapes and reuse existing web DTO fields. Source: `apps/daemon/server.js:200-269`, `apps/daemon/server.js:325-424`, `apps/daemon/server.js:725-864`, `apps/web/src/types.ts:150-179`, `apps/web/src/types.ts:215-252`
+
+### Edge Cases
+
+- Existing SSE consumers should continue ignoring unknown `agent` payloads, so new union members can be added safely. Source: `apps/web/src/providers/daemon.ts:178-228`
+- Malformed or partial SSE frames should preserve current parser tolerance until W4 validation defines stricter behavior. Source: `apps/web/src/providers/daemon.ts:163-176`
+- `/api/chat` currently emits terminal SSE errors and HTTP 400 JSON errors through different shapes; W2 should type both and allow incremental adoption. Source: `apps/daemon/server.js:868-884`, `apps/daemon/server.js:1170-1180`
+- Playwright reporter loading currently points to a `.cjs` reporter path; migration needs a compiled JS reporter path or supported TS execution path. Source: `e2e/playwright.config.ts:22-37`
+- The root `od` bin and daemon package bin currently point at JavaScript entrypoints; conversion to `.ts` requires a compiled output target before script/bin paths change. Source: `package.json:9-10`, `apps/daemon/package.json:6-13`
+- Shared contracts should stay pure and free of Next, Express, Node filesystem/process APIs, browser APIs, SQLite, and daemon internals. Source: `specs/current/architecture-boundaries.md:41-56`
 
 ## Plan
 
-<!-- Optional: Step breakdown for complex features that need multiple implementation steps.
-     Decided during Design. Checked off during Implement.
-     Keep this section compact and step-based.
-     Use markdown checkboxes for all step and substep items, for example:
-     - [ ] Step 1: Foo
-       - [ ] Substep 1.1 Implement: Foo foundation
-       - [ ] Substep 1.2 Implement: Foo integration
-       - [ ] Substep 1.3 Implement: Foo edge handling
-       - [ ] Substep 1.4 Verify: Foo automated coverage
-       - [ ] Substep 1.5 Verify: Foo manual workflow
-     - [ ] Step 2: Bar
-       - [ ] Substep 2.1 Implement: Bar
-       - [ ] Substep 2.2 Verify: Bar
-     - [ ] Step 3: Baz
-       - [ ] Substep 3.1 Implement: Baz
-       - [ ] Substep 3.2 Verify: Baz
-     Use a capability-based step breakdown with reviewable, meaningful increments.
-     Good boundaries align with one user-visible workflow, one subsystem/integration boundary, one migration/rollout step, or one stabilization milestone.
-     Each step must include small, independent substeps for implementation and immediate testing/verification.
-     Within each step, list implementation substeps before verification substeps.
-     The final step may focus on overall testing/verification, edge cases, regression coverage, and coverage improvements.
-     A step is complete only when relevant tests pass.
-     Size steps so one coding agent can implement + validate in a single session.
-     Write each substep as one small, independent task. -->
+- [ ] Step 1: Establish shared contracts package
+  - [ ] Substep 1.1 Implement: Add `packages/contracts` workspace package, exports, and strict TypeScript config.
+  - [ ] Substep 1.2 Implement: Define `ApiError`, error codes, task states, and common response envelope helpers.
+  - [ ] Substep 1.3 Implement: Define HTTP DTOs for chat, proxy stream, projects, conversations, messages, files, agents, skills, design systems, artifacts, and health.
+  - [ ] Substep 1.4 Implement: Define `/api/chat` and `/api/proxy/stream` SSE event unions and normalized agent payload unions.
+  - [ ] Substep 1.5 Verify: Run contracts typecheck and root package graph install/type resolution checks.
+- [ ] Step 2: Adopt contracts in web and daemon boundary code
+  - [ ] Substep 2.1 Implement: Import shared chat/proxy/file/project DTOs in web provider and app types while keeping UI-only unions local.
+  - [ ] Substep 2.2 Implement: Type daemon response envelopes, chat request body reads, proxy stream request body reads, and SSE send helpers.
+  - [ ] Substep 2.3 Implement: Add compatibility error helpers and adopt them in chat, upload, project/file, and proxy stream paths.
+  - [ ] Substep 2.4 Verify: Run web typecheck, daemon tests, and targeted SSE/error compatibility tests.
+- [ ] Step 3: Add daemon TypeScript foundation
+  - [ ] Substep 3.1 Implement: Add daemon `tsconfig.json`, `typecheck` script, and required TypeScript/Node/Express type dependencies.
+  - [ ] Substep 3.2 Implement: Configure transitional `allowJs` checking for current daemon modules.
+  - [ ] Substep 3.3 Implement: Update root `typecheck` to include contracts and daemon.
+  - [ ] Substep 3.4 Verify: Run daemon typecheck, daemon tests, and root typecheck.
+- [ ] Step 4: Migrate daemon modules to TypeScript
+  - [ ] Substep 4.1 Implement: Convert pure parsers/helpers and their tests first.
+  - [ ] Substep 4.2 Implement: Convert project/file/artifact helper modules and DTO builders.
+  - [ ] Substep 4.3 Implement: Convert DB, agents, runtime adapter, and stream orchestration modules.
+  - [ ] Substep 4.4 Implement: Convert `server` and `cli` entrypoints and switch package/runtime bin paths to compiled output.
+  - [ ] Substep 4.5 Verify: Run daemon typecheck/tests after each conversion batch and smoke the daemon CLI locally.
+- [ ] Step 5: Migrate scripts and e2e support to TypeScript
+  - [ ] Substep 5.1 Implement: Convert root scripts with a documented Node execution strategy.
+  - [ ] Substep 5.2 Implement: Convert e2e runtime/support scripts and preserve Playwright reporter loading through compiled output or supported TS loading.
+  - [ ] Substep 5.3 Implement: Update root `typecheck` to include scripts and e2e support.
+  - [ ] Substep 5.4 Verify: Run root typecheck, repo test suite, e2e tests, and a Playwright reporter smoke check when feasible.
 
 ## Notes
 
