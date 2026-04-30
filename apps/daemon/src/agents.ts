@@ -110,11 +110,17 @@ export const AGENT_DEFS = [
       { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
       { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
     ],
-    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
+    // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
+    // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
+    // ~32 KB direct, ~8 KB via .cmd shim). `claude -p` with no positional
+    // prompt reads the prompt from stdin under `--input-format text` (the
+    // default), which has no length cap. Mirrors the codex/gemini/opencode/
+    // cursor/qwen entries below.
+    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const caps = agentCapabilities.get('claude') || {};
       const args = [
         '-p',
-        prompt,
         '--output-format',
         'stream-json',
         '--verbose',
@@ -139,6 +145,7 @@ export const AGENT_DEFS = [
       args.push('--permission-mode', 'bypassPermissions');
       return args;
     },
+    promptViaStdin: true,
     streamFormat: 'claude-stream-json',
   },
   {
