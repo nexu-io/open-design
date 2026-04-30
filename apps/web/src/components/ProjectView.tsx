@@ -112,6 +112,7 @@ export function ProjectView({
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const cancelRef = useRef<AbortController | null>(null);
   const skillCache = useRef<Map<string, string>>(new Map());
   const designCache = useRef<Map<string, string>>(new Map());
   const templateCache = useRef<Map<string, ProjectTemplate>>(new Map());
@@ -452,7 +453,9 @@ export function ProjectView({
       };
 
       const controller = new AbortController();
+      const cancelController = new AbortController();
       abortRef.current = controller;
+      cancelRef.current = cancelController;
       const systemPrompt = await composedSystemPrompt();
 
       const handlers = {
@@ -467,6 +470,7 @@ export function ProjectView({
           updateAssistant((prev) => ({ ...prev, endedAt: Date.now() }));
           setStreaming(false);
           abortRef.current = null;
+          cancelRef.current = null;
           // Persist the finished artifact to the project folder so it shows
           // up as a real tab (not just the synthetic "live" stream).
           setArtifact((prev) => {
@@ -500,6 +504,7 @@ export function ProjectView({
           updateAssistant((prev) => ({ ...prev, endedAt: Date.now() }));
           setStreaming(false);
           abortRef.current = null;
+          cancelRef.current = null;
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
             if (finalized) persistMessage(finalized);
@@ -520,6 +525,7 @@ export function ProjectView({
           history: nextHistory,
           systemPrompt,
           signal: controller.signal,
+          cancelSignal: cancelController.signal,
           handlers,
           projectId: project.id,
           attachments: attachments.map((a) => a.path),
@@ -639,6 +645,8 @@ export function ProjectView({
   );
 
   const handleStop = useCallback(() => {
+    cancelRef.current?.abort();
+    cancelRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(false);

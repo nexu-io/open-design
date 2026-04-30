@@ -29,7 +29,10 @@ export interface DaemonStreamOptions {
   agentId: string;
   history: ChatMessage[];
   systemPrompt: string;
+  /** Stops the current browser-side SSE subscription. The daemon run continues. */
   signal: AbortSignal;
+  /** Explicit user cancellation signal. This maps to POST /api/runs/:id/cancel. */
+  cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
   // The active project's id. When supplied, the daemon spawns the agent
   // with cwd = the project folder so its file tools target the right
@@ -51,6 +54,7 @@ export async function streamViaDaemon({
   history,
   systemPrompt,
   signal,
+  cancelSignal,
   handlers,
   projectId,
   attachments,
@@ -105,10 +109,10 @@ export async function streamViaDaemon({
       void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
     };
     abortListener = cancelRun;
-    signal.addEventListener('abort', cancelRun, { once: true });
-    if (signal.aborted) {
+    cancelSignal?.addEventListener('abort', cancelRun, { once: true });
+    if (cancelSignal?.aborted) {
       cancelRun();
-      signal.removeEventListener('abort', abortListener);
+      cancelSignal.removeEventListener('abort', abortListener);
       return;
     }
 
@@ -128,7 +132,6 @@ export async function streamViaDaemon({
 
       if (!resp.ok || !resp.body) {
         const text = await resp.text().catch(() => '');
-        cancelRun();
         handlers.onError(new Error(`daemon ${resp.status}: ${text || 'no body'}`));
         return;
       }
@@ -195,7 +198,7 @@ export async function streamViaDaemon({
           if (event.event === 'error') {
             const data = event.data as SseErrorPayload;
             handlers.onError(new Error(String(data.error?.message ?? data.message ?? 'daemon error')));
-            if (abortListener) signal.removeEventListener('abort', abortListener);
+            if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
             return;
           }
 
@@ -210,14 +213,13 @@ export async function streamViaDaemon({
     }
 
     if (endStatus === null) {
-      cancelRun();
       handlers.onError(new Error('daemon stream disconnected before run completed'));
-      if (abortListener) signal.removeEventListener('abort', abortListener);
+      if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
       return;
     }
 
     if (endStatus === 'canceled') {
-      if (abortListener) signal.removeEventListener('abort', abortListener);
+      if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
       return;
     }
 
@@ -226,14 +228,16 @@ export async function streamViaDaemon({
       handlers.onError(
         new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
       );
-      if (abortListener) signal.removeEventListener('abort', abortListener);
+      if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
       return;
     }
-    if (abortListener) signal.removeEventListener('abort', abortListener);
+    if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
     handlers.onDone(acc);
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
+  } finally {
+    if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
   }
 }
 

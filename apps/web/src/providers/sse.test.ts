@@ -122,13 +122,12 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
-  it('cancels the daemon run when the caller aborts', async () => {
+  it('keeps the daemon run alive when the browser-side stream aborts', async () => {
     const handlers = createDaemonHandlers();
     const controller = new AbortController();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/cancel') return jsonResponse({ ok: true });
       if (url === '/api/runs/run-1/events') {
         controller.abort();
         throw new DOMException('aborted', 'AbortError');
@@ -145,34 +144,25 @@ describe('streamViaDaemon', () => {
       handlers,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
     expect(handlers.onDone).not.toHaveBeenCalled();
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
-  it('cancels the daemon run when abort fires after the post-create aborted check', async () => {
+  it('cancels the daemon run when the explicit cancel signal aborts', async () => {
     const handlers = createDaemonHandlers();
-    const controller = new AbortController();
-    const abortedGetter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')?.get;
-    let triggeredAbortRace = false;
-
-    Object.defineProperty(controller.signal, 'aborted', {
-      configurable: true,
-      get() {
-        if (!triggeredAbortRace) {
-          triggeredAbortRace = true;
-          controller.abort();
-          return false;
-        }
-        return abortedGetter?.call(this) ?? true;
-      },
-    });
+    const streamController = new AbortController();
+    const cancelController = new AbortController();
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
       if (url === '/api/runs/run-1/cancel') return jsonResponse({ ok: true });
-      if (url === '/api/runs/run-1/events') throw new DOMException('aborted', 'AbortError');
+      if (url === '/api/runs/run-1/events') {
+        cancelController.abort();
+        streamController.abort();
+        throw new DOMException('aborted', 'AbortError');
+      }
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -181,20 +171,21 @@ describe('streamViaDaemon', () => {
       agentId: 'mock',
       history: [{ id: '1', role: 'user', content: 'hello' }],
       systemPrompt: '',
-      signal: controller.signal,
+      signal: streamController.signal,
+      cancelSignal: cancelController.signal,
       handlers,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/runs', expect.objectContaining({
       method: 'POST',
-      signal: controller.signal,
+      signal: streamController.signal,
     }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/runs/run-1/cancel', { method: 'POST' });
-    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/runs/run-1/events', {
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/runs/run-1/events', {
       method: 'GET',
-      signal: controller.signal,
+      signal: streamController.signal,
     });
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/runs/run-1/cancel', { method: 'POST' });
     expect(handlers.onDone).not.toHaveBeenCalled();
     expect(handlers.onError).not.toHaveBeenCalled();
   });
@@ -278,12 +269,11 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).toHaveBeenCalledWith('');
   });
 
-  it('cancels the daemon run when reconnects are exhausted before an end event', async () => {
+  it('reports an error when reconnects are exhausted before an end event', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/cancel') return jsonResponse({ ok: true });
       if (url === '/api/runs/run-1/events') return sseResponse('');
       throw new Error(`unexpected fetch ${url}`);
     });
@@ -297,7 +287,7 @@ describe('streamViaDaemon', () => {
       handlers,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
     expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
