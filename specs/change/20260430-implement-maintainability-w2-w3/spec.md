@@ -1,8 +1,8 @@
 ---
-id: "20260430-implement-maintainability-w2-w3"
-name: "Implement Maintainability W2 W3"
-status: new
-created: "2026-04-30"
+id: 20260430-implement-maintainability-w2-w3
+name: Implement Maintainability W2 W3
+status: researched
+created: '2026-04-30'
 ---
 
 ## Overview
@@ -38,7 +38,69 @@ created: "2026-04-30"
 
 ## Research
 
-<!-- What have we found out? What are the alternatives considered? -->
+### Existing System
+
+- W2 covers the implicit web/daemon API contract, inconsistent error handling, and under-specified SSE protocol; W3 covers gradual TypeScript support for the daemon. Source: `specs/current/maintainability-roadmap.md:57-58`
+- W1 defines the shared boundary as pure JavaScript or TypeScript usable by both web and daemon, with API DTO types, runtime schemas, task states, SSE event names, and error codes as allowed shared contents. Source: `specs/current/architecture-boundaries.md:41-56`
+- `apps/web` communicates with daemon-owned capabilities through API DTOs and streaming events, while privileged local filesystem, SQLite, agent CLI, task lifecycle, logs, and artifacts stay daemon-owned. Source: `specs/current/architecture-boundaries.md:13-40`
+- The workspace currently has no `packages/*` workspace entries; `pnpm-workspace.yaml` includes `apps/*` and `e2e` only. Source: `pnpm-workspace.yaml:1-3`
+- No shared package currently exists under `packages/*`. Source: file search `packages/*/package.json`
+- Root scripts run daemon, web, build, tests, and typecheck through pnpm filters; root `typecheck` currently targets only `@open-design/web`. Source: `package.json:12-25`
+- Dev-mode web rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to the local daemon origin; the config notes that `/api/chat` SSE streams through the rewrite. Source: `apps/web/next.config.ts:35-44`
+- Web-side daemon chat types live in `apps/web/src/providers/daemon.ts`: `DaemonStreamOptions` sends `agentId`, `history`, `systemPrompt`, `projectId`, `attachments`, `model`, and `reasoning`. Source: `apps/web/src/providers/daemon.ts:19-38`
+- The web chat client posts `/api/chat` with JSON fields `agentId`, `systemPrompt`, `message`, `projectId`, `attachments`, `model`, and `reasoning`. Source: `apps/web/src/providers/daemon.ts:57-77`
+- The daemon `/api/chat` handler reads the same request fields from `req.body`, validates agent and message ad hoc, and returns HTTP 400 JSON errors for invalid agent, missing binary, or missing message. Source: `apps/daemon/server.js:868-884`
+- Web-side `AgentEvent` currently models UI events as `status`, `text`, `thinking`, `tool_use`, `tool_result`, `usage`, and `raw`. Source: `apps/web/src/types.ts:32-39`
+- Daemon SSE setup for `/api/chat` writes `text/event-stream` frames with `event: <name>` and JSON `data`, using events such as `start`, `agent`, `stdout`, `stderr`, `error`, and `end`. Source: `apps/daemon/server.js:1035-1044`, `apps/daemon/server.js:1087-1095`, `apps/daemon/server.js:1136-1180`
+- The web SSE parser consumes frame separators, parses event/data fields, maps `stdout` to text, buffers `stderr`, translates `agent` payloads, handles `start`, treats `error` as terminal, and reads `end` exit code. Source: `apps/web/src/providers/daemon.ts:85-151`
+- Web translation accepts daemon `agent` payload types `status`, `text_delta`, `thinking_delta`, `thinking_start`, `tool_use`, `tool_result`, `usage`, and `raw`; unknown payloads are ignored. Source: `apps/web/src/providers/daemon.ts:178-228`
+- Agent JSON event parsing emits normalized events such as `status`, `text_delta`, `tool_use`, `tool_result`, `usage`, and `raw`; OpenCode error payloads currently become a `raw` event with embedded error text. Source: `apps/daemon/json-event-stream.js:35-91`
+- The daemon API proxy has a separate SSE endpoint at `/api/proxy/stream` with request fields `baseUrl`, `apiKey`, `model`, `systemPrompt`, and `messages`, and returns `start`, `delta`, `error`, and `end` SSE events. Source: `apps/daemon/server.js:1188-1192`, `apps/daemon/server.js:1241-1250`, `apps/daemon/server.js:1262-1275`, `apps/daemon/server.js:1291-1303`
+- HTTP error responses are ad hoc: project routes often return `{ error: string }`, upload errors return `{ code, error }`, and preview errors derive status plus `{ error }`. Source: `apps/daemon/server.js:200-205`, `apps/daemon/server.js:147-177`, `apps/daemon/server.js:755-763`
+- Project CRUD and conversation/message routes shape common response envelopes such as `{ projects }`, `{ project, conversationId }`, `{ project }`, `{ conversations }`, `{ conversation }`, and `{ messages }`. Source: `apps/daemon/server.js:200-269`, `apps/daemon/server.js:325-424`
+- File routes shape common response envelopes such as `{ files }`, `{ file }`, and `{ ok: true }`, while raw file routes return binary data. Source: `apps/daemon/server.js:725-752`, `apps/daemon/server.js:776-833`, `apps/daemon/server.js:840-864`
+- `apps/daemon/projects.js` owns project file DTO construction with fields `name`, `path`, `type`, `size`, `mtime`, `kind`, `mime`, `artifactKind`, and `artifactManifest`. Source: `apps/daemon/projects.js:30-70`
+- Web application types already include daemon-adjacent DTOs such as `AgentInfo`, `ProjectFileKind`, `ProjectFile`, `Project`, and chat attachment/message/event types in `apps/web/src/types.ts`. Source: `apps/web/src/types.ts:41-101`, `apps/web/src/types.ts:150-160`
+- `apps/web` has TypeScript configured with `strict`, `noUncheckedIndexedAccess`, `allowJs`, `noEmit`, and a `typecheck` script using `tsc -b --noEmit`. Source: `apps/web/tsconfig.json:2-23`, `apps/web/package.json:6-10`
+- `apps/daemon` is ESM, starts with `node cli.js`, tests with `vitest run -c vitest.config.ts`, and currently has no `typecheck` script. Source: `apps/daemon/package.json:1-23`
+- The daemon test config is TypeScript and includes `**/*.test.{ts,tsx,js,mjs,cjs}` under a Node test environment. Source: `apps/daemon/vitest.config.ts:1-8`
+
+### Available Approaches
+
+- **Add a new shared workspace package**: create a workspace package for contracts and add it to the pnpm workspace so both `apps/web` and `apps/daemon` can import pure shared TypeScript. This matches the roadmap output of a shared contract layer and the W1 shared-boundary rules. Source: `specs/current/maintainability-roadmap.md:57-58`, `specs/current/architecture-boundaries.md:41-56`, `pnpm-workspace.yaml:1-3`
+- **Keep shared contracts inside an existing app**: moving contract types under `apps/web` would reuse the current location of many UI-adjacent types, but W1 says shared code should contain pure DTOs and avoid framework or environment-specific APIs. Source: `apps/web/src/types.ts:32-101`, `specs/current/architecture-boundaries.md:41-56`
+- **Start with type-only contracts**: W2 can define request/response, SSE event, and error model types first, while runtime schemas remain in the later W4 workstream. Source: `specs/current/maintainability-roadmap.md:57-60`
+- **Include daemon TypeScript through gradual checking**: W3 can add daemon `tsconfig` with `allowJs` and type-check new `.ts` modules while existing `.js` entrypoints keep running through Node. Source: `apps/daemon/package.json:9-13`, `apps/daemon/vitest.config.ts:1-8`, `specs/current/maintainability-roadmap.md:58`
+- **Broaden root typecheck**: root `typecheck` currently targets only web, so adding daemon contract checking requires either a daemon `typecheck` script or root script expansion. Source: `package.json:23`, `apps/daemon/package.json:9-13`
+
+### Constraints & Dependencies
+
+- W2 depends on completed W1 ownership boundaries, and W3 depends on W2 for the highest-value shared types. Source: `specs/current/maintainability-roadmap.md:56-58`
+- Runtime validation for HTTP inputs, paths, agents, models, uploads, task IDs, and command args is W4 scope, so research for W2/W3 should capture type boundaries without implementing full validation policy yet. Source: `specs/current/maintainability-roadmap.md:59`
+- Shared code must stay free of Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, and daemon internals. Source: `specs/current/architecture-boundaries.md:41-56`
+- API DTOs should prefer workspace-scoped logical or relative paths; machine absolute paths should remain daemon-internal. Source: `specs/current/architecture-boundaries.md:58-64`
+- The `/api/chat` stream currently includes daemon-internal `cwd` in the `start` SSE event. Source: `apps/daemon/server.js:1087-1095`
+- Current daemon SSE lifecycle has no heartbeat or version field in emitted events. Source: `apps/daemon/server.js:1035-1044`, `apps/daemon/server.js:1087-1180`
+- Current error responses and SSE errors do not use a unified model with `code`, `message`, `details`, `retryable`, and `requestId/taskId`. Source: `apps/daemon/server.js:147-177`, `apps/daemon/server.js:200-205`, `apps/daemon/server.js:868-884`, `apps/daemon/server.js:1170-1180`
+- Daemon package devDependencies currently include `vitest` only; TypeScript and Node/Express type packages are available in web but not daemon. Source: `apps/daemon/package.json:21-23`, `apps/web/package.json:19-24`
+
+### Key References
+
+- `specs/current/maintainability-roadmap.md:57-58` - W2/W3 outputs and dependency relationship.
+- `specs/current/architecture-boundaries.md:41-56` - allowed shared contract contents and shared-code restrictions.
+- `apps/web/next.config.ts:35-44` - dev proxy boundary for web-to-daemon API and SSE.
+- `apps/web/src/providers/daemon.ts:19-38` - web-side `/api/chat` request options.
+- `apps/web/src/providers/daemon.ts:85-151` - web-side SSE frame handling.
+- `apps/web/src/providers/daemon.ts:178-228` - web-side daemon agent event translation.
+- `apps/web/src/types.ts:32-39` - current UI `AgentEvent` union.
+- `apps/daemon/server.js:868-884` - daemon `/api/chat` request field handling and ad hoc HTTP errors.
+- `apps/daemon/server.js:1035-1044` - daemon SSE frame writer.
+- `apps/daemon/server.js:1087-1180` - daemon `/api/chat` start/agent/stdout/stderr/error/end lifecycle.
+- `apps/daemon/server.js:1188-1303` - daemon API proxy stream request and SSE events.
+- `apps/daemon/json-event-stream.js:35-91` - normalized agent JSON event output.
+- `apps/daemon/package.json:9-23` - daemon scripts and dependencies.
+- `apps/web/tsconfig.json:2-23` - web TypeScript baseline.
+- `pnpm-workspace.yaml:1-3` - current workspace package globs.
 
 ## Design
 
