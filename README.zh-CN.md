@@ -24,7 +24,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <b>简体中文</b> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">English</a> · <b>简体中文</b> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a></p>
 
 ---
 
