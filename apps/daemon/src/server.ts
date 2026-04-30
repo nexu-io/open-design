@@ -1908,6 +1908,48 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         : code === 0
           ? 'succeeded'
           : 'failed';
+
+      // ---- Lumina auto-deploy on artifact-finalized (spec 100 T009) ----------
+      // When a run succeeds and the project has a primary HTML artifact, auto-
+      // deploy it to Vercel and emit a "deploy-status" SSE event so the web UI
+      // can render the live URL without polling. Fires ONLY on finalization
+      // (status === 'succeeded'), never during streaming. Minimal change: single
+      // async IIFE that resolves after finish() so no SSE clients miss the event.
+      if (status === 'succeeded' && run.projectId) {
+        void (async () => {
+          try {
+            const projectFiles = await listFiles(PROJECTS_DIR, run.projectId);
+            const htmlFile = projectFiles.find((f) => /\.html?$/i.test(f.name));
+            if (htmlFile) {
+              const vercelConfig = await readVercelConfig();
+              if (vercelConfig.token) {
+                const files = await buildDeployFileSet(PROJECTS_DIR, run.projectId, htmlFile.name);
+                const deployResult = await deployToVercel({
+                  config: vercelConfig,
+                  files,
+                  projectId: run.projectId,
+                });
+                design.runs.emit(run, 'deploy-status', {
+                  status: deployResult.status,
+                  url: deployResult.url,
+                });
+              }
+            }
+          } catch (deployErr) {
+            // Auto-deploy failures are non-fatal — emit degraded status so UI
+            // can show an error without blocking the conversation.
+            design.runs.emit(run, 'deploy-status', {
+              status: 'error',
+              url: '',
+              error: deployErr instanceof Error ? deployErr.message : String(deployErr),
+            });
+          }
+          design.runs.finish(run, status, code, signal);
+        })();
+        return;
+      }
+      // -------------------------------------------------------------------------
+
       design.runs.finish(run, status, code, signal);
     });
   };

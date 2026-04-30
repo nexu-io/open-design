@@ -2,20 +2,37 @@ import { expect, test } from '@playwright/test';
 import { automatedCases } from '../cases';
 import type { UICase } from '../cases/types';
 
+// Lumina fork (spec 100 T006): STORAGE_KEY still used for mode/model prefs but
+// apiKey is intentionally absent — VITE_LUMINA_PROXY_MODE=true routes all AI
+// calls through the daemon proxy (LUMINA_GATEWAY_URL/_TOKEN), so the client
+// never needs a user-supplied key and the welcome modal is suppressed.
+// See README.lumina.md and apps/web/src/App.tsx:107-109 for the flag logic.
 const STORAGE_KEY = 'open-design:config';
 
+// Lumina SSE mock frame format (OpenAI /v1/chat/completions streaming).
+// Used by route stubs that need to simulate a Lumina gateway SSE response.
+// Format: `data: {"choices":[{"delta":{"content":"..."}}]}`
+export const LUMINA_SSE_MOCK_FRAME = (content: string) =>
+  `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+
 test.beforeEach(async ({ page }) => {
+  // T006: Removed localStorage seeding of apiKey. In VITE_LUMINA_PROXY_MODE,
+  // the daemon owns the gateway token — exposing it to localStorage would break
+  // the security model. onboardingCompleted=true is set by App.tsx when
+  // VITE_LUMINA_PROXY_MODE=true, mirrored here so fixtures don't depend on env.
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
       JSON.stringify({
         mode: 'daemon',
-        apiKey: '',
+        // apiKey intentionally absent — Lumina proxy mode, no BYOK
         baseUrl: 'https://api.anthropic.com',
         model: 'claude-sonnet-4-5',
         agentId: 'mock',
         skillId: null,
         designSystemId: null,
+        // VITE_LUMINA_PROXY_MODE=true auto-sets onboardingCompleted=true in
+        // App.tsx; mirror it here so welcome modal is suppressed in test env.
         onboardingCompleted: true,
         agentModels: {},
       }),
