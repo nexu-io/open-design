@@ -21,6 +21,7 @@ interface WorkflowDefinition {
   prompt: string;
   checkpoints: string[];
   exports: string[];
+  scorecard: string[];
 }
 
 interface Props {
@@ -43,6 +44,15 @@ const WORKFLOWS: WorkflowDefinition[] = [
     metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
     checkpoints: ['Layer model', 'Glass tiers', 'Safe areas', 'Accessibility'],
     exports: ['HTML', 'PNG', 'Prototype brief'],
+    scorecard: [
+      'iOS fit',
+      'Glass tier discipline',
+      'Hierarchy',
+      'Contrast',
+      'Accessibility',
+      'Interaction readiness',
+      'Export readiness',
+    ],
     prompt: `Create a high-fidelity iOS 26 Liquid Glass mobile app prototype.
 
 Use the iOS 26 Liquid Glass design system as the visual source of truth.
@@ -70,6 +80,14 @@ Keep it professional, native-feeling, and specific. Do not use generic frosted-g
     metadata: { kind: 'deck', speakerNotes: true },
     checkpoints: ['Brief lock', 'Offer fit', 'Scope clarity', 'Follow-up'],
     exports: ['PPTX', 'PDF', 'Markdown'],
+    scorecard: [
+      'Clarity',
+      'Usefulness',
+      'Conversion strength',
+      'Factual risk',
+      'Visual/export readiness',
+      'Client-readiness',
+    ],
     prompt: `Create a professional BSA Proposal + SOW package for a roofing contractor prospect.
 
 Use a production workflow:
@@ -94,6 +112,13 @@ Keep it practical, revenue-focused, specific to local service businesses, and re
     metadata: { kind: 'deck', speakerNotes: true },
     checkpoints: ['Hook', 'Proof', 'ROI', 'Owner decision'],
     exports: ['PPTX', 'PDF', 'HTML'],
+    scorecard: [
+      'Clarity',
+      'Credibility',
+      'Conversion',
+      'Visual hierarchy',
+      'Client-readiness',
+    ],
     prompt: `Build a high-quality roofing contractor pitch deck for BoostSmartAI / QuoteWake.
 
 Deck goal: explain how storm-alert automation, missed-call capture, QuoteWake estimates, CRM follow-up, pricing tiers, and first 30-day onboarding turn missed opportunities into booked work.
@@ -124,6 +149,15 @@ Use speaker notes for sales talk tracks. Include a pre-export critique scorecard
     metadata: { kind: 'template', animations: false },
     checkpoints: ['Genre fit', 'Art direction', 'Typography', 'Print specs'],
     exports: ['Run packet', 'PDF', 'Markdown'],
+    scorecard: [
+      'Genre signal',
+      'Scroll-stop power',
+      'Typography plan',
+      'Author/title hierarchy',
+      'Originality',
+      'Rights/disclosure risk',
+      'Print readiness',
+    ],
     prompt: `Create a OneShot Cover production run packet using the CoverVisionOS standard.
 
 This is for professional book-cover production, not a generic image prompt.
@@ -150,6 +184,14 @@ If exact book metadata is missing, create a clearly marked fill-in packet instea
     metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
     checkpoints: ['Information density', 'Decision flow', 'Audit trail', 'Responsiveness'],
     exports: ['HTML', 'PNG', 'ZIP'],
+    scorecard: [
+      'Scanability',
+      'Hierarchy',
+      'Information density',
+      'Actionability',
+      'Trust',
+      'Mobile/desktop readiness',
+    ],
     prompt: `Design a high-fidelity owner/operator dashboard mockup.
 
 Use case: a business owner needs to scan leads, missed calls, AI/BSA actions, proof of work, owner decisions, handoffs, and revenue outcomes.
@@ -178,6 +220,12 @@ Before final, run a quality scorecard for scanability, hierarchy, information de
     metadata: { kind: 'template', animations: false },
     checkpoints: ['Problem', 'Requirements', 'UX flow', 'Acceptance tests'],
     exports: ['Markdown', 'PDF', 'Prototype brief'],
+    scorecard: [
+      'Completeness',
+      'Ambiguity',
+      'Feasibility',
+      'Build-readiness',
+    ],
     prompt: `Create a build-ready PRD from a rough idea.
 
 Required sections:
@@ -207,6 +255,12 @@ Ask only for missing facts that materially change the spec; otherwise make clear
     metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
     checkpoints: ['Narrative', 'Scene rhythm', 'Caption clarity', 'Export plan'],
     exports: ['HTML', 'MP4 brief', 'Storyboard'],
+    scorecard: [
+      'Clarity',
+      'Pacing',
+      'Visual distinctiveness',
+      'Production readiness',
+    ],
     prompt: `Create a professional motion explainer package.
 
 Required output:
@@ -430,6 +484,7 @@ function workflowSearchText(workflow: WorkflowDefinition) {
     ...workflow.exports,
     ...workflow.skillCandidates,
     ...workflow.designSystemCandidates,
+    ...workflow.scorecard,
   ]
     .join(' ')
     .toLowerCase();
@@ -444,6 +499,7 @@ function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {
     workflowOutcome: workflow.outcome,
     workflowCheckpoints: workflow.checkpoints,
     workflowExports: workflow.exports,
+    workflowScorecard: workflow.scorecard,
   };
 }
 

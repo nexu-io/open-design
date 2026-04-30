@@ -193,6 +193,7 @@ export interface ProjectMetadata {
   workflowOutcome?: string;
   workflowCheckpoints?: string[];
   workflowExports?: string[];
+  workflowScorecard?: string[];
   // Prototype: 'wireframe' | 'high-fidelity'. Drives the visual ambition.
   fidelity?: 'wireframe' | 'high-fidelity';
   // Slide deck: whether the user wants speaker notes (less text per slide).

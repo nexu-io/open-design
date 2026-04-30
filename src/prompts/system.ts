@@ -145,6 +145,11 @@ function renderMetadataBlock(
       `- **workflowExports**: ${metadata.workflowExports.join(', ')} - keep these export formats in mind when choosing structure, dimensions, and file outputs.`,
     );
   }
+  if (metadata.workflowScorecard && metadata.workflowScorecard.length > 0) {
+    lines.push(
+      `- **workflowScorecard**: ${metadata.workflowScorecard.join(', ')} - before final output, critique the work against each dimension and fix any weak dimension instead of merely reporting it.`,
+    );
+  }
 
   if (metadata.kind === 'prototype') {
     lines.push(

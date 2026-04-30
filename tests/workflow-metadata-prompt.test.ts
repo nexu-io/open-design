@@ -13,6 +13,7 @@ describe('workflow metadata prompt context', () => {
         workflowOutcome: 'Liquid Glass iPhone concept',
         workflowCheckpoints: ['Layer model', 'Glass tiers'],
         workflowExports: ['HTML', 'PNG'],
+        workflowScorecard: ['iOS fit', 'Glass tier discipline'],
       },
     });
 
@@ -21,5 +22,7 @@ describe('workflow metadata prompt context', () => {
     expect(prompt).toContain('- **workflowOutcome**: Liquid Glass iPhone concept');
     expect(prompt).toContain('- **workflowCheckpoints**: Layer model, Glass tiers');
     expect(prompt).toContain('- **workflowExports**: HTML, PNG');
+    expect(prompt).toContain('- **workflowScorecard**: iOS fit, Glass tier discipline');
+    expect(prompt).toContain('fix any weak dimension instead of merely reporting it');
   });
 });
