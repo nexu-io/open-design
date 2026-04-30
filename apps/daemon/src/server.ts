@@ -48,6 +48,7 @@ import {
   insertConversation,
   insertProject,
   insertTemplate,
+  listProjectsAwaitingInput,
   listConversations,
   listLatestProjectRunStatuses,
   listMessages,
@@ -103,6 +104,20 @@ const promptFileBootstrap = (fp) =>
   'it contains the system prompt, design system, skill workflow, and user request. ' +
   'Do not begin your response until you have read the entire file.';
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
+
+export function normalizeProjectDisplayStatus(status) {
+  return status === 'starting' || status === 'queued' ? 'running' : status;
+}
+
+export function composeProjectDisplayStatus(baseStatus, awaitingInputProjects, projectId) {
+  if (baseStatus.value === 'succeeded' && awaitingInputProjects.has(projectId)) {
+    return { ...baseStatus, value: 'awaiting_input' };
+  }
+  return {
+    ...baseStatus,
+    value: normalizeProjectDisplayStatus(baseStatus.value),
+  };
+}
 
 /**
  * @param {ApiErrorCode} code
@@ -322,6 +337,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.get('/api/projects', (_req, res) => {
     try {
       const latestRunStatuses = listLatestProjectRunStatuses(db);
+      const awaitingInputProjects = listProjectsAwaitingInput(db);
       const activeRunStatuses = new Map();
       for (const run of design.runs.list()) {
         if (!run.projectId) continue;
@@ -342,10 +358,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const body = {
         projects: listProjects(db).map((project) => ({
           ...project,
-          status:
-            activeRunStatuses.get(project.id) ??
-            latestRunStatuses.get(project.id) ??
-            { value: 'not_started' },
+          status: composeProjectDisplayStatus(
+            activeRunStatuses.get(project.id) ?? latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+            awaitingInputProjects,
+            project.id,
+          ),
         })),
       };
       res.json(body);
@@ -356,7 +373,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   function projectStatusFromRun(run) {
     return {
-      value: run.status === 'starting' ? 'running' : run.status,
+      value: normalizeProjectDisplayStatus(run.status),
       updatedAt: run.updatedAt,
       runId: run.id,
     };

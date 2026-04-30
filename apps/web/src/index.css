@@ -1884,6 +1884,7 @@ code {
   justify-content: space-between;
 }
 .tab-panel-toolbar .toolbar-left { display: flex; gap: 8px; align-items: center; }
+.tab-panel-toolbar .toolbar-right { display: flex; gap: 8px; align-items: center; }
 .tab-panel-toolbar .toolbar-search {
   position: relative;
   width: 280px;
@@ -1932,6 +1933,17 @@ code {
   background: var(--text);
   color: white;
   box-shadow: var(--shadow-xs);
+}
+/* Icon-only variant: any pill button whose sole child is an SVG icon.
+   Center the glyph via inline-flex (removes text line-height drift) and
+   use padding that matches the text variant's overall height so both
+   sub-pills align on the same baseline in the toolbar. */
+.subtab-pill button:has(> svg:only-child) {
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
 
 /* Designs grid */
@@ -2021,6 +2033,9 @@ code {
 .design-card-status-running {
   color: var(--accent);
 }
+.design-card-status-awaiting_input {
+  color: var(--amber);
+}
 .design-card-status-queued,
 .design-card-status-not_started,
 .design-card-status-canceled {
@@ -2047,8 +2062,24 @@ code {
   transition: opacity 0.15s;
   border-color: var(--border);
   z-index: 2;
+  /* Keep button interactive for keyboard/AT users even while visually hidden. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
 }
-.design-card:hover .design-card-close { opacity: 1; }
+.design-card:hover .design-card-close,
+.design-card:focus-within .design-card-close,
+.design-kanban-card:hover .design-card-close,
+.design-kanban-card:focus-within .design-card-close,
+.design-card-close:focus-visible { opacity: 1; }
+.design-card-close:hover { color: var(--text-strong); border-color: var(--border-strong); }
+/* Larger comfortable touch target on coarse pointers (tablets/touch laptops).
+   On touch the hover reveal never fires, so keep the close button visible. */
+@media (hover: none) {
+  .design-card .design-card-close,
+  .design-kanban-card .design-card-close { opacity: 1; }
+}
 
 /* Featured (tutorial) card variant */
 .design-card.featured .design-card-thumb {
@@ -2059,6 +2090,169 @@ code {
   border-color: rgba(35, 72, 184, 0.18);
 }
 .design-card.featured .design-card-thumb::after { display: none; }
+
+/* Grid card keyboard focus (cards carry role="button" on a div). */
+.design-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--border-strong);
+}
+
+/* Kanban View */
+.tab-panel.design-kanban-view {
+  /* Fill the scrollable parent (.entry-tab-content) so columns can size to
+     the available viewport without a fragile 100vh calc. */
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+.design-kanban-board {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  /* Let columns grow to fill the remaining vertical space inside
+     .tab-panel.design-kanban-view. */
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 8px;
+  /* Hint that horizontal content may overflow on narrow viewports. */
+  scroll-snap-type: x proximity;
+  scrollbar-gutter: stable;
+}
+.design-kanban-col {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  padding: 12px;
+  gap: 12px;
+  min-height: 0;
+  scroll-snap-align: start;
+}
+.design-kanban-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+  padding-left: 2px;
+  /* Prevent long status labels from pushing the count chip out of the column. */
+  min-width: 0;
+}
+.design-kanban-header > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.design-kanban-count {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+.design-kanban-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  /* Keep the scrollbar gutter from shifting the list when content grows. */
+  padding-right: 4px;
+  margin-right: -4px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.design-kanban-empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}
+.design-kanban-card {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: var(--shadow-xs);
+}
+.design-kanban-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.design-kanban-card:active {
+  transform: none;
+}
+.design-kanban-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--border-strong);
+}
+.design-kanban-card::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--text-muted);
+}
+.design-kanban-card.status-running::before { background: var(--accent); }
+.design-kanban-card.status-awaiting_input::before { background: var(--amber); }
+.design-kanban-card.status-succeeded::before { background: var(--green); }
+.design-kanban-card.status-failed::before { background: var(--red); }
+.design-kanban-card.status-not_started::before,
+.design-kanban-card.status-queued::before,
+.design-kanban-card.status-canceled::before { background: var(--text-muted); }
+
+.design-kanban-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Reserve room for the absolutely-positioned close button. */
+  padding-right: 20px;
+}
+.design-kanban-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.design-kanban-card-meta .ds {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+/* Honor user motion preferences for the new hover transform / transitions
+   introduced alongside the kanban view. */
+@media (prefers-reduced-motion: reduce) {
+  .design-card,
+  .design-kanban-card {
+    transition: none;
+  }
+  .design-card:hover,
+  .design-kanban-card:hover {
+    transform: none;
+  }
+}
 
 /* Examples gallery */
 .examples-panel { gap: 32px; }

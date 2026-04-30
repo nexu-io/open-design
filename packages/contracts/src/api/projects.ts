@@ -6,6 +6,7 @@ export type ProjectDisplayStatus =
   | 'not_started'
   | 'queued'
   | 'running'
+  | 'awaiting_input'
   | 'succeeded'
   | 'failed'
   | 'canceled';

@@ -170,6 +170,40 @@ export function listLatestProjectRunStatuses(db) {
   return latestByProject;
 }
 
+export function listProjectsAwaitingInput(db) {
+  const rows = db
+    .prepare(
+      `SELECT latest.projectId
+         FROM (
+           SELECT c.project_id AS projectId,
+                  m.conversation_id AS conversationId,
+                  m.created_at AS createdAt,
+                  m.position AS position,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY c.project_id
+                    ORDER BY m.created_at DESC, m.position DESC
+                  ) AS rowNum
+             FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.role = 'assistant'
+              AND LOWER(m.content) LIKE '%<question-form%'
+         ) latest
+        WHERE latest.rowNum = 1
+          AND NOT EXISTS (
+            SELECT 1
+              FROM messages reply
+             WHERE reply.conversation_id = latest.conversationId
+               AND reply.role = 'user'
+               AND (
+                 reply.created_at > latest.createdAt
+                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
+               )
+          )`,
+    )
+    .all();
+  return new Set(rows.map((row) => row.projectId));
+}
+
 export function getProject(db, id) {
   const row = db
     .prepare(`SELECT ${PROJECT_COLS} FROM projects WHERE id = ?`)

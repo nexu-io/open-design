@@ -172,9 +172,15 @@ export interface Dict {
   'designs.status.notStarted': string;
   'designs.status.queued': string;
   'designs.status.running': string;
+  'designs.status.awaitingInput': string;
   'designs.status.succeeded': string;
   'designs.status.failed': string;
   'designs.status.canceled': string;
+  'designs.viewToggleAria': string;
+  'designs.viewGrid': string;
+  'designs.viewKanban': string;
+  'designs.kanbanEmptyColumn': string;
+  'designs.deleteAria': string;
 
   // Examples tab
   'examples.typeLabel': string;
