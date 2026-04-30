@@ -127,6 +127,7 @@ export async function streamViaDaemon({
 
       if (!resp.ok || !resp.body) {
         const text = await resp.text().catch(() => '');
+        cancelRun();
         handlers.onError(new Error(`daemon ${resp.status}: ${text || 'no body'}`));
         return;
       }
@@ -208,6 +209,7 @@ export async function streamViaDaemon({
     }
 
     if (endStatus === null) {
+      cancelRun();
       handlers.onError(new Error('daemon stream disconnected before run completed'));
       if (abortListener) signal.removeEventListener('abort', abortListener);
       return;
