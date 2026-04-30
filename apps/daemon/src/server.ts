@@ -152,7 +152,7 @@ const upload = multer({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
       file.originalname = decodeMultipartFilename(file.originalname);
-      const safe = file.originalname.replace(/[^\p{L}\p{N}.\-]/gu, '_');
+      const safe = sanitizeName(file.originalname);
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
@@ -164,7 +164,7 @@ const importUpload = multer({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
       file.originalname = decodeMultipartFilename(file.originalname);
-      const safe = file.originalname.replace(/[^\p{L}\p{N}.\-]/gu, '_');
+      const safe = sanitizeName(file.originalname);
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),

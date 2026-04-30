@@ -217,7 +217,14 @@ export function sanitizeName(raw) {
 // decode as UTF-8 when the result round-trips back to the original
 // bytes; otherwise the source was genuine latin1 and we leave it alone.
 export function decodeMultipartFilename(name) {
-  if (typeof name !== 'string' || name.length === 0) return name;
+  if (!name || typeof name !== 'string') return name ?? '';
+  // If any code point exceeds 0xFF the source is already a properly
+  // decoded Unicode string — for example, multer received an RFC 5987
+  // `filename*` parameter and decoded it as UTF-8. Re-running latin1
+  // -> utf8 here would corrupt those names, so exit early.
+  for (let i = 0; i < name.length; i++) {
+    if (name.charCodeAt(i) > 0xff) return name;
+  }
   const buf = Buffer.from(name, 'latin1');
   const utf8 = buf.toString('utf8');
   return Buffer.from(utf8, 'utf8').equals(buf) ? utf8 : name;

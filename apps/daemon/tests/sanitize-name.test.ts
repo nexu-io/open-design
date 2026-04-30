@@ -57,4 +57,16 @@ describe('decodeMultipartFilename', () => {
   it('treats empty input as a no-op', () => {
     expect(decodeMultipartFilename('')).toBe('');
   });
+
+  it('returns input untouched when any code point exceeds 0xff', () => {
+    // Simulates multer receiving an RFC 5987 `filename*` parameter and
+    // decoding it to UTF-8 itself. Re-decoding would corrupt the name.
+    const alreadyDecoded = '测试文档.docx';
+    expect(decodeMultipartFilename(alreadyDecoded)).toBe(alreadyDecoded);
+  });
+
+  it('handles null and undefined defensively', () => {
+    expect(decodeMultipartFilename(null as unknown as string)).toBe('');
+    expect(decodeMultipartFilename(undefined as unknown as string)).toBe('');
+  });
 });
