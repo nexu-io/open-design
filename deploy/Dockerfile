@@ -16,6 +16,7 @@ ENV http_proxy=${http_proxy}
 ENV https_proxy=${https_proxy}
 ENV no_proxy=${no_proxy}
 ENV NO_PROXY=${NO_PROXY}
+ENV CI=true
 
 RUN apk add --no-cache python3 make g++
 
