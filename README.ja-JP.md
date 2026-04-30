@@ -613,7 +613,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 - **Design System を追加** — [`design-systems/<brand>/`](design-systems/) に 9 セクションスキーマの `DESIGN.md` をドロップ。
 - **新しい coding-agent CLI を接続** — [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。
 
-完全なワークフロー、マージ基準、コードスタイル、受け入れない PR の種類 → [`CONTRIBUTING.md`](CONTRIBUTING.md)（[简体中文](CONTRIBUTING.zh-CN.md)）。
+完全なワークフロー、マージ基準、コードスタイル、受け入れない PR の種類 → [`CONTRIBUTING.ja-JP.md`](CONTRIBUTING.ja-JP.md)（[English](CONTRIBUTING.md) · [简体中文](CONTRIBUTING.zh-CN.md)）。
 
 ## コントリビューター
 
