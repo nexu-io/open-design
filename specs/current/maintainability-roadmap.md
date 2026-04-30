@@ -51,21 +51,21 @@ The first-principles maintainability goals are:
 
 The optimization work should proceed in dependency order. Some items can run in parallel once their prerequisites are stable.
 
-| Workstream | Optimization | Covers | Depends on | Output |
-|---|---|---|---|---|
-| W1 | Confirm architecture and capability boundaries | R4, R15 | — | Written ownership rules for web, daemon, shared contracts, and dangerous local capabilities. |
-| W2 | Define API, SSE, and error contracts | R2, R7, R8 | W1 | Shared request/response types, SSE event union, and error model. |
-| W3 | Add gradual TypeScript support | R1 | W2 for highest-value shared types | Daemon TS config, `allowJs`, typed new modules, typed contracts imported by web and daemon. |
-| W4 | Add runtime validation at daemon boundaries | R3, R4 | W2 | Schemas for HTTP requests, paths, agents, models, uploads, task IDs, and command args. |
-| W5 | Modularize `server.js` | R6 | W2, W3, W4 | Thin route handlers plus services/adapters for agents, DB, FS, streams, and artifacts. |
-| W6 | Introduce agent process/task manager | R5, R8, R11 | W2, W5 | Task state machine, cancellation, timeout, cleanup, exit handling, and concurrency controls. |
-| W7 | Strengthen SQLite migrations | R9 | W5 or a clear DB adapter boundary | Migration table, ordered migrations, startup checks, backup strategy, migration tests. |
-| W8 | Build the daemon test pyramid | R10 | W2, W4, W5 | Contract tests, route integration tests, service unit tests, migration tests, SSE tests, and mocked agent-process tests. |
-| W9 | Add structured logs and observability | R11 | W2, W6 | Correlated request/task logs, sanitized agent output, durations, exit status, and diagnostic context. |
-| W10 | Harden config, port, and readiness behavior | R12 | W1 | Centralized config, `/health`, readiness checks, deterministic port behavior. |
-| W11 | Harden cross-platform behavior | R13 | W4, W6, W5 | Platform-specific process handling, path normalization rules, supported-platform CI. |
-| W12 | Revisit HTTP framework choice | R14 | W2, W3, W4, W5, W8 | Evidence-based decision on whether Express remains adequate or Fastify provides clear net value. |
-| W13 | Complete operational documentation | R16 | W1 through W11 as sections stabilize | Current-state docs, runbooks, troubleshooting guides, and recovery procedures. |
+| Workstream | Status | Optimization | Covers | Depends on | Output |
+|---|---|---|---|---|---|
+| W1 | Completed | Confirm architecture and capability boundaries | R4, R15 | — | Written ownership rules for web, daemon, shared contracts, and dangerous local capabilities. See `specs/current/architecture-boundaries.md`. |
+| W2 | Planned | Define API, SSE, and error contracts | R2, R7, R8 | W1 | Shared request/response types, SSE event union, and error model. |
+| W3 | Planned | Add gradual TypeScript support | R1 | W2 for highest-value shared types | Daemon TS config, `allowJs`, typed new modules, typed contracts imported by web and daemon. |
+| W4 | Planned | Add runtime validation at daemon boundaries | R3, R4 | W2 | Schemas for HTTP requests, paths, agents, models, uploads, task IDs, and command args. |
+| W5 | Planned | Modularize `server.js` | R6 | W2, W3, W4 | Thin route handlers plus services/adapters for agents, DB, FS, streams, and artifacts. |
+| W6 | Planned | Introduce agent process/task manager | R5, R8, R11 | W2, W5 | Task state machine, cancellation, timeout, cleanup, exit handling, and concurrency controls. |
+| W7 | Planned | Strengthen SQLite migrations | R9 | W5 or a clear DB adapter boundary | Migration table, ordered migrations, startup checks, backup strategy, migration tests. |
+| W8 | Planned | Build the daemon test pyramid | R10 | W2, W4, W5 | Contract tests, route integration tests, service unit tests, migration tests, SSE tests, and mocked agent-process tests. |
+| W9 | Planned | Add structured logs and observability | R11 | W2, W6 | Correlated request/task logs, sanitized agent output, durations, exit status, and diagnostic context. |
+| W10 | Planned | Harden config, port, and readiness behavior | R12 | W1 | Centralized config, `/health`, readiness checks, deterministic port behavior. |
+| W11 | Planned | Harden cross-platform behavior | R13 | W4, W6, W5 | Platform-specific process handling, path normalization rules, supported-platform CI. |
+| W12 | Planned | Revisit HTTP framework choice | R14 | W2, W3, W4, W5, W8 | Evidence-based decision on whether Express remains adequate or Fastify provides clear net value. |
+| W13 | Planned | Complete operational documentation | R16 | W1 through W11 as sections stabilize | Current-state docs, runbooks, troubleshooting guides, and recovery procedures. |
 
 ## Recommended Execution Order
 
