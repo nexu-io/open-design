@@ -2,10 +2,11 @@
 
 ## Project shape
 
-- pnpm workspace with packages from `pnpm-workspace.yaml`: `apps/web`, `apps/daemon`, and `e2e`.
+- pnpm workspace with packages from `pnpm-workspace.yaml`: `apps/web`, `apps/daemon`, `packages/contracts`, and `e2e`.
 - Runtime target is Node `~24` with `pnpm@10.33.2`; use Corepack so the pinned pnpm version from `package.json` is selected.
 - `apps/web` is a Next.js 16 App Router + React 18 client. Entrypoints: `apps/web/app/`, main client shell `apps/web/src/App.tsx`.
-- `apps/daemon` is the local Express + SQLite process and the `od` bin (`apps/daemon/cli.js`). It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
+- `packages/contracts` is the shared, pure TypeScript web/daemon contract layer for API DTOs, SSE events, task states, and unified errors.
+- `apps/daemon` is the local Express + SQLite process and the `od` bin (`apps/daemon/dist/cli.js` after build). It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `e2e` contains both Playwright UI specs (`e2e/specs`) and Vitest/jsdom integration tests (`e2e/tests`).
 
 ## Commands
@@ -15,10 +16,19 @@
 - Web only: `pnpm dev` from the root starts Next; pair it with `pnpm daemon` when API routes are needed.
 - Production local path: `pnpm build` writes the static Next export to `apps/web/out/`; `pnpm start` builds and serves that export through the daemon.
 - Main verification: `pnpm typecheck && pnpm test && pnpm build`
+- Residual JavaScript check: `pnpm check:residual-js`; root `pnpm typecheck` runs it after package and support typechecks.
 - Package tests: `pnpm --filter @open-design/web test`, `pnpm --filter @open-design/daemon test`, `pnpm --filter @open-design/e2e test`
 - Focused Vitest: `pnpm --dir apps/web exec vitest run -c vitest.config.ts src/providers/sse.test.ts` (adjust package dir and test path as needed).
 - Playwright UI: `pnpm test:ui`; headed: `pnpm test:ui:headed`. Playwright starts `pnpm dev:all` with isolated data under `e2e/.od-data` and strict dynamic ports.
-- Live adapter smoke: `pnpm test:e2e:live` runs `e2e/scripts/runtime-adapter.e2e.live.test.mjs`.
+- Live adapter smoke: `pnpm test:e2e:live` runs `e2e/scripts/runtime-adapter.e2e.live.test.ts` through Node strip-types.
+
+## TypeScript and boundary conventions
+
+- New project-owned entrypoints, modules, scripts, tests, reporters, and configs use TypeScript. The residual JavaScript allowlist is limited to generated output, vendored dependencies, and compatibility build artifacts such as `apps/daemon/dist/**/*.{js,mjs,cjs}`, `apps/web/.next/**/*.{js,mjs,cjs}`, and `apps/web/out/**/*.{js,mjs,cjs}`.
+- Shared web/daemon contracts go in `packages/contracts`; keep this package free of Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, and daemon internals.
+- Keep UI-only state and presentation unions in `apps/web`; import daemon-facing API, SSE, task, and error contracts from `@open-design/contracts`.
+- Keep local capability logic in `apps/daemon`: filesystem, SQLite, agent CLI spawning, task lifecycle, logs, artifacts, skills, design systems, and static serving.
+- Runtime validation policy and schema enforcement belong to the later validation workstream; current shared contracts define the typed target shape.
 
 ## Runtime data and ports
 
@@ -29,15 +39,15 @@
 
 ## Agent, skill, and design-system wiring
 
-- The daemon scans `PATH` for local CLIs in `apps/daemon/agents.js` and spawns them with `cwd` pinned to `.od/projects/<id>/`.
-- Agent stdout parsing is per transport: Claude stream JSON, Copilot stream JSON, ACP JSON-RPC, or plain text. Changes to CLI args belong in `apps/daemon/agents.js` and matching parser tests.
-- Skills are folder bundles under `skills/` with `SKILL.md`; extended `od:` frontmatter is parsed by `apps/daemon/skills.js`. Restart the daemon after adding or changing skill folders.
-- Design systems are `design-systems/*/DESIGN.md`; `scripts/sync-design-systems.mjs` re-imports upstream systems.
+- The daemon scans `PATH` for local CLIs in `apps/daemon/agents.ts` and spawns them with `cwd` pinned to `.od/projects/<id>/`.
+- Agent stdout parsing is per transport: Claude stream JSON, Copilot stream JSON, ACP JSON-RPC, or plain text. Changes to CLI args belong in `apps/daemon/agents.ts` and matching parser tests.
+- Skills are folder bundles under `skills/` with `SKILL.md`; extended `od:` frontmatter is parsed by `apps/daemon/skills.ts`. Restart the daemon after adding or changing skill folders.
+- Design systems are `design-systems/*/DESIGN.md`; `scripts/sync-design-systems.ts` re-imports upstream systems.
 - Prompt composition lives in `apps/web/src/prompts/system.ts`, `discovery.ts`, and `directions.ts`; artifacts are parsed/rendered through `apps/web/src/artifacts/` and `apps/web/src/runtime/`.
 
 ## Testing notes
 
-- Web Vitest includes `apps/web/src/**/*.test.{ts,tsx,js,mjs,cjs}` in a Node environment.
-- Daemon Vitest includes `apps/daemon/**/*.test.{ts,tsx,js,mjs,cjs}` in a Node environment.
+- Web Vitest includes `apps/web/src/**/*.test.{ts,tsx}` in a Node environment.
+- Daemon Vitest includes `apps/daemon/**/*.test.{ts,tsx}` in a Node environment.
 - E2E Vitest includes `e2e/tests/**/*.test.{ts,tsx}` in jsdom with automatic React JSX.
 - Playwright uses Chromium only, writes reports under `e2e/reports/`, and reuses an existing server outside CI.

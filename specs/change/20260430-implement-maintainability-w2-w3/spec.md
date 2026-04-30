@@ -1,7 +1,7 @@
 ---
 id: 20260430-implement-maintainability-w2-w3
 name: Implement Maintainability W2 W3
-status: designed
+status: implemented
 created: '2026-04-30'
 ---
 
@@ -258,11 +258,11 @@ Flow:
   - [x] Substep 5.2 Implement: Convert e2e runtime/support scripts and preserve Playwright reporter loading through compiled output or supported TS loading.
   - [x] Substep 5.3 Implement: Update root `typecheck` to include scripts and e2e support.
   - [x] Substep 5.4 Verify: Run root typecheck, repo test suite, e2e tests, and a Playwright reporter smoke check when feasible.
-- [ ] Step 6: Lock in typed end state and future conventions
-  - [ ] Substep 6.1 Implement: Add or update root `AGENTS.md` with W2/W3 development conventions: put shared web/daemon contracts in `packages/contracts`, keep UI-only types in web, keep daemon capability logic in daemon, use TypeScript for new project-owned code, and route runtime validation work to the later validation workstream.
-  - [ ] Substep 6.2 Implement: Add an automated residual-JavaScript check for project-owned entrypoints, modules, scripts, tests, and reporters, with explicit allowlist entries only for generated, vendored, or compatibility-output files.
-  - [ ] Substep 6.3 Verify: Run the residual-JavaScript check and confirm no project-owned `.js`, `.mjs`, or `.cjs` source files remain outside the documented allowlist.
-  - [ ] Substep 6.4 Verify: Re-run root typecheck and full test suite after the final convention and residual-file checks are in place.
+- [x] Step 6: Lock in typed end state and future conventions
+  - [x] Substep 6.1 Implement: Add or update root `AGENTS.md` with W2/W3 development conventions: put shared web/daemon contracts in `packages/contracts`, keep UI-only types in web, keep daemon capability logic in daemon, use TypeScript for new project-owned code, and route runtime validation work to the later validation workstream.
+  - [x] Substep 6.2 Implement: Add an automated residual-JavaScript check for project-owned entrypoints, modules, scripts, tests, and reporters, with explicit allowlist entries only for generated, vendored, or compatibility-output files.
+  - [x] Substep 6.3 Verify: Run the residual-JavaScript check and confirm no project-owned `.js`, `.mjs`, or `.cjs` source files remain outside the documented allowlist.
+  - [x] Substep 6.4 Verify: Re-run root typecheck and full test suite after the final convention and residual-file checks are in place.
 
 ## Notes
 
@@ -302,6 +302,9 @@ Flow:
 - `e2e/tsconfig.json` and `e2e/package.json` - added e2e support typechecking plus Node strip-types execution for support scripts.
 - `e2e/playwright.config.ts` - updated root script imports and reporter paths to TypeScript files and routed the Playwright webServer command through Corepack-pinned pnpm.
 - `package.json` - broadened root `typecheck` to cover scripts and e2e support, and routed root pnpm-invoking scripts through Corepack so the pinned pnpm version is used consistently.
+- `AGENTS.md` - updated project shape, command notes, TypeScript-first conventions, shared contract boundaries, daemon ownership rules, runtime validation scope, and migrated `.ts` file references for future agents.
+- `scripts/check-residual-js.ts` - added an automated residual JavaScript scanner for project-owned `.js`, `.mjs`, and `.cjs` files, with documented output/vendor/generated allowlist prefixes and local scratch/dependency directory skips.
+- `package.json` - added `check:residual-js` and made root `typecheck` run the residual JavaScript check after package/support typechecks and daemon build output generation.
 
 ### Verification
 
@@ -331,3 +334,7 @@ Flow:
 - `corepack pnpm test` - passed; web 15 tests, daemon 18 tests, and e2e Vitest 9 tests passed.
 - `corepack pnpm --filter @open-design/e2e test:ui:clean` - passed against the TypeScript cleanup script.
 - `corepack pnpm --filter @open-design/e2e exec playwright test -c playwright.config.ts --list` - passed as a Playwright config/reporter loading smoke check and listed 15 Chromium UI tests.
+- `corepack pnpm run check:residual-js` - passed; no project-owned residual `.js`, `.mjs`, or `.cjs` files were found outside the documented allowlist.
+- `corepack pnpm --filter @open-design/e2e exec tsc -p ../scripts/tsconfig.json --noEmit` - passed after adding the residual JavaScript scanner.
+- `corepack pnpm typecheck` - passed after Step 6; contracts, web, daemon typecheck, daemon build, scripts typecheck, e2e typecheck, and residual JavaScript check all passed.
+- `corepack pnpm test` - passed after Step 6; web 15 tests, daemon 18 tests, and e2e Vitest 9 tests passed.
