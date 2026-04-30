@@ -38,5 +38,6 @@ tsconfig.tsbuildinfo
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/
+task.md
 specs/change/active
 .ralph/
