@@ -12,6 +12,9 @@
 import type { AgentEvent, ChatMessage } from '../types';
 import type {
   ChatRunCreateResponse,
+  ChatRunListResponse,
+  ChatRunStatus,
+  ChatRunStatusResponse,
   ChatRequest,
   ChatSseEvent,
   ChatSseStartPayload,
@@ -38,6 +41,9 @@ export interface DaemonStreamOptions {
   // with cwd = the project folder so its file tools target the right
   // workspace.
   projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  clientRequestId?: string | null;
   // Project-relative paths the user has staged for this turn. The
   // daemon resolves them inside the project folder, validates they
   // exist, and stitches them into the user message as `@<path>` hints.
@@ -47,6 +53,20 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  initialLastEventId?: string | null;
+  onRunCreated?: (runId: string) => void;
+  onRunStatus?: (status: ChatRunStatus) => void;
+  onRunEventId?: (eventId: string) => void;
+}
+
+export interface DaemonReattachOptions {
+  runId: string;
+  signal: AbortSignal;
+  cancelSignal?: AbortSignal;
+  handlers: DaemonStreamHandlers;
+  initialLastEventId?: string | null;
+  onRunStatus?: (status: ChatRunStatus) => void;
+  onRunEventId?: (eventId: string) => void;
 }
 
 export async function streamViaDaemon({
@@ -57,9 +77,16 @@ export async function streamViaDaemon({
   cancelSignal,
   handlers,
   projectId,
+  conversationId,
+  assistantMessageId,
+  clientRequestId,
   attachments,
   model,
   reasoning,
+  initialLastEventId,
+  onRunCreated,
+  onRunStatus,
+  onRunEventId,
 }: DaemonStreamOptions): Promise<void> {
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
@@ -72,19 +99,14 @@ export async function streamViaDaemon({
     systemPrompt,
     message: transcript,
     projectId: projectId ?? null,
+    conversationId: conversationId ?? null,
+    assistantMessageId: assistantMessageId ?? null,
+    clientRequestId: clientRequestId ?? null,
     attachments: attachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
   };
   const body = JSON.stringify(request);
-
-  let acc = '';
-  let stderrBuf = '';
-  let exitCode: number | null = null;
-  let exitSignal: string | null = null;
-  let endStatus: string | null = null;
-  let lastEventId: string | null = null;
-  let abortListener: (() => void) | null = null;
 
   try {
     const createResp = await fetch('/api/runs', {
@@ -102,17 +124,78 @@ export async function streamViaDaemon({
 
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
-    let canceled = false;
-    const cancelRun = () => {
-      if (canceled) return;
-      canceled = true;
-      void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
-    };
-    abortListener = cancelRun;
-    cancelSignal?.addEventListener('abort', cancelRun, { once: true });
+    onRunCreated?.(runId);
+    onRunStatus?.('queued');
+    await consumeDaemonRun({
+      runId,
+      signal,
+      cancelSignal,
+      handlers,
+      initialLastEventId,
+      onRunStatus,
+      onRunEventId,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return;
+    handlers.onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
+export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
+  await consumeDaemonRun(options);
+}
+
+export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
+  try {
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as ChatRunStatusResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function listActiveChatRuns(
+  projectId: string,
+  conversationId: string,
+): Promise<ChatRunStatusResponse[]> {
+  try {
+    const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
+    const resp = await fetch(`/api/runs?${qs.toString()}`);
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as ChatRunListResponse;
+    return body.runs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function consumeDaemonRun({
+  runId,
+  signal,
+  cancelSignal,
+  handlers,
+  initialLastEventId,
+  onRunStatus,
+  onRunEventId,
+}: DaemonReattachOptions): Promise<void> {
+  let acc = '';
+  let stderrBuf = '';
+  let exitCode: number | null = null;
+  let exitSignal: string | null = null;
+  let endStatus: ChatRunStatus | null = null;
+  let lastEventId: string | null = initialLastEventId ?? null;
+  let canceled = false;
+  const cancelRun = () => {
+    if (canceled) return;
+    canceled = true;
+    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+  };
+
+  cancelSignal?.addEventListener('abort', cancelRun, { once: true });
+  try {
     if (cancelSignal?.aborted) {
       cancelRun();
-      cancelSignal.removeEventListener('abort', abortListener);
       return;
     }
 
@@ -157,7 +240,10 @@ export async function streamViaDaemon({
           }
           if (parsed.kind !== 'event') continue;
           sawStreamProgress = true;
-          if (parsed.id) lastEventId = parsed.id;
+          if (parsed.id) {
+            lastEventId = parsed.id;
+            onRunEventId?.(parsed.id);
+          }
 
           const event = parsed as unknown as ChatSseEvent;
 
@@ -187,6 +273,7 @@ export async function streamViaDaemon({
 
           if (event.event === 'start') {
             const data = event.data as ChatSseStartPayload;
+            onRunStatus?.('running');
             handlers.onAgentEvent({
               kind: 'status',
               label: 'starting',
@@ -196,16 +283,17 @@ export async function streamViaDaemon({
           }
 
           if (event.event === 'error') {
+            onRunStatus?.('failed');
             const data = event.data as SseErrorPayload;
             handlers.onError(new Error(String(data.error?.message ?? data.message ?? 'daemon error')));
-            if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
             return;
           }
 
           if (event.event === 'end') {
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
-            endStatus = typeof event.data.status === 'string' ? event.data.status : 'succeeded';
+            endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
+            onRunStatus?.(endStatus);
           }
         }
       }
@@ -213,32 +301,35 @@ export async function streamViaDaemon({
     }
 
     if (endStatus === null) {
-      handlers.onError(new Error('daemon stream disconnected before run completed'));
-      if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
-      return;
+      const status = await fetchChatRunStatus(runId);
+      if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
+        endStatus = status.status;
+        exitCode = status.exitCode ?? null;
+        exitSignal = status.signal ?? null;
+        onRunStatus?.(endStatus);
+      } else {
+        handlers.onError(new Error('daemon stream disconnected before run completed'));
+        return;
+      }
     }
 
-    if (endStatus === 'canceled') {
-      if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
-      return;
-    }
+    if (endStatus === 'canceled') return;
 
     if (endStatus === 'failed' || exitSignal || (exitCode !== null && exitCode !== 0)) {
       const tail = stderrBuf.trim().slice(-400);
       handlers.onError(
         new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
       );
-      if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
       return;
     }
-    if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
     handlers.onDone(acc);
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return;
-    handlers.onError(err instanceof Error ? err : new Error(String(err)));
   } finally {
-    if (abortListener) cancelSignal?.removeEventListener('abort', abortListener);
+    cancelSignal?.removeEventListener('abort', cancelRun);
   }
+}
+
+function isChatRunStatus(value: unknown): value is ChatRunStatus {
+  return value === 'queued' || value === 'running' || value === 'succeeded' || value === 'failed' || value === 'canceled';
 }
 
 // Translate a raw `agent` SSE payload (what apps/daemon/src/claude-stream.ts emits)

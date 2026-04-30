@@ -1011,10 +1011,15 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
   const CHAT_RUN_TTL_MS = 30 * 60 * 1000;
 
-  const createChatRun = () => {
+  const createChatRun = (meta = {}) => {
     const now = Date.now();
     const run = {
       id: randomUUID(),
+      projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
+      conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
+      assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
+      clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
+      agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -1086,6 +1091,10 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   const runStatusBody = (run) => ({
     id: run.id,
+    projectId: run.projectId,
+    conversationId: run.conversationId,
+    assistantMessageId: run.assistantMessageId,
+    agentId: run.agentId,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
@@ -1102,10 +1111,18 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       systemPrompt,
       imagePaths = [],
       projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId,
       attachments = [],
       model,
       reasoning,
     } = chatBody;
+    if (typeof projectId === 'string' && projectId) run.projectId = projectId;
+    if (typeof conversationId === 'string' && conversationId) run.conversationId = conversationId;
+    if (typeof assistantMessageId === 'string' && assistantMessageId) run.assistantMessageId = assistantMessageId;
+    if (typeof clientRequestId === 'string' && clientRequestId) run.clientRequestId = clientRequestId;
+    if (typeof agentId === 'string' && agentId) run.agentId = agentId;
     const def = getAgentDef(agentId);
     if (!def) return failRun(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
     if (!def.bin) return failRun(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
@@ -1408,13 +1425,27 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   };
 
   app.post('/api/runs', (req, res) => {
-    const run = createChatRun();
+    const run = createChatRun(req.body || {});
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
     res.status(202).json(body);
     void startChatRun(req.body || {}, run).catch((err) => {
       failRun(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });
+  });
+
+  app.get('/api/runs', (req, res) => {
+    const { projectId, conversationId, status } = req.query;
+    const runs = Array.from(chatRuns.values()).filter((run) => {
+      if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
+      if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
+      if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
+      if (typeof status === 'string' && status) return run.status === status;
+      return true;
+    });
+    /** @type {import('@open-design/contracts').ChatRunListResponse} */
+    const body = { runs: runs.map(runStatusBody) };
+    res.json(body);
   });
 
   app.get('/api/runs/:id', (req, res) => {

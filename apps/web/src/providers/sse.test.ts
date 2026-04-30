@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { streamViaDaemon } from './daemon';
+import { reattachDaemonRun, streamViaDaemon } from './daemon';
 import { streamMessageOpenAI } from './openai-compatible';
 import { parseSseFrame } from './sse';
 
@@ -242,6 +242,66 @@ describe('streamViaDaemon', () => {
       signal: expect.any(AbortSignal),
     });
     expect(handlers.onDone).toHaveBeenCalledWith('hello');
+  });
+
+  it('posts run correlation fields and reports run metadata callbacks', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse('id: 4\nevent: start\ndata: {"bin":"mock-agent"}\n\nid: 5\nevent: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    const onRunCreated = vi.fn();
+    const onRunStatus = vi.fn();
+    const onRunEventId = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      assistantMessageId: 'assistant-1',
+      clientRequestId: 'client-1',
+      onRunCreated,
+      onRunStatus,
+      onRunEventId,
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toMatchObject({
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      assistantMessageId: 'assistant-1',
+      clientRequestId: 'client-1',
+    });
+    expect(onRunCreated).toHaveBeenCalledWith('run-1');
+    expect(onRunStatus).toHaveBeenCalledWith('queued');
+    expect(onRunStatus).toHaveBeenCalledWith('running');
+    expect(onRunStatus).toHaveBeenCalledWith('succeeded');
+    expect(onRunEventId).toHaveBeenCalledWith('4');
+    expect(onRunEventId).toHaveBeenCalledWith('5');
+  });
+
+  it('reattaches to an existing daemon run after the last stored event id', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(sseResponse('id: 8\nevent: stdout\ndata: {"chunk":"lo"}\n\nid: 9\nevent: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reattachDaemonRun({
+      runId: 'run-1',
+      signal: new AbortController().signal,
+      initialLastEventId: '7',
+      handlers,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/events?after=7', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    });
+    expect(handlers.onDelta).toHaveBeenCalledWith('lo');
+    expect(handlers.onDone).toHaveBeenCalledWith('lo');
   });
 
   it('keeps reconnecting when quiet resumed streams only receive keepalives', async () => {

@@ -113,6 +113,15 @@ function migrate(db) {
   if (!messageCols.some((c) => c.name === 'agent_name')) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_name TEXT`);
   }
+  if (!messageCols.some((c) => c.name === 'run_id')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN run_id TEXT`);
+  }
+  if (!messageCols.some((c) => c.name === 'run_status')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
+  }
+  if (!messageCols.some((c) => c.name === 'last_run_event_id')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
+  }
 }
 
 // ---------- projects ----------
@@ -349,6 +358,8 @@ export function listMessages(db, conversationId) {
   return db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
+              run_id AS runId, run_status AS runStatus,
+              last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
               produced_files_json AS producedFilesJson,
@@ -371,6 +382,7 @@ export function upsertMessage(db, conversationId, m) {
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
+              run_id = ?, run_status = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?,
               produced_files_json = ?, started_at = ?, ended_at = ?
         WHERE id = ?`,
@@ -379,6 +391,9 @@ export function upsertMessage(db, conversationId, m) {
       m.content,
       m.agentId ?? null,
       m.agentName ?? null,
+      m.runId ?? null,
+      m.runStatus ?? null,
+      m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -393,15 +408,16 @@ export function upsertMessage(db, conversationId, m) {
       )
       .get(conversationId);
     const position = (max?.m ?? -1) + 1;
-    // 13 values: id, conversation_id, role, content, agent_id, agent_name,
-    // events_json, attachments_json, produced_files_json, started_at,
-    // ended_at, position, created_at.
+    // 16 values: id, conversation_id, role, content, agent_id, agent_name,
+    // run_id, run_status, last_run_event_id, events_json, attachments_json,
+    // produced_files_json, started_at, ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
-         (id, conversation_id, role, content, agent_id, agent_name, events_json,
+         (id, conversation_id, role, content, agent_id, agent_name,
+          run_id, run_status, last_run_event_id, events_json,
           attachments_json, produced_files_json,
           started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -409,6 +425,9 @@ export function upsertMessage(db, conversationId, m) {
       m.content,
       m.agentId ?? null,
       m.agentName ?? null,
+      m.runId ?? null,
+      m.runStatus ?? null,
+      m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -426,6 +445,8 @@ export function upsertMessage(db, conversationId, m) {
   const row = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
+              run_id AS runId, run_status AS runStatus,
+              last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
               produced_files_json AS producedFilesJson,
@@ -448,6 +469,9 @@ function normalizeMessage(row) {
     content: row.content,
     agentId: row.agentId ?? undefined,
     agentName: row.agentName ?? undefined,
+    runId: row.runId ?? undefined,
+    runStatus: row.runStatus ?? undefined,
+    lastRunEventId: row.lastRunEventId ?? undefined,
     events: parseJsonOrUndef(row.eventsJson),
     attachments: parseJsonOrUndef(row.attachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
