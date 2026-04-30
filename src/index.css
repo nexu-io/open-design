@@ -165,12 +165,13 @@ code {
 /* -------- App shell ------------------------------------------------- */
 .app {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100vh;
   background: var(--bg-app);
 }
 
 .topbar {
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -250,6 +251,82 @@ code {
   color: var(--text-muted);
 }
 .topbar-left .back-btn:hover { background: var(--bg-subtle); color: var(--text); border-color: var(--border); }
+
+.project-blueprint {
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg) 82%, var(--accent-tint));
+  overflow-x: auto;
+}
+
+.project-blueprint-title,
+.project-blueprint-group {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.project-blueprint-title {
+  color: var(--accent-hover);
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+}
+
+.project-blueprint-title svg {
+  flex: 0 0 auto;
+}
+
+.project-blueprint-title strong {
+  max-width: 220px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-blueprint-group > span {
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.project-blueprint-group > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-blueprint-group small {
+  max-width: 150px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* -------- Avatar menu (replaces in-topbar agent picker) ------------- */
 .avatar-menu { position: relative; }
@@ -407,6 +484,7 @@ code {
 
 /* -------- Split / panes -------------------------------------------- */
 .split {
+  grid-row: 3;
   display: grid;
   grid-template-columns: minmax(380px, 460px) 1fr;
   min-height: 0;

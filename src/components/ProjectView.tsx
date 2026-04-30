@@ -45,6 +45,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
+import { WorkflowBlueprint } from './WorkflowBlueprint';
 
 interface Props {
   project: Project;
@@ -815,6 +816,7 @@ export function ProjectView({
           />
         </div>
       </div>
+      <WorkflowBlueprint metadata={project.metadata} />
       <div className="split">
         <ChatPane
           // The conversation id is part of the key so switching conversations
