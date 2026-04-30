@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "test": "vitest run -c vitest.config.ts",
-    "test:ui:clean": "node scripts/reset-artifacts.mjs",
-    "test:ui": "pnpm run test:ui:clean && playwright test -c playwright.config.ts",
-    "test:ui:headed": "pnpm run test:ui:clean && playwright test -c playwright.config.ts --headed",
-    "test:e2e:live": "node --test scripts/runtime-adapter.e2e.live.test.mjs"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:ui:clean": "node --experimental-strip-types scripts/reset-artifacts.ts",
+    "test:ui": "corepack pnpm run test:ui:clean && playwright test -c playwright.config.ts",
+    "test:ui:headed": "corepack pnpm run test:ui:clean && playwright test -c playwright.config.ts --headed",
+    "test:e2e:live": "corepack pnpm --filter @open-design/daemon build && node --experimental-strip-types --test scripts/runtime-adapter.e2e.live.test.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

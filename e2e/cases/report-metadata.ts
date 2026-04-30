@@ -1,4 +1,9 @@
-module.exports = {
+export interface ReportCaseMetadata {
+  module: string;
+  assertions: string[];
+}
+
+const caseMetadata: Record<string, ReportCaseMetadata> = {
   'prototype-basic': {
     module: '项目创建与生成',
     assertions: [
@@ -124,4 +129,6 @@ module.exports = {
       '刷新前选中的 active tab 仍然保持选中',
     ],
   },
-};
+} satisfies Record<string, ReportCaseMetadata>;
+
+export default caseMetadata;

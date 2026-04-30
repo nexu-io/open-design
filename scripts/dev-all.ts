@@ -6,7 +6,7 @@
 // apps, so a stray process holding either port doesn't kill the
 // whole boot. The resolved ports are exported into the child env, which
 // means:
-//   * the daemon's cli.js sees the new OD_PORT and binds to it
+//   * the daemon's cli.ts sees the new OD_PORT and binds to it
 //   * apps/web/next.config.ts reads the same OD_PORT and proxies /api, /artifacts,
 //     /frames to the daemon's actual port
 //   * Next.js binds to NEXT_PORT (we pass `-p $NEXT_PORT` to the web package
@@ -17,7 +17,7 @@
 // the switch so the user notices.
 
 import { spawn } from 'node:child_process';
-import { findFreePort } from './resolve-dev-ports.mjs';
+import { findFreePort } from './resolve-dev-ports.ts';
 
 const desiredDaemon = Number(process.env.OD_PORT) || 7456;
 const desiredNext = Number(process.env.NEXT_PORT) || 3000;
@@ -49,14 +49,14 @@ const env = {
   PORT: String(nextPort),
 };
 
-const packageManager = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const packageManager = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 
 const children = [
-  spawn(packageManager, ['--filter', '@open-design/daemon', 'daemon'], {
+  spawn(packageManager, ['pnpm', '--filter', '@open-design/daemon', 'daemon'], {
     env,
     stdio: 'inherit',
   }),
-  spawn(packageManager, ['--filter', '@open-design/web', 'dev', '-p', String(nextPort)], {
+  spawn(packageManager, ['pnpm', '--filter', '@open-design/web', 'dev', '-p', String(nextPort)], {
     env,
     stdio: 'inherit',
   }),
@@ -64,7 +64,7 @@ const children = [
 
 let shuttingDown = false;
 
-function stopChildren(signal = 'SIGTERM') {
+function stopChildren(signal: NodeJS.Signals = 'SIGTERM'): void {
   for (const child of children) {
     if (!child.killed) child.kill(signal);
   }
@@ -80,7 +80,7 @@ for (const child of children) {
   });
 }
 
-for (const sig of ['SIGINT', 'SIGTERM']) {
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     shuttingDown = true;
     stopChildren(sig);

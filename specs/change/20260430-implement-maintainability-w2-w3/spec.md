@@ -253,11 +253,11 @@ Flow:
   - [x] Substep 4.3 Implement: Convert DB, agents, runtime adapter, and stream orchestration modules.
   - [x] Substep 4.4 Implement: Convert `server` and `cli` entrypoints and switch package/runtime bin paths to compiled output.
   - [x] Substep 4.5 Verify: Run daemon typecheck/tests after each conversion batch and smoke the daemon CLI locally.
-- [ ] Step 5: Migrate scripts and e2e support to TypeScript
-  - [ ] Substep 5.1 Implement: Convert root scripts with a documented Node execution strategy.
-  - [ ] Substep 5.2 Implement: Convert e2e runtime/support scripts and preserve Playwright reporter loading through compiled output or supported TS loading.
-  - [ ] Substep 5.3 Implement: Update root `typecheck` to include scripts and e2e support.
-  - [ ] Substep 5.4 Verify: Run root typecheck, repo test suite, e2e tests, and a Playwright reporter smoke check when feasible.
+- [x] Step 5: Migrate scripts and e2e support to TypeScript
+  - [x] Substep 5.1 Implement: Convert root scripts with a documented Node execution strategy.
+  - [x] Substep 5.2 Implement: Convert e2e runtime/support scripts and preserve Playwright reporter loading through compiled output or supported TS loading.
+  - [x] Substep 5.3 Implement: Update root `typecheck` to include scripts and e2e support.
+  - [x] Substep 5.4 Verify: Run root typecheck, repo test suite, e2e tests, and a Playwright reporter smoke check when feasible.
 - [ ] Step 6: Lock in typed end state and future conventions
   - [ ] Substep 6.1 Implement: Add or update root `AGENTS.md` with W2/W3 development conventions: put shared web/daemon contracts in `packages/contracts`, keep UI-only types in web, keep daemon capability logic in daemon, use TypeScript for new project-owned code, and route runtime validation work to the later validation workstream.
   - [ ] Substep 6.2 Implement: Add an automated residual-JavaScript check for project-owned entrypoints, modules, scripts, tests, and reporters, with explicit allowlist entries only for generated, vendored, or compatibility-output files.
@@ -295,6 +295,13 @@ Flow:
 - `apps/daemon/tsconfig.json` - switched daemon compilation to NodeNext module resolution, disabled JavaScript source inclusion, and added `dist` declaration/source-map emit.
 - `apps/daemon/package.json` - added daemon `build`, routed daemon/dev/start through compiled `dist/cli.js`, and updated the package bin to compiled output.
 - `package.json` - updated the root `od` bin to the compiled daemon CLI path.
+- `scripts/*.ts` - migrated root development and design-system sync scripts from MJS to TypeScript, using Node 24 `--experimental-strip-types` for direct script execution.
+- `scripts/tsconfig.json` - added strict TypeScript coverage for root operational scripts.
+- `e2e/scripts/*.ts` - migrated e2e cleanup and live runtime-adapter smoke scripts to TypeScript; the live script now builds and imports the compiled daemon output.
+- `e2e/reporters/markdown-reporter.ts` and `e2e/cases/report-metadata.ts` - migrated the Playwright markdown reporter and report metadata from CommonJS to TypeScript ESM.
+- `e2e/tsconfig.json` and `e2e/package.json` - added e2e support typechecking plus Node strip-types execution for support scripts.
+- `e2e/playwright.config.ts` - updated root script imports and reporter paths to TypeScript files and routed the Playwright webServer command through Corepack-pinned pnpm.
+- `package.json` - broadened root `typecheck` to cover scripts and e2e support, and routed root pnpm-invoking scripts through Corepack so the pinned pnpm version is used consistently.
 
 ### Verification
 
@@ -316,3 +323,11 @@ Flow:
 - `corepack pnpm --filter @open-design/daemon test` - passed after daemon module conversion; all 18 daemon tests passed.
 - `node apps/daemon/dist/cli.js --help` - passed as a compiled CLI smoke check.
 - `corepack pnpm typecheck` - passed after daemon module conversion and compiled-bin package updates.
+- `corepack pnpm --filter @open-design/e2e exec tsc -p ../scripts/tsconfig.json --noEmit` - passed for root TypeScript scripts.
+- `corepack pnpm --filter @open-design/daemon build` - passed before e2e support typechecking and live-script import validation.
+- `corepack pnpm --filter @open-design/e2e typecheck` - passed for Playwright config, reporter, report metadata, and e2e support scripts.
+- `corepack pnpm typecheck` - passed after script and e2e support migration.
+- `node --experimental-strip-types` import smoke checks for `scripts/resolve-dev-ports.ts` and `e2e/reporters/markdown-reporter.ts` - passed.
+- `corepack pnpm test` - passed; web 15 tests, daemon 18 tests, and e2e Vitest 9 tests passed.
+- `corepack pnpm --filter @open-design/e2e test:ui:clean` - passed against the TypeScript cleanup script.
+- `corepack pnpm --filter @open-design/e2e exec playwright test -c playwright.config.ts --list` - passed as a Playwright config/reporter loading smoke check and listed 15 Chromium UI tests.

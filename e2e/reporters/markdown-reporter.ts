@@ -1,23 +1,63 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const caseMetadata = require('../cases/report-metadata.cjs');
+import fs from 'node:fs';
+import path from 'node:path';
+import type { FullConfig, Reporter, Suite, TestCase, TestResult } from '@playwright/test/reporter';
+import caseMetadata from '../cases/report-metadata.ts';
 
-class MarkdownReporter {
-  constructor(options = {}) {
+interface MarkdownReporterOptions {
+  outputFile?: string;
+}
+
+interface CaseRow {
+  caseId: string;
+  title: string;
+  module: string;
+  assertions: string[];
+  status: string;
+  durationMs: number;
+  retries: number;
+  file: string;
+  line: number | null;
+  attachments: Array<{ name: string; contentType: string; path: string }>;
+  error: string | null;
+}
+
+interface Summary {
+  total: number;
+  passed: number;
+  failed: number;
+  flaky: number;
+  skipped: number;
+  timedOut: number;
+  interrupted: number;
+  durationMs: number;
+}
+
+interface MarkdownInput {
+  startedAt: Date;
+  finishedAt: Date;
+  summary: Summary;
+  rows: CaseRow[];
+  outputFile: string;
+}
+
+class MarkdownReporter implements Reporter {
+  private rootSuite: Suite | null = null;
+  private startedAt: Date | null = null;
+  private readonly options: MarkdownReporterOptions;
+
+  constructor(options: MarkdownReporterOptions = {}) {
     this.options = options;
-    this.rootSuite = null;
-    this.startedAt = null;
   }
 
-  onBegin(_config, suite) {
+  onBegin(_config: FullConfig, suite: Suite): void {
     this.rootSuite = suite;
     this.startedAt = new Date();
   }
 
-  async onEnd() {
+  async onEnd(): Promise<void> {
     if (!this.rootSuite) return;
 
-    const rows = [];
+    const rows: CaseRow[] = [];
     visitSuite(this.rootSuite, rows);
     rows.sort((a, b) => a.caseId.localeCompare(b.caseId));
 
@@ -42,37 +82,42 @@ class MarkdownReporter {
   }
 }
 
-function visitSuite(suite, rows) {
+function visitSuite(suite: Suite, rows: CaseRow[]): void {
   for (const child of suite.suites || []) {
     visitSuite(child, rows);
   }
   for (const test of suite.tests || []) {
     const finalResult = test.results[test.results.length - 1];
     if (!finalResult) continue;
-    const parsed = parseCaseTitle(test.title);
-    rows.push({
-      caseId: parsed.caseId,
-      title: parsed.title,
-      module: caseMetadata[parsed.caseId]?.module || '未分组',
-      assertions: caseMetadata[parsed.caseId]?.assertions || [],
-      status: normalizeStatus(finalResult.status, test.outcome && test.outcome()),
-      durationMs: finalResult.duration ?? 0,
-      retries: Math.max(0, test.results.length - 1),
-      file: test.location?.file ?? '',
-      line: test.location?.line ?? null,
-      attachments: (finalResult.attachments || [])
-        .map((entry) => ({
-          name: entry.name || '',
-          contentType: entry.contentType || '',
-          path: entry.path ? toRelative(entry.path) : null,
-        }))
-        .filter((entry) => entry.path),
-      error: compactError(finalResult.error),
-    });
+    rows.push(buildCaseRow(test, finalResult));
   }
 }
 
-function parseCaseTitle(title) {
+function buildCaseRow(test: TestCase, finalResult: TestResult): CaseRow {
+  const parsed = parseCaseTitle(test.title);
+  const metadata = caseMetadata[parsed.caseId];
+  return {
+    caseId: parsed.caseId,
+    title: parsed.title,
+    module: metadata?.module || '未分组',
+    assertions: metadata?.assertions || [],
+    status: normalizeStatus(finalResult.status, test.outcome?.()),
+    durationMs: finalResult.duration ?? 0,
+    retries: Math.max(0, test.results.length - 1),
+    file: test.location?.file ?? '',
+    line: test.location?.line ?? null,
+    attachments: (finalResult.attachments || [])
+      .map((entry) => ({
+        name: entry.name || '',
+        contentType: entry.contentType || '',
+        path: entry.path ? toRelative(entry.path) : '',
+      }))
+      .filter((entry) => entry.path.length > 0),
+    error: compactError(finalResult.error),
+  };
+}
+
+function parseCaseTitle(title: string): { caseId: string; title: string } {
   const idx = title.indexOf(': ');
   if (idx === -1) {
     return { caseId: title, title };
@@ -83,12 +128,12 @@ function parseCaseTitle(title) {
   };
 }
 
-function normalizeStatus(status, outcome) {
+function normalizeStatus(status: string | undefined, outcome: string | undefined): string {
   if (outcome === 'flaky') return 'flaky';
   return status || 'unknown';
 }
 
-function compactError(error) {
+function compactError(error: TestResult['error']): string | null {
   if (!error) return null;
   const raw = [error.message, error.value, error.stack]
     .filter(Boolean)
@@ -98,7 +143,7 @@ function compactError(error) {
   return raw.split('\n').slice(0, 8).join('\n');
 }
 
-function summarize(rows) {
+function summarize(rows: CaseRow[]): Summary {
   const summary = {
     total: rows.length,
     passed: 0,
@@ -122,8 +167,8 @@ function summarize(rows) {
   return summary;
 }
 
-function buildMarkdown({ startedAt, finishedAt, summary, rows, outputFile }) {
-  const lines = [];
+function buildMarkdown({ startedAt, finishedAt, summary, rows, outputFile }: MarkdownInput): string {
+  const lines: string[] = [];
   lines.push('# UI 自动化测试报告');
   lines.push('');
   lines.push(`- 生成时间：${finishedAt.toISOString()}`);
@@ -217,12 +262,12 @@ function buildMarkdown({ startedAt, finishedAt, summary, rows, outputFile }) {
   return `${lines.join('\n')}\n`;
 }
 
-function formatDuration(ms) {
+function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function statusLabel(status) {
+function statusLabel(status: string): string {
   if (status === 'passed') return 'passed';
   if (status === 'failed') return 'failed';
   if (status === 'flaky') return 'flaky';
@@ -232,13 +277,13 @@ function statusLabel(status) {
   return status;
 }
 
-function toRelative(filePath) {
+function toRelative(filePath: string): string {
   if (!filePath) return '';
   return path.relative(process.cwd(), filePath) || filePath;
 }
 
-function escapeCell(value) {
+function escapeCell(value: string): string {
   return String(value).replace(/\|/g, '\\|');
 }
 
-module.exports = MarkdownReporter;
+export default MarkdownReporter;

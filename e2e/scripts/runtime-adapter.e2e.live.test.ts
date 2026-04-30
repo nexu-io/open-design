@@ -3,27 +3,52 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+interface AgentInfo {
+  id: string;
+  name: string;
+  bin: string;
+  available: boolean;
+  path?: string;
+  version?: string | null;
+  models?: Array<{ id: string; label?: string }>;
+  streamFormat?: string;
+}
+
+interface AgentsResponse {
+  agents: AgentInfo[];
+}
+
+interface StartServerResult {
+  url: string;
+  server: { close: (callback: (err?: Error) => void) => void };
+}
+
+interface ParsedSseEvent {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+type StartServer = (options: { port: number; returnServer: true }) => Promise<StartServerResult>;
+type CloseDatabase = () => void;
+
 const liveTimeoutMs = Number(process.env.OD_RUNTIME_LIVE_TIMEOUT_MS || 180_000);
 const requestedRuntimeIds = parseRuntimeIds(process.env.OD_E2E_RUNTIMES);
 const maxRuntimeCount = 8;
 const marker = 'OD_RUNTIME_ADAPTER_LIVE_OK';
 
-let baseUrl;
-let server;
-let startServer;
-let closeDatabase;
-let detectedAgents;
-let dataDir;
+let baseUrl: string;
+let server: StartServerResult['server'] | undefined;
+let startServer: StartServer;
+let closeDatabase: CloseDatabase | undefined;
+let detectedAgents: AgentInfo[] | undefined;
+let dataDir: string;
 
 test.before(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'od-runtime-adapter-live-'));
   process.env.OD_DATA_DIR = dataDir;
-  ({ startServer } = await import('../../apps/daemon/server.js'));
-  ({ closeDatabase } = await import('../../apps/daemon/db.js'));
+  ({ startServer } = await import('../../apps/daemon/dist/server.js') as { startServer: StartServer });
+  ({ closeDatabase } = await import('../../apps/daemon/dist/db.js') as { closeDatabase: CloseDatabase });
   const started = await startServer({ port: 0, returnServer: true });
   baseUrl = started.url;
   server = started.server;
@@ -31,8 +56,8 @@ test.before(async () => {
 
 test.after(async () => {
   if (server) {
-    await new Promise((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
+    await new Promise<void>((resolve, reject) => {
+      server?.close((err) => (err ? reject(err) : resolve()));
     });
   }
   closeDatabase?.();
@@ -45,7 +70,7 @@ test('runtime adapter live detection flow exposes installed runtimes', async () 
   log('detect', 'starting runtime detection via /api/agents');
   const res = await fetch(`${baseUrl}/api/agents`);
   assert.equal(res.status, 200);
-  const body = await res.json();
+  const body = await readAgentsResponse(res);
   assert.ok(Array.isArray(body.agents));
   assert.ok(body.agents.length > 0);
 
@@ -77,7 +102,8 @@ test('runtime adapter live detection flow exposes installed runtimes', async () 
     assert.equal(typeof agent.streamFormat, 'string');
     if (agent.available) {
       assert.equal(typeof agent.path, 'string');
-      assert.ok(agent.path.length > 0);
+      const resolvedPath = agent.path;
+      assert.ok(resolvedPath && resolvedPath.length > 0);
     }
   }
 });
@@ -86,7 +112,7 @@ test('runtime adapter live run flow streams a successful response for every avai
   if (!detectedAgents) {
     log('run', 'detection cache empty; fetching /api/agents before run flow');
     const res = await fetch(`${baseUrl}/api/agents`);
-    detectedAgents = (await res.json()).agents;
+    detectedAgents = (await readAgentsResponse(res)).agents;
   }
 
   const requestedSet = requestedRuntimeIds ? new Set(requestedRuntimeIds) : null;
@@ -95,11 +121,11 @@ test('runtime adapter live run flow streams a successful response for every avai
   );
 
   if (requestedSet) {
-    log('run', `runtime filter=${requestedRuntimeIds.join(',')}`);
+    log('run', `runtime filter=${requestedRuntimeIds?.join(',')}`);
     for (const id of requestedSet) {
       assert.ok(
         detectedAgents.some((agent) => agent.id === id),
-        `Requested runtime ${id} was not returned by /api/agents.`,
+        `Requested runtime ${id} is missing from /api/agents.`,
       );
     }
   }
@@ -118,8 +144,8 @@ test('runtime adapter live run flow streams a successful response for every avai
   assert.ok(
     availableAgents.length > 0,
     requestedSet
-      ? `No requested runtime is available: ${requestedRuntimeIds.join(',')}.`
-      : 'No available runtime returned by /api/agents.',
+      ? `Requested runtimes unavailable: ${requestedRuntimeIds?.join(',')}.`
+      : 'Available runtime required from /api/agents.',
   );
 
   for (const agent of availableAgents) {
@@ -127,12 +153,12 @@ test('runtime adapter live run flow streams a successful response for every avai
   }
 });
 
-async function runRuntime(agent) {
+async function runRuntime(agent: AgentInfo): Promise<void> {
   const startedAt = Date.now();
   log('run', `${agent.id}: starting /api/chat live run`);
 
   const projectId = `runtime-adapter-live-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const events = [];
+  const events: ParsedSseEvent[] = [];
   const abort = AbortSignal.timeout(liveTimeoutMs);
   try {
     const res = await fetch(`${baseUrl}/api/chat`, {
@@ -154,6 +180,7 @@ async function runRuntime(agent) {
 
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type') || '', /text\/event-stream/);
+    assert.ok(res.body, 'SSE response should include a readable body.');
 
     await collectSseEvents(res, events, agent.id);
   } finally {
@@ -167,17 +194,17 @@ async function runRuntime(agent) {
   assert.ok(start, 'SSE stream should include a start event.');
   assert.equal(start.data.agentId, agent.id);
   assert.equal(start.data.projectId, projectId);
-  log('run', `${agent.id}: start event cwd=${start.data.cwd}`);
+  log('run', `${agent.id}: start event cwd=${String(start.data.cwd ?? '')}`);
 
   const end = events.find((event) => event.event === 'end');
   assert.ok(end, 'SSE stream should include an end event.');
   assert.equal(end.data.code, 0, renderEvents(events));
-  log('run', `${agent.id}: end event code=${end.data.code} signal=${end.data.signal ?? 'none'}`);
+  log('run', `${agent.id}: end event code=${String(end.data.code)} signal=${String(end.data.signal ?? 'none')}`);
 
   const text = events
     .map((event) => {
-      if (event.event === 'stdout') return event.data.chunk || '';
-      if (event.event === 'agent') return event.data.text || event.data.delta || '';
+      if (event.event === 'stdout') return stringData(event.data.chunk);
+      if (event.event === 'agent') return stringData(event.data.text) || stringData(event.data.delta);
       return '';
     })
     .join('');
@@ -185,11 +212,12 @@ async function runRuntime(agent) {
   log('run', `${agent.id}: passed in ${Date.now() - startedAt}ms`);
 }
 
-async function collectSseEvents(res, events, agentId) {
-  const reader = res.body.getReader();
+async function collectSseEvents(res: Response, events: ParsedSseEvent[], agentId: string): Promise<void> {
+  const reader = res.body?.getReader();
+  assert.ok(reader, 'SSE response should include a readable body.');
   const decoder = new TextDecoder();
   let buffer = '';
-  const seen = new Set();
+  const seen = new Set<string>();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -216,7 +244,7 @@ async function collectSseEvents(res, events, agentId) {
   }
 }
 
-function parseSseEvent(chunk) {
+function parseSseEvent(chunk: string): ParsedSseEvent | null {
   const lines = chunk.split('\n');
   if (lines.every((line) => line === '' || line.startsWith(':'))) return null;
 
@@ -225,15 +253,15 @@ function parseSseEvent(chunk) {
   if (!eventLine || !dataLine) return null;
   return {
     event: eventLine.slice('event: '.length),
-    data: JSON.parse(dataLine.slice('data: '.length)),
+    data: JSON.parse(dataLine.slice('data: '.length)) as Record<string, unknown>,
   };
 }
 
-function renderEvents(events) {
+function renderEvents(events: ParsedSseEvent[]): string {
   return JSON.stringify(events, null, 2).slice(0, 8000);
 }
 
-function parseRuntimeIds(value) {
+function parseRuntimeIds(value: string | undefined): string[] | null {
   if (!value) return null;
   const ids = value
     .split(',')
@@ -242,11 +270,11 @@ function parseRuntimeIds(value) {
   return ids.length > 0 ? ids : null;
 }
 
-function log(stage, message) {
+function log(stage: string, message: string): void {
   console.log(`[runtime-adapter:e2e:${stage}] ${message}`);
 }
 
-function logSseProgress(agentId, event, seen) {
+function logSseProgress(agentId: string, event: ParsedSseEvent, seen: Set<string>): void {
   if (event.event === 'start' && !seen.has('start')) {
     seen.add('start');
     log('run', `${agentId}: received start event`);
@@ -257,9 +285,10 @@ function logSseProgress(agentId, event, seen) {
     log('run', `${agentId}: received stdout stream`);
     return;
   }
-  if (event.event === 'agent' && !seen.has(`agent:${event.data.type || 'event'}`)) {
-    seen.add(`agent:${event.data.type || 'event'}`);
-    log('run', `${agentId}: received agent event type=${event.data.type || 'unknown'}`);
+  const type = stringData(event.data.type) || 'event';
+  if (event.event === 'agent' && !seen.has(`agent:${type}`)) {
+    seen.add(`agent:${type}`);
+    log('run', `${agentId}: received agent event type=${type || 'unknown'}`);
     return;
   }
   if (event.event === 'stderr' && !seen.has('stderr')) {
@@ -268,11 +297,20 @@ function logSseProgress(agentId, event, seen) {
     return;
   }
   if (event.event === 'error') {
-    log('run', `${agentId}: received error event ${event.data.message || ''}`.trim());
+    log('run', `${agentId}: received error event ${stringData(event.data.message)}`.trim());
     return;
   }
   if (event.event === 'end' && !seen.has('end')) {
     seen.add('end');
     log('run', `${agentId}: received end event`);
   }
+}
+
+async function readAgentsResponse(res: Response): Promise<AgentsResponse> {
+  const body = await res.json() as Partial<AgentsResponse>;
+  return { agents: Array.isArray(body.agents) ? body.agents : [] };
+}
+
+function stringData(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

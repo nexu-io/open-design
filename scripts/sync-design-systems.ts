@@ -4,16 +4,22 @@
 // Usage:
 //   1) curl -sL $(npm view getdesign dist.tarball) -o /tmp/getdesign.tgz
 //      tar -xzf /tmp/getdesign.tgz -C /tmp
-//   2) node scripts/sync-design-systems.mjs [/tmp/package/templates]
+//   2) node --experimental-strip-types scripts/sync-design-systems.ts [/tmp/package/templates]
 //
 // The script re-creates each brand's design-systems/<slug>/DESIGN.md with a
 // `> Category: <name>` line inserted after the H1, mapped from the
 // awesome-design-md README. Hand-authored systems (default, warm-editorial)
-// are not touched.
+// are left untouched.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+interface ManifestEntry {
+  brand: string;
+  file: string;
+  description: string;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -60,37 +66,66 @@ const CATEGORY = {
   // Automotive
   bmw: 'Automotive', bugatti: 'Automotive', ferrari: 'Automotive',
   lamborghini: 'Automotive', renault: 'Automotive', tesla: 'Automotive',
-};
+} as const;
 
-const slugOf = (b) => b.replace(/\./g, '-');
+type Brand = keyof typeof CATEGORY;
 
-function main() {
-  let manifest;
+const slugOf = (brand: string): string => brand.replace(/\./g, '-');
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function readManifest(): ManifestEntry[] {
+  const raw = readFileSync(path.join(SRC, 'manifest.json'), 'utf8');
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error('manifest.json must contain an array');
+  }
+  return parsed.map((entry) => {
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      'brand' in entry &&
+      'file' in entry &&
+      'description' in entry &&
+      typeof entry.brand === 'string' &&
+      typeof entry.file === 'string' &&
+      typeof entry.description === 'string'
+    ) {
+      return entry;
+    }
+    throw new Error('manifest.json contains an invalid entry');
+  });
+}
+
+function main(): void {
+  let manifest: ManifestEntry[];
   try {
-    manifest = JSON.parse(readFileSync(path.join(SRC, 'manifest.json'), 'utf8'));
-  } catch (err) {
-    console.error(`Could not read manifest.json under ${SRC}: ${err.message}`);
-    console.error('Did you extract the getdesign tarball? See scripts/sync-design-systems.mjs header.');
+    manifest = readManifest();
+  } catch (error) {
+    console.error(`Could not read manifest.json under ${SRC}: ${errorMessage(error)}`);
+    console.error('Did you extract the getdesign tarball? See scripts/sync-design-systems.ts header.');
     process.exit(1);
   }
 
-  const written = [];
-  const skipped = [];
+  const written: string[] = [];
+  const skipped: string[] = [];
 
   for (const entry of manifest) {
     const { brand, file, description } = entry;
-    const cat = CATEGORY[brand];
+    const cat = CATEGORY[brand as Brand];
     if (!cat) { skipped.push(`${brand} (unmapped category)`); continue; }
     const slug = slugOf(brand);
-    let raw;
+    let raw: string;
     try {
       raw = readFileSync(path.join(SRC, file), 'utf8');
-    } catch (err) {
-      skipped.push(`${brand} (${err.message})`);
+    } catch (error) {
+      skipped.push(`${brand} (${errorMessage(error)})`);
       continue;
     }
     const lines = raw.split(/\r?\n/);
-    const h1 = lines.findIndex((l) => /^#\s+/.test(l));
+    const h1 = lines.findIndex((line) => /^#\s+/.test(line));
     if (h1 < 0) { skipped.push(`${brand} (no H1)`); continue; }
     const head = lines.slice(0, h1 + 1);
     const tail = lines.slice(h1 + 1);
@@ -112,7 +147,7 @@ function main() {
   console.log(`wrote ${written.length} design systems → design-systems/`);
   if (skipped.length) {
     console.log('skipped:');
-    for (const s of skipped) console.log(`  - ${s}`);
+    for (const entry of skipped) console.log(`  - ${entry}`);
   }
 }
 

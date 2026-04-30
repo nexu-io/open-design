@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { resolveDevPorts } from '../scripts/resolve-dev-ports.mjs';
+import { resolveDevPorts } from '../scripts/resolve-dev-ports.ts';
 
 const desiredDaemonPort = Number(process.env.OD_PORT) || 17_456;
 const desiredNextPort = Number(process.env.NEXT_PORT) || 17_573;
@@ -26,14 +26,14 @@ export default defineConfig({
         ['html', { open: 'never', outputFolder: './reports/playwright-html-report' }],
         ['json', { outputFile: './reports/results.json' }],
         ['junit', { outputFile: './reports/junit.xml' }],
-        ['./reporters/markdown-reporter.cjs', { outputFile: './reports/latest.md' }],
+        ['./reporters/markdown-reporter.ts', { outputFile: './reports/latest.md' }],
       ]
     : [
         ['list'],
         ['html', { open: 'never', outputFolder: './reports/playwright-html-report' }],
         ['json', { outputFile: './reports/results.json' }],
         ['junit', { outputFile: './reports/junit.xml' }],
-        ['./reporters/markdown-reporter.cjs', { outputFile: './reports/latest.md' }],
+        ['./reporters/markdown-reporter.ts', { outputFile: './reports/latest.md' }],
       ],
   use: {
     baseURL,
@@ -44,7 +44,7 @@ export default defineConfig({
     command:
       `OD_DATA_DIR=e2e/.od-data ` +
       `OD_PORT=${daemonPort} OD_PORT_STRICT=1 ` +
-      `NEXT_PORT=${nextPort} NEXT_PORT_STRICT=1 pnpm --dir .. run dev:all`,
+      `NEXT_PORT=${nextPort} NEXT_PORT_STRICT=1 corepack pnpm --dir .. run dev:all`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

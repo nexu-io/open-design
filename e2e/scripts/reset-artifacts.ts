@@ -46,10 +46,8 @@ try {
       ),
   );
 } catch (error) {
-  // It's fine if the daemon hasn't created the projects root yet.
-  if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-    // Missing roots are expected before the first daemon boot.
-  } else {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined;
+  if (code !== 'ENOENT') {
     console.warn('Failed to clean stale e2e project dirs:', error);
   }
 }

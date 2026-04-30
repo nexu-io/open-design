@@ -10,19 +10,19 @@
     "od": "./apps/daemon/dist/cli.js"
   },
   "scripts": {
-    "daemon": "pnpm --filter @open-design/daemon daemon",
-    "dev": "pnpm --filter @open-design/web dev",
-    "dev:all": "node scripts/dev-all.mjs",
-    "build": "pnpm --filter @open-design/web build",
-    "preview": "pnpm run build && pnpm --filter @open-design/daemon daemon",
-    "test:e2e:live": "pnpm --filter @open-design/e2e test:e2e:live",
-    "test": "pnpm --filter @open-design/web test && pnpm --filter @open-design/daemon test && pnpm --filter @open-design/e2e test",
-    "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
-    "test:ui": "pnpm --filter @open-design/e2e test:ui",
-    "test:ui:headed": "pnpm --filter @open-design/e2e test:ui:headed",
-    "typecheck": "corepack pnpm --filter @open-design/contracts typecheck && corepack pnpm --filter @open-design/web typecheck && corepack pnpm --filter @open-design/daemon typecheck",
-    "start": "pnpm run build && pnpm --filter @open-design/daemon start",
-    "test:run": "pnpm run test"
+    "daemon": "corepack pnpm --filter @open-design/daemon daemon",
+    "dev": "corepack pnpm --filter @open-design/web dev",
+    "dev:all": "node --experimental-strip-types scripts/dev-all.ts",
+    "build": "corepack pnpm --filter @open-design/web build",
+    "preview": "corepack pnpm run build && corepack pnpm --filter @open-design/daemon daemon",
+    "test:e2e:live": "corepack pnpm --filter @open-design/e2e test:e2e:live",
+    "test": "corepack pnpm --filter @open-design/web test && corepack pnpm --filter @open-design/daemon test && corepack pnpm --filter @open-design/e2e test",
+    "test:ui:clean": "corepack pnpm --filter @open-design/e2e test:ui:clean",
+    "test:ui": "corepack pnpm --filter @open-design/e2e test:ui",
+    "test:ui:headed": "corepack pnpm --filter @open-design/e2e test:ui:headed",
+    "typecheck": "corepack pnpm --filter @open-design/contracts typecheck && corepack pnpm --filter @open-design/web typecheck && corepack pnpm --filter @open-design/daemon typecheck && corepack pnpm --filter @open-design/daemon build && corepack pnpm --filter @open-design/e2e exec tsc -p ../scripts/tsconfig.json --noEmit && corepack pnpm --filter @open-design/e2e typecheck",
+    "start": "corepack pnpm run build && corepack pnpm --filter @open-design/daemon start",
+    "test:run": "corepack pnpm run test"
   },
   "engines": {
     "node": "~24",
