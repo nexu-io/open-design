@@ -2,40 +2,31 @@
   "name": "open-design",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@10.33.2",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
   "bin": {
-    "od": "./daemon/cli.js"
+    "od": "./apps/daemon/cli.js"
   },
   "scripts": {
-    "daemon": "node daemon/cli.js --no-open",
-    "dev": "vite",
+    "daemon": "pnpm --filter @open-design/daemon daemon",
+    "dev": "pnpm --filter @open-design/web dev",
     "dev:all": "node scripts/dev-all.mjs",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
-    "start": "npm run build && node daemon/cli.js"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "better-sqlite3": "^11.10.0",
-    "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.0.1",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "build": "pnpm --filter @open-design/web build",
+    "preview": "pnpm run build && pnpm --filter @open-design/daemon daemon",
+    "test:e2e:live": "pnpm --filter @open-design/e2e test:e2e:live",
+    "test": "pnpm --filter @open-design/web test && pnpm --filter @open-design/daemon test && pnpm --filter @open-design/e2e test",
+    "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
+    "test:ui": "pnpm --filter @open-design/e2e test:ui",
+    "test:ui:headed": "pnpm --filter @open-design/e2e test:ui:headed",
+    "typecheck": "pnpm --filter @open-design/web typecheck",
+    "start": "pnpm run build && pnpm --filter @open-design/daemon start",
+    "test:run": "pnpm run test"
   },
   "engines": {
-    "node": ">=20 <23"
+    "node": "~24",
+    "pnpm": ">=10.33.2 <11"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

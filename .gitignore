@@ -1,5 +1,7 @@
-node_modules
-dist
+node_modules/
+dist/
+out/
+.next/
 .DS_Store
 *.log
 .vite
@@ -8,6 +10,17 @@ dist
 # Holds app.sqlite (project metadata), projects/<id>/ (per-project artifacts,
 # the agent's CWD), and artifacts/ (one-off renders). Never commit.
 .od
+.od-e2e
+test-results
+playwright-report
+e2e/.od-data
+e2e/playwright-report
+e2e/reports/html
+e2e/reports/playwright-html-report
+e2e/reports/test-results
+e2e/reports/results.json
+e2e/reports/junit.xml
+e2e/reports/latest.md
 
 # Legacy folder name from before the rename; keep ignored so existing
 # clones don't accidentally stage stale runtime data.
@@ -17,7 +30,11 @@ tsconfig.tsbuildinfo
 
 .claude-sessions/*
 
-.cursor/*
+.cursor/
+.agents/
+.opencode/
+.claude/
+.codex/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/

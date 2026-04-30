@@ -22,7 +22,7 @@
 
 Anthropic 的 [Claude Design][cd]（2026-04-17 发布，基于 Opus 4.7）让大家第一次看到：当一个 LLM 不再写废话、开始直接交付设计成品，会是什么样子。它瞬间出圈 —— 然后保持**闭源**、付费、只跑在云上、绑定 Anthropic 的模型和 Anthropic 的内部 skill。没有 checkout，没有自托管，没有 Vercel 部署，也换不了自己的 agent。
 
-**Open Design（OD）就是它的开源替代品。** 同一套 loop、同一种「artifact-first」心智模型，但没有锁定。我们不做 agent —— 你笔记本上最强的 coding agent 已经装好了。我们要做的，是把它接进一个 skill 驱动的设计工作流，跑在一个普通的 Web 应用里：本地 `pnpm dev`，云端 `vercel deploy`，每一层都 BYOK（自带 Key）。
+**Open Design（OD）就是它的开源替代品。** 同一套 loop、同一种「artifact-first」心智模型，但没有锁定。我们不做 agent —— 你笔记本上最强的 coding agent 已经装好了。我们要做的，是把它接进一个 skill 驱动的设计工作流：本地用 `pnpm dev:all` 跑完整 web + daemon，云端可单独部署 Web 层，每一层都 BYOK（自带 Key）。
 
 输入「帮我做一份杂志风的种子轮 pitch deck」。在模型挥洒第一个像素之前，**初始化问题表单**已经先跳出来。Agent 从 5 套精挑的视觉方向里选一个。一张活的 `TodoWrite` 计划卡片实时流入 UI。Daemon 在磁盘上构建出一个真实的项目目录，里面有 seed 模板、布局库、自检 checklist。Agent **强制 pre-flight** 读取它们，对自己的输出跑一轮**五维评审**，几秒后吐出一个 `<artifact>`，渲染在沙盒 iframe 里。
 
@@ -30,7 +30,7 @@ Anthropic 的 [Claude Design][cd]（2026-04-17 发布，基于 Opus 4.7）让大
 
 OD 站在四个开源项目的肩膀上：
 
-- [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) —— 设计哲学的指南针。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」思路 —— 全部蒸馏进 [`src/prompts/discovery.ts`](src/prompts/discovery.ts)。
+- [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) —— 设计哲学的指南针。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」思路 —— 全部蒸馏进 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts)。
 - [**`op7418/guizang-ppt-skill`**（歸藏的杂志风 PPT skill）](https://github.com/op7418/guizang-ppt-skill) —— Deck 模式。原样捆绑在 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下，原 LICENSE 保留；杂志版式、WebGL hero、P0/P1/P2 checklist。
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) —— UX 北极星，也是我们最接近的同类。第一个开源的 Claude-Design 替代品。我们借鉴了它的流式 artifact 循环、沙盒 iframe 预览模式（自带 React 18 + Babel）、实时 agent 面板（todos + tool calls + 可中断生成）、5 种导出格式列表（HTML / PDF / PPTX / ZIP / Markdown）。我们刻意在形态上分流 —— 它是桌面 Electron 应用，把 [`pi-ai`][piai] 打包进去做 agent；我们是 Web 应用 + 本地 daemon，把 agent 运行时**委托**给你已经装好的 CLI。
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) —— Daemon 与运行时架构。PATH 扫描式 agent 检测，本地 daemon 作为唯一的特权进程，agent-as-teammate 的世界观。
@@ -45,7 +45,7 @@ OD 站在四个开源项目的肩膀上：
 | **视觉方向** | 5 套精选流派（Editorial Monocle · Modern Minimal · Tech Utility · Brutalist · Soft Warm），每一套自带 OKLch 色板 + 字体栈 |
 | **设备外壳** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome —— 像素级精确，跨 skill 共享 |
 | **Agent 运行时** | 本地 daemon 在你的项目目录里 spawn CLI —— agent 拥有真实的 `Read` / `Write` / `Bash` / `WebFetch`，作用在真实磁盘上 |
-| **部署目标** | 本地 `pnpm dev` · Vercel · 单进程生产 (`npm start`) |
+| **部署目标** | 本地 `pnpm dev:all` · Vercel Web 层 · 单进程生产 (`pnpm start`) |
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -214,17 +214,17 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
   + （deck kind 且无 skill 种子时） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
 ```
 
-每一层都可组合。每一层都是一个你能改的文件。看 [`src/prompts/system.ts`](src/prompts/system.ts) 和 [`src/prompts/discovery.ts`](src/prompts/discovery.ts) 就知道真实契约长什么样。
+每一层都可组合。每一层都是一个你能改的文件。看 [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) 和 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) 就知道真实契约长什么样。
 
 ## 技术架构
 
 ```
 ┌────────────────────────── 浏览器 ──────────────────────────────┐
 │                                                                │
-│   Vite + React SPA  （chat · 文件工作区 · iframe 预览）        │
+│   Next.js 16 App Router  （chat · 文件工作区 · iframe 预览）   │
 │                                                                │
 └──────────────┬───────────────────────────────────┬─────────────┘
-               │ /api/* （dev 走代理）             │ direct (BYOK)
+               │ /api/* （dev 走 rewrites）        │ direct (BYOK)
                ▼                                   ▼
    ┌──────────────────────┐              ┌──────────────────────┐
    │   本地 daemon         │              │   Anthropic SDK      │
@@ -247,8 +247,8 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 
 | 层 | 技术栈 |
 |---|---|
-| 前端 | Vite 5 + React 18 + TypeScript |
-| Daemon | Node 20–22 · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
+| 前端 | Next.js 16 App Router + React 18 + TypeScript |
+| Daemon | Node 24 · Express · SSE 流 · `better-sqlite3` 存项目/对话/消息/tab |
 | Agent 传输层 | `child_process.spawn`，Claude Code 走 `claude-stream-json` 解析器、Copilot CLI 走 `copilot-stream-json`，其余走 line-buffered plain stdout |
 | 存储 | 纯文件 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 启动自建） |
 | 预览 | 沙盒 iframe（`srcdoc`）+ 每个 skill 的 `<artifact>` parser |
@@ -259,12 +259,14 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-nvm use              # 使用 .nvmrc 中的 Node 22
 corepack enable
+corepack pnpm --version   # 应输出 10.33.2
 pnpm install
-pnpm dev:all         # daemon (:7456) + Vite (:5173) 一起起
-open http://localhost:5173
+pnpm dev:all         # daemon (:7456) + Next dev (:3000) 一起起
+open http://localhost:3000
 ```
+
+环境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可选辅助工具，不是项目必需步骤；如果使用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再运行 `pnpm install`。
 
 第一次加载会：
 
@@ -303,42 +305,28 @@ open-design/
 ├── QUICKSTART.md                  ← 跑 / 构建 / 部署
 ├── package.json                   ← 单 bin: od
 │
-├── daemon/                        ← Node + Express，唯一的服务端
-│   ├── cli.js                     ← `od` 二进制入口
-│   ├── server.js                  ← /api/* 路由（projects、chat、files、exports）
-│   ├── agents.js                  ← PATH 扫描器 + 各 CLI 的 argv 拼装
-│   ├── claude-stream.js           ← Claude Code stdout 流式 JSON 解析
-│   ├── skills.js                  ← SKILL.md frontmatter 加载器
-│   ├── design-systems.js          ← DESIGN.md 加载器 + swatch 提取
-│   ├── design-system-preview.js   ← 单系统 live showcase
-│   ├── design-system-showcase.js  ← 多 section 画廊渲染
-│   ├── lint-artifact.js           ← 输出的 P0/P1 自检
-│   ├── projects.js                ← 项目级文件系统辅助
-│   ├── db.js                      ← SQLite schema（projects/messages/templates/tabs）
-│   └── frontmatter.js             ← 零依赖 YAML 子集解析
+├── apps/
+│   ├── daemon/                    ← Node + Express，唯一的服务端
+│   │   ├── cli.js                 ← `od` 二进制入口
+│   │   ├── server.js              ← /api/* 路由（projects、chat、files、exports）
+│   │   ├── agents.js              ← PATH 扫描器 + 各 CLI 的 argv 拼装
+│   │   ├── claude-stream.js       ← Claude Code stdout 流式 JSON 解析
+│   │   ├── skills.js              ← SKILL.md frontmatter 加载器
+│   │   └── db.js                  ← SQLite schema（projects/messages/templates/tabs）
+│   │
+│   └── web/                       ← Next.js 16 App Router + React 客户端
+│       ├── app/                   ← App Router 入口
+│       ├── next.config.ts         ← dev rewrites + 生产 out/ 静态导出
+│       └── src/                   ← React + TS 客户端模块
+│           ├── App.tsx            ← 路由、bootstrap、设置
+│           ├── components/        ← chat、composer、picker、preview、sketch…
+│           ├── prompts/           ← system、discovery、directions、deck framework
+│           ├── artifacts/         ← streaming <artifact> parser + manifest
+│           ├── runtime/           ← iframe srcdoc、markdown、导出辅助
+│           ├── providers/         ← daemon SSE + BYOK API 传输
+│           └── state/             ← localStorage + daemon-backed 项目状态
 │
-├── src/                           ← Vite + React + TS 前端
-│   ├── App.tsx                    ← 路由、bootstrap、设置
-│   ├── components/                ← 27 个组件（chat、composer、picker、preview、sketch…）
-│   ├── prompts/
-│   │   ├── system.ts              ← composeSystemPrompt(base, skill, DS, metadata)
-│   │   ├── official-system.ts     ← 身份宪章
-│   │   ├── discovery.ts           ← turn-1 表单 + turn-2 分支 + 五维评审
-│   │   ├── directions.ts          ← 5 套视觉方向 × OKLch 色板 + 字体栈
-│   │   └── deck-framework.ts      ← deck 导航 / 计数 / 打印样式
-│   ├── artifacts/
-│   │   ├── parser.ts              ← 流式 <artifact> 标签解析
-│   │   └── question-form.ts       ← <question-form> JSON 协议 + 重放
-│   ├── runtime/
-│   │   ├── srcdoc.ts              ← iframe 沙盒包装
-│   │   ├── markdown.tsx           ← 助手消息渲染
-│   │   ├── exports.ts             ← HTML / PDF / ZIP 导出
-│   │   └── zip.ts                 ← 项目打包
-│   ├── providers/
-│   │   ├── daemon.ts              ← /api/chat SSE 流消费者
-│   │   ├── anthropic.ts           ← BYOK Anthropic SDK 路径
-│   │   └── registry.ts            ← /api/agents、/api/skills、/api/design-systems
-│   └── state/                     ← config + projects（localStorage + daemon 持久化）
+├── e2e/                           ← Playwright UI + 外部集成/Vitest harness
 │
 ├── skills/                        ← 19 个 SKILL.md skill 包
 │   ├── web-prototype/             ← 原型默认
@@ -446,11 +434,11 @@ open-design/
 | Brutalist | 粗粝、巨字、无阴影、刺眼强调 | Bloomberg Businessweek · Achtung |
 | Soft warm | 大方、低对比、桃色中性 | Notion 营销页 · Apple Health |
 
-完整 spec → [`src/prompts/directions.ts`](src/prompts/directions.ts)。
+完整 spec → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
 
 ## 反 AI Slop 机制
 
-下面整套机制都是 [`huashu-design`](https://github.com/alchaincyf/huashu-design) 的 playbook，被移植进 OD 的提示词栈，并通过 skill 副文件 pre-flight 让每个 skill 都能落地执行。看 [`src/prompts/discovery.ts`](src/prompts/discovery.ts) 是真实文案：
+下面整套机制都是 [`huashu-design`](https://github.com/alchaincyf/huashu-design) 的 playbook，被移植进 OD 的提示词栈，并通过 skill 副文件 pre-flight 让每个 skill 都能落地执行。看 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) 是真实文案：
 
 - **先表单。** Turn 1 必须是 `<question-form>`，**不准** thinking、不准 tools、不准旁白。用户用 radio 速度选默认。
 - **品牌资产协议。** 用户贴截图或 URL 时，agent 走 5 步流程（定位 · 下载 · grep hex · 写 `brand-spec.md` · 复述）才能开始写 CSS。**绝不从记忆里猜品牌色**。
@@ -504,7 +492,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `--output-format json`（类型化事件） | `copilot -p <prompt> --allow-all-tools --output-format json` |
 | Anthropic API · BYOK | n/a | SSE 直连 | 没装任何 CLI 时的浏览器兜底 |
 
-加一个新 CLI = 在 [`daemon/agents.js`](daemon/agents.js) 里加一项。流式格式从 `claude-stream-json`（类型化事件）和 `plain`（原始文本）两种里选一个。
+加一个新 CLI = 在 [`apps/daemon/agents.js`](apps/daemon/agents.js) 里加一项。流式格式从 `claude-stream-json`（类型化事件）和 `plain`（原始文本）两种里选一个。
 
 ## 引用与师承
 
@@ -513,7 +501,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 | 项目 | 在这里的角色 |
 |---|---|
 | [`Claude Design`][cd] | 本仓库为之提供开源替代的闭源产品。 |
-| [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) | 设计哲学的核心。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」库 —— 全部蒸馏进 [`src/prompts/discovery.ts`](src/prompts/discovery.ts) 与 [`src/prompts/directions.ts`](src/prompts/directions.ts)。 |
+| [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) | 设计哲学的核心。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」库 —— 全部蒸馏进 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) 与 [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。 |
 | [**`op7418/guizang-ppt-skill`**（歸藏）][guizang] | Magazine-web-PPT skill 原样捆绑在 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下，原 LICENSE 保留。Deck 模式默认。P0/P1/P2 checklist 文化也被借给了所有其他 skill。 |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + adapter 架构。PATH 扫描式 agent 检测、本地 daemon 作为唯一特权进程、agent-as-teammate 世界观。我们采纳模型，不 vendor 代码。 |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 第一个开源的 Claude-Design 替代品，也是我们最接近的同类。已采纳的 UX 模式：流式 artifact 循环、沙盒 iframe 预览（自带 React 18 + Babel）、实时 agent 面板（todos + tool calls + 可中断）、5 种导出格式列表（HTML/PDF/PPTX/ZIP/Markdown）、本地优先的 designs hub、`SKILL.md` 品味注入。路线图上的 UX 模式：评论模式手术刀编辑、AI 自吐 tweaks 面板。**我们刻意不 vendor [`pi-ai`][piai]** —— open-codesign 把它打包成 agent 运行时；我们则委托给用户已经装好的 CLI。 |
@@ -555,7 +543,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 
 - **加一个 skill** —— 往 [`skills/`](skills/) 丢一个文件夹，遵循 [`SKILL.md`][skill] 规范。
 - **加一套 design system** —— 往 [`design-systems/<brand>/`](design-systems/) 丢一份 `DESIGN.md`，用 9 段式 schema。
-- **接入一个新的 coding-agent CLI** —— 在 [`daemon/agents.js`](daemon/agents.js) 里加一项。
+- **接入一个新的 coding-agent CLI** —— 在 [`apps/daemon/agents.js`](apps/daemon/agents.js) 里加一项。
 
 完整流程、合并硬线、代码风格、我们不接收的 PR 类型 → [`CONTRIBUTING.zh-CN.md`](CONTRIBUTING.zh-CN.md)（[English](CONTRIBUTING.md)）。
 

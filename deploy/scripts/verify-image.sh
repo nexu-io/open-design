@@ -26,8 +26,8 @@ docker rm "$ARCHIVE_CONTAINER_ID" >/dev/null
 ARCHIVE_CONTAINER_ID=""
 
 for required_path in \
-  "app/daemon/server.js" \
-  "app/dist/index.html" \
+  "app/apps/daemon/server.js" \
+  "app/apps/web/out/index.html" \
   "app/node_modules/better-sqlite3" \
   "app/skills" \
   "app/design-systems" \
@@ -40,7 +40,7 @@ do
 done
 
 for forbidden_path in \
-  "app/src" \
+  "app/apps/web/src" \
   "app/docs" \
   "app/story" \
   "app/node_modules/typescript" \
