@@ -118,6 +118,7 @@ export async function streamViaDaemon({
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
+      onRunStatus?.('failed');
       handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
       return;
     }
@@ -137,6 +138,7 @@ export async function streamViaDaemon({
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
+    onRunStatus?.('failed');
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
 }

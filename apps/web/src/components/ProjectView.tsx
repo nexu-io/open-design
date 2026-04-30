@@ -728,7 +728,11 @@ export function ProjectView({
         },
         onError: (err: Error) => {
           setError(err.message);
-          updateAssistant((prev) => ({ ...prev, endedAt: Date.now(), runStatus: prev.runId ? 'failed' : prev.runStatus }));
+          updateAssistant((prev) => ({
+            ...prev,
+            endedAt: Date.now(),
+            runStatus: prev.runId || isActiveRunStatus(prev.runStatus) ? 'failed' : prev.runStatus,
+          }));
           setStreaming(false);
           abortRef.current = null;
           cancelRef.current = null;

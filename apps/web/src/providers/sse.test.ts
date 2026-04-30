@@ -221,6 +221,44 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
+  it('marks create-run HTTP failures as failed', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('down', { status: 503 })));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(onRunStatus).toHaveBeenCalledWith('failed');
+    expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'daemon 503: down' }));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('marks invalid create-run JSON as failed', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('not json', { status: 202 })));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(onRunStatus).toHaveBeenCalledWith('failed');
+    expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
   it('reconnects to a daemon run after an incomplete stream closes', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()
