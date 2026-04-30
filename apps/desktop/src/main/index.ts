@@ -84,8 +84,14 @@ export async function runDesktopMain(
 ): Promise<void> {
   await app.whenReady();
 
+  let appQuitRequested = false;
+  app.on("before-quit", () => {
+    appQuitRequested = true;
+  });
+
   const desktop = await createDesktopRuntime({
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
+    shouldHideOnClose: () => !appQuitRequested,
   });
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;

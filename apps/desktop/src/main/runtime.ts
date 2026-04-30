@@ -64,6 +64,7 @@ export type DesktopRuntime = {
 
 export type DesktopRuntimeOptions = {
   discoverUrl(): Promise<string | null>;
+  shouldHideOnClose?: () => boolean;
 };
 
 function createPendingHtml(): string {
@@ -146,6 +147,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     if (consoleEntries.length > MAX_CONSOLE_ENTRIES) {
       consoleEntries.splice(0, consoleEntries.length - MAX_CONSOLE_ENTRIES);
     }
+  });
+
+  window.on("close", (event) => {
+    if (stopped || options.shouldHideOnClose?.() === false) return;
+    event.preventDefault();
+    window.hide();
   });
 
   await window.loadURL(createPendingHtml());
