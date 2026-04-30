@@ -113,7 +113,6 @@ export async function streamViaDaemon({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
-      signal,
     });
 
     if (!createResp.ok) {

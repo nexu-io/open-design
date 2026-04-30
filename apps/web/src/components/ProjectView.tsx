@@ -420,7 +420,16 @@ export function ProjectView({
         }
 
         const status = fallbackRun ?? await fetchChatRunStatus(runId);
-        if (cancelled || !status) continue;
+        if (cancelled) return;
+        if (!status) {
+          updateMessageById(
+            message.id,
+            (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+            true,
+          );
+          completedReattachRunsRef.current.add(runId);
+          continue;
+        }
         updateMessageById(
           message.id,
           (prev) => ({ ...prev, runStatus: status.status }),
