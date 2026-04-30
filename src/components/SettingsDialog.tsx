@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
-import type { Locale } from '../i18n';
+import { useI18n } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -34,7 +33,7 @@ export function SettingsDialog({
   onClose,
   onRefreshAgents,
 }: Props) {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -345,36 +344,6 @@ export function SettingsDialog({
             </section>
           )}
 
-          <section className="settings-section">
-            <div className="section-head">
-              <div>
-                <h3>{t('settings.language')}</h3>
-                <p className="hint">{t('settings.languageHint')}</p>
-              </div>
-            </div>
-            <div
-              className="seg-control"
-              role="tablist"
-              aria-label={t('settings.language')}
-            >
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={'seg-btn' + (active ? ' active' : '')}
-                    onClick={() => setLocale(code as Locale)}
-                  >
-                    <span className="seg-title">{LOCALE_LABEL[code]}</span>
-                    <span className="seg-meta">{code}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
         </div>
 
         <footer className="modal-foot">

@@ -53,7 +53,7 @@ function visitSuite(suite, rows) {
     rows.push({
       caseId: parsed.caseId,
       title: parsed.title,
-      module: caseMetadata[parsed.caseId]?.module || '未分组',
+      module: caseMetadata[parsed.caseId]?.module || 'Uncategorized',
       assertions: caseMetadata[parsed.caseId]?.assertions || [],
       status: normalizeStatus(finalResult.status, test.outcome && test.outcome()),
       durationMs: finalResult.duration ?? 0,
@@ -124,28 +124,28 @@ function summarize(rows) {
 
 function buildMarkdown({ startedAt, finishedAt, summary, rows, outputFile }) {
   const lines = [];
-  lines.push('# UI 自动化测试报告');
+  lines.push('# UI Automation Test Report');
   lines.push('');
-  lines.push(`- 生成时间：${finishedAt.toISOString()}`);
-  lines.push(`- 开始时间：${startedAt.toISOString()}`);
-  lines.push(`- 结束时间：${finishedAt.toISOString()}`);
-  lines.push(`- 报告文件：\`${outputFile}\``);
-  lines.push(`- 执行结果：${summary.failed === 0 && summary.timedOut === 0 ? '通过' : '失败'}`);
+  lines.push(`- Generated: ${finishedAt.toISOString()}`);
+  lines.push(`- Started: ${startedAt.toISOString()}`);
+  lines.push(`- Finished: ${finishedAt.toISOString()}`);
+  lines.push(`- Report file: \`${outputFile}\``);
+  lines.push(`- Result: ${summary.failed === 0 && summary.timedOut === 0 ? 'passed' : 'failed'}`);
   lines.push('');
-  lines.push('## 汇总');
+  lines.push('## Summary');
   lines.push('');
-  lines.push(`- 总用例：${summary.total}`);
-  lines.push(`- 通过：${summary.passed}`);
-  lines.push(`- 失败：${summary.failed}`);
-  lines.push(`- Flaky：${summary.flaky}`);
-  lines.push(`- 跳过：${summary.skipped}`);
-  lines.push(`- 超时：${summary.timedOut}`);
-  lines.push(`- 中断：${summary.interrupted}`);
-  lines.push(`- 总耗时：${formatDuration(summary.durationMs)}`);
+  lines.push(`- Total cases: ${summary.total}`);
+  lines.push(`- Passed: ${summary.passed}`);
+  lines.push(`- Failed: ${summary.failed}`);
+  lines.push(`- Flaky: ${summary.flaky}`);
+  lines.push(`- Skipped: ${summary.skipped}`);
+  lines.push(`- Timed out: ${summary.timedOut}`);
+  lines.push(`- Interrupted: ${summary.interrupted}`);
+  lines.push(`- Total duration: ${formatDuration(summary.durationMs)}`);
   lines.push('');
-  lines.push('## 用例结果');
+  lines.push('## Case Results');
   lines.push('');
-  lines.push('| Case ID | 模块 | 标题 | 状态 | 耗时 | 重试 |');
+  lines.push('| Case ID | Module | Title | Status | Duration | Retries |');
   lines.push('| --- | --- | --- | --- | --- | --- |');
   for (const row of rows) {
     lines.push(
@@ -154,21 +154,21 @@ function buildMarkdown({ startedAt, finishedAt, summary, rows, outputFile }) {
   }
 
   lines.push('');
-  lines.push('## 关键断言');
+  lines.push('## Key Assertions');
   lines.push('');
   for (const row of rows) {
     lines.push(`### ${row.caseId}`);
     lines.push('');
-    lines.push(`- 模块：${row.module}`);
-    lines.push(`- 标题：${row.title}`);
-    lines.push(`- 状态：${statusLabel(row.status)}`);
+    lines.push(`- Module: ${row.module}`);
+    lines.push(`- Title: ${row.title}`);
+    lines.push(`- Status: ${statusLabel(row.status)}`);
     if (row.assertions.length > 0) {
-      lines.push('- 本次验证点：');
+      lines.push('- Verified points:');
       for (const assertion of row.assertions) {
         lines.push(`  - ${assertion}`);
       }
     } else {
-      lines.push('- 本次验证点：未配置');
+      lines.push('- Verified points: not configured');
     }
     lines.push('');
   }
@@ -176,43 +176,43 @@ function buildMarkdown({ startedAt, finishedAt, summary, rows, outputFile }) {
   const problematic = rows.filter((row) => row.status !== 'passed');
   if (problematic.length > 0) {
     lines.push('');
-    lines.push('## 异常详情');
+    lines.push('## Failure Details');
     lines.push('');
     for (const row of problematic) {
       lines.push(`### ${row.caseId}`);
       lines.push('');
-      lines.push(`- 标题：${row.title}`);
-      lines.push(`- 状态：${statusLabel(row.status)}`);
-      lines.push(`- 位置：\`${toRelative(row.file)}${row.line ? `:${row.line}` : ''}\``);
+      lines.push(`- Title: ${row.title}`);
+      lines.push(`- Status: ${statusLabel(row.status)}`);
+      lines.push(`- Location: \`${toRelative(row.file)}${row.line ? `:${row.line}` : ''}\``);
       if (row.error) {
-        lines.push('- 错误：');
+        lines.push('- Error:');
         lines.push('```text');
         lines.push(row.error);
         lines.push('```');
       }
       if (row.attachments.length > 0) {
-        lines.push('- 附件：');
+        lines.push('- Attachments:');
         for (const attachment of row.attachments) {
-          lines.push(`  - \`${attachment.name}\` · \`${attachment.path}\``);
+          lines.push(`  - \`${attachment.name}\` - \`${attachment.path}\``);
         }
       }
       lines.push('');
     }
   }
 
-  lines.push('## 原始产物');
+  lines.push('## Raw Artifacts');
   lines.push('');
-  lines.push('- HTML 报告入口：`e2e/reports/ui-test-report.html`');
-  lines.push('- Playwright HTML 底层目录：`e2e/reports/playwright-html-report/`');
-  lines.push('- JSON 结果：`e2e/reports/results.json`');
-  lines.push('- JUnit 结果：`e2e/reports/junit.xml`');
-  lines.push('- Playwright 附件：`e2e/reports/test-results/`');
+  lines.push('- HTML report entry: `e2e/reports/ui-test-report.html`');
+  lines.push('- Playwright HTML directory: `e2e/reports/playwright-html-report/`');
+  lines.push('- JSON results: `e2e/reports/results.json`');
+  lines.push('- JUnit results: `e2e/reports/junit.xml`');
+  lines.push('- Playwright attachments: `e2e/reports/test-results/`');
   lines.push('');
-  lines.push('## 说明');
+  lines.push('## Notes');
   lines.push('');
-  lines.push('- 这份报告记录的是本次实际执行到的 UI 自动化用例。');
-  lines.push('- 用例设计来源见 `e2e/cases/` 以及各模块文档。');
-  lines.push('- 如果用例失败，优先查看本报告中的附件路径和 HTML 报告。');
+  lines.push('- This report records the UI automation cases that ran in this execution.');
+  lines.push('- Case design comes from `e2e/cases/` and the related module documents.');
+  lines.push('- If a case fails, start with the attachment paths and the HTML report listed above.');
   lines.push('');
   return `${lines.join('\n')}\n`;
 }

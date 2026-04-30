@@ -16,8 +16,6 @@ triggers:
   - "title card"
   - "hyperframes"
   - "kinetic typography"
-  - "动态设计"
-  - "动效"
 od:
   mode: prototype
   platform: desktop
@@ -53,7 +51,6 @@ Lottie, etc.) can capture into a video.
    - **Focal mark** — a wireframe globe, a stylized object, or a typographic
      monogram drawn as inline SVG. ~28% of the canvas wide.
    - **Ring labels** — short words / phonetic tokens placed around one of
-     the rings (e.g. "Hola · Bonjour · 你好 · नमस्ते"). They co-rotate with
      the ring, with `<text>` paths counter-rotated so the words stay upright.
    - **Headline** — bottom-left or center-bottom. Display serif, italic
      accent on one word. Add a subtle `letterSpacing` + opacity reveal

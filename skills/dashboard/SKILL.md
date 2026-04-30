@@ -10,8 +10,6 @@ triggers:
   - "admin panel"
   - "analytics"
   - "control panel"
-  - "后台"
-  - "管理后台"
 od:
   mode: prototype
   platform: desktop

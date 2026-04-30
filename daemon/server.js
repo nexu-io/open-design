@@ -1210,7 +1210,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 // `<!-- SLIDES_HERE -->` marker; the snippet contributes the actual
 // `<section class="slide ...">` content. We also patch the placeholder
 // `<title>` so the iframe's tab name reads as the skill, not the
-// "[必填] 替换为 PPT 标题" stub.
+// "Required: replace with deck title" stub.
 function assembleExample(tplHtml, slidesHtml, skillName) {
   const slidesMarker = /<!--\s*SLIDES_HERE\s*-->/i;
   const titleTag = /<title>[^<]*<\/title>/i;

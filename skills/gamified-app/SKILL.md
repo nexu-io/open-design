@@ -16,8 +16,6 @@ triggers:
   - "xp app"
   - "streak app"
   - "life management app"
-  - "游戏化"
-  - "习惯打卡"
 od:
   mode: prototype
   platform: mobile

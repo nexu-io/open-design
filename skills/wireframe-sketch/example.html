@@ -147,62 +147,62 @@
       <h1><em>Zentou AI · Portal</em>
         <span class="pin"><span class="x"></span>WIREFRAME v0.1</span>
       </h1>
-      <div class="sub">受験者画面のレイアウト探索 — 4案 + 元画面の再整理</div>
+      <div class="sub">Candidate portal layout exploration - 4 options + source screen cleanup</div>
       <div class="meta"><b>DATE</b> 2026-04-18 · <b>DEVICE</b> DESKTOP 1440 · <b>FIDELITY</b> LOW</div>
     </div>
 
     <div class="tabs" data-od-id="tabs">
       <div class="tab"><span class="glyph"></span><span class="num">00</span>ALL</div>
-      <div class="tab"><span class="glyph"></span><span class="num">01</span>A · 整理型 (元画面ベース)</div>
-      <div class="tab active"><span class="glyph"></span><span class="num">02</span>B · ダッシュボード (KPI)</div>
-      <div class="tab"><span class="glyph"></span><span class="num">03</span>C · タイムライン (次の試験)</div>
-      <div class="tab"><span class="glyph"></span><span class="num">04</span>D · 学習体験型</div>
+      <div class="tab"><span class="glyph"></span><span class="num">01</span>A · Organized source screen</div>
+      <div class="tab active"><span class="glyph"></span><span class="num">02</span>B · KPI dashboard</div>
+      <div class="tab"><span class="glyph"></span><span class="num">03</span>C · Next exam timeline</div>
+      <div class="tab"><span class="glyph"></span><span class="num">04</span>D · Learning experience</div>
     </div>
 
     <div class="canvas" data-od-id="canvas">
       <div class="section-label">
-        <h2>B · ダッシュボード</h2>
+        <h2>B · Dashboard</h2>
         <span class="pill">DATA-FORWARD</span>
       </div>
-      <p class="lede">KPIを最上段に。「今の自分の位置」を一目で把握 → 詳細は下へスクロール。</p>
+      <p class="lede">Put KPIs first so the learner sees current standing at a glance, then scrolls for detail.</p>
 
       <div class="browser" data-od-id="browser"><div class="dots"><span></span><span></span><span></span></div><div class="url">zentou-ai.jp / portal / dashboard</div><div class="user">motoki.daisuke</div></div>
 
       <div class="layout">
         <aside class="nav" data-od-id="sidebar">
-          <span class="brand">全統 AI</span>
+          <span class="brand">Zentou AI</span>
           <ul>
-            <li class="active"><span class="square"></span>ダッシュボード</li>
-            <li><span class="square"></span>試験日程</li>
-            <li><span class="square"></span>成績一覧</li>
-            <li><span class="square"></span>練習問題</li>
-            <li><span class="square"></span>学習計画</li>
+            <li class="active"><span class="square"></span>Dashboard</li>
+            <li><span class="square"></span>Exam schedule</li>
+            <li><span class="square"></span>Scores</li>
+            <li><span class="square"></span>Practice</li>
+            <li><span class="square"></span>Study plan</li>
           </ul>
         </aside>
 
         <div data-od-id="main">
           <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
             <div>
-              <div class="greeting">おかえりなさい</div>
-              <div class="name">motoki.daisuke <span style="font-size:18px;color:var(--pencil);">さん</span></div>
+              <div class="greeting">Welcome back</div>
+              <div class="name">motoki.daisuke</div>
             </div>
             <div class="toggle-row">
-              <span class="tag">今週</span>
-              <span class="tag active">今月</span>
-              <span class="tag">通算</span>
+              <span class="tag">Week</span>
+              <span class="tag active">Month</span>
+              <span class="tag">All time</span>
             </div>
           </div>
 
           <div class="kpis" data-od-id="kpis">
-            <div class="kpi tilt-1"><div class="label">認定ランク</div><div class="value">A2</div><div class="small">基礎認定</div></div>
-            <div class="kpi tilt-2"><div class="label">偏差値</div><div class="value ink" style="color:#3b6e8e;">39</div><div class="small">↑ +3.2 前回比</div></div>
-            <div class="kpi tilt-3"><div class="label">次回まで</div><div class="value">1日</div><div class="small">04/19 10:00</div></div>
-            <div class="kpi tilt-4"><div class="label">練習進捗</div><div class="value ink" style="color:#3b6e8e;">62%</div><div class="small">▰▰▰▰▰▱▱▱</div></div>
+            <div class="kpi tilt-1"><div class="label">Rank</div><div class="value">A2</div><div class="small">Foundation</div></div>
+            <div class="kpi tilt-2"><div class="label">Score index</div><div class="value ink" style="color:#3b6e8e;">39</div><div class="small">up +3.2 vs. last</div></div>
+            <div class="kpi tilt-3"><div class="label">Next exam</div><div class="value">1d</div><div class="small">04/19 10:00</div></div>
+            <div class="kpi tilt-4"><div class="label">Practice</div><div class="value ink" style="color:#3b6e8e;">62%</div><div class="small">▰▰▰▰▰▱▱▱</div></div>
           </div>
 
           <div class="panels" data-od-id="panels">
             <div class="panel" data-od-id="chart">
-              <h3><span class="dot"></span>CHART · 偏差値推移</h3>
+              <h3><span class="dot"></span>CHART · Score trend</h3>
               <svg class="scribble" viewBox="0 0 480 160" aria-hidden="true">
                 <path d="M 14 142 L 460 142" stroke="#4d473d" stroke-width="1.6" fill="none"/>
                 <path d="M 14 14 L 14 142" stroke="#4d473d" stroke-width="1.6" fill="none"/>
@@ -215,7 +215,7 @@
               </svg>
             </div>
             <div class="panel" data-od-id="bars">
-              <h3><span class="dot"></span>SUBJECTS · 科目別</h3>
+              <h3><span class="dot"></span>SUBJECTS · By subject</h3>
               <svg class="scribble" viewBox="0 0 320 160" aria-hidden="true">
                 <defs>
                   <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
@@ -228,28 +228,28 @@
                 <rect x="142" y="78" width="38" height="64" fill="url(#hatch)" stroke="#2b2620" stroke-width="1.4"/>
                 <rect x="198" y="22" width="38" height="120" fill="url(#hatch)" stroke="#2b2620" stroke-width="1.4"/>
                 <rect x="254" y="50" width="38" height="92" fill="url(#hatch)" stroke="#2b2620" stroke-width="1.4"/>
-                <text x="14" y="158" font-family="IBM Plex Mono, monospace" font-size="11" fill="#4d473d">開発 / 国 / 数 / 英 / 理</text>
+                <text x="14" y="158" font-family="IBM Plex Mono, monospace" font-size="11" fill="#4d473d">Dev / Lang / Math / Eng / Sci</text>
               </svg>
             </div>
           </div>
 
           <div class="events" data-od-id="events">
-            <div class="label">📣 お知らせ (直近 3 件)</div>
+            <div class="label">Recent notices (3)</div>
             <div class="lines"><span></span><span></span><span></span></div>
           </div>
 
           <div class="next-step" data-od-id="next-step">
-            <div class="head">● NEXT STEP / 次にやること</div>
+            <div class="head">NEXT STEP</div>
             <ul>
-              <li>試験の申込を完了する</li>
-              <li>弱点「論理」を10問だけ解く</li>
+              <li>Complete exam registration</li>
+              <li>Solve 10 logic practice questions</li>
             </ul>
           </div>
         </div>
       </div>
 
-      <div class="sticky sn1" data-od-id="sticky-1"><div class="tape"></div>一日目から触りたくなる画面に</div>
-      <div class="sticky sn2" data-od-id="sticky-2"><div class="tape"></div><b>page-1 / 5</b><br/>余白は気持ちよく。<br/>密度は B 案ぐらい。</div>
+      <div class="sticky sn1" data-od-id="sticky-1"><div class="tape"></div>Make the first-day screen inviting</div>
+      <div class="sticky sn2" data-od-id="sticky-2"><div class="tape"></div><b>page-1 / 5</b><br/>Keep the whitespace easy.<br/>Use option B density.</div>
     </div>
   </div>
 </body>

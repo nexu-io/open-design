@@ -1,322 +1,178 @@
 # Skills Protocol
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
+**Parent:** [`spec.md`](spec.md)
+**Siblings:** [`architecture.md`](architecture.md), [`agent-adapters.md`](agent-adapters.md), [`modes.md`](modes.md)
 
-A **Skill** is the atomic unit of design capability in OD. We adopt Claude Code's `SKILL.md` convention verbatim as the base format, then add optional fields for design-specific features (preview type, input schema, slider parameters). A skill written for plain Claude Code runs in OD. An OD skill that doesn't use our extensions runs in plain Claude Code.
+Open Design skills are portable design-generation recipes. A skill packages
+trigger phrases, workflow instructions, optional assets, and optional reference
+material so the app can route a brief to the right production flow.
 
-> **Compatibility promise:** A skill like [`guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) works in OD **without modification**. It just drops into `~/.claude/skills/` and OD discovers it.
+## 1. Skill Folder Shape
 
----
-
-## 1. Base format (unchanged from Claude Code)
-
-Every skill is a directory containing at minimum a `SKILL.md`:
-
-```
-<skill-root>/
-├── SKILL.md              # manifest + workflow instructions
-├── assets/               # templates, images, boilerplate the skill writes
-│   └── …
-└── references/           # knowledge files the skill reads during planning
-    ├── components.md
-    ├── layouts.md
-    └── …
+```text
+skill-name/
+  SKILL.md
+  assets/
+  references/
 ```
 
-`SKILL.md` front-matter (YAML):
+- `SKILL.md` is the manifest and workflow instruction file.
+- `assets/` contains templates, images, boilerplate, and other files the skill
+  can copy into a generated artifact.
+- `references/` contains supporting guidance such as layouts, components,
+  themes, and quality checklists.
+
+## 2. Manifest
+
+Each `SKILL.md` starts with YAML front matter:
 
 ```yaml
 ---
 name: magazine-web-ppt
 description: |
-  Magazine-style horizontal-swipe web deck.
-  Trigger keywords: 杂志风 PPT, magazine deck, swipe slides.
+  Create an editorial web-based slide deck with magazine typography,
+  horizontal navigation, and export-friendly HTML.
 triggers:
-  - "magazine deck"
-  - "杂志风 PPT"
-  - "horizontal swipe presentation"
----
-```
-
-Body is free-form Markdown that describes the workflow the agent should follow — typically a numbered step list plus principles. This is what [guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) does.
-
-**OD reads all of this as-is.** No changes required.
-
-## 2. OD extensions (optional)
-
-Skills can declare additional front-matter fields to unlock OD-specific UI. All fields are optional; absent fields fall back to sensible defaults.
-
-```yaml
----
-name: magazine-web-ppt
-description: …
-triggers: […]
-
-# --- OD extensions below this line ---
-
+  - "deck"
+  - "presentation"
+  - "slides"
 od:
-  mode: deck                        # one of: prototype | deck | template | design-system
-  preview:
-    type: html                      # html | jsx | pptx | markdown
-    entry: index.html               # relative path produced by the skill
-    reload: debounce-100            # how the preview refreshes
-  design_system:
-    requires: true                  # this skill reads the active DESIGN.md
-    sections: [color, typography]   # which sections it actually uses (for prompt pruning)
-  inputs:                           # typed inputs the user can fill in the UI
-    - name: title
-      type: string
-      required: true
-    - name: slide_count
-      type: integer
-      default: 8
-      min: 4
-      max: 20
-    - name: theme
-      type: enum
-      values: [editorial, minimal, brutalist, dark-glass, warm]
-      default: editorial
-  parameters:                       # live-tweakable sliders after first generation
-    - name: accent_hue
-      type: hue                     # hue | spacing | font-scale | opacity
-      default: 18
-      range: [0, 360]
-    - name: section_spacing
-      type: spacing
-      default: 48
-      range: [16, 128]
-  outputs:
-    primary: index.html
-    secondary: [slides.json]        # for PPTX export
-  capabilities_required:
-    - surgical_edit                 # comment mode needs this
-    - file_write
----
-```
-
-### 2.1 What OD uses each field for
-
-| Field | Used by |
-|---|---|
-| `od.mode` | routing (which mode picker the skill shows up under) |
-| `od.preview.type` | picking the right iframe renderer |
-| `od.design_system.requires` | whether to inject `DESIGN.md` |
-| `od.design_system.sections` | pruning the injected DESIGN.md to relevant sections only (token savings) |
-| `od.inputs` | rendering a typed form in the sidebar instead of only free-text |
-| `od.parameters` | rendering live sliders that re-prompt on change |
-| `od.outputs.primary` | which file the iframe loads |
-| `od.outputs.secondary` | which files export pipelines read (e.g. `slides.json` for PPTX) |
-| `od.capabilities_required` | gating: if the active agent lacks surgical edit, comment mode is disabled for this skill |
-
-### 2.2 If a skill omits `od:` entirely
-
-Defaults:
-- `mode`: inferred from name/description (best-effort keyword match) or "prototype"
-- `preview.type`: sniff for `*.html` → html, `*.jsx` → jsx, else "markdown"
-- `preview.entry`: first file matching the sniffed type
-- `design_system.requires`: true if the skill body mentions "design system" or "DESIGN.md"
-- `inputs`, `parameters`: none (free-text prompt only)
-
-The goal: **zero-config compatibility** for existing Claude Code skills.
-
-## 3. Skill discovery & precedence
-
-The daemon's skill registry scans three locations:
-
-| Location | Priority | Purpose |
-|---|---|---|
-| `./.claude/skills/` | 1 (highest) | project-private skills, not committed |
-| `./skills/` | 2 | project-committed skills |
-| `~/.claude/skills/` | 3 | user-global skills |
-
-Conflicts by `name` resolve to the higher-priority version. All locations are watched with `chokidar` in dev and re-scanned on `SIGHUP` in production.
-
-### Symlink strategy (borrowed from [cc-switch](https://github.com/farion1231/cc-switch))
-
-`cc-switch` maintains a central skill dir at `~/.cc-switch/skills/` and symlinks it into each agent's expected location (`~/.claude/skills/`, `~/.codex/skills/`, etc.). OD can opt into the same model:
-
-```
-~/.open-design/skills/
-    magazine-web-ppt/      (canonical location)
-~/.claude/skills/
-    magazine-web-ppt → ~/.open-design/skills/magazine-web-ppt
-~/.codex/skills/
-    magazine-web-ppt → ~/.open-design/skills/magazine-web-ppt
-```
-
-One install → every agent sees the skill. This is optional; users who only use one agent don't need it.
-
-## 4. Skill types (by mode)
-
-Each mode expects a slightly different skill shape. The required outputs and expected workflow differ.
-
-### 4.1 `prototype-skill`
-
-- **Purpose:** single-screen interactive prototype.
-- **Preview:** `html` or `jsx`.
-- **Primary output:** `index.html` or `Prototype.jsx`.
-- **Typical workflow:** clarify brief → resolve design tokens → write component tree → write file.
-- **Example skills:** `saas-landing`, `dashboard`, `login-flow`, `empty-states`.
-
-### 4.2 `deck-skill`
-
-- **Purpose:** multi-slide presentation.
-- **Preview:** `html` (single-file deck with in-page navigation).
-- **Primary output:** `index.html`.
-- **Secondary output:** `slides.json` (for PPTX export).
-- **Typical workflow:** clarify topic + slide count → pick theme → populate slides from layout catalog → self-check against quality rubric.
-- **Reference implementation:** [guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) — fork this for v1.
-
-### 4.3 `template-skill`
-
-- **Purpose:** start from a pre-built artifact; agent only personalizes content, doesn't design from scratch.
-- **Preview:** inherits from the template bundle (`html` typically).
-- **Primary output:** a populated copy of the template.
-- **Typical workflow:** copy `assets/template/` to artifact dir → replace content placeholders → optionally tweak tokens to match design system.
-- **Why separate from `prototype-skill`:** much faster (no design decisions), higher-quality floor, worse ceiling.
-
-### 4.4 `design-system-skill`
-
-- **Purpose:** produce a `DESIGN.md` from inputs (brand brief, screenshot, URL).
-- **Preview:** `markdown` (render the resulting DESIGN.md with a sample-components preview).
-- **Primary output:** `DESIGN.md`.
-- **Typical workflow:** analyze input → draft 9 sections per awesome-claude-design schema → generate sample component preview → finalize.
-- **Post-run:** OD prompts the user to set this DESIGN.md as the project's active design system.
-
-## 5. The DESIGN.md as skill context
-
-Every non–design-system skill (modes 1–3) can consume the active `DESIGN.md`. OD injects it as:
-
-1. **System-prompt prefix** (required sections only, per `od.design_system.sections`).
-2. **File available in CWD** named `DESIGN.md` — skills can `Read` it directly via their agent.
-3. **Template variable** `{{ design_system }}` if the skill body references it in Mustache-style.
-
-The 9-section DESIGN.md format is **not invented by OD**; it's the [awesome-claude-design](https://github.com/VoltAgent/awesome-claude-design) convention, reproduced here for convenience:
-
-```markdown
-# <Brand Name>
-
-## Visual Theme & Atmosphere
-## Color Palette & Roles
-## Typography Rules
-## Component Stylings
-## Layout Principles
-## Depth & Elevation
-## Do's and Don'ts
-## Responsive Behavior
-## Agent Prompt Guide
-```
-
-Full schema and examples: [`schemas/design-system.md`](schemas/design-system.md) and [`examples/DESIGN.sample.md`](examples/DESIGN.sample.md) (TODO).
-
-## 6. Skill installation
-
-```sh
-od skill add https://github.com/op7418/guizang-ppt-skill
-# → clones into ~/.open-design/skills/magazine-web-ppt
-# → symlinks into ~/.claude/skills/ (and any other active agent dirs)
-# → re-indexes registry
-
-od skill add ./path/to/my-skill
-# → symlinks local dir (no copy) into skills registry
-
-od skill list
-# → table: name, mode, source, agent compatibility
-
-od skill remove <name>
-# → unlinks; does not delete the source
-```
-
-## 7. Worked example — running `guizang-ppt-skill` under OD
-
-The skill is unchanged. Here's the full path:
-
-1. User: `od skill add https://github.com/op7418/guizang-ppt-skill`
-2. Registry indexes it. No `od:` block in front-matter → defaults applied:
-   - `mode`: inferred from body mentioning "PPT" → `deck`.
-   - `preview.type`: sniffed from `assets/template.html` → `html`.
-   - `preview.entry`: `index.html` (convention).
-   - `design_system.requires`: false (skill body doesn't mention DESIGN.md).
-3. User switches to `deck` mode in the web UI; skill appears in the skill picker.
-4. User types "给我做一份杂志风 8 页投资人 PPT".
-5. Daemon dispatches to active agent (Claude Code) with:
-   - system message: skill's `SKILL.md` body
-   - cwd: `./.od/artifacts/2026-04-24-pitch-deck/`
-   - files already placed in cwd: `template.html` (from skill's `assets/`)
-6. Agent runs its 6-step workflow (clarify → copy template → populate → self-check → preview → refine).
-7. OD streams the agent's tool calls as UI events; artifact dir grows.
-8. Agent signals done; daemon sets preview iframe to `index.html`.
-9. User clicks "Export PPTX" — export pipeline notices the skill has no `slides.json` output (the upstream skill doesn't produce one). OD falls back to "print to PDF then page-to-slide PPTX," which is uglier but works. This is a known limitation documented per-skill.
-
-## 8. Writing a new skill — minimal example
-
-```
-saas-landing-skill/
-├── SKILL.md
-└── assets/
-    └── base.html
-```
-
-```markdown
----
-name: saas-landing
-description: |
-  Produce a single-page SaaS landing with hero, features, social proof, pricing, CTA.
-  Trigger: "saas landing", "marketing page", "product landing".
-triggers:
-  - "saas landing"
-  - "marketing page"
-od:
-  mode: prototype
+  mode: deck
+  platform: desktop
+  scenario: presentation
   preview:
     type: html
-    entry: index.html
+    entry: assets/template.html
   design_system:
-    requires: true
-    sections: [color, typography, layout, components]
-  inputs:
-    - name: product_name
-      type: string
-      required: true
-    - name: tagline
-      type: string
-      required: true
-    - name: has_pricing
-      type: boolean
-      default: true
-  parameters:
-    - name: hero_density
-      type: spacing
-      default: 96
-      range: [48, 200]
+    requires: false
 ---
-
-# Workflow
-
-1. Read DESIGN.md from cwd. Adopt its color/typography/layout rules.
-2. Copy `assets/base.html` to `index.html` in cwd.
-3. Fill sections: hero, features (3–6), social proof, pricing (if `has_pricing`), CTA, footer.
-4. Inline all CSS. Use system font stack as fallback if DESIGN.md typography fails to load.
-5. Respect `hero_density` parameter as the hero section's vertical padding in px.
-6. Write `index.html`. Done.
 ```
 
-## 9. Testing skills
+The body is free-form Markdown that describes the workflow the agent should
+follow. Numbered steps, constraints, quality checks, and output contracts are
+preferred.
 
-A skill ships with optional test inputs that OD uses for CI:
+## 3. Required Fields
 
+- `name`: stable slug used by the registry.
+- `description`: concise explanation of what the skill produces.
+- `triggers`: short English phrases that indicate when to use the skill.
+- `od.mode`: broad output type such as `prototype`, `deck`, `design-system`, or
+  `document`.
+- `od.preview.type`: `html`, `jsx`, `markdown`, or another preview adapter.
+
+## 4. Optional Fields
+
+- `od.platform`: `desktop`, `mobile`, `web`, `print`, or similar.
+- `od.scenario`: broad job category such as `marketing`, `operations`, or
+  `presentation`.
+- `od.featured`: numeric ranking for featured skills.
+- `od.upstream`: source repository or inspiration link.
+- `od.preview.entry`: file to open for preview.
+- `od.design_system.requires`: whether a `DESIGN.md` context is required.
+- `od.design_system.sections`: design-system sections the skill expects.
+- `example_prompt`: a sample English prompt for the launcher UI.
+
+## 5. Registry Behavior
+
+The registry reads every `SKILL.md`, normalizes its manifest, and exposes the
+skill to the launcher. If an `od:` block is missing, the app can infer basic
+defaults from the body and assets:
+
+- HTML assets imply `preview.type: html`.
+- Deck, slide, and presentation language imply `mode: deck`.
+- Single-page app or prototype language implies `mode: prototype`.
+- Missing design-system metadata defaults to `requires: false`.
+
+## 6. Routing
+
+Routing should prefer explicit user intent over fuzzy matching. The router uses:
+
+1. Exact workflow selection from the UI.
+2. Trigger phrases in `SKILL.md`.
+3. Semantic fit between the brief and the skill description.
+4. Optional scenario or platform filters.
+
+When multiple skills match, show the best few choices instead of silently
+guessing.
+
+## 7. Design-System Injection
+
+Skills that need a visual system can consume the active `DESIGN.md` in two
+ways:
+
+1. The app injects the design-system text into the agent context.
+2. The file is available in the working directory for direct reading.
+
+Skills should use the supplied colors, typography, spacing, component rules, and
+layout conventions instead of inventing unrelated styling.
+
+## 8. Install Commands
+
+Future CLI shape:
+
+```bash
+od skills install https://github.com/example/magazine-web-ppt
+od skills link ./skills/magazine-web-ppt
+od skills list
+od skills remove magazine-web-ppt
 ```
-<skill-root>/
-└── tests/
-    ├── basic.prompt
-    ├── basic.expected.manifest.json   # assertions: files produced, preview.type, etc.
-    └── basic.expected.regex.txt       # text regex assertions against the primary output
+
+Install should copy or link the skill, update the registry, and make it
+available to all configured agent adapters.
+
+## 9. Worked Example
+
+When `magazine-web-ppt` is installed:
+
+1. The registry indexes `SKILL.md`.
+2. The launcher shows it as a deck workflow.
+3. The user chooses the skill and writes an English brief.
+4. The agent reads the workflow, copies `assets/template.html`, fills the deck,
+   and checks it against the skill's references.
+5. The preview adapter opens the generated HTML.
+6. Export can print to PDF or convert slide pages into PPTX when a structured
+   slide manifest is available.
+
+## 10. Minimal Skill Example
+
+```text
+landing-page/
+  SKILL.md
+  assets/
+    base.html
 ```
 
-`od skill test <name>` runs the skill against each case using a cheap model (e.g. Haiku 4.5) and asserts on the manifest + regex. Low-fidelity but catches structural regressions.
+`SKILL.md`:
 
-## 10. Open questions
+```yaml
+---
+name: landing-page
+description: Create a focused product landing page.
+triggers:
+  - "landing page"
+  - "homepage"
+  - "product page"
+od:
+  mode: prototype
+  platform: desktop
+  scenario: marketing
+  preview:
+    type: html
+    entry: assets/base.html
+---
+```
 
-- **Skill signing.** Can we verify a skill hasn't been tampered with between publish and install? Simplest answer: `od skill add` records the git commit SHA; reinstall-on-update warns on signature change. Deferred to v1.
-- **Skill composition.** Can a `prototype-skill` call a `deck-skill` for a sub-artifact? Not in v1; skills are leaf-level. Composition would require a meta-skill concept, which is speculative.
-- **Parameter stability.** When sliders change, should the agent re-plan or just re-render? Lean: re-render (fast path), with an "also re-plan" button for larger changes.
+The workflow should clarify the offer, audience, proof, CTA, and visual tone;
+then produce a complete HTML artifact with responsive states and a self-check.
+
+## 11. Skill Quality Checklist
+
+- Trigger phrases are English-only and specific.
+- The workflow produces a concrete artifact, not just advice.
+- Required assets exist and open correctly.
+- The output contract is clear.
+- Design-system requirements are declared.
+- The skill includes self-checks for layout, accessibility, and responsive
+  behavior.
+- Example prompts are realistic and professional.

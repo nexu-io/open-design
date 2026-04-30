@@ -18,7 +18,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English only</b></p>
 
 ---
 
@@ -305,7 +305,6 @@ Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md)
 ```
 open-design/
 ├── README.md                      ← this file
-├── README.zh-CN.md                ← 简体中文
 ├── QUICKSTART.md                  ← run / build / deploy guide
 ├── package.json                   ← pnpm workspace, single bin: od
 │
@@ -570,7 +569,7 @@ Issues, PRs, new skills, and new design systems are all welcome. The highest-lev
 - **Add a design system** — drop a `DESIGN.md` into [`design-systems/<brand>/`](design-systems/) using the 9-section schema.
 - **Wire up a new coding-agent CLI** — one entry in [`daemon/agents.js`](daemon/agents.js).
 
-Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([简体中文](CONTRIBUTING.zh-CN.md)).
+Full walkthrough, bar-for-merging, code style, and what we don't accept -> [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 

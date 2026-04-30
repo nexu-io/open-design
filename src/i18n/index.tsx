@@ -10,36 +10,20 @@ import {
   type ReactNode,
 } from 'react';
 import { en } from './locales/en';
-import { ptBR } from './locales/pt-BR';
-import { zhCN } from './locales/zh-CN';
-import { LOCALES, type Dict, type Locale } from './types';
+import type { Dict, Locale } from './types';
 
-export { LOCALES, LOCALE_LABEL } from './types';
 export type { Locale } from './types';
 
 type DictKey = keyof Dict;
 
 const DICTS: Record<Locale, Dict> = {
   'en': en,
-  'zh-CN': zhCN,
-  'pt-BR': ptBR,
 };
 
 const LS_KEY = 'open-design:locale';
 
-// First-run default is English. We honor an explicit user pick saved to
-// localStorage but never auto-detect from `navigator.language`, so the
-// initial experience is consistent and predictable.
 function detectInitialLocale(): Locale {
-  if (typeof window === 'undefined') return 'en';
-  try {
-    const stored = window.localStorage.getItem(LS_KEY);
-    if (stored && (LOCALES as string[]).includes(stored)) {
-      return stored as Locale;
-    }
-  } catch {
-    /* ignore */
-  }
+  try { window.localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
   return 'en';
 }
 
@@ -69,11 +53,7 @@ export function I18nProvider({ initial, children }: ProviderProps) {
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
-    try {
-      window.localStorage.setItem(LS_KEY, next);
-    } catch {
-      /* ignore */
-    }
+    try { window.localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
   }, []);
 
   const t = useCallback(

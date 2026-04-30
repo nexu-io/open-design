@@ -8,7 +8,6 @@ description: |
   keyframes, no JS, ready to be screen-recorded into a vertical video.
   Use when the brief asks for a "sprite animation", "pixel-art video",
   "8-bit explainer", "history of X explainer", "kinetic typography history",
-  "Nintendo-style", "精灵图动画", "像素动画", or "复古动画".
 triggers:
   - "sprite animation"
   - "pixel art animation"
@@ -17,9 +16,6 @@ triggers:
   - "kinetic typography"
   - "history explainer"
   - "nintendo style"
-  - "精灵图"
-  - "像素动画"
-  - "复古动画"
 od:
   mode: prototype
   platform: desktop
@@ -50,18 +46,15 @@ display, looping CSS animations, kinetic Japanese / English display type.
 3. **Stage** — full-bleed cream / off-white background (`#f5efe2`) with a
    subtle paper grain. Keep margins generous; this is one beat of a video.
 4. **Top bar** — small mono row:
-   - Left: title slug ("名次の/番組" or "EP. 01 / NINTENDO")
    - Right: progress dots ("01 / 12") and a "REC" stamp
 5. **Subject animations** — at least three independent looping animations
    on the page:
-   - **Big year**: the headline year (e.g. "1889年") fills the lower-left,
      in a serif display weight. It has a subtle vertical glitch / scanline
      animation (clip-path keyframes), and a 1-frame "pop" every loop.
    - **Pixel sprite card**: a 96×128 pixel-art card or character (use an
      inline SVG with crisp `shape-rendering: crispEdges` rectangles, or a
      `box-shadow` pixel grid). Subtle bobbing animation (±4px, 1.6s).
    - **Kinetic kana**: 1–2 Japanese / kanji characters that fade-and-slide
-     in sync with the bob (e.g. "花" — *hana* — flower).
    - **Tick ribbon**: bottom of the stage, a tape/ribbon with year ticks
      (1889 · 1907 · 1949 · 1977 · 1985 · 2006 · 2017) sliding left at a
      slow constant speed.

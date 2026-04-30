@@ -33,11 +33,11 @@
   <text x="800" y="690" text-anchor="middle"
         font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
         font-size="24" fill="#6B6258">
-    iPhone 15 Pro frame · multi-screen · shared /frames/ assets.
+    iPhone 15 Pro frame    multi-screen    shared /frames/ assets.
   </text>
   <text x="800" y="844" text-anchor="middle"
         font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
         font-size="20" letter-spacing="4" fill="#6B6258" opacity="0.85">
-    SCREENSHOT PENDING · 截图占位
+    SCREENSHOT PENDING
   </text>
 </svg>

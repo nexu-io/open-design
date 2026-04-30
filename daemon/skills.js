@@ -152,7 +152,7 @@ function derivePrompt(data) {
 
 function inferMode(body, description) {
   const hay = `${description ?? ""}\n${body ?? ""}`.toLowerCase();
-  if (/\bppt|deck|slide|presentation|幻灯|投影/.test(hay)) return "deck";
+  if (/\bppt|deck|slide|presentation/.test(hay)) return "deck";
   if (/\bdesign[- ]system|\bdesign\.md|\bdesign tokens/.test(hay))
     return "design-system";
   if (/\btemplate\b/.test(hay)) return "template";
@@ -166,7 +166,7 @@ function normalizePlatform(value, mode, body, description) {
   if (value === "desktop" || value === "mobile") return value;
   if (mode !== "prototype") return null;
   const hay = `${description ?? ""}\n${body ?? ""}`.toLowerCase();
-  if (/mobile|phone|ios|android|手机|移动端/.test(hay)) return "mobile";
+  if (/mobile|phone|ios|android/.test(hay)) return "mobile";
   return "desktop";
 }
 
@@ -195,7 +195,7 @@ function normalizeScenario(value, body, description) {
   }
   const hay = `${description ?? ""}\n${body ?? ""}`.toLowerCase();
   if (/finance|invoice|expense|budget|p&l|revenue/.test(hay)) return "finance";
-  if (/\bhr\b|onboarding|payroll|employee|人事/.test(hay)) return "hr";
+  if (/\bhr\b|onboarding|payroll|employee/.test(hay)) return "hr";
   if (/marketing|campaign|brand|landing/.test(hay)) return "marketing";
   if (/runbook|incident|deploy|engineering|sre|api/.test(hay))
     return "engineering";

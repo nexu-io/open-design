@@ -15,7 +15,6 @@ import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
 import { Icon } from './Icon';
-import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
 import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
 import { OneShotWorkflows } from './OneShotWorkflows';
@@ -201,7 +200,6 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
-          <LanguageMenu />
         </div>
         <button
           type="button"

@@ -81,8 +81,6 @@ export const en: Dict = {
   'settings.localCli': 'Local CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'no agent selected',
-  'settings.language': 'Language',
-  'settings.languageHint': 'Switch the interface language. Saved to this browser.',
   'settings.modelPicker': 'Model',
   'settings.reasoningPicker': 'Reasoning effort',
   'settings.modelPickerHint':

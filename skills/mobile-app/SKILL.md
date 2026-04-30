@@ -12,8 +12,6 @@ triggers:
   - "phone screen"
   - "app ui"
   - "app mockup"
-  - "移动端"
-  - "手机 app"
 od:
   mode: prototype
   platform: mobile

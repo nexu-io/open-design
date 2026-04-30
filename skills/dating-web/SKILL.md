@@ -14,8 +14,6 @@ triggers:
   - "social dashboard"
   - "community dashboard"
   - "consumer dashboard"
-  - "约会应用"
-  - "婚恋"
 od:
   mode: prototype
   platform: desktop

@@ -1,14 +1,6 @@
-// Supported UI locales. Adding a new locale requires creating a new
-// dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'zh-CN' | 'pt-BR';
-
-export const LOCALES: Locale[] = ['en', 'zh-CN', 'pt-BR'];
-
-export const LOCALE_LABEL: Record<Locale, string> = {
-  'en': 'English',
-  'zh-CN': '简体中文',
-  'pt-BR': 'Português (Brasil)',
-};
+// OneShot Design is English-only. Keep the locale type explicit so the
+// translator API stays stable without exposing language switching in the UI.
+export type Locale = 'en';
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
 // flat (not deeply nested) so missing-key TS errors point straight at the
@@ -92,8 +84,6 @@ export interface Dict {
   'settings.localCli': string;
   'settings.anthropicApi': string;
   'settings.noAgentSelected': string;
-  'settings.language': string;
-  'settings.languageHint': string;
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;

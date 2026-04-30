@@ -4,14 +4,12 @@ description: |
   An engineering runbook — service overview, alerts table, dashboards
   links, common procedures with copy-pasteable commands, on-call rotation,
   and an incident-response checklist. Use when the brief mentions
-  "runbook", "ops doc", "on-call guide", "SRE doc", or "运维手册".
 triggers:
   - "runbook"
   - "ops doc"
   - "on-call"
   - "sre doc"
   - "service runbook"
-  - "运维手册"
 od:
   mode: prototype
   platform: desktop

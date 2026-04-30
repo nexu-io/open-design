@@ -1,318 +1,156 @@
-<!--
-  Example slides for the magazine-web-ppt skill.
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneShot Design Editorial Deck Example</title>
+  <style>
+    :root {
+      --ink: #101114;
+      --paper: #f4f0e8;
+      --accent: #bd3d2f;
+      --muted: rgba(16, 17, 20, .62);
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --serif: Georgia, "Times New Roman", serif;
+      --sans: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
 
-  Topic: "一人公司 · The Quiet Hardware" — a fictional but realistic 64-day
-  case study, mirroring the rhythm and content arc of the original 歸藏
-  guizang-ppt-skill demo. Used to power the Examples preview without
-  requiring real product imagery on disk — image slots stand in for what a
-  real deck would show.
-
-  Theme rhythm: hero dark → light → dark → light → hero light → dark →
-  hero dark → light → hero light. Hits all 8 layout categories.
--->
-
-<!-- Layout 1 · Hero Cover ============================================ -->
-<section class="slide hero dark">
-  <div class="chrome">
-    <div>A Talk · 2026.04.22</div>
-    <div>Vol.01</div>
-  </div>
-  <div class="frame" style="display:grid; gap:4vh; align-content:center; min-height:80vh">
-    <div class="kicker">私享会 · 创作者 Demo Day</div>
-    <h1 class="h-hero">一人公司</h1>
-    <h2 class="h-sub">被 AI 折叠的组织</h2>
-    <p class="lead" style="max-width:60vw">
-      一个独立创作者 —— 在 64 天里完成 11 万行代码、覆盖 9 个平台、跨过 5 个时区，<br>
-      生活节奏几乎没有被打扰。
-    </p>
-    <div class="meta-row">
-      <span>歸藏 Guizang</span><span>·</span><span>独立创作者</span><span>·</span><span>CodePilot 作者</span>
-    </div>
-  </div>
-  <div class="foot">
-    <div>一场关于 AI · 组织 · 个体的分享</div>
-    <div>— 2026 —</div>
-  </div>
-</section>
-
-<!-- Layout 2 · Big Numbers Grid ======================================= -->
-<section class="slide light">
-  <div class="chrome">
-    <div>过去 64 天 · 开发篇</div>
-    <div>Act I / Dev · 02 / 09</div>
-  </div>
-  <div class="frame" style="padding-top:6vh">
-    <div class="kicker">一个人，做了什么。</div>
-    <h2 class="h-xl">过去 64 天</h2>
-    <p class="lead" style="margin-bottom:5vh">从 0 到开源 CodePilot。</p>
-
-    <div class="grid-6" style="margin-top:6vh">
-      <div class="stat-card">
-        <div class="stat-label">Duration</div>
-        <div class="stat-nb">64 <span class="stat-unit">天</span></div>
-        <div class="stat-note">从立项到现在</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Lines of Code</div>
-        <div class="stat-nb">110K+</div>
-        <div class="stat-note">一行一行写到 11 万+</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">GitHub Stars</div>
-        <div class="stat-nb">5,166</div>
-        <div class="stat-note">单仓库 · 60 天破 5K</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Downloads</div>
-        <div class="stat-nb">41K+</div>
-        <div class="stat-note">装进了几万台电脑里</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">AI Providers</div>
-        <div class="stat-nb">19</div>
-        <div class="stat-note">跨平台模型接入</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Commits</div>
-        <div class="stat-nb">608+</div>
-        <div class="stat-note">没有协作者</div>
-      </div>
-    </div>
-  </div>
-  <div class="foot">
-    <div>项目 · CodePilot　|　github.com/codepilot</div>
-    <div>Act I · Dev Numbers</div>
-  </div>
-</section>
-
-<!-- Layout 4 · Quote + Image ========================================== -->
-<section class="slide dark">
-  <div class="chrome">
-    <div>身份反差 · The Twist</div>
-    <div>03 / 09</div>
-  </div>
-  <div class="frame grid-2-7-5" style="padding-top:6vh">
-    <div style="display:flex; flex-direction:column; justify-content:space-between; gap:3vh">
-      <div>
-        <div class="kicker">BUT</div>
-        <h2 class="h-xl" style="white-space:nowrap; font-size:7.2vw">
-          我不是程序员。
-        </h2>
-        <p class="lead" style="margin-top:3vh">
-          大学毕业之后再没写过一行生产代码。过去十年做的是 UI 设计 / AI 特效 / 自媒体内容。
-        </p>
-      </div>
-      <div class="callout">
-        “这东西在三年前，<br>
-        需要一个十人团队做一年。”
-        <div class="callout-src">— 一个观察者的判断</div>
-      </div>
-    </div>
-    <figure class="img-slot r-3x2" style="aspect-ratio:16/10; max-height:56vh">
-      <span class="plus">+</span>
-      <span class="label">Product Screenshot · CodePilot</span>
-    </figure>
-  </div>
-  <div class="foot">
-    <div>Page 03 · 我不是程序员</div>
-    <div>— · —</div>
-  </div>
-</section>
-
-<!-- Layout 6 · Pipeline =============================================== -->
-<section class="slide light">
-  <div class="chrome">
-    <div>我的工作流 · Workflow</div>
-    <div>Act II · 04 / 09</div>
-  </div>
-  <div class="frame">
-    <div class="kicker">Pipeline · 流水线</div>
-    <h2 class="h-xl">两条流水线</h2>
-
-    <div class="pipeline-section">
-      <div class="pipeline-label">文本侧 · Text Pipeline</div>
-      <div class="pipeline">
-        <div class="step">
-          <div class="step-nb">01</div>
-          <div class="step-title">Draft</div>
-          <div class="step-desc">AI 帮我起草初稿</div>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink); font-family: var(--sans); }
+    #deck { position: fixed; inset: 0; display: flex; transition: transform .8s cubic-bezier(.77,0,.175,1); }
+    .slide { width: 100vw; height: 100vh; flex: 0 0 100vw; padding: 6vh 6vw 9vh; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .dark { background: radial-gradient(circle at 72% 22%, rgba(189,61,47,.28), transparent 36%), var(--ink); color: var(--paper); }
+    .light { background: radial-gradient(circle at 18% 20%, rgba(189,61,47,.16), transparent 34%), var(--paper); color: var(--ink); }
+    .chrome, .foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; opacity: .66; }
+    .foot { margin-top: auto; }
+    .frame { flex: 1; display: grid; align-items: center; gap: 5vw; }
+    .two { grid-template-columns: 1.05fr .95fr; }
+    .three { grid-template-columns: repeat(3, 1fr); }
+    .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .28em; text-transform: uppercase; opacity: .62; margin-bottom: 2.2vh; }
+    h1, h2 { font-family: var(--serif); font-weight: 700; line-height: .95; letter-spacing: 0; }
+    h1 { font-size: clamp(70px, 10vw, 152px); max-width: 12ch; }
+    h2 { font-size: clamp(52px, 6.4vw, 110px); max-width: 12ch; }
+    .lead { font-family: var(--serif); font-size: clamp(24px, 2.1vw, 40px); line-height: 1.32; opacity: .84; max-width: 31ch; }
+    .stat { border-top: 1px solid currentColor; padding-top: 2vh; }
+    .stat .label { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.4vh; }
+    .stat .number { font-family: var(--serif); font-size: clamp(56px, 7vw, 124px); line-height: .86; color: var(--accent); }
+    .stat p { margin-top: 1.6vh; font-size: clamp(15px, 1vw, 18px); line-height: 1.48; opacity: .72; }
+    .timeline { display: grid; gap: 2vh; }
+    .step { display: grid; grid-template-columns: 4rem 1fr; gap: 1.4rem; padding: 1.6vh 0; border-top: 1px solid rgba(255,255,255,.18); }
+    .step strong { font-family: var(--mono); color: var(--accent); letter-spacing: .1em; }
+    .step span { font-size: clamp(18px, 1.4vw, 26px); line-height: 1.34; }
+    blockquote { border-left: 4px solid var(--accent); padding-left: 2vw; font-family: var(--serif); font-size: clamp(30px, 3.5vw, 64px); line-height: 1.08; max-width: 14ch; }
+    #nav { position: fixed; left: 50%; bottom: 2.4vh; transform: translateX(-50%); display: flex; gap: 9px; z-index: 5; }
+    #nav button { width: 8px; height: 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.35); }
+    #nav button.active { width: 24px; background: var(--accent); }
+  </style>
+</head>
+<body>
+  <main id="deck">
+    <section class="slide dark">
+      <div class="chrome"><span>OneShot Design</span><span>Founder Brief</span></div>
+      <div class="frame two">
+        <div>
+          <div class="kicker">Professional design in one pass</div>
+          <h1>From prompt to polished direction.</h1>
         </div>
-        <div class="step">
-          <div class="step-nb">02</div>
-          <div class="step-title">Polish</div>
-          <div class="step-desc">AI 润色去 AI 味</div>
+        <p class="lead">A short editorial deck showing how OneShot Design can turn a messy idea into a usable visual system, prototype, and client-ready narrative.</p>
+      </div>
+      <div class="foot"><span>Cover</span><span>01 / 05</span></div>
+    </section>
+
+    <section class="slide light">
+      <div class="chrome"><span>Signals</span><span>Why it matters</span></div>
+      <div class="frame three">
+        <article class="stat">
+          <div class="label">Inputs</div>
+          <div class="number">1</div>
+          <p>One strong brief should create a complete direction, not a pile of disconnected screens.</p>
+        </article>
+        <article class="stat">
+          <div class="label">Outputs</div>
+          <div class="number">6</div>
+          <p>Workflow cards route the same idea into decks, apps, landing pages, audits, brand kits, or exports.</p>
+        </article>
+        <article class="stat">
+          <div class="label">Quality bar</div>
+          <div class="number">A</div>
+          <p>Every result should feel intentional enough to show a client before another round of cleanup.</p>
+        </article>
+      </div>
+      <div class="foot"><span>Metrics</span><span>02 / 05</span></div>
+    </section>
+
+    <section class="slide dark">
+      <div class="chrome"><span>Workflow</span><span>System</span></div>
+      <div class="frame two">
+        <div>
+          <div class="kicker">Repeatable pipeline</div>
+          <h2>Strategy, structure, surface, proof.</h2>
         </div>
-        <div class="step">
-          <div class="step-nb">03</div>
-          <div class="step-title">Morph</div>
-          <div class="step-desc">AI 变形成推特 / 小红书</div>
-        </div>
-        <div class="step">
-          <div class="step-nb">04</div>
-          <div class="step-title">Illustrate</div>
-          <div class="step-desc">AI 生成信息图</div>
-        </div>
-        <div class="step">
-          <div class="step-nb">05</div>
-          <div class="step-title">Distribute</div>
-          <div class="step-desc">一键分发 9 平台</div>
+        <div class="timeline">
+          <div class="step"><strong>01</strong><span>Clarify the job, audience, constraints, and format.</span></div>
+          <div class="step"><strong>02</strong><span>Select a design system and generate the first high-fidelity artifact.</span></div>
+          <div class="step"><strong>03</strong><span>Run critique, accessibility, responsive, and export checks before handoff.</span></div>
         </div>
       </div>
-    </div>
+      <div class="foot"><span>Pipeline</span><span>03 / 05</span></div>
+    </section>
 
-    <div class="pipeline-section">
-      <div class="pipeline-label">视觉 · 视频侧 · Video Pipeline</div>
-      <div class="pipeline" data-cols="3">
-        <div class="step">
-          <div class="step-nb">06</div>
-          <div class="step-title">Cut</div>
-          <div class="step-desc">AI 剪辑 + 自动配字幕</div>
-        </div>
-        <div class="step">
-          <div class="step-nb">07</div>
-          <div class="step-title">Wrap</div>
-          <div class="step-desc">AI 包装 + 配 BGM</div>
-        </div>
-        <div class="step">
-          <div class="step-nb">08</div>
-          <div class="step-title">Cover</div>
-          <div class="step-desc">AI 生成封面图</div>
-        </div>
+    <section class="slide light">
+      <div class="chrome"><span>Positioning</span><span>Difference</span></div>
+      <div class="frame two">
+        <blockquote>Design agents should behave like a disciplined studio, not a random template generator.</blockquote>
+        <p class="lead">That means naming the decision, proving the layout, checking the edges, and making the next edit obvious.</p>
       </div>
-    </div>
-  </div>
-  <div class="foot">
-    <div>Page 04 · 我的内容工厂</div>
-    <div>Workflow</div>
-  </div>
-</section>
+      <div class="foot"><span>Principle</span><span>04 / 05</span></div>
+    </section>
 
-<!-- Layout 2 · Act Divider ============================================ -->
-<section class="slide hero light">
-  <div class="chrome">
-    <div>第二幕 · 折叠</div>
-    <div>Act II · 05 / 09</div>
-  </div>
-  <div class="frame" style="display:grid; gap:6vh; align-content:center; min-height:80vh">
-    <div class="kicker">Act II</div>
-    <h1 class="h-hero" style="font-size:8.5vw">折叠</h1>
-    <p class="lead" style="max-width:55vw">
-      从 “一个人做内容” 到 “一个人是组织”。<br>
-      AI 不是工具，是岗位的折叠器。
-    </p>
-  </div>
-  <div class="foot">
-    <div>第二幕引子</div>
-    <div>— · —</div>
-  </div>
-</section>
-
-<!-- Layout 8 · Big Quote ============================================== -->
-<section class="slide dark">
-  <div class="chrome">
-    <div>The Takeaway · 核心金句</div>
-    <div>06 / 09</div>
-  </div>
-  <div class="frame" style="display:grid; gap:5vh; align-content:center; min-height:80vh">
-    <div class="kicker">Quote · 金句</div>
-    <blockquote style="font-family:var(--serif-zh); font-weight:700; font-size:5.6vw; line-height:1.2; letter-spacing:-.01em; max-width:78vw">
-      “没有交接,<br>所有人都在构建。”
-    </blockquote>
-    <p class="lead" style="max-width:55vw; opacity:.65">
-      Without the handoff, everyone builds.<br>
-      And that makes all the difference.
-    </p>
-    <div class="meta-row">
-      <span>— Luke Wroblewski</span><span>·</span><span>2026.04.16</span>
-    </div>
-  </div>
-  <div class="foot">
-    <div>Page 06 · 金句</div>
-    <div>— · —</div>
-  </div>
-</section>
-
-<!-- Layout 7 · Hero Question ========================================== -->
-<section class="slide hero dark">
-  <div class="chrome">
-    <div>留给你的问题</div>
-    <div>07 / 09</div>
-  </div>
-  <div class="frame" style="display:grid; gap:8vh; align-content:center; min-height:80vh">
-    <div class="kicker">The Question</div>
-    <h1 class="h-hero" style="font-size:7vw; line-height:1.15">
-      你的公司里，<br>
-      哪些岗位本来就<br>
-      不该由人来做？
-    </h1>
-    <p class="lead" style="max-width:50vw">
-      这不是技术问题，是架构问题。
-    </p>
-  </div>
-  <div class="foot">
-    <div>Page 07 · The Question</div>
-    <div>— · —</div>
-  </div>
-</section>
-
-<!-- Layout 9 · Before / After ========================================= -->
-<section class="slide light">
-  <div class="chrome">
-    <div>旧 vs 新 · The Shift</div>
-    <div>08 / 09</div>
-  </div>
-  <div class="frame" style="padding-top:5vh">
-    <div class="kicker">Before / After · 范式转变</div>
-    <h2 class="h-xl" style="margin-bottom:4vh">从交接到共建</h2>
-
-    <div class="grid-2-6-6" style="gap:5vw 4vh">
-      <div style="padding:3vh 2vw; border-left:3px solid currentColor; opacity:.55">
-        <div class="kicker" style="opacity:.9">Before · 旧模式</div>
-        <h3 class="h-md" style="margin-top:2vh">设计 → 开发 → 交接</h3>
-        <ul style="margin-top:3vh; padding-left:1.2em; display:flex; flex-direction:column; gap:1.4vh; font-family:var(--sans-zh); font-size:max(14px,1.1vw); line-height:1.55">
-          <li>设计师在 Figma 做稿，反复对齐像素</li>
-          <li>开发盯着设计稿手动翻译</li>
-          <li>反复 PR 沟通，文档遗失在 Slack</li>
-          <li>非技术成员无法触碰代码</li>
-        </ul>
+    <section class="slide dark">
+      <div class="chrome"><span>Close</span><span>OneShot Design</span></div>
+      <div class="frame two">
+        <div>
+          <div class="kicker">Next build target</div>
+          <h2>Turn every workflow into a professional deliverable lane.</h2>
+        </div>
+        <p class="lead">The win is not just faster generation. The win is a tool that reliably thinks, designs, reviews, and packages the work.</p>
       </div>
-      <div style="padding:3vh 2vw; border-left:3px solid currentColor">
-        <div class="kicker" style="opacity:.9">After · 新模式</div>
-        <h3 class="h-md" style="margin-top:2vh">同工具 · 并行 · 共建</h3>
-        <ul style="margin-top:3vh; padding-left:1.2em; display:flex; flex-direction:column; gap:1.4vh; font-family:var(--sans-zh); font-size:max(14px,1.1vw); line-height:1.55">
-          <li>三个角色同时在同一份 Intent 上工作</li>
-          <li>agents.md / SKILL.md 是共享上下文</li>
-          <li>代理处理对齐、冲突、动效</li>
-          <li>任何人都能安全贡献代码</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-  <div class="foot">
-    <div>Page 08 · 范式转变</div>
-    <div>Before / After</div>
-  </div>
-</section>
+      <div class="foot"><span>Decision</span><span>05 / 05</span></div>
+    </section>
+  </main>
 
-<!-- Layout 2 · Hero Close ============================================= -->
-<section class="slide hero light">
-  <div class="chrome">
-    <div>End · 致谢</div>
-    <div>09 / 09</div>
-  </div>
-  <div class="frame" style="display:grid; gap:5vh; align-content:center; min-height:80vh">
-    <div class="kicker">Thanks for watching</div>
-    <h1 class="h-hero" style="font-size:9vw">谢谢。</h1>
-    <p class="lead" style="max-width:55vw">
-      Slides are a single HTML file —<br>
-      open in any browser, no build, no server.
-    </p>
-    <div class="meta-row">
-      <span>github.com/op7418/guizang-ppt-skill</span><span>·</span><span>MIT License</span>
-    </div>
-  </div>
-  <div class="foot">
-    <div>Made with magazine-web-ppt skill</div>
-    <div>— Fin —</div>
-  </div>
-</section>
+  <nav id="nav" aria-label="Slides"></nav>
+  <script>
+    const deck = document.querySelector('#deck');
+    const slides = [...document.querySelectorAll('.slide')];
+    const nav = document.querySelector('#nav');
+    let index = 0;
+
+    slides.forEach((_, i) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-label', `Go to slide ${i + 1}`);
+      button.addEventListener('click', () => go(i));
+      nav.append(button);
+    });
+
+    function go(next) {
+      index = Math.max(0, Math.min(slides.length - 1, next));
+      deck.style.transform = `translateX(${-index * 100}vw)`;
+      [...nav.children].forEach((button, i) => button.classList.toggle('active', i === index));
+    }
+
+    addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown') go(index + 1);
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') go(index - 1);
+    });
+
+    addEventListener('wheel', (event) => {
+      if (Math.abs(event.deltaY) < 18) return;
+      go(index + Math.sign(event.deltaY));
+    }, { passive: true });
+
+    go(0);
+  </script>
+</body>
+</html>

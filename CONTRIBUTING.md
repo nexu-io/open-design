@@ -4,7 +4,7 @@ Thanks for thinking about contributing. OD is small on purpose — most of the v
 
 This guide tells you exactly where to look for each type of contribution and what bar a PR has to clear before we merge it.
 
-<p align="center"><b>English</b> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English only</b></p>
 
 ---
 
@@ -16,7 +16,7 @@ This guide tells you exactly where to look for each type of contribution and wha
 | Make OD speak a new brand's visual language | a **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | one Markdown file |
 | Hook up a new coding-agent CLI | an **Agent adapter** | [`daemon/agents.js`](daemon/agents.js) | ~10 lines in one array |
 | Add a feature, fix a bug, lift a UX pattern from [`open-codesign`][ocod] | code | `src/`, `daemon/` | normal PR |
-| Improve docs, port a section to 中文, fix typos | docs | `README.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | one PR |
+| Improve docs, clarify examples, fix typos | docs | `README.md`, `docs/`, `QUICKSTART.md` | one PR |
 
 If you're not sure which bucket your idea is in, [open a discussion / issue first](https://github.com/nexu-io/open-design/issues/new) and we'll point you at the right surface.
 
@@ -72,7 +72,7 @@ description: |
 triggers:
   - "your trigger phrase"
   - "another phrase"
-  - "中文触发词"
+  - "another trigger phrase"
 od:
   mode: prototype           # prototype | deck | template | design-system
   platform: desktop         # desktop | mobile
@@ -197,7 +197,7 @@ Bar for merging:
 We're not pedantic about formatting (Prettier on save is fine), but two rules are non-negotiable because they show up in the prompt stack and the user-facing API:
 
 1. **Single quotes in JS/TS.** Strings are single-quoted unless escaping makes them ugly. The codebase is already consistent — please match.
-2. **Comments in English.** Even if the PR is translating something into 中文, code comments stay in English so we can keep one set of greppable references.
+2. **Comments in English.** Product text, docs, code comments, test metadata, and examples should stay in English so we keep one greppable reference set.
 
 Beyond that:
 

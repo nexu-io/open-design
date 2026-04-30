@@ -4,13 +4,11 @@ description: |
   Single-file horizontal-swipe slide deck for a weekly team update —
   shipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the
   brief mentions "weekly update", "team update slides", "weekly status",
-  "周报演示".
 triggers:
   - "weekly update"
   - "team update slides"
   - "weekly status"
   - "weekly review"
-  - "周报演示"
 od:
   mode: deck
   scenario: operations

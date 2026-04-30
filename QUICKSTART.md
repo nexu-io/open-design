@@ -19,7 +19,7 @@ The **Design system** dropdown ships with 71 built-in systems — 2 hand-authore
 The **Skill** dropdown groups by mode (Prototype / Deck / Template / Design system) and shows the default skill per mode with a `· default` suffix. Bundled skills:
 
 - **Prototype** — `web-prototype` (generic), `saas-landing`, `dashboard`, `pricing-page`, `docs-page`, `blog-post`, `mobile-app`.
-- **Deck / PPT** — `simple-deck` (single-file horizontal swipe) and `magazine-web-ppt` (the `guizang-ppt` bundle from [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) — default for deck mode, ships its own assets/template + 4 references). Skills with side files get an automatic "Skill root (absolute)" preamble so the agent can resolve `assets/template.html` and `references/*.md` against the real on-disk path instead of its CWD.
+- **Deck / PPT** — `simple-deck` (single-file horizontal swipe) and `magazine-web-ppt` (editorial deck skill with assets/template + references). Skills with side files get an automatic "Skill root (absolute)" preamble so the agent can resolve `assets/template.html` and `references/*.md` against the real on-disk path instead of its CWD.
 
 Pair a skill with a design system and a single prompt produces a layout-appropriate prototype or deck in the chosen visual language.
 
@@ -81,7 +81,7 @@ open-design/
 │   ├── blog-post/             # editorial long-form
 │   ├── mobile-app/            # phone-frame single screen
 │   ├── simple-deck/           # minimal horizontal-swipe deck
-│   └── guizang-ppt/           # magazine-web-ppt — bundled deck/PPT default
+│   └── guizang-ppt/           # magazine-web-ppt — editorial deck skill
 │       ├── SKILL.md
 │       ├── assets/template.html
 │       └── references/{themes,layouts,components,checklist}.md

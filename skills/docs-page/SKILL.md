@@ -10,7 +10,6 @@ triggers:
   - "guide"
   - "tutorial"
   - "api reference"
-  - "文档"
 od:
   mode: prototype
   platform: desktop
