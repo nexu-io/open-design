@@ -10,6 +10,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Workflow cards seed the right project type, skill, design system preference, prompt, quality checkpoints, and export expectations.
 - The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, and Motion Explainer.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
+- The Liquid Glass system includes `design-systems/ios-26-liquid-glass/assets/reference-prototype.html`, a compact visual reference for lock screen widgets, Control Center tiles, app chrome, modal sheets, and reduced-brightness behavior.
 - The app metadata, loading shell, onboarding copy, exported ZIP README, and locale strings now use OneShot Design.
 - Next.js dev is configured to allow `127.0.0.1` and `localhost`, which keeps the in-app browser hydrated on local ports like `3004`.
 

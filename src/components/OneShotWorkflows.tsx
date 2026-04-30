@@ -52,8 +52,9 @@ Required output:
 2. iPhone-first prototype using safe areas, Dynamic Island awareness, SF-style typography, layered background/content, and floating Liquid Glass surfaces.
 3. Use the four-layer model: background, glass, solid focus surface, and dynamic state.
 4. Include at least one Chrome glass tab bar or navigation surface, Regular glass cards/widgets, and one Thick glass modal sheet or action panel.
-5. Include a reduced-brightness or reduced-motion accessibility state in the design notes.
-6. Run a quality scorecard for iOS fit, glass tier discipline, hierarchy, contrast, accessibility, interaction readiness, and export readiness.
+5. Use design-systems/ios-26-liquid-glass/assets/reference-prototype.html as the concrete visual reference for glass tiers, app chrome, and reduced-brightness behavior.
+6. Include a reduced-brightness or reduced-motion accessibility state in the design notes.
+7. Run a quality scorecard for iOS fit, glass tier discipline, hierarchy, contrast, accessibility, interaction readiness, and export readiness.
 
 Keep it professional, native-feeling, and specific. Do not use generic frosted-glass web cards or admin-dashboard density.`,
   },

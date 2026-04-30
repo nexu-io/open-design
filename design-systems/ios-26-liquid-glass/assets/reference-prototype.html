@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iOS 26 Liquid Glass Reference Prototype</title>
+  <style>
+    :root {
+      --glass-blur-thin: 30px;
+      --glass-blur-regular: 50px;
+      --glass-blur-thick: 70px;
+      --glass-blur-chrome: 90px;
+      --glass-saturate: 180%;
+      --glass-fill-light-thin: rgba(255, 255, 255, .45);
+      --glass-fill-light-regular: rgba(255, 255, 255, .58);
+      --glass-fill-light-thick: rgba(255, 255, 255, .72);
+      --glass-fill-light-chrome: rgba(255, 255, 255, .84);
+      --glass-border-light: rgba(255, 255, 255, .55);
+      --label: #1d1d1f;
+      --label-secondary: rgba(60, 60, 67, .68);
+      --accent-blue: #007aff;
+      --accent-pink: #ff2d55;
+      --accent-green: #30d158;
+      --elev-1: 0 1px 2px rgba(0, 0, 0, .06), 0 4px 10px rgba(0, 0, 0, .08);
+      --elev-2: 0 2px 4px rgba(0, 0, 0, .08), 0 12px 28px rgba(0, 0, 0, .14);
+      --r-md: 22px;
+      --r-lg: 34px;
+      --r-xl: 48px;
+      --r-capsule: 999px;
+      --swift: 220ms cubic-bezier(.32, .72, 0, 1);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      color: var(--label);
+      background:
+        radial-gradient(circle at 12% 0%, #cfe1ff 0, transparent 34%),
+        radial-gradient(circle at 84% 100%, #ffd1e7 0, transparent 40%),
+        linear-gradient(180deg, #eef2f8, #dfe7f3);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body.reduce-bright {
+      --glass-saturate: 110%;
+    }
+
+    .page {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 1;
+      letter-spacing: -.04em;
+    }
+
+    .hero p {
+      margin: 10px 0 0;
+      max-width: 620px;
+      color: var(--label-secondary);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    .toggle {
+      min-height: 44px;
+      border: 1px solid var(--glass-border-light);
+      border-radius: var(--r-capsule);
+      padding: 0 16px;
+      background: var(--glass-fill-light-thick);
+      backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate));
+      color: var(--label);
+      box-shadow: var(--elev-1);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .phones {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 24px;
+      align-items: start;
+    }
+
+    .phone-wrap {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+    }
+
+    .phone {
+      width: min(100%, 340px);
+      aspect-ratio: 340 / 700;
+      padding: 10px;
+      border-radius: 58px;
+      background: #0a0a0c;
+      box-shadow: 0 0 0 2px #2a2a2e, 0 30px 80px rgba(0, 0, 0, .35);
+    }
+
+    .screen {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 48px;
+      background:
+        radial-gradient(circle at 30% 18%, #ffc879 0, transparent 30%),
+        radial-gradient(circle at 80% 28%, #ff6b9d 0, transparent 34%),
+        linear-gradient(180deg, #5b4b8a 0%, #2b1f4a 58%, #090614 100%);
+      isolation: isolate;
+    }
+
+    .screen.ocean {
+      background:
+        radial-gradient(circle at 20% 80%, #40d9ff 0, transparent 40%),
+        radial-gradient(circle at 80% 20%, #8b5cf6 0, transparent 42%),
+        linear-gradient(180deg, #0b2447 0%, #19376d 48%, #576cbc 100%);
+    }
+
+    .screen.app {
+      background:
+        radial-gradient(circle at 18% 8%, #eff8ff 0, transparent 42%),
+        radial-gradient(circle at 88% 14%, #ffdcec 0, transparent 40%),
+        linear-gradient(180deg, #f7f9ff, #edf2fb);
+    }
+
+    .island {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      width: 118px;
+      height: 34px;
+      transform: translateX(-50%);
+      border-radius: 20px;
+      background: #000;
+      z-index: 10;
+    }
+
+    .status {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 54px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 28px 0;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 650;
+      z-index: 8;
+    }
+
+    .glass {
+      position: relative;
+      overflow: hidden;
+      background: var(--glass-fill-light-regular);
+      backdrop-filter: blur(var(--glass-blur-regular)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur-regular)) saturate(var(--glass-saturate));
+      border: 1px solid var(--glass-border-light);
+      box-shadow: var(--elev-1);
+    }
+
+    .glass::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, .58), rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 18% 0%, rgba(255, 255, 255, .48), transparent 34%);
+      opacity: .44;
+    }
+
+    .reduce-bright .glass::before {
+      opacity: .22;
+    }
+
+    .glass.thin {
+      background: var(--glass-fill-light-thin);
+      backdrop-filter: blur(var(--glass-blur-thin)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur-thin)) saturate(var(--glass-saturate));
+    }
+
+    .glass.thick {
+      background: var(--glass-fill-light-thick);
+      backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate));
+      box-shadow: var(--elev-2);
+    }
+
+    .glass.chrome {
+      background: var(--glass-fill-light-chrome);
+      backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+    }
+
+    .lock-time {
+      position: absolute;
+      top: 78px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #fff;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, .25);
+    }
+
+    .lock-time .date {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .lock-time .time {
+      margin-top: 2px;
+      font-size: 84px;
+      line-height: .92;
+      letter-spacing: -.06em;
+      font-weight: 760;
+    }
+
+    .notification {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      top: 248px;
+      min-height: 74px;
+      border-radius: var(--r-md);
+      padding: 14px 16px;
+      color: #111;
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .notif-icon,
+    .round-action {
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .76);
+      font-weight: 800;
+    }
+
+    .notif-icon {
+      width: 34px;
+      height: 34px;
+      color: var(--accent-blue);
+    }
+
+    .notif-title,
+    .tile-title {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .notif-body,
+    .tile-sub {
+      color: var(--label-secondary);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .widgets {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      top: 344px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .widget {
+      min-height: 104px;
+      border-radius: var(--r-lg);
+      padding: 16px;
+      color: #111;
+    }
+
+    .widget-value {
+      margin-top: 8px;
+      font-size: 30px;
+      font-weight: 760;
+      letter-spacing: -.04em;
+    }
+
+    .lock-actions {
+      position: absolute;
+      left: 30px;
+      right: 30px;
+      bottom: 28px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .round-action {
+      width: 54px;
+      height: 54px;
+      font-size: 20px;
+    }
+
+    .control-center {
+      position: absolute;
+      inset: 70px 18px 26px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-auto-rows: 84px;
+      gap: 12px;
+    }
+
+    .cc-tile {
+      border-radius: var(--r-lg);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: #111;
+    }
+
+    .cc-tile.big {
+      grid-row: span 2;
+    }
+
+    .cc-icon {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--accent-blue);
+      font-weight: 800;
+    }
+
+    .cc-icon.green { background: var(--accent-green); color: #06230e; }
+    .cc-icon.pink { background: var(--accent-pink); }
+
+    .slider {
+      position: relative;
+      height: 112px;
+      border-radius: var(--r-capsule);
+      background: rgba(255, 255, 255, .48);
+      overflow: hidden;
+    }
+
+    .slider-fill {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 68%;
+      background: #fff;
+    }
+
+    .app-content {
+      position: absolute;
+      inset: 62px 18px 96px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .app-title {
+      margin: 0 0 4px;
+      font-size: 34px;
+      line-height: 1.05;
+      letter-spacing: -.04em;
+    }
+
+    .app-card {
+      border-radius: var(--r-lg);
+      padding: 16px;
+      color: #111;
+    }
+
+    .metric {
+      font-size: 38px;
+      line-height: .95;
+      font-weight: 780;
+      letter-spacing: -.05em;
+    }
+
+    .sheet {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 86px;
+      border-radius: var(--r-xl);
+      padding: 18px;
+      color: #111;
+    }
+
+    .sheet button {
+      width: 100%;
+      min-height: 44px;
+      border: 0;
+      border-radius: var(--r-capsule);
+      background: var(--accent-blue);
+      color: #fff;
+      font-weight: 700;
+      margin-top: 14px;
+    }
+
+    .tabbar {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 22px;
+      height: 64px;
+      border-radius: var(--r-capsule);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      align-items: center;
+      color: #111;
+    }
+
+    .tab {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .tab strong {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      margin: 0 auto 2px;
+      border-radius: 50%;
+    }
+
+    .tab.active strong {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    .caption {
+      color: var(--label-secondary);
+      font-size: 13px;
+      font-weight: 650;
+      text-align: center;
+    }
+
+    @media (max-width: 980px) {
+      .phones { grid-template-columns: 1fr; }
+      .hero { align-items: start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <h1>iOS 26 Liquid Glass</h1>
+        <p>Reference prototype for OneShot Design. Use it to preserve glass tiers, iPhone safe areas, floating chrome, and accessibility-aware brightness behavior.</p>
+      </div>
+      <button class="toggle" type="button" id="brightness-toggle">Reduce Bright Effects</button>
+    </header>
+
+    <section class="phones" aria-label="Liquid Glass reference screens">
+      <article class="phone-wrap">
+        <div class="phone">
+          <div class="screen">
+            <div class="island"></div>
+            <div class="status"><span>9:41</span><span>5G 100%</span></div>
+            <div class="lock-time">
+              <div class="date">Friday, April 17</div>
+              <div class="time">9:41</div>
+            </div>
+            <div class="notification glass thin">
+              <div class="notif-icon">M</div>
+              <div>
+                <div class="notif-title">Messages</div>
+                <div class="notif-body">Dinner at 7? The new place opened.</div>
+              </div>
+              <div class="notif-body">now</div>
+            </div>
+            <div class="widgets">
+              <div class="widget glass">
+                <div class="tile-title">Weather</div>
+                <div class="widget-value">68 F</div>
+                <div class="tile-sub">Partly cloudy</div>
+              </div>
+              <div class="widget glass">
+                <div class="tile-title">Activity</div>
+                <div class="widget-value">734</div>
+                <div class="tile-sub">Move calories</div>
+              </div>
+            </div>
+            <div class="lock-actions">
+              <div class="round-action glass chrome">L</div>
+              <div class="round-action glass chrome">C</div>
+            </div>
+          </div>
+        </div>
+        <div class="caption">Lock screen: Thin notifications, Regular widgets, Chrome actions</div>
+      </article>
+
+      <article class="phone-wrap">
+        <div class="phone">
+          <div class="screen ocean">
+            <div class="island"></div>
+            <div class="status"><span>9:41</span><span>5G 100%</span></div>
+            <div class="control-center">
+              <div class="cc-tile glass chrome big">
+                <div class="cc-icon">W</div>
+                <div>
+                  <div class="tile-title">Connectivity</div>
+                  <div class="tile-sub">Wi-Fi, Bluetooth, AirDrop</div>
+                </div>
+              </div>
+              <div class="cc-tile glass">
+                <div class="cc-icon green">P</div>
+                <div class="tile-title">Personal</div>
+              </div>
+              <div class="cc-tile glass">
+                <div class="cc-icon pink">F</div>
+                <div class="tile-title">Focus</div>
+              </div>
+              <div class="cc-tile glass thick big">
+                <div class="tile-title">Brightness</div>
+                <div class="slider"><div class="slider-fill"></div></div>
+              </div>
+              <div class="cc-tile glass">
+                <div class="cc-icon">A</div>
+                <div class="tile-title">AirPlay</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="caption">Control Center: Regular tiles, Thick slider, Chrome cluster</div>
+      </article>
+
+      <article class="phone-wrap">
+        <div class="phone">
+          <div class="screen app">
+            <div class="island"></div>
+            <div class="status" style="color:#111;"><span>9:41</span><span>5G 100%</span></div>
+            <div class="app-content">
+              <h2 class="app-title">Today</h2>
+              <div class="app-card glass">
+                <div class="tile-title">Launch readiness</div>
+                <div class="metric">92%</div>
+                <div class="tile-sub">Three checks left before export.</div>
+              </div>
+              <div class="app-card glass">
+                <div class="tile-title">Next action</div>
+                <div class="tile-sub">Review accessibility and reduced-brightness mode before sharing the build.</div>
+              </div>
+            </div>
+            <div class="sheet glass thick">
+              <div class="tile-title">Share prototype</div>
+              <div class="tile-sub">Thick glass sheet with strong fill for decision moments.</div>
+              <button type="button">Export package</button>
+            </div>
+            <div class="tabbar glass chrome">
+              <div class="tab active"><strong>1</strong>Today</div>
+              <div class="tab"><strong>2</strong>Plan</div>
+              <div class="tab"><strong>3</strong>Files</div>
+              <div class="tab"><strong>4</strong>More</div>
+            </div>
+          </div>
+        </div>
+        <div class="caption">App shell: Regular cards, Thick sheet, Chrome tab bar</div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const button = document.querySelector('#brightness-toggle');
+    button.addEventListener('click', () => {
+      document.body.classList.toggle('reduce-bright');
+      button.textContent = document.body.classList.contains('reduce-bright')
+        ? 'Brightness Reduced'
+        : 'Reduce Bright Effects';
+    });
+  </script>
+</body>
+</html>

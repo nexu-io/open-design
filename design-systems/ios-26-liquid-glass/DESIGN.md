@@ -9,12 +9,18 @@ This design system is derived from the local OneShot reference files:
 
 - `liquid_glass_design_system---64829619-43c9-475f-bfca-399c0c3c4f7c.docx`
 - `liquid_glass_prototype---4d424121-2626-45c7-a944-e1efff6d6d75.html`
+- `assets/reference-prototype.html`
 
 Use it for iOS 26-style mobile app concepts, lock-screen surfaces, Control
 Center-style dashboards, widgets, tab bars, modal sheets, floating action
 surfaces, and Apple-adjacent product UI. The goal is not generic frosted glass.
 The goal is a layered mobile interface where translucent surfaces lens the
 background, preserve legibility, and respond to interaction.
+
+The bundled `assets/reference-prototype.html` file is a compact OneShot-ready
+visual reference. Use it when an agent needs a concrete example of the lock
+screen, Control Center, app shell, glass tier choices, and reduced-brightness
+behavior.
 
 ## 2. Core Philosophy
 
