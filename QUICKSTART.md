@@ -2,10 +2,35 @@
 
 Run the full product locally.
 
+## Environment requirements
+
+- **Node.js:** `~24` (Node 24.x). The repo enforces this through `package.json#engines`.
+- **pnpm:** `10.33.x`. The repo pins `pnpm@10.33.2` through `packageManager`; use Corepack so the pinned version is selected automatically.
+- **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native should work for most flows, but WSL2 is the safer baseline.
+- **Optional local agent CLI:** Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
+
+`nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 24 before running pnpm:
+
+```bash
+# nvm
+nvm install 24
+nvm use 24
+
+# fnm
+fnm install 24
+fnm use 24
+```
+
+Then enable Corepack and let the repo select pnpm:
+
+```bash
+corepack enable
+corepack pnpm --version   # should print 10.33.2
+```
+
 ## One-shot (dev mode)
 
 ```bash
-nvm use                # uses Node 22 from .nvmrc
 corepack enable
 pnpm install
 pnpm dev:all           # starts daemon (:7456) + Next dev (:3000) together
@@ -28,17 +53,38 @@ Pair a skill with a design system and a single prompt produces a layout-appropri
 ```bash
 pnpm daemon            # just the daemon (no web UI build)
 pnpm dev               # just Next.js dev server on :3000
-pnpm build             # production build + static export to out/
-pnpm preview           # build, then serve out/ through the daemon locally
-pnpm start             # build + daemon serving out/ (single-process prod mode)
+pnpm build             # production build + static export to apps/web/out/
+pnpm preview           # build, then serve apps/web/out/ through the daemon locally
+pnpm start             # build + daemon serving apps/web/out/ (single-process prod mode)
 pnpm typecheck         # tsc -b --noEmit
 ```
 
-Use Node 20–22. The repo pins pnpm via `packageManager`; Node 24 is not supported because `better-sqlite3` may lack matching prebuilt binaries and fall back to native compilation.
+Root scripts are orchestration only. App-specific commands live in workspace packages (`apps/web`, `apps/daemon`, and `e2e`), but the root aliases above are the normal entry points.
 
 For the daemon-only production mode, the daemon serves the static Next.js export itself at `http://localhost:7456`, so no reverse proxy is involved.
 
-During local development, `next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to the daemon port so the App Router app can talk to the sibling Express process without CORS setup.
+If you place nginx in front of the daemon, keep SSE routes unbuffered and uncompressed. A common failure is the browser console showing `net::ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)` after 80-90 seconds because nginx `gzip on` buffers chunked SSE responses even when the daemon sends `X-Accel-Buffering: no`.
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:7456;
+
+    proxy_buffering off;
+    gzip off;
+
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+During local development, `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to the daemon port so the App Router app can talk to the sibling Express process without CORS setup.
 
 ## Two execution modes
 
@@ -65,13 +111,25 @@ Swap the skill or the design system in the top bar and the next send uses the ne
 
 ```
 open-design/
-├── daemon/                    # Node/Express — spawns local agents + serves APIs
-│   ├── cli.js                 # `od` bin entry (also used by npm scripts)
-│   ├── server.js              # /api/agents /api/skills /api/design-systems /api/chat /api/upload /api/artifacts/save
-│   ├── agents.js              # PATH scanner for claude/codex/gemini/opencode/cursor-agent/qwen/copilot
-│   ├── skills.js              # SKILL.md loader (frontmatter parser)
-│   ├── design-systems.js      # DESIGN.md loader
-│   └── frontmatter.js         # tiny YAML-subset parser (no deps)
+├── apps/
+│   ├── daemon/                # Node/Express — spawns local agents + serves APIs
+│   │   ├── cli.js             # `od` bin entry (also used by npm scripts)
+│   │   ├── server.js          # /api/agents /api/skills /api/design-systems /api/chat /api/upload /api/artifacts/save
+│   │   ├── agents.js          # PATH scanner for claude/codex/gemini/opencode/cursor-agent/qwen/copilot
+│   │   ├── skills.js          # SKILL.md loader (frontmatter parser)
+│   │   ├── design-systems.js  # DESIGN.md loader
+│   │   └── frontmatter.js     # tiny YAML-subset parser (no deps)
+│   └── web/                   # Next.js 16 App Router + React client
+│       ├── app/               # App Router entrypoints
+│       ├── src/               # shared React + TypeScript client/runtime modules
+│       │   ├── App.tsx        # orchestrates mode / skill / DS pickers + send
+│       │   ├── providers/     # daemon + BYOK API transports
+│       │   ├── prompts/       # system, discovery, directions, deck framework
+│       │   ├── artifacts/     # streaming <artifact> parser + manifests
+│       │   ├── runtime/       # iframe srcdoc, markdown, export helpers
+│       │   └── state/         # localStorage + daemon-backed project state
+│       └── next.config.ts     # dev rewrites + prod apps/web/out export config
+├── e2e/                       # Playwright UI + external integration/Vitest harness
 ├── skills/                    # SKILL.md — drops in from any Claude Code skill repo
 │   ├── web-prototype/         # generic single-screen prototype (default for prototype mode)
 │   ├── saas-landing/          # marketing page (hero / features / pricing / CTA)
@@ -91,37 +149,26 @@ open-design/
 │   ├── README.md              # catalog overview
 │   └── …69 product systems    # claude · cohere · linear-app · vercel · stripe · airbnb …
 ├── scripts/sync-design-systems.mjs   # re-import from upstream getdesign tarball
-├── app/                       # Next.js 16 App Router entrypoints
-├── src/                       # shared React + TypeScript client/runtime modules
-│   ├── App.tsx                # orchestrates mode / skill / DS pickers + send
-│   ├── providers/
-│   │   ├── anthropic.ts       # SDK stream (BYOK path)
-│   │   ├── daemon.ts          # fetch-SSE against /api/chat (local-CLI path)
-│   │   └── registry.ts        # /api/agents /api/skills /api/design-systems fetchers
-│   ├── prompts/system.ts      # composeSystemPrompt(base, skill, DS)
-│   ├── artifacts/parser.ts    # streaming <artifact> parser
-│   ├── runtime/srcdoc.ts      # sandbox wrapper for iframe srcDoc
-│   ├── components/            # ChatPane, PreviewPane, AgentPicker, SkillPicker, DesignSystemPicker, SettingsDialog
-│   └── state/config.ts        # localStorage persistence
 ├── docs/                      # product vision + spec
 ├── .od/                       # runtime data (gitignored, auto-created)
 │   ├── app.sqlite              #   projects / conversations / messages / tabs
 │   ├── artifacts/              #   one-off "Save to disk" renders
 │   └── projects/<id>/          #   per-project working dir + agent cwd
-└── next.config.ts             # dev rewrites + prod out/ export config
+├── pnpm-workspace.yaml        # apps/* + e2e
+└── package.json               # root orchestration scripts + `od` bin
 ```
 
 ## Troubleshooting
 
 - **"no agents found on PATH"** — install one of: `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Or switch to "Anthropic API · BYOK" in the top bar and paste a key in **Settings**.
-- **daemon 500 on /api/chat** — check the daemon terminal for the stderr tail; usually the CLI rejected its args. Different CLIs take different argv shapes; see `daemon/agents.js` `buildArgs` if you need to tweak.
+- **daemon 500 on /api/chat** — check the daemon terminal for the stderr tail; usually the CLI rejected its args. Different CLIs take different argv shapes; see `apps/daemon/agents.js` `buildArgs` if you need to tweak.
 - **artifact never renders** — the model produced text without wrapping in `<artifact>`. Confirm the system prompt is going through (check daemon log) and consider switching to a more capable model or a stricter skill.
 
 ## Mapping back to the vision
 
 This Quickstart is the runnable seed of the spec in [`docs/`](docs/). The spec describes where this grows (see [`docs/roadmap.md`](docs/roadmap.md)). Highlights:
 
-- `docs/architecture.md` now matches the shipped stack: Next.js 16 App Router in front, local daemon behind it, and `next.config.ts` rewrites in dev to keep the browser talking to the same `/api` surface.
-- `docs/skills-protocol.md` describes the full `od:` frontmatter (typed inputs, sliders, capability gating). This MVP reads `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` only — extend `daemon/skills.js` to add the rest.
-- `docs/agent-adapters.md` foresees richer dispatch (capability detection, streaming tool-calls). Our `daemon/agents.js` is a minimal dispatcher — enough to prove the wiring.
+- `docs/architecture.md` describes the shipped stack: Next.js 16 App Router in front, local daemon behind it, and `apps/web/next.config.ts` rewrites in dev to keep the browser talking to the same `/api` surface.
+- `docs/skills-protocol.md` describes the full `od:` frontmatter (typed inputs, sliders, capability gating). This MVP reads `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` only — extend `apps/daemon/skills.js` to add the rest.
+- `docs/agent-adapters.md` foresees richer dispatch (capability detection, streaming tool-calls). Our `apps/daemon/agents.js` is a minimal dispatcher — enough to prove the wiring.
 - `docs/modes.md` lists four modes: prototype / deck / template / design-system. We ship skills for the first two; the picker already filters by `mode`.

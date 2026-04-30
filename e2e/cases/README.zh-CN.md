@@ -30,7 +30,7 @@
 - `title`：人可读的用例名称
 - `kind`：项目类型，比如 `prototype`、`deck`、`workspace`
 - `flow`：Playwright 里对应的自动化流程分支
-- `automated`：当前是否会被 `npm run test:ui` 执行
+- `automated`：当前是否会被 `pnpm run test:ui` 执行
 - `description`：覆盖目标和场景说明
 - `create`：创建项目时要用到的输入
 - `prompt`：主输入内容
@@ -91,7 +91,13 @@
 ## 运行方式
 
 ```bash
-npm run test:ui
+pnpm run test:ui
+```
+
+也可以直接在独立测试包内运行：
+
+```bash
+pnpm --filter @open-design/e2e test:ui
 ```
 
 运行完成后会自动生成：
@@ -111,5 +117,5 @@ npm run test:ui
 如果要带界面调试：
 
 ```bash
-npm run test:ui:headed
+pnpm run test:ui:headed
 ```

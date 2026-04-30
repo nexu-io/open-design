@@ -14,7 +14,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ko.md">한국어</a></p>
 
 ---
 
@@ -22,7 +22,7 @@
 
 Anthropic's [Claude Design][cd] (released 2026-04-17, Opus 4.7) showed what happens when an LLM stops writing prose and starts shipping design artifacts. It went viral — and stayed closed-source, paid-only, cloud-only, locked to Anthropic's model and Anthropic's skills. There is no checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 
-**Open Design (OD) is the open-source alternative.** Same loop, same artifact-first mental model, none of the lock-in. We don't ship an agent — the strongest coding agents already live on your laptop. We wire them into a skill-driven design workflow that runs on `pnpm dev`, deploys to Vercel, and stays BYOK at every layer.
+**Open Design (OD) is the open-source alternative.** Same loop, same artifact-first mental model, none of the lock-in. We don't ship an agent — the strongest coding agents already live on your laptop. We wire them into a skill-driven design workflow that runs locally with `pnpm dev:all`, can deploy the web layer to Vercel, and stays BYOK at every layer.
 
 Type `make me a magazine-style pitch deck for our seed round`. The interactive question form pops up before the model improvises a single pixel. The agent picks one of five curated visual directions. A live `TodoWrite` plan streams into the UI. The daemon builds a real on-disk project folder with a seed template, layout library, and self-check checklist. The agent reads them — pre-flight enforced — runs a five-dimensional critique against its own output, and emits a single `<artifact>` that renders in a sandboxed iframe seconds later.
 
@@ -30,7 +30,7 @@ That's not "AI tries to design something". That's an AI that has been trained, b
 
 OD stands on four open-source shoulders:
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`src/prompts/discovery.ts`](src/prompts/discovery.ts).
+- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts).
 - [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — the deck mode. Bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved; magazine-style layouts, WebGL hero, P0/P1/P2 checklists.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — the UX north star and our closest peer. The first open-source Claude-Design alternative. We borrow its streaming-artifact loop, its sandboxed-iframe preview pattern (vendored React 18 + Babel), its live agent panel (todos + tool calls + interruptible generation), and its five-format export list (HTML / PDF / PPTX / ZIP / Markdown). We deliberately diverge on form factor — they are a desktop Electron app bundling [`pi-ai`][piai]; we are a web app + local daemon that delegates to your existing CLI.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — the daemon-and-runtime architecture. PATH-scan agent detection, the local daemon as the only privileged process, the agent-as-teammate worldview.
@@ -45,7 +45,7 @@ OD stands on four open-source shoulders:
 | **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Tech Utility · Brutalist · Soft Warm) — each ships a deterministic OKLch palette + font stack |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across screens |
 | **Agent runtime** | Local daemon spawns the CLI in your project folder — agent gets real `Read`, `Write`, `Bash`, `WebFetch` against a real on-disk environment |
-| **Deployable to** | Local (`pnpm dev`) · Vercel · Single-process prod (`npm start`) |
+| **Deployable to** | Local (`pnpm dev:all`) · Vercel web layer · Single-process prod (`pnpm start`) |
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -214,7 +214,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
 ```
 
-Every layer is composable. Every layer is a file you can edit. Read [`src/prompts/system.ts`](src/prompts/system.ts) and [`src/prompts/discovery.ts`](src/prompts/discovery.ts) to see the actual contract.
+Every layer is composable. Every layer is a file you can edit. Read [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) and [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) to see the actual contract.
 
 ## Architecture
 
@@ -248,9 +248,9 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 | Layer | Stack |
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
-| Daemon | Node 20–22 · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
+| Daemon | Node 24 · Express · SSE streaming · `better-sqlite3` for projects/conversations/messages/tabs |
 | Agent transport | `child_process.spawn` with typed-event parsers for Claude Code (`claude-stream-json`) and Copilot CLI (`copilot-stream-json`); line-buffered plain stdout for the rest |
-| Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/db.sqlite` (gitignored) |
+| Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/app.sqlite` (gitignored) |
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser |
 | Export | HTML (inline assets) · PDF (browser print) · PPTX (skill-defined) · ZIP (archiver) |
 
@@ -259,12 +259,14 @@ Every layer is composable. Every layer is a file you can edit. Read [`src/prompt
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-nvm use              # uses Node 22 from .nvmrc
 corepack enable
+corepack pnpm --version   # should print 10.33.2
 pnpm install
 pnpm dev:all         # daemon (:7456) + Next dev (:3000)
 open http://localhost:3000
 ```
+
+Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optional helpers only; if you use one, run `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` before `pnpm install`.
 
 The first load:
 
@@ -303,47 +305,31 @@ open-design/
 ├── QUICKSTART.md                  ← run / build / deploy guide
 ├── package.json                   ← pnpm workspace, single bin: od
 │
-├── daemon/                        ← Node + Express, the only server
-│   ├── cli.js                     ← `od` bin entry point
-│   ├── server.js                  ← /api/* routes (projects, chat, files, exports)
-│   ├── agents.js                  ← PATH scanner + per-CLI argv builders
-│   ├── claude-stream.js           ← streaming JSON parser for Claude Code stdout
-│   ├── skills.js                  ← SKILL.md frontmatter loader
-│   ├── design-systems.js          ← DESIGN.md loader + swatch extractor
-│   ├── design-system-preview.js   ← live one-shot showcase per system
-│   ├── design-system-showcase.js  ← multi-section gallery render
-│   ├── lint-artifact.js           ← P0/P1 self-check on agent output
-│   ├── projects.js                ← per-project filesystem helpers
-│   ├── db.js                      ← SQLite schema (projects/messages/templates/tabs)
-│   └── frontmatter.js             ← zero-dep YAML-subset parser
+├── apps/
+│   ├── daemon/                    ← Node + Express, the only server
+│   │   ├── cli.js                 ← `od` bin entry point
+│   │   ├── server.js              ← /api/* routes (projects, chat, files, exports)
+│   │   ├── agents.js              ← PATH scanner + per-CLI argv builders
+│   │   ├── claude-stream.js       ← streaming JSON parser for Claude Code stdout
+│   │   ├── skills.js              ← SKILL.md frontmatter loader
+│   │   └── db.js                  ← SQLite schema (projects/messages/templates/tabs)
+│   │
+│   └── web/                       ← Next.js 16 App Router + React client
+│       ├── app/                   ← App Router entrypoints
+│       ├── next.config.ts         ← dev rewrites + prod static export to out/
+│       └── src/                   ← shared React + TS client modules for Next.js
+│           ├── App.tsx            ← routing, bootstrap, settings
+│           ├── components/        ← chat, composer, picker, preview, sketch, …
+│           ├── prompts/
+│           │   ├── system.ts      ← composeSystemPrompt(base, skill, DS, metadata)
+│           │   ├── discovery.ts   ← turn-1 form + turn-2 branch + 5-dim critique
+│           │   └── directions.ts  ← 5 visual directions × OKLch palette + font stack
+│           ├── artifacts/         ← streaming <artifact> parser + manifests
+│           ├── runtime/           ← iframe srcdoc, markdown, export helpers
+│           ├── providers/         ← daemon SSE + BYOK API transports
+│           └── state/             ← config + projects (localStorage + daemon-backed)
 │
-├── app/                           ← Next.js 16 App Router entrypoints
-│   ├── layout.tsx                 ← root layout shell
-│   ├── page.tsx                   ← main app entry
-│   └── [[...slug]]/page.tsx       ← catch-all client shell for project routes
-│
-├── src/                           ← shared React + TS client modules for Next.js
-│   ├── App.tsx                    ← routing, bootstrap, settings
-│   ├── components/                ← 27 components (chat, composer, picker, preview, sketch, …)
-│   ├── prompts/
-│   │   ├── system.ts              ← composeSystemPrompt(base, skill, DS, metadata)
-│   │   ├── official-system.ts     ← identity charter
-│   │   ├── discovery.ts           ← turn-1 form + turn-2 branch + 5-dim critique
-│   │   ├── directions.ts          ← 5 visual directions × OKLch palette + font stack
-│   │   └── deck-framework.ts      ← deck nav / counter / print stylesheet
-│   ├── artifacts/
-│   │   ├── parser.ts              ← streaming <artifact> tag extractor
-│   │   └── question-form.ts       ← <question-form> JSON schema + replay
-│   ├── runtime/
-│   │   ├── srcdoc.ts              ← iframe sandbox wrapper
-│   │   ├── markdown.tsx           ← assistant message renderer
-│   │   ├── exports.ts             ← HTML / PDF / ZIP export helpers
-│   │   └── zip.ts                 ← project archive
-│   ├── providers/
-│   │   ├── daemon.ts              ← /api/chat SSE stream consumer
-│   │   ├── anthropic.ts           ← BYOK Anthropic SDK path
-│   │   └── registry.ts            ← /api/agents, /api/skills, /api/design-systems
-│   └── state/                     ← config + projects (localStorage + daemon-backed)
+├── e2e/                           ← Playwright UI + external integration/Vitest harness
 │
 ├── skills/                        ← 19 SKILL.md skill bundles
 │   ├── web-prototype/             ← default for prototype mode
@@ -385,8 +371,6 @@ open-design/
 │
 ├── templates/
 │   └── deck-framework.html        ← deck baseline (nav / counter / print)
-│
-├── next.config.ts                 ← dev rewrites + prod static export to out/
 │
 ├── scripts/
 │   └── sync-design-systems.mjs    ← re-import upstream awesome-design-md tarball
@@ -453,11 +437,11 @@ When the user has no brand spec, the agent emits a second form with five curated
 | Brutalist | Raw, oversized type, no shadows, harsh accents | Bloomberg Businessweek · Achtung |
 | Soft warm | Generous, low contrast, peachy neutrals | Notion marketing · Apple Health |
 
-Full spec → [`src/prompts/directions.ts`](src/prompts/directions.ts).
+Full spec → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts).
 
 ## Anti-AI-slop machinery
 
-The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf/huashu-design) playbook, ported into OD's prompt-stack and made enforceable per-skill via the side-file pre-flight. Read [`src/prompts/discovery.ts`](src/prompts/discovery.ts) for the live wording:
+The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf/huashu-design) playbook, ported into OD's prompt-stack and made enforceable per-skill via the side-file pre-flight. Read [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) for the live wording:
 
 - **Question form first.** Turn 1 is `<question-form>` only — no thinking, no tools, no narration. The user chooses defaults at radio speed.
 - **Brand-spec extraction.** When the user attaches a screenshot or URL, the agent runs a five-step protocol (locate · download · grep hex · codify `brand-spec.md` · vocalise) before writing CSS. **Never guesses brand colors from memory.**
@@ -511,7 +495,7 @@ Auto-detected from `PATH` on daemon boot. No config required.
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `--output-format json` (typed events) | `copilot -p <prompt> --allow-all-tools --output-format json` |
 | Anthropic API · BYOK | n/a | SSE direct | Browser fallback when no CLI is on PATH |
 
-Adding a new CLI is one entry in [`daemon/agents.js`](daemon/agents.js). Streaming format is one of `claude-stream-json` (typed events) or `plain` (raw text).
+Adding a new CLI is one entry in [`apps/daemon/agents.js`](apps/daemon/agents.js). Streaming format is one of `claude-stream-json` (typed events) or `plain` (raw text).
 
 ## References & lineage
 
@@ -520,7 +504,7 @@ Every external project this repo borrows from. Each link goes to the source so y
 | Project | Role here |
 |---|---|
 | [`Claude Design`][cd] | The closed-source product this repo is the open-source alternative to. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`src/prompts/discovery.ts`](src/prompts/discovery.ts) and [`src/prompts/directions.ts`](src/prompts/directions.ts). |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) and [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Magazine-web-PPT skill bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved. Default for deck mode. P0/P1/P2 checklist culture borrowed for every other skill. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection. UX patterns on our roadmap: comment-mode surgical edits, AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
@@ -562,7 +546,7 @@ Issues, PRs, new skills, and new design systems are all welcome. The highest-lev
 
 - **Add a skill** — drop a folder into [`skills/`](skills/) following the [`SKILL.md`][skill] convention.
 - **Add a design system** — drop a `DESIGN.md` into [`design-systems/<brand>/`](design-systems/) using the 9-section schema.
-- **Wire up a new coding-agent CLI** — one entry in [`daemon/agents.js`](daemon/agents.js).
+- **Wire up a new coding-agent CLI** — one entry in [`apps/daemon/agents.js`](apps/daemon/agents.js).
 
 Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([简体中文](CONTRIBUTING.zh-CN.md)).
 

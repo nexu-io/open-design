@@ -313,7 +313,12 @@ async function sendPrompt(
     try {
       await expect(input).toHaveValue(prompt, { timeout: 1500 });
       await expect(sendButton).toBeEnabled({ timeout: 1500 });
+      const chatResponse = page.waitForResponse(
+        (resp) => resp.url().includes('/api/chat') && resp.request().method() === 'POST',
+        { timeout: 2000 },
+      );
       await sendButton.evaluate((button: HTMLButtonElement) => button.click());
+      await chatResponse;
       return;
     } catch (error) {
       await input.click();
@@ -323,7 +328,12 @@ async function sendPrompt(
       try {
         await expect(input).toHaveValue(prompt, { timeout: 1500 });
         await expect(sendButton).toBeEnabled({ timeout: 1500 });
+        const chatResponse = page.waitForResponse(
+          (resp) => resp.url().includes('/api/chat') && resp.request().method() === 'POST',
+          { timeout: 2000 },
+        );
         await sendButton.evaluate((button: HTMLButtonElement) => button.click());
+        await chatResponse;
         return;
       } catch (retryError) {
         if (attempt === 2) throw retryError;
@@ -606,11 +616,16 @@ async function runFileUploadSendFlow(
   page: Parameters<typeof test>[0]['page'],
   entry: UICase,
 ) {
+  const uploadResponse = page.waitForResponse(
+    (resp) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
   await page.getByTestId('chat-file-input').setInputFiles({
     name: 'reference.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('Reference content for upload flow.\n', 'utf8'),
   });
+  await expect((await uploadResponse).ok()).toBeTruthy();
 
   await expect(page.getByTestId('staged-attachments')).toBeVisible();
   await expect(
@@ -637,12 +652,14 @@ async function runDesignFilesUploadFlow(
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
   await page.getByTestId('design-files-tab').click();
-  const fileRow = page.getByTestId('design-file-row-moodboard.png');
+  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: 'moodboard.png',
+  });
   await expect(fileRow).toBeVisible();
   await fileRow.click();
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
-  await expect(preview.getByText('moodboard.png', { exact: true })).toBeVisible();
+  await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
 
   await fileRow.dblclick();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
@@ -667,14 +684,16 @@ async function runDesignFilesDeleteFlow(
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
   await page.getByTestId('design-files-tab').click();
 
-  const fileRow = page.getByTestId('design-file-row-trash-me.png');
+  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: 'trash-me.png',
+  });
   await expect(fileRow).toBeVisible();
   await fileRow.hover();
-  await page.getByTestId('design-file-menu-trash-me.png').click();
+  await fileRow.locator('[data-testid^="design-file-menu-"]').click();
   await expect(page.getByTestId('design-file-menu-popover')).toBeVisible();
-  await page.getByTestId('design-file-delete-trash-me.png').click();
+  await page.locator('[data-testid^="design-file-delete-"]').click();
 
-  await expect(page.getByTestId('design-file-row-trash-me.png')).toHaveCount(0);
+  await expect(fileRow).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
 }
 

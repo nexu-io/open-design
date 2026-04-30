@@ -11,7 +11,7 @@
 - `junit.xml`：JUnit 格式结果，方便接 CI
 - `test-results/`：失败用例的截图、trace、error-context 等原始附件
 
-每次执行 `npm run test:ui` 前，系统会先自动清理旧的：
+每次执行 `pnpm run test:ui`（或 `pnpm --filter @open-design/e2e test:ui`）前，系统会先自动清理旧的：
 
 - `e2e/.od-data/`
 - `e2e/reports/test-results/`

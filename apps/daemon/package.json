@@ -1,0 +1,27 @@
+{
+  "name": "@open-design/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "od": "./cli.js"
+  },
+  "scripts": {
+    "daemon": "node cli.js --no-open",
+    "dev": "node cli.js --no-open",
+    "start": "node cli.js",
+    "test": "vitest run -c vitest.config.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.19.2",
+    "jszip": "^3.10.1",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

@@ -14,8 +14,8 @@ This guide tells you exactly where to look for each type of contribution and wha
 |---|---|---|---|
 | Make OD render a new kind of artifact (an invoice, an iOS Settings screen, a one-pager…) | a **Skill** | [`skills/<your-skill>/`](skills/) | one folder, ~2 files |
 | Make OD speak a new brand's visual language | a **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | one Markdown file |
-| Hook up a new coding-agent CLI | an **Agent adapter** | [`daemon/agents.js`](daemon/agents.js) | ~10 lines in one array |
-| Add a feature, fix a bug, lift a UX pattern from [`open-codesign`][ocod] | code | `src/`, `daemon/` | normal PR |
+| Hook up a new coding-agent CLI | an **Agent adapter** | [`apps/daemon/agents.js`](apps/daemon/agents.js) | ~10 lines in one array |
+| Add a feature, fix a bug, lift a UX pattern from [`open-codesign`][ocod] | code | `apps/web/src/`, `apps/daemon/` | normal PR |
 | Improve docs, port a section to 中文, fix typos | docs | `README.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | one PR |
 
 If you're not sure which bucket your idea is in, [open a discussion / issue first](https://github.com/nexu-io/open-design/issues/new) and we'll point you at the right surface.
@@ -29,13 +29,14 @@ The full one-page setup lives in [`QUICKSTART.md`](QUICKSTART.md). The TL;DR for
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install              # or npm install
+corepack enable           # selects the pinned pnpm from packageManager
+pnpm install
 pnpm dev:all              # daemon (:7456) + Next dev (:3000)
 pnpm typecheck            # tsc -b --noEmit
 pnpm build                # production build
 ```
 
-Node 20.9+ and <23 is required. macOS, Linux, and WSL2 are tested daily. Windows native should work but isn't a primary target — file an issue if it doesn't.
+Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native should work but isn't a primary target — file an issue if it doesn't.
 
 You don't need any agent CLI on your `PATH` to develop OD itself — the daemon will tell you "no agents found" and fall back to the **Anthropic API · BYOK** path, which is the fastest dev loop anyway.
 
@@ -169,7 +170,7 @@ The 69 product systems we ship are imported from [`VoltAgent/awesome-design-md`]
 
 ## Adding a new coding-agent CLI
 
-Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`daemon/agents.js`](daemon/agents.js):
+Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`apps/daemon/agents.js`](apps/daemon/agents.js):
 
 ```javascript
 {
@@ -182,7 +183,7 @@ Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`
 }
 ```
 
-That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`daemon/claude-stream.js`](daemon/claude-stream.js) and set `streamFormat: 'claude-stream-json'`.
+That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`apps/daemon/claude-stream.js`](apps/daemon/claude-stream.js) and set `streamFormat: 'claude-stream-json'`.
 
 Bar for merging:
 
@@ -202,7 +203,7 @@ We're not pedantic about formatting (Prettier on save is fine), but two rules ar
 Beyond that:
 
 - **Don't narrate.** No `// import the module`, no `// loop through items`. If the code reads obviously, the comment is noise. Save comments for non-obvious intent or constraints the code can't express.
-- **TypeScript** for `src/`. The daemon (`daemon/`) is plain ESM JavaScript with JSDoc when types matter — keep it that way.
+- **TypeScript** for `apps/web/src/`. The daemon (`apps/daemon/`) is plain ESM JavaScript with JSDoc when types matter — keep it that way.
 - **No new top-level dependencies** without a paragraph in the PR description on what we get vs. what bytes we ship. The dep list in [`package.json`](package.json) is small on purpose.
 - **Run `pnpm typecheck`** before pushing. CI runs it; failing it earns a "please fix" comment.
 
@@ -225,7 +226,7 @@ We don't enforce a CLA. Apache-2.0 covers us; your contribution is licensed unde
 
 Open an issue with:
 
-- What you ran (the exact `pnpm dev:all` / `npm start` invocation).
+- What you ran (the exact `pnpm dev:all` / `pnpm start` invocation).
 - Which agent CLI was selected (or whether you were on the BYOK path).
 - The skill + design system pair that triggered it.
 - The relevant **daemon stderr tail** — most "the artifact never rendered" reports get diagnosed in 30 seconds when we can see `spawn ENOENT` or the CLI's actual error.
