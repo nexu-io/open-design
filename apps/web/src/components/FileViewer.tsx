@@ -204,6 +204,7 @@ function HtmlViewer({
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
+  const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
@@ -245,13 +246,26 @@ function HtmlViewer({
     return /class\s*=\s*['"][^'"]*\bslide\b/i.test(source);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
+  const previewSource = inlinedSource ?? source;
+
+  useEffect(() => {
+    setInlinedSource(null);
+    if (!source || effectiveDeck || !hasRelativeAssetRefs(source)) return;
+    let cancelled = false;
+    void inlineRelativeAssets(source, projectId, file.name).then((next) => {
+      if (!cancelled) setInlinedSource(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [source, effectiveDeck, projectId, file.name]);
 
   const srcDoc = useMemo(
-    () => (source ? buildSrcdoc(source, {
+    () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
     }) : ''),
-    [source, effectiveDeck, projectId, file.name],
+    [previewSource, effectiveDeck, projectId, file.name],
   );
 
   useEffect(() => {
@@ -737,6 +751,109 @@ function HtmlViewer({
 function baseDirFor(fileName: string): string {
   const idx = fileName.lastIndexOf('/');
   return idx >= 0 ? fileName.slice(0, idx + 1) : '';
+}
+
+function hasRelativeAssetRefs(html: string): boolean {
+  const attr = /\s(?:src|href)\s*=\s*["']([^"']+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = attr.exec(html)) !== null) {
+    const value = match[1]?.trim();
+    if (!value) continue;
+    if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(value)) continue;
+    return true;
+  }
+  return false;
+}
+
+async function inlineRelativeAssets(
+  html: string,
+  projectId: string,
+  fileName: string,
+): Promise<string> {
+  const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
+  const links = html.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of links) {
+    const rel = readHtmlAttr(tag, 'rel');
+    const href = readHtmlAttr(tag, 'href');
+    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
+    replacements.push(
+      fetchProjectRelativeText(projectId, fileName, href).then((css) =>
+        css == null
+          ? null
+          : {
+              from: tag,
+              to:
+                `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
+                `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+            },
+      ),
+    );
+  }
+
+  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
+  for (const tag of scripts) {
+    const src = readHtmlAttr(tag, 'src');
+    if (!src) continue;
+    replacements.push(
+      fetchProjectRelativeText(projectId, fileName, src).then((js) => {
+        if (js == null) return null;
+        const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
+        const attrs = open
+          .replace(/^<script/i, '')
+          .replace(/>$/i, '')
+          .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
+        return {
+          from: tag,
+          to: `<script${attrs}>\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`,
+        };
+      }),
+    );
+  }
+
+  const resolved = (await Promise.all(replacements)).filter(
+    (item): item is { from: string; to: string } => item !== null,
+  );
+  return resolved.reduce((next, { from, to }) => next.replace(from, to), html);
+}
+
+async function fetchProjectRelativeText(
+  projectId: string,
+  ownerFileName: string,
+  assetRef: string,
+): Promise<string | null> {
+  const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
+  if (!filePath) return null;
+  try {
+    const resp = await fetch(projectRawUrl(projectId, filePath));
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
+function resolveProjectRelativePath(ownerFileName: string, assetRef: string): string | null {
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(assetRef)) return null;
+  try {
+    const url = new URL(assetRef, `https://od.local/${baseDirFor(ownerFileName)}`);
+    if (url.origin !== 'https://od.local') return null;
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+  } catch {
+    return null;
+  }
+}
+
+function readHtmlAttr(tag: string, name: string): string | null {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
+  return match?.[2] ?? null;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function ImageViewer({
