@@ -2,7 +2,6 @@
 import express from 'express';
 import multer from 'multer';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -22,6 +21,7 @@ import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
+import { createChatRunService } from './runs.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
@@ -1006,101 +1006,9 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     },
   );
 
-  const chatRuns = new Map();
-  const MAX_RUN_EVENTS = 2_000;
-  const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
-  const CHAT_RUN_TTL_MS = 30 * 60 * 1000;
-
-  const createChatRun = (meta = {}) => {
-    const now = Date.now();
-    const run = {
-      id: randomUUID(),
-      projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
-      conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
-      assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
-      clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
-      agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
-      status: 'queued',
-      createdAt: now,
-      updatedAt: now,
-      events: [],
-      nextEventId: 1,
-      clients: new Set(),
-      child: null,
-      acpSession: null,
-      exitCode: null,
-      signal: null,
-      cancelRequested: false,
-      promptFileCleaned: null,
-    };
-    chatRuns.set(run.id, run);
-    return run;
+  const design = {
+    runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
-
-  const scheduleRunCleanup = (run) => {
-    setTimeout(() => {
-      if (TERMINAL_RUN_STATUSES.has(run.status)) chatRuns.delete(run.id);
-    }, CHAT_RUN_TTL_MS).unref?.();
-  };
-
-  const emitRunEvent = (run, event, data) => {
-    const id = run.nextEventId++;
-    const record = { id, event, data };
-    run.events.push(record);
-    if (run.events.length > MAX_RUN_EVENTS) run.events.splice(0, run.events.length - MAX_RUN_EVENTS);
-    run.updatedAt = Date.now();
-    for (const sse of run.clients) sse.send(event, data, id);
-  };
-
-  const finishRun = (run, status, code = null, signal = null) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return;
-    run.status = status;
-    run.exitCode = code;
-    run.signal = signal;
-    run.updatedAt = Date.now();
-    run.promptFileCleaned?.();
-    emitRunEvent(run, 'end', { code, signal, status });
-    for (const sse of run.clients) sse.end();
-    run.clients.clear();
-    scheduleRunCleanup(run);
-  };
-
-  const failRun = (run, code, message, init = {}) => {
-    emitRunEvent(run, 'error', createSseErrorPayload(code, message, init));
-    finishRun(run, 'failed', 1, null);
-  };
-
-  const attachRunStream = (run, req, res) => {
-    const sse = createSseResponse(res);
-    const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
-    for (const record of run.events) {
-      if (!Number.isFinite(lastEventId) || record.id > lastEventId) {
-        sse.send(record.event, record.data, record.id);
-      }
-    }
-    if (TERMINAL_RUN_STATUSES.has(run.status)) {
-      sse.end();
-      return;
-    }
-    run.clients.add(sse);
-    res.on('close', () => {
-      run.clients.delete(sse);
-      sse.cleanup();
-    });
-  };
-
-  const runStatusBody = (run) => ({
-    id: run.id,
-    projectId: run.projectId,
-    conversationId: run.conversationId,
-    assistantMessageId: run.assistantMessageId,
-    agentId: run.agentId,
-    status: run.status,
-    createdAt: run.createdAt,
-    updatedAt: run.updatedAt,
-    exitCode: run.exitCode,
-    signal: run.signal,
-  });
 
   const startChatRun = async (chatBody, run) => {
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
@@ -1124,12 +1032,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     if (typeof clientRequestId === 'string' && clientRequestId) run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
     const def = getAgentDef(agentId);
-    if (!def) return failRun(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
-    if (!def.bin) return failRun(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    if (!def) return design.runs.fail(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
+    if (!def.bin) return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
     if (typeof message !== 'string' || !message.trim()) {
-      return failRun(run, 'BAD_REQUEST', 'message required');
+      return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
-    if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
@@ -1145,7 +1053,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         cwd = null;
       }
     }
-    if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
 
     // Sanitise supplied image paths: must live under UPLOAD_DIR.
     const safeImages = imagePaths.filter((p) => {
@@ -1281,7 +1189,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
     run.promptFileCleaned = cleanPromptFile;
     const args = def.buildArgs(effectivePrompt, safeImages, extraAllowedDirs, agentOptions, { cwd });
-    const send = (event, data) => emitRunEvent(run, event, data);
+    const send = (event, data) => design.runs.emit(run, event, data);
 
     // resolvedBin was already looked up above for the ENAMETOOLONG check.
     // If detection can't find the binary, surface a friendly SSE error
@@ -1290,13 +1198,13 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     // from issue #10 the rest of this block is meant to prevent.
     if (!resolvedBin) {
       cleanPromptFile();
-      emitRunEvent(run, 'error', createSseErrorPayload(
+      design.runs.emit(run, 'error', createSseErrorPayload(
         'AGENT_UNAVAILABLE',
         `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
           'Install it and refresh the agent list (GET /api/agents) before retrying.',
         { retryable: true },
       ));
-      return finishRun(run, 'failed', 1, null);
+      return design.runs.finish(run, 'failed', 1, null);
     }
     // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
     // those without `shell: true` (CVE-2024-27980). When `shell: true` is set
@@ -1325,7 +1233,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const useShell =
       process.platform === 'win32' && CMD_BAT_RE.test(resolvedBin);
 
-    if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
 
     run.status = 'running';
     run.updatedAt = Date.now();
@@ -1369,8 +1277,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
     } catch (err) {
       cleanPromptFile();
-      emitRunEvent(run, 'error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
-      return finishRun(run, 'failed', 1, null);
+      design.runs.emit(run, 'error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      return design.runs.finish(run, 'failed', 1, null);
     }
 
     child.stdout.setEncoding('utf8');
@@ -1409,77 +1317,62 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
     child.on('error', (err) => {
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
-      finishRun(run, 'failed', 1, null);
+      design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
       if (acpSession?.hasFatalError()) {
-        return finishRun(run, 'failed', code ?? 1, signal ?? null);
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       const status = run.cancelRequested
         ? 'canceled'
         : code === 0
           ? 'succeeded'
           : 'failed';
-      finishRun(run, status, code, signal);
+      design.runs.finish(run, status, code, signal);
     });
   };
 
   app.post('/api/runs', (req, res) => {
-    const run = createChatRun(req.body || {});
+    const run = design.runs.create(req.body || {});
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
     res.status(202).json(body);
-    void startChatRun(req.body || {}, run).catch((err) => {
-      failRun(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
-    });
+    design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
   app.get('/api/runs', (req, res) => {
     const { projectId, conversationId, status } = req.query;
-    const runs = Array.from(chatRuns.values()).filter((run) => {
-      if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
-      if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
-      if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
-      if (typeof status === 'string' && status) return run.status === status;
-      return true;
-    });
+    const runs = design.runs.list({ projectId, conversationId, status });
     /** @type {import('@open-design/contracts').ChatRunListResponse} */
-    const body = { runs: runs.map(runStatusBody) };
+    const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
   });
 
   app.get('/api/runs/:id', (req, res) => {
-    const run = chatRuns.get(req.params.id);
+    const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(runStatusBody(run));
+    res.json(design.runs.statusBody(run));
   });
 
   app.get('/api/runs/:id/events', (req, res) => {
-    const run = chatRuns.get(req.params.id);
+    const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    attachRunStream(run, req, res);
+    design.runs.stream(run, req, res);
   });
 
   app.post('/api/runs/:id/cancel', (req, res) => {
-    const run = chatRuns.get(req.params.id);
+    const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    if (!TERMINAL_RUN_STATUSES.has(run.status)) {
-      run.cancelRequested = true;
-      run.updatedAt = Date.now();
-      if (run.child && !run.child.killed) run.child.kill('SIGTERM');
-      else finishRun(run, 'canceled', null, 'SIGTERM');
-    }
+    design.runs.cancel(run);
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
     const body = { ok: true };
     res.json(body);
   });
 
   app.post('/api/chat', (req, res) => {
-    const run = createChatRun();
-    attachRunStream(run, req, res);
-    void startChatRun(req.body || {}, run).catch((err) => {
-      failRun(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
-    });
+    const run = design.runs.create();
+    design.runs.stream(run, req, res);
+    design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
   // ---- API Proxy (SSE) for OpenAI-compatible endpoints ---------------------
