@@ -5,10 +5,10 @@ description: |
   concrete design spec. Eliminates ambiguity from vague requests like
   "make it professional" by requiring explicit dimensions: palette, typography,
   layout, mood, density, and constraints.
-  Trigger keywords: "design brief", "brief", "ilang brief", "structured brief".
+  Trigger keywords: "design brief", "create a design brief", "ilang brief", "structured brief".
 triggers:
   - "design brief"
-  - "brief"
+  - "create a design brief"
   - "ilang brief"
   - "structured brief"
 od:
@@ -65,7 +65,36 @@ The user provides a design brief in one of two formats:
 
 > "I need a landing page for a developer tool. Clean, minimal, dark mode. Inter font. No flashy animations."
 
-If the user provides Option B, convert it to the structured format internally before proceeding. Identify every dimension explicitly stated and flag dimensions that were left unspecified.
+If the user provides Option B, convert it to the structured format using the mapping table below, then proceed. Identify every dimension explicitly stated and flag dimensions that were left unspecified.
+
+### Natural language → I-Lang mapping
+
+For each sentence in the natural language input, identify dimension keywords and map to the closest structured value:
+
+| Natural language phrase | Dimension | I-Lang value |
+|------------------------|-----------|-------------|
+| "dark mode", "dark theme" | palette | `monochrome_dark` |
+| "light", "white background" | palette | `light_clean` |
+| "earthy", "warm tones" | palette | `earth_tones` |
+| "pop of color", "vibrant" | accent | `electric_blue` or `coral` |
+| "subtle accent" | accent | `muted_sage` or `slate` |
+| "clean", "minimal", "simple" | mood | `professional_minimal` |
+| "playful", "fun", "friendly" | mood | `playful` |
+| "bold", "brutalist", "raw" | mood | `brutalist` |
+| "editorial", "magazine-like" | mood | `editorial` |
+| "spacious", "lots of whitespace" | density | `spacious` |
+| "compact", "dense", "information-rich" | density | `compact` |
+| "Inter", "system font" | typography | `inter` or `system_ui` |
+| "serif", "traditional" | typography | `georgia` or `playfair` |
+| "monospace", "code-like" | typography | `jetbrains_mono` |
+| "no animations", "static" | exclude | `animations` |
+| "no gradients" | exclude | `gradients` |
+| "no stock photos" | exclude | `stock_photos` |
+| "single page" | layout | `single_column` |
+| "two columns", "sidebar" | layout | `two_column` |
+| "mobile first" | responsive | `mobile_first` |
+
+When a phrase maps to multiple dimensions (e.g. "clean dark landing page" → mood=professional_minimal + palette=monochrome_dark + layout=single_column), resolve each dimension independently.
 
 ## 2. Validate dimensions
 
