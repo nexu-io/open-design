@@ -126,6 +126,25 @@ function renderMetadataBlock(
   );
   lines.push('');
   lines.push(`- **kind**: ${metadata.kind}`);
+  if (metadata.workflowTitle) {
+    lines.push(`- **workflow**: ${metadata.workflowTitle}`);
+  }
+  if (metadata.workflowCategory) {
+    lines.push(`- **workflowCategory**: ${metadata.workflowCategory}`);
+  }
+  if (metadata.workflowOutcome) {
+    lines.push(`- **workflowOutcome**: ${metadata.workflowOutcome}`);
+  }
+  if (metadata.workflowCheckpoints && metadata.workflowCheckpoints.length > 0) {
+    lines.push(
+      `- **workflowCheckpoints**: ${metadata.workflowCheckpoints.join(', ')} - treat these as production gates to verify before final output.`,
+    );
+  }
+  if (metadata.workflowExports && metadata.workflowExports.length > 0) {
+    lines.push(
+      `- **workflowExports**: ${metadata.workflowExports.join(', ')} - keep these export formats in mind when choosing structure, dimensions, and file outputs.`,
+    );
+  }
 
   if (metadata.kind === 'prototype') {
     lines.push(

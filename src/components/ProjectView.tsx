@@ -722,6 +722,13 @@ export function ProjectView({
     return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
   }, [skills, designSystems, project.skillId, project.designSystemId, t]);
 
+  const workflowLabel = project.metadata?.workflowTitle;
+  const workflowMeta = useMemo(() => {
+    const category = project.metadata?.workflowCategory;
+    const outcome = project.metadata?.workflowOutcome;
+    return [category, outcome].filter(Boolean).join(' · ');
+  }, [project.metadata?.workflowCategory, project.metadata?.workflowOutcome]);
+
   const isDeck = useMemo(
     () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
     [skills, project.skillId],
@@ -781,6 +788,17 @@ export function ProjectView({
               {project.name}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
+            {workflowLabel ? (
+              <span
+                className="project-workflow-chip"
+                data-testid="project-workflow"
+                title={workflowMeta || workflowLabel}
+              >
+                <Icon name="sparkles" size={11} />
+                <span>{workflowLabel}</span>
+                {workflowMeta ? <small>{workflowMeta}</small> : null}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="topbar-right">

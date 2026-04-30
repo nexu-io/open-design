@@ -185,6 +185,14 @@ export type ProjectKind = 'prototype' | 'deck' | 'template' | 'other';
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  // OneShot workflow identity. Captured by the launcher so reloads,
+  // project reuse, and agent turns keep the selected production path.
+  workflowId?: string;
+  workflowTitle?: string;
+  workflowCategory?: string;
+  workflowOutcome?: string;
+  workflowCheckpoints?: string[];
+  workflowExports?: string[];
   // Prototype: 'wireframe' | 'high-fidelity'. Drives the visual ambition.
   fidelity?: 'wireframe' | 'high-fidelity';
   // Slide deck: whether the user wants speaker notes (less text per slide).

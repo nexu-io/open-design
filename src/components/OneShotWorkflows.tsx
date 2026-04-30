@@ -275,7 +275,7 @@ export function OneShotWorkflows({
       name: workflow.title,
       skillId,
       designSystemId,
-      metadata: workflow.metadata,
+      metadata: metadataForWorkflow(workflow),
       pendingPrompt: workflow.prompt,
     });
   }
@@ -433,6 +433,18 @@ function workflowSearchText(workflow: WorkflowDefinition) {
   ]
     .join(' ')
     .toLowerCase();
+}
+
+function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {
+  return {
+    ...workflow.metadata,
+    workflowId: workflow.id,
+    workflowTitle: workflow.title,
+    workflowCategory: workflow.category,
+    workflowOutcome: workflow.outcome,
+    workflowCheckpoints: workflow.checkpoints,
+    workflowExports: workflow.exports,
+  };
 }
 
 function resolveSkillLabel(workflow: WorkflowDefinition, skills: SkillSummary[]) {
