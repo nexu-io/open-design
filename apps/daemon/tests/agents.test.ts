@@ -75,3 +75,13 @@ test('kiro args use acp subcommand for json-rpc streaming', () => {
   assert.deepEqual(args, ['acp']);
   assert.equal(kiro.streamFormat, 'acp-json-rpc');
 });
+
+test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {
+  // fetchModels rejects when the binary doesn't exist; the daemon's
+  // probe() catches this and uses fallbackModels instead.
+  const result = await kiro.fetchModels('/nonexistent/kiro-cli').catch(() => null);
+
+  assert.equal(result, null);
+  assert.ok(Array.isArray(kiro.fallbackModels));
+  assert.equal(kiro.fallbackModels[0].id, 'default');
+});
