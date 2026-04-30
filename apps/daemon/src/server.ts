@@ -27,6 +27,7 @@ import { importClaudeDesignZip } from './claude-design-import.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import {
+  decodeMultipartFilename,
   deleteProjectFile,
   ensureProject,
   listFiles,
@@ -150,7 +151,8 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
-      const safe = file.originalname.replace(/[^\w.\-]/g, '_');
+      file.originalname = decodeMultipartFilename(file.originalname);
+      const safe = file.originalname.replace(/[^\p{L}\p{N}.\-]/gu, '_');
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
@@ -161,7 +163,8 @@ const importUpload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
-      const safe = file.originalname.replace(/[^\w.\-]/g, '_');
+      file.originalname = decodeMultipartFilename(file.originalname);
+      const safe = file.originalname.replace(/[^\p{L}\p{N}.\-]/gu, '_');
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
@@ -183,9 +186,12 @@ const projectUpload = multer({
       }
     },
     filename: (_req, file, cb) => {
-      // Reuse the same sanitiser used everywhere else, then prepend a
-      // base36 timestamp so multiple uploads with the same original name
-      // don't clobber each other.
+      // multer@1 hands us latin1-decoded multipart filenames; restore the
+      // original UTF-8 so the response (and the on-disk name) preserves
+      // non-ASCII characters instead of mangling them. Then run the
+      // shared sanitiser and prepend a base36 timestamp so multiple
+      // uploads with the same original name don't clobber each other.
+      file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
       cb(null, `${Date.now().toString(36)}-${safe}`);
     },
