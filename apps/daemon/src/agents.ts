@@ -472,6 +472,24 @@ export const AGENT_DEFS = [
     promptViaStdin: true,
     streamFormat: 'pi-rpc',
   },
+  {
+    id: 'kiro',
+    name: 'Kiro CLI',
+    bin: 'kiro-cli',
+    versionArgs: ['--version'],
+    fetchModels: async (resolvedBin) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: ['acp'],
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+    ],
+    buildArgs: () => ['acp'],
+    streamFormat: 'acp-json-rpc',
+  },
 ];
 
 export function resolveOnPath(bin) {
