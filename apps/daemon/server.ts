@@ -68,7 +68,14 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+export function resolveProjectRoot(moduleDir: string): string {
+  const daemonDir = path.basename(moduleDir) === 'dist'
+    ? path.dirname(moduleDir)
+    : moduleDir;
+  return path.resolve(daemonDir, '../..');
+}
+
+const PROJECT_ROOT = resolveProjectRoot(__dirname);
 // Built web app lives in `out/` — that's where Next.js writes the static
 // export configured in next.config.ts. The folder name used to be `dist/`
 // when this project shipped with Vite; the daemon serves whatever the
