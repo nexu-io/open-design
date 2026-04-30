@@ -405,6 +405,7 @@ export function ProjectView({
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
+        if (!isActiveRunStatus(message.runStatus)) continue;
         const fallbackRun = !message.runId ? activeByMessage.get(message.id) : null;
         const runId = message.runId ?? fallbackRun?.id;
         if (!runId) continue;
