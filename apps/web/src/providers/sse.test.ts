@@ -150,6 +150,37 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
+  it('passes the caller signal to the initial create-run request', async () => {
+    const handlers = createDaemonHandlers();
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/runs') {
+        expect(init?.signal).toBe(controller.signal);
+        controller.abort();
+        throw new DOMException('aborted', 'AbortError');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: controller.signal,
+      handlers,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs', expect.objectContaining({
+      method: 'POST',
+      signal: controller.signal,
+    }));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
   it('reconnects to a daemon run after an incomplete stream closes', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()
