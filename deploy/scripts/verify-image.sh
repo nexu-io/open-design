@@ -65,9 +65,9 @@ if [[ -n "$runtime_tools" ]]; then
   exit 1
 fi
 
-node_runtime_layout="$(docker run --rm --entrypoint sh "$IMAGE_REF" -lc 'if [ -x /usr/bin/node ] && [ ! -e /usr/local/bin/node ]; then echo alpine-runtime; else echo legacy-runtime; fi')"
-if [[ "$node_runtime_layout" != "alpine-runtime" ]]; then
-  echo "unexpected runtime node layout: $node_runtime_layout" >&2
+node_major="$(docker run --rm --entrypoint node "$IMAGE_REF" -p 'process.versions.node.split(`.`)[0]')"
+if [[ "$node_major" != "24" ]]; then
+  echo "unexpected runtime node major: $node_major" >&2
   exit 1
 fi
 

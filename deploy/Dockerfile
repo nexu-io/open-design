@@ -1,5 +1,5 @@
-ARG NODE_IMAGE=docker.io/library/node:22-alpine
-ARG RUNTIME_IMAGE=docker.io/library/alpine:3.22
+ARG NODE_IMAGE=docker.io/library/node:24-alpine
+ARG RUNTIME_IMAGE=docker.io/library/node:24-alpine
 
 FROM ${NODE_IMAGE} AS build
 
@@ -64,7 +64,7 @@ RUN pnpm --filter @open-design/web build && \
 
 FROM ${RUNTIME_IMAGE}
 
-RUN apk add --no-cache nodejs tini && \
+RUN apk add --no-cache tini && \
     addgroup -S -g 1001 open-design && \
     adduser -S -D -H -u 1001 -G open-design open-design
 
