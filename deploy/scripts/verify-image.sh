@@ -28,7 +28,8 @@ ARCHIVE_CONTAINER_ID=""
 for required_path in \
   "app/apps/daemon/server.js" \
   "app/apps/web/out/index.html" \
-  "app/node_modules/better-sqlite3" \
+  "app/apps/daemon/node_modules/express" \
+  "app/apps/daemon/node_modules/better-sqlite3" \
   "app/skills" \
   "app/design-systems" \
   "app/assets/frames"
@@ -43,13 +44,13 @@ for forbidden_path in \
   "app/apps/web/src" \
   "app/docs" \
   "app/story" \
-  "app/node_modules/typescript" \
-  "app/node_modules/vite" \
-  "app/node_modules/@types" \
-  "app/node_modules/.pnpm/@types\\+" \
-  "app/node_modules/.pnpm/better-sqlite3@.*/node_modules/better-sqlite3/deps" \
-  "app/node_modules/.pnpm/better-sqlite3@.*/node_modules/better-sqlite3/src" \
-  "app/node_modules/.cache"
+  "app/apps/daemon/node_modules/typescript" \
+  "app/apps/daemon/node_modules/vite" \
+  "app/apps/daemon/node_modules/@types" \
+  "app/apps/daemon/node_modules/.pnpm/@types\\+" \
+  "app/apps/daemon/node_modules/.pnpm/better-sqlite3@.*/node_modules/better-sqlite3/deps" \
+  "app/apps/daemon/node_modules/.pnpm/better-sqlite3@.*/node_modules/better-sqlite3/src" \
+  "app/apps/daemon/node_modules/.cache"
 do
   if grep -Eq "^${forbidden_path}(/|$)" <<<"$archive_listing"; then
     echo "unexpected build-only content found in runtime image: $forbidden_path" >&2

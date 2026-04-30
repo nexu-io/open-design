@@ -1,4 +1,4 @@
-ARG NODE_IMAGE=docker.io/library/node:24-alpine
+ARG NODE_IMAGE=docker.io/library/node:22-alpine
 ARG RUNTIME_IMAGE=docker.io/library/alpine:3.22
 
 FROM ${NODE_IMAGE} AS build
@@ -31,17 +31,17 @@ RUN corepack enable && \
 
 COPY apps ./apps
 RUN pnpm --filter @open-design/web build && \
-    pnpm prune --prod && \
+    pnpm --filter @open-design/daemon deploy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
       /root/.cache \
       /root/.local/share/pnpm/store \
-      node_modules/.cache \
-      node_modules/@types \
-      node_modules/.pnpm/@types+* \
-      node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/deps \
-      node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/src && \
-    find node_modules -type d \( \
+      /app/deploy/daemon/node_modules/.cache \
+      /app/deploy/daemon/node_modules/@types \
+      /app/deploy/daemon/node_modules/.pnpm/@types+* \
+      /app/deploy/daemon/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/deps \
+      /app/deploy/daemon/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/src && \
+    find /app/deploy/daemon/node_modules -type d \( \
       -name test -o \
       -name tests -o \
       -name "__tests__" -o \
@@ -51,7 +51,7 @@ RUN pnpm --filter @open-design/web build && \
       -name examples -o \
       -name ".github" \
     \) -prune -exec rm -rf '{}' + && \
-    find node_modules -type f \( \
+    find /app/deploy/daemon/node_modules -type f \( \
       -name "*.md" -o \
       -name "*.markdown" -o \
       -name "*.d.ts" -o \
@@ -69,11 +69,8 @@ RUN apk add --no-cache nodejs tini && \
     adduser -S -D -H -u 1001 -G open-design open-design
 
 WORKDIR /app
-COPY --from=build --chown=open-design:open-design /app/package.json ./package.json
-COPY --from=build --chown=open-design:open-design /app/apps/daemon ./apps/daemon
+COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daemon
 COPY --from=build --chown=open-design:open-design /app/apps/web/out ./apps/web/out
-COPY --from=build --chown=open-design:open-design /app/node_modules ./node_modules
-COPY --from=build --chown=open-design:open-design /app/apps/daemon/node_modules ./apps/daemon/node_modules
 COPY --chown=open-design:open-design skills ./skills
 COPY --chown=open-design:open-design design-systems ./design-systems
 COPY --chown=open-design:open-design assets/frames ./assets/frames

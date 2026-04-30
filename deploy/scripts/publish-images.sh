@@ -7,7 +7,7 @@ IMAGE_TAG="${IMAGE_TAG:-latest}"
 REGISTRY="${REGISTRY:-docker.io}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-vanjayak}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-open-design}"
-NODE_BASE_IMAGE="${NODE_BASE_IMAGE:-docker.io/library/node:24-alpine}"
+NODE_BASE_IMAGE="${NODE_BASE_IMAGE:-docker.io/library/node:22-alpine}"
 RUNTIME_BASE_IMAGE="${RUNTIME_BASE_IMAGE:-docker.io/library/alpine:3.22}"
 PUSH_STRATEGY="${PUSH_STRATEGY:-skopeo}"
 PRELOAD_BASE_IMAGES="${PRELOAD_BASE_IMAGES:-1}"
@@ -107,7 +107,7 @@ Options:
   --image_namespace <namespace>   default: vanjayak
   --image_repository <name>       default: open-design
   --image <image-ref>             override full image ref
-  --node_base_image <image-ref>   default: docker.io/library/node:24-alpine
+  --node_base_image <image-ref>   default: docker.io/library/node:22-alpine
   --runtime_base_image <image-ref> default: docker.io/library/alpine:3.22
   --push_strategy <skopeo|buildx> default: skopeo
   --preload_base_images <0|1>     default: 1
@@ -252,7 +252,7 @@ node_local_base_image() {
   local platform="$1"
   local arch
   arch="$(platform_to_arch "$platform")" || die "unsupported platform '$platform'"
-  printf 'open-design-base-node:24-alpine-%s' "$arch"
+  printf 'open-design-base-node:22-alpine-%s' "$arch"
 }
 
 runtime_local_base_image() {
