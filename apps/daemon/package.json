@@ -31,20 +31,25 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.3",
     "@open-design/contracts": "workspace:0.1.0",
     "@open-design/platform": "workspace:0.1.0",
     "@open-design/sidecar": "workspace:0.1.0",
     "@open-design/sidecar-proto": "workspace:0.1.0",
     "better-sqlite3": "^11.10.0",
     "express": "^4.19.2",
+    "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^4.17.21",
+    "@types/js-yaml": "^4.0.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^20.17.10",
+    "jose": "^6.2.3",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   },
