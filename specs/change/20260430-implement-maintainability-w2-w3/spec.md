@@ -209,6 +209,7 @@ Flow:
 - `apps/daemon/**/*.ts` - migrated daemon modules, server, CLI, parsers, and helpers.
 - `scripts/**/*.ts` - migrated root operational scripts.
 - `e2e/**/*.ts` - migrated e2e support scripts and reporter strategy.
+- `AGENTS.md` - repository development conventions for future work: shared contracts first for web/daemon boundaries, TypeScript-first implementation, no project-owned JavaScript entrypoints/modules/scripts/tests/reporters after W3.
 
 ### Interfaces / APIs
 
@@ -257,6 +258,11 @@ Flow:
   - [ ] Substep 5.2 Implement: Convert e2e runtime/support scripts and preserve Playwright reporter loading through compiled output or supported TS loading.
   - [ ] Substep 5.3 Implement: Update root `typecheck` to include scripts and e2e support.
   - [ ] Substep 5.4 Verify: Run root typecheck, repo test suite, e2e tests, and a Playwright reporter smoke check when feasible.
+- [ ] Step 6: Lock in typed end state and future conventions
+  - [ ] Substep 6.1 Implement: Add or update root `AGENTS.md` with W2/W3 development conventions: put shared web/daemon contracts in `packages/contracts`, keep UI-only types in web, keep daemon capability logic in daemon, use TypeScript for new project-owned code, and route runtime validation work to the later validation workstream.
+  - [ ] Substep 6.2 Implement: Add an automated residual-JavaScript check for project-owned entrypoints, modules, scripts, tests, and reporters, with explicit allowlist entries only for generated, vendored, or compatibility-output files.
+  - [ ] Substep 6.3 Verify: Run the residual-JavaScript check and confirm no project-owned `.js`, `.mjs`, or `.cjs` source files remain outside the documented allowlist.
+  - [ ] Substep 6.4 Verify: Re-run root typecheck and full test suite after the final convention and residual-file checks are in place.
 
 ## Notes
 
