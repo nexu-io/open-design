@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type {
@@ -158,9 +159,9 @@ export function EntryView({
   return (
     <div
       className="entry"
-      style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}
+      style={{ '--entry-sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
-      <aside className="entry-side" style={{ width: sidebarWidth }}>
+      <aside className="entry-side">
         <div className="entry-brand">
           <span className="entry-brand-mark" aria-hidden>
             <img src="/logo.svg" alt="" className="brand-mark-img" draggable={false} />

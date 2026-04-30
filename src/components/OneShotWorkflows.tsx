@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import type { CreateInput } from './NewProjectPanel';
 import type {
   DesignSystemSummary,
@@ -207,12 +208,35 @@ const QUALITY_GATES = [
   'Verified export',
 ];
 
+const ALL_CATEGORIES = 'All workflows';
+
 export function OneShotWorkflows({
   skills,
   designSystems,
   defaultDesignSystemId,
   onCreateProject,
 }: Props) {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState(ALL_CATEGORIES);
+
+  const categories = useMemo(
+    () => [
+      ALL_CATEGORIES,
+      ...Array.from(new Set(WORKFLOWS.map((workflow) => workflow.category))),
+    ],
+    [],
+  );
+
+  const visibleWorkflows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return WORKFLOWS.filter((workflow) => {
+      const categoryMatch = category === ALL_CATEGORIES || workflow.category === category;
+      if (!categoryMatch) return false;
+      if (!needle) return true;
+      return workflowSearchText(workflow).includes(needle);
+    });
+  }, [category, query]);
+
   function launchWorkflow(workflow: WorkflowDefinition) {
     const skillId = pickSkillId(workflow, skills);
     const designSystemId = pickDesignSystemId(
@@ -238,6 +262,11 @@ export function OneShotWorkflows({
             One prompt, structured brief, polished artifact, critique score,
             verified export, saved for reuse.
           </p>
+          <div className="oneshot-hero-stats" aria-label="OneShot workflow stats">
+            <span>{WORKFLOWS.length} workflow packs</span>
+            <span>{QUALITY_GATES.length} quality gates</span>
+            <span>English-only output</span>
+          </div>
         </div>
         <div className="oneshot-hero-system" aria-label="OneShot production system">
           {QUALITY_GATES.map((gate, index) => (
@@ -267,15 +296,53 @@ export function OneShotWorkflows({
           </div>
         </div>
 
+        <div className="oneshot-toolbar" aria-label="Workflow filters">
+          <label className="oneshot-search">
+            <Icon name="search" size={14} />
+            <span className="sr-only">Search workflows</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search workflows, exports, gates, or outcomes"
+            />
+          </label>
+          <div className="oneshot-category-tabs" role="tablist" aria-label="Workflow categories">
+            {categories.map((entry) => (
+              <button
+                key={entry}
+                type="button"
+                role="tab"
+                aria-selected={category === entry}
+                className={category === entry ? 'active' : ''}
+                onClick={() => setCategory(entry)}
+              >
+                {entry}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="oneshot-workflow-grid">
-          {WORKFLOWS.map((workflow) => (
+          {visibleWorkflows.map((workflow) => (
             <WorkflowCard
               key={workflow.id}
               workflow={workflow}
+              skillLabel={resolveSkillLabel(workflow, skills)}
+              designSystemLabel={resolveDesignSystemLabel(
+                workflow,
+                designSystems,
+                defaultDesignSystemId,
+              )}
               onLaunch={() => launchWorkflow(workflow)}
             />
           ))}
         </div>
+        {visibleWorkflows.length === 0 ? (
+          <div className="oneshot-empty">
+            No workflow packs match this search. Clear the filter or try a broader term.
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -283,9 +350,13 @@ export function OneShotWorkflows({
 
 function WorkflowCard({
   workflow,
+  skillLabel,
+  designSystemLabel,
   onLaunch,
 }: {
   workflow: WorkflowDefinition;
+  skillLabel: string;
+  designSystemLabel: string;
   onLaunch: () => void;
 }) {
   return (
@@ -301,6 +372,16 @@ function WorkflowCard({
           <span key={checkpoint}>{checkpoint}</span>
         ))}
       </div>
+      <div className="oneshot-card-route" aria-label={`${workflow.title} routing`}>
+        <span>
+          <Icon name="sparkles" size={12} />
+          {skillLabel}
+        </span>
+        <span>
+          <Icon name="grid" size={12} />
+          {designSystemLabel}
+        </span>
+      </div>
       <div className="oneshot-card-foot">
         <span>{workflow.exports.join(' / ')}</span>
         <button type="button" className="primary" onClick={onLaunch}>
@@ -310,6 +391,37 @@ function WorkflowCard({
       </div>
     </article>
   );
+}
+
+function workflowSearchText(workflow: WorkflowDefinition) {
+  return [
+    workflow.title,
+    workflow.category,
+    workflow.outcome,
+    workflow.description,
+    ...workflow.checkpoints,
+    ...workflow.exports,
+    ...workflow.skillCandidates,
+    ...workflow.designSystemCandidates,
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+function resolveSkillLabel(workflow: WorkflowDefinition, skills: SkillSummary[]) {
+  const id = pickSkillId(workflow, skills);
+  if (!id) return 'Skill auto-match';
+  return skills.find((skill) => skill.id === id)?.name ?? id;
+}
+
+function resolveDesignSystemLabel(
+  workflow: WorkflowDefinition,
+  designSystems: DesignSystemSummary[],
+  defaultDesignSystemId: string | null,
+) {
+  const id = pickDesignSystemId(workflow, designSystems, defaultDesignSystemId);
+  if (!id) return 'No design system';
+  return designSystems.find((system) => system.id === id)?.title ?? id;
 }
 
 function pickSkillId(workflow: WorkflowDefinition, skills: SkillSummary[]) {

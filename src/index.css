@@ -1013,7 +1013,7 @@ code {
    ============================================================ */
 .entry {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: var(--entry-sidebar-width, 380px) 1fr;
   height: 100vh;
   background: var(--bg);
 }
@@ -1021,6 +1021,7 @@ code {
 .entry-side {
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
+  width: var(--entry-sidebar-width, 380px);
   padding: 28px 24px 20px;
   display: flex;
   flex-direction: column;
@@ -1786,6 +1787,18 @@ code {
   background: var(--bg);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* OneShot Design workflow layer --------------------------------------- */
 .oneshot-workflows {
   display: flex;
@@ -1833,6 +1846,23 @@ code {
   color: var(--text-muted);
   font-size: 15px;
   line-height: 1.6;
+}
+
+.oneshot-hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.oneshot-hero-stats span {
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.68);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .oneshot-hero-system {
@@ -1909,6 +1939,74 @@ code {
   font-weight: 560;
 }
 
+.oneshot-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.oneshot-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.oneshot-search svg {
+  position: absolute;
+  left: 11px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.oneshot-search input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.oneshot-search input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.oneshot-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.oneshot-category-tabs button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.oneshot-category-tabs button:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.oneshot-category-tabs button.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+}
+
 .oneshot-workflow-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1980,6 +2078,34 @@ code {
   font-weight: 560;
 }
 
+.oneshot-card-route {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.oneshot-card-route span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-subtle) 76%, var(--bg-panel));
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 590;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oneshot-card-route svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
 .oneshot-card-foot {
   padding-top: 12px;
   border-top: 1px solid var(--border-soft);
@@ -1995,6 +2121,19 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.oneshot-empty {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px;
 }
 
 @media (max-width: 1080px) {
@@ -2015,9 +2154,26 @@ code {
     justify-content: flex-start;
     max-width: none;
   }
+
+  .oneshot-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .oneshot-category-tabs {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
+  .entry-header {
+    gap: 10px;
+    padding: 12px 12px 0;
+  }
+
+  .entry-tab-content {
+    padding: 14px 12px 24px;
+  }
+
   .oneshot-workflows {
     gap: 18px;
   }
@@ -2038,6 +2194,10 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .oneshot-toolbar {
+    gap: 10px;
+  }
+
   .oneshot-card {
     min-height: auto;
   }
@@ -2050,6 +2210,10 @@ code {
 
   .oneshot-card-outcome {
     text-align: left;
+  }
+
+  .oneshot-card-route {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2323,7 +2487,16 @@ code {
 
 @media (max-width: 900px) {
   .entry { grid-template-columns: 1fr; }
-  .entry-side { border-right: none; border-bottom: 1px solid var(--border); }
+  .entry-side {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .entry-side-resizer {
+    display: none;
+  }
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
 }

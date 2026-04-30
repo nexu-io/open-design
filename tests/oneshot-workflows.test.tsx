@@ -53,6 +53,8 @@ describe('OneShotWorkflows', () => {
     expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(6);
     expect(screen.getByText('BSA Proposal + SOW')).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
+    expect(screen.getByText('6 workflow packs')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
   });
 
   it('seeds a workflow project with matched skill, design system, metadata, and prompt', () => {
@@ -80,5 +82,33 @@ describe('OneShotWorkflows', () => {
         pendingPrompt: expect.stringContaining('CoverVisionOS standard'),
       }),
     );
+  });
+
+  it('filters workflows by search and category', () => {
+    render(
+      <OneShotWorkflows
+        skills={[skill('simple-deck', 'deck')]}
+        designSystems={[designSystem('linear-app')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes'),
+      { target: { value: 'cover' } },
+    );
+
+    expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
+    expect(screen.queryByText('Roofing Pitch Deck')).not.toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes'),
+      { target: { value: '' } },
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Sales deck' }));
+
+    expect(screen.getByText('Roofing Pitch Deck')).toBeInTheDocument();
+    expect(screen.queryByText('Dashboard Mockup')).not.toBeInTheDocument();
   });
 });
