@@ -10,8 +10,9 @@ afterEach(() => {
 
 describe('parseSseFrame', () => {
   it('parses JSON event frames', () => {
-    expect(parseSseFrame('event: stdout\ndata: {"chunk":"hello"}')).toEqual({
+    expect(parseSseFrame('id: 12\nevent: stdout\ndata: {"chunk":"hello"}')).toEqual({
       kind: 'event',
+      id: '12',
       event: 'stdout',
       data: { chunk: 'hello' },
     });
@@ -32,7 +33,9 @@ describe('parseSseFrame', () => {
 describe('streamViaDaemon', () => {
   it('ignores comment frames without notifying handlers', async () => {
     const handlers = createDaemonHandlers();
-    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(': keepalive\n\n')));
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\nevent: end\ndata: {"code":0,"status":"succeeded"}\n\n')));
 
     await streamViaDaemon({
       agentId: 'mock',
@@ -52,8 +55,10 @@ describe('streamViaDaemon', () => {
     const handlers = createDaemonHandlers();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        sseResponse(
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
           [
             ': keepalive',
             '',
@@ -68,9 +73,10 @@ describe('streamViaDaemon', () => {
             'event: end',
             'data: {"code":0}',
             '',
+            '',
           ].join('\n'),
+          ),
         ),
-      ),
     );
 
     await streamViaDaemon({
@@ -90,16 +96,18 @@ describe('streamViaDaemon', () => {
     const handlers = createDaemonHandlers();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        sseResponse(
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
           [
             'event: error',
             'data: {"message":"legacy message","error":{"code":"AGENT_UNAVAILABLE","message":"typed message"}}',
             '',
             '',
           ].join('\n'),
+          ),
         ),
-      ),
     );
 
     await streamViaDaemon({
@@ -112,6 +120,57 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(new Error('typed message'));
     expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('cancels the daemon run when the caller aborts', async () => {
+    const handlers = createDaemonHandlers();
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/cancel') return jsonResponse({ ok: true });
+      if (url === '/api/runs/run-1/events') {
+        controller.abort();
+        throw new DOMException('aborted', 'AbortError');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: controller.signal,
+      handlers,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
+    expect(handlers.onDone).not.toHaveBeenCalled();
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('reconnects to a daemon run after an incomplete stream closes', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse('id: 1\nevent: stdout\ndata: {"chunk":"he"}\n\n'))
+      .mockResolvedValueOnce(sseResponse('id: 2\nevent: stdout\ndata: {"chunk":"llo"}\n\nid: 3\nevent: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/events?after=1', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    });
+    expect(handlers.onDone).toHaveBeenCalledWith('hello');
   });
 });
 
@@ -190,4 +249,11 @@ function sseResponse(text: string): Response {
       headers: { 'content-type': 'text/event-stream' },
     },
   );
+}
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 202,
+    headers: { 'content-type': 'application/json' },
+  });
 }

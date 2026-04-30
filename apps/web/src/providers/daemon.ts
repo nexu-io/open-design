@@ -11,6 +11,7 @@
  */
 import type { AgentEvent, ChatMessage } from '../types';
 import type {
+  ChatRunCreateResponse,
   ChatRequest,
   ChatSseEvent,
   ChatSseStartPayload,
@@ -76,91 +77,150 @@ export async function streamViaDaemon({
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
+  let exitSignal: string | null = null;
+  let endStatus: string | null = null;
+  let lastEventId: string | null = null;
+  let abortListener: (() => void) | null = null;
 
   try {
-    const resp = await fetch('/api/chat', {
+    const createResp = await fetch('/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
-      signal,
     });
 
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text().catch(() => '');
-      handlers.onError(new Error(`daemon ${resp.status}: ${text || 'no body'}`));
+    if (!createResp.ok) {
+      const text = await createResp.text().catch(() => '');
+      handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
       return;
     }
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
+    const created = (await createResp.json()) as ChatRunCreateResponse;
+    const runId = created.runId;
+    let canceled = false;
+    const cancelRun = () => {
+      if (canceled) return;
+      canceled = true;
+      void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+    };
+    if (signal.aborted) {
+      cancelRun();
+      return;
+    }
+    abortListener = cancelRun;
+    signal.addEventListener('abort', cancelRun, { once: true });
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buf.indexOf('\n\n')) !== -1) {
-        const frame = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-        const parsed = parseSseFrame(frame);
-        if (!parsed || parsed.kind !== 'event') continue;
+    for (let reconnects = 0; endStatus === null && reconnects < 5;) {
+      const qs = lastEventId ? `?after=${encodeURIComponent(lastEventId)}` : '';
+      let resp: Response;
+      try {
+        resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
+          method: 'GET',
+          signal,
+        });
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') throw err;
+        reconnects += 1;
+        continue;
+      }
 
-        const event = parsed as unknown as ChatSseEvent;
+      if (!resp.ok || !resp.body) {
+        const text = await resp.text().catch(() => '');
+        handlers.onError(new Error(`daemon ${resp.status}: ${text || 'no body'}`));
+        return;
+      }
 
-        if (event.event === 'stdout') {
-          const chunk = String(event.data.chunk ?? '');
-          acc += chunk;
-          handlers.onDelta(chunk);
-          handlers.onAgentEvent({ kind: 'text', text: chunk });
-          continue;
-        }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let sawEvent = false;
 
-        if (event.event === 'stderr') {
-          stderrBuf += event.data.chunk ?? '';
-          continue;
-        }
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buf.indexOf('\n\n')) !== -1) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const parsed = parseSseFrame(frame);
+          if (!parsed || parsed.kind !== 'event') continue;
+          sawEvent = true;
+          if (parsed.id) lastEventId = parsed.id;
 
-        if (event.event === 'agent') {
-          const translated = translateAgentEvent(event.data);
-          if (!translated) continue;
-          if (translated.kind === 'text') {
-            acc += translated.text;
-            handlers.onDelta(translated.text);
+          const event = parsed as unknown as ChatSseEvent;
+
+          if (event.event === 'stdout') {
+            const chunk = String(event.data.chunk ?? '');
+            acc += chunk;
+            handlers.onDelta(chunk);
+            handlers.onAgentEvent({ kind: 'text', text: chunk });
+            continue;
           }
-          handlers.onAgentEvent(translated);
-          continue;
-        }
 
-        if (event.event === 'start') {
-          const data = event.data as ChatSseStartPayload;
-          handlers.onAgentEvent({
-            kind: 'status',
-            label: 'starting',
-            detail: typeof data.bin === 'string' ? data.bin : undefined,
-          });
-          continue;
-        }
+          if (event.event === 'stderr') {
+            stderrBuf += event.data.chunk ?? '';
+            continue;
+          }
 
-        if (event.event === 'error') {
-          const data = event.data as SseErrorPayload;
-          handlers.onError(new Error(String(data.error?.message ?? data.message ?? 'daemon error')));
-          return;
-        }
+          if (event.event === 'agent') {
+            const translated = translateAgentEvent(event.data);
+            if (!translated) continue;
+            if (translated.kind === 'text') {
+              acc += translated.text;
+              handlers.onDelta(translated.text);
+            }
+            handlers.onAgentEvent(translated);
+            continue;
+          }
 
-        if (event.event === 'end') {
-          exitCode = typeof event.data.code === 'number' ? event.data.code : null;
+          if (event.event === 'start') {
+            const data = event.data as ChatSseStartPayload;
+            handlers.onAgentEvent({
+              kind: 'status',
+              label: 'starting',
+              detail: typeof data.bin === 'string' ? data.bin : undefined,
+            });
+            continue;
+          }
+
+          if (event.event === 'error') {
+            const data = event.data as SseErrorPayload;
+            handlers.onError(new Error(String(data.error?.message ?? data.message ?? 'daemon error')));
+            if (abortListener) signal.removeEventListener('abort', abortListener);
+            return;
+          }
+
+          if (event.event === 'end') {
+            exitCode = typeof event.data.code === 'number' ? event.data.code : null;
+            exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
+            endStatus = typeof event.data.status === 'string' ? event.data.status : 'succeeded';
+          }
         }
       }
+      reconnects = sawEvent ? 0 : reconnects + 1;
     }
 
-    if (exitCode !== null && exitCode !== 0) {
-      const tail = stderrBuf.trim().slice(-400);
-      handlers.onError(
-        new Error(`agent exited with code ${exitCode}${tail ? `\n${tail}` : ''}`),
-      );
+    if (endStatus === null) {
+      handlers.onError(new Error('daemon stream disconnected before run completed'));
+      if (abortListener) signal.removeEventListener('abort', abortListener);
       return;
     }
+
+    if (endStatus === 'canceled') {
+      if (abortListener) signal.removeEventListener('abort', abortListener);
+      return;
+    }
+
+    if (endStatus === 'failed' || exitSignal || (exitCode !== null && exitCode !== 0)) {
+      const tail = stderrBuf.trim().slice(-400);
+      handlers.onError(
+        new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
+      );
+      if (abortListener) signal.removeEventListener('abort', abortListener);
+      return;
+    }
+    if (abortListener) signal.removeEventListener('abort', abortListener);
     handlers.onDone(acc);
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;

@@ -25,6 +25,15 @@ describe('createSseResponse', () => {
     expect(res.writes.join('')).toBe('event: start\ndata: {"ok":true}\n\n');
   });
 
+  it('can attach SSE event ids for resumable streams', () => {
+    const res = new FakeResponse();
+    const sse = createSseResponse(res, { keepAliveIntervalMs: 0 });
+
+    expect(sse.send('stdout', { chunk: 'hello' }, 12)).toBe(true);
+
+    expect(res.writes.join('')).toBe('id: 12\nevent: stdout\ndata: {"chunk":"hello"}\n\n');
+  });
+
   it('emits heartbeat comments before real events', () => {
     const res = new FakeResponse();
     const sse = createSseResponse(res, { keepAliveIntervalMs: 0 });

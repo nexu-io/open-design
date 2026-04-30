@@ -12,6 +12,23 @@ export interface ChatRequest {
   reasoning?: string | null;
 }
 
+export interface ChatRunCreateResponse {
+  runId: string;
+}
+
+export interface ChatRunStatusResponse {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  createdAt: number;
+  updatedAt: number;
+  exitCode?: number | null;
+  signal?: string | null;
+}
+
+export interface ChatRunCancelResponse {
+  ok: true;
+}
+
 export interface ChatAttachment {
   path: string;
   name: string;

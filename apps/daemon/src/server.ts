@@ -274,8 +274,9 @@ export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INT
 
   return {
     /** @param {ChatSseEvent['event'] | ProxySseEvent['event'] | string} event */
-    send(event, data) {
+    send(event, data, id = null) {
       if (!canWrite()) return false;
+      if (id !== null && id !== undefined) res.write(`id: ${id}\n`);
       res.write(`event: ${event}\n`);
       res.write(`data: ${JSON.stringify(data)}\n\n`);
       return true;
@@ -1005,9 +1006,96 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     },
   );
 
-  app.post('/api/chat', async (req, res) => {
+  const chatRuns = new Map();
+  const MAX_RUN_EVENTS = 2_000;
+  const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+  const CHAT_RUN_TTL_MS = 30 * 60 * 1000;
+
+  const createChatRun = () => {
+    const now = Date.now();
+    const run = {
+      id: randomUUID(),
+      status: 'queued',
+      createdAt: now,
+      updatedAt: now,
+      events: [],
+      nextEventId: 1,
+      clients: new Set(),
+      child: null,
+      acpSession: null,
+      exitCode: null,
+      signal: null,
+      cancelRequested: false,
+      promptFileCleaned: null,
+    };
+    chatRuns.set(run.id, run);
+    return run;
+  };
+
+  const scheduleRunCleanup = (run) => {
+    setTimeout(() => {
+      if (TERMINAL_RUN_STATUSES.has(run.status)) chatRuns.delete(run.id);
+    }, CHAT_RUN_TTL_MS).unref?.();
+  };
+
+  const emitRunEvent = (run, event, data) => {
+    const id = run.nextEventId++;
+    const record = { id, event, data };
+    run.events.push(record);
+    if (run.events.length > MAX_RUN_EVENTS) run.events.splice(0, run.events.length - MAX_RUN_EVENTS);
+    run.updatedAt = Date.now();
+    for (const sse of run.clients) sse.send(event, data, id);
+  };
+
+  const finishRun = (run, status, code = null, signal = null) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    run.status = status;
+    run.exitCode = code;
+    run.signal = signal;
+    run.updatedAt = Date.now();
+    run.promptFileCleaned?.();
+    emitRunEvent(run, 'end', { code, signal, status });
+    for (const sse of run.clients) sse.end();
+    run.clients.clear();
+    scheduleRunCleanup(run);
+  };
+
+  const failRun = (run, code, message, init = {}) => {
+    emitRunEvent(run, 'error', createSseErrorPayload(code, message, init));
+    finishRun(run, 'failed', 1, null);
+  };
+
+  const attachRunStream = (run, req, res) => {
+    const sse = createSseResponse(res);
+    const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
+    for (const record of run.events) {
+      if (!Number.isFinite(lastEventId) || record.id > lastEventId) {
+        sse.send(record.event, record.data, record.id);
+      }
+    }
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      sse.end();
+      return;
+    }
+    run.clients.add(sse);
+    res.on('close', () => {
+      run.clients.delete(sse);
+      sse.cleanup();
+    });
+  };
+
+  const runStatusBody = (run) => ({
+    id: run.id,
+    status: run.status,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    exitCode: run.exitCode,
+    signal: run.signal,
+  });
+
+  const startChatRun = async (chatBody, run) => {
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
-    const chatBody = req.body || {};
+    chatBody = chatBody || {};
     const {
       agentId,
       message,
@@ -1019,11 +1107,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       reasoning,
     } = chatBody;
     const def = getAgentDef(agentId);
-    if (!def) return sendApiError(res, 400, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
-    if (!def.bin) return sendApiError(res, 400, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    if (!def) return failRun(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
+    if (!def.bin) return failRun(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
     if (typeof message !== 'string' || !message.trim()) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'message required');
+      return failRun(run, 'BAD_REQUEST', 'message required');
     }
+    if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
@@ -1039,6 +1128,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         cwd = null;
       }
     }
+    if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
 
     // Sanitise supplied image paths: must live under UPLOAD_DIR.
     const safeImages = imagePaths.filter((p) => {
@@ -1172,10 +1262,9 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
     }
 
+    run.promptFileCleaned = cleanPromptFile;
     const args = def.buildArgs(effectivePrompt, safeImages, extraAllowedDirs, agentOptions, { cwd });
-
-    const sse = createSseResponse(res);
-    const send = sse.send;
+    const send = (event, data) => emitRunEvent(run, event, data);
 
     // resolvedBin was already looked up above for the ENAMETOOLONG check.
     // If detection can't find the binary, surface a friendly SSE error
@@ -1184,13 +1273,13 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     // from issue #10 the rest of this block is meant to prevent.
     if (!resolvedBin) {
       cleanPromptFile();
-      send('error', createSseErrorPayload(
+      emitRunEvent(run, 'error', createSseErrorPayload(
         'AGENT_UNAVAILABLE',
         `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
           'Install it and refresh the agent list (GET /api/agents) before retrying.',
         { retryable: true },
       ));
-      return sse.end();
+      return finishRun(run, 'failed', 1, null);
     }
     // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
     // those without `shell: true` (CVE-2024-27980). When `shell: true` is set
@@ -1219,7 +1308,12 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const useShell =
       process.platform === 'win32' && CMD_BAT_RE.test(resolvedBin);
 
+    if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
+
+    run.status = 'running';
+    run.updatedAt = Date.now();
     send('start', {
+      runId: run.id,
       agentId,
       bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
@@ -1243,6 +1337,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         cwd: cwd || undefined,
         shell: useShell,
       });
+      run.child = child;
       if ((def.promptViaStdin || needsFilePrompt) && child.stdin) {
         // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
         // launch) would otherwise surface as an unhandled stream error and
@@ -1257,8 +1352,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
     } catch (err) {
       cleanPromptFile();
-      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
-      return sse.end();
+      emitRunEvent(run, 'error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      return finishRun(run, 'failed', 1, null);
     }
 
     child.stdout.setEncoding('utf8');
@@ -1295,24 +1390,64 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
-    const kill = () => {
-      if (child && !child.killed) child.kill('SIGTERM');
-    };
-    res.on('close', () => {
-      if (!res.writableEnded) kill();
-    });
-
     child.on('error', (err) => {
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
-      sse.end();
+      finishRun(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
       if (acpSession?.hasFatalError()) {
-        return sse.end();
+        return finishRun(run, 'failed', code ?? 1, signal ?? null);
       }
-      cleanPromptFile();
-      send('end', { code, signal });
-      sse.end();
+      const status = run.cancelRequested
+        ? 'canceled'
+        : code === 0
+          ? 'succeeded'
+          : 'failed';
+      finishRun(run, status, code, signal);
+    });
+  };
+
+  app.post('/api/runs', (req, res) => {
+    const run = createChatRun();
+    /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
+    const body = { runId: run.id };
+    res.status(202).json(body);
+    void startChatRun(req.body || {}, run).catch((err) => {
+      failRun(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
+    });
+  });
+
+  app.get('/api/runs/:id', (req, res) => {
+    const run = chatRuns.get(req.params.id);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    res.json(runStatusBody(run));
+  });
+
+  app.get('/api/runs/:id/events', (req, res) => {
+    const run = chatRuns.get(req.params.id);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    attachRunStream(run, req, res);
+  });
+
+  app.post('/api/runs/:id/cancel', (req, res) => {
+    const run = chatRuns.get(req.params.id);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) {
+      run.cancelRequested = true;
+      run.updatedAt = Date.now();
+      if (run.child && !run.child.killed) run.child.kill('SIGTERM');
+      else finishRun(run, 'canceled', null, 'SIGTERM');
+    }
+    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
+    const body = { ok: true };
+    res.json(body);
+  });
+
+  app.post('/api/chat', (req, res) => {
+    const run = createChatRun();
+    attachRunStream(run, req, res);
+    void startChatRun(req.body || {}, run).catch((err) => {
+      failRun(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });
   });
 

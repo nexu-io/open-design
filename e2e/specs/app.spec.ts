@@ -91,7 +91,10 @@ for (const entry of automatedCases()) {
     }
 
     if (entry.mockArtifact) {
-      await page.route('**/api/chat', async (route) => {
+      await page.route('**/api/runs', async (route) => {
+        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
+      });
+      await page.route('**/api/runs/*/events', async (route) => {
         const artifact =
           `<artifact identifier="${entry.mockArtifact!.identifier}" type="text/html" title="${entry.mockArtifact!.title}">` +
           entry.mockArtifact!.html +
@@ -121,7 +124,10 @@ for (const entry of automatedCases()) {
     }
 
     if (entry.flow === 'question-form-selection-limit') {
-      await page.route('**/api/chat', async (route) => {
+      await page.route('**/api/runs', async (route) => {
+        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
+      });
+      await page.route('**/api/runs/*/events', async (route) => {
         const form = [
           '<question-form id="discovery" title="Quick brief — 30 seconds">',
           JSON.stringify(
@@ -169,7 +175,10 @@ for (const entry of automatedCases()) {
 
     if (entry.flow === 'question-form-submit-persistence') {
       let requestCount = 0;
-      await page.route('**/api/chat', async (route) => {
+      await page.route('**/api/runs', async (route) => {
+        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
+      });
+      await page.route('**/api/runs/*/events', async (route) => {
         requestCount += 1;
         const chunk =
           requestCount === 1
@@ -203,7 +212,7 @@ for (const entry of automatedCases()) {
           `data: ${JSON.stringify({ chunk })}`,
           '',
           'event: end',
-          'data: {"code":0}',
+          'data: {"code":0,"status":"succeeded"}',
           '',
           '',
         ].join('\n');
@@ -314,7 +323,7 @@ async function sendPrompt(
       await expect(input).toHaveValue(prompt, { timeout: 1500 });
       await expect(sendButton).toBeEnabled({ timeout: 1500 });
       const chatResponse = page.waitForResponse(
-        (resp) => resp.url().includes('/api/chat') && resp.request().method() === 'POST',
+        (resp) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
         { timeout: 2000 },
       );
       await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -329,7 +338,7 @@ async function sendPrompt(
         await expect(input).toHaveValue(prompt, { timeout: 1500 });
         await expect(sendButton).toBeEnabled({ timeout: 1500 });
         const chatResponse = page.waitForResponse(
-          (resp) => resp.url().includes('/api/chat') && resp.request().method() === 'POST',
+          (resp) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
           { timeout: 2000 },
         );
         await sendButton.evaluate((button: HTMLButtonElement) => button.click());

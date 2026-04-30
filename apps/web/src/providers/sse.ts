@@ -1,5 +1,5 @@
 export type ParsedSseFrame =
-  | { kind: 'event'; event: string; data: Record<string, unknown> }
+  | { kind: 'event'; event: string; data: Record<string, unknown>; id?: string }
   | { kind: 'comment'; comment: string }
   | { kind: 'empty' };
 
@@ -7,6 +7,7 @@ export function parseSseFrame(frame: string): ParsedSseFrame | null {
   const lines = frame.split('\n');
   const comments: string[] = [];
   let event = 'message';
+  let id: string | undefined;
   const dataLines: string[] = [];
 
   for (const rawLine of lines) {
@@ -15,6 +16,8 @@ export function parseSseFrame(frame: string): ParsedSseFrame | null {
       comments.push(line.slice(1).trimStart());
     } else if (line.startsWith('event: ')) {
       event = line.slice(7).trim();
+    } else if (line.startsWith('id: ')) {
+      id = line.slice(4).trim();
     } else if (line.startsWith('data: ')) {
       dataLines.push(line.slice(6));
     }
@@ -28,7 +31,7 @@ export function parseSseFrame(frame: string): ParsedSseFrame | null {
   }
 
   try {
-    return { kind: 'event', event, data: JSON.parse(dataLines.join('\n')) };
+    return { kind: 'event', event, data: JSON.parse(dataLines.join('\n')), ...(id ? { id } : {}) };
   } catch {
     return null;
   }

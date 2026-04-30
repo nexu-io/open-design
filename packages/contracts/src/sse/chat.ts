@@ -4,10 +4,15 @@ import type { SseTransportEvent } from './common';
 export const CHAT_SSE_PROTOCOL_VERSION = 1;
 
 export interface ChatSseStartPayload {
+  runId?: string;
+  agentId?: string;
   bin: string;
   protocolVersion?: typeof CHAT_SSE_PROTOCOL_VERSION;
   /** Legacy daemon-internal absolute cwd. Kept for compatibility during W2 adoption. */
-  cwd?: string;
+  cwd?: string | null;
+  projectId?: string | null;
+  model?: string | null;
+  reasoning?: string | null;
 }
 
 export interface ChatSseChunkPayload {
@@ -16,6 +21,8 @@ export interface ChatSseChunkPayload {
 
 export interface ChatSseEndPayload {
   code: number | null;
+  signal?: string | null;
+  status?: 'succeeded' | 'failed' | 'canceled';
 }
 
 export type DaemonAgentPayload =
