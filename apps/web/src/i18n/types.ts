@@ -1,14 +1,16 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'zh-CN' | 'zh-TW' | 'pt-BR';
+export type Locale = 'en' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'ru' | 'fa';
 
-export const LOCALES: Locale[] = ['en', 'zh-CN', 'zh-TW', 'pt-BR'];
+export const LOCALES: Locale[] = ['en', 'zh-CN', 'zh-TW', 'pt-BR', 'ru', 'fa'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
   'zh-CN': '简体中文',
   'zh-TW': '繁體中文',
   'pt-BR': 'Português (Brasil)',
+  'ru': 'Русский',
+  'fa': 'فارسی',
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -394,6 +396,10 @@ export interface Dict {
   'fileViewer.open': string;
   'fileViewer.imageMeta': string;
   'fileViewer.sketchMeta': string;
+  'fileViewer.markdownStreamingMeta': string;
+  'fileViewer.markdownErrorMeta': string;
+  'fileViewer.markdownStreamingStatus': string;
+  'fileViewer.markdownErrorStatus': string;
   'fileViewer.reload': string;
   'fileViewer.reloadDisk': string;
   'fileViewer.copy': string;

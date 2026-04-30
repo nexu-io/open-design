@@ -10,7 +10,9 @@ import {
   type ReactNode,
 } from 'react';
 import { en } from './locales/en';
+import { fa } from './locales/fa';
 import { ptBR } from './locales/pt-BR';
+import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
 import { LOCALES, type Dict, type Locale } from './types';
@@ -25,6 +27,8 @@ const DICTS: Record<Locale, Dict> = {
   'zh-CN': zhCN,
   'zh-TW': zhTW,
   'pt-BR': ptBR,
+  'ru': ru,
+  'fa': fa,
 };
 
 const LS_KEY = 'open-design:locale';
@@ -107,7 +111,7 @@ export function useI18n(): I18nContextValue {
     // without requiring every callsite to wrap in a provider.
     return {
       locale: 'en',
-      setLocale: () => {},
+      setLocale: () => { },
       t: (key, vars) => {
         const raw = en[key] ?? key;
         if (!vars) return raw;

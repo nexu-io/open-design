@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node ./esbuild.config.mjs",
     "dev": "tsx ./src/index.ts",
+    "test": "node --import tsx --test src/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

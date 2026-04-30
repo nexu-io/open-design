@@ -140,7 +140,7 @@ export function ChatPane({
       el.scrollTop = el.scrollHeight;
       setScrolledFromBottom(false);
     });
-  }, [messages.length]);
+  }, [activeConversationId, messages.length]);
 
   useEffect(() => {
     const el = logRef.current;

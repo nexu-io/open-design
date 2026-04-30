@@ -18,6 +18,7 @@ import {
 import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
+import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
@@ -28,6 +29,7 @@ import { importClaudeDesignZip } from './claude-design-import.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import {
+  decodeMultipartFilename,
   deleteProjectFile,
   ensureProject,
   listFiles,
@@ -73,7 +75,8 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export function resolveProjectRoot(moduleDir: string): string {
-  const daemonDir = ['dist', 'src'].includes(path.basename(moduleDir))
+  const base = path.basename(moduleDir);
+  const daemonDir = base === 'dist' || base === 'src'
     ? path.dirname(moduleDir)
     : moduleDir;
   return path.resolve(daemonDir, '../..');
@@ -167,7 +170,8 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
-      const safe = file.originalname.replace(/[^\w.\-]/g, '_');
+      file.originalname = decodeMultipartFilename(file.originalname);
+      const safe = sanitizeName(file.originalname);
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
@@ -178,7 +182,8 @@ const importUpload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
-      const safe = file.originalname.replace(/[^\w.\-]/g, '_');
+      file.originalname = decodeMultipartFilename(file.originalname);
+      const safe = sanitizeName(file.originalname);
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
@@ -200,9 +205,12 @@ const projectUpload = multer({
       }
     },
     filename: (_req, file, cb) => {
-      // Reuse the same sanitiser used everywhere else, then prepend a
-      // base36 timestamp so multiple uploads with the same original name
-      // don't clobber each other.
+      // multer@1 hands us latin1-decoded multipart filenames; restore the
+      // original UTF-8 so the response (and the on-disk name) preserves
+      // non-ASCII characters instead of mangling them. Then run the
+      // shared sanitiser and prepend a base36 timestamp so multiple
+      // uploads with the same original name don't clobber each other.
+      file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
       cb(null, `${Date.now().toString(36)}-${safe}`);
     },
@@ -1365,7 +1373,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         shell: useShell,
       });
       run.child = child;
-      if ((def.promptViaStdin || needsFilePrompt) && child.stdin) {
+      if ((def.promptViaStdin || needsFilePrompt) && child.stdin && def.streamFormat !== 'pi-rpc') {
         // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
         // launch) would otherwise surface as an unhandled stream error and
         // crash the daemon. Swallow it — the regular exit/close handlers
@@ -1398,6 +1406,14 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
+    } else if (def.streamFormat === 'pi-rpc') {
+      acpSession = attachPiRpcSession({
+        child,
+        prompt: composed,
+        cwd: cwd || PROJECT_ROOT,
+        model: safeModel,
+        send,
+      });
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({
         child,

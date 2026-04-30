@@ -77,7 +77,7 @@ function normalizeModels(models, defaultModelOption) {
   return out;
 }
 
-function createJsonLineStream(onMessage) {
+export function createJsonLineStream(onMessage) {
   let buffer = '';
   return {
     feed(chunk) {

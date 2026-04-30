@@ -24,12 +24,19 @@ export type ArtifactRendererId =
 
 export type ArtifactExportKind = 'html' | 'pdf' | 'zip' | 'pptx' | 'jsx' | 'md' | 'svg' | 'txt';
 
+export type ArtifactStatus = 'streaming' | 'complete' | 'error';
+
 export interface ArtifactManifest {
   version: 1;
   kind: ArtifactKind;
   title: string;
   entry: string;
   renderer: ArtifactRendererId;
+  /**
+   * Optional for backward compatibility with pre-streaming artifacts.
+   * Daemon/web manifest normalization defaults missing values to "complete".
+   */
+  status?: ArtifactStatus;
   exports: ArtifactExportKind[];
   supportingFiles?: string[];
   createdAt?: string;

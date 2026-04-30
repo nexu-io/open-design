@@ -3,6 +3,7 @@ import type {
   ArtifactKind,
   ArtifactManifest,
   ArtifactRendererId,
+  ArtifactStatus,
 } from './types';
 
 const MANIFEST_VERSION = 1;
@@ -38,6 +39,7 @@ const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
   'svg',
   'txt',
 ]);
+const ALLOWED_STATUS: ReadonlySet<ArtifactStatus> = new Set(['streaming', 'complete', 'error']);
 
 function normalizeExt(name: string): string {
   const i = name.lastIndexOf('.');
@@ -81,6 +83,7 @@ export function createHtmlArtifactManifest(input: {
     title: input.title,
     entry: input.entry,
     renderer: 'html',
+    status: 'complete',
     exports: ['html', 'pdf', 'zip'],
     createdAt: now,
     updatedAt: now,
@@ -106,6 +109,9 @@ export function parseArtifactManifest(raw: string): ArtifactManifest | null {
     }
     if (!ALLOWED_KINDS.has(parsed.kind as ArtifactKind)) return null;
     if (!ALLOWED_RENDERERS.has(parsed.renderer as ArtifactRendererId)) return null;
+    if (parsed.status !== undefined && !ALLOWED_STATUS.has(parsed.status as ArtifactStatus)) {
+      return null;
+    }
     if (parsed.exports.length === 0) return null;
     if (parsed.exports.some((value) => !ALLOWED_EXPORTS.has(value as ArtifactExportKind))) return null;
     return {
@@ -114,6 +120,9 @@ export function parseArtifactManifest(raw: string): ArtifactManifest | null {
       title: parsed.title,
       entry: parsed.entry,
       renderer: parsed.renderer as ArtifactRendererId,
+      status: ALLOWED_STATUS.has(parsed.status as ArtifactStatus)
+        ? (parsed.status as ArtifactStatus)
+        : 'complete',
       exports: parsed.exports as ArtifactExportKind[],
       supportingFiles: Array.isArray(parsed.supportingFiles)
         ? parsed.supportingFiles.filter((x): x is string => typeof x === 'string')
@@ -167,6 +176,7 @@ export function inferLegacyManifest(input: {
     title: input.title || input.entry,
     entry: input.entry,
     renderer,
+    status: 'complete',
     exports: exportsForKind(resolvedKind),
     metadata: input.metadata,
   };

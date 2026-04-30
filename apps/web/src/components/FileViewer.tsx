@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { artifactRendererRegistry } from '../artifacts/renderer-registry';
+import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
+import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
@@ -50,6 +51,12 @@ export function FileViewer({
         streaming={Boolean(streaming)}
       />
     );
+  }
+  if (rendererMatch?.renderer.id === 'markdown') {
+    return <MarkdownViewer projectId={projectId} file={file} />;
+  }
+  if (rendererMatch?.renderer.id === 'svg') {
+    return <ImageViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'image') {
     return <ImageViewer projectId={projectId} file={file} />;
@@ -872,6 +879,108 @@ function TextViewer({
           <CodeWithLines text={text} />
         ) : (
           <pre className="viewer-source">{text}</pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MarkdownViewer({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: ProjectFile;
+}) {
+  const t = useT();
+  const [text, setText] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const status = file.artifactManifest?.status ?? 'complete';
+  const isStreaming = status === 'streaming';
+  const isError = status === 'error';
+
+  useEffect(() => {
+    setText(null);
+    let cancelled = false;
+    void fetchProjectFileText(projectId, file.name).then((next) => {
+      if (!cancelled) setText(next ?? '');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.name, file.mtime, reloadKey]);
+
+  async function copy() {
+    if (text == null) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+  }
+
+  const html = useMemo(() => {
+    if (text === null) return null;
+    const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
+    return renderPartial(text);
+  }, [text]);
+
+  return (
+    <div className="viewer text-viewer">
+      <div className="viewer-toolbar">
+        <div className="viewer-toolbar-left">
+          {isStreaming ? <span className="viewer-meta">{t('fileViewer.markdownStreamingMeta')}</span> : null}
+          {isError ? <span className="viewer-meta">{t('fileViewer.markdownErrorMeta')}</span> : null}
+        </div>
+        <div className="viewer-toolbar-actions">
+          <button
+            type="button"
+            className="viewer-action"
+            onClick={() => setReloadKey((n) => n + 1)}
+            title={t('fileViewer.reloadDisk')}
+          >
+            <Icon name="reload" size={13} />
+            <span>{t('fileViewer.reload')}</span>
+          </button>
+          <button
+            type="button"
+            className="viewer-action"
+            onClick={() => void copy()}
+            title={t('fileViewer.copyTitle')}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={13} />
+            <span>{copied ? t('fileViewer.copied') : t('fileViewer.copy')}</span>
+          </button>
+        </div>
+      </div>
+      <div className="viewer-body">
+        {html === null ? (
+          <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        ) : (
+          <>
+            {isStreaming ? <div className="markdown-status">{t('fileViewer.markdownStreamingStatus')}</div> : null}
+            {isError ? <div className="markdown-status markdown-status-error">{t('fileViewer.markdownErrorStatus')}</div> : null}
+            {/* Safe by contract: renderMarkdownToSafeHtml escapes raw HTML and rejects unsafe link protocols. */}
+            <article
+              className="markdown-rendered"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </>
         )}
       </div>
     </div>

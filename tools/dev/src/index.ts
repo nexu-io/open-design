@@ -46,6 +46,13 @@ import {
   type ToolDevOptions,
 } from "./config.js";
 import {
+  appendStartupLogDiagnostics,
+  createStartupLogDiagnostics,
+  detectLogDiagnostics,
+  formatLogDiagnostics,
+  type LogDiagnostic,
+} from "./diagnostics.js";
+import {
   inspectDaemonRuntime,
   inspectDesktopRuntime,
   inspectWebRuntime,
@@ -539,8 +546,10 @@ async function startDaemon(config: ToolDevConfig, options: CliOptions) {
       status,
     };
   } catch (error) {
+    const logPath = config.apps.daemon.latestLogPath;
+    const lines = await readLogTail(logPath, 80).catch(() => []);
     await stopApp(config, APP_KEYS.DAEMON).catch(() => undefined);
-    throw error;
+    throw appendStartupLogDiagnostics(error, APP_KEYS.DAEMON, createStartupLogDiagnostics(logPath, lines));
   }
 }
 
@@ -700,6 +709,12 @@ async function readLogs(config: ToolDevConfig, appName: ToolDevAppName) {
   return { app: appName, lines: await readLogTail(logPath, 200), logPath };
 }
 
+function createLogDiagnostics(logs: Record<string, LogResult>): Record<string, LogDiagnostic[]> {
+  return Object.fromEntries(
+    Object.entries(logs).map(([appName, log]) => [appName, detectLogDiagnostics(log.lines)] as const),
+  );
+}
+
 type LogResult = Awaited<ReturnType<typeof readLogs>>;
 
 function isLogResult(value: LogResult | Record<string, LogResult>): value is LogResult {
@@ -739,6 +754,19 @@ function printCheckResult(result: unknown, options: CliOptions): void {
   if (logs != null) {
     process.stdout.write("\nLogs\n");
     printLogs(logs as Record<string, LogResult>, options);
+  }
+
+  const diagnostics = asRecord(record?.diagnostics);
+  if (diagnostics != null) {
+    const entries = Object.entries(diagnostics)
+      .map(([appName, value]) => [appName, Array.isArray(value) ? formatLogDiagnostics(value as LogDiagnostic[]) : null] as const)
+      .filter((entry): entry is readonly [string, string] => entry[1] != null);
+    if (entries.length > 0) {
+      process.stdout.write("\nDiagnostics\n");
+      for (const [appName, message] of entries) {
+        process.stdout.write(`[${appName}] ${message}\n`);
+      }
+    }
   }
 }
 
@@ -919,7 +947,7 @@ addSharedOptions(cli.command("check [app]", "Print status and recent logs for qu
     const logs = Object.fromEntries(
       await Promise.all(targets.map(async (target) => [target, await readLogs(config, target)] as const)),
     );
-    printCheckResult({ apps, logs, namespace: config.namespace }, options);
+    printCheckResult({ apps, diagnostics: createLogDiagnostics(logs), logs, namespace: config.namespace }, options);
   },
 );
 

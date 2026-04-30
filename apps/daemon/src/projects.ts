@@ -196,16 +196,38 @@ export function validateProjectPath(raw) {
   return parts.join('/');
 }
 
-// Replace anything outside [A-Za-z0-9._-] with underscore. Spaces collapse
+// Keep Unicode letters/digits as-is; replace path separators, control
+// characters, and reserved punctuation with underscore. Spaces collapse
 // to dashes (matches the kebab-case style used by the agent's slugs).
+// The previous ASCII-only filter collapsed every non-ASCII character to
+// '_', so a Chinese filename like '测试文档.docx' became '____.docx'
+// (issue #144).
 export function sanitizeName(raw) {
   const cleaned = String(raw ?? '')
     .replace(/[\\/]/g, '_')
     .replace(/\s+/g, '-')
-    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .replace(/[^\p{L}\p{N}._-]/gu, '_')
     .replace(/^\.+/, '_')
     .trim();
   return cleaned || `file-${Date.now()}`;
+}
+
+// multer@1 decodes multipart filenames as latin1, which mangles any
+// UTF-8 bytes (Chinese, Japanese, Cyrillic, ...) the user uploads. Re-
+// decode as UTF-8 when the result round-trips back to the original
+// bytes; otherwise the source was genuine latin1 and we leave it alone.
+export function decodeMultipartFilename(name) {
+  if (!name || typeof name !== 'string') return name ?? '';
+  // If any code point exceeds 0xFF the source is already a properly
+  // decoded Unicode string — for example, multer received an RFC 5987
+  // `filename*` parameter and decoded it as UTF-8. Re-running latin1
+  // -> utf8 here would corrupt those names, so exit early.
+  for (let i = 0; i < name.length; i++) {
+    if (name.charCodeAt(i) > 0xff) return name;
+  }
+  const buf = Buffer.from(name, 'latin1');
+  const utf8 = buf.toString('utf8');
+  return Buffer.from(utf8, 'utf8').equals(buf) ? utf8 : name;
 }
 
 function toProjectPath(raw) {

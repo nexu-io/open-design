@@ -119,6 +119,7 @@ export function ProjectView({
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
   const skillCache = useRef<Map<string, string>>(new Map());
   const designCache = useRef<Map<string, string>>(new Map());
@@ -188,7 +189,11 @@ export function ProjectView({
       for (const controller of reattachControllersRef.current.values()) {
         controller.abort();
       }
+      for (const controller of reattachCancelControllersRef.current.values()) {
+        controller.abort();
+      }
       reattachControllersRef.current.clear();
+      reattachCancelControllersRef.current.clear();
     };
   }, [project.id, activeConversationId]);
 
@@ -440,6 +445,7 @@ export function ProjectView({
         const controller = new AbortController();
         const cancelController = new AbortController();
         reattachControllersRef.current.set(runId, controller);
+        reattachCancelControllersRef.current.set(runId, cancelController);
         if (!isTerminalRunStatus(status.status)) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
@@ -484,6 +490,7 @@ export function ProjectView({
               );
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
+              reattachCancelControllersRef.current.delete(runId);
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
@@ -500,6 +507,7 @@ export function ProjectView({
               );
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
+              reattachCancelControllersRef.current.delete(runId);
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
@@ -519,6 +527,7 @@ export function ProjectView({
             if (runStatus === 'canceled') {
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
+              reattachCancelControllersRef.current.delete(runId);
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
@@ -538,6 +547,7 @@ export function ProjectView({
           .finally(() => {
             if (persistTimer) clearTimeout(persistTimer);
             reattachControllersRef.current.delete(runId);
+            reattachCancelControllersRef.current.delete(runId);
             if (abortRef.current === controller) abortRef.current = null;
             if (cancelRef.current === cancelController) cancelRef.current = null;
           });
@@ -912,8 +922,16 @@ export function ProjectView({
     const stoppedAt = Date.now();
     cancelRef.current?.abort();
     cancelRef.current = null;
+    for (const controller of reattachCancelControllersRef.current.values()) {
+      controller.abort();
+    }
+    reattachCancelControllersRef.current.clear();
     abortRef.current?.abort();
     abortRef.current = null;
+    for (const controller of reattachControllersRef.current.values()) {
+      controller.abort();
+    }
+    reattachControllersRef.current.clear();
     setStreaming(false);
     setMessages((curr) => {
       const finalized: ChatMessage[] = [];

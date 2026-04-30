@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { detectAcpModels } from './acp.js';
+import { parsePiModels } from './pi-rpc.js';
 
 const execFileP = promisify(execFile);
 
@@ -311,8 +312,10 @@ export const AGENT_DEFS = [
       { id: 'sonnet-4-thinking', label: 'sonnet-4-thinking' },
       { id: 'gpt-5', label: 'gpt-5' },
     ],
-    // Prompt delivered via stdin (`cursor-agent -`) to avoid Windows
-    // `spawn ENAMETOOLONG` while preserving Cursor Agent's structured stream.
+    // Cursor Agent does not use `-` as a "read prompt from stdin" sentinel.
+    // Passing it makes the CLI treat the dash as the literal user prompt,
+    // which then surfaces as "your message only contains '-'". Keep stdin
+    // piped for prompt delivery, but do not append a fake prompt arg.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = [];
       args.push('--print', '--output-format', 'stream-json', '--stream-partial-output', '--force', '--trust');
@@ -322,7 +325,6 @@ export const AGENT_DEFS = [
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
-      args.push('-');
       return args;
     },
     promptViaStdin: true,
@@ -399,6 +401,69 @@ export const AGENT_DEFS = [
       return args;
     },
     streamFormat: 'copilot-stream-json',
+  },
+  {
+    id: 'pi',
+    name: 'Pi',
+    bin: 'pi',
+    versionArgs: ['--version'],
+    // `pi --list-models` prints a TSV table to stderr (not stdout),
+    // so we use a custom fetchModels that reads stderr.
+    fetchModels: async (resolvedBin) => {
+      try {
+        const { stderr } = await execFileP(resolvedBin, ['--list-models'], {
+          timeout: 20_000,
+          maxBuffer: 8 * 1024 * 1024,
+        });
+        const parsed = parsePiModels(stderr);
+        if (!parsed || parsed.length === 0) return null;
+        return parsed;
+      } catch {
+        return null;
+      }
+    },
+    // Fallback models — the most commonly used providers/models when
+    // `pi --list-models` fails or times out.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (anthropic)' },
+      { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5 (anthropic)' },
+      { id: 'openai/gpt-5', label: 'GPT-5 (openai)' },
+      { id: 'openai/o4-mini', label: 'o4-mini (openai)' },
+      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro (google)' },
+      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash (google)' },
+    ],
+    // Thinking level presets mapped to pi's --thinking flag.
+    reasoningOptions: [
+      { id: 'default', label: 'Default' },
+      { id: 'off', label: 'Off' },
+      { id: 'minimal', label: 'Minimal' },
+      { id: 'low', label: 'Low' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'high', label: 'High' },
+      { id: 'xhigh', label: 'XHigh' },
+    ],
+    // pi's RPC mode drives the entire conversation over stdio JSON-RPC.
+    // The daemon sends a `prompt` command and pi streams back typed events.
+    // No prompt in argv — avoids ENAMETOOLONG and keeps the protocol clean.
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+      const args = ['--mode', 'rpc', '--no-session'];
+      if (options.model && options.model !== 'default') {
+        // pi --model accepts patterns ("sonnet", "anthropic/claude-sonnet-4-5",
+        // "openai/gpt-5:high") so we pass the value through as-is.
+        args.push('--model', options.model);
+      }
+      if (options.reasoning && options.reasoning !== 'default') {
+        args.push('--thinking', options.reasoning);
+      }
+      // pi supports --append-system-prompt for cwd and extra context.
+      // For now we rely on the composed prompt containing the cwd hint
+      // (same pattern as other agents) rather than using system-prompt flags.
+      return args;
+    },
+    // Prompt is sent via RPC `prompt` command on stdin, not as a CLI arg.
+    promptViaStdin: true,
+    streamFormat: 'pi-rpc',
   },
 ];
 
