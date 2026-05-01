@@ -1981,6 +1981,54 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   const redactAuthTokens = (text) => text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
+  // Hostname-only checks miss several SSRF vectors that still resolve to
+  // internal addresses: 0.0.0.0 (= localhost on linux/macOS), the rest of
+  // the 127/8 loopback range (127.0.0.2 etc), IPv4-mapped IPv6
+  // (::ffff:127.0.0.1), CGNAT (100.64.0.0/10), IPv6 ULA (fc00::/7) and
+  // link-local (fe80::/10). Resolve the parsed URL hostname to all
+  // numeric IP forms first, then test each form against a single block
+  // list so future ranges only need to be added once.
+  const isBlockedIPv4 = (octets) => {
+    const [a, b] = octets;
+    if (a === 0) return true; // 0.0.0.0/8
+    if (a === 10) return true; // 10/8
+    if (a === 127) return true; // 127/8 loopback
+    if (a === 169 && b === 254) return true; // 169.254/16 link-local + AWS metadata
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+    if (a === 192 && b === 168) return true; // 192.168/16
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64/10 CGNAT
+    return false;
+  };
+  const parseIPv4 = (host) => {
+    const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (!m) return null;
+    const octets = m.slice(1).map(Number);
+    if (octets.some((n) => n < 0 || n > 255)) return null;
+    return octets;
+  };
+  const isBlockedIPv6 = (host) => {
+    // host arrives without brackets here. Lowercase + check for the major
+    // unrouted/internal ranges.
+    const h = host.toLowerCase();
+    if (h === '::' || h === '::1') return true;
+    if (h.startsWith('fe80:') || h.startsWith('fe80::')) return true; // link-local
+    // ULA: fc00::/7 covers fc00:: and fd00::
+    if (h.startsWith('fc') || h.startsWith('fd')) return true;
+    // IPv4-mapped IPv6 (::ffff:0:0/96): defer to IPv4 block list
+    const mapped = /^::ffff:([0-9a-f.:]+)$/.exec(h);
+    if (mapped) {
+      const v4 = parseIPv4(mapped[1]);
+      if (v4) return isBlockedIPv4(v4);
+      // Hex form ::ffff:7f00:1 — split last two groups into 4 octets.
+      const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(mapped[1]);
+      if (hex) {
+        const high = parseInt(hex[1], 16);
+        const low = parseInt(hex[2], 16);
+        return isBlockedIPv4([high >> 8, high & 0xff, low >> 8, low & 0xff]);
+      }
+    }
+    return false;
+  };
   const validateExternalApiBaseUrl = (baseUrl) => {
     let parsed;
     try {
@@ -1991,13 +2039,17 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return { error: 'Only http/https allowed' };
     }
-    if (
-      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
-      parsed.hostname.startsWith('169.254.') ||
-      parsed.hostname.startsWith('10.') ||
-      /^192\.168\./.test(parsed.hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)
-    ) {
+    let host = parsed.hostname;
+    if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+    const lowerHost = host.toLowerCase();
+    if (lowerHost === 'localhost' || lowerHost.endsWith('.localhost')) {
+      return { error: 'Internal hostnames blocked', forbidden: true };
+    }
+    const v4 = parseIPv4(host);
+    if (v4 && isBlockedIPv4(v4)) {
+      return { error: 'Internal IPs blocked', forbidden: true };
+    }
+    if (host.includes(':') && isBlockedIPv6(host)) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }
     return { parsed };
