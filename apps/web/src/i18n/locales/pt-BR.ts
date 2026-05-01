@@ -390,7 +390,7 @@ export const ptBR: Dict = {
   'designFiles.download': 'Baixar',
   'designFiles.dropTitle': '⤓ Solte arquivos aqui',
   'designFiles.dropDesc':
-    'Imagens, docs, referências, links do Figma ou pastas — o agente usará tudo como contexto.',
+    'Imagens, docs, referências ou pastas — o agente usará tudo como contexto.',
   'designFiles.upload.title': 'Enviar arquivos',
   'designFiles.paste.title': 'Colar texto como arquivo',
   'designFiles.upload.label': 'Enviar',

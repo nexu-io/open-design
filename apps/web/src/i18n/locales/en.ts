@@ -391,7 +391,7 @@ export const en: Dict = {
   'designFiles.download': 'Download',
   'designFiles.dropTitle': '⤓ Drop files here',
   'designFiles.dropDesc':
-    'Images, docs, references, Figma links, or folders — the agent will use them as context.',
+    'Images, docs, references, or folders — the agent will use them as context.',
   'designFiles.upload.title': 'Upload files',
   'designFiles.paste.title': 'Paste text as a file',
   'designFiles.upload.label': 'Upload',

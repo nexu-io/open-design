@@ -390,7 +390,7 @@ export const ru: Dict = {
   'designFiles.download': 'Скачать',
   'designFiles.dropTitle': '⤓ Перетащите файлы сюда',
   'designFiles.dropDesc':
-    'Изображения, документы, ссылки, ссылки Figma или папки — агент будет использовать их как контекст.',
+    'Изображения, документы, референсы или папки — агент будет использовать их как контекст.',
   'designFiles.upload.title': 'Загрузить файлы',
   'designFiles.paste.title': 'Вставить текст как файл',
   'designFiles.upload.label': 'Загрузить',

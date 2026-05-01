@@ -382,7 +382,7 @@ export const zhTW: Dict = {
   'designFiles.openInTab': '在分頁中開啟',
   'designFiles.download': '下載',
   'designFiles.dropTitle': '⤓ 把檔案拖到這裡',
-  'designFiles.dropDesc': '圖片、文件、參考資料、Figma 連結或資料夾 — 智慧體都會用作上下文。',
+  'designFiles.dropDesc': '圖片、文件、參考資料或資料夾 — 智慧體都會用作上下文。',
   'designFiles.upload.title': '上傳一張圖片',
   'designFiles.paste.title': '將文字貼上為檔案',
   'designFiles.upload.label': '上傳',
