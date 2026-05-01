@@ -15,6 +15,9 @@ Dynamic, vibrant style with thick borders, geometric shapes, high-contrast color
 
 - **Primary:** `#EA580B` — Token from style foundations.
 - **Secondary:** `#F59E0B` — Token from style foundations.
+- **Success:** `#16A34A` — Token from style foundations.
+- **Warning:** `#D97706` — Token from style foundations.
+- **Danger:** `#DC2626` — Token from style foundations.
 - **Background:** `#FFEDD5` — Token from style foundations.
 - **Surface:** `#FDBA74` — Token from style foundations.
 - **Text:** `#EA580C` — Token from style foundations.

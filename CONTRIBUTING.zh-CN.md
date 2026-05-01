@@ -4,7 +4,7 @@
 
 这份指南会告诉你：每种贡献该往哪里看、合并之前 PR 需要过哪些线。
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>简体中文</b> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -14,9 +14,9 @@
 |---|---|---|---|
 | 让 OD 渲染一种新的 artifact（一份发票、一个 iOS 设置页、一张 one-pager……） | 一个 **Skill** | [`skills/<your-skill>/`](skills/) | 一个文件夹，约 2 个文件 |
 | 让 OD 说一种新品牌的视觉语言 | 一套 **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | 一个 Markdown 文件 |
-| 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`daemon/agents.js`](daemon/agents.js) | 一个数组里 ~10 行 |
-| 加功能、修 bug、从 [`open-codesign`][ocod] 移植一个 UX 模式 | 代码 | `src/`、`daemon/` | 普通 PR |
-| 改文档、补中文翻译、修错别字 | 文档 | `README.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
+| 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | 一个数组里 ~10 行 |
+| 加功能、修 bug、从 [`open-codesign`][ocod] 移植一个 UX 模式 | 代码 | `apps/web/src/`、`apps/daemon/` | 普通 PR |
+| 改文档、补德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
 
 不确定自己想做的属于哪一桶？[先开 issue / discussion](https://github.com/nexu-io/open-design/issues/new)，我们告诉你该改哪个面。
 
@@ -29,13 +29,14 @@
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-pnpm install              # 或 npm install
-pnpm dev:all              # daemon (:7456) + Next dev (:3000)
+corepack enable           # 使用 packageManager 固定的 pnpm
+pnpm install
+pnpm tools-dev run web    # daemon + web 前台闭环
 pnpm typecheck            # tsc -b --noEmit
 pnpm build                # 生产构建
 ```
 
-要求 Node 20.9+ 且 <23。macOS、Linux、WSL2 每天都在跑。Windows 原生应该能跑但不是主要目标 —— 跑不起来请开 issue。
+要求 Node `~24` 和 pnpm `10.33.x`。`nvm` / `fnm` 是可选路径；如果你习惯用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`。macOS、Linux、WSL2 是主要路径。Windows 原生应该能跑但不是主要目标 —— 跑不起来请开 issue。
 
 **开发 OD 本身不需要在 `PATH` 上装任何 agent CLI** —— daemon 会告诉你「找不到 agent」并落到 **Anthropic API · BYOK** 路径，反而是最快的开发循环。
 
@@ -162,13 +163,13 @@ design-systems/your-brand/
 4. **不要营销废话。** 品牌的 tagline 不是设计 token。删掉。
 5. **slug 用 ASCII** —— `linear.app` 写成 `linear-app`，`x.ai` 写成 `x-ai`。已经导入的 69 套都遵循这个约定，跟着写。
 
-我们内置的 69 套产品系统是通过 [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs) 从 [`VoltAgent/awesome-design-md`][acd2] 导入的。如果你的品牌应该归属在上游，**请先把 PR 发到那里** —— 我们下一次同步会自动收上来。`design-systems/` 文件夹用来放那些**不适合归到上游**的系统、加上我们手写的两套 starter。
+我们内置的 69 套产品系统是通过 [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts) 从 [`VoltAgent/awesome-design-md`][acd2] 导入的。如果你的品牌应该归属在上游，**请先把 PR 发到那里** —— 我们下一次同步会自动收上来。`design-systems/` 文件夹用来放那些**不适合归到上游**的系统、加上我们手写的两套 starter。
 
 ---
 
 ## 接入一个新的 coding-agent CLI
 
-接入一个新 agent（比如某个新 shop 的 `foo-coder` CLI）就是在 [`daemon/agents.js`](daemon/agents.js) 里加一项：
+接入一个新 agent（比如某个新 shop 的 `foo-coder` CLI）就是在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一项：
 
 ```javascript
 {
@@ -181,7 +182,7 @@ design-systems/your-brand/
 }
 ```
 
-完事 —— daemon 会在 `PATH` 上检测到它、picker 显示出来、对话路径就通了。如果这个 CLI 吐 **类型化事件**（像 Claude Code 的 `--output-format stream-json`），在 [`daemon/claude-stream.js`](daemon/claude-stream.js) 里写一个 parser，并把 `streamFormat` 设成 `'claude-stream-json'`。
+完事 —— daemon 会在 `PATH` 上检测到它、picker 显示出来、对话路径就通了。如果这个 CLI 吐 **类型化事件**（像 Claude Code 的 `--output-format stream-json`），在 [`apps/daemon/src/claude-stream.ts`](apps/daemon/src/claude-stream.ts) 里写一个 parser，并把 `streamFormat` 设成 `'claude-stream-json'`。
 
 合并硬线：
 
@@ -201,7 +202,7 @@ design-systems/your-brand/
 除此之外：
 
 - **不要写废话注释。** 不要 `// 引入这个模块`、不要 `// 遍历元素`。如果代码本身一眼能读，注释就是噪音。注释只用来说明非显而易见的意图、或者代码本身表达不出来的约束。
-- **`src/` 用 TypeScript。** Daemon (`daemon/`) 是纯 ESM JavaScript，类型重要的地方用 JSDoc —— 保持这样。
+- **`apps/web/src/` 用 TypeScript。** Daemon (`apps/daemon/`) 是纯 ESM JavaScript，类型重要的地方用 JSDoc —— 保持这样。
 - **不要随便加顶层依赖。** PR 描述里至少要有一段，说明引入它能换到什么、又新增了多少 bundle 字节。[`package.json`](package.json) 的依赖少是有意为之。
 - **推之前跑 `pnpm typecheck`。** CI 会跑；挂了会换来一句「请修一下」。
 
@@ -224,7 +225,7 @@ design-systems/your-brand/
 
 开 issue 时请带上：
 
-- 你跑的命令（精确到 `pnpm dev:all` / `npm start`）。
+- 你跑的命令（精确到 `pnpm tools-dev ...`）。
 - 选中的 agent CLI 是哪个（或者你走的是 BYOK 路径）。
 - 触发问题时的 skill + design system 组合。
 - 相关的 **daemon stderr 末尾几行** —— 大多数「artifact 没渲染出来」的报告，看到 `spawn ENOENT` 或 CLI 实际报错后 30 秒就能定位。

@@ -1,0 +1,31 @@
+{
+  "name": "@open-design/tools-pack",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tools-pack": "./bin/tools-pack.mjs"
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsx ./src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/platform": "workspace:0.1.0",
+    "@open-design/sidecar": "workspace:0.1.0",
+    "@open-design/sidecar-proto": "workspace:0.1.0",
+    "@electron/notarize": "3.1.0",
+    "cac": "6.7.14",
+    "electron-builder": "26.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.27.7",
+    "tsx": "4.21.0",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

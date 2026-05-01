@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="240" viewBox="0 0 900 240" role="img" aria-label="Open Design — GitHub Stats placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff9966"/>
+      <stop offset="100%" stop-color="#ff5e62"/>
+    </linearGradient>
+    <style>
+      .title { fill: #f0f6fc; font: 600 22px 'Inter','Helvetica Neue',Arial,sans-serif; }
+      .subtitle { fill: #c9d1d9; font: 400 13px 'Inter','Helvetica Neue',Arial,sans-serif; }
+      .muted { fill: #8b949e; font: 400 11px 'JetBrains Mono','SF Mono',Menlo,monospace; }
+      .pill { fill: #21262d; }
+      .pill-text { fill: #c9d1d9; font: 500 11px 'Inter','Helvetica Neue',Arial,sans-serif; }
+      .accent { fill: url(#accent); }
+    </style>
+  </defs>
+  <rect width="900" height="240" fill="url(#bg)" rx="8"/>
+  <rect x="0" y="0" width="6" height="240" class="accent"/>
+
+  <text class="title" x="32" y="56">Open Design — GitHub Stats</text>
+  <text class="subtitle" x="32" y="84">Live repository metrics will appear here once the workflow has run —</text>
+  <text class="subtitle" x="32" y="102">GITHUB_TOKEN gives core stats; add METRICS_TOKEN for richer plugins (traffic, follow-up).</text>
+
+  <g transform="translate(32, 130)">
+    <rect class="pill" x="0" y="0" width="180" height="28" rx="14"/>
+    <text class="pill-text" x="16" y="18">.github/workflows/metrics.yml</text>
+
+    <rect class="pill" x="194" y="0" width="160" height="28" rx="14"/>
+    <text class="pill-text" x="210" y="18">lowlighter/metrics</text>
+
+    <rect class="pill" x="368" y="0" width="166" height="28" rx="14"/>
+    <text class="pill-text" x="384" y="18">cron: daily 00:15 UTC</text>
+  </g>
+
+  <g transform="translate(32, 182)">
+    <text class="muted" x="0" y="0">Trigger a manual run from the Actions tab to populate immediately.</text>
+    <text class="muted" x="0" y="20">METRICS_TOKEN (fine-grained PAT) unlocks traffic / follow-up time plugins; without it, GITHUB_TOKEN still produces core metrics.</text>
+  </g>
+
+  <text class="muted" x="32" y="226">github.com/nexu-io/open-design</text>
+</svg>

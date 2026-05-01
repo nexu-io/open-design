@@ -14,7 +14,7 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 - [x] `README.md` + `docs/spec.md` + architecture / protocol / adapter / modes / references docs (this repo, as of now)
 - [ ] `docs/schemas/skill-manifest.json` — JSON Schema for the `od:` front-matter block
 - [ ] `docs/schemas/design-system.md` — formal spec of the 9-section `DESIGN.md`
-- [ ] `docs/schemas/protocol.md` — JSON-RPC method signatures
+- [ ] `docs/schemas/protocol.md` — HTTP/SSE API schemas
 - [ ] `docs/schemas/adapter.md` — adapter interface in TypeScript, printed out
 - [ ] `docs/examples/DESIGN.sample.md` — a working example design system
 - [ ] `docs/examples/saas-landing-skill/` — a working example skill (the one sketched in `skills-protocol.md` §8)
@@ -31,12 +31,12 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 ### Scope
 
 **Included:**
-- Web app (Next.js 15, App Router)
+- Web app (Next.js 16, App Router)
   - chat pane · artifact tree · sandboxed iframe preview · export menu
   - skill picker · mode picker · design-system picker
   - **no** comment mode yet · **no** sliders yet · **no** template gallery UI yet
 - Local daemon (Node)
-  - JSON-RPC over WebSocket on `:7431`
+  - HTTP/SSE API on `:7456`
   - agent detection + cached results
   - skill registry (scan three dirs, hot-reload)
   - artifact store (plain files + `history.jsonl`)
@@ -72,18 +72,18 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 
 | Week | Theme | Concrete deliverables |
 |---|---|---|
-| 1 | Scaffolding | monorepo (pnpm workspaces: `apps/web`, `apps/daemon`, `packages/shared`); Next.js 15 base; daemon CLI skeleton; CI green |
-| 2 | Daemon core | JSON-RPC over WS; session manager; skill registry scanning; artifact store (write files + `history.jsonl`); design-system resolver loading `./DESIGN.md` |
+| 1 | Scaffolding | pnpm workspaces (`apps/web`, `apps/daemon`, `e2e`); Next.js 16 base; daemon CLI skeleton; CI green |
+| 2 | Daemon core | HTTP/SSE API; project/conversation store; skill registry scanning; artifact store; design-system resolver loading `DESIGN.md` |
 | 3 | Claude Code adapter | detection (PATH + `~/.claude/` probe); spawn with `--output-format stream-json`; parser from JSON-lines → `AgentEvent`; streaming to daemon's session; cancel via SIGTERM |
 | 4 | API-fallback adapter | Anthropic Messages streaming; minimal tool loop (Read/Write/Edit rooted to artifact cwd); integration with skill prompt injection |
-| 5 | Web UI — chat + artifact tree | Zustand session store; WS client; chat pane; artifact tree reflects filesystem; skill picker |
+| 5 | Web UI — chat + file workspace | React state + daemon-backed project store; SSE client; chat pane; file workspace reflects project files; skill picker |
 | 6 | Web UI — preview + export | sandboxed iframe with hot reload; JSX → vendored React/Babel runtime; export ZIP; export self-contained HTML (inline CSS) |
 | 7 | Default skills | port `guizang-ppt-skill` (no modifications; add `od:` extension block); write `saas-landing` skill; write 1–2 DESIGN.md examples; docs for skill authors |
 | 8 | Polish + dogfood | end-to-end dogfooding; performance pass (daemon <500ms cold start, first generation overhead <50ms); bug-fixing; first publishable alpha |
 
 ### MVP exit criteria
 
-1. `pnpm install && pnpm dev` works on clean macOS and Linux.
+1. `corepack enable && pnpm install && pnpm tools-dev run web` works on clean macOS and Linux with Node 24.
 2. With Claude Code installed: prototype + deck generation works end-to-end.
 3. Without Claude Code installed: API-fallback produces prototypes (not decks — guizang-ppt-skill needs native skill loading).
 4. A user can drop a DESIGN.md into the project root and subsequent generations respect it.

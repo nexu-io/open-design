@@ -2,6 +2,8 @@ node_modules/
 dist/
 out/
 .next/
+.next-*/
+.tmp/
 .DS_Store
 *.log
 .vite
@@ -38,3 +40,6 @@ tsconfig.tsbuildinfo
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/
+task.md
+specs/change/active
+.ralph/

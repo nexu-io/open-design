@@ -1,0 +1,61 @@
+name: github-metrics
+
+on:
+  schedule:
+    # Runs daily at 00:15 UTC; output is committed to docs/assets/github-metrics.svg.
+    - cron: '15 0 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/metrics.yml
+
+permissions:
+  contents: write
+
+jobs:
+  metrics:
+    name: Generate repository metrics SVG
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub repository metrics
+        uses: lowlighter/metrics@latest
+        with:
+          # Output path; the action commits this file back into the repo on changes.
+          filename: docs/assets/github-metrics.svg
+
+          # Auth: prefers a fine-grained PAT (richer plugins) but falls back to GITHUB_TOKEN.
+          # METRICS_TOKEN (fine-grained PAT) unlocks richer plugins (traffic, follow-up time);
+          # without it, GITHUB_TOKEN is sufficient for core metrics — the traffic / follow-up
+          # plugins simply silently no-op and the rest of the SVG still renders.
+          token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
+          committer_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Use the repository template (per-repo metrics, not user metrics).
+          base: ''
+          template: repository
+
+          # Plugins. Anything that requires a personal token will silently no-op
+          # without METRICS_TOKEN — the rest still produce a useful SVG.
+          plugin_contributors: yes
+          plugin_contributors_categories: |
+            {
+              "Skills": "skills/**",
+              "Design systems": "design-systems/**",
+              "Web": "apps/web/**",
+              "Daemon": "apps/daemon/**",
+              "Docs": "docs/**"
+            }
+          plugin_followup: yes
+          plugin_followup_sections: pr, issue
+          plugin_languages: yes
+          plugin_languages_details: lines, percentage
+          plugin_languages_limit: 8
+          plugin_lines: yes
+          plugin_traffic: yes
+          plugin_stargazers: yes
+          plugin_stargazers_charts_type: chartist
+
+          config_timezone: Asia/Shanghai
+          config_display: large

@@ -1,0 +1,23 @@
+{
+  "id": "profile-avatar-snow-rabbit-empress-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Snow Rabbit Empress Portrait",
+  "summary": "A realistic fantasy portrait prompt for generating a regal rabbit-themed woman in ornate winter hanfu standing in a snowy mountain temple setting.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic",
+    "fantasy",
+    "nature"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A cinematic fantasy portrait of an elegant East Asian-inspired woman standing outdoors in a snowy mountain temple courtyard, centered in the frame from about waist-up. She wears a luxurious winter hanfu in glossy white and deep black satin with soft white fur trim at the collar and sleeves, embroidered with rabbit motifs and delicate floral patterns. Her long straight hair is silver-white, falling over both shoulders, and she wears an ornate silver headdress with filigree, pearls, dangling tassels, a pale turquoise jewel, and prominent upright white rabbit ears. Her face is deliberately obscured by a smooth rectangular blur block. Snow is falling across the scene. The background shows a dramatic cold blue-gray sky, snow-covered pine trees, distant jagged mountains, stone lanterns, and traditional Chinese temple buildings with curved tiled roofs on the right side. Mood is ethereal, regal, and wintry, with soft diffused lighting, shallow depth of field, high detail fabric texture, realistic fantasy styling, and a polished gpt-image-2 aesthetic.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453211307_ml0yqj_HG_dACOaUAArlU6.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-2"
+  }
+}

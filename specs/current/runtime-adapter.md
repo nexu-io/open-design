@@ -6,15 +6,15 @@ Runtime Adapter is the daemon layer responsible for adapting local AI agent CLIs
 
 The current implementation is concentrated in:
 
-- `daemon/agents.js`: agent definitions, detection, model lists, argument construction, model validation.
-- `daemon/server.js`: `/api/chat` request orchestration, prompt composition, `spawn()` subprocesses, SSE forwarding.
-- `daemon/claude-stream.js`: parsing Claude Code structured JSONL output.
-- `daemon/json-event-stream.js`: parsing structured JSON/JSONL output from Codex, Gemini, OpenCode, and Cursor Agent.
-- `daemon/acp.js`: model detection and streaming session orchestration for the ACP JSON-RPC runtime.
+- `apps/daemon/src/agents.ts`: agent definitions, detection, model lists, argument construction, model validation.
+- `apps/daemon/src/server.ts`: `/api/chat` request orchestration, prompt composition, `spawn()` subprocesses, SSE forwarding.
+- `apps/daemon/src/claude-stream.ts`: parsing Claude Code structured JSONL output.
+- `apps/daemon/src/json-event-stream.ts`: parsing structured JSON/JSONL output from Codex, Gemini, OpenCode, and Cursor Agent.
+- `apps/daemon/src/acp.ts`: model detection and streaming session orchestration for the ACP JSON-RPC runtime.
 
 ## Currently Supported Runtimes
 
-`AGENT_DEFS` in `daemon/agents.js` defines 8 local runtimes:
+`AGENT_DEFS` in `apps/daemon/src/agents.ts` defines 8 local runtimes:
 
 | id | Name | CLI | Output format | Model list source |
 |---|---|---|---|---|
@@ -61,7 +61,7 @@ The detection result includes:
 
 ## Runtime Flow
 
-Actual execution happens in `POST /api/chat` in `daemon/server.js`.
+Actual execution happens in `POST /api/chat` in `apps/daemon/src/server.ts`.
 
 Flow:
 
@@ -102,7 +102,7 @@ These events are sent to the frontend through the SSE `agent` event.
 
 ### Codex / Gemini / OpenCode / Cursor Agent: Structured JSON Event Stream
 
-These four runtimes currently use the unified `json-event-stream` output format, with stdout parsed by `daemon/json-event-stream.js`.
+These four runtimes currently use the unified `json-event-stream` output format, with stdout parsed by `apps/daemon/src/json-event-stream.ts`.
 
 #### Codex
 
@@ -198,7 +198,7 @@ Kimi uses:
 kimi acp
 ```
 
-The daemon starts an ACP session over stdio through `daemon/acp.js`:
+The daemon starts an ACP session over stdio through `apps/daemon/src/acp.ts`:
 
 1. `initialize`
 2. `session/new`
@@ -279,5 +279,5 @@ The current implementation already has the core outline of the target architectu
 - `detectAgents()` corresponds to `detect()`.
 - `AGENT_DEFS` corresponds to the adapter registry.
 - `buildArgs()` corresponds to runtime-specific invocation.
-- `streamFormat` + `claude-stream.js` + `json-event-stream.js` + `acp.js` correspond to stream normalization.
+- `streamFormat` + `claude-stream.ts` + `json-event-stream.ts` + `acp.ts` correspond to stream normalization.
 - `/api/chat` corresponds to unified run orchestration.

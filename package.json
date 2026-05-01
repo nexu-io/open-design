@@ -2,56 +2,39 @@
   "name": "open-design",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@10.33.2",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
   "bin": {
-    "od": "./daemon/cli.js"
+    "od": "./apps/daemon/dist/cli.js"
   },
   "scripts": {
-    "daemon": "node daemon/cli.js --no-open",
-    "dev": "next dev",
-    "dev:all": "node scripts/dev-all.mjs",
-    "build": "next build",
-    "preview": "pnpm build && node daemon/cli.js --no-open",
-    "test:e2e:live": "node --test scripts/runtime-adapter.e2e.live.test.mjs",
-    "test": "vitest run",
-    "test:ui:clean": "node scripts/reset-e2e-artifacts.mjs",
-    "test:ui": "npm run test:ui:clean && playwright test -c e2e/playwright.config.ts",
-    "test:ui:headed": "npm run test:ui:clean && playwright test -c e2e/playwright.config.ts --headed",
-    "typecheck": "tsc -b --noEmit",
-    "start": "npm run build && node daemon/cli.js",
-    "test:run": "vitest run"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "better-sqlite3": "^11.10.0",
-    "express": "^4.19.2",
-    "jszip": "^3.10.1",
-    "multer": "^1.4.5-lts.1",
-    "next": "^16.2.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "postinstall": "node ./scripts/postinstall.mjs",
+    "tools-dev": "pnpm exec tools-dev",
+    "tools-pack": "pnpm exec tools-pack",
+    "build": "pnpm --filter @open-design/web build",
+    "check:residual-js": "node --experimental-strip-types scripts/check-residual-js.ts",
+    "test:e2e:live": "pnpm --filter @open-design/e2e test:e2e:live",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present run test",
+    "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
+    "test:ui": "pnpm --filter @open-design/e2e test:ui",
+    "test:ui:headed": "pnpm --filter @open-design/e2e test:ui:headed",
+    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && pnpm --filter @open-design/daemon build && pnpm check:residual-js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@types/node": "^20.17.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "concurrently": "^9.0.1",
-    "jsdom": "^29.1.0",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "@open-design/tools-dev": "workspace:0.1.0",
+    "@open-design/tools-pack": "workspace:0.1.0"
   },
   "engines": {
-    "node": ">=20.9.0 <23"
+    "node": "~24",
+    "pnpm": ">=10.33.2 <11"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "electron",
+      "esbuild"
     ]
   }
 }

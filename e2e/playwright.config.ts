@@ -1,15 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
-import { resolveDevPorts } from '../scripts/resolve-dev-ports.mjs';
 
-const desiredDaemonPort = Number(process.env.OD_PORT) || 17_456;
-const desiredNextPort = Number(process.env.NEXT_PORT) || 17_573;
-const { daemonPort, appPort: nextPort } = await resolveDevPorts({
-  daemonStart: desiredDaemonPort,
-  appStart: desiredNextPort,
-  appLabel: 'next',
-  searchRange: 200,
-});
-const baseURL = `http://127.0.0.1:${nextPort}`;
+const daemonPort = Number(process.env.OD_PORT) || 17_456;
+const webPort = Number(process.env.OD_WEB_PORT) || 17_573;
+const baseURL = `http://127.0.0.1:${webPort}`;
 
 export default defineConfig({
   testDir: './specs',
@@ -26,14 +19,14 @@ export default defineConfig({
         ['html', { open: 'never', outputFolder: './reports/playwright-html-report' }],
         ['json', { outputFile: './reports/results.json' }],
         ['junit', { outputFile: './reports/junit.xml' }],
-        ['./reporters/markdown-reporter.cjs', { outputFile: 'e2e/reports/latest.md' }],
+        ['./reporters/markdown-reporter.ts', { outputFile: './reports/latest.md' }],
       ]
     : [
         ['list'],
         ['html', { open: 'never', outputFolder: './reports/playwright-html-report' }],
         ['json', { outputFile: './reports/results.json' }],
         ['junit', { outputFile: './reports/junit.xml' }],
-        ['./reporters/markdown-reporter.cjs', { outputFile: 'e2e/reports/latest.md' }],
+        ['./reporters/markdown-reporter.ts', { outputFile: './reports/latest.md' }],
       ],
   use: {
     baseURL,
@@ -43,10 +36,9 @@ export default defineConfig({
   webServer: {
     command:
       `OD_DATA_DIR=e2e/.od-data ` +
-      `OD_PORT=${daemonPort} OD_PORT_STRICT=1 ` +
-      `NEXT_PORT=${nextPort} NEXT_PORT_STRICT=1 npm run dev:all`,
+      `pnpm --dir .. tools-dev run web --daemon-port ${daemonPort} --web-port ${webPort}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [

@@ -1,0 +1,54 @@
+{
+  "name": "@open-design/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "bin": {
+    "od": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./package.json": "./package.json",
+    "./sidecar": {
+      "types": "./dist/sidecar/index.d.ts",
+      "default": "./dist/sidecar/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json",
+    "daemon": "pnpm run build && node dist/cli.js --no-open",
+    "dev": "pnpm run build && node dist/cli.js --no-open",
+    "start": "pnpm run build && node dist/cli.js",
+    "test": "vitest run -c vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/contracts": "workspace:0.1.0",
+    "@open-design/platform": "workspace:0.1.0",
+    "@open-design/sidecar": "workspace:0.1.0",
+    "@open-design/sidecar-proto": "workspace:0.1.0",
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.19.2",
+    "jszip": "^3.10.1",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.17.10",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

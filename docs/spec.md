@@ -29,7 +29,7 @@ Other docs:
 
 | # | Bet | [Anthropic Claude Design][cd] | [Open CoDesign][ocod] | OD |
 |---|---|---|---|---|
-| 1 | Where the product runs | claude.ai only | Local Electron app | **Next.js web app** — `pnpm dev`, `vercel deploy`, or `docker compose up` |
+| 1 | Where the product runs | claude.ai only | Local Electron app | **Next.js web app + local daemon + desktop loop** — `pnpm tools-dev`, Vercel web deploy |
 | 2 | Who owns the agent loop | Anthropic, closed | [Open CoDesign][ocod] itself, via [`pi-ai`][piai] | **The user's existing code agent CLI** (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, OpenClaw); direct Anthropic API as fallback |
 | 3 | What "design skills" are | Proprietary internal tools | TypeScript modules baked into the app | **File-based skills** that follow Claude Code's `SKILL.md` spec — forkable, versionable, shareable, installable by symlink |
 | 4 | How design systems are authored | Implicit in prompt | N/A | **`DESIGN.md` files** following the [awesome-claude-design][acd] 9-section schema |
@@ -67,7 +67,7 @@ These four scenarios map 1:1 to the four modes in [`modes.md`](modes.md).
 │                        Web App (Next.js)                         │
 │  chat · artifact tree · iframe preview · comment mode · exports  │
 └────────────┬─────────────────────────────────┬───────────────────┘
-             │ WebSocket (JSON-RPC)            │ HTTPS (BYOK direct)
+             │ HTTP + SSE (/api/chat)          │ HTTPS (BYOK direct)
 ┌────────────▼──────────────────┐     ┌────────▼─────────────────┐
 │   Local Daemon (od daemon)   │     │   Anthropic Messages API │
 │   · agent detection           │     │   (fallback when no CLI) │
@@ -85,7 +85,7 @@ These four scenarios map 1:1 to the four modes in [`modes.md`](modes.md).
 Module responsibilities:
 
 - **Web app** — chat UI, artifact tree, sandboxed iframe preview, comment mode, slider controls, export UI. Stateless; all state lives in the daemon or in the browser's IndexedDB for cloud deploys.
-- **Daemon** — long-running local process. Detects agents, registers skills, manages artifacts on disk, resolves the active design system, and brokers WebSocket sessions.
+- **Daemon** — long-running local process. Detects agents, registers skills, manages artifacts on disk, resolves the active design system, and brokers REST/SSE requests.
 - **Agent adapters** — one adapter per supported CLI; see [`agent-adapters.md`](agent-adapters.md).
 - **Skill registry** — scans `~/.claude/skills/`, `./skills/`, and `./.claude/skills/`; merges and exposes a typed catalog.
 - **Artifact store** — project-scoped folder (default `./.od/`) holding generated files, version snapshots (git-friendly), and per-artifact metadata.
@@ -126,7 +126,7 @@ In short: Claude Design is a product; OD is a **substrate**.
 
 ## 9. Success criteria for v1
 
-- One developer can `git clone && pnpm install && pnpm dev`, point at their Claude Code install, and produce a prototype in under 5 minutes.
+- One developer can `git clone && corepack enable && pnpm install && pnpm tools-dev run web`, point at their Claude Code install, and produce a prototype in under 5 minutes.
 - A third party can author a skill in a separate git repo, publish it, and have a user install it by running `od skill add <git-url>` without touching OD's source.
 - A design system author can write a `DESIGN.md`, point OD at it, and have the style propagate across prototype / deck / template outputs.
 - Deploying to Vercel with a local daemon works end-to-end (the daemon is reachable via localhost tunnel or a user-provided URL).

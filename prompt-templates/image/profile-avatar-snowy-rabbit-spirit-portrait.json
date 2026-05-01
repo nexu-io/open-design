@@ -1,0 +1,22 @@
+{
+  "id": "profile-avatar-snowy-rabbit-spirit-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Snowy Rabbit Spirit Portrait",
+  "summary": "This prompt generates a serene fantasy portrait of an anonymous rabbit-eared woman in winter, ideal for atmospheric character art and stylized profile illustrations.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "fantasy",
+    "nature"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A soft, painterly portrait of a mysterious young woman with {argument name=\"hair color\" default=\"long white hair\"} and 2 tall rabbit ears rising above her head, centered in a vertical composition from chest up. Her face is completely obscured by a flat rectangular censor block in muted beige, creating an anonymous surreal effect. She wears a traditional kimono-inspired robe in warm ivory with bold black trim: 3 visible black sections total, including the wide crossover collar, 2 black sleeve bands, and a black waist sash tied in front. On the left chest is 1 embroidered white rabbit patch outlined in brown. On the right side of her hair hangs 1 red braided cord ornament tied into a bow, decorated with 2 tassels and 1 small rabbit-shaped charm. The hair is long, flowing, slightly windswept, and silky, framing the shoulders. Set her in a quiet snowy landscape with falling snow, pale gray winter atmosphere, bare trees, and a softly blurred traditional pagoda silhouette in the distance on the right. Use a delicate East Asian fantasy aesthetic, muted colors, gentle lighting, subtle texture like watercolor or gouache on paper, highly refined costume details, calm mood, and a centered symmetrical composition.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453209807_szh7zz_HG_c_-ca4AAz43H.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-0"
+  }
+}

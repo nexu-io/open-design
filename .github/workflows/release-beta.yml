@@ -2,16 +2,279 @@ name: release-beta
 
 on:
   workflow_dispatch:
+    inputs:
+      signed:
+        description: "Build signed/notarized mac artifacts. Disable only for explicit unsigned validation releases."
+        required: true
+        type: boolean
+        default: true
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: open-design-release-beta
+  cancel-in-progress: false
 
 jobs:
-  placeholder:
-    name: Release beta placeholder
+  metadata:
+    name: Prepare beta metadata
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      OPEN_DESIGN_RELEASE_SIGNED: ${{ inputs.signed }}
+    outputs:
+      asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
+      base_version: ${{ steps.beta.outputs.base_version }}
+      beta_tag: ${{ steps.beta.outputs.beta_tag }}
+      beta_version: ${{ steps.beta.outputs.beta_version }}
+      branch: ${{ steps.beta.outputs.branch }}
+      commit: ${{ steps.beta.outputs.commit }}
+      release_name: ${{ steps.beta.outputs.release_name }}
+      signed: ${{ steps.beta.outputs.signed }}
+      version_tag: ${{ steps.beta.outputs.version_tag }}
     steps:
-      - name: Note pending release-beta implementation
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Prepare beta release metadata
+        id: beta
+        run: node --experimental-strip-types ./scripts/release-beta.ts
+
+  build_mac:
+    name: Build beta mac arm64
+    needs: metadata
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply beta package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
+
+      - name: Prepare Apple signing certificate
+        if: ${{ inputs.signed }}
+        env:
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
-          echo "release-beta workflow placeholder"
-          echo "TODO: wire build, packaging, e2e, and beta publishing after release boundaries are defined."
+          set -euo pipefail
+          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
+            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+          fi
+          {
+            echo "CSC_LINK=$cert_path"
+            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build beta mac artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          signed_flag=""
+          if [ "${{ inputs.signed }}" = "true" ]; then
+            signed_flag="--signed"
+          fi
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-beta \
+            --portable \
+            --to all \
+            --json \
+            $signed_flag
+
+      - name: Prepare beta assets
+        id: assets
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$release_dir"
+
+          source_dmg="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/dmg/Open Design-release-beta.dmg"
+          source_zip="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/zip/Open Design-release-beta.zip"
+          if [ ! -f "$source_dmg" ]; then
+            echo "expected dmg not found at $source_dmg" >&2
+            exit 1
+          fi
+          if [ ! -f "$source_zip" ]; then
+            echo "expected zip not found at $source_zip" >&2
+            exit 1
+          fi
+
+          asset_suffix="${{ needs.metadata.outputs.asset_version_suffix }}"
+          versioned_dmg="open-design-${{ needs.metadata.outputs.beta_version }}${asset_suffix}-mac-arm64.dmg"
+          versioned_zip="open-design-${{ needs.metadata.outputs.beta_version }}${asset_suffix}-mac-arm64.zip"
+          dmg_checksum_file="$versioned_dmg.sha256"
+          zip_checksum_file="$versioned_zip.sha256"
+
+          cp "$source_dmg" "$release_dir/$versioned_dmg"
+          cp "$source_zip" "$release_dir/$versioned_zip"
+          (
+            cd "$release_dir"
+            shasum -a 256 "$versioned_dmg" > "$dmg_checksum_file"
+            shasum -a 256 "$versioned_zip" > "$zip_checksum_file"
+          )
+
+          zip_sha512="$(openssl dgst -sha512 -binary "$release_dir/$versioned_zip" | openssl base64 -A)"
+          zip_size="$(stat -f%z "$release_dir/$versioned_zip")"
+          zip_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ needs.metadata.outputs.version_tag }}/$versioned_zip"
+          release_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > "$release_dir/latest-mac.yml" <<EOF
+          version: "${{ needs.metadata.outputs.beta_version }}"
+          files:
+            - url: "$zip_url"
+              sha512: "$zip_sha512"
+              size: $zip_size
+          path: "$zip_url"
+          sha512: "$zip_sha512"
+          releaseDate: "$release_date"
+          releaseNotes: "Open Design beta ${{ needs.metadata.outputs.beta_version }}${asset_suffix}"
+          EOF
+
+      - name: Upload mac release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-mac-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  publish:
+    name: Publish beta release
+    needs:
+      - metadata
+      - build_mac
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Download mac release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-mac-release-assets
+          path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Move beta tags to current commit
+        run: |
+          set -euo pipefail
+          git tag -f "${{ needs.metadata.outputs.version_tag }}" "$GITHUB_SHA"
+          git push origin "refs/tags/${{ needs.metadata.outputs.version_tag }}" --force
+          git tag -f "${{ needs.metadata.outputs.beta_tag }}" "$GITHUB_SHA"
+          git push origin "refs/tags/${{ needs.metadata.outputs.beta_tag }}" --force
+
+      - name: Write release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          version_notes_file="$RUNNER_TEMP/open-design-beta-version-notes.md"
+          latest_notes_file="$RUNNER_TEMP/open-design-beta-latest-notes.md"
+          cat > "$version_notes_file" <<EOF
+          ## Summary
+          - channel: beta
+          - version: ${{ needs.metadata.outputs.beta_version }}
+          - base version: ${{ needs.metadata.outputs.base_version }}
+          - signed: ${{ needs.metadata.outputs.signed }}
+          - branch: ${{ needs.metadata.outputs.branch }}
+          - commit: ${{ needs.metadata.outputs.commit }}
+
+          This beta release ships mac arm64 DMG, update ZIP, checksums, and a copy of latest-mac.yml.
+          EOF
+          cat > "$latest_notes_file" <<EOF
+          ## Summary
+          - channel: beta
+          - latest version: ${{ needs.metadata.outputs.beta_version }}
+          - latest tag: ${{ needs.metadata.outputs.version_tag }}
+
+          This release is the mutable beta channel feed carrier. It should contain feed assets only.
+          EOF
+          {
+            echo "version_notes_file=$version_notes_file"
+            echo "latest_notes_file=$latest_notes_file"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update immutable beta prerelease
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/release-assets/mac"
+          if gh release view "${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
+            gh release edit "${{ needs.metadata.outputs.version_tag }}" \
+              --title "${{ needs.metadata.outputs.release_name }}" \
+              --notes-file "${{ steps.notes.outputs.version_notes_file }}" \
+              --prerelease
+          else
+            gh release create "${{ needs.metadata.outputs.version_tag }}" \
+              --target "$GITHUB_SHA" \
+              --title "${{ needs.metadata.outputs.release_name }}" \
+              --notes-file "${{ steps.notes.outputs.version_notes_file }}" \
+              --prerelease
+          fi
+          gh release upload "${{ needs.metadata.outputs.version_tag }}" "$release_dir"/* --clobber
+
+      - name: Create or update beta channel feed
+        run: |
+          set -euo pipefail
+          latest_mac_path="$RUNNER_TEMP/release-assets/mac/latest-mac.yml"
+          if gh release view "${{ needs.metadata.outputs.beta_tag }}" >/dev/null 2>&1; then
+            while IFS= read -r asset_name; do
+              if [ -n "$asset_name" ]; then
+                gh release delete-asset "${{ needs.metadata.outputs.beta_tag }}" "$asset_name" --yes
+              fi
+            done < <(gh release view "${{ needs.metadata.outputs.beta_tag }}" --json assets --jq '.assets[].name')
+            gh release edit "${{ needs.metadata.outputs.beta_tag }}" \
+              --title "Open Design Beta Latest" \
+              --notes-file "${{ steps.notes.outputs.latest_notes_file }}" \
+              --prerelease
+            gh release upload "${{ needs.metadata.outputs.beta_tag }}" "$latest_mac_path" --clobber
+          else
+            gh release create "${{ needs.metadata.outputs.beta_tag }}" \
+              "$latest_mac_path" \
+              --target "$GITHUB_SHA" \
+              --title "Open Design Beta Latest" \
+              --notes-file "${{ steps.notes.outputs.latest_notes_file }}" \
+              --prerelease
+          fi
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## Beta release"
+            echo "- Channel: beta"
+            echo "- Version: ${{ needs.metadata.outputs.beta_version }}"
+            echo "- Version tag: ${{ needs.metadata.outputs.version_tag }}"
+            echo "- Channel feed tag: ${{ needs.metadata.outputs.beta_tag }}"
+            echo "- Signed: ${{ needs.metadata.outputs.signed }}"
+            echo "- mac assets: open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.zip"
+            echo "- Feed: latest-mac.yml"
+          } >> "$GITHUB_STEP_SUMMARY"

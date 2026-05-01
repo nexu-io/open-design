@@ -1,0 +1,50 @@
+{
+  "name": "@open-design/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./sidecar": {
+      "types": "./dist/sidecar/index.d.ts",
+      "default": "./dist/sidecar/index.js"
+    }
+  },
+  "files": [
+    ".next",
+    "app",
+    "dist",
+    "next.config.ts",
+    "package.json",
+    "public",
+    "src"
+  ],
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:sidecar": "tsc -p tsconfig.sidecar.json",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run -c vitest.config.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@open-design/contracts": "workspace:0.1.0",
+    "@open-design/platform": "workspace:0.1.0",
+    "@open-design/sidecar": "workspace:0.1.0",
+    "@open-design/sidecar-proto": "workspace:0.1.0",
+    "next": "^16.2.4",
+    "openai": "^6.35.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

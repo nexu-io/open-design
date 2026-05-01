@@ -22,7 +22,7 @@ OD is a web app plus a local daemon. The split means the same UI can run in thre
 │                                                    │
 │   browser ──► Next.js dev server (localhost:3000)  │
 │                       │                            │
-│                       │ ws://localhost:7431        │
+│                       │ http://localhost:7456      │
 │                       ▼                            │
 │            od daemon (Node, long-running)         │
 │                       │                            │
@@ -31,7 +31,7 @@ OD is a web app plus a local daemon. The split means the same UI can run in thre
 └────────────────────────────────────────────────────┘
 ```
 
-One `pnpm dev` starts both the Next.js app and the daemon (via a predev script). Zero config. No accounts.
+One `pnpm tools-dev run web` starts both the Next.js app and the daemon. `pnpm tools-dev` adds the desktop shell. Zero config. No accounts.
 
 ### Topology B — Web on Vercel + daemon on user's machine
 
@@ -74,7 +74,7 @@ The three topologies share the same web bundle; the difference is which transpor
 │       └─────────── session bus (in-memory) ──────────────┘           │
 │                        │                                             │
 │                        ▼                                             │
-│              Transport layer (ws-rpc | http-direct | indexeddb)      │
+│              Transport layer (daemon SSE | api-direct | browser)      │
 └─────────────────────────┬───────────────────────────────────────────┘
                           │
   ┌───────────────────────┴────────────────────────────────┐
@@ -96,16 +96,16 @@ The three topologies share the same web bundle; the difference is which transpor
 │ cursor-agent │                           │ skills/      │
 │ gemini       │                           │ DESIGN.md    │
 │ opencode     │                           └──────────────┘
-│ openclaw     │
+│ qwen         │
 └──────────────┘
 ```
 
 ## 3. Key components
 
-### 3.1 Web app (Next.js 15, App Router)
+### 3.1 Web app (Next.js 16, App Router)
 
 - **Why Next.js, not Vite SPA?** We want SSR for the marketing landing page + serverless routes for Topology C's direct-API path + Vercel deployment as a first-class citizen. An SPA would need a separate server for any of that.
-- **State:** Zustand for session/artifact stores. Browser-side only; hydrated from daemon on connect.
+- **State:** React/browser state for UI config, with projects/conversations/files hydrated from the daemon APIs.
 - **Iframe preview:** Vendored React 18 + Babel standalone for JSX artifacts, following [Open CoDesign][ocod]'s approach. HTML artifacts load raw. See [§5](#5-preview-renderer).
 - **Comment mode:** Click captures `[data-od-id]` on preview DOM, opens a popover, sends `{artifact_id, element_id, note}` to daemon → agent gets a surgical edit instruction.
 - **Slider UI:** When an agent emits a "tweak parameter" tool call (see [`skills-protocol.md`](skills-protocol.md) §4.2), the web app renders a live-update control that re-sends parameterized prompts without round-tripping the chat.
@@ -114,13 +114,13 @@ The three topologies share the same web bundle; the difference is which transpor
 
 Single binary via `pkg` or a thin Node script distributed over npm. Responsibilities:
 
-- Listen on `ws://localhost:7431` (configurable). Accept JSON-RPC-over-WebSocket.
+- Listen on `http://localhost:7456` by default. Accept REST/SSE routes under `/api/*`.
 - Maintain a **session** per web tab. Sessions hold: active agent, active skill, active artifact, in-flight tool calls, design-system reference.
 - Operate the **agent adapter pool**: one detected CLI = one adapter instance, reused across sessions.
 - Scan and index **skills** from `~/.claude/skills/`, `./skills/`, `./.claude/skills/` on startup and on FS-watch events.
 - Own the **artifact store** — writes files to disk, never in memory.
 - Run the **preview compile pipeline** (Babel transform for JSX, CSS inliner for HTML exports).
-- Spawn headless Chromium via Puppeteer for **PDF export**. PPTX via `pptxgenjs`.
+- Provide export hooks for HTML/PDF/ZIP and skill-defined deck outputs.
 
 ### 3.3 Agent adapter pool
 
@@ -252,24 +252,21 @@ All config is plain text / TOML / JSON — no binary formats, no sqlite. Reviewa
 
 ## 7. Protocol between web and daemon
 
-JSON-RPC 2.0 over WebSocket. Why not REST? Because we need streaming. Why not gRPC? Over-engineering for a single-origin local app.
+The shipped daemon uses HTTP routes plus Server-Sent Events for streaming chat output. This keeps the browser on the same `/api/*` surface in dev and production while still allowing incremental agent output.
 
-Methods (MVP):
+Representative API surface:
 
 ```
-session.open(params) -> { sessionId }
-session.generate(params) -> streams: tool_call | text_delta | artifact_update | done
-session.refine(params) -> streams: same
-session.cancel(params) -> { ok }
-agents.list() -> [{ id, name, version, capabilities }]
-agents.setActive({ agentId }) -> { ok }
-skills.list() -> [{ id, name, mode, manifest }]
-skills.setActive({ sessionId, skillId }) -> { ok }
-skills.install({ source }) -> streams: progress
-design.setActive({ path }) -> { designSystem }
-artifacts.list({ projectRoot }) -> [Artifact]
-artifacts.get({ id }) -> Artifact
-artifacts.export({ id, format }) -> streams: progress | { url | path }
+GET  /api/health
+GET  /api/agents
+GET  /api/skills
+GET  /api/design-systems
+GET  /api/projects
+POST /api/projects
+GET  /api/projects/:id/files
+POST /api/projects/:id/upload
+POST /api/chat              -> text/event-stream
+POST /api/artifacts/save
 ```
 
 Full schema in [`schemas/protocol.md`](schemas/protocol.md) (TODO: write).
@@ -279,8 +276,10 @@ Full schema in [`schemas/protocol.md`](schemas/protocol.md) (TODO: write).
 ### Local
 ```sh
 pnpm install
-pnpm dev           # starts daemon on :7431, next on :3000
+pnpm tools-dev run web       # starts daemon + web foreground loop
 ```
+
+When a reverse proxy sits in front of the daemon, `/api/*` includes SSE streams and must stay unbuffered. The daemon sends `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and also emits SSE comment keepalives, but nginx can still break chunked streams if gzip is enabled. For nginx, set `proxy_buffering off;`, `gzip off;`, and long `proxy_read_timeout` / `proxy_send_timeout` values on the API location. Otherwise browsers can report `net::ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)` on long generations.
 
 ### Docker
 ```yaml
@@ -289,11 +288,11 @@ services:
   daemon:
     image: openclaudedesign/daemon
     volumes: [ "~/.open-design:/root/.open-design", "./:/workspace" ]
-    ports: ["7431:7431"]
+    ports: ["7456:7456"]
   web:
     image: openclaudedesign/web
     ports: ["3000:3000"]
-    environment: [ "OD_DAEMON_URL=ws://daemon:7431" ]
+    environment: [ "OD_DAEMON_URL=http://daemon:7456" ]
 ```
 
 ### Vercel + local daemon (Topology B)
@@ -313,7 +312,7 @@ vercel deploy                     # same bundle
 
 | Surface | Threat | Mitigation |
 |---|---|---|
-| Daemon WebSocket | Arbitrary local process talks to daemon | Token handshake; token printed on `od daemon` start, required in WS URL |
+| Daemon HTTP/SSE API | Arbitrary local process talks to daemon | Bind to localhost by default; add auth/tunnel hardening before exposing beyond the machine |
 | Artifact code in preview | XSS/cookie theft from host | `<iframe sandbox="allow-scripts">`, no `allow-same-origin` |
 | Agent running on user's machine | Agent reads/writes outside project | Adapter sets `cwd` to artifact dir; relies on agent's own permission system (Claude Code's `--allowed-tools` etc.) |
 | User secrets | Leak to cloud | BYOK stored only in daemon's `config.toml` (mode 0600) or browser `localStorage` in Topology C, never sent to OD's own servers (we don't have any) |

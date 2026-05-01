@@ -1,0 +1,19 @@
+{
+  "id": "animation-transfer-and-camera-tracking-prompt",
+  "surface": "video",
+  "title": "Animation transfer and camera tracking prompt",
+  "summary": "A technical prompt for Seedance 2.0 that applies a specific motion reference to a character while maintaining fixed camera tracking.",
+  "category": "General",
+  "tags": [],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "apply the walking animation of @anim excatly as it is to @char7 . the camera tracks the character exactly in place, camera angle does not change",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/089e7cd70d20131d6d1b44741520eaee/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/089e7cd70d20131d6d1b44741520eaee/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Olivio Sarikas",
+    "url": "https://x.com/OlivioSarikas/status/2049093762077630628"
+  }
+}
