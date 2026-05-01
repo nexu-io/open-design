@@ -1863,7 +1863,15 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       // OS command-line length limit (Windows CreateProcess caps at ~32 KB)
       // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
       const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || needsFilePrompt ? 'pipe' : 'ignore';
-      child = spawn(resolvedBin, args, {
+      // With shell:true on Windows, Node.js builds `cmd.exe /d /s /c "<bin> <args>"`
+      // and escapes argv items but does NOT quote the bin path itself. If
+      // `resolvedBin` contains spaces (e.g. an npm shim under a user directory
+      // like `C:\Users\First Last\AppData\...\claude.CMD`), cmd.exe parses up
+      // to the first space as the command and the rest as arguments, yielding
+      // "The system cannot find the file 'C:\Users\First'". Quote the bin so
+      // the entire path is treated as one token.
+      const spawnBin = useShell ? `"${resolvedBin}"` : resolvedBin;
+      child = spawn(spawnBin, args, {
         env: { ...process.env, ...odMediaEnv },
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
