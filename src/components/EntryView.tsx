@@ -258,7 +258,9 @@ export function EntryView({
                   skills={skills}
                   designSystems={designSystems}
                   defaultDesignSystemId={defaultDesignSystemId}
+                  projects={projects}
                   onCreateProject={onCreateProject}
+                  onOpenProject={onOpenProject}
                 />
               ) : null}
               {topTab === 'inspiration' ? (

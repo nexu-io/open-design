@@ -660,6 +660,117 @@ code {
   color: var(--text-muted);
 }
 
+.oneshot-library-search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.oneshot-library-search-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.oneshot-library-search-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.oneshot-library-search-head p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.oneshot-library-search-stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.oneshot-library-search-stats span {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 7px;
+}
+
+.oneshot-library-search-box {
+  max-width: none;
+}
+
+.oneshot-library-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.oneshot-library-result {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.oneshot-library-result div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.oneshot-library-result span {
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.oneshot-library-result strong,
+.oneshot-library-result small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oneshot-library-result strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.oneshot-library-result small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.oneshot-library-result button {
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+.oneshot-library-empty {
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 .inspiration-create-board input,
 .inspiration-create-board textarea,
 .inspiration-add-pin input,
@@ -3077,6 +3188,25 @@ code {
 
   .oneshot-toolbar {
     gap: 10px;
+  }
+
+  .oneshot-library-search {
+    padding: 0 12px;
+  }
+
+  .oneshot-library-search-head,
+  .oneshot-library-result {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .oneshot-library-search-stats {
+    justify-content: flex-start;
+  }
+
+  .oneshot-library-result button {
+    max-width: 100%;
+    white-space: normal;
   }
 
   .oneshot-card {
