@@ -28,10 +28,6 @@ od:
       type: string
       required: true
       description: "I-Lang formatted design brief or natural language description"
-    - name: output_format
-      type: enum
-      values: [design_md, html_preview, both]
-      default: both
   outputs:
     primary: DESIGN.md
     secondary: brief-preview.html
@@ -58,7 +54,7 @@ The user provides a design brief in one of two formats:
 ```
 [PLAN:@DESIGN|type=saas_landing]
   |palette=navy_and_white|accent=coral
-  |typography=inter_for_body|display=space_grotesk
+  |typography=inter|display=space_grotesk
   |layout=single_column|max_width=1200px
   |mood=professional_minimal
   |density=spacious|section_gap=96px
@@ -107,7 +103,7 @@ When a phrase maps to multiple dimensions (e.g. "clean dark landing page" → mo
 
 Every design brief must resolve these 8 dimensions. If any are missing from the input, select sensible defaults using the rules in Section 2.2.
 
-The values listed below are representative, not exhaustive. The agent may accept semantically clear values not in this table (e.g., `palette=warm_earth` or `mood=retro_tech` are valid). If a value is ambiguous or unrecognizable, prompt the user for clarification rather than guessing.
+The values listed below form a closed vocabulary. Only values in this table have concrete token mappings in Section 2.1. If the user provides a value not listed here, the agent must prompt for clarification rather than guessing.
 
 | # | Dimension | Key | Example values |
 |---|-----------|-----|---------------|
@@ -143,7 +139,7 @@ Each symbolic value maps to concrete design tokens. The agent must resolve these
 | `density=balanced` | Section spacing: 72px, Content padding: 24px/40px |
 | `density=spacious` | Section spacing: 96px, Content padding: 24px/48px |
 
-For symbolic values not in this table, the agent should derive concrete tokens by analogy (e.g., `palette=ocean_blue` → select blues in the same lightness range as `navy_and_white`).
+Symbolic values not in this table are not valid. If the user provides an unrecognized value (e.g., `palette=ocean_blue`), the agent must prompt for clarification: "I don't recognize `palette=ocean_blue`. Did you mean `navy_and_white`, `monochrome_dark`, `light_clean`, or `earth_tones`?"
 
 ### 2.2 Default resolution rules
 
@@ -227,7 +223,7 @@ Produce a DESIGN.md following Open Design's 9-section convention. All color hex 
 - [if exclude contains items → list each as "Do NOT use {item}."]
 ```
 
-## 4. Generate brief-preview.html (if output_format includes html_preview)
+## 4. Generate brief-preview.html
 
 Create a single HTML file that visually renders the resolved design tokens. The preview must contain these 4 sections in order:
 
