@@ -85,3 +85,54 @@ test('kiro fetchModels falls back to fallbackModels when detection fails', async
   assert.ok(Array.isArray(kiro.fallbackModels));
   assert.equal(kiro.fallbackModels[0].id, 'default');
 });
+
+// ---- reasoning-effort clamp ------------------------------------------------
+// Drives clampCodexReasoning through the public buildArgs surface so the
+// helper stays non-exported. The wire-level `-c model_reasoning_effort="..."`
+// flag is what the codex CLI (and ultimately OpenAI) actually sees.
+
+test('codex buildArgs clamps reasoning effort per model', () => {
+  const cases = [
+    // [model, reasoning, expected wire-level effort]
+    // gpt-5.5 family (and unknown / 'default' which we treat as 5.5):
+    // minimal -> low, others pass through.
+    [undefined,            'minimal', 'low'],
+    ['default',            'minimal', 'low'],
+    ['gpt-5.2',            'minimal', 'low'],
+    ['gpt-5.3',            'minimal', 'low'],
+    ['gpt-5.4',            'minimal', 'low'],
+    ['gpt-5.5',            'minimal', 'low'],
+    ['gpt-5.5',            'low',     'low'],
+    ['gpt-5.5',            'medium',  'medium'],
+    ['gpt-5.5',            'high',    'high'],
+    ['vendor/gpt-5.5-foo', 'minimal', 'low'],     // path-style id
+    // gpt-5.1: xhigh isn't supported, others pass through.
+    ['gpt-5.1',            'xhigh',   'high'],
+    ['gpt-5.1',            'high',    'high'],
+    // gpt-5.1-codex-mini: caps at medium / high only.
+    ['gpt-5.1-codex-mini', 'minimal', 'medium'],
+    ['gpt-5.1-codex-mini', 'low',     'medium'],
+    ['gpt-5.1-codex-mini', 'medium',  'medium'],
+    ['gpt-5.1-codex-mini', 'high',    'high'],
+    ['gpt-5.1-codex-mini', 'xhigh',   'high'],
+    // Unknown / future families: pass through; let the API surface its error
+    // as the signal a new rule belongs in clampCodexReasoning.
+    ['gpt-6',              'minimal', 'minimal'],
+  ];
+  for (const [model, reasoning, expected] of cases) {
+    const args = codex.buildArgs('', [], [], { model, reasoning }, { cwd: '/tmp/od-project' });
+    assert.ok(
+      args.includes(`model_reasoning_effort="${expected}"`),
+      `(model=${model ?? '<none>'}, reasoning=${reasoning}) → expected ${expected}; args=${JSON.stringify(args)}`,
+    );
+  }
+});
+
+test('codex buildArgs omits model_reasoning_effort when reasoning is "default"', () => {
+  const args = codex.buildArgs('', [], [], { reasoning: 'default' }, { cwd: '/tmp/od-project' });
+
+  assert.equal(
+    args.some((a) => typeof a === 'string' && a.startsWith('model_reasoning_effort=')),
+    false,
+  );
+});
