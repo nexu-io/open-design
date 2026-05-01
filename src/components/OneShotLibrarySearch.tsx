@@ -56,11 +56,18 @@ interface LibraryViewImportPlanItem {
 const SAVED_VIEWS_KEY = 'oneshot:library-search-views';
 const TRANSFER_HISTORY_KEY = 'oneshot:library-search-transfer-history';
 const SAVED_VIEWS_SCHEMA = 'oneshot.library-search-views.v1';
+const TRANSFER_HISTORY_SCHEMA = 'oneshot.library-search-transfer-history.v1';
 
 interface LibraryViewsExport {
   schema: typeof SAVED_VIEWS_SCHEMA;
   exportedAt: number;
   views: SavedLibraryView[];
+}
+
+interface LibraryTransferHistoryExport {
+  schema: typeof TRANSFER_HISTORY_SCHEMA;
+  exportedAt: number;
+  entries: LibraryTransferHistoryEntry[];
 }
 
 interface LibraryTransferHistoryEntry {
@@ -233,6 +240,24 @@ export function OneShotLibrarySearch({
     const note = window.prompt('Client, machine, or production-lane note for this transfer', entry.note ?? '');
     if (note === null) return;
     updateLibraryTransferHistoryNote(entry.id, cleanOptionalText(note));
+  }
+
+  function exportTransferHistory() {
+    if (transferHistory.length === 0) return;
+    const packet: LibraryTransferHistoryExport = {
+      schema: TRANSFER_HISTORY_SCHEMA,
+      exportedAt: Date.now(),
+      entries: transferHistory,
+    };
+    const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'oneshot-library-search-transfer-history.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function exportSavedViews() {
@@ -500,9 +525,14 @@ export function OneShotLibrarySearch({
           <div className="oneshot-library-transfer-history" aria-label="Library Search transfer history">
             <div className="oneshot-library-transfer-history-head">
               <span>Transfer history</span>
-              <button type="button" className="secondary" onClick={clearLibraryTransferHistory}>
-                Clear history
-              </button>
+              <div className="oneshot-library-transfer-history-head-actions">
+                <button type="button" className="secondary" onClick={exportTransferHistory}>
+                  Export history
+                </button>
+                <button type="button" className="secondary" onClick={clearLibraryTransferHistory}>
+                  Clear history
+                </button>
+              </div>
             </div>
             <div className="oneshot-library-transfer-history-list">
               {transferHistory.slice(0, 5).map((entry) => (

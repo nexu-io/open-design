@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
+import { buildStudioSnapshot } from '../state/studioSnapshot';
 import type {
   AgentInfo,
   AppConfig,
@@ -130,6 +131,19 @@ export function EntryView({
     onCreateProject(input);
   }
 
+  function exportStudioSnapshot() {
+    const packet = buildStudioSnapshot({ projects, templates });
+    const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'oneshot-studio-snapshot.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   const startWidthRef = useRef(0);
   const startXRef = useRef(0);
 
@@ -238,6 +252,15 @@ export function EntryView({
             <TopTabButton current={topTab} value="library-search" label="Library Search" onClick={setTopTab} />
           </div>
           <div className="entry-header-right">
+            <button
+              type="button"
+              className="entry-snapshot-btn"
+              onClick={exportStudioSnapshot}
+              title="Export OneShot studio snapshot"
+            >
+              <Icon name="download" size={13} />
+              <span>Export snapshot</span>
+            </button>
             {/* Avatar settings live next to tabs to mirror the project view. */}
             <button
               type="button"

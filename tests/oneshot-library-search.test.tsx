@@ -591,10 +591,21 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.queryByText('Collection: Publishing')).not.toBeInTheDocument();
   });
 
-  it('shows and clears Library Search transfer history', () => {
+  it('shows, exports, and clears Library Search transfer history', async () => {
     vi.spyOn(window, 'prompt')
       .mockReturnValueOnce('Publishing workstation import')
       .mockReturnValueOnce('');
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const createObjectURL = vi.fn(() => 'blob:oneshot-library-transfer-history');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
     localStorage.setItem('oneshot:library-search-transfer-history', JSON.stringify([
       {
         id: 'history-export',
@@ -630,6 +641,26 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('Exported 2 Library Search views')).toBeInTheDocument();
     expect(screen.getByText('Backup packet for Windows laptop')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Replay import' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export history' }));
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(anchorClick).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:oneshot-library-transfer-history');
+    const exportedText = await (createObjectURL.mock.calls[0][0] as Blob).text();
+    expect(JSON.parse(exportedText)).toMatchObject({
+      schema: 'oneshot.library-search-transfer-history.v1',
+      entries: [
+        expect.objectContaining({
+          direction: 'import',
+          viewCount: 3,
+        }),
+        expect.objectContaining({
+          direction: 'export',
+          note: 'Backup packet for Windows laptop',
+          viewCount: 2,
+        }),
+      ],
+    });
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Add note' })[0]);
     expect(window.prompt).toHaveBeenCalledWith(
