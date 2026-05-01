@@ -847,14 +847,14 @@ code {
   color: currentColor;
   font-size: 13px;
   font-weight: 650;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 .settings-nav-item small {
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .settings-content {
   min-width: 0;
@@ -1048,6 +1048,7 @@ code {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .settings-language-code,
 .settings-language-option-code {
@@ -1059,6 +1060,7 @@ code {
 .settings-language-menu {
   position: fixed;
   z-index: 1000;
+  max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2200,6 +2202,8 @@ code {
   left: 0;
   z-index: 50;
   min-width: 180px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 48px));
   display: flex;
   flex-direction: column;
   padding: 4px;
@@ -2210,7 +2214,7 @@ code {
 }
 .lang-menu-item {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
@@ -2221,6 +2225,10 @@ code {
   color: var(--text);
   text-align: left;
   cursor: pointer;
+}
+.lang-menu-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .lang-menu-item:hover { background: var(--bg-subtle); }
 .lang-menu-item.active { background: var(--bg-subtle); }
@@ -2250,13 +2258,22 @@ code {
   gap: 16px;
   padding: 14px 28px 0;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 .entry-header-tabs-row {
   display: flex;
   align-items: center;
   gap: 24px;
 }
-.entry-tabs { display: flex; gap: 2px; }
+.entry-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.entry-tabs::-webkit-scrollbar { display: none; }
 .entry-tab {
   background: transparent;
   border: none;
@@ -2266,6 +2283,8 @@ code {
   font-size: 14px;
   color: var(--text-muted);
   font-weight: 500;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .entry-tab:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
 .entry-tab.active {
@@ -2276,6 +2295,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .entry-tab-content {
@@ -2296,13 +2316,21 @@ code {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
 }
-.tab-panel-toolbar .toolbar-left { display: flex; gap: 8px; align-items: center; }
-.tab-panel-toolbar .toolbar-right { display: flex; gap: 8px; align-items: center; }
+.tab-panel-toolbar .toolbar-left,
+.tab-panel-toolbar .toolbar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .tab-panel-toolbar .toolbar-search {
   position: relative;
-  width: 280px;
-  max-width: 30vw;
+  flex: 1 1 240px;
+  width: min(280px, 100%);
+  max-width: 100%;
 }
 .tab-panel-toolbar .toolbar-search input {
   padding-left: 30px;
@@ -2332,7 +2360,11 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.subtab-pill::-webkit-scrollbar { display: none; }
 .subtab-pill button {
   background: transparent;
   border: none;
@@ -2341,6 +2373,7 @@ code {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
+  white-space: nowrap;
 }
 .subtab-pill button:hover:not(.active) { background: rgba(255,255,255,0.6); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
@@ -2766,8 +2799,19 @@ code {
 .ds-row-swatch + .ds-row-swatch { border-left: 1px solid rgba(0, 0, 0, 0.05); }
 
 @media (max-width: 900px) {
-  .entry { grid-template-columns: 1fr; }
-  .entry-side { border-right: none; border-bottom: 1px solid var(--border); }
+  .entry {
+    grid-template-columns: 1fr !important;
+    height: auto;
+    min-height: 100vh;
+  }
+  .entry-side {
+    width: 100% !important;
+    min-width: 0;
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .entry-side-resizer { display: none; }
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
 }
