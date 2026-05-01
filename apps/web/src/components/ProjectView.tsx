@@ -46,10 +46,10 @@ import type {
   ProjectTemplate,
   SkillSummary,
 } from '../types';
+import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
-import { Icon } from './Icon';
 
 interface Props {
   project: Project;
@@ -1044,20 +1044,24 @@ export function ProjectView({
 
   return (
     <div className="app">
-      <div className="topbar">
-        <div className="topbar-left">
-          <button
-            className="ghost back-btn"
-            onClick={onBack}
-            title={t('project.backToProjects')}
-            aria-label={t('project.backToProjects')}
-          >
-            <Icon name="arrow-left" size={14} />
-          </button>
-          <span className="brand-mark" aria-hidden>
-            <img src="/logo.svg" alt="" className="brand-mark-img" draggable={false} />
-          </span>
-          <div className="topbar-title">
+      <AppChromeHeader
+        onBack={onBack}
+        backLabel={t('project.backToProjects')}
+        actions={(
+          <AvatarMenu
+            config={config}
+            agents={agents}
+            daemonLive={daemonLive}
+            onModeChange={onModeChange}
+            onAgentChange={onAgentChange}
+            onAgentModelChange={onAgentModelChange}
+            onOpenSettings={onOpenSettings}
+            onRefreshAgents={onRefreshAgents}
+            onBack={onBack}
+          />
+        )}
+      >
+        <div className="app-project-title">
             <span
               className="title editable"
               data-testid="project-title"
@@ -1076,22 +1080,8 @@ export function ProjectView({
               {project.name}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
-          </div>
         </div>
-        <div className="topbar-right">
-          <AvatarMenu
-            config={config}
-            agents={agents}
-            daemonLive={daemonLive}
-            onModeChange={onModeChange}
-            onAgentChange={onAgentChange}
-            onAgentModelChange={onAgentModelChange}
-            onOpenSettings={onOpenSettings}
-            onRefreshAgents={onRefreshAgents}
-            onBack={onBack}
-          />
-        </div>
-      </div>
+      </AppChromeHeader>
       <div className="split">
         <ChatPane
           // The conversation id is part of the key so switching conversations

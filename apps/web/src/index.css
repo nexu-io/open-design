@@ -170,6 +170,114 @@ code {
   background: var(--bg-app);
 }
 
+.app-chrome-header {
+  --app-chrome-traffic-space: 0px;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  gap: 12px;
+  flex-shrink: 0;
+}
+.app-chrome-traffic-space {
+  width: var(--app-chrome-traffic-space);
+  flex: 0 0 var(--app-chrome-traffic-space);
+}
+.app-chrome-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.app-chrome-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  overflow: visible;
+  flex-shrink: 0;
+}
+.app-chrome-mark .brand-mark-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  padding: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.app-chrome-name {
+  color: var(--text-strong);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.app-chrome-back,
+.settings-icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.app-chrome-back:hover:not(:disabled),
+.settings-icon-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+}
+.app-chrome-content {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.app-chrome-drag {
+  min-width: 24px;
+  flex: 1 1 auto;
+  align-self: stretch;
+}
+.app-chrome-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.app-project-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.app-project-title .title {
+  color: var(--text-strong);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-project-title .meta {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -1286,10 +1394,19 @@ code {
 /* ============================================================
    Entry view — left sidebar + right tabs
    ============================================================ */
+.entry-shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  min-height: 0;
+  background: var(--bg);
+}
+
 .entry {
   display: grid;
   grid-template-columns: 380px 1fr;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   background: var(--bg);
 }
 
@@ -2284,9 +2401,10 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 28px 0;
+  padding: 0 28px;
   border-bottom: 1px solid var(--border);
   min-width: 0;
+  min-height: 52px;
 }
 .entry-header-tabs-row {
   display: flex;
@@ -4414,13 +4532,15 @@ code {
    ============================================================ */
 
 /* Editable project title (inline rename in topbar) */
-.topbar-title .title.editable {
+.topbar-title .title.editable,
+.app-project-title .title.editable {
   outline: none;
   border-radius: 4px;
   padding: 1px 4px;
   margin: -1px -4px;
 }
-.topbar-title .title.editable:focus {
+.topbar-title .title.editable:focus,
+.app-project-title .title.editable:focus {
   background: var(--bg-subtle);
   box-shadow: 0 0 0 1px var(--accent);
 }
