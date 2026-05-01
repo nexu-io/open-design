@@ -1,7 +1,14 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
-import { buildStudioSnapshot } from '../state/studioSnapshot';
+import {
+  applyStudioSnapshotLocalLibraries,
+  buildStudioSnapshot,
+  buildStudioSnapshotImportPlan,
+  normalizeStudioSnapshot,
+  type StudioSnapshot,
+  type StudioSnapshotImportMode,
+} from '../state/studioSnapshot';
 import type {
   AgentInfo,
   AppConfig,
@@ -86,6 +93,10 @@ export function EntryView({
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [resizing, setResizing] = useState(false);
+  const [snapshotImportMode, setSnapshotImportMode] = useState<StudioSnapshotImportMode>('merge');
+  const [snapshotImport, setSnapshotImport] = useState<StudioSnapshot | null>(null);
+  const [snapshotImportError, setSnapshotImportError] = useState('');
+  const [snapshotImportStatus, setSnapshotImportStatus] = useState('');
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === config.agentId) ?? null,
@@ -126,6 +137,10 @@ export function EntryView({
     () => (previewSystemId ? designSystems.find((d) => d.id === previewSystemId) ?? null : null),
     [designSystems, previewSystemId],
   );
+  const snapshotImportPlan = useMemo(
+    () => (snapshotImport ? buildStudioSnapshotImportPlan(snapshotImport, snapshotImportMode) : null),
+    [snapshotImport, snapshotImportMode],
+  );
 
   function handleCreate(input: CreateInput) {
     onCreateProject(input);
@@ -142,6 +157,32 @@ export function EntryView({
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function previewStudioSnapshotImport(file: File | undefined) {
+    if (!file) return;
+    setSnapshotImportError('');
+    setSnapshotImportStatus('');
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const snapshot = normalizeStudioSnapshot(parsed);
+      if (!snapshot) {
+        setSnapshotImport(null);
+        setSnapshotImportError('That file is not a OneShot studio snapshot.');
+        return;
+      }
+      setSnapshotImport(snapshot);
+    } catch {
+      setSnapshotImport(null);
+      setSnapshotImportError('The selected snapshot could not be read.');
+    }
+  }
+
+  function restoreStudioSnapshotLocalLibraries() {
+    if (!snapshotImportPlan) return;
+    applyStudioSnapshotLocalLibraries(snapshotImportPlan.snapshot, snapshotImportPlan.mode);
+    setSnapshotImport(null);
+    setSnapshotImportStatus(`Restored ${snapshotImportPlan.totals.restored} local studio records from the snapshot.`);
   }
 
   const startWidthRef = useRef(0);
@@ -252,6 +293,19 @@ export function EntryView({
             <TopTabButton current={topTab} value="library-search" label="Library Search" onClick={setTopTab} />
           </div>
           <div className="entry-header-right">
+            <label className="entry-snapshot-btn entry-snapshot-import" title="Import OneShot studio snapshot">
+              <Icon name="import" size={13} />
+              <span>Import snapshot</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                aria-label="Import snapshot"
+                onChange={(event) => {
+                  void previewStudioSnapshotImport(event.target.files?.[0]);
+                  event.currentTarget.value = '';
+                }}
+              />
+            </label>
             <button
               type="button"
               className="entry-snapshot-btn"
@@ -284,6 +338,12 @@ export function EntryView({
             <CenteredLoader label={t('entry.loadingWorkspace')} />
           ) : (
             <>
+              {snapshotImportError ? (
+                <div className="entry-snapshot-message danger" role="alert">{snapshotImportError}</div>
+              ) : null}
+              {snapshotImportStatus ? (
+                <div className="entry-snapshot-message" role="status">{snapshotImportStatus}</div>
+              ) : null}
               {topTab === 'workflows' ? (
                 <OneShotWorkflows
                   skills={skills}
@@ -331,6 +391,68 @@ export function EntryView({
           system={previewSystem}
           onClose={() => setPreviewSystemId(null)}
         />
+      ) : null}
+      {snapshotImportPlan ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal entry-snapshot-modal" role="dialog" aria-modal="true" aria-label="Studio snapshot restore preview">
+            <h2>Studio snapshot restore preview</h2>
+            <p className="hint">
+              Review the packet before restoring local studio libraries. Projects and templates stay archived in the packet for audit.
+            </p>
+            <div className="entry-snapshot-audit" aria-label="Snapshot import audit">
+              <div>
+                <span>Incoming</span>
+                <strong>{snapshotImportPlan.totals.incoming}</strong>
+              </div>
+              <div>
+                <span>Local</span>
+                <strong>{snapshotImportPlan.totals.local}</strong>
+              </div>
+              <div>
+                <span>Conflicts</span>
+                <strong>{snapshotImportPlan.totals.conflicts}</strong>
+              </div>
+              <div>
+                <span>Restored</span>
+                <strong>{snapshotImportPlan.totals.restored}</strong>
+              </div>
+            </div>
+            <label className="entry-snapshot-mode">
+              <span>Conflict handling</span>
+              <select
+                value={snapshotImportMode}
+                onChange={(event) => setSnapshotImportMode(event.target.value as StudioSnapshotImportMode)}
+              >
+                <option value="merge">Merge without overwriting</option>
+                <option value="replace">Replace local studio libraries</option>
+              </select>
+            </label>
+            <div className="entry-snapshot-rows">
+              {snapshotImportPlan.sections.map((section) => (
+                <div className="entry-snapshot-row" key={section.key}>
+                  <strong>{section.label}</strong>
+                  <span>
+                    {section.incoming} incoming - {section.local} local - {section.conflicts} conflicts - {section.restored} restored
+                  </span>
+                </div>
+              ))}
+              <div className="entry-snapshot-row archive">
+                <strong>Project archive</strong>
+                <span>
+                  {snapshotImportPlan.archiveOnly.projects} projects and {snapshotImportPlan.archiveOnly.templates} templates remain audit-only in this restore.
+                </span>
+              </div>
+            </div>
+            <div className="row">
+              <button type="button" className="secondary" onClick={() => setSnapshotImport(null)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={restoreStudioSnapshotLocalLibraries}>
+                Restore local libraries
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

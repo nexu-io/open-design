@@ -16,6 +16,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category or custom collection, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
 - The top navigation now includes a dedicated Library Search tab after Design systems. It spans saved blueprints, Inspiration boards, and generated project records, with direct actions to start a blueprint, create an Inspiration brief, or reopen a project.
 - The entry header can export a full OneShot studio snapshot covering generated projects, saved templates, workflow blueprints, Inspiration boards and pins, Library Search views, and Library Search transfer history.
+- Studio snapshots can now be imported through a dry-run restore preview with merge or replace conflict handling before any local library data is changed.
 - Library Search can now narrow reusable work by source, output type, and recent activity, which keeps large local libraries easier to scan.
 - Library Search views can now be named, saved, grouped by collection or production lane, pinned above recent views, annotated with owner and usage notes, duplicated as quick variants, reapplied, deleted, previewed before transfer, exported, and imported as OneShot JSON packets with rename, replace, or skip conflict handling, before/after packet audits, exportable local transfer history, import replay, and transfer notes for client, machine, or production-lane context, so common filters can become portable studio workbenches.
 - The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, imported local images, usage notes, tags, and OneShot reference-brief creation.
@@ -44,4 +45,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Add studio snapshot import with a before/after restore preview, conflict handling, and a dry-run audit before any local data is changed.
+1. Add daemon-backed project/template restore from studio snapshots with per-record confirmation, rollback notes, and server-write audit output.

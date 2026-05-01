@@ -170,7 +170,141 @@ describe('EntryView', () => {
       libraryTransferHistory: [expect.objectContaining({ direction: 'export' })],
     });
   });
+
+  it('previews and restores local libraries from a studio snapshot', async () => {
+    localStorage.setItem('oneshot:saved-blueprints', JSON.stringify([
+      {
+        id: 'existing-blueprint',
+        name: 'Existing cover run',
+        prompt: 'Existing prompt',
+        skillId: 'pm-spec',
+        designSystemId: null,
+        metadata: { kind: 'template', workflowId: 'oneshot-cover-run' },
+        createdAt: 100,
+      },
+    ]));
+    localStorage.setItem('oneshot:library-search-views', JSON.stringify([
+      {
+        id: 'existing-view',
+        name: 'Existing boards',
+        query: 'existing',
+        sourceFilter: 'Board',
+        outputFilter: 'visual-reference',
+        recencyFilter: 'all',
+        createdAt: 200,
+      },
+    ]));
+
+    renderEntryView();
+
+    const snapshot = {
+      schema: 'oneshot.studio-snapshot.v1',
+      exportedAt: Date.now(),
+      projects: [project('project-from-packet', 'Archived project')],
+      templates: [template('template-from-packet', 'Archived template')],
+      savedBlueprints: [
+        {
+          id: 'existing-blueprint',
+          name: 'Conflicting cover run',
+          prompt: 'Incoming prompt',
+          skillId: 'pm-spec',
+          designSystemId: null,
+          metadata: { kind: 'template', workflowId: 'oneshot-cover-run' },
+          createdAt: 300,
+        },
+        {
+          id: 'incoming-blueprint',
+          name: 'Incoming dashboard run',
+          prompt: 'Incoming dashboard prompt',
+          skillId: 'pm-spec',
+          designSystemId: null,
+          metadata: { kind: 'template', workflowId: 'dashboard-mockup' },
+          createdAt: 400,
+        },
+      ],
+      inspirationBoards: [
+        {
+          id: 'incoming-board',
+          title: 'Incoming board',
+          description: '',
+          tags: [],
+          createdAt: 500,
+          updatedAt: 500,
+        },
+      ],
+      inspirationPins: [],
+      libraryViews: [
+        {
+          id: 'incoming-view',
+          name: 'Incoming boards',
+          query: 'cover',
+          sourceFilter: 'Board',
+          outputFilter: 'visual-reference',
+          recencyFilter: '30d',
+          createdAt: 600,
+        },
+      ],
+      libraryTransferHistory: [
+        {
+          id: 'incoming-history',
+          direction: 'import',
+          createdAt: 700,
+          viewCount: 1,
+        },
+      ],
+    };
+    const file = new File([JSON.stringify(snapshot)], 'oneshot-studio-snapshot.json', {
+      type: 'application/json',
+    });
+
+    fireEvent.change(screen.getByLabelText('Import snapshot'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByRole('dialog', { name: 'Studio snapshot restore preview' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Snapshot import audit')).toBeInTheDocument();
+    expect(screen.getByText('2 incoming - 1 local - 1 conflicts - 1 restored')).toBeInTheDocument();
+    expect(screen.getByText('1 projects and 1 templates remain audit-only in this restore.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore local libraries' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Restored 4 local studio records from the snapshot.');
+    expect(JSON.parse(localStorage.getItem('oneshot:saved-blueprints') ?? '[]')).toEqual([
+      expect.objectContaining({ id: 'incoming-blueprint', name: 'Incoming dashboard run' }),
+      expect.objectContaining({ id: 'existing-blueprint', name: 'Existing cover run' }),
+    ]);
+    expect(JSON.parse(localStorage.getItem('oneshot:library-search-views') ?? '[]')).toEqual([
+      expect.objectContaining({ id: 'incoming-view', name: 'Incoming boards' }),
+      expect.objectContaining({ id: 'existing-view', name: 'Existing boards' }),
+    ]);
+    expect(JSON.parse(localStorage.getItem('oneshot:inspiration-boards') ?? '[]')).toEqual([
+      expect.objectContaining({ id: 'incoming-board', title: 'Incoming board' }),
+    ]);
+    expect(JSON.parse(localStorage.getItem('oneshot:library-search-transfer-history') ?? '[]')).toEqual([
+      expect.objectContaining({ id: 'incoming-history', direction: 'import' }),
+    ]);
+  });
 });
+
+function renderEntryView() {
+  return render(
+    <EntryView
+      skills={[skill]}
+      designSystems={[designSystem]}
+      projects={[project('project-1', 'OneShot Cover Run')]}
+      templates={[template('template-1', 'Cover packet template')]}
+      defaultDesignSystemId="ios-26-liquid-glass"
+      config={config}
+      agents={agents}
+      onCreateProject={vi.fn()}
+      onImportClaudeDesign={vi.fn()}
+      onOpenProject={vi.fn()}
+      onDeleteProject={vi.fn()}
+      onChangeDefaultDesignSystem={vi.fn()}
+      onOpenSettings={vi.fn()}
+    />,
+  );
+}
 
 function project(id: string, name: string): Project {
   return {

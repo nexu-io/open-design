@@ -3250,6 +3250,117 @@ code {
   background: var(--bg-subtle);
 }
 
+.entry-snapshot-import {
+  cursor: pointer;
+}
+
+.entry-snapshot-import input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.entry-snapshot-message {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.entry-snapshot-message.danger {
+  border-color: color-mix(in srgb, #b42318 28%, var(--border));
+  color: #b42318;
+}
+
+.entry-snapshot-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.entry-snapshot-audit {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.entry-snapshot-audit > div,
+.entry-snapshot-row {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.entry-snapshot-audit span,
+.entry-snapshot-row span,
+.entry-snapshot-mode span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.entry-snapshot-audit strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 20px;
+}
+
+.entry-snapshot-mode {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+
+.entry-snapshot-mode select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.entry-snapshot-rows {
+  display: grid;
+  gap: 7px;
+}
+
+.entry-snapshot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.entry-snapshot-row strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.entry-snapshot-row span {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-snapshot-row.archive {
+  background: var(--bg-subtle);
+}
+
 .entry-tab-content {
   flex: 1;
   min-height: 0;
@@ -3693,6 +3804,20 @@ code {
 
   .entry-snapshot-btn span {
     display: none;
+  }
+
+  .entry-snapshot-audit {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry-snapshot-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .entry-snapshot-row span {
+    text-align: left;
+    white-space: normal;
   }
 
   .entry-tab-content {
