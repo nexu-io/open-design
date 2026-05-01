@@ -106,4 +106,27 @@ describe('Inspiration Library', () => {
     expect(onCreateProject.mock.calls[0]?.[0]?.pendingPrompt).toContain('local/reference.html');
     expect(onCreateProject.mock.calls[0]?.[0]?.pendingPrompt).toContain('Internal inspiration only.');
   });
+
+  it('imports a local image into a reference pin', async () => {
+    const onCreateProject = vi.fn();
+    render(<InspirationTab onCreateProject={onCreateProject} />);
+
+    const file = new File(['mock image'], 'sample-reference.png', { type: 'image/png' });
+    fireEvent.change(await screen.findByLabelText('Import image'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Reference title')).toHaveValue('sample-reference');
+    });
+    expect(screen.getByPlaceholderText('Source URL or local reference')).toHaveValue(
+      'Imported image: sample-reference.png',
+    );
+    expect(screen.getByText('Imported image: sample-reference.png')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add pin' }));
+
+    expect(await screen.findByText('sample-reference')).toBeInTheDocument();
+    expect(localStorage.getItem('oneshot:inspiration-pins')).toContain('data:image/png;base64');
+  });
 });

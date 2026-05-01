@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
 import type { InspirationBoard, InspirationPin } from '../types';
 import type { CreateInput } from './NewProjectPanel';
 import {
@@ -30,6 +30,8 @@ export function InspirationTab({ onCreateProject }: Props) {
   const [pinNote, setPinNote] = useState('');
   const [pinUsageNote, setPinUsageNote] = useState('');
   const [pinTags, setPinTags] = useState('');
+  const [pinImageName, setPinImageName] = useState('');
+  const [pinImageError, setPinImageError] = useState('');
 
   useEffect(() => {
     function refresh() {
@@ -105,6 +107,39 @@ export function InspirationTab({ onCreateProject }: Props) {
     setPinNote('');
     setPinUsageNote('');
     setPinTags('');
+    setPinImageName('');
+    setPinImageError('');
+  }
+
+  function handleImageImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPinImageError('');
+    if (!file.type.startsWith('image/')) {
+      setPinImageError('Choose an image file.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setPinImageError('Use a smaller reference image under 4 MB.');
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) {
+        setPinImageError('The image could not be imported.');
+        return;
+      }
+      setPinImageUrl(result);
+      setPinImageName(file.name);
+      setPinTitle((current) => current || file.name.replace(/\.[^.]+$/, ''));
+      setPinSourceUrl((current) => current || `Imported image: ${file.name}`);
+      setPinUsageNote((current) => current || 'Local reference image. Confirm usage rights before direct reuse.');
+    };
+    reader.onerror = () => setPinImageError('The image could not be imported.');
+    reader.readAsDataURL(file);
   }
 
   function startReferenceBrief() {
@@ -236,6 +271,10 @@ export function InspirationTab({ onCreateProject }: Props) {
                   onChange={(event) => setPinImageUrl(event.target.value)}
                   placeholder="Image URL"
                 />
+                <label className="inspiration-file-picker">
+                  <span>Import image</span>
+                  <input type="file" accept="image/*" onChange={handleImageImport} />
+                </label>
                 <input
                   value={pinSourceUrl}
                   onChange={(event) => setPinSourceUrl(event.target.value)}
@@ -256,6 +295,12 @@ export function InspirationTab({ onCreateProject }: Props) {
                   onChange={(event) => setPinUsageNote(event.target.value)}
                   placeholder="Usage, license, or attribution note"
                 />
+                {pinImageName ? (
+                  <small className="inspiration-import-status">Imported image: {pinImageName}</small>
+                ) : null}
+                {pinImageError ? (
+                  <small className="inspiration-import-status error" role="alert">{pinImageError}</small>
+                ) : null}
                 <button type="button" className="primary" onClick={handleCreatePin} disabled={!pinTitle.trim()}>
                   <Icon name="plus" size={13} />
                   Add pin

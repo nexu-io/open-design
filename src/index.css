@@ -668,6 +668,36 @@ code {
   padding: 8px 9px;
 }
 
+.inspiration-file-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 7px 9px;
+}
+
+.inspiration-file-picker input {
+  border: 0;
+  padding: 0;
+  font-size: 11.5px;
+}
+
+.inspiration-import-status {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.inspiration-import-status.error {
+  color: var(--red);
+}
+
 .inspiration-create-board textarea,
 .inspiration-add-pin textarea {
   min-height: 66px;
@@ -847,6 +877,31 @@ code {
   .inspiration-masonry {
     column-count: 1;
   }
+}
+
+.oneshot-reference-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 8px;
+}
+
+.oneshot-reference-select select {
+  max-width: 220px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  padding: 5px 7px;
 }
 
 /* -------- Avatar menu (replaces in-topbar agent picker) ------------- */

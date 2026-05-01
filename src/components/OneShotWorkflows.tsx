@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CreateInput } from './NewProjectPanel';
 import type {
   DesignSystemSummary,
+  InspirationBoard,
+  InspirationPin,
   ProjectMetadata,
   SavedWorkflowBlueprint,
   SkillSummary,
@@ -15,6 +17,11 @@ import {
   renameSavedBlueprint,
   setSavedBlueprintPinned,
 } from '../state/blueprints';
+import {
+  buildInspirationPrompt,
+  listInspirationBoards,
+  listInspirationPins,
+} from '../state/inspiration';
 import { Icon } from './Icon';
 
 type WorkflowKind = 'prototype' | 'deck' | 'template' | 'other';
@@ -451,6 +458,7 @@ const ALL_CATEGORIES = 'All workflows';
 const ALL_SAVED_BLUEPRINTS = 'All saved';
 const PINNED_SAVED_BLUEPRINTS = 'Pinned';
 const UNGROUPED_SAVED_BLUEPRINTS = 'Ungrouped';
+const NO_REFERENCE_BOARD = 'none';
 
 export function OneShotWorkflows({
   skills,
@@ -462,6 +470,9 @@ export function OneShotWorkflows({
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [savedBlueprintGroup, setSavedBlueprintGroup] = useState(ALL_SAVED_BLUEPRINTS);
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
+  const [inspirationBoards, setInspirationBoards] = useState<InspirationBoard[]>([]);
+  const [inspirationPins, setInspirationPins] = useState<InspirationPin[]>([]);
+  const [referenceBoardId, setReferenceBoardId] = useState(NO_REFERENCE_BOARD);
 
   useEffect(() => {
     function refreshSavedBlueprints() {
@@ -473,6 +484,20 @@ export function OneShotWorkflows({
     return () => {
       window.removeEventListener('oneshot:blueprints-changed', refreshSavedBlueprints);
       window.removeEventListener('storage', refreshSavedBlueprints);
+    };
+  }, []);
+
+  useEffect(() => {
+    function refreshInspiration() {
+      setInspirationBoards(listInspirationBoards());
+      setInspirationPins(listInspirationPins());
+    }
+    refreshInspiration();
+    window.addEventListener('oneshot:inspiration-changed', refreshInspiration);
+    window.addEventListener('storage', refreshInspiration);
+    return () => {
+      window.removeEventListener('oneshot:inspiration-changed', refreshInspiration);
+      window.removeEventListener('storage', refreshInspiration);
     };
   }, []);
 
@@ -515,11 +540,30 @@ export function OneShotWorkflows({
     );
   }, [savedBlueprintGroup, savedBlueprints]);
 
+  const selectedReferenceBoard = useMemo(
+    () => inspirationBoards.find((board) => board.id === referenceBoardId) ?? null,
+    [inspirationBoards, referenceBoardId],
+  );
+
+  const selectedReferencePins = useMemo(
+    () =>
+      selectedReferenceBoard
+        ? inspirationPins.filter((pin) => pin.boardId === selectedReferenceBoard.id)
+        : [],
+    [inspirationPins, selectedReferenceBoard],
+  );
+
   useEffect(() => {
     if (!savedBlueprintGroups.includes(savedBlueprintGroup)) {
       setSavedBlueprintGroup(ALL_SAVED_BLUEPRINTS);
     }
   }, [savedBlueprintGroup, savedBlueprintGroups]);
+
+  useEffect(() => {
+    if (referenceBoardId !== NO_REFERENCE_BOARD && !selectedReferenceBoard) {
+      setReferenceBoardId(NO_REFERENCE_BOARD);
+    }
+  }, [referenceBoardId, selectedReferenceBoard]);
 
   function launchWorkflow(workflow: WorkflowDefinition) {
     const skillId = pickSkillId(workflow, skills);
@@ -532,8 +576,8 @@ export function OneShotWorkflows({
       name: workflow.title,
       skillId,
       designSystemId,
-      metadata: metadataForWorkflow(workflow),
-      pendingPrompt: workflow.prompt,
+      metadata: metadataForWorkflow(workflow, selectedReferenceBoard, selectedReferencePins),
+      pendingPrompt: promptForWorkflow(workflow, selectedReferenceBoard, selectedReferencePins),
     });
   }
 
@@ -711,6 +755,22 @@ export function OneShotWorkflows({
               </button>
             ))}
           </div>
+          {inspirationBoards.length > 0 ? (
+            <label className="oneshot-reference-select">
+              <span>Reference board</span>
+              <select
+                value={referenceBoardId}
+                onChange={(event) => setReferenceBoardId(event.target.value)}
+              >
+                <option value={NO_REFERENCE_BOARD}>None</option>
+                {inspirationBoards.map((board) => (
+                  <option key={board.id} value={board.id}>
+                    {board.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         <div className="oneshot-workflow-grid">
@@ -826,7 +886,11 @@ function savedBlueprintGroupName(blueprint: SavedWorkflowBlueprint) {
   return blueprint.metadata.workflowCategory ?? UNGROUPED_SAVED_BLUEPRINTS;
 }
 
-function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {
+function metadataForWorkflow(
+  workflow: WorkflowDefinition,
+  referenceBoard: InspirationBoard | null,
+  referencePins: InspirationPin[],
+): ProjectMetadata {
   return {
     ...workflow.metadata,
     workflowId: workflow.id,
@@ -838,7 +902,24 @@ function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {
     workflowExportPackage: workflow.exportPackage,
     workflowScorecard: workflow.scorecard,
     workflowHandoff: workflow.handoff,
+    workflowReferenceBoardId: referenceBoard?.id,
+    workflowReferenceBoardTitle: referenceBoard?.title,
+    workflowReferencePinCount: referenceBoard ? referencePins.length : undefined,
   };
+}
+
+function promptForWorkflow(
+  workflow: WorkflowDefinition,
+  referenceBoard: InspirationBoard | null,
+  referencePins: InspirationPin[],
+) {
+  if (!referenceBoard) return workflow.prompt;
+  return [
+    workflow.prompt,
+    '',
+    'Reference lock:',
+    buildInspirationPrompt(referenceBoard, referencePins),
+  ].join('\n');
 }
 
 function resolveSkillLabel(workflow: WorkflowDefinition, skills: SkillSummary[]) {

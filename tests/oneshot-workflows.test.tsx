@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotWorkflows } from '../src/components/OneShotWorkflows';
 import { listSavedBlueprints, saveWorkflowBlueprint } from '../src/state/blueprints';
+import { createInspirationBoard, createInspirationPin } from '../src/state/inspiration';
 import type { DesignSystemSummary, SkillSummary } from '../src/types';
 
 function skill(id: string, mode: SkillSummary['mode']): SkillSummary {
@@ -214,6 +215,55 @@ describe('OneShotWorkflows', () => {
         pendingPrompt: expect.stringContaining('iOS 26 Liquid Glass'),
       }),
     );
+  });
+
+  it('attaches a selected inspiration board to a workflow launch', () => {
+    const onCreateProject = vi.fn();
+    const board = createInspirationBoard({
+      title: 'Launch reference board',
+      description: 'Reference lock for a premium product workflow.',
+      tags: ['premium'],
+    });
+    createInspirationPin({
+      boardId: board.id,
+      title: 'Glass launch panel',
+      sourceUrl: 'local/glass-panel.html',
+      note: 'Use the layered hierarchy and restrained controls.',
+      usageNote: 'Internal reference only.',
+      tags: ['glass'],
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('mobile-app', 'prototype')]}
+        designSystems={[designSystem('ios-26-liquid-glass')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Reference board'), {
+      target: { value: board.id },
+    });
+
+    const iosCard = screen.getByText('iOS 26 App Prototype').closest('.oneshot-card');
+    expect(iosCard).not.toBeNull();
+    fireEvent.click((iosCard as HTMLElement).querySelector('button') as HTMLButtonElement);
+
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          workflowReferenceBoardId: board.id,
+          workflowReferenceBoardTitle: 'Launch reference board',
+          workflowReferencePinCount: 1,
+        }),
+        pendingPrompt: expect.stringContaining('Reference lock:'),
+      }),
+    );
+    expect(onCreateProject.mock.calls[0]?.[0]?.pendingPrompt).toContain(
+      'Use the OneShot inspiration board: Launch reference board.',
+    );
+    expect(onCreateProject.mock.calls[0]?.[0]?.pendingPrompt).toContain('Source: local/glass-panel.html');
   });
 
   it('filters workflows by search and category', () => {

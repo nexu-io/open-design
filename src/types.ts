@@ -209,6 +209,9 @@ export interface ProjectMetadata {
   workflowExportPackage?: WorkflowExportPackageItem[];
   workflowScorecard?: string[];
   workflowHandoff?: WorkflowHandoff;
+  workflowReferenceBoardId?: string;
+  workflowReferenceBoardTitle?: string;
+  workflowReferencePinCount?: number;
   // Prototype: 'wireframe' | 'high-fidelity'. Drives the visual ambition.
   fidelity?: 'wireframe' | 'high-fidelity';
   // Slide deck: whether the user wants speaker notes (less text per slide).
