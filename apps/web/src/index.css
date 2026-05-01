@@ -6097,3 +6097,63 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border-radius: 4px;
   color: var(--text-muted);
 }
+
+/* Prompt template picker — reuses the design-system picker shell so the
+   trigger / popover already look right. We only restyle the avatar (image
+   thumb) and add the editable prompt body block below the trigger. */
+.prompt-template-picker .prompt-template-avatar {
+  background: var(--bg-subtle);
+}
+.prompt-template-picker .prompt-template-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.prompt-template-picker .prompt-template-avatar.fallback {
+  color: var(--text-muted);
+}
+.prompt-template-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.prompt-template-edit-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.prompt-template-edit-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.prompt-template-edit-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.prompt-template-edit-textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: inherit;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  resize: vertical;
+}
+.prompt-template-edit-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

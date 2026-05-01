@@ -204,6 +204,14 @@ export interface Dict {
   'newproj.audioDurationSeconds': string;
   'newproj.voiceLabel': string;
   'newproj.voicePlaceholder': string;
+  'newproj.promptTemplateLabel': string;
+  'newproj.promptTemplateNoneTitle': string;
+  'newproj.promptTemplateNoneSub': string;
+  'newproj.promptTemplateRefSub': string;
+  'newproj.promptTemplateSearch': string;
+  'newproj.promptTemplateEmpty': string;
+  'newproj.promptTemplateBodyLabel': string;
+  'newproj.promptTemplateOptimizeHint': string;
 
   // Prompt templates
   'promptTemplates.searchPlaceholder': string;

@@ -52,6 +52,23 @@ type ProjectMetadata = {
   audioModel?: string | null;
   audioDuration?: number | null;
   voice?: string | null;
+  promptTemplate?: {
+    id?: string | null;
+    surface?: 'image' | 'video' | null;
+    title?: string | null;
+    prompt?: string | null;
+    summary?: string | null;
+    category?: string | null;
+    tags?: string[] | null;
+    model?: string | null;
+    aspect?: string | null;
+    source?: {
+      repo?: string | null;
+      license?: string | null;
+      author?: string | null;
+      url?: string | null;
+    } | null;
+  } | null;
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 
@@ -195,6 +212,9 @@ function renderMetadataBlock(
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
     }
+    if (metadata.promptTemplate?.title) {
+      lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
+    }
     lines.push('');
     lines.push(
       'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `od media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
@@ -210,6 +230,9 @@ function renderMetadataBlock(
     lines.push(
       `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown — ask: 16:9, 9:16, 1:1)'}`,
     );
+    if (metadata.promptTemplate?.title) {
+      lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
+    }
     lines.push('');
     lines.push(
       'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `od media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
@@ -245,6 +268,54 @@ function renderMetadataBlock(
     lines.push(
       `- **inspirationDesignSystemIds**: ${metadata.inspirationDesignSystemIds.join(', ')} — the user picked these systems as *additional* inspiration alongside the primary one. Borrow palette accents, typographic personality, or component patterns from them; don't replace the primary system's tokens.`,
     );
+  }
+
+  // Curated prompt template reference for image/video projects. Inlined
+  // verbatim (with light truncation) so the agent can borrow structure,
+  // mood and phrasing without a separate fetch. The user may have edited
+  // the body before clicking Create — those edits land here and are now
+  // authoritative for the brief.
+  if (
+    (metadata.kind === 'image' || metadata.kind === 'video') &&
+    metadata.promptTemplate &&
+    typeof metadata.promptTemplate.prompt === 'string' &&
+    metadata.promptTemplate.prompt.trim().length > 0
+  ) {
+    const tpl = metadata.promptTemplate;
+    lines.push('');
+    lines.push(`### Reference prompt template — "${tpl.title ?? 'untitled'}"`);
+    const meta = [];
+    if (tpl.category) meta.push(`category: ${tpl.category}`);
+    if (tpl.model) meta.push(`suggested model: ${tpl.model}`);
+    if (tpl.aspect) meta.push(`aspect: ${tpl.aspect}`);
+    if (Array.isArray(tpl.tags) && tpl.tags.length > 0) {
+      meta.push(`tags: ${tpl.tags.join(', ')}`);
+    }
+    if (meta.length > 0) lines.push(meta.join(' · '));
+    if (tpl.summary) {
+      lines.push('');
+      lines.push(tpl.summary);
+    }
+    lines.push('');
+    lines.push(
+      'The user picked this template as inspiration. Treat it as a structural and stylistic reference: borrow composition, palette cues, lighting language, lens/motion direction, and the level of detail. Adapt the wording to the user\'s actual subject and brief — do NOT generate the template subject verbatim. If a field above is unknown the user wants you to follow the template\'s defaults.',
+    );
+    const prompt: string = tpl.prompt ?? '';
+    const truncated =
+      prompt.length > 4000
+        ? `${prompt.slice(0, 4000)}\n… (truncated ${prompt.length - 4000} chars)`
+        : prompt;
+    lines.push('');
+    lines.push('```text');
+    lines.push(truncated);
+    lines.push('```');
+    if (tpl.source) {
+      const author = tpl.source.author ? ` by ${tpl.source.author}` : '';
+      lines.push('');
+      lines.push(
+        `Source: ${tpl.source.repo}${author} — license ${tpl.source.license ?? 'unspecified'}. Preserve attribution if you echo the template language directly.`,
+      );
+    }
   }
 
   if (metadata.kind === 'template' && template && template.files.length > 0) {

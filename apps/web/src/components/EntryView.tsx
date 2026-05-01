@@ -20,7 +20,6 @@ import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
-import { AppChromeHeader, SettingsIconButton } from './AppChromeHeader';
 import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
@@ -169,132 +168,152 @@ export function EntryView({
   }, [sidebarWidth]);
 
   return (
-    <div className="entry-shell">
-      <AppChromeHeader
-        actions={(
-          <SettingsIconButton
-            onClick={onOpenSettings}
-            title={t('entry.openSettingsTitle')}
-            ariaLabel={t('entry.openSettingsAria')}
-          />
-        )}
-      />
-      <div
-        className="entry"
-        style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}
-      >
-        <aside className="entry-side" style={{ width: sidebarWidth }}>
-          <NewProjectPanel
-            skills={skills}
-            designSystems={designSystems}
-            defaultDesignSystemId={defaultDesignSystemId}
-            templates={templates}
-            onCreate={handleCreate}
-            onImportClaudeDesign={onImportClaudeDesign}
-            mediaProviders={config.mediaProviders}
-            loading={loading}
-          />
-          <div className="entry-side-foot">
-            <button
-              type="button"
-              className="foot-pill"
-              onClick={onOpenSettings}
-              title={t('settings.envConfigure')}
-            >
-              <Icon name="settings" size={12} />
-              <span>
-                {config.mode === 'daemon'
-                  ? t('settings.localCli')
-                  : t('settings.anthropicApi')}
-              </span>
-              <span style={{ color: 'var(--text-faint)' }}>·</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
-                {envMetaLine}
-              </span>
-            </button>
-            <LanguageMenu />
+    <div
+      className="entry"
+      style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}
+    >
+      <aside className="entry-side" style={{ width: sidebarWidth }}>
+        <div className="entry-brand">
+          <span className="entry-brand-mark" aria-hidden>
+            <img src="/logo.svg" alt="" className="brand-mark-img" draggable={false} />
+          </span>
+          <div className="entry-brand-text">
+            <div className="entry-brand-title-row">
+              <span className="entry-brand-title">{t('app.brand')}</span>
+              <span className="entry-brand-pill">{t('app.brandPill')}</span>
+            </div>
+            <div className="entry-brand-subtitle">{t('app.brandSubtitle')}</div>
           </div>
+        </div>
+        <NewProjectPanel
+          skills={skills}
+          designSystems={designSystems}
+          defaultDesignSystemId={defaultDesignSystemId}
+          templates={templates}
+          promptTemplates={promptTemplates}
+          onCreate={handleCreate}
+          onImportClaudeDesign={onImportClaudeDesign}
+          mediaProviders={config.mediaProviders}
+          loading={loading}
+        />
+        <div className="entry-side-foot">
           <button
             type="button"
-            aria-label={t('entry.resizeAria')}
-            className={`entry-side-resizer${resizing ? ' dragging' : ''}`}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              startWidthRef.current = sidebarWidth;
-              startXRef.current = e.clientX;
-              setResizing(true);
-            }}
-          />
-        </aside>
-        <main className="entry-main">
-          <div className="entry-header">
-            <div className="entry-tabs" role="tablist">
-              <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
-              <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
-              <TopTabButton
-                current={topTab}
-                value="design-systems"
-                label={t('entry.tabDesignSystems')}
-                onClick={setTopTab}
-              />
-              <TopTabButton
-                current={topTab}
-                value="image-templates"
-                label={t('entry.tabImageTemplates')}
-                onClick={setTopTab}
-              />
-              <TopTabButton
-                current={topTab}
-                value="video-templates"
-                label={t('entry.tabVideoTemplates')}
-                onClick={setTopTab}
-              />
-            </div>
+            className="foot-pill"
+            onClick={onOpenSettings}
+            title={t('settings.envConfigure')}
+          >
+            <Icon name="settings" size={12} />
+            <span>
+              {config.mode === 'daemon'
+                ? t('settings.localCli')
+                : t('settings.anthropicApi')}
+            </span>
+            <span style={{ color: 'var(--text-faint)' }}>·</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+              {envMetaLine}
+            </span>
+          </button>
+          <LanguageMenu />
+        </div>
+        <button
+          type="button"
+          aria-label={t('entry.resizeAria')}
+          className={`entry-side-resizer${resizing ? ' dragging' : ''}`}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            startWidthRef.current = sidebarWidth;
+            startXRef.current = e.clientX;
+            setResizing(true);
+          }}
+        />
+      </aside>
+      <main className="entry-main">
+        <div className="entry-header">
+          <div className="entry-tabs" role="tablist">
+            <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
+            <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
+            <TopTabButton
+              current={topTab}
+              value="design-systems"
+              label={t('entry.tabDesignSystems')}
+              onClick={setTopTab}
+            />
+            <TopTabButton
+              current={topTab}
+              value="image-templates"
+              label={t('entry.tabImageTemplates')}
+              onClick={setTopTab}
+            />
+            <TopTabButton
+              current={topTab}
+              value="video-templates"
+              label={t('entry.tabVideoTemplates')}
+              onClick={setTopTab}
+            />
           </div>
-          <div className="entry-tab-content">
-            {loading ? (
-              <CenteredLoader label={t('entry.loadingWorkspace')} />
-            ) : (
-              <>
-                {topTab === 'designs' ? (
-                  <DesignsTab
-                    projects={projects}
-                    skills={skills}
-                    designSystems={designSystems}
-                    onOpen={onOpenProject}
-                    onDelete={onDeleteProject}
-                  />
-                ) : null}
-                {topTab === 'examples' ? (
-                  <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
-                ) : null}
-                {topTab === 'design-systems' ? (
-                  <DesignSystemsTab
-                    systems={designSystems}
-                    selectedId={defaultDesignSystemId}
-                    onSelect={onChangeDefaultDesignSystem}
-                    onPreview={previewDesignSystem}
-                  />
-                ) : null}
-                {topTab === 'image-templates' ? (
-                  <PromptTemplatesTab
-                    surface="image"
-                    templates={promptTemplates}
-                    onPreview={setPreviewPromptTemplate}
-                  />
-                ) : null}
-                {topTab === 'video-templates' ? (
-                  <PromptTemplatesTab
-                    surface="video"
-                    templates={promptTemplates}
-                    onPreview={setPreviewPromptTemplate}
-                  />
-                ) : null}
-              </>
-            )}
+          <div className="entry-header-right">
+            {/* Avatar settings live next to tabs to mirror the project view. */}
+            <button
+              type="button"
+              className="avatar-btn"
+              onClick={onOpenSettings}
+              title={t('entry.openSettingsTitle')}
+              aria-label={t('entry.openSettingsAria')}
+            >
+              <img
+                src="/avatar.png"
+                alt=""
+                aria-hidden
+                draggable={false}
+                className="avatar-btn-photo"
+              />
+            </button>
           </div>
-        </main>
-      </div>
+        </div>
+        <div className="entry-tab-content">
+          {loading ? (
+            <CenteredLoader label={t('entry.loadingWorkspace')} />
+          ) : (
+            <>
+              {topTab === 'designs' ? (
+                <DesignsTab
+                  projects={projects}
+                  skills={skills}
+                  designSystems={designSystems}
+                  onOpen={onOpenProject}
+                  onDelete={onDeleteProject}
+                />
+              ) : null}
+              {topTab === 'examples' ? (
+                <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
+              ) : null}
+              {topTab === 'design-systems' ? (
+                <DesignSystemsTab
+                  systems={designSystems}
+                  selectedId={defaultDesignSystemId}
+                  onSelect={onChangeDefaultDesignSystem}
+                  onPreview={previewDesignSystem}
+                />
+              ) : null}
+              {topTab === 'image-templates' ? (
+                <PromptTemplatesTab
+                  surface="image"
+                  templates={promptTemplates}
+                  onPreview={setPreviewPromptTemplate}
+                />
+              ) : null}
+              {topTab === 'video-templates' ? (
+                <PromptTemplatesTab
+                  surface="video"
+                  templates={promptTemplates}
+                  onPreview={setPreviewPromptTemplate}
+                />
+              ) : null}
+            </>
+          )}
+        </div>
+      </main>
       {previewSystem ? (
         <DesignSystemPreviewModal
           system={previewSystem}
