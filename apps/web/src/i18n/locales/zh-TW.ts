@@ -134,6 +134,7 @@ export const zhTW: Dict = {
   'promptTemplates.openSource': '查看原始來源',
   'promptTemplates.openFullscreen': '開啟全螢幕預覽',
   'promptTemplates.closeFullscreen': '關閉全螢幕預覽',
+  'promptTemplates.retry': '重試',
 
   'newproj.tabPrototype': '原型',
   'newproj.tabDeck': '投影片',
@@ -211,6 +212,7 @@ export const zhTW: Dict = {
   'newproj.promptTemplateBodyLabel': 'Prompt（可繼續優化）',
   'newproj.promptTemplateOptimizeHint':
     '可隨意編輯 — 修改後的內容會作為 agent 生成時的參考。',
+  'newproj.promptTemplateBodyEmpty': '內容為空 — agent 不會拿到範本參考。',
 
   'designs.subRecent': '最近',
   'designs.subYours': '我的設計',

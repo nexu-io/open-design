@@ -212,7 +212,11 @@ function renderMetadataBlock(
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
     }
-    if (metadata.promptTemplate?.title) {
+    if (
+      metadata.promptTemplate?.title &&
+      typeof metadata.promptTemplate.prompt === 'string' &&
+      metadata.promptTemplate.prompt.trim().length > 0
+    ) {
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
@@ -230,7 +234,11 @@ function renderMetadataBlock(
     lines.push(
       `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown — ask: 16:9, 9:16, 1:1)'}`,
     );
-    if (metadata.promptTemplate?.title) {
+    if (
+      metadata.promptTemplate?.title &&
+      typeof metadata.promptTemplate.prompt === 'string' &&
+      metadata.promptTemplate.prompt.trim().length > 0
+    ) {
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
@@ -300,11 +308,14 @@ function renderMetadataBlock(
     lines.push(
       'The user picked this template as inspiration. Treat it as a structural and stylistic reference: borrow composition, palette cues, lighting language, lens/motion direction, and the level of detail. Adapt the wording to the user\'s actual subject and brief — do NOT generate the template subject verbatim. If a field above is unknown the user wants you to follow the template\'s defaults.',
     );
-    const prompt: string = tpl.prompt ?? '';
+    // Escape triple-backticks so a user who pastes ``` into the editable
+    // template body can't break out of the markdown fence below and inject
+    // free-form instructions into the agent's system prompt.
+    const safe = (tpl.prompt ?? '').replace(/```/g, '`\u200b`\u200b`');
     const truncated =
-      prompt.length > 4000
-        ? `${prompt.slice(0, 4000)}\n… (truncated ${prompt.length - 4000} chars)`
-        : prompt;
+      safe.length > 4000
+        ? `${safe.slice(0, 4000)}\n… (truncated ${safe.length - 4000} chars)`
+        : safe;
     lines.push('');
     lines.push('```text');
     lines.push(truncated);

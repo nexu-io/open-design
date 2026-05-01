@@ -136,6 +136,7 @@ export const en: Dict = {
   'promptTemplates.openSource': 'View original',
   'promptTemplates.openFullscreen': 'Open fullscreen preview',
   'promptTemplates.closeFullscreen': 'Close fullscreen preview',
+  'promptTemplates.retry': 'Retry',
 
   'newproj.tabPrototype': 'Prototype',
   'newproj.tabDeck': 'Slide deck',
@@ -215,6 +216,8 @@ export const en: Dict = {
   'newproj.promptTemplateBodyLabel': 'Prompt (you can tune it)',
   'newproj.promptTemplateOptimizeHint':
     'Edit anything — your changes carry into the agent\'s brief.',
+  'newproj.promptTemplateBodyEmpty':
+    'Empty body — the agent will get no template reference.',
 
   'designs.subRecent': 'Recent',
   'designs.subYours': 'Your designs',

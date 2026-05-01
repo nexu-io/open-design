@@ -118,8 +118,8 @@ export const de: Dict = {
   'entry.openSettingsAria': 'Einstellungen öffnen',
   'entry.resizeAria': 'Seitenleiste skalieren',
   'entry.loadingWorkspace': 'Workspace wird geladen…',
-  'entry.tabImageTemplates': 'Bild-Prompts',
-  'entry.tabVideoTemplates': 'Video-Prompts',
+  'entry.tabImageTemplates': 'Bildvorlagen',
+  'entry.tabVideoTemplates': 'Videovorlagen',
   'promptTemplates.searchPlaceholder': 'Templates suchen…',
   'promptTemplates.countLabel': '{n} Ergebnisse',
   'promptTemplates.emptyImage': 'Noch keine Bild-Prompt-Templates installiert.',
@@ -136,6 +136,7 @@ export const de: Dict = {
   'promptTemplates.openSource': 'Original anzeigen',
   'promptTemplates.openFullscreen': 'Vollbildvorschau öffnen',
   'promptTemplates.closeFullscreen': 'Vollbildvorschau schließen',
+  'promptTemplates.retry': 'Erneut versuchen',
 
   'newproj.tabPrototype': 'Prototyp',
   'newproj.tabDeck': 'Slide Deck',
@@ -206,6 +207,17 @@ export const de: Dict = {
   'newproj.audioDurationSeconds': '{n}s',
   'newproj.voiceLabel': 'Stimme',
   'newproj.voicePlaceholder': 'Provider-Voice-ID, optional',
+  'newproj.promptTemplateLabel': 'Referenzvorlage',
+  'newproj.promptTemplateNoneTitle': 'Keine — eigene schreiben',
+  'newproj.promptTemplateNoneSub': 'Galerie überspringen und eigenes Briefing verfassen',
+  'newproj.promptTemplateRefSub': 'Referenzvorlage',
+  'newproj.promptTemplateSearch': 'Vorlagen suchen…',
+  'newproj.promptTemplateEmpty': 'Für dieses Format sind noch keine Vorlagen installiert.',
+  'newproj.promptTemplateBodyLabel': 'Prompt (kann angepasst werden)',
+  'newproj.promptTemplateOptimizeHint':
+    'Beliebig editierbar — deine Änderungen fließen in das Agenten-Briefing ein.',
+  'newproj.promptTemplateBodyEmpty':
+    'Leerer Body — der Agent erhält keine Vorlagenreferenz.',
 
   'designs.subRecent': 'Aktuell',
   'designs.subYours': 'Ihre Designs',

@@ -137,6 +137,7 @@ export const fa: Dict = {
   'promptTemplates.openSource': 'دیدن منبع اصلی',
   'promptTemplates.openFullscreen': 'باز کردن پیش‌نمایش تمام‌صفحه',
   'promptTemplates.closeFullscreen': 'بستن پیش‌نمایش تمام‌صفحه',
+  'promptTemplates.retry': 'تلاش دوباره',
 
   'newproj.tabPrototype': 'نمونه اولیه',
   'newproj.tabDeck': 'ارائه اسلاید',
@@ -206,6 +207,7 @@ export const fa: Dict = {
   'newproj.promptTemplateBodyLabel': 'پرامپت (قابل ویرایش)',
   'newproj.promptTemplateOptimizeHint':
     'هر چیزی را می‌توانید ویرایش کنید — تغییرات شما به بریف ایجنت اضافه می‌شود.',
+  'newproj.promptTemplateBodyEmpty': 'متن خالی است — ایجنت هیچ مرجع قالبی دریافت نمی‌کند.',
   'newproj.dsModeSingle': 'تکی',
   'newproj.dsModeMulti': 'چندگانه',
   'newproj.dsNoneTitle': 'هیچ — آزاد',

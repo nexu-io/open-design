@@ -212,6 +212,7 @@ export interface Dict {
   'newproj.promptTemplateEmpty': string;
   'newproj.promptTemplateBodyLabel': string;
   'newproj.promptTemplateOptimizeHint': string;
+  'newproj.promptTemplateBodyEmpty': string;
 
   // Prompt templates
   'promptTemplates.searchPlaceholder': string;
@@ -230,6 +231,7 @@ export interface Dict {
   'promptTemplates.openSource': string;
   'promptTemplates.openFullscreen': string;
   'promptTemplates.closeFullscreen': string;
+  'promptTemplates.retry': string;
 
   // Designs tab
   'designs.subRecent': string;

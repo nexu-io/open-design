@@ -135,6 +135,7 @@ export const ptBR: Dict = {
   'promptTemplates.openSource': 'Ver original',
   'promptTemplates.openFullscreen': 'Abrir prévia em tela cheia',
   'promptTemplates.closeFullscreen': 'Fechar prévia em tela cheia',
+  'promptTemplates.retry': 'Tentar novamente',
 
   'newproj.tabPrototype': 'Protótipo',
   'newproj.tabDeck': 'Apresentação',
@@ -214,6 +215,8 @@ export const ptBR: Dict = {
   'newproj.promptTemplateBodyLabel': 'Prompt (você pode ajustar)',
   'newproj.promptTemplateOptimizeHint':
     'Edite o que quiser — suas alterações entram no briefing do agente.',
+  'newproj.promptTemplateBodyEmpty':
+    'Corpo vazio — o agente não receberá nenhuma referência de modelo.',
 
   'designs.subRecent': 'Recentes',
   'designs.subYours': 'Seus designs',

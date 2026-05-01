@@ -118,8 +118,8 @@ export const esES: Dict = {
   'entry.openSettingsAria': 'Abrir ajustes',
   'entry.resizeAria': 'Redimensionar barra lateral',
   'entry.loadingWorkspace': 'Cargando espacio de trabajo…',
-  'entry.tabImageTemplates': 'Prompts de imagen',
-  'entry.tabVideoTemplates': 'Prompts de vídeo',
+  'entry.tabImageTemplates': 'Plantillas de imagen',
+  'entry.tabVideoTemplates': 'Plantillas de vídeo',
   'promptTemplates.searchPlaceholder': 'Buscar plantillas…',
   'promptTemplates.countLabel': '{n} resultados',
   'promptTemplates.emptyImage': 'Aún no hay plantillas de prompt de imagen instaladas.',
@@ -137,6 +137,7 @@ export const esES: Dict = {
   'promptTemplates.openSource': 'Ver original',
   'promptTemplates.openFullscreen': 'Abrir vista previa en pantalla completa',
   'promptTemplates.closeFullscreen': 'Cerrar vista previa en pantalla completa',
+  'promptTemplates.retry': 'Reintentar',
 
   'newproj.tabPrototype': 'Prototipo',
   'newproj.tabDeck': 'Presentación',
@@ -207,6 +208,17 @@ export const esES: Dict = {
   'newproj.audioDurationSeconds': '{n} s',
   'newproj.voiceLabel': 'Voz',
   'newproj.voicePlaceholder': 'Id de voz del proveedor, opcional',
+  'newproj.promptTemplateLabel': 'Plantilla de referencia',
+  'newproj.promptTemplateNoneTitle': 'Ninguna — escribe la tuya',
+  'newproj.promptTemplateNoneSub': 'Sáltate la galería y describe tu propio briefing',
+  'newproj.promptTemplateRefSub': 'Plantilla de referencia',
+  'newproj.promptTemplateSearch': 'Buscar plantillas…',
+  'newproj.promptTemplateEmpty': 'Aún no hay plantillas para este formato.',
+  'newproj.promptTemplateBodyLabel': 'Prompt (editable)',
+  'newproj.promptTemplateOptimizeHint':
+    'Edita lo que quieras — tus cambios se incorporan al briefing del agente.',
+  'newproj.promptTemplateBodyEmpty':
+    'Cuerpo vacío — el agente no recibirá ninguna referencia de plantilla.',
 
   'designs.subRecent': 'Recientes',
   'designs.subYours': 'Tus diseños',

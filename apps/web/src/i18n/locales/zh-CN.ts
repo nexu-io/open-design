@@ -134,6 +134,7 @@ export const zhCN: Dict = {
   'promptTemplates.openSource': '查看原始来源',
   'promptTemplates.openFullscreen': '打开全屏预览',
   'promptTemplates.closeFullscreen': '关闭全屏预览',
+  'promptTemplates.retry': '重试',
 
   'newproj.tabPrototype': '原型',
   'newproj.tabDeck': '幻灯片',
@@ -211,6 +212,7 @@ export const zhCN: Dict = {
   'newproj.promptTemplateBodyLabel': 'Prompt（可继续优化）',
   'newproj.promptTemplateOptimizeHint':
     '可以任意编辑 — 修改后的内容会作为 agent 生成时的参考。',
+  'newproj.promptTemplateBodyEmpty': '正文为空 — agent 不会拿到模板参考。',
 
   'designs.subRecent': '最近',
   'designs.subYours': '我的设计',

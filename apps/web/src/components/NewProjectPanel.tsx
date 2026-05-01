@@ -657,6 +657,12 @@ function PromptTemplatePicker({
   const [query, setQuery] = useState('');
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Last template we tried to pick that failed — kept so the inline
+  // banner can offer a one-click retry without making the user re-find
+  // the card in the popover (which auto-closed on success). Cleared as
+  // soon as a pick succeeds or the user picks a different template.
+  const [lastFailedPick, setLastFailedPick] =
+    useState<PromptTemplateSummary | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -711,11 +717,20 @@ function PromptTemplatePicker({
       const detail = await fetchPromptTemplate(summary.surface, summary.id);
       if (!detail) {
         setError(t('promptTemplates.fetchError'));
+        setLastFailedPick(summary);
         return;
       }
       onChange({ summary, prompt: detail.prompt });
+      setLastFailedPick(null);
       setOpen(false);
       setQuery('');
+    } catch {
+      // fetchPromptTemplate already swallows errors and returns null in
+      // the happy path; this catch is a defensive net for unexpected
+      // throws so the inline banner still surfaces and the user can
+      // retry instead of being stuck on a permanent loading spinner.
+      setError(t('promptTemplates.fetchError'));
+      setLastFailedPick(summary);
     } finally {
       setLoadingId(null);
     }
@@ -723,6 +738,8 @@ function PromptTemplatePicker({
 
   function clear() {
     onChange(null);
+    setLastFailedPick(null);
+    setError(null);
     setOpen(false);
     setQuery('');
   }
@@ -827,7 +844,28 @@ function PromptTemplatePicker({
               })
             )}
           </div>
-          {error ? <div className="ds-picker-empty">{error}</div> : null}
+        </div>
+      ) : null}
+      {error ? (
+        <div
+          className="prompt-template-error"
+          role="alert"
+          data-testid="prompt-template-error"
+        >
+          <span className="prompt-template-error-msg">{error}</span>
+          {lastFailedPick ? (
+            <button
+              type="button"
+              className="ghost prompt-template-error-retry"
+              data-testid="prompt-template-retry"
+              onClick={() => void pickTemplate(lastFailedPick)}
+              disabled={loadingId === lastFailedPick.id}
+            >
+              {loadingId === lastFailedPick.id
+                ? t('common.loading')
+                : t('promptTemplates.retry')}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {value ? (
@@ -849,6 +887,14 @@ function PromptTemplatePicker({
               onChange({ summary: value.summary, prompt: e.target.value })
             }
           />
+          {value.prompt.trim().length === 0 ? (
+            <div
+              className="prompt-template-edit-empty"
+              data-testid="prompt-template-empty-hint"
+            >
+              {t('newproj.promptTemplateBodyEmpty')}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

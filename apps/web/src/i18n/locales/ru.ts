@@ -135,6 +135,7 @@ export const ru: Dict = {
   'promptTemplates.openSource': 'Открыть оригинал',
   'promptTemplates.openFullscreen': 'Открыть полноэкранный предпросмотр',
   'promptTemplates.closeFullscreen': 'Закрыть полноэкранный предпросмотр',
+  'promptTemplates.retry': 'Повторить',
 
   'newproj.tabPrototype': 'Прототип',
   'newproj.tabDeck': 'Презентация',
@@ -214,6 +215,8 @@ export const ru: Dict = {
   'newproj.promptTemplateBodyLabel': 'Промпт (можно править)',
   'newproj.promptTemplateOptimizeHint':
     'Меняйте всё что нужно — правки попадут в бриф агента.',
+  'newproj.promptTemplateBodyEmpty':
+    'Пустое тело — агент не получит шаблонную референцию.',
 
   'designs.subRecent': 'Недавние',
   'designs.subYours': 'Ваши дизайны',
