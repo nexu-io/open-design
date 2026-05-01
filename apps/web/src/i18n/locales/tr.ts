@@ -1,6 +1,6 @@
 import type { Dict } from '../types';
 
-export const en: Dict = {
+export const tr: Dict = {
   'common.cancel': 'İptal et',
   'common.save': 'Kaydet',
   'common.close': 'Kapat',
@@ -25,7 +25,7 @@ export const en: Dict = {
   'common.fullscreen': 'Tam ekran',
   'common.openInNewTab': 'Yeni sekmede aç',
   'common.exportPdf': 'PDF olarak dışa aktar',
-  'common.exportZip': 'ZIP olarak indir,
+  'common.exportZip': 'ZIP olarak indir',
   'common.exportHtml': 'Tekil HTML olarak dışa aktar',
   'common.justNow': 'şimdi',
   'common.minutesAgo': '{n} dakika önce',
