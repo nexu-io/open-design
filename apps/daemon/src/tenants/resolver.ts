@@ -174,7 +174,10 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
     const sessionToken = readSessionCookie(req);
     if (!sessionToken) {
       const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${req.url ?? '/'}`;
-      const location = `${SIGN_IN_URL}?return=${encodeURIComponent(returnUrl)}`;
+      // Use redirect_url (Clerk + app convention) so the sign-in page picks
+      // it up via useSearchParams().get('redirect_url'). Older code shipped
+      // ?return= which the app ignored, dropping the user on /cms.
+      const location = `${SIGN_IN_URL}?redirect_url=${encodeURIComponent(returnUrl)}`;
       logResolution({
         requestId,
         host: rawHost,
