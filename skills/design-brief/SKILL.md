@@ -212,7 +212,7 @@ Produce a DESIGN.md following Open Design's 9-section convention. All color hex 
 - DO ensure all text meets WCAG AA contrast ratio.
 - DON'T invent colors outside the palette.
 - DON'T add decorative shadows unless Depth & Elevation allows them.
-- DON'T use more than 2 typefaces.
+- DON'T use more than 2 display/body typefaces (monospace is a utility face for code and data — it does not count toward this limit).
 
 ## Agent Prompt Guide
 - Do NOT invent colors outside this palette.
