@@ -1048,11 +1048,6 @@ code {
   min-width: 0;
 }
 
-.oneshot-library-transfer-history-list article > button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .oneshot-library-transfer-history-list strong {
   color: var(--text);
   font-size: 12px;
@@ -1064,9 +1059,25 @@ code {
   font-size: 11.5px;
 }
 
+.oneshot-library-transfer-history-note {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .oneshot-library-transfer-history-list span {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oneshot-library-transfer-history-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oneshot-library-transfer-history-actions button {
   white-space: nowrap;
 }
 
@@ -3742,7 +3753,8 @@ code {
   }
 
   .oneshot-library-transfer-history-head button,
-  .oneshot-library-transfer-history-list article > button,
+  .oneshot-library-transfer-history-actions,
+  .oneshot-library-transfer-history-actions button,
   .oneshot-library-transfer-history-list span {
     width: 100%;
     max-width: none;

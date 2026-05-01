@@ -592,6 +592,9 @@ describe('OneShotLibrarySearch', () => {
   });
 
   it('shows and clears Library Search transfer history', () => {
+    vi.spyOn(window, 'prompt')
+      .mockReturnValueOnce('Publishing workstation import')
+      .mockReturnValueOnce('');
     localStorage.setItem('oneshot:library-search-transfer-history', JSON.stringify([
       {
         id: 'history-export',
@@ -599,6 +602,7 @@ describe('OneShotLibrarySearch', () => {
         createdAt: 200,
         viewCount: 2,
         conflictCount: 0,
+        note: 'Backup packet for Windows laptop',
       },
       {
         id: 'history-import',
@@ -624,7 +628,18 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('Imported 2 of 3 Library Search views')).toBeInTheDocument();
     expect(screen.getByText('Mode: Rename - 1 conflict - 1 create, 1 rename, 1 skip')).toBeInTheDocument();
     expect(screen.getByText('Exported 2 Library Search views')).toBeInTheDocument();
+    expect(screen.getByText('Backup packet for Windows laptop')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Replay import' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add note' })[0]);
+    expect(window.prompt).toHaveBeenCalledWith(
+      'Client, machine, or production-lane note for this transfer',
+      '',
+    );
+    expect(screen.getByText('Publishing workstation import')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit note' })[0]);
+    expect(screen.queryByText('Publishing workstation import')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
 

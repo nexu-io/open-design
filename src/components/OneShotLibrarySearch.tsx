@@ -68,6 +68,7 @@ interface LibraryTransferHistoryEntry {
   direction: LibraryTransferDirection;
   createdAt: number;
   viewCount: number;
+  note?: string;
   importedCount?: number;
   conflictCount?: number;
   conflictMode?: LibraryImportConflictMode;
@@ -226,6 +227,12 @@ export function OneShotLibrarySearch({
     setImportConflictMode(entry.conflictMode ?? 'rename');
     setViewImportError('');
     setViewImportStatus(`Replaying ${entry.replayViews.length} Library Search view${entry.replayViews.length === 1 ? '' : 's'} from transfer history.`);
+  }
+
+  function editTransferHistoryNote(entry: LibraryTransferHistoryEntry) {
+    const note = window.prompt('Client, machine, or production-lane note for this transfer', entry.note ?? '');
+    if (note === null) return;
+    updateLibraryTransferHistoryNote(entry.id, cleanOptionalText(note));
   }
 
   function exportSavedViews() {
@@ -503,17 +510,29 @@ export function OneShotLibrarySearch({
                   <div>
                     <strong>{summarizeTransferHistoryTitle(entry)}</strong>
                     <span>{summarizeTransferHistoryDetail(entry)}</span>
+                    {entry.note ? (
+                      <span className="oneshot-library-transfer-history-note">{entry.note}</span>
+                    ) : null}
                     <small>{new Date(entry.createdAt).toLocaleString()}</small>
                   </div>
-                  {entry.direction === 'import' && entry.replayViews?.length ? (
+                  <div className="oneshot-library-transfer-history-actions">
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => replayTransferHistory(entry)}
+                      onClick={() => editTransferHistoryNote(entry)}
                     >
-                      Replay import
+                      {entry.note ? 'Edit note' : 'Add note'}
                     </button>
-                  ) : null}
+                    {entry.direction === 'import' && entry.replayViews?.length ? (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => replayTransferHistory(entry)}
+                      >
+                        Replay import
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               ))}
             </div>
@@ -735,6 +754,14 @@ function clearLibraryTransferHistory() {
   window.dispatchEvent(new CustomEvent('oneshot:library-transfer-history-changed'));
 }
 
+function updateLibraryTransferHistoryNote(id: string, note?: string) {
+  const next = listLibraryTransferHistory().map((entry) => (
+    entry.id === id ? { ...entry, note } : entry
+  ));
+  localStorage.setItem(TRANSFER_HISTORY_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-transfer-history-changed'));
+}
+
 function normalizeLibraryTransferHistoryEntry(payload: unknown): LibraryTransferHistoryEntry | null {
   if (!payload || typeof payload !== 'object') return null;
   const candidate = payload as Partial<LibraryTransferHistoryEntry>;
@@ -747,6 +774,7 @@ function normalizeLibraryTransferHistoryEntry(payload: unknown): LibraryTransfer
     direction: candidate.direction,
     createdAt,
     viewCount,
+    note: cleanOptionalText(candidate.note),
     importedCount: Number.isFinite(candidate.importedCount) ? Number(candidate.importedCount) : undefined,
     conflictCount: Number.isFinite(candidate.conflictCount) ? Number(candidate.conflictCount) : undefined,
     conflictMode: normalizeConflictMode(candidate.conflictMode),
