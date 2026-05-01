@@ -10,7 +10,7 @@ export function listSavedBlueprints(): SavedWorkflowBlueprint[] {
     return Array.isArray(parsed)
       ? parsed
           .filter((item) => item && typeof item.id === 'string')
-          .sort((a, b) => b.createdAt - a.createdAt)
+          .sort(sortSavedBlueprints)
       : [];
   } catch {
     return [];
@@ -24,6 +24,9 @@ export function saveWorkflowBlueprint(input: {
   designSystemId: string | null;
 }): SavedWorkflowBlueprint {
   const now = Date.now();
+  const existing = listSavedBlueprints().find(
+    (item) => item.metadata.workflowId === input.metadata.workflowId,
+  );
   const id = input.metadata.workflowId
     ? `${input.metadata.workflowId}-${now}`
     : crypto.randomUUID();
@@ -35,6 +38,7 @@ export function saveWorkflowBlueprint(input: {
     skillId: input.skillId,
     designSystemId: input.designSystemId,
     createdAt: now,
+    pinnedAt: existing?.pinnedAt,
   };
   const next = [
     blueprint,
@@ -68,4 +72,20 @@ export function promoteSavedBlueprint(id: string): void {
   );
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
+}
+
+export function setSavedBlueprintPinned(id: string, pinned: boolean): void {
+  const pinnedAt = pinned ? Date.now() : undefined;
+  const next = listSavedBlueprints().map((item) =>
+    item.id === id ? { ...item, pinnedAt } : item,
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
+}
+
+function sortSavedBlueprints(a: SavedWorkflowBlueprint, b: SavedWorkflowBlueprint) {
+  const pinSort = Number(Boolean(b.pinnedAt)) - Number(Boolean(a.pinnedAt));
+  if (pinSort !== 0) return pinSort;
+  if (a.pinnedAt || b.pinnedAt) return (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0);
+  return b.createdAt - a.createdAt;
 }

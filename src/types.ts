@@ -261,6 +261,7 @@ export interface SavedWorkflowBlueprint {
   designSystemId: string | null;
   metadata: ProjectMetadata;
   createdAt: number;
+  pinnedAt?: number;
 }
 
 export interface ProjectTemplate {

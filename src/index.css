@@ -382,6 +382,11 @@ code {
   background: var(--bg-panel);
 }
 
+.oneshot-saved-item.pinned {
+  border-color: var(--accent-soft);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--accent-tint) 100%);
+}
+
 .oneshot-saved-launch {
   align-items: flex-start;
   display: flex;
@@ -397,7 +402,7 @@ code {
 .oneshot-saved-actions {
   align-self: stretch;
   display: grid;
-  grid-template-columns: repeat(3, 30px);
+  grid-template-columns: repeat(4, 30px);
   border-left: 1px solid var(--border-soft);
 }
 
@@ -426,22 +431,42 @@ code {
   background: var(--red-bg);
 }
 
-.oneshot-saved-launch strong,
-.oneshot-saved-launch span {
+.oneshot-saved-title,
+.oneshot-saved-meta {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.oneshot-saved-launch strong {
-  color: var(--text);
-  font-size: 12.5px;
+.oneshot-saved-title {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
 }
 
-.oneshot-saved-launch span {
+.oneshot-saved-title strong {
+  color: var(--text);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oneshot-saved-meta {
   color: var(--text-muted);
   font-size: 11.5px;
+}
+
+.oneshot-saved-pin {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 /* -------- Avatar menu (replaces in-topbar agent picker) ------------- */

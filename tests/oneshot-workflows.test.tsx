@@ -390,6 +390,103 @@ describe('OneShotWorkflows', () => {
     expect(listSavedBlueprints()[0]?.name).toBe('OneShot Cover Run');
   });
 
+  it('pins and unpins a saved blueprint above recent items', () => {
+    const dateNow = vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(2000);
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'prototype',
+        workflowId: 'dashboard-mockup',
+        workflowTitle: 'Dashboard Mockup',
+      },
+      prompt: 'Use the OneShot workflow blueprint: Dashboard Mockup.',
+      skillId: 'dashboard',
+      designSystemId: 'linear-app',
+    });
+    dateNow.mockRestore();
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template'), skill('dashboard', 'prototype')]}
+        designSystems={[designSystem('warm-editorial'), designSystem('linear-app')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    expect(listSavedBlueprints()[0]?.name).toBe('Dashboard Mockup');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin OneShot Cover Run blueprint' }));
+
+    expect(listSavedBlueprints()[0]).toEqual(
+      expect.objectContaining({ name: 'OneShot Cover Run', pinnedAt: expect.any(Number) }),
+    );
+    expect(screen.getByText('Pinned')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Unpin OneShot Cover Run blueprint' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin OneShot Cover Run blueprint' }));
+
+    expect(listSavedBlueprints()[0]?.name).toBe('Dashboard Mockup');
+    expect(listSavedBlueprints().find((item) => item.name === 'OneShot Cover Run')?.pinnedAt).toBeUndefined();
+    expect(screen.queryByText('Pinned')).not.toBeInTheDocument();
+  });
+
+  it('keeps a workflow blueprint pinned when it is saved again', () => {
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin OneShot Cover Run blueprint' }));
+    const pinnedAt = listSavedBlueprints()[0]?.pinnedAt;
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the updated OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    expect(listSavedBlueprints()).toHaveLength(1);
+    expect(listSavedBlueprints()[0]).toEqual(
+      expect.objectContaining({
+        prompt: 'Use the updated OneShot workflow blueprint: OneShot Cover Run.',
+        pinnedAt,
+      }),
+    );
+  });
+
   it('deletes a saved blueprint after confirmation', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     saveWorkflowBlueprint({

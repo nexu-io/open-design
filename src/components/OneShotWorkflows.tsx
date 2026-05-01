@@ -13,6 +13,7 @@ import {
   listSavedBlueprints,
   promoteSavedBlueprint,
   renameSavedBlueprint,
+  setSavedBlueprintPinned,
 } from '../state/blueprints';
 import { Icon } from './Icon';
 
@@ -540,7 +541,7 @@ export function OneShotWorkflows({
             {savedBlueprints.slice(0, 4).map((blueprint) => (
               <article
                 key={blueprint.id}
-                className="oneshot-saved-item"
+                className={`oneshot-saved-item${blueprint.pinnedAt ? ' pinned' : ''}`}
               >
                 <button
                   type="button"
@@ -555,14 +556,29 @@ export function OneShotWorkflows({
                     });
                   }}
                 >
-                  <strong>{blueprint.name}</strong>
-                  <span>
+                  <span className="oneshot-saved-title">
+                    <strong>{blueprint.name}</strong>
+                    {blueprint.pinnedAt ? (
+                      <span className="oneshot-saved-pin">Pinned</span>
+                    ) : null}
+                  </span>
+                  <span className="oneshot-saved-meta">
                     {[blueprint.metadata.workflowCategory, blueprint.metadata.workflowOutcome]
                       .filter(Boolean)
                       .join(' - ') || 'Reusable workflow prompt'}
                   </span>
                 </button>
                 <div className="oneshot-saved-actions" aria-label={`${blueprint.name} blueprint actions`}>
+                  <button
+                    type="button"
+                    className="oneshot-saved-action"
+                    aria-pressed={Boolean(blueprint.pinnedAt)}
+                    aria-label={`${blueprint.pinnedAt ? 'Unpin' : 'Pin'} ${blueprint.name} blueprint`}
+                    title={`${blueprint.pinnedAt ? 'Unpin' : 'Pin'} ${blueprint.name} blueprint`}
+                    onClick={() => setSavedBlueprintPinned(blueprint.id, !blueprint.pinnedAt)}
+                  >
+                    <Icon name="pin" size={12} />
+                  </button>
                   <button
                     type="button"
                     className="oneshot-saved-action"
