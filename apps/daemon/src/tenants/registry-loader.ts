@@ -126,8 +126,10 @@ function resolveDesignSystemsRoot(): string {
 }
 
 function checkDesignSystemExists(root: string, key: string): boolean {
-  const file = path.join(root, key, 'index.ts');
-  return existsSync(file);
+  // Source-tree default uses index.ts; the compiled deploy ships index.js.
+  // Accept either so the same validator works in dev and prod.
+  return existsSync(path.join(root, key, 'index.ts'))
+    || existsSync(path.join(root, key, 'index.js'));
 }
 
 function checkDataDirSafe(dir: string): { ok: true } | { ok: false; reason: string } {

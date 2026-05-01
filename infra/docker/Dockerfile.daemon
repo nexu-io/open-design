@@ -36,6 +36,9 @@ WORKDIR /workspace
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/daemon/package.json ./apps/daemon/package.json
 COPY packages ./packages
+COPY tools ./tools
+# Root postinstall script referenced by package.json.
+COPY scripts ./scripts
 
 # Now copy daemon sources.
 COPY apps/daemon ./apps/daemon
@@ -47,7 +50,7 @@ RUN pnpm install --frozen-lockfile \
 # Produce a self-contained, production-only deploy directory at /deploy.
 # `pnpm deploy` resolves workspace:* protocol references, copies only the
 # files declared in `apps/daemon/package.json#files`, and installs prod deps.
-RUN pnpm --filter @open-design/daemon --prod deploy /deploy
+RUN pnpm --filter @open-design/daemon --prod deploy --legacy /deploy
 
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS runtime
@@ -74,6 +77,7 @@ USER node
 ENV NODE_ENV=production \
     OD_PORT=8080 \
     OD_HOST=0.0.0.0 \
+    OD_DATA_DIR=/data \
     TENANT_REGISTRY_PATH=/etc/opendesign/tenant-registry.yaml
 
 EXPOSE 8080
