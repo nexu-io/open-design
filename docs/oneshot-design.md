@@ -16,7 +16,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category or custom collection, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
 - The top navigation now includes a dedicated Library Search tab after Design systems. It spans saved blueprints, Inspiration boards, and generated project records, with direct actions to start a blueprint, create an Inspiration brief, or reopen a project.
 - Library Search can now narrow reusable work by source, output type, and recent activity, which keeps large local libraries easier to scan.
-- Library Search views can now be named, saved, pinned above recent views, annotated with owner and usage notes, reapplied, deleted, exported, and imported as OneShot JSON packets, so common filters can become portable studio workbenches.
+- Library Search views can now be named, saved, pinned above recent views, annotated with owner and usage notes, duplicated as quick variants, reapplied, deleted, exported, and imported as OneShot JSON packets, so common filters can become portable studio workbenches.
 - The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, imported local images, usage notes, tags, and OneShot reference-brief creation.
 - Inspiration boards can now be renamed, retagged, described, and deleted with their pins; individual pins can be edited in place from the board view.
 - Inspiration boards recommend the strongest OneShot production paths and can launch a workflow-specific project with the board attached as the reference lock.
@@ -43,4 +43,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Add Library Search view duplication and quick-save variants so teams can branch a workbench without losing the original.
+1. Add Library Search view collection grouping so portable workbenches can be organized by client, vertical, or production lane.

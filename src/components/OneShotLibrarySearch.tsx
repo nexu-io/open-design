@@ -166,6 +166,14 @@ export function OneShotLibrarySearch({
     });
   }
 
+  function duplicateSavedView(view: SavedLibraryView) {
+    const fallbackName = `${view.name} copy`;
+    const name = window.prompt('Name this duplicated Library Search view', fallbackName);
+    const cleanedName = name?.trim();
+    if (!cleanedName) return;
+    duplicateLibraryView(view, cleanedName);
+  }
+
   function exportSavedViews() {
     if (savedViews.length === 0) return;
     const packet: LibraryViewsExport = {
@@ -339,6 +347,15 @@ export function OneShotLibrarySearch({
                 </button>
                 <button
                   type="button"
+                  className="oneshot-library-view-duplicate"
+                  aria-label={`Duplicate ${view.name} saved Library Search view`}
+                  title={`Duplicate ${view.name} saved Library Search view`}
+                  onClick={() => duplicateSavedView(view)}
+                >
+                  <Icon name="copy" size={11} />
+                </button>
+                <button
+                  type="button"
                   className="oneshot-library-view-delete"
                   aria-label={`Delete ${view.name} saved Library Search view`}
                   title={`Delete ${view.name} saved Library Search view`}
@@ -460,6 +477,23 @@ function updateLibraryViewContext(
       ? { ...view, owner: context.owner, note: context.note }
       : view
   ));
+  localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+}
+
+function duplicateLibraryView(view: SavedLibraryView, name: string) {
+  const now = Date.now();
+  const duplicate: SavedLibraryView = {
+    ...view,
+    id: `library-view-${now}-${slugify(name) || crypto.randomUUID()}`,
+    name,
+    createdAt: now,
+    pinnedAt: undefined,
+  };
+  const next = [
+    duplicate,
+    ...listSavedLibraryViews().filter((item) => item.name !== name),
+  ].slice(0, 8);
   localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
 }

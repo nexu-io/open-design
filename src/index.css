@@ -888,6 +888,7 @@ code {
 
 .oneshot-library-view-pin,
 .oneshot-library-view-edit,
+.oneshot-library-view-duplicate,
 .oneshot-library-view-delete {
   display: inline-flex;
   align-items: center;
@@ -913,6 +914,11 @@ code {
 .oneshot-library-view-edit:hover {
   background: var(--bg-muted);
   color: var(--text);
+}
+
+.oneshot-library-view-duplicate:hover {
+  background: var(--blue-bg);
+  color: var(--blue);
 }
 
 .oneshot-library-view-delete:hover {

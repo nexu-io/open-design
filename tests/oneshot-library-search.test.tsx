@@ -332,6 +332,48 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('Owner: James studio - Use before starting CoverVision cover runs.')).toBeInTheDocument();
   });
 
+  it('duplicates saved Library Search views as quick variants', () => {
+    vi.spyOn(window, 'prompt')
+      .mockReturnValueOnce('Cover board review')
+      .mockReturnValueOnce('James studio')
+      .mockReturnValueOnce('Use before starting CoverVision cover runs.')
+      .mockReturnValueOnce('Cover board review - Fiction');
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'cover' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Board' } });
+    fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'visual-reference' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit details for Cover board review saved Library Search view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Cover board review saved Library Search view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate Cover board review saved Library Search view' }));
+
+    expect(window.prompt).toHaveBeenNthCalledWith(
+      4,
+      'Name this duplicated Library Search view',
+      'Cover board review copy',
+    );
+    expect(screen.getByText('Cover board review')).toBeInTheDocument();
+    expect(screen.getByText('Cover board review - Fiction')).toBeInTheDocument();
+    expect(screen.getAllByText('Owner: James studio - Use before starting CoverVision cover runs.')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cover board review - Fiction/ }));
+    expect(screen.getByPlaceholderText('Search blueprints, boards, and projects')).toHaveValue('cover');
+    expect(screen.getByLabelText('Source')).toHaveValue('Board');
+    expect(screen.getByLabelText('Output')).toHaveValue('visual-reference');
+    expect(screen.getByText('Pinned - Board - Visual reference - Any time - "cover"')).toBeInTheDocument();
+    expect(screen.getByText('Board - Visual reference - Any time - "cover"')).toBeInTheDocument();
+  });
+
   it('imports saved Library Search views and restores their filters', async () => {
     const packet = {
       schema: 'oneshot.library-search-views.v1',
