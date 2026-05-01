@@ -71,7 +71,9 @@ const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 // real models support narrower subsets — gpt-5.2/5.3/5.4/5.5 reject
 // `minimal`, gpt-5.1 rejects `xhigh`, gpt-5.1-codex-mini caps at `medium`.
 // An undefined / 'default' modelId is clamped as if it were gpt-5.5,
-// since that's codex's current default model.
+// since that's codex's current default model. Unknown / future model ids
+// pass through unchanged — if the API later rejects, the server error
+// is the signal that a new rule belongs here.
 function clampCodexReasoning(modelId, effort) {
   if (!effort) return effort;
   const raw = String(modelId ?? '').trim();
