@@ -767,15 +767,65 @@ code {
   gap: 10px;
 }
 
-.oneshot-library-views-head span {
+.oneshot-library-views-head > span {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.oneshot-library-views-head button {
+.oneshot-library-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.oneshot-library-view-actions button {
   flex: 0 0 auto;
+}
+
+.oneshot-library-view-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.oneshot-library-view-import {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.oneshot-library-view-import:hover {
+  border-color: var(--accent);
+}
+
+.oneshot-library-view-import input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.oneshot-library-view-status {
+  color: var(--green);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.oneshot-library-view-status.error {
+  color: var(--red);
 }
 
 .oneshot-library-view-list {
@@ -3364,7 +3414,13 @@ code {
     flex-direction: column;
   }
 
-  .oneshot-library-views-head button,
+  .oneshot-library-view-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .oneshot-library-view-actions button,
+  .oneshot-library-view-import,
   .oneshot-library-view-pill {
     width: 100%;
   }

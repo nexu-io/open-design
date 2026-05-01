@@ -1,3 +1,4 @@
+import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   buildInspirationPrompt,
@@ -39,6 +40,13 @@ interface SavedLibraryView extends LibraryViewFilters {
 }
 
 const SAVED_VIEWS_KEY = 'oneshot:library-search-views';
+const SAVED_VIEWS_SCHEMA = 'oneshot.library-search-views.v1';
+
+interface LibraryViewsExport {
+  schema: typeof SAVED_VIEWS_SCHEMA;
+  exportedAt: number;
+  views: SavedLibraryView[];
+}
 
 export function OneShotLibrarySearch({
   projects,
@@ -50,6 +58,8 @@ export function OneShotLibrarySearch({
   const [outputFilter, setOutputFilter] = useState<LibraryOutputFilter>('all');
   const [recencyFilter, setRecencyFilter] = useState<LibraryRecencyFilter>('all');
   const [savedViews, setSavedViews] = useState<SavedLibraryView[]>([]);
+  const [viewImportStatus, setViewImportStatus] = useState('');
+  const [viewImportError, setViewImportError] = useState('');
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
   const [inspirationBoards, setInspirationBoards] = useState<InspirationBoard[]>([]);
   const [inspirationPins, setInspirationPins] = useState<InspirationPin[]>([]);
@@ -142,6 +152,57 @@ export function OneShotLibrarySearch({
     });
   }
 
+  function exportSavedViews() {
+    if (savedViews.length === 0) return;
+    const packet: LibraryViewsExport = {
+      schema: SAVED_VIEWS_SCHEMA,
+      exportedAt: Date.now(),
+      views: savedViews,
+    };
+    const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'oneshot-library-search-views.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleViewImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setViewImportStatus('');
+    setViewImportError('');
+    if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+      setViewImportError('Choose a OneShot Library Search views JSON file.');
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        const imported = importLibraryViews(JSON.parse(text));
+        if (imported.length === 0) {
+          setViewImportError('This file is not a valid OneShot Library Search views export.');
+          return;
+        }
+        setViewImportStatus(`Imported ${imported.length} Library Search view${imported.length === 1 ? '' : 's'}.`);
+      } catch {
+        setViewImportError('This Library Search views file could not be imported.');
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setViewImportError('This Library Search views file could not be imported.');
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
   return (
     <section className="oneshot-library-search" aria-label="OneShot library search">
       <div className="oneshot-library-search-head">
@@ -209,10 +270,30 @@ export function OneShotLibrarySearch({
       <div className="oneshot-library-views" aria-label="Saved Library Search views">
         <div className="oneshot-library-views-head">
           <span>Saved views</span>
-          <button type="button" className="secondary" onClick={saveCurrentView}>
-            Save current view
-          </button>
+          <div className="oneshot-library-view-actions">
+            <button type="button" className="secondary" onClick={saveCurrentView}>
+              Save current view
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={exportSavedViews}
+              disabled={savedViews.length === 0}
+            >
+              Export views
+            </button>
+            <label className="oneshot-library-view-import">
+              <span>Import views</span>
+              <input type="file" accept="application/json,.json" onChange={handleViewImport} />
+            </label>
+          </div>
         </div>
+        {viewImportStatus ? (
+          <small className="oneshot-library-view-status">{viewImportStatus}</small>
+        ) : null}
+        {viewImportError ? (
+          <small className="oneshot-library-view-status error" role="alert">{viewImportError}</small>
+        ) : null}
         {savedViews.length > 0 ? (
           <div className="oneshot-library-view-list">
             {savedViews.map((view) => (
@@ -331,10 +412,63 @@ function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
 }
 
+function importLibraryViews(payload: unknown): SavedLibraryView[] {
+  const packet = normalizeLibraryViewsExport(payload);
+  if (!packet) return [];
+  const now = Date.now();
+  const imported = packet.views.map((view, index) => ({
+    ...view,
+    id: `library-view-${now}-${index}-${slugify(view.name) || crypto.randomUUID()}`,
+    createdAt: Number.isFinite(view.createdAt) ? view.createdAt : now + index,
+  }));
+  const importedNames = new Set(imported.map((view) => view.name));
+  const next = [
+    ...imported,
+    ...listSavedLibraryViews().filter((view) => !importedNames.has(view.name)),
+  ].slice(0, 8);
+  localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+  return imported;
+}
+
 function deleteLibraryView(id: string) {
   const next = listSavedLibraryViews().filter((view) => view.id !== id);
   localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+}
+
+function normalizeLibraryViewsExport(payload: unknown): LibraryViewsExport | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload as Partial<LibraryViewsExport>;
+  if (candidate.schema !== SAVED_VIEWS_SCHEMA || !Array.isArray(candidate.views)) return null;
+  const views = candidate.views
+    .map(normalizeSavedLibraryView)
+    .filter((view): view is SavedLibraryView => Boolean(view));
+  if (views.length === 0) return null;
+  return {
+    schema: SAVED_VIEWS_SCHEMA,
+    exportedAt: Number.isFinite(candidate.exportedAt) ? Number(candidate.exportedAt) : Date.now(),
+    views,
+  };
+}
+
+function normalizeSavedLibraryView(payload: unknown): SavedLibraryView | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload as Partial<SavedLibraryView>;
+  const name = candidate.name?.trim();
+  if (!name) return null;
+  const sourceFilter = normalizeSourceFilter(candidate.sourceFilter);
+  const outputFilter = normalizeViewOutputFilter(candidate.outputFilter);
+  const recencyFilter = normalizeRecencyFilter(candidate.recencyFilter);
+  return {
+    id: typeof candidate.id === 'string' ? candidate.id : crypto.randomUUID(),
+    name,
+    query: typeof candidate.query === 'string' ? candidate.query : '',
+    sourceFilter,
+    outputFilter,
+    recencyFilter,
+    createdAt: Number.isFinite(candidate.createdAt) ? Number(candidate.createdAt) : Date.now(),
+  };
 }
 
 function buildSavedViewName(filters: LibraryViewFilters) {
@@ -399,7 +533,7 @@ function buildLibraryResults({
   const blueprintResults = savedBlueprints.map((blueprint) => ({
     id: blueprint.id,
     type: 'Blueprint' as const,
-    outputType: normalizeOutputType(blueprint.metadata.kind),
+    outputType: normalizeProjectOutputType(blueprint.metadata.kind),
     title: blueprint.name,
     detail: [
       blueprint.collection ? `Collection: ${blueprint.collection}` : '',
@@ -444,7 +578,7 @@ function buildLibraryResults({
   const projectResults = projects.map((project) => ({
     id: project.id,
     type: 'Project' as const,
-    outputType: normalizeOutputType(project.metadata?.kind),
+    outputType: normalizeProjectOutputType(project.metadata?.kind),
     title: project.name,
     detail: [
       project.metadata?.workflowCategory,
@@ -472,7 +606,30 @@ function buildLibraryResults({
     .slice(0, needle ? 8 : 6);
 }
 
-function normalizeOutputType(kind: ProjectKind | undefined): LibraryOutputFilter {
+function normalizeSourceFilter(value: unknown): LibrarySourceFilter {
+  if (value === 'Blueprint' || value === 'Board' || value === 'Project') return value;
+  return 'all';
+}
+
+function normalizeViewOutputFilter(value: unknown): LibraryOutputFilter {
+  if (
+    value === 'prototype' ||
+    value === 'deck' ||
+    value === 'template' ||
+    value === 'visual-reference' ||
+    value === 'other'
+  ) {
+    return value;
+  }
+  return 'all';
+}
+
+function normalizeRecencyFilter(value: unknown): LibraryRecencyFilter {
+  if (value === '7d' || value === '30d' || value === '90d') return value;
+  return 'all';
+}
+
+function normalizeProjectOutputType(kind: ProjectKind | undefined): LibraryOutputFilter {
   if (kind === 'prototype' || kind === 'deck' || kind === 'template' || kind === 'other') {
     return kind;
   }

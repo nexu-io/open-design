@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotLibrarySearch } from '../src/components/OneShotLibrarySearch';
 import { saveWorkflowBlueprint } from '../src/state/blueprints';
@@ -223,5 +223,83 @@ describe('OneShotLibrarySearch', () => {
     );
     expect(screen.queryByText('Cover board review')).not.toBeInTheDocument();
     expect(screen.getByText('Save a filter set to reuse it later.')).toBeInTheDocument();
+  });
+
+  it('exports saved Library Search views as a portable JSON packet', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Exported cover boards');
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const createObjectURL = vi.fn(() => 'blob:oneshot-library-views');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'cover' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Board' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export views' }));
+
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(anchorClick).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:oneshot-library-views');
+  });
+
+  it('imports saved Library Search views and restores their filters', async () => {
+    const packet = {
+      schema: 'oneshot.library-search-views.v1',
+      exportedAt: Date.now(),
+      views: [
+        {
+          id: 'old-imported-view',
+          name: 'Imported boards',
+          query: 'cover',
+          sourceFilter: 'Board',
+          outputFilter: 'visual-reference',
+          recencyFilter: '30d',
+          createdAt: 123,
+        },
+      ],
+    };
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    const file = new File([JSON.stringify(packet)], 'oneshot-library-search-views.json', {
+      type: 'application/json',
+    });
+    fireEvent.change(screen.getByLabelText('Import views'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
+    expect(screen.getByText('Imported boards')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Imported boards/ }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Search blueprints, boards, and projects')).toHaveValue('cover');
+    });
+    expect(screen.getByLabelText('Source')).toHaveValue('Board');
+    expect(screen.getByLabelText('Output')).toHaveValue('visual-reference');
+    expect(screen.getByLabelText('Recent')).toHaveValue('30d');
   });
 });
