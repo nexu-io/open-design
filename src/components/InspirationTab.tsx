@@ -5,10 +5,13 @@ import {
   buildInspirationPrompt,
   createInspirationBoard,
   createInspirationPin,
+  deleteInspirationBoard,
   deleteInspirationPin,
   listInspirationBoards,
   listInspirationPins,
   parseTags,
+  updateInspirationBoard,
+  updateInspirationPin,
 } from '../state/inspiration';
 import { Icon } from './Icon';
 
@@ -24,6 +27,9 @@ export function InspirationTab({ onCreateProject }: Props) {
   const [boardTitle, setBoardTitle] = useState('');
   const [boardDescription, setBoardDescription] = useState('');
   const [boardTags, setBoardTags] = useState('');
+  const [boardEditTitle, setBoardEditTitle] = useState('');
+  const [boardEditDescription, setBoardEditDescription] = useState('');
+  const [boardEditTags, setBoardEditTags] = useState('');
   const [pinTitle, setPinTitle] = useState('');
   const [pinImageUrl, setPinImageUrl] = useState('');
   const [pinSourceUrl, setPinSourceUrl] = useState('');
@@ -32,6 +38,7 @@ export function InspirationTab({ onCreateProject }: Props) {
   const [pinTags, setPinTags] = useState('');
   const [pinImageName, setPinImageName] = useState('');
   const [pinImageError, setPinImageError] = useState('');
+  const [editingPinId, setEditingPinId] = useState<string | null>(null);
 
   useEffect(() => {
     function refresh() {
@@ -75,6 +82,12 @@ export function InspirationTab({ onCreateProject }: Props) {
     [pins],
   );
 
+  useEffect(() => {
+    setBoardEditTitle(activeBoard?.title ?? '');
+    setBoardEditDescription(activeBoard?.description ?? '');
+    setBoardEditTags(activeBoard?.tags.join(', ') ?? '');
+  }, [activeBoard?.id, activeBoard?.title, activeBoard?.description, activeBoard?.tags]);
+
   function handleCreateBoard() {
     const title = boardTitle.trim();
     if (!title) return;
@@ -92,6 +105,18 @@ export function InspirationTab({ onCreateProject }: Props) {
   function handleCreatePin() {
     const title = pinTitle.trim();
     if (!title || !activeBoard) return;
+    if (editingPinId) {
+      updateInspirationPin(editingPinId, {
+        title,
+        imageUrl: pinImageUrl,
+        sourceUrl: pinSourceUrl,
+        note: pinNote,
+        usageNote: pinUsageNote,
+        tags: parseTags(pinTags),
+      });
+      resetPinForm();
+      return;
+    }
     createInspirationPin({
       boardId: activeBoard.id,
       title,
@@ -101,6 +126,10 @@ export function InspirationTab({ onCreateProject }: Props) {
       usageNote: pinUsageNote,
       tags: parseTags(pinTags),
     });
+    resetPinForm();
+  }
+
+  function resetPinForm() {
     setPinTitle('');
     setPinImageUrl('');
     setPinSourceUrl('');
@@ -109,6 +138,39 @@ export function InspirationTab({ onCreateProject }: Props) {
     setPinTags('');
     setPinImageName('');
     setPinImageError('');
+    setEditingPinId(null);
+  }
+
+  function startPinEdit(pin: InspirationPin) {
+    setEditingPinId(pin.id);
+    setPinTitle(pin.title);
+    setPinImageUrl(pin.imageUrl);
+    setPinSourceUrl(pin.sourceUrl);
+    setPinNote(pin.note);
+    setPinUsageNote(pin.usageNote);
+    setPinTags(pin.tags.join(', '));
+    setPinImageName(pin.imageUrl.startsWith('data:image/') ? 'existing imported image' : '');
+    setPinImageError('');
+  }
+
+  function handleUpdateBoard() {
+    if (!activeBoard || !boardEditTitle.trim()) return;
+    updateInspirationBoard(activeBoard.id, {
+      title: boardEditTitle,
+      description: boardEditDescription,
+      tags: parseTags(boardEditTags),
+    });
+  }
+
+  function handleDeleteBoard() {
+    if (!activeBoard) return;
+    const boardPinCount = pins.filter((pin) => pin.boardId === activeBoard.id).length;
+    const message = `Delete the "${activeBoard.title}" inspiration board and ${boardPinCount} pins?`;
+    if (!window.confirm(message)) return;
+    deleteInspirationBoard(activeBoard.id);
+    resetPinForm();
+    const nextBoard = listInspirationBoards().find((board) => board.id !== activeBoard.id) ?? null;
+    setActiveBoardId(nextBoard?.id ?? null);
   }
 
   function handleImageImport(event: ChangeEvent<HTMLInputElement>) {
@@ -240,6 +302,34 @@ export function InspirationTab({ onCreateProject }: Props) {
                 </button>
               </div>
 
+              <div className="inspiration-board-manage" aria-label="Manage inspiration board">
+                <input
+                  value={boardEditTitle}
+                  onChange={(event) => setBoardEditTitle(event.target.value)}
+                  placeholder="Board title"
+                />
+                <input
+                  value={boardEditTags}
+                  onChange={(event) => setBoardEditTags(event.target.value)}
+                  placeholder="Board tags"
+                />
+                <textarea
+                  value={boardEditDescription}
+                  onChange={(event) => setBoardEditDescription(event.target.value)}
+                  placeholder="Board purpose"
+                />
+                <div className="inspiration-manage-actions">
+                  <button type="button" className="primary" onClick={handleUpdateBoard} disabled={!boardEditTitle.trim()}>
+                    <Icon name="edit" size={13} />
+                    Save board
+                  </button>
+                  <button type="button" className="secondary danger" onClick={handleDeleteBoard}>
+                    <Icon name="close" size={13} />
+                    Delete board
+                  </button>
+                </div>
+              </div>
+
               <div className="inspiration-toolbar">
                 <label className="oneshot-search">
                   <Icon name="search" size={14} />
@@ -303,8 +393,13 @@ export function InspirationTab({ onCreateProject }: Props) {
                 ) : null}
                 <button type="button" className="primary" onClick={handleCreatePin} disabled={!pinTitle.trim()}>
                   <Icon name="plus" size={13} />
-                  Add pin
+                  {editingPinId ? 'Update pin' : 'Add pin'}
                 </button>
+                {editingPinId ? (
+                  <button type="button" className="secondary" onClick={resetPinForm}>
+                    Cancel edit
+                  </button>
+                ) : null}
               </div>
 
               {boardPins.length > 0 ? (
@@ -321,17 +416,27 @@ export function InspirationTab({ onCreateProject }: Props) {
                       <div className="inspiration-pin-body">
                         <div className="inspiration-pin-title">
                           <strong>{pin.title}</strong>
-                          <button
-                            type="button"
-                            aria-label={`Delete ${pin.title} pin`}
-                            title={`Delete ${pin.title} pin`}
-                            onClick={() => {
-                              if (!window.confirm(`Delete the "${pin.title}" inspiration pin?`)) return;
-                              deleteInspirationPin(pin.id);
-                            }}
-                          >
-                            <Icon name="close" size={12} />
-                          </button>
+                          <div className="inspiration-pin-actions">
+                            <button
+                              type="button"
+                              aria-label={`Edit ${pin.title} pin`}
+                              title={`Edit ${pin.title} pin`}
+                              onClick={() => startPinEdit(pin)}
+                            >
+                              <Icon name="edit" size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Delete ${pin.title} pin`}
+                              title={`Delete ${pin.title} pin`}
+                              onClick={() => {
+                                if (!window.confirm(`Delete the "${pin.title}" inspiration pin?`)) return;
+                                deleteInspirationPin(pin.id);
+                              }}
+                            >
+                              <Icon name="close" size={12} />
+                            </button>
+                          </div>
                         </div>
                         {pin.note ? <p>{pin.note}</p> : null}
                         {pin.sourceUrl ? (

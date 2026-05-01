@@ -6,6 +6,8 @@ import {
   buildInspirationPrompt,
   createInspirationBoard,
   createInspirationPin,
+  listInspirationBoards,
+  listInspirationPins,
   parseTags,
 } from '../src/state/inspiration';
 
@@ -128,5 +130,72 @@ describe('Inspiration Library', () => {
 
     expect(await screen.findByText('sample-reference')).toBeInTheDocument();
     expect(localStorage.getItem('oneshot:inspiration-pins')).toContain('data:image/png;base64');
+  });
+
+  it('renames boards, edits pins, and deletes a board with its pins', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onCreateProject = vi.fn();
+    render(<InspirationTab onCreateProject={onCreateProject} />);
+
+    fireEvent.change(await screen.findByPlaceholderText('Board name'), {
+      target: { value: 'Working moodboard' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Purpose, audience, or project'), {
+      target: { value: 'Original board purpose.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create board' }));
+
+    expect(await screen.findByRole('heading', { name: 'Working moodboard' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Reference title'), {
+      target: { value: 'Original pin title' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('What should OneShot learn from this?'), {
+      target: { value: 'Original pin note.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add pin' }));
+    expect(await screen.findByText('Original pin title')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Board title'), {
+      target: { value: 'Renamed moodboard' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Board purpose'), {
+      target: { value: 'Updated board purpose.' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Board tags'), {
+      target: { value: 'updated, launch' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save board' }));
+
+    expect(await screen.findByRole('heading', { name: 'Renamed moodboard' })).toBeInTheDocument();
+    expect(listInspirationBoards()[0]).toEqual(
+      expect.objectContaining({
+        title: 'Renamed moodboard',
+        description: 'Updated board purpose.',
+        tags: ['updated', 'launch'],
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Original pin title pin' }));
+    fireEvent.change(screen.getByPlaceholderText('Reference title'), {
+      target: { value: 'Updated pin title' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('What should OneShot learn from this?'), {
+      target: { value: 'Updated pin note.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update pin' }));
+
+    expect(await screen.findByText('Updated pin title')).toBeInTheDocument();
+    expect(screen.queryByText('Original pin title')).not.toBeInTheDocument();
+    expect(listInspirationPins().find((pin) => pin.title === 'Updated pin title')?.note).toBe('Updated pin note.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete board' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Renamed moodboard' })).not.toBeInTheDocument();
+    });
+    expect(window.confirm).toHaveBeenCalledWith('Delete the "Renamed moodboard" inspiration board and 1 pins?');
+    expect(listInspirationBoards().some((board) => board.title === 'Renamed moodboard')).toBe(false);
+    expect(listInspirationPins().some((pin) => pin.title === 'Updated pin title')).toBe(false);
   });
 });

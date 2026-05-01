@@ -15,6 +15,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Workflow-created projects now show a reusable blueprint strip with gates, exports, scorecards, handoff context, a copyable prompt, and a save action.
 - Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
 - The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, imported local images, usage notes, tags, and OneShot reference-brief creation.
+- Inspiration boards can now be renamed, retagged, described, and deleted with their pins; individual pins can be edited in place from the board view.
 - Workflow launches can attach an Inspiration Library board as the reference lock, adding the board context and pins into the generated prompt and workflow metadata.
 - The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, and Motion Explainer.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
@@ -38,4 +39,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 ## Near-Term Build Priorities
 
 1. Add custom blueprint collections so saved templates can move beyond automatic workflow groups.
-2. Add richer board management for the Inspiration Library, including board rename/delete, pin editing, and board-specific workflow recommendations.
+2. Add board-specific workflow recommendations so Inspiration boards can suggest the strongest OneShot production path.

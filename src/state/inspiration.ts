@@ -50,14 +50,14 @@ const DEFAULT_PINS: InspirationPin[] = [
 
 export function listInspirationBoards(): InspirationBoard[] {
   const stored = readArray<InspirationBoard>(BOARDS_KEY);
-  return (stored.length > 0 ? stored : DEFAULT_BOARDS)
+  return (hasStoredValue(BOARDS_KEY) ? stored : DEFAULT_BOARDS)
     .filter((board) => board && typeof board.id === 'string')
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export function listInspirationPins(): InspirationPin[] {
   const stored = readArray<InspirationPin>(PINS_KEY);
-  return (stored.length > 0 ? stored : DEFAULT_PINS)
+  return (hasStoredValue(PINS_KEY) ? stored : DEFAULT_PINS)
     .filter((pin) => pin && typeof pin.id === 'string')
     .sort((a, b) => b.createdAt - a.createdAt);
 }
@@ -79,6 +79,42 @@ export function createInspirationBoard(input: {
   localStorage.setItem(BOARDS_KEY, JSON.stringify([board, ...listInspirationBoards()]));
   emitChange();
   return board;
+}
+
+export function updateInspirationBoard(id: string, input: {
+  title?: string;
+  description?: string;
+  tags?: string[];
+}): InspirationBoard | null {
+  const now = Date.now();
+  let updated: InspirationBoard | null = null;
+  const next = listInspirationBoards().map((board) => {
+    if (board.id !== id) return board;
+    updated = {
+      ...board,
+      title: input.title?.trim() || board.title,
+      description: input.description?.trim() ?? board.description,
+      tags: input.tags ?? board.tags,
+      updatedAt: now,
+    };
+    return updated;
+  });
+  if (!updated) return null;
+  localStorage.setItem(BOARDS_KEY, JSON.stringify(next));
+  emitChange();
+  return updated;
+}
+
+export function deleteInspirationBoard(id: string): void {
+  localStorage.setItem(
+    BOARDS_KEY,
+    JSON.stringify(listInspirationBoards().filter((board) => board.id !== id)),
+  );
+  localStorage.setItem(
+    PINS_KEY,
+    JSON.stringify(listInspirationPins().filter((pin) => pin.boardId !== id)),
+  );
+  emitChange();
 }
 
 export function createInspirationPin(input: {
@@ -108,11 +144,40 @@ export function createInspirationPin(input: {
   return pin;
 }
 
+export function updateInspirationPin(id: string, input: {
+  title?: string;
+  imageUrl?: string;
+  sourceUrl?: string;
+  note?: string;
+  usageNote?: string;
+  tags?: string[];
+}): InspirationPin | null {
+  const now = Date.now();
+  let updated: InspirationPin | null = null;
+  const next = listInspirationPins().map((pin) => {
+    if (pin.id !== id) return pin;
+    updated = {
+      ...pin,
+      title: input.title?.trim() || pin.title,
+      imageUrl: input.imageUrl?.trim() ?? pin.imageUrl,
+      sourceUrl: input.sourceUrl?.trim() ?? pin.sourceUrl,
+      note: input.note?.trim() ?? pin.note,
+      usageNote: input.usageNote?.trim() ?? pin.usageNote,
+      tags: input.tags ?? pin.tags,
+    };
+    touchBoard(pin.boardId, now);
+    return updated;
+  });
+  if (!updated) return null;
+  localStorage.setItem(PINS_KEY, JSON.stringify(next));
+  emitChange();
+  return updated;
+}
+
 export function deleteInspirationPin(id: string): void {
-  localStorage.setItem(
-    PINS_KEY,
-    JSON.stringify(listInspirationPins().filter((pin) => pin.id !== id)),
-  );
+  const existing = listInspirationPins().find((pin) => pin.id === id);
+  localStorage.setItem(PINS_KEY, JSON.stringify(listInspirationPins().filter((pin) => pin.id !== id)));
+  if (existing) touchBoard(existing.boardId, Date.now());
   emitChange();
 }
 
@@ -160,6 +225,14 @@ function readArray<T>(key: string): T[] {
     return Array.isArray(parsed) ? parsed as T[] : [];
   } catch {
     return [];
+  }
+}
+
+function hasStoredValue(key: string) {
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
   }
 }
 
