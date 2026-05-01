@@ -17,6 +17,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, imported local images, usage notes, tags, and OneShot reference-brief creation.
 - Inspiration boards can now be renamed, retagged, described, and deleted with their pins; individual pins can be edited in place from the board view.
 - Inspiration boards recommend the strongest OneShot production paths and can launch a workflow-specific project with the board attached as the reference lock.
+- Inspiration boards can be exported and imported as OneShot JSON packets, so reference libraries can move between machines, backups, and repos.
 - Workflow launches can attach an Inspiration Library board as the reference lock, adding the board context and pins into the generated prompt and workflow metadata.
 - The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, and Motion Explainer.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
@@ -40,4 +41,5 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 ## Near-Term Build Priorities
 
 1. Add custom blueprint collections so saved templates can move beyond automatic workflow groups.
-2. Add export/import for Inspiration boards so reference libraries can move between machines and repos.
+2. Add custom blueprint collections so saved templates can move beyond automatic workflow groups.
+3. Add a library search view that spans saved blueprints, Inspiration boards, and generated project records.

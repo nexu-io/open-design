@@ -7,6 +7,8 @@ import {
   createInspirationPin,
   deleteInspirationBoard,
   deleteInspirationPin,
+  exportInspirationBoard,
+  importInspirationBoard,
   listInspirationBoards,
   listInspirationPins,
   parseTags,
@@ -123,6 +125,8 @@ export function InspirationTab({ onCreateProject }: Props) {
   const [pinImageName, setPinImageName] = useState('');
   const [pinImageError, setPinImageError] = useState('');
   const [editingPinId, setEditingPinId] = useState<string | null>(null);
+  const [boardImportStatus, setBoardImportStatus] = useState('');
+  const [boardImportError, setBoardImportError] = useState('');
 
   useEffect(() => {
     function refresh() {
@@ -262,6 +266,55 @@ export function InspirationTab({ onCreateProject }: Props) {
     setActiveBoardId(nextBoard?.id ?? null);
   }
 
+  function handleExportBoard() {
+    if (!activeBoard) return;
+    const packet = exportInspirationBoard(activeBoard.id);
+    if (!packet) return;
+    const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${slugForDownload(activeBoard.title)}-oneshot-board.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleBoardImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBoardImportStatus('');
+    setBoardImportError('');
+    if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+      setBoardImportError('Choose a OneShot board JSON file.');
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        const imported = importInspirationBoard(JSON.parse(text));
+        if (!imported) {
+          setBoardImportError('This file is not a valid OneShot board export.');
+          return;
+        }
+        setActiveBoardId(imported.id);
+        setBoardImportStatus(`Imported board: ${imported.title}`);
+      } catch {
+        setBoardImportError('This board file could not be imported.');
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setBoardImportError('This board file could not be imported.');
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
   function handleImageImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -395,6 +448,16 @@ export function InspirationTab({ onCreateProject }: Props) {
               <Icon name="plus" size={13} />
               Create board
             </button>
+            <label className="inspiration-file-picker inspiration-board-import">
+              <span>Import board</span>
+              <input type="file" accept="application/json,.json" onChange={handleBoardImport} />
+            </label>
+            {boardImportStatus ? (
+              <small className="inspiration-import-status">{boardImportStatus}</small>
+            ) : null}
+            {boardImportError ? (
+              <small className="inspiration-import-status error" role="alert">{boardImportError}</small>
+            ) : null}
           </div>
         </aside>
 
@@ -437,6 +500,10 @@ export function InspirationTab({ onCreateProject }: Props) {
                   <button type="button" className="primary" onClick={handleUpdateBoard} disabled={!boardEditTitle.trim()}>
                     <Icon name="edit" size={13} />
                     Save board
+                  </button>
+                  <button type="button" className="secondary" onClick={handleExportBoard}>
+                    <Icon name="download" size={13} />
+                    Export board
                   </button>
                   <button type="button" className="secondary danger" onClick={handleDeleteBoard}>
                     <Icon name="close" size={13} />
@@ -638,4 +705,12 @@ function recommendWorkflows(board: InspirationBoard, pins: InspirationPin[]) {
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
     .map((entry) => entry.recommendation);
+}
+
+function slugForDownload(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'inspiration-board';
 }

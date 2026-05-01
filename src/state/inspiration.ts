@@ -3,6 +3,14 @@ import type { InspirationBoard, InspirationPin } from '../types';
 const BOARDS_KEY = 'oneshot:inspiration-boards';
 const PINS_KEY = 'oneshot:inspiration-pins';
 const CHANGE_EVENT = 'oneshot:inspiration-changed';
+const EXPORT_SCHEMA = 'oneshot.inspiration-board.v1';
+
+export interface InspirationBoardExport {
+  schema: typeof EXPORT_SCHEMA;
+  exportedAt: number;
+  board: InspirationBoard;
+  pins: InspirationPin[];
+}
 
 const DEFAULT_BOARDS: InspirationBoard[] = [
   {
@@ -115,6 +123,44 @@ export function deleteInspirationBoard(id: string): void {
     JSON.stringify(listInspirationPins().filter((pin) => pin.boardId !== id)),
   );
   emitChange();
+}
+
+export function exportInspirationBoard(id: string): InspirationBoardExport | null {
+  const board = listInspirationBoards().find((entry) => entry.id === id);
+  if (!board) return null;
+  return {
+    schema: EXPORT_SCHEMA,
+    exportedAt: Date.now(),
+    board,
+    pins: listInspirationPins().filter((pin) => pin.boardId === id),
+  };
+}
+
+export function importInspirationBoard(payload: unknown): InspirationBoard | null {
+  const packet = normalizeBoardExport(payload);
+  if (!packet) return null;
+  const now = Date.now();
+  const existingBoardIds = new Set(listInspirationBoards().map((board) => board.id));
+  const boardId = existingBoardIds.has(packet.board.id)
+    ? `board-${now}-${slugify(packet.board.title) || crypto.randomUUID()}`
+    : packet.board.id;
+  const board: InspirationBoard = {
+    ...packet.board,
+    id: boardId,
+    createdAt: Number.isFinite(packet.board.createdAt) ? packet.board.createdAt : now,
+    updatedAt: now,
+  };
+  const importedPins: InspirationPin[] = packet.pins.map((pin, index) => ({
+    ...pin,
+    id: `pin-${now}-${index}-${slugify(pin.title) || crypto.randomUUID()}`,
+    boardId,
+    createdAt: Number.isFinite(pin.createdAt) ? pin.createdAt : now + index,
+  }));
+
+  localStorage.setItem(BOARDS_KEY, JSON.stringify([board, ...listInspirationBoards()]));
+  localStorage.setItem(PINS_KEY, JSON.stringify([...importedPins, ...listInspirationPins()]));
+  emitChange();
+  return board;
 }
 
 export function createInspirationPin(input: {
@@ -234,6 +280,66 @@ function hasStoredValue(key: string) {
   } catch {
     return false;
   }
+}
+
+function normalizeBoardExport(payload: unknown): InspirationBoardExport | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload as Partial<InspirationBoardExport>;
+  if (candidate.schema !== EXPORT_SCHEMA || !candidate.board || typeof candidate.board !== 'object') return null;
+  const boardInput = candidate.board as Partial<InspirationBoard>;
+  const title = typeof boardInput.title === 'string' ? boardInput.title.trim() : '';
+  if (!title) return null;
+  const id = typeof boardInput.id === 'string' && boardInput.id.trim()
+    ? boardInput.id.trim()
+    : `board-${Date.now()}-${slugify(title) || crypto.randomUUID()}`;
+  const pinsInput = Array.isArray(candidate.pins) ? candidate.pins : [];
+  return {
+    schema: EXPORT_SCHEMA,
+    exportedAt: typeof candidate.exportedAt === 'number' ? candidate.exportedAt : Date.now(),
+    board: {
+      id,
+      title,
+      description: typeof boardInput.description === 'string' ? boardInput.description : '',
+      tags: normalizeTags(boardInput.tags),
+      createdAt: typeof boardInput.createdAt === 'number' ? boardInput.createdAt : Date.now(),
+      updatedAt: typeof boardInput.updatedAt === 'number' ? boardInput.updatedAt : Date.now(),
+    },
+    pins: pinsInput
+      .map((pinInput, index) => normalizePin(pinInput, id, index))
+      .filter((pin): pin is InspirationPin => Boolean(pin)),
+  };
+}
+
+function normalizePin(input: unknown, boardId: string, index: number): InspirationPin | null {
+  if (!input || typeof input !== 'object') return null;
+  const pinInput = input as Partial<InspirationPin>;
+  const title = typeof pinInput.title === 'string' ? pinInput.title.trim() : '';
+  if (!title) return null;
+  return {
+    id: typeof pinInput.id === 'string' && pinInput.id.trim()
+      ? pinInput.id.trim()
+      : `pin-${Date.now()}-${index}-${slugify(title) || crypto.randomUUID()}`,
+    boardId,
+    title,
+    imageUrl: typeof pinInput.imageUrl === 'string' ? pinInput.imageUrl : '',
+    sourceUrl: typeof pinInput.sourceUrl === 'string' ? pinInput.sourceUrl : '',
+    note: typeof pinInput.note === 'string' ? pinInput.note : '',
+    usageNote: typeof pinInput.usageNote === 'string' ? pinInput.usageNote : '',
+    tags: normalizeTags(pinInput.tags),
+    createdAt: typeof pinInput.createdAt === 'number' ? pinInput.createdAt : Date.now() + index,
+  };
+}
+
+function normalizeTags(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .filter((tag): tag is string => typeof tag === 'string')
+        .map((tag) => tag.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ).slice(0, 12);
 }
 
 function emitChange() {

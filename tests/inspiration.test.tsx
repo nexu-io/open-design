@@ -6,6 +6,8 @@ import {
   buildInspirationPrompt,
   createInspirationBoard,
   createInspirationPin,
+  exportInspirationBoard,
+  importInspirationBoard,
   listInspirationBoards,
   listInspirationPins,
   parseTags,
@@ -130,6 +132,77 @@ describe('Inspiration Library', () => {
 
     expect(await screen.findByText('sample-reference')).toBeInTheDocument();
     expect(localStorage.getItem('oneshot:inspiration-pins')).toContain('data:image/png;base64');
+  });
+
+  it('exports and imports a portable board packet', () => {
+    const board = createInspirationBoard({
+      title: 'Portable board',
+      description: 'References that should move between machines.',
+      tags: ['portable', 'export'],
+    });
+    createInspirationPin({
+      boardId: board.id,
+      title: 'Portable pin',
+      sourceUrl: 'local/portable.html',
+      note: 'Keep this source with the board.',
+      tags: ['source'],
+    });
+
+    const packet = exportInspirationBoard(board.id);
+    expect(packet).toEqual(
+      expect.objectContaining({
+        schema: 'oneshot.inspiration-board.v1',
+        board: expect.objectContaining({ title: 'Portable board' }),
+      }),
+    );
+    expect(packet?.pins).toHaveLength(1);
+
+    const imported = importInspirationBoard(packet);
+
+    expect(imported).toEqual(expect.objectContaining({ title: 'Portable board' }));
+    expect(listInspirationBoards().filter((entry) => entry.title === 'Portable board')).toHaveLength(2);
+    expect(listInspirationPins().filter((pin) => pin.title === 'Portable pin')).toHaveLength(2);
+    expect(listInspirationPins().find((pin) => pin.boardId === imported?.id)?.sourceUrl).toBe('local/portable.html');
+  });
+
+  it('imports a board JSON file from the library sidebar', async () => {
+    const onCreateProject = vi.fn();
+    render(<InspirationTab onCreateProject={onCreateProject} />);
+
+    const packet = {
+      schema: 'oneshot.inspiration-board.v1',
+      exportedAt: 1000,
+      board: {
+        id: 'imported-board',
+        title: 'Imported reference board',
+        description: 'Imported from a JSON packet.',
+        tags: ['imported'],
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+      pins: [
+        {
+          id: 'imported-pin',
+          boardId: 'imported-board',
+          title: 'Imported pin',
+          imageUrl: '',
+          sourceUrl: 'local/imported.html',
+          note: 'Imported note.',
+          usageNote: 'Imported usage.',
+          tags: ['pin'],
+          createdAt: 1000,
+        },
+      ],
+    };
+    const file = new File([JSON.stringify(packet)], 'board.json', { type: 'application/json' });
+
+    fireEvent.change(await screen.findByLabelText('Import board'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Imported reference board' })).toBeInTheDocument();
+    expect(screen.getByText('Imported board: Imported reference board')).toBeInTheDocument();
+    expect(screen.getByText('Imported pin')).toBeInTheDocument();
   });
 
   it('renames boards, edits pins, and deletes a board with its pins', async () => {
