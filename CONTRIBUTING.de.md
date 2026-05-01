@@ -191,6 +191,12 @@ Merge-Bar:
 
 ---
 
+## Wartung von Lokalisierungen
+
+Deutsch verwendet das formelle `Sie`, weil OD eine gemischte Zielgruppe aus Solo-Creators, Agenturen und Engineering-Teams anspricht; solange Projektfeedback keine informelle `du`-Stimme nahelegt, ist formelles Deutsch die am wenigsten überraschende Vorgabe. Locale-PRs sollen UI-Chrome, zentrale Dokumentation und display-only Gallery-Metadaten in `apps/web/src/i18n/content.ts` übersetzen, aber nicht `skills/`, `design-systems/` oder Prompt-Bodies, die Agents ausführen. Diese Quell-Prompts sind Workflow-Eingaben; eine gemeinsame Quellsprache vermeidet multiplizierte Prompt-QA über alle Locales. Wenn ein Skill, Designsystem oder Prompt Template ergänzt oder umbenannt wird, aktualisieren Sie die deutschen Display-Metadaten und führen `pnpm --filter @open-design/web test` aus; `content.test.ts` schlägt fehl, wenn die deutsche Display-Coverage driftet. Daemon-Fehler, Export-Dateinamen und agent-generierte Artifact-Texte sind bekannte Grenzen, sofern ein PR sie nicht ausdrücklich umfasst.
+
+---
+
 ## Code Style
 
 Wir sind beim Formatting nicht pedantisch (Prettier on save ist okay), aber zwei Regeln sind nicht verhandelbar:

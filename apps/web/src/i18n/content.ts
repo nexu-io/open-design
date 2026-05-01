@@ -644,6 +644,15 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
   },
 };
 
+export const GERMAN_CONTENT_IDS = {
+  skills: Object.keys(DE_SKILL_COPY),
+  designSystems: Object.keys(DE_DESIGN_SYSTEM_SUMMARIES),
+  designSystemCategories: Object.keys(DE_DESIGN_SYSTEM_CATEGORIES),
+  promptTemplates: Object.keys(DE_PROMPT_TEMPLATE_COPY),
+  promptTemplateCategories: Object.keys(DE_PROMPT_TEMPLATE_CATEGORIES),
+  promptTemplateTags: Object.keys(DE_PROMPT_TEMPLATE_TAGS),
+};
+
 function isGerman(locale: Locale): boolean {
   return locale === 'de';
 }
