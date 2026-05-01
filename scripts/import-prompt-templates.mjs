@@ -46,7 +46,7 @@
  * All output JSON carries a `source` block so attribution stays intact.
  */
 
-import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, unlink, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -317,25 +317,46 @@ function inferTags(title, prompt, surface) {
   return Array.from(set).slice(0, lim);
 }
 
-async function clearDir(dir) {
+// Remove previously generated JSON files. Hand-authored templates (those
+// whose `source.repo` is not the upstream CC-BY corpus we import from) are
+// preserved so first-party curated prompts aren't wiped on re-run.
+async function clearDir(dir, upstreamRepo) {
   try {
     const files = await readdir(dir);
     for (const f of files) {
-      if (f.endsWith('.json')) {
-        await unlink(path.join(dir, f));
+      if (!f.endsWith('.json')) continue;
+      const filePath = path.join(dir, f);
+      let keep = false;
+      try {
+        const parsed = JSON.parse(await readFile(filePath, 'utf8'));
+        const repo = parsed?.source?.repo;
+        if (repo && repo !== upstreamRepo) keep = true;
+      } catch {
+        // Unparseable file — treat as generated and remove.
       }
+      if (!keep) await unlink(filePath);
     }
   } catch {
     // missing dir is fine — created below.
   }
 }
 
-async function writeAll(entries, outDir) {
+async function writeAll(entries, outDir, upstreamRepo) {
   await mkdir(outDir, { recursive: true });
-  await clearDir(outDir);
+  await clearDir(outDir, upstreamRepo);
   // De-dup on slug; if two entries collide, keep the first (which is the
-  // featured one — always parsed before "All Prompts").
+  // featured one — always parsed before "All Prompts"). Hand-authored
+  // templates already on disk (preserved by clearDir) also take priority
+  // so we never overwrite curated first-party prompts.
   const seen = new Set();
+  try {
+    const existing = await readdir(outDir);
+    for (const f of existing) {
+      if (f.endsWith('.json')) seen.add(f.replace(/\.json$/, ''));
+    }
+  } catch {
+    // noop
+  }
   let count = 0;
   for (const entry of entries) {
     if (seen.has(entry.id)) continue;
@@ -366,7 +387,7 @@ async function main() {
       continue;
     }
     const outDir = ctx.surface === 'image' ? OUT_IMAGE : OUT_VIDEO;
-    const written = await writeAll(entries, outDir);
+    const written = await writeAll(entries, outDir, ctx.repo);
     if (ctx.surface === 'image') totalImage += written;
     else totalVideo += written;
     console.log(
