@@ -34,6 +34,7 @@ export type ToolDevOptions = {
   daemonPort?: number | string | null;
   json?: boolean;
   namespace?: string;
+  prod?: boolean;
   toolsDevRoot?: string;
   webPort?: number | string | null;
 };
@@ -170,7 +171,7 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
       },
       desktop: {
         ...desktop,
-        electronBinaryPath: resolveElectronBinaryPath(WORKSPACE_ROOT),
+        get electronBinaryPath() { return resolveElectronBinaryPath(WORKSPACE_ROOT); },
         mainEntryPath: path.join(WORKSPACE_ROOT, "apps/desktop/dist/main/index.js"),
         packageJsonPath: desktopPackageJsonPath,
       },
