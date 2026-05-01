@@ -9,6 +9,7 @@ import type {
   InspirationBoard,
   InspirationPin,
   Project,
+  ProjectKind,
   SavedWorkflowBlueprint,
 } from '../types';
 import { Icon } from './Icon';
@@ -20,12 +21,19 @@ interface Props {
   onOpenProject: (id: string) => void;
 }
 
+type LibrarySourceFilter = 'all' | 'Blueprint' | 'Board' | 'Project';
+type LibraryOutputFilter = 'all' | 'prototype' | 'deck' | 'template' | 'visual-reference' | 'other';
+type LibraryRecencyFilter = 'all' | '7d' | '30d' | '90d';
+
 export function OneShotLibrarySearch({
   projects,
   onCreateProject,
   onOpenProject,
 }: Props) {
   const [query, setQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<LibrarySourceFilter>('all');
+  const [outputFilter, setOutputFilter] = useState<LibraryOutputFilter>('all');
+  const [recencyFilter, setRecencyFilter] = useState<LibraryRecencyFilter>('all');
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
   const [inspirationBoards, setInspirationBoards] = useState<InspirationBoard[]>([]);
   const [inspirationPins, setInspirationPins] = useState<InspirationPin[]>([]);
@@ -60,12 +68,24 @@ export function OneShotLibrarySearch({
   const libraryResults = useMemo(
     () => buildLibraryResults({
       query,
+      sourceFilter,
+      outputFilter,
+      recencyFilter,
       savedBlueprints,
       inspirationBoards,
       inspirationPins,
       projects,
     }),
-    [inspirationBoards, inspirationPins, projects, query, savedBlueprints],
+    [
+      inspirationBoards,
+      inspirationPins,
+      outputFilter,
+      projects,
+      query,
+      recencyFilter,
+      savedBlueprints,
+      sourceFilter,
+    ],
   );
 
   return (
@@ -91,6 +111,47 @@ export function OneShotLibrarySearch({
           placeholder="Search blueprints, boards, and projects"
         />
       </label>
+      <div className="oneshot-library-filters" aria-label="Library filters">
+        <label>
+          <span>Source</span>
+          <select
+            value={sourceFilter}
+            onChange={(event) => setSourceFilter(event.target.value as LibrarySourceFilter)}
+          >
+            <option value="all">All sources</option>
+            <option value="Blueprint">Blueprints</option>
+            <option value="Board">Inspiration boards</option>
+            <option value="Project">Projects</option>
+          </select>
+        </label>
+        <label>
+          <span>Output</span>
+          <select
+            value={outputFilter}
+            onChange={(event) => setOutputFilter(event.target.value as LibraryOutputFilter)}
+          >
+            <option value="all">All output types</option>
+            <option value="prototype">Prototype</option>
+            <option value="deck">Deck</option>
+            <option value="template">Template</option>
+            <option value="visual-reference">Visual reference</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>
+          <span>Recent</span>
+          <select
+            value={recencyFilter}
+            onChange={(event) => setRecencyFilter(event.target.value as LibraryRecencyFilter)}
+          >
+            <option value="all">Any time</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+          </select>
+        </label>
+        <span className="oneshot-library-filter-count">{libraryResults.length} results</span>
+      </div>
       {libraryResults.length > 0 ? (
         <div className="oneshot-library-results">
           {libraryResults.map((result) => (
@@ -156,12 +217,18 @@ export function OneShotLibrarySearch({
 
 function buildLibraryResults({
   query,
+  sourceFilter,
+  outputFilter,
+  recencyFilter,
   savedBlueprints,
   inspirationBoards,
   inspirationPins,
   projects,
 }: {
   query: string;
+  sourceFilter: LibrarySourceFilter;
+  outputFilter: LibraryOutputFilter;
+  recencyFilter: LibraryRecencyFilter;
   savedBlueprints: SavedWorkflowBlueprint[];
   inspirationBoards: InspirationBoard[];
   inspirationPins: InspirationPin[];
@@ -171,6 +238,7 @@ function buildLibraryResults({
   const blueprintResults = savedBlueprints.map((blueprint) => ({
     id: blueprint.id,
     type: 'Blueprint' as const,
+    outputType: normalizeOutputType(blueprint.metadata.kind),
     title: blueprint.name,
     detail: [
       blueprint.collection ? `Collection: ${blueprint.collection}` : '',
@@ -193,6 +261,7 @@ function buildLibraryResults({
     return {
       id: board.id,
       type: 'Board' as const,
+      outputType: 'visual-reference' as const,
       title: board.title,
       detail: `${boardPins.length} pins${board.tags.length ? ` - ${board.tags.join(', ')}` : ''}`,
       action: `Create brief from ${board.title}`,
@@ -214,6 +283,7 @@ function buildLibraryResults({
   const projectResults = projects.map((project) => ({
     id: project.id,
     type: 'Project' as const,
+    outputType: normalizeOutputType(project.metadata?.kind),
     title: project.name,
     detail: [
       project.metadata?.workflowCategory,
@@ -234,6 +304,22 @@ function buildLibraryResults({
 
   return [...blueprintResults, ...boardResults, ...projectResults]
     .filter((result) => !needle || result.searchText.includes(needle))
+    .filter((result) => sourceFilter === 'all' || result.type === sourceFilter)
+    .filter((result) => outputFilter === 'all' || result.outputType === outputFilter)
+    .filter((result) => matchesRecency(result.timestamp, recencyFilter))
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, needle ? 8 : 6);
+}
+
+function normalizeOutputType(kind: ProjectKind | undefined): LibraryOutputFilter {
+  if (kind === 'prototype' || kind === 'deck' || kind === 'template' || kind === 'other') {
+    return kind;
+  }
+  return 'other';
+}
+
+function matchesRecency(timestamp: number, recency: LibraryRecencyFilter) {
+  if (recency === 'all') return true;
+  const days = recency === '7d' ? 7 : recency === '30d' ? 30 : 90;
+  return timestamp >= Date.now() - days * 24 * 60 * 60 * 1000;
 }

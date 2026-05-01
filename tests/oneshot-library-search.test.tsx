@@ -105,4 +105,54 @@ describe('OneShotLibrarySearch', () => {
       }),
     );
   });
+
+  it('filters the library by source, output type, and recent activity', () => {
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+        workflowCategory: 'Book cover production',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    const board = createInspirationBoard({
+      title: 'Cover moodboard',
+      description: 'Publishing references for a cover.',
+      tags: ['cover'],
+    });
+    createInspirationPin({
+      boardId: board.id,
+      title: 'Cover source',
+      sourceUrl: 'local/cover-source.html',
+      note: 'Use the title hierarchy.',
+      tags: ['typography'],
+    });
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Project' } });
+    expect(screen.getByText('Project archive')).toBeInTheDocument();
+    expect(screen.queryByText('OneShot Cover Run')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cover moodboard')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'all' } });
+    fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'visual-reference' } });
+    expect(screen.getByText('Cover moodboard')).toBeInTheDocument();
+    expect(screen.queryByText('OneShot Cover Run')).not.toBeInTheDocument();
+    expect(screen.queryByText('Project archive')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'all' } });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Project' } });
+    fireEvent.change(screen.getByLabelText('Recent'), { target: { value: '7d' } });
+    expect(screen.getByText('No library records match this search yet.')).toBeInTheDocument();
+  });
 });
