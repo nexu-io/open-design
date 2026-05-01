@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // the same env so /api, /artifacts, and /frames always reach the right
 // daemon instance during `next dev`.
 const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
-const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
+const DAEMON_ORIGIN = process.env.DAEMON_URL || `http://127.0.0.1:${DAEMON_PORT}`;
 
 // The regular CLI build still ships as a static export so the `od` daemon can
 // serve a single-process production build. Packaged desktop builds opt into a
