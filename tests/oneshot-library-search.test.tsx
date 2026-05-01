@@ -298,6 +298,40 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.queryByText('Pinned - Board - All outputs - Any time - "cover"')).not.toBeInTheDocument();
   });
 
+  it('adds owner and usage notes to saved Library Search views', () => {
+    vi.spyOn(window, 'prompt')
+      .mockReturnValueOnce('Cover board review')
+      .mockReturnValueOnce('James studio')
+      .mockReturnValueOnce('Use before starting CoverVision cover runs.');
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'cover' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Board' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit details for Cover board review saved Library Search view' }));
+
+    expect(window.prompt).toHaveBeenNthCalledWith(
+      2,
+      'Owner or studio context for this Library Search view',
+      '',
+    );
+    expect(window.prompt).toHaveBeenNthCalledWith(
+      3,
+      'When should this Library Search view be used?',
+      '',
+    );
+    expect(screen.getByText('Owner: James studio - Use before starting CoverVision cover runs.')).toBeInTheDocument();
+  });
+
   it('imports saved Library Search views and restores their filters', async () => {
     const packet = {
       schema: 'oneshot.library-search-views.v1',
@@ -311,6 +345,8 @@ describe('OneShotLibrarySearch', () => {
           outputFilter: 'visual-reference',
           recencyFilter: '30d',
           createdAt: 123,
+          owner: 'Publishing desk',
+          note: 'Use for incoming cover reference packets.',
           pinnedAt: 456,
         },
       ],
@@ -334,6 +370,7 @@ describe('OneShotLibrarySearch', () => {
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByText('Imported boards')).toBeInTheDocument();
     expect(screen.getByText('Pinned - Board - Visual reference - Last 30 days - "cover"')).toBeInTheDocument();
+    expect(screen.getByText('Owner: Publishing desk - Use for incoming cover reference packets.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Imported boards/ }));
     await waitFor(() => {

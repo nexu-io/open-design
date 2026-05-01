@@ -882,7 +882,12 @@ code {
   font-size: 11.5px;
 }
 
+.oneshot-library-view-pill .oneshot-library-view-context {
+  color: var(--text-soft);
+}
+
 .oneshot-library-view-pin,
+.oneshot-library-view-edit,
 .oneshot-library-view-delete {
   display: inline-flex;
   align-items: center;
@@ -903,6 +908,11 @@ code {
 .oneshot-library-view-pin:hover {
   background: var(--accent-soft);
   color: var(--accent-strong);
+}
+
+.oneshot-library-view-edit:hover {
+  background: var(--bg-muted);
+  color: var(--text);
 }
 
 .oneshot-library-view-delete:hover {

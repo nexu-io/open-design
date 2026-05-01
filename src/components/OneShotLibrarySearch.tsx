@@ -37,6 +37,8 @@ interface SavedLibraryView extends LibraryViewFilters {
   id: string;
   name: string;
   createdAt: number;
+  owner?: string;
+  note?: string;
   pinnedAt?: number;
 }
 
@@ -150,6 +152,17 @@ export function OneShotLibrarySearch({
     saveLibraryView({
       ...currentFilters,
       name: cleanedName,
+    });
+  }
+
+  function editSavedViewContext(view: SavedLibraryView) {
+    const owner = window.prompt('Owner or studio context for this Library Search view', view.owner ?? '');
+    if (owner === null) return;
+    const note = window.prompt('When should this Library Search view be used?', view.note ?? '');
+    if (note === null) return;
+    updateLibraryViewContext(view.id, {
+      owner: cleanOptionalText(owner),
+      note: cleanOptionalText(note),
     });
   }
 
@@ -302,6 +315,9 @@ export function OneShotLibrarySearch({
                 <button type="button" onClick={() => applySavedView(view)}>
                   <strong>{view.name}</strong>
                   <span>{view.pinnedAt ? `Pinned - ${summarizeSavedView(view)}` : summarizeSavedView(view)}</span>
+                  {summarizeSavedViewContext(view) ? (
+                    <span className="oneshot-library-view-context">{summarizeSavedViewContext(view)}</span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -311,6 +327,15 @@ export function OneShotLibrarySearch({
                   onClick={() => toggleLibraryViewPin(view.id)}
                 >
                   <Icon name="pin" size={11} />
+                </button>
+                <button
+                  type="button"
+                  className="oneshot-library-view-edit"
+                  aria-label={`Edit details for ${view.name} saved Library Search view`}
+                  title={`Edit details for ${view.name} saved Library Search view`}
+                  onClick={() => editSavedViewContext(view)}
+                >
+                  <Icon name="edit" size={11} />
                 </button>
                 <button
                   type="button"
@@ -414,12 +439,27 @@ function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
     ...input,
     id: `library-view-${Date.now()}-${slugify(input.name) || crypto.randomUUID()}`,
     createdAt: Date.now(),
+    owner: existing?.owner,
+    note: existing?.note,
     pinnedAt: existing?.pinnedAt,
   };
   const next = [
     view,
     ...listSavedLibraryViews().filter((item) => item.name !== input.name),
   ].slice(0, 8);
+  localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+}
+
+function updateLibraryViewContext(
+  id: string,
+  context: Pick<SavedLibraryView, 'owner' | 'note'>,
+) {
+  const next = listSavedLibraryViews().map((view) => (
+    view.id === id
+      ? { ...view, owner: context.owner, note: context.note }
+      : view
+  ));
   localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
 }
@@ -493,6 +533,8 @@ function normalizeSavedLibraryView(payload: unknown): SavedLibraryView | null {
     outputFilter,
     recencyFilter,
     createdAt: Number.isFinite(candidate.createdAt) ? Number(candidate.createdAt) : Date.now(),
+    owner: cleanOptionalText(candidate.owner),
+    note: cleanOptionalText(candidate.note),
     pinnedAt: Number.isFinite(candidate.pinnedAt) ? Number(candidate.pinnedAt) : undefined,
   };
 }
@@ -522,6 +564,19 @@ function summarizeSavedView(view: LibraryViewFilters) {
     view.query.trim() ? `"${view.query.trim()}"` : '',
   ].filter(Boolean);
   return parts.join(' - ');
+}
+
+function summarizeSavedViewContext(view: Pick<SavedLibraryView, 'owner' | 'note'>) {
+  return [
+    view.owner ? `Owner: ${view.owner}` : '',
+    view.note ?? '',
+  ].filter(Boolean).join(' - ');
+}
+
+function cleanOptionalText(value: unknown) {
+  if (typeof value !== 'string') return undefined;
+  const cleaned = value.trim();
+  return cleaned || undefined;
 }
 
 function formatOutputFilter(value: LibraryOutputFilter) {
