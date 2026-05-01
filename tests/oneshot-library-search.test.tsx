@@ -225,7 +225,7 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('Save a filter set to reuse it later.')).toBeInTheDocument();
   });
 
-  it('exports saved Library Search views as a portable JSON packet', () => {
+  it('previews and exports saved Library Search views as a portable JSON packet', () => {
     vi.spyOn(window, 'prompt').mockReturnValue('Exported cover boards');
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const createObjectURL = vi.fn(() => 'blob:oneshot-library-views');
@@ -252,7 +252,13 @@ describe('OneShotLibrarySearch', () => {
     });
     fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Board' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Export views' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview export' }));
+
+    expect(screen.getByLabelText('Export preview')).toBeInTheDocument();
+    expect(screen.getByText('1 views - 0 collections - 0 pinned')).toBeInTheDocument();
+    expect(screen.getAllByText('Exported cover boards')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download views JSON' }));
 
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalled();
@@ -457,6 +463,12 @@ describe('OneShotLibrarySearch', () => {
     fireEvent.change(screen.getByLabelText('Import views'), {
       target: { files: [file] },
     });
+
+    expect(await screen.findByText('Previewing 1 Library Search view.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Import preview')).toBeInTheDocument();
+    expect(screen.queryByText('Imported boards')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
 
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByText('Imported boards')).toBeInTheDocument();

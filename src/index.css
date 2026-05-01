@@ -828,6 +828,63 @@ code {
   color: var(--red);
 }
 
+.oneshot-library-transfer-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.oneshot-library-transfer-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.oneshot-library-transfer-preview-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.oneshot-library-transfer-preview-head > div:last-child {
+  flex-direction: row;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.oneshot-library-transfer-preview-head strong {
+  font-size: 12.5px;
+}
+
+.oneshot-library-transfer-preview-head span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.oneshot-library-transfer-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.oneshot-library-transfer-preview-list span {
+  max-width: 220px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .oneshot-library-view-list {
   display: flex;
   flex-direction: column;
@@ -3464,6 +3521,21 @@ code {
   .oneshot-library-views-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .oneshot-library-transfer-preview-head {
+    flex-direction: column;
+  }
+
+  .oneshot-library-transfer-preview-head > div:last-child {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .oneshot-library-transfer-preview-head button,
+  .oneshot-library-transfer-preview-list span {
+    width: 100%;
+    max-width: none;
   }
 
   .oneshot-library-view-actions {

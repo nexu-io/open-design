@@ -62,6 +62,8 @@ export function OneShotLibrarySearch({
   const [outputFilter, setOutputFilter] = useState<LibraryOutputFilter>('all');
   const [recencyFilter, setRecencyFilter] = useState<LibraryRecencyFilter>('all');
   const [savedViews, setSavedViews] = useState<SavedLibraryView[]>([]);
+  const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
+  const [pendingImportViews, setPendingImportViews] = useState<SavedLibraryView[] | null>(null);
   const [viewImportStatus, setViewImportStatus] = useState('');
   const [viewImportError, setViewImportError] = useState('');
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
@@ -197,11 +199,24 @@ export function OneShotLibrarySearch({
     URL.revokeObjectURL(url);
   }
 
+  function confirmViewImport() {
+    if (!pendingImportViews) return;
+    const imported = importLibraryViews({
+      schema: SAVED_VIEWS_SCHEMA,
+      exportedAt: Date.now(),
+      views: pendingImportViews,
+    });
+    setPendingImportViews(null);
+    setViewImportError('');
+    setViewImportStatus(`Imported ${imported.length} Library Search view${imported.length === 1 ? '' : 's'}.`);
+  }
+
   function handleViewImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     setViewImportStatus('');
     setViewImportError('');
+    setPendingImportViews(null);
     if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
       setViewImportError('Choose a OneShot Library Search views JSON file.');
       event.target.value = '';
@@ -211,12 +226,13 @@ export function OneShotLibrarySearch({
     reader.onload = () => {
       try {
         const text = typeof reader.result === 'string' ? reader.result : '';
-        const imported = importLibraryViews(JSON.parse(text));
-        if (imported.length === 0) {
+        const packet = normalizeLibraryViewsExport(JSON.parse(text));
+        if (!packet) {
           setViewImportError('This file is not a valid OneShot Library Search views export.');
           return;
         }
-        setViewImportStatus(`Imported ${imported.length} Library Search view${imported.length === 1 ? '' : 's'}.`);
+        setPendingImportViews(packet.views);
+        setViewImportStatus(`Previewing ${packet.views.length} Library Search view${packet.views.length === 1 ? '' : 's'}.`);
       } catch {
         setViewImportError('This Library Search views file could not be imported.');
       } finally {
@@ -304,10 +320,10 @@ export function OneShotLibrarySearch({
             <button
               type="button"
               className="secondary"
-              onClick={exportSavedViews}
+              onClick={() => setExportPreviewOpen(true)}
               disabled={savedViews.length === 0}
             >
-              Export views
+              Preview export
             </button>
             <label className="oneshot-library-view-import">
               <span>Import views</span>
@@ -320,6 +336,29 @@ export function OneShotLibrarySearch({
         ) : null}
         {viewImportError ? (
           <small className="oneshot-library-view-status error" role="alert">{viewImportError}</small>
+        ) : null}
+        {exportPreviewOpen ? (
+          <LibraryViewTransferPreview
+            title="Export preview"
+            views={savedViews}
+            primaryAction="Download views JSON"
+            onPrimaryAction={exportSavedViews}
+            secondaryAction="Close preview"
+            onSecondaryAction={() => setExportPreviewOpen(false)}
+          />
+        ) : null}
+        {pendingImportViews ? (
+          <LibraryViewTransferPreview
+            title="Import preview"
+            views={pendingImportViews}
+            primaryAction="Import previewed views"
+            onPrimaryAction={confirmViewImport}
+            secondaryAction="Cancel import"
+            onSecondaryAction={() => {
+              setPendingImportViews(null);
+              setViewImportStatus('');
+            }}
+          />
         ) : null}
         {savedViews.length > 0 ? (
           <div className="oneshot-library-view-list">
@@ -446,6 +485,54 @@ export function OneShotLibrarySearch({
         </div>
       )}
     </section>
+  );
+}
+
+function LibraryViewTransferPreview({
+  title,
+  views,
+  primaryAction,
+  onPrimaryAction,
+  secondaryAction,
+  onSecondaryAction,
+}: {
+  title: string;
+  views: SavedLibraryView[];
+  primaryAction: string;
+  onPrimaryAction: () => void;
+  secondaryAction: string;
+  onSecondaryAction: () => void;
+}) {
+  const collections = new Set(views.map((view) => view.collection).filter(Boolean));
+  const pinnedCount = views.filter((view) => view.pinnedAt).length;
+  return (
+    <div className="oneshot-library-transfer-preview" aria-label={title}>
+      <div className="oneshot-library-transfer-preview-head">
+        <div>
+          <strong>{title}</strong>
+          <span>
+            {views.length} views - {collections.size} collections - {pinnedCount} pinned
+          </span>
+        </div>
+        <div>
+          <button type="button" className="secondary" onClick={onSecondaryAction}>
+            {secondaryAction}
+          </button>
+          <button type="button" onClick={onPrimaryAction}>
+            {primaryAction}
+          </button>
+        </div>
+      </div>
+      <div className="oneshot-library-transfer-preview-list">
+        {views.slice(0, 6).map((view) => (
+          <span key={view.id}>
+            {view.name}
+            {view.collection ? ` - ${view.collection}` : ''}
+          </span>
+        ))}
+        {views.length > 6 ? <span>+{views.length - 6} more views</span> : null}
+      </div>
+    </div>
   );
 }
 
