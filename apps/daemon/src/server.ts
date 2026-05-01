@@ -93,6 +93,7 @@ import {
 import { loadTenantRegistry, RegistryBootError } from './tenants/registry-loader.js';
 import { tenantResolverMiddleware } from './tenants/resolver.js';
 import { devTenantBypassMiddleware } from './dev-tenant-bypass.js';
+import { createHealthzHandler } from './healthz.js';
 import {
   getTenantContextOptional,
   runWithTenantContext,
@@ -561,6 +562,26 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     app.get('/api/health', (_req, res) => {
       res.json({ ok: true, version: '0.1.0' });
     });
+
+    // Spec 101 T044 — `/healthz` is the Caddy + external load-balancer probe.
+    // Mounted BEFORE the tenant resolver so Caddy can hit it without a tenant
+    // subdomain or Clerk session. Reports degraded status if any of:
+    //   - tenant registry is empty,
+    //   - LUMINA_GATEWAY_URL HEAD probe fails,
+    //   - Vercel API GET /v2/user fails.
+    // Bind the registry size at handler-construction time — the snapshot is
+    // immutable for the daemon's lifetime.
+    {
+      const registrySize = registry.size;
+      app.get(
+        '/healthz',
+        createHealthzHandler({
+          getRegistrySize: () => registrySize,
+          luminaGatewayUrl: process.env.LUMINA_GATEWAY_URL ?? '',
+          vercelApiToken: process.env.VERCEL_API_TOKEN ?? '',
+        }),
+      );
+    }
 
     // Composed tenant pipeline. The dev-mode short-circuit (NEVER in prod)
     // runs first. When it activates (CLERK_DEV_BYPASS=true, dev env, valid

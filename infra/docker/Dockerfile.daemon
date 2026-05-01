@@ -1,0 +1,89 @@
+# syntax=docker/dockerfile:1.7
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Open-Design daemon — multi-stage container image
+#
+# Stage 1 (builder): installs full pnpm workspace deps, runs the daemon's
+# TypeScript build (tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json), then
+# prunes to production-only deps with `pnpm deploy`.
+#
+# Stage 2 (runtime): copies the pruned, production-ready deploy directory and
+# runs the compiled CLI as a non-root user.
+#
+# Pinned to node:24-alpine to match `engines.node: "~24"` in
+# /tmp/lumina-2.0.0-build/apps/daemon/package.json. The pnpm version is pinned
+# via Corepack to match the root packageManager field
+# (`pnpm@10.33.2`).
+# ──────────────────────────────────────────────────────────────────────────────
+
+ARG NODE_VERSION=24
+ARG PNPM_VERSION=10.33.2
+
+# ─── Stage 1: builder ─────────────────────────────────────────────────────────
+FROM node:${NODE_VERSION}-alpine AS builder
+
+ARG PNPM_VERSION
+
+# build-base + python3 are required to compile better-sqlite3 native bindings.
+RUN apk add --no-cache build-base python3 \
+    && corepack enable \
+    && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+WORKDIR /workspace
+
+# Copy workspace manifest + lockfile first so dependency installation is cached
+# independently of source-only changes.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY apps/daemon/package.json ./apps/daemon/package.json
+COPY packages ./packages
+
+# Now copy daemon sources.
+COPY apps/daemon ./apps/daemon
+
+# Install the entire workspace (frozen lockfile) and compile the daemon.
+RUN pnpm install --frozen-lockfile \
+    && pnpm --filter @open-design/daemon run build
+
+# Produce a self-contained, production-only deploy directory at /deploy.
+# `pnpm deploy` resolves workspace:* protocol references, copies only the
+# files declared in `apps/daemon/package.json#files`, and installs prod deps.
+RUN pnpm --filter @open-design/daemon --prod deploy /deploy
+
+# ─── Stage 2: runtime ─────────────────────────────────────────────────────────
+FROM node:${NODE_VERSION}-alpine AS runtime
+
+# `curl` is required by the HEALTHCHECK below.
+# `tini` keeps PID 1 sane for signal handling and zombie reaping.
+RUN apk add --no-cache curl tini
+
+WORKDIR /app
+
+# The official node:*-alpine image already ships a non-root `node` user
+# (uid/gid 1000). We create /data with ownership for that user so bind-mounted
+# host volumes can be written without escalation.
+RUN mkdir -p /data /etc/opendesign \
+    && chown -R node:node /app /data
+
+# Copy the pruned deploy directory from the builder.
+COPY --from=builder --chown=node:node /deploy ./
+
+USER node
+
+# Daemon listens on $OD_PORT (default 8080 in container; the daemon CLI also
+# honours OD_PORT). Caddy reverse-proxies to 127.0.0.1:<DAEMON_PORT>.
+ENV NODE_ENV=production \
+    OD_PORT=8080 \
+    OD_HOST=0.0.0.0 \
+    TENANT_REGISTRY_PATH=/etc/opendesign/tenant-registry.yaml
+
+EXPOSE 8080
+
+# /data: tenant project files (bind-mounted from host).
+# /etc/opendesign/tenant-registry.yaml is bind-mounted read-only at runtime
+# (NOT declared as VOLUME — host file mount, not container-managed volume).
+VOLUME ["/data"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/healthz || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--", "node", "dist/cli.js", "--no-open"]

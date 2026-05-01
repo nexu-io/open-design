@@ -1,0 +1,37 @@
+# Caddyfile.opendesign
+#
+# Spec: 101-open-design-platform (Track 3 — Caddy wildcard cert via Cloudflare DNS-01)
+#
+# Terminates `*.opendesign.holalumina.com` with a single auto-renewing wildcard
+# certificate via the ACME DNS-01 challenge against Cloudflare. Reserved
+# subdomains are rejected at the proxy layer (404) before requests reach the
+# daemon; defense-in-depth enforcement also lives in the daemon.
+#
+# Required environment on the Caddy host:
+#   CLOUDFLARE_API_TOKEN  zone-scoped read+write token for holalumina.com
+#
+# Required Caddy build:
+#   caddy + caddy-dns/cloudflare module (xcaddy build with the plugin).
+
+*.opendesign.holalumina.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	# Reserved subdomains — never reach the daemon. Source of truth: research.md
+	# Track 3 + plan.md "Reserved subdomains". New entries require a constitution
+	# amendment.
+	@reserved host api.opendesign.holalumina.com www.opendesign.holalumina.com admin.opendesign.holalumina.com status.opendesign.holalumina.com docs.opendesign.holalumina.com health.opendesign.holalumina.com metrics.opendesign.holalumina.com
+	handle @reserved {
+		respond 404
+	}
+
+	# Forward to the open-design daemon on the loopback interface. The daemon
+	# resolves the tenant from `X-Forwarded-Host`, so we explicitly forward the
+	# original Host header (Caddy preserves Host by default for reverse_proxy,
+	# but the tenant resolver reads `X-Forwarded-Host` for clarity and parity
+	# with multi-hop deployments).
+	reverse_proxy 127.0.0.1:8080 {
+		header_up X-Forwarded-Host {host}
+	}
+}
