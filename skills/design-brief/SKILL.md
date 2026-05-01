@@ -47,7 +47,7 @@ Parse a structured design brief into a concrete DESIGN.md and optional visual pr
 
 The 8 dimensions in this skill are derived from analysis of the 71 design systems bundled with Open Design. Every DESIGN.md in `design-systems/` resolves at minimum: color palette, accent, typography, display font, layout model, and component style. We distilled these into 8 orthogonal dimensions that cover the decisions a designer makes before any pixel is placed. Mood and density were added because they are the two most common sources of ambiguity in natural language briefs ("make it clean" means different things to different people).
 
-Dimensions intentionally excluded from the brief level: animation timing, responsive breakpoints, and accessibility contrast. These are enforced at the template level by individual skills (e.g., `saas-landing` handles its own breakpoint logic) and in the Responsive Behavior / Do's and Don'ts sections of the generated DESIGN.md.
+Dimensions intentionally excluded from the brief level: animation timing, responsive strategy, and accessibility contrast. These are enforced at the template level by individual skills (e.g., `saas-landing` handles its own responsive logic), though the generated DESIGN.md includes sensible breakpoint defaults for downstream consumption.
 
 ## 1. Accept input
 
@@ -109,16 +109,16 @@ Every design brief must resolve these 8 dimensions. If any are missing from the 
 
 The values listed below are representative, not exhaustive. The agent may accept semantically clear values not in this table (e.g., `palette=warm_earth` or `mood=retro_tech` are valid). If a value is ambiguous or unrecognizable, prompt the user for clarification rather than guessing.
 
-| Dimension | Key | Example values |
-|-----------|-----|---------------|
-| Color palette | `palette` | navy_and_white, earth_tones, monochrome_dark, light_clean |
-| Accent color | `accent` | coral, electric_blue, emerald, muted_sage |
-| Body typography | `typography` | inter, system_ui, dm_sans, georgia |
-| Display typography | `display` | space_grotesk, clash_display, same_as_body, playfair |
-| Layout model | `layout` | single_column, two_column, asymmetric |
-| Mood | `mood` | professional_minimal, playful, brutalist, editorial |
-| Density | `density` | compact, balanced, spacious |
-| Constraints | `exclude` | animations, gradients, stock_photos, carousel |
+| # | Dimension | Key | Example values |
+|---|-----------|-----|---------------|
+| 1 | Color palette | `palette` | navy_and_white, earth_tones, monochrome_dark, light_clean |
+| 2 | Accent color | `accent` | coral, electric_blue, emerald, muted_sage |
+| 3 | Body typography | `typography` | inter, system_ui, dm_sans, georgia |
+| 4 | Display typography | `display` | space_grotesk, clash_display, same_as_body, playfair |
+| 5 | Layout model | `layout` | single_column, two_column, asymmetric |
+| 6 | Mood | `mood` | professional_minimal, playful, brutalist, editorial |
+| 7 | Density | `density` | compact, balanced, spacious |
+| 8 | Constraints | `exclude` | animations, gradients, stock_photos, carousel |
 
 ### 2.1 Symbolic → concrete token resolution
 
@@ -164,7 +164,7 @@ If mood is also unspecified, all defaults fall back to the safe neutral set: `pa
 
 ## 3. Generate DESIGN.md
 
-This skill generates a new DESIGN.md from scratch based on the resolved brief dimensions. If a DESIGN.md already exists in the working directory, the agent should ask the user whether to overwrite or merge before proceeding.
+This skill generates a new DESIGN.md from scratch based on the resolved brief dimensions. If a DESIGN.md already exists in the working directory, the agent should ask the user whether to overwrite or skip.
 
 Produce a DESIGN.md following Open Design's 9-section convention. All color hex values, font stacks, and spacing values must come from the resolved tokens in Section 2.1 — do not invent values outside the resolution table.
 
