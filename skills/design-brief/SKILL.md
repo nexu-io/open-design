@@ -12,7 +12,7 @@ triggers:
   - "ilang brief"
   - "structured brief"
 od:
-  mode: prototype
+  mode: design-system
   platform: desktop
   scenario: planning
   preview:
@@ -20,9 +20,9 @@ od:
     entry: brief-preview.html
     reload: debounce-100
   design_system:
-    requires: true
+    requires: false
     generates: true
-    sections: [color, typography, layout, components, responsive, dos-and-donts]
+    sections: [visual-theme, color-palette, typography, component-stylings, layout, depth-elevation, dos-and-donts, responsive, agent-prompt-guide]
   inputs:
     - name: brief
       type: string
@@ -171,7 +171,12 @@ Produce a DESIGN.md following Open Design's 9-section convention. All color hex 
 ```markdown
 # [Project Name] Design System
 
-## Color
+## Visual Theme & Atmosphere
+- Mood: [resolved from mood]
+- Feel: [derived from mood — e.g., professional_minimal → "Clean, confident, restrained"]
+- References: [if mood=editorial → "Magazine layouts, Monocle, Cereal"; if mood=brutalist → "Exposed structure, raw typography"]
+
+## Color Palette & Roles
 - Background: [resolved from palette]
 - Surface: [resolved from palette]
 - Text primary: [resolved from palette]
@@ -179,12 +184,17 @@ Produce a DESIGN.md following Open Design's 9-section convention. All color hex 
 - Accent: [resolved from accent]
 - Accent hover: [resolved from accent]
 
-## Typography
+## Typography Rules
 - Display: [resolved from display], 700, clamp(2rem, 5vw, 3.5rem)
 - Body: [resolved from typography], 400, 1rem/1.6
 - Mono: JetBrains Mono, 400, 0.875rem
 
-## Layout
+## Component Stylings
+- Buttons: [if mood=playful → "rounded-full", otherwise → "rounded-md"], accent bg, contrast text
+- Cards: surface bg, subtle border, 12px radius
+- Inputs: [if mood=brutalist → "thick border", otherwise → "transparent bg, bottom border"]
+
+## Layout Principles
 - Max width: 1200px
 - Grid: [resolved from layout]
 - Section spacing: [resolved from density]
@@ -194,18 +204,6 @@ Produce a DESIGN.md following Open Design's 9-section convention. All color hex 
 - Shadows: [if mood=brutalist → "hard 4px offset", if mood=professional_minimal → "none", otherwise → "subtle sm"]
 - Borders: 1px solid [derived from palette, 8% opacity of text color]
 
-## Components
-- Buttons: [if mood=playful → "rounded-full", otherwise → "rounded-md"], accent bg, contrast text
-- Cards: surface bg, subtle border, 12px radius
-- Inputs: [if mood=brutalist → "thick border", otherwise → "transparent bg, bottom border"]
-
-## Responsive Behavior
-- Breakpoints: 640px (sm), 768px (md), 1024px (lg), 1280px (xl)
-- Mobile: single column, stack all sections vertically
-- Tablet: allow 2-column feature grids
-- Desktop: full layout with max-width constraint
-- Images: fluid, max-width 100%, maintain aspect ratio
-
 ## Do's and Don'ts
 - DO use the declared color tokens exclusively.
 - DO maintain consistent section spacing.
@@ -213,6 +211,13 @@ Produce a DESIGN.md following Open Design's 9-section convention. All color hex 
 - DON'T invent colors outside the palette.
 - DON'T add decorative shadows unless Depth & Elevation allows them.
 - DON'T use more than 2 display/body typefaces (monospace is a utility face for code and data — it does not count toward this limit).
+
+## Responsive Behavior
+- Breakpoints: 640px (sm), 768px (md), 1024px (lg), 1280px (xl)
+- Mobile: single column, stack all sections vertically
+- Tablet: allow 2-column feature grids
+- Desktop: full layout with max-width constraint
+- Images: fluid, max-width 100%, maintain aspect ratio
 
 ## Agent Prompt Guide
 - Do NOT invent colors outside this palette.
