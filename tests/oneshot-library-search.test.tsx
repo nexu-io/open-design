@@ -568,6 +568,7 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByLabelText('Library Search transfer history')).toBeInTheDocument();
     expect(screen.getByText('Imported 1 of 1 Library Search view')).toBeInTheDocument();
     expect(screen.getByText('Mode: Replace - 1 conflict - 1 replace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Replay import' })).toBeInTheDocument();
     expect(screen.getByText('Collection: Publishing')).toBeInTheDocument();
     expect(screen.queryByText('Collection: Sales')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Shared view/ }));
@@ -623,11 +624,56 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('Imported 2 of 3 Library Search views')).toBeInTheDocument();
     expect(screen.getByText('Mode: Rename - 1 conflict - 1 create, 1 rename, 1 skip')).toBeInTheDocument();
     expect(screen.getByText('Exported 2 Library Search views')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Replay import' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
 
     expect(screen.queryByLabelText('Library Search transfer history')).not.toBeInTheDocument();
     expect(localStorage.getItem('oneshot:library-search-transfer-history')).toBeNull();
+  });
+
+  it('replays an import history entry into the import preview', async () => {
+    localStorage.setItem('oneshot:library-search-transfer-history', JSON.stringify([
+      {
+        id: 'history-import-replay',
+        direction: 'import',
+        createdAt: 300,
+        viewCount: 1,
+        importedCount: 1,
+        conflictCount: 0,
+        conflictMode: 'replace',
+        actions: { create: 1 },
+        replayViews: [
+          {
+            id: 'replay-view',
+            name: 'Replay boards',
+            query: 'cover',
+            sourceFilter: 'Board',
+            outputFilter: 'visual-reference',
+            recencyFilter: '30d',
+            collection: 'Publishing',
+            createdAt: 100,
+          },
+        ],
+      },
+    ]));
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replay import' }));
+
+    expect(await screen.findByText('Replaying 1 Library Search view from transfer history.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Import preview')).toBeInTheDocument();
+    expect(screen.getByLabelText('Import conflicts')).toHaveValue('replace');
+    expect(screen.getByText('Replay boards - Publishing')).toBeInTheDocument();
+    expect(screen.getByText('Create')).toBeInTheDocument();
+    expect(screen.getByText('No saved view')).toBeInTheDocument();
   });
 
   it('audits and renames duplicate Library Search view names inside one import packet', async () => {

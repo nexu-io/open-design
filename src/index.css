@@ -1030,13 +1030,27 @@ code {
 
 .oneshot-library-transfer-history-list article {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
+}
+
+.oneshot-library-transfer-history-list article > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.oneshot-library-transfer-history-list article > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .oneshot-library-transfer-history-list strong {
@@ -3728,9 +3742,14 @@ code {
   }
 
   .oneshot-library-transfer-history-head button,
+  .oneshot-library-transfer-history-list article > button,
   .oneshot-library-transfer-history-list span {
     width: 100%;
     max-width: none;
+  }
+
+  .oneshot-library-transfer-history-list article {
+    flex-direction: column;
   }
 
   .oneshot-library-view-actions {
