@@ -6,10 +6,10 @@
 //      tar -xzf /tmp/getdesign.tgz -C /tmp
 //   2) node --experimental-strip-types scripts/sync-design-systems.ts [/tmp/package/templates]
 //
-// The script re-creates each brand's design-systems/<slug>/DESIGN.md with a
-// `> Category: <name>` line inserted after the H1, mapped from the
-// awesome-design-md README. Hand-authored systems (default, warm-editorial)
-// are left untouched.
+// Extra flags:
+//   --dry-run      Preview changes without writing files
+//   --brand <slug> Sync only one brand
+//   --manifest     Generate sync-manifest.json
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -25,16 +25,158 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const SRC = process.argv[2] || '/tmp/package/templates';
 
-const CATEGORY = {
-  // AI & LLM
-  claude: 'AI & LLM', cohere: 'AI & LLM', elevenlabs: 'AI & LLM',
-  minimax: 'AI & LLM', 'mistral.ai': 'AI & LLM', ollama: 'AI & LLM',
-  'opencode.ai': 'AI & LLM', replicate: 'AI & LLM', runwayml: 'AI & LLM',
-  'together.ai': 'AI & LLM', voltagent: 'AI & LLM', 'x.ai': 'AI & LLM',
-  // Developer Tools
-  cursor: 'Developer Tools', expo: 'Developer Tools', lovable: 'Developer Tools',
-  raycast: 'Developer Tools', superhuman: 'Developer Tools',
-  vercel: 'Developer Tools', warp: 'Developer Tools',
+const args = process.argv.slice(3);
+
+const hasFlag = (flag: string) => args.includes(flag);
+
+const getArgValue = (flag: string) => {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+
+const DRY_RUN = hasFlag('--dry-run');
+const FILTER = getArgValue('--brand');
+const EXPORT_MANIFEST = hasFlag('--manifest');
+
+const generated: ManifestEntry[] = [];
+
+const CATEGORY: Record<string, string> = {
+  claude: 'AI & LLM',
+  cohere: 'AI & LLM',
+  elevenlabs: 'AI & LLM',
+  minimax: 'AI & LLM',
+  'mistral.ai': 'AI & LLM',
+  ollama: 'AI & LLM',
+  'opencode.ai': 'AI & LLM',
+  replicate: 'AI & LLM',
+  runwayml: 'AI & LLM',
+  'together.ai': 'AI & LLM',
+  voltagent: 'AI & LLM',
+  'x.ai': 'AI & LLM',
+
+  cursor: 'Developer Tools',
+  expo: 'Developer Tools',
+  lovable: 'Developer Tools',
+  raycast: 'Developer Tools',
+  superhuman: 'Developer Tools',
+
+  stripe: 'Fintech',
+  paypal: 'Fintech',
+
+  spotify: 'Media',
+  netflix: 'Media',
+
+  notion: 'Productivity',
+  linear: 'Productivity',
+
+  nike: 'Retail',
+  adidas: 'Retail'
+};
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w.-]/g, '');
+
+const saveFile = (target: string, content: string) => {
+  if (DRY_RUN) {
+    console.log(`[dry-run] ${target}`);
+    return;
+  }
+
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, content, 'utf8');
+};
+
+const insertCategory = (markdown: string, category: string) => {
+  const lines = markdown.split('\n');
+
+  if (!lines.length) return markdown;
+
+  if (lines[0].startsWith('# ')) {
+    lines.splice(1, 0, '', `> Category: ${category}`, '');
+    return lines.join('\n');
+  }
+
+  return `> Category: ${category}\n\n${markdown}`;
+};
+
+const parseTemplates = (): ManifestEntry[] => {
+  const manifestPath = path.join(SRC, 'manifest.json');
+
+  try {
+    const raw = readFileSync(manifestPath, 'utf8');
+    const data = JSON.parse(raw);
+
+    if (!Array.isArray(data)) return [];
+
+    return data.map((item: any) => ({
+      brand: item.brand || slugify(item.name || 'unknown'),
+      file: item.file || `${item.brand || 'unknown'}.md`,
+      description: item.description || ''
+    }));
+  } catch {
+    return [];
+  }
+};
+
+const entries = parseTemplates();
+
+if (!entries.length) {
+  console.log('No templates found.');
+  process.exit(0);
+}
+
+for (const entry of entries) {
+  if (FILTER && entry.brand !== FILTER) continue;
+
+  if (entry.brand === 'default' || entry.brand === 'warm-editorial') {
+    console.log(`Skipped hand-authored: ${entry.brand}`);
+    continue;
+  }
+
+  const inputFile = path.join(SRC, entry.file);
+
+  let markdown = '';
+
+  try {
+    markdown = readFileSync(inputFile, 'utf8');
+  } catch {
+    console.log(`Missing source: ${inputFile}`);
+    continue;
+  }
+
+  const category = CATEGORY[entry.brand] || 'General';
+  const finalMarkdown = insertCategory(markdown, category);
+
+  const outputFile = path.join(
+    ROOT,
+    'design-systems',
+    slugify(entry.brand),
+    'DESIGN.md'
+  );
+
+  saveFile(outputFile, finalMarkdown);
+
+  generated.push({
+    brand: entry.brand,
+    file: outputFile,
+    description: entry.description
+  });
+}
+
+if (EXPORT_MANIFEST) {
+  const manifestOut = path.join(ROOT, 'sync-manifest.json');
+  saveFile(manifestOut, JSON.stringify(generated, null, 2));
+}
+
+console.log(`Synced ${generated.length} design systems`);
+
+if (FILTER) {
+  console.log(`Filtered brand: ${FILTER}`);
+}  vercel: 'Developer Tools', warp: 'Developer Tools',
   // Backend & Data
   clickhouse: 'Backend & Data', composio: 'Backend & Data',
   hashicorp: 'Backend & Data', mongodb: 'Backend & Data',
