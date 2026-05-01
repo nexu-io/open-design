@@ -18,6 +18,7 @@ export function AppChromeHeader({ actions, children, onBack, backLabel }: Props)
       <div className="app-chrome-traffic-space" aria-hidden />
       <div className="app-chrome-brand" aria-label={t('app.brand')}>
         <span className="app-chrome-mark" aria-hidden>
+          {/* decorative, parent has aria-label */}
           <img src="/app-icon.svg" alt="" className="brand-mark-img" draggable={false} />
         </span>
         <span className="app-chrome-name">{t('app.brand')}</span>
