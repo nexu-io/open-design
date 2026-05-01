@@ -25,6 +25,21 @@ type LibrarySourceFilter = 'all' | 'Blueprint' | 'Board' | 'Project';
 type LibraryOutputFilter = 'all' | 'prototype' | 'deck' | 'template' | 'visual-reference' | 'other';
 type LibraryRecencyFilter = 'all' | '7d' | '30d' | '90d';
 
+interface LibraryViewFilters {
+  query: string;
+  sourceFilter: LibrarySourceFilter;
+  outputFilter: LibraryOutputFilter;
+  recencyFilter: LibraryRecencyFilter;
+}
+
+interface SavedLibraryView extends LibraryViewFilters {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+const SAVED_VIEWS_KEY = 'oneshot:library-search-views';
+
 export function OneShotLibrarySearch({
   projects,
   onCreateProject,
@@ -34,6 +49,7 @@ export function OneShotLibrarySearch({
   const [sourceFilter, setSourceFilter] = useState<LibrarySourceFilter>('all');
   const [outputFilter, setOutputFilter] = useState<LibraryOutputFilter>('all');
   const [recencyFilter, setRecencyFilter] = useState<LibraryRecencyFilter>('all');
+  const [savedViews, setSavedViews] = useState<SavedLibraryView[]>([]);
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
   const [inspirationBoards, setInspirationBoards] = useState<InspirationBoard[]>([]);
   const [inspirationPins, setInspirationPins] = useState<InspirationPin[]>([]);
@@ -48,6 +64,19 @@ export function OneShotLibrarySearch({
     return () => {
       window.removeEventListener('oneshot:blueprints-changed', refreshSavedBlueprints);
       window.removeEventListener('storage', refreshSavedBlueprints);
+    };
+  }, []);
+
+  useEffect(() => {
+    function refreshSavedViews() {
+      setSavedViews(listSavedLibraryViews());
+    }
+    refreshSavedViews();
+    window.addEventListener('oneshot:library-views-changed', refreshSavedViews);
+    window.addEventListener('storage', refreshSavedViews);
+    return () => {
+      window.removeEventListener('oneshot:library-views-changed', refreshSavedViews);
+      window.removeEventListener('storage', refreshSavedViews);
     };
   }, []);
 
@@ -87,6 +116,31 @@ export function OneShotLibrarySearch({
       sourceFilter,
     ],
   );
+
+  const currentFilters: LibraryViewFilters = {
+    query,
+    sourceFilter,
+    outputFilter,
+    recencyFilter,
+  };
+
+  function applySavedView(view: SavedLibraryView) {
+    setQuery(view.query);
+    setSourceFilter(view.sourceFilter);
+    setOutputFilter(view.outputFilter);
+    setRecencyFilter(view.recencyFilter);
+  }
+
+  function saveCurrentView() {
+    const fallbackName = buildSavedViewName(currentFilters);
+    const name = window.prompt('Name this Library Search view', fallbackName);
+    const cleanedName = name?.trim();
+    if (!cleanedName) return;
+    saveLibraryView({
+      ...currentFilters,
+      name: cleanedName,
+    });
+  }
 
   return (
     <section className="oneshot-library-search" aria-label="OneShot library search">
@@ -152,6 +206,39 @@ export function OneShotLibrarySearch({
         </label>
         <span className="oneshot-library-filter-count">{libraryResults.length} results</span>
       </div>
+      <div className="oneshot-library-views" aria-label="Saved Library Search views">
+        <div className="oneshot-library-views-head">
+          <span>Saved views</span>
+          <button type="button" className="secondary" onClick={saveCurrentView}>
+            Save current view
+          </button>
+        </div>
+        {savedViews.length > 0 ? (
+          <div className="oneshot-library-view-list">
+            {savedViews.map((view) => (
+              <div key={view.id} className="oneshot-library-view-pill">
+                <button type="button" onClick={() => applySavedView(view)}>
+                  <strong>{view.name}</strong>
+                  <span>{summarizeSavedView(view)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="oneshot-library-view-delete"
+                  aria-label={`Delete ${view.name} saved Library Search view`}
+                  title={`Delete ${view.name} saved Library Search view`}
+                  onClick={() => deleteLibraryView(view.id)}
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="oneshot-library-view-empty">
+            Save a filter set to reuse it later.
+          </div>
+        )}
+      </div>
       {libraryResults.length > 0 ? (
         <div className="oneshot-library-results">
           {libraryResults.map((result) => (
@@ -213,6 +300,80 @@ export function OneShotLibrarySearch({
       )}
     </section>
   );
+}
+
+function listSavedLibraryViews(): SavedLibraryView[] {
+  try {
+    const raw = localStorage.getItem(SAVED_VIEWS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SavedLibraryView[];
+    return Array.isArray(parsed)
+      ? parsed
+          .filter((view) => view && typeof view.id === 'string' && typeof view.name === 'string')
+          .sort((a, b) => b.createdAt - a.createdAt)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
+  const view: SavedLibraryView = {
+    ...input,
+    id: `library-view-${Date.now()}-${slugify(input.name) || crypto.randomUUID()}`,
+    createdAt: Date.now(),
+  };
+  const next = [
+    view,
+    ...listSavedLibraryViews().filter((item) => item.name !== input.name),
+  ].slice(0, 8);
+  localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+}
+
+function deleteLibraryView(id: string) {
+  const next = listSavedLibraryViews().filter((view) => view.id !== id);
+  localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+}
+
+function buildSavedViewName(filters: LibraryViewFilters) {
+  const parts = [
+    filters.sourceFilter === 'all' ? '' : filters.sourceFilter,
+    filters.outputFilter === 'all' ? '' : formatOutputFilter(filters.outputFilter),
+    filters.recencyFilter === 'all' ? '' : formatRecencyFilter(filters.recencyFilter),
+    filters.query.trim() || '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(' / ') : 'Library view';
+}
+
+function summarizeSavedView(view: LibraryViewFilters) {
+  const parts = [
+    view.sourceFilter === 'all' ? 'All sources' : view.sourceFilter,
+    view.outputFilter === 'all' ? 'All outputs' : formatOutputFilter(view.outputFilter),
+    view.recencyFilter === 'all' ? 'Any time' : formatRecencyFilter(view.recencyFilter),
+    view.query.trim() ? `"${view.query.trim()}"` : '',
+  ].filter(Boolean);
+  return parts.join(' - ');
+}
+
+function formatOutputFilter(value: LibraryOutputFilter) {
+  if (value === 'visual-reference') return 'Visual reference';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatRecencyFilter(value: LibraryRecencyFilter) {
+  if (value === '7d') return 'Last 7 days';
+  if (value === '30d') return 'Last 30 days';
+  if (value === '90d') return 'Last 90 days';
+  return 'Any time';
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function buildLibraryResults({

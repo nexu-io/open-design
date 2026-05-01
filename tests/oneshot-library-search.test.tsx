@@ -155,4 +155,73 @@ describe('OneShotLibrarySearch', () => {
     fireEvent.change(screen.getByLabelText('Recent'), { target: { value: '7d' } });
     expect(screen.getByText('No library records match this search yet.')).toBeInTheDocument();
   });
+
+  it('saves, applies, and deletes reusable Library Search views', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Cover board review');
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+        workflowCategory: 'Book cover production',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    const board = createInspirationBoard({
+      title: 'Cover moodboard',
+      description: 'Publishing references for a cover.',
+      tags: ['cover'],
+    });
+    createInspirationPin({
+      boardId: board.id,
+      title: 'Cover source',
+      sourceUrl: 'local/cover-source.html',
+      note: 'Use the title hierarchy.',
+      tags: ['typography'],
+    });
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'moodboard' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Board' } });
+    fireEvent.change(screen.getByLabelText('Recent'), { target: { value: '30d' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
+
+    expect(window.prompt).toHaveBeenCalledWith(
+      'Name this Library Search view',
+      'Board / Last 30 days / moodboard',
+    );
+    expect(screen.getByText('Cover board review')).toBeInTheDocument();
+    expect(screen.getByText('Board - All outputs - Last 30 days - "moodboard"')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'archive' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Project' } });
+    fireEvent.change(screen.getByLabelText('Recent'), { target: { value: 'all' } });
+    expect(screen.getByText('Project archive')).toBeInTheDocument();
+    expect(screen.queryByText('Cover moodboard')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cover board review/ }));
+    expect(screen.getByPlaceholderText('Search blueprints, boards, and projects')).toHaveValue('moodboard');
+    expect(screen.getByLabelText('Source')).toHaveValue('Board');
+    expect(screen.getByLabelText('Recent')).toHaveValue('30d');
+    expect(screen.getByText('Cover moodboard')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete Cover board review saved Library Search view' }),
+    );
+    expect(screen.queryByText('Cover board review')).not.toBeInTheDocument();
+    expect(screen.getByText('Save a filter set to reuse it later.')).toBeInTheDocument();
+  });
 });

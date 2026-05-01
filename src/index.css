@@ -750,6 +750,100 @@ code {
   padding: 8px 10px;
 }
 
+.oneshot-library-views {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.oneshot-library-views-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.oneshot-library-views-head span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.oneshot-library-views-head button {
+  flex: 0 0 auto;
+}
+
+.oneshot-library-view-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.oneshot-library-view-pill {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.oneshot-library-view-pill > button:first-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 280px;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.oneshot-library-view-pill strong,
+.oneshot-library-view-pill span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oneshot-library-view-pill strong {
+  font-size: 12.5px;
+}
+
+.oneshot-library-view-pill span,
+.oneshot-library-view-empty {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.oneshot-library-view-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.oneshot-library-view-delete:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .oneshot-library-results {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -3263,6 +3357,21 @@ code {
 
   .oneshot-library-filter-count {
     justify-self: stretch;
+  }
+
+  .oneshot-library-views-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .oneshot-library-views-head button,
+  .oneshot-library-view-pill {
+    width: 100%;
+  }
+
+  .oneshot-library-view-pill > button:first-child {
+    max-width: none;
+    flex: 1 1 auto;
   }
 
   .oneshot-library-result button {
