@@ -23,7 +23,8 @@ jobs:
       - name: Generate GitHub repository metrics
         uses: lowlighter/metrics@latest
         with:
-          # Output path; the action opens a PR when this file changes.
+          # Output path; the action opens/updates a PR when this file changes.
+          # Requires manual review to merge. If metrics unchanged, no PR is created.
           filename: docs/assets/github-metrics.svg
 
           # Auth: prefers a fine-grained PAT (richer plugins) but falls back to GITHUB_TOKEN.
@@ -39,6 +40,7 @@ jobs:
           # Organization-owned repositories must be targeted explicitly, otherwise
           # lowlighter/metrics infers the token owner and treats the target as an org.
           template: repository
+          base: ''
           user: nexu-io
           repo: open-design
 
