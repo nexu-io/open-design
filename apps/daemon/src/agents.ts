@@ -66,6 +66,31 @@ const agentCapabilities = new Map();
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
+// Map a user-picked reasoning effort to one the chosen model will accept.
+// Codex's CLI accepts `none | minimal | low | medium | high | xhigh`, but
+// real models support narrower subsets — gpt-5.2/5.3/5.4/5.5 reject
+// `minimal`, gpt-5.1 rejects `xhigh`, gpt-5.1-codex-mini caps at `medium`.
+// An undefined / 'default' modelId is clamped as if it were gpt-5.5,
+// since that's codex's current default model.
+function clampCodexReasoning(modelId, effort) {
+  if (!effort) return effort;
+  const raw = String(modelId ?? '').trim();
+  const id = raw.includes('/') ? raw.split('/').pop() : raw;
+  const isGpt5LateFamily =
+    !id ||
+    id === 'default' ||
+    id.startsWith('gpt-5.2') ||
+    id.startsWith('gpt-5.3') ||
+    id.startsWith('gpt-5.4') ||
+    id.startsWith('gpt-5.5');
+  if (isGpt5LateFamily && effort === 'minimal') return 'low';
+  if (id === 'gpt-5.1' && effort === 'xhigh') return 'high';
+  if (id === 'gpt-5.1-codex-mini') {
+    return effort === 'high' || effort === 'xhigh' ? 'high' : 'medium';
+  }
+  return effort;
+}
+
 // Parse one-id-per-line stdout from `<cli> models` and prepend the synthetic
 // default option. Used by opencode / cursor-agent.
 function parseLineSeparatedModels(stdout) {
@@ -183,9 +208,10 @@ export const AGENT_DEFS = [
         args.push('--model', options.model);
       }
       if (options.reasoning && options.reasoning !== 'default') {
+        const effort = clampCodexReasoning(options.model, options.reasoning);
         // Codex accepts `-c key=value` config overrides; reasoning effort
         // is exposed as `model_reasoning_effort`.
-        args.push('-c', `model_reasoning_effort="${options.reasoning}"`);
+        args.push('-c', `model_reasoning_effort="${effort}"`);
       }
       args.push('-');
       return args;
