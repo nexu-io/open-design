@@ -1,5 +1,5 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
-import type { InspirationBoard, InspirationPin } from '../types';
+import type { InspirationBoard, InspirationPin, ProjectKind } from '../types';
 import type { CreateInput } from './NewProjectPanel';
 import {
   buildInspirationPrompt,
@@ -18,6 +18,90 @@ import { Icon } from './Icon';
 interface Props {
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
 }
+
+interface BoardWorkflowRecommendation {
+  id: string;
+  title: string;
+  category: string;
+  outcome: string;
+  kind: ProjectKind;
+  keywords: string[];
+  checkpoints: string[];
+  prompt: string;
+}
+
+const BOARD_WORKFLOW_RECOMMENDATIONS: BoardWorkflowRecommendation[] = [
+  {
+    id: 'oneshot-cover-run',
+    title: 'OneShot Cover Run',
+    category: 'Book cover production',
+    outcome: 'CoverVisionOS run packet',
+    kind: 'template',
+    keywords: ['book', 'cover', 'covers', 'publishing', 'genre', 'author', 'kdp', 'spine', 'typography'],
+    checkpoints: ['Genre fit', 'Art direction', 'Typography', 'Print specs'],
+    prompt: 'Create a professional CoverVisionOS run packet from this board. Extract genre signals, composition directions, type hierarchy, palette, print risks, and a production-ready prompt packet.',
+  },
+  {
+    id: 'ios-26-app-prototype',
+    title: 'iOS 26 App Prototype',
+    category: 'Mobile app',
+    outcome: 'Liquid Glass iPhone concept',
+    kind: 'prototype',
+    keywords: ['ios', 'iphone', 'mobile', 'app', 'glass', 'liquid', 'widget', 'tab', 'sheet'],
+    checkpoints: ['Layer model', 'Glass tiers', 'Safe areas', 'Accessibility'],
+    prompt: 'Create a high-fidelity iOS 26 Liquid Glass prototype from this board. Extract glass hierarchy, mobile controls, safe-area behavior, accessibility risks, and screen-level direction.',
+  },
+  {
+    id: 'dashboard-mockup',
+    title: 'Dashboard Mockup',
+    category: 'Product prototype',
+    outcome: 'Operational UI concept',
+    kind: 'prototype',
+    keywords: ['dashboard', 'saas', 'table', 'operator', 'crm', 'metrics', 'analytics', 'pipeline', 'admin'],
+    checkpoints: ['Information density', 'Decision flow', 'Audit trail', 'Responsiveness'],
+    prompt: 'Create an operational dashboard mockup from this board. Extract information hierarchy, navigation density, tables, status treatment, trust cues, and responsive behavior.',
+  },
+  {
+    id: 'bsa-proposal-sow',
+    title: 'BSA Proposal + SOW',
+    category: 'Business artifact',
+    outcome: 'Client-ready proposal package',
+    kind: 'deck',
+    keywords: ['proposal', 'sow', 'client', 'scope', 'pricing', 'service', 'roofing', 'business', 'sales'],
+    checkpoints: ['Brief lock', 'Offer fit', 'Scope clarity', 'Follow-up'],
+    prompt: 'Create a client-ready proposal and SOW package from this board. Extract offer framing, proof points, scope, timeline, pricing story, and follow-up material.',
+  },
+  {
+    id: 'roofing-pitch-deck',
+    title: 'Roofing Pitch Deck',
+    category: 'Sales deck',
+    outcome: 'Storm-response sales story',
+    kind: 'deck',
+    keywords: ['roofing', 'storm', 'deck', 'pitch', 'estimate', 'quote', 'contractor', 'lead', 'roi'],
+    checkpoints: ['Hook', 'Proof', 'ROI', 'Owner decision'],
+    prompt: 'Create a roofing contractor pitch deck from this board. Extract the story arc, sales visuals, proof panels, ROI framing, and owner decision flow.',
+  },
+  {
+    id: 'prd-factory',
+    title: 'PRD Factory',
+    category: 'Product brief',
+    outcome: 'Build-ready spec',
+    kind: 'template',
+    keywords: ['prd', 'spec', 'requirements', 'product', 'brief', 'flow', 'ux', 'acceptance', 'build'],
+    checkpoints: ['Problem', 'Requirements', 'UX flow', 'Acceptance tests'],
+    prompt: 'Create a build-ready PRD from this board. Extract user jobs, product requirements, UX flows, acceptance tests, risks, and implementation phases.',
+  },
+  {
+    id: 'motion-explainer',
+    title: 'Motion Explainer',
+    category: 'Motion asset',
+    outcome: 'Shot list + animated HTML brief',
+    kind: 'prototype',
+    keywords: ['motion', 'video', 'explainer', 'animation', 'storyboard', 'caption', 'scene', 'social', 'launch'],
+    checkpoints: ['Narrative', 'Scene rhythm', 'Caption clarity', 'Export plan'],
+    prompt: 'Create a motion explainer package from this board. Extract visual rhythm, scene beats, caption tone, narrative structure, and export-ready production notes.',
+  },
+];
 
 export function InspirationTab({ onCreateProject }: Props) {
   const [boards, setBoards] = useState<InspirationBoard[]>([]);
@@ -80,6 +164,11 @@ export function InspirationTab({ onCreateProject }: Props) {
   const allTags = useMemo(
     () => Array.from(new Set(pins.flatMap((pin) => pin.tags))).slice(0, 10),
     [pins],
+  );
+
+  const workflowRecommendations = useMemo(
+    () => (activeBoard ? recommendWorkflows(activeBoard, pins.filter((pin) => pin.boardId === activeBoard.id)) : []),
+    [activeBoard, pins],
   );
 
   useEffect(() => {
@@ -220,6 +309,32 @@ export function InspirationTab({ onCreateProject }: Props) {
     });
   }
 
+  function startRecommendedWorkflow(recommendation: BoardWorkflowRecommendation) {
+    if (!activeBoard) return;
+    onCreateProject({
+      name: `${activeBoard.title} - ${recommendation.title}`,
+      skillId: null,
+      designSystemId: null,
+      metadata: {
+        kind: recommendation.kind,
+        workflowId: recommendation.id,
+        workflowTitle: recommendation.title,
+        workflowCategory: recommendation.category,
+        workflowOutcome: recommendation.outcome,
+        workflowCheckpoints: recommendation.checkpoints,
+        workflowReferenceBoardId: activeBoard.id,
+        workflowReferenceBoardTitle: activeBoard.title,
+        workflowReferencePinCount: boardPins.length,
+      },
+      pendingPrompt: [
+        recommendation.prompt,
+        '',
+        'Reference lock:',
+        buildInspirationPrompt(activeBoard, boardPins),
+      ].join('\n'),
+    });
+  }
+
   return (
     <div className="inspiration-tab">
       <section className="inspiration-hero">
@@ -327,6 +442,34 @@ export function InspirationTab({ onCreateProject }: Props) {
                     <Icon name="close" size={13} />
                     Delete board
                   </button>
+                </div>
+              </div>
+
+              <div className="inspiration-recommendations" aria-label="Recommended OneShot paths">
+                <div className="inspiration-recommendations-head">
+                  <div>
+                    <strong>Recommended OneShot paths</strong>
+                    <span>Best matches from this board's tags, sources, and notes.</span>
+                  </div>
+                  <Icon name="sparkles" size={14} />
+                </div>
+                <div className="inspiration-recommendation-list">
+                  {workflowRecommendations.map((recommendation) => (
+                    <article key={recommendation.id} className="inspiration-recommendation-card">
+                      <div>
+                        <span>{recommendation.category}</span>
+                        <strong>{recommendation.title}</strong>
+                        <small>{recommendation.outcome}</small>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => startRecommendedWorkflow(recommendation)}
+                      >
+                        Start {recommendation.title}
+                      </button>
+                    </article>
+                  ))}
                 </div>
               </div>
 
@@ -467,4 +610,32 @@ export function InspirationTab({ onCreateProject }: Props) {
       </section>
     </div>
   );
+}
+
+function recommendWorkflows(board: InspirationBoard, pins: InspirationPin[]) {
+  const haystack = [
+    board.title,
+    board.description,
+    ...board.tags,
+    ...pins.flatMap((pin) => [
+      pin.title,
+      pin.sourceUrl,
+      pin.note,
+      pin.usageNote,
+      ...pin.tags,
+    ]),
+  ].join(' ').toLowerCase();
+
+  return BOARD_WORKFLOW_RECOMMENDATIONS
+    .map((recommendation, index) => ({
+      recommendation,
+      score:
+        recommendation.keywords.reduce(
+          (total, keyword) => total + (haystack.includes(keyword) ? 1 : 0),
+          0,
+        ) || (index === 0 ? 0.5 : 0),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((entry) => entry.recommendation);
 }

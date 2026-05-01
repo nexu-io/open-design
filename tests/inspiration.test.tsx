@@ -198,4 +198,58 @@ describe('Inspiration Library', () => {
     expect(listInspirationBoards().some((board) => board.title === 'Renamed moodboard')).toBe(false);
     expect(listInspirationPins().some((pin) => pin.title === 'Updated pin title')).toBe(false);
   });
+
+  it('recommends and starts a workflow-specific OneShot path from a board', async () => {
+    const onCreateProject = vi.fn();
+    render(<InspirationTab onCreateProject={onCreateProject} />);
+
+    fireEvent.change(await screen.findByPlaceholderText('Board name'), {
+      target: { value: 'Fantasy cover references' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Purpose, audience, or project'), {
+      target: { value: 'Book cover typography and publishing direction.' },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText('tags, separated, by commas')[0], {
+      target: { value: 'cover, publishing, typography' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create board' }));
+
+    expect(await screen.findByText('Recommended OneShot paths')).toBeInTheDocument();
+    expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Reference title'), {
+      target: { value: 'Epic fantasy comp' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Source URL or local reference'), {
+      target: { value: 'local/fantasy-cover.html' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('What should OneShot learn from this?'), {
+      target: { value: 'Use strong title hierarchy and genre signal.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add pin' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start OneShot Cover Run' }));
+
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Fantasy cover references - OneShot Cover Run',
+        skillId: null,
+        designSystemId: null,
+        metadata: expect.objectContaining({
+          kind: 'template',
+          workflowId: 'oneshot-cover-run',
+          workflowTitle: 'OneShot Cover Run',
+          workflowCategory: 'Book cover production',
+          workflowReferenceBoardTitle: 'Fantasy cover references',
+          workflowReferencePinCount: 1,
+        }),
+        pendingPrompt: expect.stringContaining('Reference lock:'),
+      }),
+    );
+    expect(onCreateProject.mock.calls[0]?.[0]?.pendingPrompt).toContain(
+      'Create a professional CoverVisionOS run packet from this board.',
+    );
+    expect(onCreateProject.mock.calls[0]?.[0]?.pendingPrompt).toContain('Source: local/fantasy-cover.html');
+  });
 });

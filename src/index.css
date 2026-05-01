@@ -769,6 +769,86 @@ code {
   gap: 8px;
 }
 
+.inspiration-recommendations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.inspiration-recommendations-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inspiration-recommendations-head div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inspiration-recommendations-head strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.inspiration-recommendations-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.inspiration-recommendation-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inspiration-recommendation-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 128px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.inspiration-recommendation-card div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inspiration-recommendation-card span {
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.inspiration-recommendation-card strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.inspiration-recommendation-card small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.inspiration-recommendation-card button {
+  align-self: flex-start;
+}
+
 .inspiration-toolbar {
   display: flex;
   align-items: center;
@@ -925,6 +1005,10 @@ code {
   }
 
   .inspiration-board-manage {
+    grid-template-columns: 1fr;
+  }
+
+  .inspiration-recommendation-list {
     grid-template-columns: 1fr;
   }
 
