@@ -37,6 +37,7 @@ interface SavedLibraryView extends LibraryViewFilters {
   id: string;
   name: string;
   createdAt: number;
+  collection?: string;
   owner?: string;
   note?: string;
   pinnedAt?: number;
@@ -136,6 +137,7 @@ export function OneShotLibrarySearch({
     outputFilter,
     recencyFilter,
   };
+  const savedViewGroups = useMemo(() => groupSavedLibraryViews(savedViews), [savedViews]);
 
   function applySavedView(view: SavedLibraryView) {
     setQuery(view.query);
@@ -156,11 +158,14 @@ export function OneShotLibrarySearch({
   }
 
   function editSavedViewContext(view: SavedLibraryView) {
+    const collection = window.prompt('Collection, client, or production lane for this Library Search view', view.collection ?? '');
+    if (collection === null) return;
     const owner = window.prompt('Owner or studio context for this Library Search view', view.owner ?? '');
     if (owner === null) return;
     const note = window.prompt('When should this Library Search view be used?', view.note ?? '');
     if (note === null) return;
     updateLibraryViewContext(view.id, {
+      collection: cleanOptionalText(collection),
       owner: cleanOptionalText(owner),
       note: cleanOptionalText(note),
     });
@@ -318,51 +323,60 @@ export function OneShotLibrarySearch({
         ) : null}
         {savedViews.length > 0 ? (
           <div className="oneshot-library-view-list">
-            {savedViews.map((view) => (
-              <div key={view.id} className={`oneshot-library-view-pill${view.pinnedAt ? ' pinned' : ''}`}>
-                <button type="button" onClick={() => applySavedView(view)}>
-                  <strong>{view.name}</strong>
-                  <span>{view.pinnedAt ? `Pinned - ${summarizeSavedView(view)}` : summarizeSavedView(view)}</span>
-                  {summarizeSavedViewContext(view) ? (
-                    <span className="oneshot-library-view-context">{summarizeSavedViewContext(view)}</span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  className={`oneshot-library-view-pin${view.pinnedAt ? ' active' : ''}`}
-                  aria-label={`${view.pinnedAt ? 'Unpin' : 'Pin'} ${view.name} saved Library Search view`}
-                  title={`${view.pinnedAt ? 'Unpin' : 'Pin'} ${view.name} saved Library Search view`}
-                  onClick={() => toggleLibraryViewPin(view.id)}
-                >
-                  <Icon name="pin" size={11} />
-                </button>
-                <button
-                  type="button"
-                  className="oneshot-library-view-edit"
-                  aria-label={`Edit details for ${view.name} saved Library Search view`}
-                  title={`Edit details for ${view.name} saved Library Search view`}
-                  onClick={() => editSavedViewContext(view)}
-                >
-                  <Icon name="edit" size={11} />
-                </button>
-                <button
-                  type="button"
-                  className="oneshot-library-view-duplicate"
-                  aria-label={`Duplicate ${view.name} saved Library Search view`}
-                  title={`Duplicate ${view.name} saved Library Search view`}
-                  onClick={() => duplicateSavedView(view)}
-                >
-                  <Icon name="copy" size={11} />
-                </button>
-                <button
-                  type="button"
-                  className="oneshot-library-view-delete"
-                  aria-label={`Delete ${view.name} saved Library Search view`}
-                  title={`Delete ${view.name} saved Library Search view`}
-                  onClick={() => deleteLibraryView(view.id)}
-                >
-                  <Icon name="close" size={11} />
-                </button>
+            {savedViewGroups.map((group) => (
+              <div key={group.title ?? 'all-views'} className="oneshot-library-view-group">
+                {group.title ? (
+                  <span className="oneshot-library-view-group-title">{group.title}</span>
+                ) : null}
+                <div className="oneshot-library-view-group-items">
+                  {group.views.map((view) => (
+                    <div key={view.id} className={`oneshot-library-view-pill${view.pinnedAt ? ' pinned' : ''}`}>
+                      <button type="button" onClick={() => applySavedView(view)}>
+                        <strong>{view.name}</strong>
+                        <span>{view.pinnedAt ? `Pinned - ${summarizeSavedView(view)}` : summarizeSavedView(view)}</span>
+                        {summarizeSavedViewContext(view) ? (
+                          <span className="oneshot-library-view-context">{summarizeSavedViewContext(view)}</span>
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        className={`oneshot-library-view-pin${view.pinnedAt ? ' active' : ''}`}
+                        aria-label={`${view.pinnedAt ? 'Unpin' : 'Pin'} ${view.name} saved Library Search view`}
+                        title={`${view.pinnedAt ? 'Unpin' : 'Pin'} ${view.name} saved Library Search view`}
+                        onClick={() => toggleLibraryViewPin(view.id)}
+                      >
+                        <Icon name="pin" size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className="oneshot-library-view-edit"
+                        aria-label={`Edit details for ${view.name} saved Library Search view`}
+                        title={`Edit details for ${view.name} saved Library Search view`}
+                        onClick={() => editSavedViewContext(view)}
+                      >
+                        <Icon name="edit" size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className="oneshot-library-view-duplicate"
+                        aria-label={`Duplicate ${view.name} saved Library Search view`}
+                        title={`Duplicate ${view.name} saved Library Search view`}
+                        onClick={() => duplicateSavedView(view)}
+                      >
+                        <Icon name="copy" size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className="oneshot-library-view-delete"
+                        aria-label={`Delete ${view.name} saved Library Search view`}
+                        title={`Delete ${view.name} saved Library Search view`}
+                        onClick={() => deleteLibraryView(view.id)}
+                      >
+                        <Icon name="close" size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -456,6 +470,7 @@ function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
     ...input,
     id: `library-view-${Date.now()}-${slugify(input.name) || crypto.randomUUID()}`,
     createdAt: Date.now(),
+    collection: existing?.collection,
     owner: existing?.owner,
     note: existing?.note,
     pinnedAt: existing?.pinnedAt,
@@ -470,11 +485,11 @@ function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
 
 function updateLibraryViewContext(
   id: string,
-  context: Pick<SavedLibraryView, 'owner' | 'note'>,
+  context: Pick<SavedLibraryView, 'collection' | 'owner' | 'note'>,
 ) {
   const next = listSavedLibraryViews().map((view) => (
     view.id === id
-      ? { ...view, owner: context.owner, note: context.note }
+      ? { ...view, collection: context.collection, owner: context.owner, note: context.note }
       : view
   ));
   localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
@@ -567,10 +582,27 @@ function normalizeSavedLibraryView(payload: unknown): SavedLibraryView | null {
     outputFilter,
     recencyFilter,
     createdAt: Number.isFinite(candidate.createdAt) ? Number(candidate.createdAt) : Date.now(),
+    collection: cleanOptionalText(candidate.collection),
     owner: cleanOptionalText(candidate.owner),
     note: cleanOptionalText(candidate.note),
     pinnedAt: Number.isFinite(candidate.pinnedAt) ? Number(candidate.pinnedAt) : undefined,
   };
+}
+
+function groupSavedLibraryViews(views: SavedLibraryView[]) {
+  const hasCollections = views.some((view) => view.collection);
+  if (!hasCollections) return [{ title: null as string | null, views }];
+  const groups: Array<{ title: string; views: SavedLibraryView[] }> = [];
+  for (const view of views) {
+    const title = view.collection ?? 'Ungrouped';
+    const existing = groups.find((group) => group.title === title);
+    if (existing) {
+      existing.views.push(view);
+    } else {
+      groups.push({ title, views: [view] });
+    }
+  }
+  return groups;
 }
 
 function sortSavedLibraryViews(a: SavedLibraryView, b: SavedLibraryView) {
@@ -600,8 +632,9 @@ function summarizeSavedView(view: LibraryViewFilters) {
   return parts.join(' - ');
 }
 
-function summarizeSavedViewContext(view: Pick<SavedLibraryView, 'owner' | 'note'>) {
+function summarizeSavedViewContext(view: Pick<SavedLibraryView, 'collection' | 'owner' | 'note'>) {
   return [
+    view.collection ? `Collection: ${view.collection}` : '',
     view.owner ? `Owner: ${view.owner}` : '',
     view.note ?? '',
   ].filter(Boolean).join(' - ');

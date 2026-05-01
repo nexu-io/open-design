@@ -830,6 +830,26 @@ code {
 
 .oneshot-library-view-list {
   display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.oneshot-library-view-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oneshot-library-view-group-title {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.oneshot-library-view-group-items {
+  display: flex;
   flex-wrap: wrap;
   gap: 7px;
 }

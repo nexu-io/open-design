@@ -301,6 +301,7 @@ describe('OneShotLibrarySearch', () => {
   it('adds owner and usage notes to saved Library Search views', () => {
     vi.spyOn(window, 'prompt')
       .mockReturnValueOnce('Cover board review')
+      .mockReturnValueOnce('Publishing')
       .mockReturnValueOnce('James studio')
       .mockReturnValueOnce('Use before starting CoverVision cover runs.');
 
@@ -321,20 +322,27 @@ describe('OneShotLibrarySearch', () => {
 
     expect(window.prompt).toHaveBeenNthCalledWith(
       2,
-      'Owner or studio context for this Library Search view',
+      'Collection, client, or production lane for this Library Search view',
       '',
     );
     expect(window.prompt).toHaveBeenNthCalledWith(
       3,
+      'Owner or studio context for this Library Search view',
+      '',
+    );
+    expect(window.prompt).toHaveBeenNthCalledWith(
+      4,
       'When should this Library Search view be used?',
       '',
     );
-    expect(screen.getByText('Owner: James studio - Use before starting CoverVision cover runs.')).toBeInTheDocument();
+    expect(screen.getByText('Publishing')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Publishing - Owner: James studio - Use before starting CoverVision cover runs.')).toBeInTheDocument();
   });
 
   it('duplicates saved Library Search views as quick variants', () => {
     vi.spyOn(window, 'prompt')
       .mockReturnValueOnce('Cover board review')
+      .mockReturnValueOnce('Publishing')
       .mockReturnValueOnce('James studio')
       .mockReturnValueOnce('Use before starting CoverVision cover runs.')
       .mockReturnValueOnce('Cover board review - Fiction');
@@ -358,13 +366,13 @@ describe('OneShotLibrarySearch', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate Cover board review saved Library Search view' }));
 
     expect(window.prompt).toHaveBeenNthCalledWith(
-      4,
+      5,
       'Name this duplicated Library Search view',
       'Cover board review copy',
     );
     expect(screen.getByText('Cover board review')).toBeInTheDocument();
     expect(screen.getByText('Cover board review - Fiction')).toBeInTheDocument();
-    expect(screen.getAllByText('Owner: James studio - Use before starting CoverVision cover runs.')).toHaveLength(2);
+    expect(screen.getAllByText('Collection: Publishing - Owner: James studio - Use before starting CoverVision cover runs.')).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: /^Cover board review - Fiction/ }));
     expect(screen.getByPlaceholderText('Search blueprints, boards, and projects')).toHaveValue('cover');
@@ -372,6 +380,46 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByLabelText('Output')).toHaveValue('visual-reference');
     expect(screen.getByText('Pinned - Board - Visual reference - Any time - "cover"')).toBeInTheDocument();
     expect(screen.getByText('Board - Visual reference - Any time - "cover"')).toBeInTheDocument();
+  });
+
+  it('groups saved Library Search views by collection', () => {
+    localStorage.setItem('oneshot:library-search-views', JSON.stringify([
+      {
+        id: 'sales-view',
+        name: 'Project archive review',
+        query: 'archive',
+        sourceFilter: 'Project',
+        outputFilter: 'all',
+        recencyFilter: 'all',
+        collection: 'Sales',
+        createdAt: 200,
+      },
+      {
+        id: 'publishing-view',
+        name: 'Cover board review',
+        query: 'cover',
+        sourceFilter: 'Board',
+        outputFilter: 'visual-reference',
+        recencyFilter: 'all',
+        collection: 'Publishing',
+        createdAt: 100,
+      },
+    ]));
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Sales')).toBeInTheDocument();
+    expect(screen.getByText('Publishing')).toBeInTheDocument();
+    expect(screen.getByText('Project archive review')).toBeInTheDocument();
+    expect(screen.getByText('Cover board review')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Sales')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Publishing')).toBeInTheDocument();
   });
 
   it('imports saved Library Search views and restores their filters', async () => {
@@ -387,6 +435,7 @@ describe('OneShotLibrarySearch', () => {
           outputFilter: 'visual-reference',
           recencyFilter: '30d',
           createdAt: 123,
+          collection: 'Publishing',
           owner: 'Publishing desk',
           note: 'Use for incoming cover reference packets.',
           pinnedAt: 456,
@@ -411,8 +460,9 @@ describe('OneShotLibrarySearch', () => {
 
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByText('Imported boards')).toBeInTheDocument();
+    expect(screen.getByText('Publishing')).toBeInTheDocument();
     expect(screen.getByText('Pinned - Board - Visual reference - Last 30 days - "cover"')).toBeInTheDocument();
-    expect(screen.getByText('Owner: Publishing desk - Use for incoming cover reference packets.')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Publishing - Owner: Publishing desk - Use for incoming cover reference packets.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Imported boards/ }));
     await waitFor(() => {
