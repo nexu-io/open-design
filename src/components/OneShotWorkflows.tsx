@@ -448,6 +448,9 @@ const QUALITY_GATES = [
 ];
 
 const ALL_CATEGORIES = 'All workflows';
+const ALL_SAVED_BLUEPRINTS = 'All saved';
+const PINNED_SAVED_BLUEPRINTS = 'Pinned';
+const UNGROUPED_SAVED_BLUEPRINTS = 'Ungrouped';
 
 export function OneShotWorkflows({
   skills,
@@ -457,6 +460,7 @@ export function OneShotWorkflows({
 }: Props) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORIES);
+  const [savedBlueprintGroup, setSavedBlueprintGroup] = useState(ALL_SAVED_BLUEPRINTS);
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
 
   useEffect(() => {
@@ -489,6 +493,33 @@ export function OneShotWorkflows({
       return workflowSearchText(workflow).includes(needle);
     });
   }, [category, query]);
+
+  const savedBlueprintGroups = useMemo(
+    () => [
+      ALL_SAVED_BLUEPRINTS,
+      ...(savedBlueprints.some((blueprint) => blueprint.pinnedAt)
+        ? [PINNED_SAVED_BLUEPRINTS]
+        : []),
+      ...Array.from(new Set(savedBlueprints.map(savedBlueprintGroupName))),
+    ],
+    [savedBlueprints],
+  );
+
+  const visibleSavedBlueprints = useMemo(() => {
+    if (savedBlueprintGroup === ALL_SAVED_BLUEPRINTS) return savedBlueprints;
+    if (savedBlueprintGroup === PINNED_SAVED_BLUEPRINTS) {
+      return savedBlueprints.filter((blueprint) => blueprint.pinnedAt);
+    }
+    return savedBlueprints.filter(
+      (blueprint) => savedBlueprintGroupName(blueprint) === savedBlueprintGroup,
+    );
+  }, [savedBlueprintGroup, savedBlueprints]);
+
+  useEffect(() => {
+    if (!savedBlueprintGroups.includes(savedBlueprintGroup)) {
+      setSavedBlueprintGroup(ALL_SAVED_BLUEPRINTS);
+    }
+  }, [savedBlueprintGroup, savedBlueprintGroups]);
 
   function launchWorkflow(workflow: WorkflowDefinition) {
     const skillId = pickSkillId(workflow, skills);
@@ -534,11 +565,27 @@ export function OneShotWorkflows({
       {savedBlueprints.length > 0 ? (
         <section className="oneshot-saved" aria-label="Saved blueprints">
           <div className="oneshot-saved-head">
-            <Icon name="history" size={14} />
-            <span>Saved blueprints</span>
+            <span>
+              <Icon name="history" size={14} />
+              Saved blueprints
+            </span>
+            <div className="oneshot-saved-groups" role="tablist" aria-label="Saved blueprint groups">
+              {savedBlueprintGroups.map((group) => (
+                <button
+                  key={group}
+                  type="button"
+                  role="tab"
+                  aria-selected={savedBlueprintGroup === group}
+                  className={savedBlueprintGroup === group ? 'active' : ''}
+                  onClick={() => setSavedBlueprintGroup(group)}
+                >
+                  {group}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="oneshot-saved-list">
-            {savedBlueprints.slice(0, 4).map((blueprint) => (
+            {visibleSavedBlueprints.slice(0, 4).map((blueprint) => (
               <article
                 key={blueprint.id}
                 className={`oneshot-saved-item${blueprint.pinnedAt ? ' pinned' : ''}`}
@@ -773,6 +820,10 @@ function workflowSearchText(workflow: WorkflowDefinition) {
   ]
     .join(' ')
     .toLowerCase();
+}
+
+function savedBlueprintGroupName(blueprint: SavedWorkflowBlueprint) {
+  return blueprint.metadata.workflowCategory ?? UNGROUPED_SAVED_BLUEPRINTS;
 }
 
 function metadataForWorkflow(workflow: WorkflowDefinition): ProjectMetadata {

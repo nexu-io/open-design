@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotWorkflows } from '../src/components/OneShotWorkflows';
 import { listSavedBlueprints, saveWorkflowBlueprint } from '../src/state/blueprints';
@@ -286,6 +286,59 @@ describe('OneShotWorkflows', () => {
     );
   });
 
+  it('groups saved blueprints by workflow category and pinned status', () => {
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+        workflowCategory: 'Book cover production',
+        workflowOutcome: 'CoverVisionOS run packet',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'prototype',
+        workflowId: 'dashboard-mockup',
+        workflowTitle: 'Dashboard Mockup',
+        workflowCategory: 'Product prototype',
+        workflowOutcome: 'Operational UI concept',
+      },
+      prompt: 'Use the OneShot workflow blueprint: Dashboard Mockup.',
+      skillId: 'dashboard',
+      designSystemId: 'linear-app',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template'), skill('dashboard', 'prototype')]}
+        designSystems={[designSystem('warm-editorial'), designSystem('linear-app')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    const groups = within(screen.getByRole('tablist', { name: 'Saved blueprint groups' }));
+    expect(groups.getByRole('tab', { name: 'All saved' })).toHaveAttribute('aria-selected', 'true');
+    expect(groups.getByRole('tab', { name: 'Book cover production' })).toBeInTheDocument();
+    expect(groups.getByRole('tab', { name: 'Product prototype' })).toBeInTheDocument();
+    expect(groups.queryByRole('tab', { name: 'Pinned' })).not.toBeInTheDocument();
+
+    fireEvent.click(groups.getByRole('tab', { name: 'Book cover production' }));
+
+    expect(screen.getByRole('button', { name: /^OneShot Cover Run/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Dashboard Mockup/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin OneShot Cover Run blueprint' }));
+    fireEvent.click(groups.getByRole('tab', { name: 'Pinned' }));
+
+    expect(screen.getByRole('button', { name: /^OneShot Cover Run/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Dashboard Mockup/i })).not.toBeInTheDocument();
+  });
+
   it('renames a saved blueprint', () => {
     vi.spyOn(window, 'prompt').mockReturnValue('Custom Cover Packet');
     saveWorkflowBlueprint({
@@ -432,7 +485,7 @@ describe('OneShotWorkflows', () => {
     expect(listSavedBlueprints()[0]).toEqual(
       expect.objectContaining({ name: 'OneShot Cover Run', pinnedAt: expect.any(Number) }),
     );
-    expect(screen.getByText('Pinned')).toBeInTheDocument();
+    expect(screen.getAllByText('Pinned').length).toBeGreaterThan(0);
     expect(
       screen.getByRole('button', { name: 'Unpin OneShot Cover Run blueprint' }),
     ).toHaveAttribute('aria-pressed', 'true');

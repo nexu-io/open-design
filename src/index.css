@@ -355,13 +355,46 @@ code {
 }
 
 .oneshot-saved-head {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 7px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.oneshot-saved-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.oneshot-saved-groups {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  text-transform: none;
+}
+
+.oneshot-saved-groups button {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.oneshot-saved-groups button.active {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
 }
 
 .oneshot-saved-list {
