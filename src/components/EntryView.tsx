@@ -19,9 +19,16 @@ import { InspirationTab } from './InspirationTab';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
 import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
+import { OneShotLibrarySearch } from './OneShotLibrarySearch';
 import { OneShotWorkflows } from './OneShotWorkflows';
 
-type TopTab = 'workflows' | 'inspiration' | 'designs' | 'examples' | 'design-systems';
+type TopTab =
+  | 'workflows'
+  | 'inspiration'
+  | 'designs'
+  | 'examples'
+  | 'design-systems'
+  | 'library-search';
 
 interface Props {
   skills: SkillSummary[];
@@ -228,6 +235,7 @@ export function EntryView({
               label={t('entry.tabDesignSystems')}
               onClick={setTopTab}
             />
+            <TopTabButton current={topTab} value="library-search" label="Library Search" onClick={setTopTab} />
           </div>
           <div className="entry-header-right">
             {/* Avatar settings live next to tabs to mirror the project view. */}
@@ -258,9 +266,7 @@ export function EntryView({
                   skills={skills}
                   designSystems={designSystems}
                   defaultDesignSystemId={defaultDesignSystemId}
-                  projects={projects}
                   onCreateProject={onCreateProject}
-                  onOpenProject={onOpenProject}
                 />
               ) : null}
               {topTab === 'inspiration' ? (
@@ -284,6 +290,13 @@ export function EntryView({
                   selectedId={defaultDesignSystemId}
                   onSelect={onChangeDefaultDesignSystem}
                   onPreview={previewDesignSystem}
+                />
+              ) : null}
+              {topTab === 'library-search' ? (
+                <OneShotLibrarySearch
+                  projects={projects}
+                  onCreateProject={onCreateProject}
+                  onOpenProject={onOpenProject}
                 />
               ) : null}
             </>

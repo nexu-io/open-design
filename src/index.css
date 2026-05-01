@@ -2691,6 +2691,7 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
   padding: 14px 28px 0;
   border-bottom: 1px solid var(--border);
 }
@@ -2699,8 +2700,17 @@ code {
   align-items: center;
   gap: 24px;
 }
-.entry-tabs { display: flex; gap: 2px; }
+.entry-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.entry-tabs::-webkit-scrollbar { display: none; }
 .entry-tab {
+  flex: 0 0 auto;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;

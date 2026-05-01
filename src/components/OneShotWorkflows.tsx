@@ -4,7 +4,6 @@ import type {
   DesignSystemSummary,
   InspirationBoard,
   InspirationPin,
-  Project,
   ProjectMetadata,
   SavedWorkflowBlueprint,
   SkillSummary,
@@ -49,9 +48,7 @@ interface Props {
   skills: SkillSummary[];
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
-  projects?: Project[];
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
-  onOpenProject?: (id: string) => void;
 }
 
 const WORKFLOWS: WorkflowDefinition[] = [
@@ -469,12 +466,9 @@ export function OneShotWorkflows({
   skills,
   designSystems,
   defaultDesignSystemId,
-  projects = [],
   onCreateProject,
-  onOpenProject,
 }: Props) {
   const [query, setQuery] = useState('');
-  const [libraryQuery, setLibraryQuery] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [savedBlueprintGroup, setSavedBlueprintGroup] = useState(ALL_SAVED_BLUEPRINTS);
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
@@ -570,17 +564,6 @@ export function OneShotWorkflows({
         ? inspirationPins.filter((pin) => pin.boardId === selectedReferenceBoard.id)
         : [],
     [inspirationPins, selectedReferenceBoard],
-  );
-
-  const libraryResults = useMemo(
-    () => buildLibraryResults({
-      query: libraryQuery,
-      savedBlueprints,
-      inspirationBoards,
-      inspirationPins,
-      projects,
-    }),
-    [inspirationBoards, inspirationPins, libraryQuery, projects, savedBlueprints],
   );
 
   useEffect(() => {
@@ -760,91 +743,6 @@ export function OneShotWorkflows({
           </div>
         </section>
       ) : null}
-
-      <section className="oneshot-library-search" aria-label="OneShot library search">
-        <div className="oneshot-library-search-head">
-          <div>
-            <h2>Library search</h2>
-            <p>Search saved blueprints, Inspiration boards, and generated project records.</p>
-          </div>
-          <div className="oneshot-library-search-stats" aria-label="Library search scope">
-            <span>{savedBlueprints.length} blueprints</span>
-            <span>{inspirationBoards.length} boards</span>
-            <span>{projects.length} projects</span>
-          </div>
-        </div>
-        <label className="oneshot-search oneshot-library-search-box">
-          <Icon name="search" size={14} />
-          <span className="sr-only">Search OneShot library</span>
-          <input
-            type="search"
-            value={libraryQuery}
-            onChange={(event) => setLibraryQuery(event.target.value)}
-            placeholder="Search blueprints, boards, and projects"
-          />
-        </label>
-        {libraryResults.length > 0 ? (
-          <div className="oneshot-library-results">
-            {libraryResults.map((result) => (
-              <article key={`${result.type}-${result.id}`} className="oneshot-library-result">
-                <div>
-                  <span>{result.type}</span>
-                  <strong>{result.title}</strong>
-                  <small>{result.detail}</small>
-                </div>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    if (result.type === 'Blueprint') {
-                      const blueprint = savedBlueprints.find((item) => item.id === result.id);
-                      if (!blueprint) return;
-                      onCreateProject({
-                        name: blueprint.name,
-                        skillId: blueprint.skillId,
-                        designSystemId: blueprint.designSystemId,
-                        metadata: blueprint.metadata,
-                        pendingPrompt: blueprint.prompt,
-                      });
-                      return;
-                    }
-                    if (result.type === 'Board') {
-                      const board = inspirationBoards.find((item) => item.id === result.id);
-                      if (!board) return;
-                      const pins = inspirationPins.filter((pin) => pin.boardId === board.id);
-                      onCreateProject({
-                        name: `${board.title} reference brief`,
-                        skillId: null,
-                        designSystemId: null,
-                        metadata: {
-                          kind: 'other',
-                          workflowTitle: 'OneShot Inspiration Brief',
-                          workflowCategory: 'Visual reference',
-                          workflowOutcome: 'Reference-backed creative direction',
-                          workflowReferenceBoardId: board.id,
-                          workflowReferenceBoardTitle: board.title,
-                          workflowReferencePinCount: pins.length,
-                        },
-                        pendingPrompt: buildInspirationPrompt(board, pins),
-                      });
-                      return;
-                    }
-                    if (result.type === 'Project') {
-                      onOpenProject?.(result.id);
-                    }
-                  }}
-                >
-                  {result.action}
-                </button>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="oneshot-library-empty">
-            No library records match this search yet.
-          </div>
-        )}
-      </section>
 
       <section className="oneshot-section">
         <div className="oneshot-section-head">
@@ -1054,90 +952,6 @@ function promptForWorkflow(
     'Reference lock:',
     buildInspirationPrompt(referenceBoard, referencePins),
   ].join('\n');
-}
-
-function buildLibraryResults({
-  query,
-  savedBlueprints,
-  inspirationBoards,
-  inspirationPins,
-  projects,
-}: {
-  query: string;
-  savedBlueprints: SavedWorkflowBlueprint[];
-  inspirationBoards: InspirationBoard[];
-  inspirationPins: InspirationPin[];
-  projects: Project[];
-}) {
-  const needle = query.trim().toLowerCase();
-  const blueprintResults = savedBlueprints.map((blueprint) => ({
-    id: blueprint.id,
-    type: 'Blueprint' as const,
-    title: blueprint.name,
-    detail: [
-      blueprint.collection ? `Collection: ${blueprint.collection}` : '',
-      blueprint.metadata.workflowCategory,
-      blueprint.metadata.workflowOutcome,
-    ].filter(Boolean).join(' - ') || 'Reusable workflow prompt',
-    action: `Start ${blueprint.name}`,
-    timestamp: blueprint.pinnedAt ?? blueprint.createdAt,
-    searchText: [
-      blueprint.name,
-      blueprint.collection,
-      blueprint.metadata.workflowCategory,
-      blueprint.metadata.workflowOutcome,
-      blueprint.metadata.workflowTitle,
-      blueprint.prompt,
-    ].filter(Boolean).join(' ').toLowerCase(),
-  }));
-  const boardResults = inspirationBoards.map((board) => {
-    const boardPins = inspirationPins.filter((pin) => pin.boardId === board.id);
-    return {
-      id: board.id,
-      type: 'Board' as const,
-      title: board.title,
-      detail: `${boardPins.length} pins${board.tags.length ? ` - ${board.tags.join(', ')}` : ''}`,
-      action: `Create brief from ${board.title}`,
-      timestamp: board.updatedAt,
-      searchText: [
-        board.title,
-        board.description,
-        ...board.tags,
-        ...boardPins.flatMap((pin) => [
-          pin.title,
-          pin.sourceUrl,
-          pin.note,
-          pin.usageNote,
-          ...pin.tags,
-        ]),
-      ].filter(Boolean).join(' ').toLowerCase(),
-    };
-  });
-  const projectResults = projects.map((project) => ({
-    id: project.id,
-    type: 'Project' as const,
-    title: project.name,
-    detail: [
-      project.metadata?.workflowCategory,
-      project.metadata?.workflowOutcome,
-      project.metadata?.kind,
-    ].filter(Boolean).join(' - ') || 'Generated project record',
-    action: `Open ${project.name}`,
-    timestamp: project.updatedAt,
-    searchText: [
-      project.name,
-      project.metadata?.workflowTitle,
-      project.metadata?.workflowCategory,
-      project.metadata?.workflowOutcome,
-      project.metadata?.kind,
-      project.pendingPrompt,
-    ].filter(Boolean).join(' ').toLowerCase(),
-  }));
-
-  return [...blueprintResults, ...boardResults, ...projectResults]
-    .filter((result) => !needle || result.searchText.includes(needle))
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, needle ? 8 : 6);
 }
 
 function resolveSkillLabel(workflow: WorkflowDefinition, skills: SkillSummary[]) {
