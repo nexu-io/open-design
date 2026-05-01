@@ -129,10 +129,14 @@ Each symbolic value maps to concrete design tokens. The agent must resolve these
 | `accent=coral` | Accent: #F97316, Hover: #EA580C |
 | `accent=electric_blue` | Accent: #3B82F6, Hover: #2563EB |
 | `accent=emerald` | Accent: #10B981, Hover: #059669 |
+| `accent=muted_sage` | Accent: #84A98C, Hover: #6B8F73 |
+| `accent=slate` | Accent: #64748B, Hover: #475569 |
 | `typography=inter` | Body: Inter, 400, 1rem/1.6 |
 | `typography=system_ui` | Body: system-ui, 400, 1rem/1.6 |
+| `typography=dm_sans` | Body: DM Sans, 400, 1rem/1.6 |
 | `typography=georgia` | Body: Georgia, 400, 1.125rem/1.7 |
 | `display=space_grotesk` | Display: Space Grotesk, 700, clamp(2rem, 5vw, 3.5rem) |
+| `display=clash_display` | Display: Clash Display, 700, clamp(2rem, 5vw, 3.5rem) |
 | `display=playfair` | Display: Playfair Display, 700, clamp(2rem, 5vw, 3.5rem) |
 | `display=same_as_body` | Display inherits body font family, weight 600 |
 | `density=compact` | Section spacing: 48px, Content padding: 16px/24px |
