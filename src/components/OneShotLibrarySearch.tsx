@@ -37,6 +37,7 @@ interface SavedLibraryView extends LibraryViewFilters {
   id: string;
   name: string;
   createdAt: number;
+  pinnedAt?: number;
 }
 
 const SAVED_VIEWS_KEY = 'oneshot:library-search-views';
@@ -297,10 +298,19 @@ export function OneShotLibrarySearch({
         {savedViews.length > 0 ? (
           <div className="oneshot-library-view-list">
             {savedViews.map((view) => (
-              <div key={view.id} className="oneshot-library-view-pill">
+              <div key={view.id} className={`oneshot-library-view-pill${view.pinnedAt ? ' pinned' : ''}`}>
                 <button type="button" onClick={() => applySavedView(view)}>
                   <strong>{view.name}</strong>
-                  <span>{summarizeSavedView(view)}</span>
+                  <span>{view.pinnedAt ? `Pinned - ${summarizeSavedView(view)}` : summarizeSavedView(view)}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`oneshot-library-view-pin${view.pinnedAt ? ' active' : ''}`}
+                  aria-label={`${view.pinnedAt ? 'Unpin' : 'Pin'} ${view.name} saved Library Search view`}
+                  title={`${view.pinnedAt ? 'Unpin' : 'Pin'} ${view.name} saved Library Search view`}
+                  onClick={() => toggleLibraryViewPin(view.id)}
+                >
+                  <Icon name="pin" size={11} />
                 </button>
                 <button
                   type="button"
@@ -391,7 +401,7 @@ function listSavedLibraryViews(): SavedLibraryView[] {
     return Array.isArray(parsed)
       ? parsed
           .filter((view) => view && typeof view.id === 'string' && typeof view.name === 'string')
-          .sort((a, b) => b.createdAt - a.createdAt)
+          .sort(sortSavedLibraryViews)
       : [];
   } catch {
     return [];
@@ -399,15 +409,30 @@ function listSavedLibraryViews(): SavedLibraryView[] {
 }
 
 function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
+  const existing = listSavedLibraryViews().find((item) => item.name === input.name);
   const view: SavedLibraryView = {
     ...input,
     id: `library-view-${Date.now()}-${slugify(input.name) || crypto.randomUUID()}`,
     createdAt: Date.now(),
+    pinnedAt: existing?.pinnedAt,
   };
   const next = [
     view,
     ...listSavedLibraryViews().filter((item) => item.name !== input.name),
   ].slice(0, 8);
+  localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
+}
+
+function toggleLibraryViewPin(id: string) {
+  const now = Date.now();
+  const next = listSavedLibraryViews()
+    .map((view) => (
+      view.id === id
+        ? { ...view, pinnedAt: view.pinnedAt ? undefined : now }
+        : view
+    ))
+    .sort(sortSavedLibraryViews);
   localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
 }
@@ -468,7 +493,15 @@ function normalizeSavedLibraryView(payload: unknown): SavedLibraryView | null {
     outputFilter,
     recencyFilter,
     createdAt: Number.isFinite(candidate.createdAt) ? Number(candidate.createdAt) : Date.now(),
+    pinnedAt: Number.isFinite(candidate.pinnedAt) ? Number(candidate.pinnedAt) : undefined,
   };
+}
+
+function sortSavedLibraryViews(a: SavedLibraryView, b: SavedLibraryView) {
+  if (a.pinnedAt && b.pinnedAt) return b.pinnedAt - a.pinnedAt;
+  if (a.pinnedAt) return -1;
+  if (b.pinnedAt) return 1;
+  return b.createdAt - a.createdAt;
 }
 
 function buildSavedViewName(filters: LibraryViewFilters) {

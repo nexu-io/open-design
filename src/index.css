@@ -844,6 +844,11 @@ code {
   overflow: hidden;
 }
 
+.oneshot-library-view-pill.pinned {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+}
+
 .oneshot-library-view-pill > button:first-child {
   display: flex;
   flex-direction: column;
@@ -877,6 +882,7 @@ code {
   font-size: 11.5px;
 }
 
+.oneshot-library-view-pin,
 .oneshot-library-view-delete {
   display: inline-flex;
   align-items: center;
@@ -889,9 +895,19 @@ code {
   color: var(--text-muted);
 }
 
+.oneshot-library-view-pin.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.oneshot-library-view-pin:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
 .oneshot-library-view-delete:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
+  background: var(--red-bg);
+  color: var(--red);
 }
 
 .oneshot-library-results {

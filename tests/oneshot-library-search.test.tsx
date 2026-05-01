@@ -259,6 +259,45 @@ describe('OneShotLibrarySearch', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:oneshot-library-views');
   });
 
+  it('pins saved Library Search views above recent views', () => {
+    vi.spyOn(window, 'prompt')
+      .mockReturnValueOnce('Cover boards')
+      .mockReturnValueOnce('Project archive view');
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'cover' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Board' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
+
+    fireEvent.change(screen.getByPlaceholderText('Search blueprints, boards, and projects'), {
+      target: { value: 'archive' },
+    });
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'Project' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current view' }));
+
+    let savedViewNames = Array.from(document.querySelectorAll('.oneshot-library-view-pill strong'))
+      .map((element) => element.textContent);
+    expect(savedViewNames).toEqual(['Project archive view', 'Cover boards']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Cover boards saved Library Search view' }));
+    expect(screen.getByText('Pinned - Board - All outputs - Any time - "cover"')).toBeInTheDocument();
+    savedViewNames = Array.from(document.querySelectorAll('.oneshot-library-view-pill strong'))
+      .map((element) => element.textContent);
+    expect(savedViewNames).toEqual(['Cover boards', 'Project archive view']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin Cover boards saved Library Search view' }));
+    expect(screen.queryByText('Pinned - Board - All outputs - Any time - "cover"')).not.toBeInTheDocument();
+  });
+
   it('imports saved Library Search views and restores their filters', async () => {
     const packet = {
       schema: 'oneshot.library-search-views.v1',
@@ -272,6 +311,7 @@ describe('OneShotLibrarySearch', () => {
           outputFilter: 'visual-reference',
           recencyFilter: '30d',
           createdAt: 123,
+          pinnedAt: 456,
         },
       ],
     };
@@ -293,6 +333,7 @@ describe('OneShotLibrarySearch', () => {
 
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByText('Imported boards')).toBeInTheDocument();
+    expect(screen.getByText('Pinned - Board - Visual reference - Last 30 days - "cover"')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Imported boards/ }));
     await waitFor(() => {
