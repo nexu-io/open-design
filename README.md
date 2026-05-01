@@ -341,6 +341,21 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 
 Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md).
 
+## Nix
+
+A flake is published at the repo root. Home Manager is the recommended path for individual developers; a NixOS module is also exposed for shared/server installs. See [`nix/README.md`](nix/README.md) for the full surface (data dir, secrets, `webFrontend` vs. bringing your own server, `OD_DAEMON_URL`).
+
+```nix
+# Home Manager
+inputs.open-design.url = "github:nexu-io/open-design";
+# then: imports = [ inputs.open-design.homeManagerModules.default ];
+```
+
+```bash
+nix run github:nexu-io/open-design       # boot the daemon (`od`) without installing
+nix develop github:nexu-io/open-design   # dev shell pinned to Node 24 + pnpm 10.33
+```
+
 ## Repository structure
 
 ```
