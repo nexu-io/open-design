@@ -622,7 +622,7 @@ export const en: Dict = {
   'qf.submitTitle': 'Cevapları gönder',
   'qf.cardSelected': 'seçildi',
   'qf.cardRefs': 'Referanslar:',
-  'qf.cardSampleText': 'The quick brown fox · 0123',
+  'qf.cardSampleText': 'Pijamalı hasta yağız şoföre çabucak güvendi · 0123',
 
   'sketch.toolSelect': 'Seç (işlem yok)',
   'sketch.toolPen': 'Kalem',
