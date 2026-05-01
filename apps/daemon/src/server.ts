@@ -2265,11 +2265,10 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   }
 
   return new Promise((resolve) => {
-    const host = process.env.OD_HOST || '127.0.0.1';
-    const server = app.listen(port, host, () => {
+    const server = app.listen(port, '127.0.0.1', () => {
       const address = server.address();
       const actualPort = typeof address === 'object' && address ? address.port : port;
-      const url = `http://${host}:${actualPort}`;
+      const url = `http://127.0.0.1:${actualPort}`;
       resolve(returnServer ? { url, server } : url);
     });
   });
