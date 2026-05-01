@@ -391,7 +391,7 @@ export const ja: Dict = {
   'designFiles.download': 'ダウンロード',
   'designFiles.dropTitle': '⤓ ファイルをここにドロップ',
   'designFiles.dropDesc':
-    '画像、ドキュメント、参考資料、Figma リンク、フォルダー — Claude がコンテキストとして使用します。',
+    '画像、ドキュメント、参考資料、Figma リンク、フォルダー — エージェントがコンテキストとして使用します。',
   'designFiles.upload.title': 'ファイルをアップロード',
   'designFiles.paste.title': 'テキストをファイルとして貼り付け',
   'designFiles.upload.label': 'アップロード',
