@@ -435,7 +435,7 @@ code {
 .oneshot-saved-actions {
   align-self: stretch;
   display: grid;
-  grid-template-columns: repeat(4, 30px);
+  grid-template-columns: repeat(5, 30px);
   border-left: 1px solid var(--border-soft);
 }
 
@@ -652,6 +652,12 @@ code {
   color: var(--text-muted);
   font-size: 11.5px;
   font-weight: 700;
+}
+
+.oneshot-saved-pin.collection {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
 }
 
 .inspiration-create-board input,

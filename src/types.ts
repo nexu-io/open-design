@@ -265,6 +265,7 @@ export interface SavedWorkflowBlueprint {
   metadata: ProjectMetadata;
   createdAt: number;
   pinnedAt?: number;
+  collection?: string;
 }
 
 export interface InspirationBoard {

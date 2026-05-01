@@ -2,7 +2,11 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotWorkflows } from '../src/components/OneShotWorkflows';
-import { listSavedBlueprints, saveWorkflowBlueprint } from '../src/state/blueprints';
+import {
+  listSavedBlueprints,
+  saveWorkflowBlueprint,
+  setSavedBlueprintCollection,
+} from '../src/state/blueprints';
 import { createInspirationBoard, createInspirationPin } from '../src/state/inspiration';
 import type { DesignSystemSummary, SkillSummary } from '../src/types';
 
@@ -419,6 +423,88 @@ describe('OneShotWorkflows', () => {
     expect(
       screen.queryByRole('button', { name: /^OneShot Cover Run/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it('groups saved blueprints by custom collection', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Client Launch');
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+        workflowCategory: 'Book cover production',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'prototype',
+        workflowId: 'dashboard-mockup',
+        workflowTitle: 'Dashboard Mockup',
+        workflowCategory: 'Product prototype',
+      },
+      prompt: 'Use the OneShot workflow blueprint: Dashboard Mockup.',
+      skillId: 'dashboard',
+      designSystemId: 'linear-app',
+    });
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template'), skill('dashboard', 'prototype')]}
+        designSystems={[designSystem('warm-editorial'), designSystem('linear-app')]}
+        defaultDesignSystemId="default"
+        onCreateProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set OneShot Cover Run blueprint collection' }));
+
+    expect(window.prompt).toHaveBeenCalledWith('Set blueprint collection', '');
+    expect(listSavedBlueprints().find((item) => item.name === 'OneShot Cover Run')?.collection).toBe('Client Launch');
+    expect(screen.getByText('Client Launch')).toBeInTheDocument();
+
+    const groups = within(screen.getByRole('tablist', { name: 'Saved blueprint groups' }));
+    fireEvent.click(groups.getByRole('tab', { name: 'Collection: Client Launch' }));
+
+    expect(screen.getByRole('button', { name: /^OneShot Cover Run/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Dashboard Mockup/i })).not.toBeInTheDocument();
+  });
+
+  it('preserves a saved blueprint collection when the blueprint is saved again', () => {
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+    const id = listSavedBlueprints()[0]?.id;
+    expect(id).toBeTruthy();
+    setSavedBlueprintCollection(id as string, 'Launch Shelf');
+
+    saveWorkflowBlueprint({
+      metadata: {
+        kind: 'template',
+        workflowId: 'oneshot-cover-run',
+        workflowTitle: 'OneShot Cover Run',
+      },
+      prompt: 'Use the updated OneShot workflow blueprint: OneShot Cover Run.',
+      skillId: 'digital-eguide',
+      designSystemId: 'warm-editorial',
+    });
+
+    expect(listSavedBlueprints()).toHaveLength(1);
+    expect(listSavedBlueprints()[0]).toEqual(
+      expect.objectContaining({
+        prompt: 'Use the updated OneShot workflow blueprint: OneShot Cover Run.',
+        collection: 'Launch Shelf',
+      }),
+    );
   });
 
   it('keeps a saved blueprint name when rename is blank', () => {

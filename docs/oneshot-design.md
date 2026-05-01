@@ -13,7 +13,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Workflow export packages are structured metadata, visible on the workflow cards, and injected into the agent prompt as concrete deliverable contracts.
 - OneShot Cover Run now carries a CoverVisionOS handoff contract with production stages, expected files, and downstream router commands.
 - Workflow-created projects now show a reusable blueprint strip with gates, exports, scorecards, handoff context, a copyable prompt, and a save action.
-- Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
+- Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category or custom collection, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
 - The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, imported local images, usage notes, tags, and OneShot reference-brief creation.
 - Inspiration boards can now be renamed, retagged, described, and deleted with their pins; individual pins can be edited in place from the board view.
 - Inspiration boards recommend the strongest OneShot production paths and can launch a workflow-specific project with the board attached as the reference lock.
@@ -40,6 +40,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Add custom blueprint collections so saved templates can move beyond automatic workflow groups.
-2. Add custom blueprint collections so saved templates can move beyond automatic workflow groups.
-3. Add a library search view that spans saved blueprints, Inspiration boards, and generated project records.
+1. Add a library search view that spans saved blueprints, Inspiration boards, and generated project records.

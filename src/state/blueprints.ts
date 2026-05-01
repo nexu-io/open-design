@@ -39,6 +39,7 @@ export function saveWorkflowBlueprint(input: {
     designSystemId: input.designSystemId,
     createdAt: now,
     pinnedAt: existing?.pinnedAt,
+    collection: existing?.collection,
   };
   const next = [
     blueprint,
@@ -78,6 +79,17 @@ export function setSavedBlueprintPinned(id: string, pinned: boolean): void {
   const pinnedAt = pinned ? Date.now() : undefined;
   const next = listSavedBlueprints().map((item) =>
     item.id === id ? { ...item, pinnedAt } : item,
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));
+}
+
+export function setSavedBlueprintCollection(id: string, collection: string | null): void {
+  const cleanedCollection = collection?.trim();
+  const next = listSavedBlueprints().map((item) =>
+    item.id === id
+      ? { ...item, collection: cleanedCollection || undefined }
+      : item,
   );
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:blueprints-changed'));

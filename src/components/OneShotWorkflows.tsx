@@ -15,6 +15,7 @@ import {
   listSavedBlueprints,
   promoteSavedBlueprint,
   renameSavedBlueprint,
+  setSavedBlueprintCollection,
   setSavedBlueprintPinned,
 } from '../state/blueprints';
 import {
@@ -458,6 +459,7 @@ const ALL_CATEGORIES = 'All workflows';
 const ALL_SAVED_BLUEPRINTS = 'All saved';
 const PINNED_SAVED_BLUEPRINTS = 'Pinned';
 const UNGROUPED_SAVED_BLUEPRINTS = 'Ungrouped';
+const SAVED_COLLECTION_PREFIX = 'Collection: ';
 const NO_REFERENCE_BOARD = 'none';
 
 export function OneShotWorkflows({
@@ -525,6 +527,13 @@ export function OneShotWorkflows({
       ...(savedBlueprints.some((blueprint) => blueprint.pinnedAt)
         ? [PINNED_SAVED_BLUEPRINTS]
         : []),
+      ...Array.from(
+        new Set(
+          savedBlueprints
+            .map((blueprint) => blueprint.collection)
+            .filter((collection): collection is string => Boolean(collection)),
+        ),
+      ).map((collection) => `${SAVED_COLLECTION_PREFIX}${collection}`),
       ...Array.from(new Set(savedBlueprints.map(savedBlueprintGroupName))),
     ],
     [savedBlueprints],
@@ -534,6 +543,10 @@ export function OneShotWorkflows({
     if (savedBlueprintGroup === ALL_SAVED_BLUEPRINTS) return savedBlueprints;
     if (savedBlueprintGroup === PINNED_SAVED_BLUEPRINTS) {
       return savedBlueprints.filter((blueprint) => blueprint.pinnedAt);
+    }
+    if (savedBlueprintGroup.startsWith(SAVED_COLLECTION_PREFIX)) {
+      const collection = savedBlueprintGroup.slice(SAVED_COLLECTION_PREFIX.length);
+      return savedBlueprints.filter((blueprint) => blueprint.collection === collection);
     }
     return savedBlueprints.filter(
       (blueprint) => savedBlueprintGroupName(blueprint) === savedBlueprintGroup,
@@ -652,6 +665,9 @@ export function OneShotWorkflows({
                     {blueprint.pinnedAt ? (
                       <span className="oneshot-saved-pin">Pinned</span>
                     ) : null}
+                    {blueprint.collection ? (
+                      <span className="oneshot-saved-pin collection">{blueprint.collection}</span>
+                    ) : null}
                   </span>
                   <span className="oneshot-saved-meta">
                     {[blueprint.metadata.workflowCategory, blueprint.metadata.workflowOutcome]
@@ -678,6 +694,22 @@ export function OneShotWorkflows({
                     onClick={() => promoteSavedBlueprint(blueprint.id)}
                   >
                     <Icon name="arrow-up" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="oneshot-saved-action"
+                    aria-label={`Set ${blueprint.name} blueprint collection`}
+                    title={`Set ${blueprint.name} blueprint collection`}
+                    onClick={() => {
+                      const nextCollection = window.prompt(
+                        'Set blueprint collection',
+                        blueprint.collection ?? '',
+                      );
+                      if (nextCollection === null) return;
+                      setSavedBlueprintCollection(blueprint.id, nextCollection);
+                    }}
+                  >
+                    <Icon name="folder" size={12} />
                   </button>
                   <button
                     type="button"
