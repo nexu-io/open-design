@@ -466,7 +466,12 @@ describe('OneShotLibrarySearch', () => {
 
     expect(await screen.findByText('Previewing 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByLabelText('Import preview')).toBeInTheDocument();
-    expect(screen.queryByText('Imported boards')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Import packet audit')).toBeInTheDocument();
+    expect(screen.getByText('Create')).toBeInTheDocument();
+    expect(screen.getByText('Before')).toBeInTheDocument();
+    expect(screen.getByText('No saved view')).toBeInTheDocument();
+    expect(screen.getByText('After')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Imported boards/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
 
@@ -537,6 +542,11 @@ describe('OneShotLibrarySearch', () => {
     seedExistingView();
     renderSearch();
     await loadImportFile();
+    expect(screen.getByLabelText('Import packet audit')).toBeInTheDocument();
+    expect(screen.getByText('Rename')).toBeInTheDocument();
+    expect(screen.getByText(/Shared view imported from Shared view/)).toBeInTheDocument();
+    expect(screen.getAllByText('Project - All outputs - Any time - "archive"').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Board - Visual reference - Last 30 days - "cover"').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByText('Shared view imported')).toBeInTheDocument();
@@ -549,6 +559,7 @@ describe('OneShotLibrarySearch', () => {
     renderSearch();
     await loadImportFile();
     fireEvent.change(screen.getByLabelText('Import conflicts'), { target: { value: 'replace' } });
+    expect(screen.getByText('Replace')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
     expect(screen.getByText('Collection: Publishing')).toBeInTheDocument();
@@ -563,9 +574,67 @@ describe('OneShotLibrarySearch', () => {
     renderSearch();
     await loadImportFile();
     fireEvent.change(screen.getByLabelText('Import conflicts'), { target: { value: 'skip' } });
+    expect(screen.getByText('Skip')).toBeInTheDocument();
+    expect(screen.getByText('No change')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
     expect(await screen.findByText('Imported 0 Library Search views.')).toBeInTheDocument();
     expect(screen.getByText('Collection: Sales')).toBeInTheDocument();
     expect(screen.queryByText('Collection: Publishing')).not.toBeInTheDocument();
+  });
+
+  it('audits and renames duplicate Library Search view names inside one import packet', async () => {
+    const packet = {
+      schema: 'oneshot.library-search-views.v1',
+      exportedAt: Date.now(),
+      views: [
+        {
+          id: 'incoming-duplicate-a',
+          name: 'Duplicate packet view',
+          query: 'cover',
+          sourceFilter: 'Board',
+          outputFilter: 'visual-reference',
+          recencyFilter: '30d',
+          collection: 'Publishing',
+          createdAt: 100,
+        },
+        {
+          id: 'incoming-duplicate-b',
+          name: 'Duplicate packet view',
+          query: 'archive',
+          sourceFilter: 'Project',
+          outputFilter: 'deck',
+          recencyFilter: '7d',
+          collection: 'Sales',
+          createdAt: 101,
+        },
+      ],
+    };
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    const file = new File([JSON.stringify(packet)], 'oneshot-library-search-views.json', {
+      type: 'application/json',
+    });
+    fireEvent.change(screen.getByLabelText('Import views'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByText('Previewing 2 Library Search views.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Import packet audit')).toBeInTheDocument();
+    expect(screen.getByText('Create')).toBeInTheDocument();
+    expect(screen.getByText('Rename')).toBeInTheDocument();
+    expect(screen.getByText(/Duplicate packet view imported from Duplicate packet view/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
+
+    expect(await screen.findByText('Imported 2 Library Search views.')).toBeInTheDocument();
+    expect(screen.getByText('Duplicate packet view')).toBeInTheDocument();
+    expect(screen.getByText('Duplicate packet view imported')).toBeInTheDocument();
   });
 });

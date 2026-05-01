@@ -26,6 +26,7 @@ type LibrarySourceFilter = 'all' | 'Blueprint' | 'Board' | 'Project';
 type LibraryOutputFilter = 'all' | 'prototype' | 'deck' | 'template' | 'visual-reference' | 'other';
 type LibraryRecencyFilter = 'all' | '7d' | '30d' | '90d';
 type LibraryImportConflictMode = 'rename' | 'replace' | 'skip';
+type LibraryImportAction = 'create' | 'rename' | 'replace' | 'skip';
 
 interface LibraryViewFilters {
   query: string;
@@ -42,6 +43,13 @@ interface SavedLibraryView extends LibraryViewFilters {
   owner?: string;
   note?: string;
   pinnedAt?: number;
+}
+
+interface LibraryViewImportPlanItem {
+  view: SavedLibraryView;
+  existingView?: SavedLibraryView;
+  action: LibraryImportAction;
+  resolvedName: string;
 }
 
 const SAVED_VIEWS_KEY = 'oneshot:library-search-views';
@@ -517,6 +525,7 @@ function LibraryViewTransferPreview({
   const collections = new Set(views.map((view) => view.collection).filter(Boolean));
   const pinnedCount = views.filter((view) => view.pinnedAt).length;
   const conflictCount = countLibraryViewImportConflicts(views, existingViews);
+  const importPlan = conflictMode ? buildLibraryViewImportPlan(views, existingViews, conflictMode) : [];
   return (
     <div className="oneshot-library-transfer-preview" aria-label={title}>
       <div className="oneshot-library-transfer-preview-head">
@@ -563,6 +572,36 @@ function LibraryViewTransferPreview({
         ))}
         {views.length > 6 ? <span>+{views.length - 6} more views</span> : null}
       </div>
+      {importPlan.length > 0 ? (
+        <div className="oneshot-library-transfer-audit" aria-label="Import packet audit">
+          {importPlan.slice(0, 6).map((item) => (
+            <div key={`${item.view.id}-${item.resolvedName}`} className="oneshot-library-transfer-audit-row">
+              <div>
+                <strong>{formatLibraryImportAction(item.action)}</strong>
+                <span>
+                  {item.resolvedName}
+                  {item.resolvedName !== item.view.name ? ` from ${item.view.name}` : ''}
+                </span>
+              </div>
+              <dl>
+                <div>
+                  <dt>Before</dt>
+                  <dd>{item.existingView ? summarizeSavedView(item.existingView) : 'No saved view'}</dd>
+                </div>
+                <div>
+                  <dt>After</dt>
+                  <dd>{item.action === 'skip' ? 'No change' : summarizeSavedView(item.view)}</dd>
+                </div>
+              </dl>
+            </div>
+          ))}
+          {importPlan.length > 6 ? (
+            <span className="oneshot-library-transfer-audit-more">
+              +{importPlan.length - 6} more audited views
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -652,24 +691,15 @@ function importLibraryViews(
   if (!packet) return [];
   const now = Date.now();
   const existingViews = listSavedLibraryViews();
-  const existingKeys = new Set(existingViews.map((view) => libraryViewNameKey(view.name)));
-  const reservedKeys = new Set(existingKeys);
-  const imported = packet.views.reduce<SavedLibraryView[]>((acc, view, index) => {
-    const nameKey = libraryViewNameKey(view.name);
-    const hasConflict = existingKeys.has(nameKey);
-    if (hasConflict && conflictMode === 'skip') return acc;
-    const name = hasConflict && conflictMode === 'rename'
-      ? buildImportedLibraryViewName(view.name, reservedKeys)
-      : view.name;
-    reservedKeys.add(libraryViewNameKey(name));
-    acc.push({
-      ...view,
-      id: `library-view-${now}-${index}-${slugify(name) || crypto.randomUUID()}`,
-      name,
-      createdAt: Number.isFinite(view.createdAt) ? view.createdAt : now + index,
-    });
-    return acc;
-  }, []);
+  const importPlan = buildLibraryViewImportPlan(packet.views, existingViews, conflictMode);
+  const imported = importPlan
+    .filter((item) => item.action !== 'skip')
+    .map((item, index) => ({
+      ...item.view,
+      id: `library-view-${now}-${index}-${slugify(item.resolvedName) || crypto.randomUUID()}`,
+      name: item.resolvedName,
+      createdAt: Number.isFinite(item.view.createdAt) ? item.view.createdAt : now + index,
+    }));
   const importedNames = new Set(imported.map((view) => libraryViewNameKey(view.name)));
   const next = [
     ...imported,
@@ -754,6 +784,70 @@ function sortSavedLibraryViews(a: SavedLibraryView, b: SavedLibraryView) {
 function countLibraryViewImportConflicts(incomingViews: SavedLibraryView[], existingViews: SavedLibraryView[]) {
   const existingKeys = new Set(existingViews.map((view) => libraryViewNameKey(view.name)));
   return incomingViews.filter((view) => existingKeys.has(libraryViewNameKey(view.name))).length;
+}
+
+function buildLibraryViewImportPlan(
+  incomingViews: SavedLibraryView[],
+  existingViews: SavedLibraryView[],
+  conflictMode: LibraryImportConflictMode,
+): LibraryViewImportPlanItem[] {
+  const existingByName = new Map(existingViews.map((view) => [libraryViewNameKey(view.name), view]));
+  const reservedKeys = new Set(existingViews.map((view) => libraryViewNameKey(view.name)));
+  const replacedKeys = new Set<string>();
+  return incomingViews.map((view) => {
+    const viewNameKey = libraryViewNameKey(view.name);
+    const existingView = existingByName.get(viewNameKey);
+    const hasReservedName = reservedKeys.has(viewNameKey);
+    if (existingView && conflictMode === 'skip') {
+      return {
+        view,
+        existingView,
+        action: 'skip',
+        resolvedName: view.name,
+      };
+    }
+    if (existingView && conflictMode === 'replace' && !replacedKeys.has(viewNameKey)) {
+      replacedKeys.add(viewNameKey);
+      reservedKeys.add(viewNameKey);
+      return {
+        view,
+        existingView,
+        action: 'replace',
+        resolvedName: view.name,
+      };
+    }
+    if (hasReservedName) {
+      const resolvedName = buildImportedLibraryViewName(view.name, reservedKeys);
+      reservedKeys.add(libraryViewNameKey(resolvedName));
+      return {
+        view,
+        existingView,
+        action: 'rename',
+        resolvedName,
+      };
+    }
+    reservedKeys.add(libraryViewNameKey(view.name));
+    return {
+      view,
+      action: 'create',
+      resolvedName: view.name,
+    };
+  });
+}
+
+function formatLibraryImportAction(action: LibraryImportAction) {
+  switch (action) {
+    case 'create':
+      return 'Create';
+    case 'rename':
+      return 'Rename';
+    case 'replace':
+      return 'Replace';
+    case 'skip':
+      return 'Skip';
+    default:
+      return 'Create';
+  }
 }
 
 function buildImportedLibraryViewName(name: string, reservedKeys: Set<string>) {
