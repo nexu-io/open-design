@@ -484,4 +484,88 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByLabelText('Output')).toHaveValue('visual-reference');
     expect(screen.getByLabelText('Recent')).toHaveValue('30d');
   });
+
+  it('resolves imported Library Search view name conflicts by renaming, replacing, or skipping', async () => {
+    const renderSearch = () => render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    const seedExistingView = () => {
+      localStorage.setItem('oneshot:library-search-views', JSON.stringify([
+        {
+          id: 'existing-shared-view',
+          name: 'Shared view',
+          query: 'archive',
+          sourceFilter: 'Project',
+          outputFilter: 'all',
+          recencyFilter: 'all',
+          collection: 'Sales',
+          createdAt: 200,
+        },
+      ]));
+    };
+    const importPacket = () => ({
+      schema: 'oneshot.library-search-views.v1',
+      exportedAt: Date.now(),
+      views: [
+        {
+          id: 'incoming-shared-view',
+          name: 'Shared view',
+          query: 'cover',
+          sourceFilter: 'Board',
+          outputFilter: 'visual-reference',
+          recencyFilter: '30d',
+          collection: 'Publishing',
+          createdAt: 100,
+        },
+      ],
+    });
+    const loadImportFile = async () => {
+      const file = new File([JSON.stringify(importPacket())], 'oneshot-library-search-views.json', {
+        type: 'application/json',
+      });
+      fireEvent.change(screen.getByLabelText('Import views'), {
+        target: { files: [file] },
+      });
+      expect(await screen.findByText('Previewing 1 Library Search view.')).toBeInTheDocument();
+      expect(screen.getByText('1 name conflict')).toBeInTheDocument();
+    };
+
+    seedExistingView();
+    renderSearch();
+    await loadImportFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
+    expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
+    expect(screen.getByText('Shared view imported')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Publishing')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Sales')).toBeInTheDocument();
+
+    cleanup();
+    localStorage.clear();
+    seedExistingView();
+    renderSearch();
+    await loadImportFile();
+    fireEvent.change(screen.getByLabelText('Import conflicts'), { target: { value: 'replace' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
+    expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Publishing')).toBeInTheDocument();
+    expect(screen.queryByText('Collection: Sales')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Shared view/ }));
+    expect(screen.getByLabelText('Source')).toHaveValue('Board');
+    expect(screen.getByLabelText('Output')).toHaveValue('visual-reference');
+
+    cleanup();
+    localStorage.clear();
+    seedExistingView();
+    renderSearch();
+    await loadImportFile();
+    fireEvent.change(screen.getByLabelText('Import conflicts'), { target: { value: 'skip' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
+    expect(await screen.findByText('Imported 0 Library Search views.')).toBeInTheDocument();
+    expect(screen.getByText('Collection: Sales')).toBeInTheDocument();
+    expect(screen.queryByText('Collection: Publishing')).not.toBeInTheDocument();
+  });
 });

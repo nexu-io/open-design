@@ -25,6 +25,7 @@ interface Props {
 type LibrarySourceFilter = 'all' | 'Blueprint' | 'Board' | 'Project';
 type LibraryOutputFilter = 'all' | 'prototype' | 'deck' | 'template' | 'visual-reference' | 'other';
 type LibraryRecencyFilter = 'all' | '7d' | '30d' | '90d';
+type LibraryImportConflictMode = 'rename' | 'replace' | 'skip';
 
 interface LibraryViewFilters {
   query: string;
@@ -64,6 +65,7 @@ export function OneShotLibrarySearch({
   const [savedViews, setSavedViews] = useState<SavedLibraryView[]>([]);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [pendingImportViews, setPendingImportViews] = useState<SavedLibraryView[] | null>(null);
+  const [importConflictMode, setImportConflictMode] = useState<LibraryImportConflictMode>('rename');
   const [viewImportStatus, setViewImportStatus] = useState('');
   const [viewImportError, setViewImportError] = useState('');
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
@@ -205,7 +207,7 @@ export function OneShotLibrarySearch({
       schema: SAVED_VIEWS_SCHEMA,
       exportedAt: Date.now(),
       views: pendingImportViews,
-    });
+    }, importConflictMode);
     setPendingImportViews(null);
     setViewImportError('');
     setViewImportStatus(`Imported ${imported.length} Library Search view${imported.length === 1 ? '' : 's'}.`);
@@ -351,6 +353,9 @@ export function OneShotLibrarySearch({
           <LibraryViewTransferPreview
             title="Import preview"
             views={pendingImportViews}
+            existingViews={savedViews}
+            conflictMode={importConflictMode}
+            onConflictModeChange={setImportConflictMode}
             primaryAction="Import previewed views"
             onPrimaryAction={confirmViewImport}
             secondaryAction="Cancel import"
@@ -491,6 +496,9 @@ export function OneShotLibrarySearch({
 function LibraryViewTransferPreview({
   title,
   views,
+  existingViews = [],
+  conflictMode,
+  onConflictModeChange,
   primaryAction,
   onPrimaryAction,
   secondaryAction,
@@ -498,6 +506,9 @@ function LibraryViewTransferPreview({
 }: {
   title: string;
   views: SavedLibraryView[];
+  existingViews?: SavedLibraryView[];
+  conflictMode?: LibraryImportConflictMode;
+  onConflictModeChange?: (mode: LibraryImportConflictMode) => void;
   primaryAction: string;
   onPrimaryAction: () => void;
   secondaryAction: string;
@@ -505,6 +516,7 @@ function LibraryViewTransferPreview({
 }) {
   const collections = new Set(views.map((view) => view.collection).filter(Boolean));
   const pinnedCount = views.filter((view) => view.pinnedAt).length;
+  const conflictCount = countLibraryViewImportConflicts(views, existingViews);
   return (
     <div className="oneshot-library-transfer-preview" aria-label={title}>
       <div className="oneshot-library-transfer-preview-head">
@@ -523,6 +535,25 @@ function LibraryViewTransferPreview({
           </button>
         </div>
       </div>
+      {onConflictModeChange && conflictMode ? (
+        <div className="oneshot-library-transfer-conflicts">
+          <div>
+            <strong>{conflictCount} name conflict{conflictCount === 1 ? '' : 's'}</strong>
+            <span>Choose how imported views should handle saved views with the same name.</span>
+          </div>
+          <label>
+            <span>Import conflicts</span>
+            <select
+              value={conflictMode}
+              onChange={(event) => onConflictModeChange(event.target.value as LibraryImportConflictMode)}
+            >
+              <option value="rename">Rename incoming views</option>
+              <option value="replace">Replace matching views</option>
+              <option value="skip">Skip matching views</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
       <div className="oneshot-library-transfer-preview-list">
         {views.slice(0, 6).map((view) => (
           <span key={view.id}>
@@ -613,19 +644,40 @@ function toggleLibraryViewPin(id: string) {
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
 }
 
-function importLibraryViews(payload: unknown): SavedLibraryView[] {
+function importLibraryViews(
+  payload: unknown,
+  conflictMode: LibraryImportConflictMode = 'rename',
+): SavedLibraryView[] {
   const packet = normalizeLibraryViewsExport(payload);
   if (!packet) return [];
   const now = Date.now();
-  const imported = packet.views.map((view, index) => ({
-    ...view,
-    id: `library-view-${now}-${index}-${slugify(view.name) || crypto.randomUUID()}`,
-    createdAt: Number.isFinite(view.createdAt) ? view.createdAt : now + index,
-  }));
-  const importedNames = new Set(imported.map((view) => view.name));
+  const existingViews = listSavedLibraryViews();
+  const existingKeys = new Set(existingViews.map((view) => libraryViewNameKey(view.name)));
+  const reservedKeys = new Set(existingKeys);
+  const imported = packet.views.reduce<SavedLibraryView[]>((acc, view, index) => {
+    const nameKey = libraryViewNameKey(view.name);
+    const hasConflict = existingKeys.has(nameKey);
+    if (hasConflict && conflictMode === 'skip') return acc;
+    const name = hasConflict && conflictMode === 'rename'
+      ? buildImportedLibraryViewName(view.name, reservedKeys)
+      : view.name;
+    reservedKeys.add(libraryViewNameKey(name));
+    acc.push({
+      ...view,
+      id: `library-view-${now}-${index}-${slugify(name) || crypto.randomUUID()}`,
+      name,
+      createdAt: Number.isFinite(view.createdAt) ? view.createdAt : now + index,
+    });
+    return acc;
+  }, []);
+  const importedNames = new Set(imported.map((view) => libraryViewNameKey(view.name)));
   const next = [
     ...imported,
-    ...listSavedLibraryViews().filter((view) => !importedNames.has(view.name)),
+    ...existingViews.filter((view) => (
+      conflictMode === 'replace'
+        ? !importedNames.has(libraryViewNameKey(view.name))
+        : true
+    )),
   ].slice(0, 8);
   localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('oneshot:library-views-changed'));
@@ -697,6 +749,25 @@ function sortSavedLibraryViews(a: SavedLibraryView, b: SavedLibraryView) {
   if (a.pinnedAt) return -1;
   if (b.pinnedAt) return 1;
   return b.createdAt - a.createdAt;
+}
+
+function countLibraryViewImportConflicts(incomingViews: SavedLibraryView[], existingViews: SavedLibraryView[]) {
+  const existingKeys = new Set(existingViews.map((view) => libraryViewNameKey(view.name)));
+  return incomingViews.filter((view) => existingKeys.has(libraryViewNameKey(view.name))).length;
+}
+
+function buildImportedLibraryViewName(name: string, reservedKeys: Set<string>) {
+  const baseName = `${name} imported`;
+  if (!reservedKeys.has(libraryViewNameKey(baseName))) return baseName;
+  let suffix = 2;
+  while (reservedKeys.has(libraryViewNameKey(`${baseName} ${suffix}`))) {
+    suffix += 1;
+  }
+  return `${baseName} ${suffix}`;
+}
+
+function libraryViewNameKey(name: string) {
+  return name.trim().toLowerCase();
 }
 
 function buildSavedViewName(filters: LibraryViewFilters) {
