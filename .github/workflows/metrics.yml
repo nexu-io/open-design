@@ -33,8 +33,11 @@ jobs:
           committer_token: ${{ secrets.GITHUB_TOKEN }}
 
           # Use the repository template (per-repo metrics, not user metrics).
-          base: ''
+          # Organization-owned repositories must be targeted explicitly, otherwise
+          # lowlighter/metrics infers the token owner and treats the target as an org.
           template: repository
+          user: nexu-io
+          repo: open-design
 
           # Plugins. Anything that requires a personal token will silently no-op
           # without METRICS_TOKEN — the rest still produce a useful SVG.
