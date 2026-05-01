@@ -502,6 +502,353 @@ code {
   text-transform: uppercase;
 }
 
+/* -------- OneShot Inspiration Library ------------------------------- */
+.inspiration-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+}
+
+.inspiration-hero,
+.inspiration-shell {
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.inspiration-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-subtle) 100%);
+}
+
+.inspiration-hero h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.inspiration-hero p {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.inspiration-stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.inspiration-stats span,
+.inspiration-tags span,
+.inspiration-tags button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 7px;
+}
+
+.inspiration-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.inspiration-sidebar,
+.inspiration-main,
+.inspiration-add-pin,
+.inspiration-pin {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.inspiration-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.inspiration-side-head,
+.inspiration-board-head,
+.inspiration-pin-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inspiration-side-head {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.inspiration-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspiration-board-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  text-align: left;
+}
+
+.inspiration-board-list button.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.inspiration-board-list strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.inspiration-board-list span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.inspiration-create-board,
+.inspiration-add-pin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspiration-create-board {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.inspiration-create-board label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.inspiration-create-board input,
+.inspiration-create-board textarea,
+.inspiration-add-pin input,
+.inspiration-add-pin textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 8px 9px;
+}
+
+.inspiration-create-board textarea,
+.inspiration-add-pin textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+
+.inspiration-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  min-width: 0;
+}
+
+.inspiration-board-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 14px;
+}
+
+.inspiration-board-head h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.inspiration-board-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.inspiration-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inspiration-toolbar .oneshot-search {
+  flex: 1;
+}
+
+.inspiration-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.inspiration-tags button {
+  cursor: pointer;
+}
+
+.inspiration-tags button:hover {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+
+.inspiration-add-pin {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+}
+
+.inspiration-add-pin textarea {
+  min-height: 72px;
+}
+
+.inspiration-add-pin button {
+  justify-self: start;
+}
+
+.inspiration-masonry {
+  column-count: 3;
+  column-gap: 10px;
+}
+
+.inspiration-pin {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 10px;
+  overflow: hidden;
+  break-inside: avoid;
+}
+
+.inspiration-pin img,
+.inspiration-pin-placeholder {
+  display: block;
+  width: 100%;
+  min-height: 150px;
+  background: var(--bg-subtle);
+}
+
+.inspiration-pin img {
+  height: auto;
+  object-fit: cover;
+}
+
+.inspiration-pin-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.inspiration-pin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+}
+
+.inspiration-pin-title strong {
+  font-size: 13px;
+}
+
+.inspiration-pin-title button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.inspiration-pin-title button:hover {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.inspiration-pin p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inspiration-pin a {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inspiration-pin small {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.inspiration-empty {
+  padding: 28px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .inspiration-hero,
+  .inspiration-board-head,
+  .inspiration-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inspiration-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .inspiration-add-pin {
+    grid-template-columns: 1fr;
+  }
+
+  .inspiration-masonry {
+    column-count: 1;
+  }
+}
+
 /* -------- Avatar menu (replaces in-topbar agent picker) ------------- */
 .avatar-menu { position: relative; }
 .avatar-btn {

@@ -264,6 +264,27 @@ export interface SavedWorkflowBlueprint {
   pinnedAt?: number;
 }
 
+export interface InspirationBoard {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface InspirationPin {
+  id: string;
+  boardId: string;
+  title: string;
+  imageUrl: string;
+  sourceUrl: string;
+  note: string;
+  usageNote: string;
+  tags: string[];
+  createdAt: number;
+}
+
 export interface ProjectTemplate {
   id: string;
   name: string;

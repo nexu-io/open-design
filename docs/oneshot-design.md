@@ -14,6 +14,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - OneShot Cover Run now carries a CoverVisionOS handoff contract with production stages, expected files, and downstream router commands.
 - Workflow-created projects now show a reusable blueprint strip with gates, exports, scorecards, handoff context, a copyable prompt, and a save action.
 - Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
+- The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, usage notes, tags, and OneShot reference-brief creation.
 - The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, and Motion Explainer.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
 - The Liquid Glass system includes `design-systems/ios-26-liquid-glass/assets/reference-prototype.html`, a compact visual reference for lock screen widgets, Control Center tiles, app chrome, modal sheets, and reduced-brightness behavior.
@@ -36,3 +37,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 ## Near-Term Build Priorities
 
 1. Add custom blueprint collections so saved templates can move beyond automatic workflow groups.
+2. Add image upload/import capture and board-to-workflow attachments for the Inspiration Library.

@@ -15,12 +15,13 @@ import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
+import { InspirationTab } from './InspirationTab';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
 import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
 import { OneShotWorkflows } from './OneShotWorkflows';
 
-type TopTab = 'workflows' | 'designs' | 'examples' | 'design-systems';
+type TopTab = 'workflows' | 'inspiration' | 'designs' | 'examples' | 'design-systems';
 
 interface Props {
   skills: SkillSummary[];
@@ -86,17 +87,17 @@ export function EntryView({
   const envMetaLine = useMemo(() => {
     if (config.mode === 'api') {
       try {
-        return `${config.model} · ${new URL(config.baseUrl).host}`;
+        return `${config.model} - ${new URL(config.baseUrl).host}`;
       } catch {
         return config.model;
       }
     }
     return currentAgent
-      ? `${currentAgent.name}${currentAgent.version ? ` · ${currentAgent.version}` : ''}`
+      ? `${currentAgent.name}${currentAgent.version ? ` - ${currentAgent.version}` : ''}`
       : t('settings.noAgentSelected');
   }, [config.mode, config.model, config.baseUrl, currentAgent, t]);
 
-  // 'Use this prompt' on an example card is a fast path — skip the form and
+  // 'Use this prompt' on an example card is a fast path - skip the form and
   // create the project immediately with sane defaults derived from the skill,
   // seeding the chat composer with the example prompt via pendingPrompt.
   function usePromptFromSkill(skill: SkillSummary) {
@@ -196,7 +197,7 @@ export function EntryView({
                 ? t('settings.localCli')
                 : t('settings.anthropicApi')}
             </span>
-            <span style={{ color: 'var(--text-faint)' }}>·</span>
+            <span style={{ color: 'var(--text-faint)' }}>-</span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
               {envMetaLine}
             </span>
@@ -218,6 +219,7 @@ export function EntryView({
         <div className="entry-header">
           <div className="entry-tabs" role="tablist">
             <TopTabButton current={topTab} value="workflows" label={t('entry.tabWorkflows')} onClick={setTopTab} />
+            <TopTabButton current={topTab} value="inspiration" label="Inspiration" onClick={setTopTab} />
             <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
             <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
             <TopTabButton
@@ -258,6 +260,9 @@ export function EntryView({
                   defaultDesignSystemId={defaultDesignSystemId}
                   onCreateProject={onCreateProject}
                 />
+              ) : null}
+              {topTab === 'inspiration' ? (
+                <InspirationTab onCreateProject={onCreateProject} />
               ) : null}
               {topTab === 'designs' ? (
                 <DesignsTab
@@ -323,7 +328,7 @@ function TopTabButton({
 // produces a project indistinguishable from one created via the form. Per-
 // skill hints in SKILL.md frontmatter (od.fidelity, od.speaker_notes,
 // od.animations) override the defaults so each example reproduces the
-// shipped example.html — e.g. wireframe-sketch declares fidelity:wireframe.
+// shipped example.html - e.g. wireframe-sketch declares fidelity:wireframe.
 function metadataForSkill(skill: SkillSummary): ProjectMetadata {
   const kind = kindForSkill(skill);
   if (kind === 'prototype') {
