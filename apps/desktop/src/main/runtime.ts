@@ -155,6 +155,14 @@ async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
   await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
 }
 
+function installWindowChromeCssHook(window: BrowserWindow): void {
+  window.webContents.on("did-finish-load", () => {
+    void applyWindowChromeCss(window).catch((error: unknown) => {
+      console.error("desktop window chrome CSS injection failed", error);
+    });
+  });
+}
+
 function showWindowButtons(window: BrowserWindow): void {
   if (process.platform !== "darwin" || window.isDestroyed()) return;
   window.setWindowButtonVisibility(true);
@@ -174,6 +182,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  installWindowChromeCssHook(window);
   showWindowButtons(window);
   let currentUrl: string | null = null;
   let stopped = false;
@@ -196,7 +205,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   await window.loadURL(createPendingHtml());
   showWindowButtons(window);
-  await applyWindowChromeCss(window);
 
   const schedule = (delayMs: number) => {
     if (stopped) return;
@@ -214,7 +222,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         currentUrl = url;
         await window.loadURL(url);
         showWindowButtons(window);
-        await applyWindowChromeCss(window);
       }
       schedule(url == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {
