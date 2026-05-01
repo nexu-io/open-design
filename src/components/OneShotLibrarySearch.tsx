@@ -27,6 +27,7 @@ type LibraryOutputFilter = 'all' | 'prototype' | 'deck' | 'template' | 'visual-r
 type LibraryRecencyFilter = 'all' | '7d' | '30d' | '90d';
 type LibraryImportConflictMode = 'rename' | 'replace' | 'skip';
 type LibraryImportAction = 'create' | 'rename' | 'replace' | 'skip';
+type LibraryTransferDirection = 'export' | 'import';
 
 interface LibraryViewFilters {
   query: string;
@@ -53,12 +54,24 @@ interface LibraryViewImportPlanItem {
 }
 
 const SAVED_VIEWS_KEY = 'oneshot:library-search-views';
+const TRANSFER_HISTORY_KEY = 'oneshot:library-search-transfer-history';
 const SAVED_VIEWS_SCHEMA = 'oneshot.library-search-views.v1';
 
 interface LibraryViewsExport {
   schema: typeof SAVED_VIEWS_SCHEMA;
   exportedAt: number;
   views: SavedLibraryView[];
+}
+
+interface LibraryTransferHistoryEntry {
+  id: string;
+  direction: LibraryTransferDirection;
+  createdAt: number;
+  viewCount: number;
+  importedCount?: number;
+  conflictCount?: number;
+  conflictMode?: LibraryImportConflictMode;
+  actions?: Partial<Record<LibraryImportAction, number>>;
 }
 
 export function OneShotLibrarySearch({
@@ -76,6 +89,7 @@ export function OneShotLibrarySearch({
   const [importConflictMode, setImportConflictMode] = useState<LibraryImportConflictMode>('rename');
   const [viewImportStatus, setViewImportStatus] = useState('');
   const [viewImportError, setViewImportError] = useState('');
+  const [transferHistory, setTransferHistory] = useState<LibraryTransferHistoryEntry[]>([]);
   const [savedBlueprints, setSavedBlueprints] = useState<SavedWorkflowBlueprint[]>([]);
   const [inspirationBoards, setInspirationBoards] = useState<InspirationBoard[]>([]);
   const [inspirationPins, setInspirationPins] = useState<InspirationPin[]>([]);
@@ -103,6 +117,19 @@ export function OneShotLibrarySearch({
     return () => {
       window.removeEventListener('oneshot:library-views-changed', refreshSavedViews);
       window.removeEventListener('storage', refreshSavedViews);
+    };
+  }, []);
+
+  useEffect(() => {
+    function refreshTransferHistory() {
+      setTransferHistory(listLibraryTransferHistory());
+    }
+    refreshTransferHistory();
+    window.addEventListener('oneshot:library-transfer-history-changed', refreshTransferHistory);
+    window.addEventListener('storage', refreshTransferHistory);
+    return () => {
+      window.removeEventListener('oneshot:library-transfer-history-changed', refreshTransferHistory);
+      window.removeEventListener('storage', refreshTransferHistory);
     };
   }, []);
 
@@ -207,15 +234,29 @@ export function OneShotLibrarySearch({
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    addLibraryTransferHistory({
+      direction: 'export',
+      viewCount: savedViews.length,
+      conflictCount: 0,
+    });
   }
 
   function confirmViewImport() {
     if (!pendingImportViews) return;
+    const importPlan = buildLibraryViewImportPlan(pendingImportViews, savedViews, importConflictMode);
     const imported = importLibraryViews({
       schema: SAVED_VIEWS_SCHEMA,
       exportedAt: Date.now(),
       views: pendingImportViews,
     }, importConflictMode);
+    addLibraryTransferHistory({
+      direction: 'import',
+      viewCount: pendingImportViews.length,
+      importedCount: imported.length,
+      conflictCount: countLibraryViewImportConflicts(pendingImportViews, savedViews),
+      conflictMode: importConflictMode,
+      actions: countLibraryImportActions(importPlan),
+    });
     setPendingImportViews(null);
     setViewImportError('');
     setViewImportStatus(`Imported ${imported.length} Library Search view${imported.length === 1 ? '' : 's'}.`);
@@ -437,6 +478,25 @@ export function OneShotLibrarySearch({
             Save a filter set to reuse it later.
           </div>
         )}
+        {transferHistory.length > 0 ? (
+          <div className="oneshot-library-transfer-history" aria-label="Library Search transfer history">
+            <div className="oneshot-library-transfer-history-head">
+              <span>Transfer history</span>
+              <button type="button" className="secondary" onClick={clearLibraryTransferHistory}>
+                Clear history
+              </button>
+            </div>
+            <div className="oneshot-library-transfer-history-list">
+              {transferHistory.slice(0, 5).map((entry) => (
+                <article key={entry.id}>
+                  <strong>{summarizeTransferHistoryTitle(entry)}</strong>
+                  <span>{summarizeTransferHistoryDetail(entry)}</span>
+                  <small>{new Date(entry.createdAt).toLocaleString()}</small>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       {libraryResults.length > 0 ? (
         <div className="oneshot-library-results">
@@ -621,6 +681,57 @@ function listSavedLibraryViews(): SavedLibraryView[] {
   }
 }
 
+function listLibraryTransferHistory(): LibraryTransferHistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(TRANSFER_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as LibraryTransferHistoryEntry[];
+    return Array.isArray(parsed)
+      ? parsed
+          .map(normalizeLibraryTransferHistoryEntry)
+          .filter((entry): entry is LibraryTransferHistoryEntry => Boolean(entry))
+          .sort((a, b) => b.createdAt - a.createdAt)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function addLibraryTransferHistory(input: Omit<LibraryTransferHistoryEntry, 'id' | 'createdAt'>) {
+  const entry: LibraryTransferHistoryEntry = {
+    ...input,
+    id: `library-transfer-${Date.now()}-${input.direction}`,
+    createdAt: Date.now(),
+  };
+  const next = [entry, ...listLibraryTransferHistory()].slice(0, 12);
+  localStorage.setItem(TRANSFER_HISTORY_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('oneshot:library-transfer-history-changed'));
+}
+
+function clearLibraryTransferHistory() {
+  localStorage.removeItem(TRANSFER_HISTORY_KEY);
+  window.dispatchEvent(new CustomEvent('oneshot:library-transfer-history-changed'));
+}
+
+function normalizeLibraryTransferHistoryEntry(payload: unknown): LibraryTransferHistoryEntry | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload as Partial<LibraryTransferHistoryEntry>;
+  if (candidate.direction !== 'export' && candidate.direction !== 'import') return null;
+  const viewCount = Number(candidate.viewCount);
+  const createdAt = Number(candidate.createdAt);
+  if (!Number.isFinite(viewCount) || !Number.isFinite(createdAt)) return null;
+  return {
+    id: typeof candidate.id === 'string' ? candidate.id : crypto.randomUUID(),
+    direction: candidate.direction,
+    createdAt,
+    viewCount,
+    importedCount: Number.isFinite(candidate.importedCount) ? Number(candidate.importedCount) : undefined,
+    conflictCount: Number.isFinite(candidate.conflictCount) ? Number(candidate.conflictCount) : undefined,
+    conflictMode: normalizeConflictMode(candidate.conflictMode),
+    actions: normalizeImportActionCounts(candidate.actions),
+  };
+}
+
 function saveLibraryView(input: Omit<SavedLibraryView, 'id' | 'createdAt'>) {
   const existing = listSavedLibraryViews().find((item) => item.name === input.name);
   const view: SavedLibraryView = {
@@ -786,6 +897,13 @@ function countLibraryViewImportConflicts(incomingViews: SavedLibraryView[], exis
   return incomingViews.filter((view) => existingKeys.has(libraryViewNameKey(view.name))).length;
 }
 
+function countLibraryImportActions(plan: LibraryViewImportPlanItem[]) {
+  return plan.reduce<Partial<Record<LibraryImportAction, number>>>((counts, item) => {
+    counts[item.action] = (counts[item.action] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 function buildLibraryViewImportPlan(
   incomingViews: SavedLibraryView[],
   existingViews: SavedLibraryView[],
@@ -848,6 +966,60 @@ function formatLibraryImportAction(action: LibraryImportAction) {
     default:
       return 'Create';
   }
+}
+
+function summarizeTransferHistoryTitle(entry: LibraryTransferHistoryEntry) {
+  if (entry.direction === 'export') {
+    return `Exported ${entry.viewCount} Library Search view${entry.viewCount === 1 ? '' : 's'}`;
+  }
+  const importedCount = entry.importedCount ?? 0;
+  return `Imported ${importedCount} of ${entry.viewCount} Library Search view${entry.viewCount === 1 ? '' : 's'}`;
+}
+
+function summarizeTransferHistoryDetail(entry: LibraryTransferHistoryEntry) {
+  if (entry.direction === 'export') {
+    return 'Downloaded portable OneShot JSON packet.';
+  }
+  const actions = formatImportActionCounts(entry.actions);
+  const conflictMode = entry.conflictMode ? `Mode: ${formatConflictMode(entry.conflictMode)}` : '';
+  const conflicts = `${entry.conflictCount ?? 0} conflict${entry.conflictCount === 1 ? '' : 's'}`;
+  return [conflictMode, conflicts, actions].filter(Boolean).join(' - ');
+}
+
+function formatImportActionCounts(actions?: Partial<Record<LibraryImportAction, number>>) {
+  if (!actions) return '';
+  return (['create', 'rename', 'replace', 'skip'] as LibraryImportAction[])
+    .map((action) => actions[action] ? `${actions[action]} ${action}` : '')
+    .filter(Boolean)
+    .join(', ');
+}
+
+function formatConflictMode(mode: LibraryImportConflictMode) {
+  switch (mode) {
+    case 'rename':
+      return 'Rename';
+    case 'replace':
+      return 'Replace';
+    case 'skip':
+      return 'Skip';
+    default:
+      return 'Rename';
+  }
+}
+
+function normalizeConflictMode(mode: unknown): LibraryImportConflictMode | undefined {
+  return mode === 'rename' || mode === 'replace' || mode === 'skip' ? mode : undefined;
+}
+
+function normalizeImportActionCounts(actions: unknown) {
+  if (!actions || typeof actions !== 'object') return undefined;
+  const candidate = actions as Partial<Record<LibraryImportAction, number>>;
+  return (['create', 'rename', 'replace', 'skip'] as LibraryImportAction[])
+    .reduce<Partial<Record<LibraryImportAction, number>>>((counts, action) => {
+      const value = Number(candidate[action]);
+      if (Number.isFinite(value) && value > 0) counts[action] = value;
+      return counts;
+    }, {});
 }
 
 function buildImportedLibraryViewName(name: string, reservedKeys: Set<string>) {

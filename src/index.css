@@ -1001,6 +1001,61 @@ code {
   font-weight: 700;
 }
 
+.oneshot-library-transfer-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.oneshot-library-transfer-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.oneshot-library-transfer-history-head > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.oneshot-library-transfer-history-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 7px;
+}
+
+.oneshot-library-transfer-history-list article {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.oneshot-library-transfer-history-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.oneshot-library-transfer-history-list span,
+.oneshot-library-transfer-history-list small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.oneshot-library-transfer-history-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .oneshot-library-view-list {
   display: flex;
   flex-direction: column;
@@ -3665,6 +3720,17 @@ code {
   .oneshot-library-transfer-audit-row,
   .oneshot-library-transfer-audit-row dl {
     grid-template-columns: 1fr;
+  }
+
+  .oneshot-library-transfer-history-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .oneshot-library-transfer-history-head button,
+  .oneshot-library-transfer-history-list span {
+    width: 100%;
+    max-width: none;
   }
 
   .oneshot-library-view-actions {

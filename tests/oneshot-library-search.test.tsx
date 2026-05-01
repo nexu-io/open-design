@@ -263,6 +263,9 @@ describe('OneShotLibrarySearch', () => {
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:oneshot-library-views');
+    expect(screen.getByLabelText('Library Search transfer history')).toBeInTheDocument();
+    expect(screen.getByText('Exported 1 Library Search view')).toBeInTheDocument();
+    expect(screen.getByText('Downloaded portable OneShot JSON packet.')).toBeInTheDocument();
   });
 
   it('pins saved Library Search views above recent views', () => {
@@ -562,6 +565,9 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('Replace')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
     expect(await screen.findByText('Imported 1 Library Search view.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Library Search transfer history')).toBeInTheDocument();
+    expect(screen.getByText('Imported 1 of 1 Library Search view')).toBeInTheDocument();
+    expect(screen.getByText('Mode: Replace - 1 conflict - 1 replace')).toBeInTheDocument();
     expect(screen.getByText('Collection: Publishing')).toBeInTheDocument();
     expect(screen.queryByText('Collection: Sales')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Shared view/ }));
@@ -578,8 +584,50 @@ describe('OneShotLibrarySearch', () => {
     expect(screen.getByText('No change')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Import previewed views' }));
     expect(await screen.findByText('Imported 0 Library Search views.')).toBeInTheDocument();
+    expect(screen.getByText('Imported 0 of 1 Library Search view')).toBeInTheDocument();
+    expect(screen.getByText('Mode: Skip - 1 conflict - 1 skip')).toBeInTheDocument();
     expect(screen.getByText('Collection: Sales')).toBeInTheDocument();
     expect(screen.queryByText('Collection: Publishing')).not.toBeInTheDocument();
+  });
+
+  it('shows and clears Library Search transfer history', () => {
+    localStorage.setItem('oneshot:library-search-transfer-history', JSON.stringify([
+      {
+        id: 'history-export',
+        direction: 'export',
+        createdAt: 200,
+        viewCount: 2,
+        conflictCount: 0,
+      },
+      {
+        id: 'history-import',
+        direction: 'import',
+        createdAt: 300,
+        viewCount: 3,
+        importedCount: 2,
+        conflictCount: 1,
+        conflictMode: 'rename',
+        actions: { create: 1, rename: 1, skip: 1 },
+      },
+    ]));
+
+    render(
+      <OneShotLibrarySearch
+        projects={[project('project-1', 'Project archive')]}
+        onCreateProject={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Library Search transfer history')).toBeInTheDocument();
+    expect(screen.getByText('Imported 2 of 3 Library Search views')).toBeInTheDocument();
+    expect(screen.getByText('Mode: Rename - 1 conflict - 1 create, 1 rename, 1 skip')).toBeInTheDocument();
+    expect(screen.getByText('Exported 2 Library Search views')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
+
+    expect(screen.queryByLabelText('Library Search transfer history')).not.toBeInTheDocument();
+    expect(localStorage.getItem('oneshot:library-search-transfer-history')).toBeNull();
   });
 
   it('audits and renames duplicate Library Search view names inside one import packet', async () => {
