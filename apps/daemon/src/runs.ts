@@ -32,7 +32,6 @@ export function createChatRunService({
       exitCode: null,
       signal: null,
       cancelRequested: false,
-      promptFileCleaned: null,
     };
     runs.set(run.id, run);
     return run;
@@ -75,7 +74,6 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
-    run.promptFileCleaned?.();
     emit(run, 'end', { code, signal, status });
     for (const sse of run.clients) sse.end();
     run.clients.clear();

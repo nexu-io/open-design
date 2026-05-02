@@ -8,6 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { composeSystemPrompt } from './prompts/system.js';
+import { createCommandInvocation } from '@open-design/platform';
 import {
   detectAgents,
   getAgentDef,
@@ -187,15 +188,6 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
-// Windows ENAMETOOLONG mitigation constants
-const CMD_BAT_RE = /\.(cmd|bat)$/i;
-const PROMPT_TEMP_FILE = () =>
-  '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
-const promptFileBootstrap = (fp) =>
-  `Your full instructions are stored in the file: ${fp.replace(/\\/g, '/')}. ` +
-  'Open that file first and follow every instruction in it exactly — ' +
-  'it contains the system prompt, design system, skill workflow, and user request. ' +
-  'Do not begin your response until you have read the entire file.';
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
 
 export function normalizeProjectDisplayStatus(status) {
@@ -1719,66 +1711,13 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
 
-    // Windows ENAMETOOLONG mitigation.  On Windows the OS caps the command
-    // line passed to child_process.spawn: ~8 191 chars when shell:true is
-    // needed (.cmd/.bat npm shims) and ~32 767 chars otherwise (CreateProcess).
-    // The composed prompt (system prompt + design system + skill body + user
-    // message) can exceed either limit.  Agents with `promptViaStdin` bypass
-    // this by piping through stdin.  For the remaining agents we write the
-    // prompt to a temp file in the project directory and pass a short
-    // bootstrap message that tells the agent to Read it before responding.
     const resolvedBin = resolveAgentBin(agentId);
-    const isWinShell = process.platform === 'win32' && resolvedBin && CMD_BAT_RE.test(resolvedBin);
-    // Thresholds account for escaping overhead (~1.1-1.3x for cmd.exe shell)
-    // plus other args (~500 chars).  6500 chars for shell:true, 30000 for
-    // direct CreateProcess.
-    const promptLimit = isWinShell ? 6500 : 30000;
-    const needsFilePrompt =
-      !def.promptViaStdin &&
-      process.platform === 'win32' &&
-      composed.length > promptLimit &&
-      cwd;
-    if (process.platform === 'win32') {
-      console.log(
-        `[od] prompt-delivery: agent=${agentId} promptLen=${composed.length} ` +
-        `shell=${isWinShell} limit=${promptLimit} file=${!!needsFilePrompt} ` +
-        `bin=${resolvedBin ? path.basename(resolvedBin) : 'null'}`,
-      );
-    }
-    let effectivePrompt = composed;
-    let promptFilePath = null;
-    let promptFileCleaned = false;
-    const cleanPromptFile = () => {
-      if (promptFilePath && !promptFileCleaned) {
-        promptFileCleaned = true;
-        fs.unlink(promptFilePath, () => {});
-      }
-    };
-    // ^^^ idempotency: promptFileCleaned is set synchronously BEFORE the
-    // async fs.unlink callback, so a second call never races past the guard.
-    if (needsFilePrompt) {
-      promptFilePath = path.join(cwd, PROMPT_TEMP_FILE());
-      try {
-        fs.writeFileSync(promptFilePath, composed, 'utf8');
-        effectivePrompt = promptFileBootstrap(promptFilePath);
-        console.log(`[od] wrote prompt to ${promptFilePath}`);
-      } catch (err) {
-        console.error(`[od] failed to write prompt file: ${err.message}`);
-        promptFilePath = null;
-      }
-    }
 
-    run.promptFileCleaned = cleanPromptFile;
-    const args = def.buildArgs(effectivePrompt, safeImages, extraAllowedDirs, agentOptions, { cwd });
-    const send = (event, data) => design.runs.emit(run, event, data);
-
-    // resolvedBin was already looked up above for the ENAMETOOLONG check.
     // If detection can't find the binary, surface a friendly SSE error
     // pointing at /api/agents instead of silently falling back to
     // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
-    // from issue #10 the rest of this block is meant to prevent.
+    // from issue #10.
     if (!resolvedBin) {
-      cleanPromptFile();
       design.runs.emit(run, 'error', createSseErrorPayload(
         'AGENT_UNAVAILABLE',
         `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
@@ -1787,32 +1726,10 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       ));
       return design.runs.finish(run, 'failed', 1, null);
     }
-    // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
-    // those without `shell: true` (CVE-2024-27980). When `shell: true` is set
-    // on Windows, Node escapes argv items for the cmd.exe shell — that
-    // escape is what currently keeps user-controlled prompt text in `args`
-    // (composed via `def.buildArgs(prompt, ...)` above) from being
-    // interpreted as shell metacharacters. Two caveats this leaves on the
-    // table for a future contributor to be aware of:
-    //   1. Defensibility relies on Node's escaper staying correct. The
-    //      stronger fix is to keep user text out of argv entirely by piping
-    //      the composed prompt through child stdin instead of passing it
-    //      as a `-p $prompt`-style flag. Do NOT add a new prompt-bearing
-    //      flag in `buildArgs` thinking shell:true makes it safe — route
-    //      it through stdin instead.
-    //   2. cmd.exe caps the full command line at ~8191 chars (well below
-    //      Node's direct-spawn argv cap), so long prompts can fail with an
-    //      ENAMETOOLONG-class error here. Same mitigation: stdin.
-    //
-    // We only flip shell:true for `.cmd`/`.bat` because those are the only
-    // PATHEXT entries that strictly require cmd.exe to launch. `.exe`/`.com`
-    // launch directly (no shell needed); `.ps1`/`.vbs` etc. would need a
-    // different host (powershell / wscript) — `shell: true` (which uses
-    // cmd.exe) wouldn't actually help those, so we don't pretend it would.
-    // In practice npm-installed CLIs ship as `.cmd` shims, which is the
-    // case this branch covers.
-    const useShell =
-      process.platform === 'win32' && CMD_BAT_RE.test(resolvedBin);
+
+    const args = def.buildArgs(composed, safeImages, extraAllowedDirs, agentOptions, { cwd });
+    const send = (event, data) => design.runs.emit(run, event, data);
+
     const odMediaEnv = {
       OD_BIN,
       OD_DAEMON_URL: `http://127.0.0.1:${port}`,
@@ -1842,19 +1759,23 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     let child;
     let acpSession = null;
     try {
-      // When the agent definition sets `promptViaStdin`, pipe the composed
-      // prompt through stdin instead of embedding it in argv. Bypasses the
-      // OS command-line length limit (Windows CreateProcess caps at ~32 KB)
-      // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
-      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || needsFilePrompt ? 'pipe' : 'ignore';
-      child = spawn(resolvedBin, args, {
-        env: { ...process.env, ...odMediaEnv },
+      // Prompt delivery via stdin is now the universal default. This bypasses
+      // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
+      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      const env = { ...process.env, ...odMediaEnv };
+      const invocation = createCommandInvocation({
+        command: resolvedBin,
+        args,
+        env,
+      });
+      child = spawn(invocation.command, invocation.args, {
+        env,
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
-        shell: useShell,
+        shell: false,
       });
       run.child = child;
-      if ((def.promptViaStdin || needsFilePrompt) && child.stdin && def.streamFormat !== 'pi-rpc') {
+      if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
         // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
         // launch) would otherwise surface as an unhandled stream error and
         // crash the daemon. Swallow it — the regular exit/close handlers
@@ -1867,7 +1788,6 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
-      cleanPromptFile();
       design.runs.emit(run, 'error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
       return design.runs.finish(run, 'failed', 1, null);
     }
