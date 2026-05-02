@@ -91,6 +91,8 @@ export interface Dict {
   'settings.show': string;
   'settings.hide': string;
   'settings.model': string;
+  'settings.maxTokens': string;
+  'settings.maxTokensHint': string;
   'settings.baseUrl': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;

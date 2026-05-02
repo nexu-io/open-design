@@ -72,6 +72,9 @@ export const ko: Dict = {
   'settings.show': '표시',
   'settings.hide': '숨기기',
   'settings.model': '모델',
+  'settings.maxTokens': '최대 토큰 수 (선택 사항)',
+  'settings.maxTokensHint':
+    '응답 길이 상한입니다. 각 모델에는 기본값이 미리 조정되어 있으며(placeholder로 표시됨), 비워 두면 그 값을 사용하고 숫자를 입력하면 덮어씁니다.',
   'settings.baseUrl': 'Base URL',
   'settings.apiHint':
     '이 브라우저에서 설정한 Base URL로 직접 호출됩니다. 프록시는 사용되지 않으며, 키는 localStorage에만 보관됩니다.',

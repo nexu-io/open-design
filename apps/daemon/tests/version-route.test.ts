@@ -7,12 +7,16 @@ describe('/api/version', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    const started = await startServer({ port: 0, returnServer: true }) as {
-      url: string;
-      server: http.Server;
-    };
-    baseUrl = started.url;
-    server = started.server;
+    const started = await startServer({ port: 0, returnServer: true }) as http.Server | undefined;
+    if (started == null) {
+      throw new Error('startServer did not return a server handle');
+    }
+    const address = started.address();
+    if (address == null || typeof address === 'string') {
+      throw new Error('startServer did not bind to a TCP port');
+    }
+    server = started;
+    baseUrl = `http://127.0.0.1:${address.port}`;
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
