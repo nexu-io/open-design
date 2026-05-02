@@ -59,6 +59,7 @@ export type DesktopRuntime = {
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
+  show(): void;
   status(): DesktopStatusSnapshot;
 };
 
@@ -273,6 +274,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, image.toPNG());
       return { path: outputPath };
+    },
+    show() {
+      if (!window.isDestroyed()) {
+        window.show();
+        window.focus();
+      }
     },
     status() {
       return {
