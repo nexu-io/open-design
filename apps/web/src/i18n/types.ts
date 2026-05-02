@@ -16,7 +16,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'ja': '日本語',
   'ko': '한국어',
   'pl': 'Polski',
-  'hu': 'Magyar'
+  'hu': 'Magyar',
+  'tr': 'Türkçe'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
