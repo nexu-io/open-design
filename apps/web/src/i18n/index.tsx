@@ -13,6 +13,7 @@ import { de } from './locales/de';
 import { en } from './locales/en';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
+import { fr } from './locales/fr';
 import { ja } from './locales/ja';
 import { ko } from './locales/ko';
 import { ptBR } from './locales/pt-BR';
@@ -41,6 +42,7 @@ const DICTS: Record<Locale, Dict> = {
   'ko': ko,
   'pl': pl,
   'hu': hu,
+  'fr': fr,
 };
 
 const LS_KEY = 'open-design:locale';
