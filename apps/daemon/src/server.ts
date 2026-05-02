@@ -411,7 +411,7 @@ const projectUpload = multer({
       cb(null, `${Date.now().toString(36)}-${safe}`);
     },
   }),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
 });
 
 function handleProjectUpload(req, res, next) {
