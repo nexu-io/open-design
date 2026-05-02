@@ -28,6 +28,13 @@ import { buildSrcdoc } from '../runtime/srcdoc';
 import { saveTemplate } from '../state/projects';
 import type { DeployConfigResponse, DeployProjectFileResponse, ProjectFile } from '../types';
 import { Icon } from './Icon';
+import {
+  liveSnapshotForComment,
+  overlayBoundsFromSnapshot,
+  targetFromSnapshot,
+  type PreviewCommentSnapshot,
+} from '../comments';
+import type { PreviewComment, PreviewCommentTarget } from '../types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
@@ -41,6 +48,9 @@ interface Props {
   isDeck?: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
+  previewComments?: PreviewComment[];
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
+  onRemovePreviewComment?: (commentId: string) => Promise<void>;
 }
 
 export function FileViewer({
@@ -50,6 +60,9 @@ export function FileViewer({
   isDeck,
   onExportAsPptx,
   streaming,
+  previewComments = [],
+  onSavePreviewComment,
+  onRemovePreviewComment,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -65,6 +78,9 @@ export function FileViewer({
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
+        previewComments={previewComments}
+        onSavePreviewComment={onSavePreviewComment}
+        onRemovePreviewComment={onRemovePreviewComment}
       />
     );
   }
@@ -128,6 +144,159 @@ function FileActions({
       >
         {t('fileViewer.open')}
       </a>
+    </div>
+  );
+}
+
+function CommentPopover({
+  target,
+  existing,
+  draft,
+  onDraft,
+  onClose,
+  onSave,
+  onRemove,
+  t,
+}: {
+  target: PreviewCommentSnapshot;
+  existing: PreviewComment | null;
+  draft: string;
+  onDraft: (value: string) => void;
+  onClose: () => void;
+  onSave: (attach: boolean) => void | Promise<void>;
+  onRemove: (commentId: string) => void | Promise<void>;
+  t: TranslateFn;
+}) {
+  return (
+    <div className="comment-popover" data-testid="comment-popover">
+      <div className="comment-popover-head">
+        <div>
+          <strong>{target.elementId}</strong>
+          <span>{target.label}</span>
+        </div>
+        <button type="button" className="ghost" onClick={onClose}>
+          {t('common.close')}
+        </button>
+      </div>
+      <textarea
+        data-testid="comment-popover-input"
+        value={draft}
+        placeholder={t('chat.comments.placeholder')}
+        onChange={(event) => onDraft(event.target.value)}
+      />
+      <div className="comment-popover-actions">
+        {existing ? (
+          <button type="button" className="comment-popover-remove" onClick={() => onRemove(existing.id)}>
+            {t('chat.comments.remove')}
+          </button>
+        ) : <span />}
+        <button
+          type="button"
+          className="primary"
+          data-testid="comment-add-send"
+          disabled={!draft.trim()}
+          onClick={() => void onSave(true)}
+        >
+          {existing ? t('chat.comments.updateSend') : t('chat.comments.addSend')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CommentPreviewOverlays({
+  comments,
+  liveTargets,
+  hoveredTarget,
+  activeTarget,
+  scale,
+  onOpenComment,
+}: {
+  comments: PreviewComment[];
+  liveTargets: Map<string, PreviewCommentSnapshot>;
+  hoveredTarget: PreviewCommentSnapshot | null;
+  activeTarget: PreviewCommentSnapshot | null;
+  scale: number;
+  onOpenComment: (comment: PreviewComment, snapshot: PreviewCommentSnapshot) => void;
+}) {
+  const visibleComments = comments
+    .map((comment, index) => ({
+      comment,
+      index,
+      snapshot: liveSnapshotForComment(comment, liveTargets),
+    }))
+    .filter((item): item is { comment: PreviewComment; index: number; snapshot: PreviewCommentSnapshot } =>
+      Boolean(item.snapshot),
+    );
+  const targetOverlay = activeTarget ?? hoveredTarget;
+  return (
+    <div className="comment-overlay-layer" aria-hidden={false}>
+      {visibleComments.map(({ comment, index, snapshot }) => {
+        const bounds = overlayBoundsFromSnapshot(snapshot, scale);
+        return (
+          <div
+            key={comment.id}
+            className="comment-saved-marker"
+            style={{
+              left: bounds.left,
+              top: bounds.top,
+              width: bounds.width,
+              height: bounds.height,
+            }}
+            data-testid={`comment-saved-marker-${comment.elementId}`}
+          >
+            <div className="comment-saved-outline" />
+            <button
+              type="button"
+              className="comment-saved-pin"
+              onClick={() => onOpenComment(comment, snapshot)}
+              title={`${comment.elementId}: ${comment.note}`}
+              aria-label={`Open comment for ${comment.elementId}`}
+            >
+              {index + 1}
+            </button>
+          </div>
+        );
+      })}
+      {targetOverlay ? (
+        <CommentTargetOverlay
+          snapshot={targetOverlay}
+          scale={scale}
+          selected={Boolean(activeTarget)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function CommentTargetOverlay({
+  snapshot,
+  scale,
+  selected,
+}: {
+  snapshot: PreviewCommentSnapshot;
+  scale: number;
+  selected: boolean;
+}) {
+  const bounds = overlayBoundsFromSnapshot(snapshot, scale);
+  const width = Math.round(snapshot.position.width);
+  const height = Math.round(snapshot.position.height);
+  return (
+    <div
+      className={`comment-target-overlay${selected ? ' selected' : ''}`}
+      style={{
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      }}
+      data-testid="comment-target-overlay"
+    >
+      <div className="comment-target-tooltip">
+        <strong>{snapshot.elementId}</strong>
+        <span>{snapshot.label}</span>
+        <span>{width} × {height}</span>
+      </div>
     </div>
   );
 }
@@ -410,6 +579,9 @@ function HtmlViewer({
   isDeck,
   onExportAsPptx,
   streaming,
+  previewComments = [],
+  onSavePreviewComment,
+  onRemovePreviewComment,
 }: {
   projectId: string;
   file: ProjectFile;
@@ -417,6 +589,9 @@ function HtmlViewer({
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
+  previewComments?: PreviewComment[];
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
+  onRemovePreviewComment?: (commentId: string) => Promise<void>;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -443,6 +618,11 @@ function HtmlViewer({
   const [teamSlug, setTeamSlug] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [commentMode, setCommentMode] = useState(false);
+  const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
+  const [commentDraft, setCommentDraft] = useState('');
   const previewStateKey = `${projectId}:${file.name}`;
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
@@ -516,8 +696,9 @@ function HtmlViewer({
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      commentBridge: commentMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, commentMode],
   );
 
   useEffect(() => {
@@ -540,6 +721,87 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [effectiveDeck, previewStateKey]);
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:comment-mode', enabled: commentMode }, '*');
+  }, [commentMode, srcDoc]);
+
+  useEffect(() => {
+    setActiveCommentTarget(null);
+    setHoveredCommentTarget(null);
+    setLiveCommentTargets(new Map());
+    setCommentDraft('');
+  }, [file.name]);
+
+  useEffect(() => {
+    if (!commentMode) {
+      setActiveCommentTarget(null);
+      setHoveredCommentTarget(null);
+      setLiveCommentTargets(new Map());
+      return;
+    }
+    const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot => ({
+      filePath: file.name,
+      elementId: String(data.elementId || ''),
+      selector: String(data.selector || ''),
+      label: String(data.label || ''),
+      text: String(data.text || ''),
+      position: {
+        x: Number(data.position?.x) || 0,
+        y: Number(data.position?.y) || 0,
+        width: Number(data.position?.width) || 0,
+        height: Number(data.position?.height) || 0,
+      },
+      htmlHint: String(data.htmlHint || ''),
+    });
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as (Partial<PreviewCommentSnapshot> & {
+        type?: string;
+        targets?: Array<Partial<PreviewCommentSnapshot>>;
+      }) | null;
+      if (!data?.type) return;
+      if (data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
+        const next = new Map<string, PreviewCommentSnapshot>();
+        data.targets.forEach((item) => {
+          const snapshot = snapshotFromData(item);
+          if (snapshot.elementId) next.set(snapshot.elementId, snapshot);
+        });
+        setLiveCommentTargets(next);
+        setActiveCommentTarget((current) => (
+          current ? next.get(current.elementId) ?? null : null
+        ));
+        setHoveredCommentTarget((current) => (
+          current ? next.get(current.elementId) ?? null : null
+        ));
+        return;
+      }
+      if (data.type === 'od:comment-leave') {
+        setHoveredCommentTarget(null);
+        return;
+      }
+      if (data.type === 'od:comment-hover') {
+        const snapshot = snapshotFromData(data);
+        if (!snapshot.elementId) return;
+        setHoveredCommentTarget(snapshot);
+        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        return;
+      }
+      if (data.type === 'od:comment-target') {
+        const snapshot = snapshotFromData(data);
+        if (!snapshot.elementId) return;
+        const existing = previewComments.find((comment) => comment.elementId === snapshot.elementId);
+        setActiveCommentTarget(snapshot);
+        setHoveredCommentTarget(snapshot);
+        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        setCommentDraft(existing?.note ?? '');
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [commentMode, file.name, previewComments]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
@@ -895,11 +1157,11 @@ function HtmlViewer({
           </div>
           <span className="viewer-divider" aria-hidden />
           <button
-            className="viewer-action"
+            className={`viewer-action${commentMode ? ' active' : ''}`}
             type="button"
-            disabled
-            data-coming-soon="true"
+            data-testid="comment-mode-toggle"
             title={t('fileViewer.comment')}
+            onClick={() => setCommentMode((v) => !v)}
           >
             <Icon name="comment" size={13} />
             <span>{t('fileViewer.comment')}</span>
@@ -1117,21 +1379,57 @@ function HtmlViewer({
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
-          <div
-            style={{
-              width: `${100 / previewScale}%`,
-              height: `${100 / previewScale}%`,
-              transform: `scale(${previewScale})`,
-              transformOrigin: '0 0',
-            }}
-          >
-            <iframe
-              ref={iframeRef}
-              data-testid="artifact-preview-frame"
-              title={file.name}
-              sandbox="allow-scripts"
-              srcDoc={srcDoc}
-            />
+          <div className="comment-preview-layer">
+            <div
+              style={{
+                width: `${100 / previewScale}%`,
+                height: `${100 / previewScale}%`,
+                transform: `scale(${previewScale})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              <iframe
+                ref={iframeRef}
+                data-testid="artifact-preview-frame"
+                title={file.name}
+                sandbox="allow-scripts"
+                srcDoc={srcDoc}
+              />
+            </div>
+            {commentMode ? (
+              <CommentPreviewOverlays
+                comments={previewComments}
+                liveTargets={liveCommentTargets}
+                hoveredTarget={hoveredCommentTarget}
+                activeTarget={activeCommentTarget}
+                scale={previewScale}
+                onOpenComment={(comment, snapshot) => {
+                  setActiveCommentTarget(snapshot);
+                  setHoveredCommentTarget(snapshot);
+                  setCommentDraft(comment.note);
+                }}
+              />
+            ) : null}
+            {commentMode && activeCommentTarget ? (
+              <CommentPopover
+                target={activeCommentTarget}
+                existing={previewComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
+                draft={commentDraft}
+                onDraft={setCommentDraft}
+                onClose={() => setActiveCommentTarget(null)}
+                onSave={async (attach) => {
+                  if (!commentDraft.trim() || !onSavePreviewComment) return;
+                  const saved = await onSavePreviewComment(targetFromSnapshot(activeCommentTarget), commentDraft.trim(), attach);
+                  if (saved) setActiveCommentTarget(null);
+                }}
+                onRemove={async (commentId) => {
+                  if (!onRemovePreviewComment) return;
+                  await onRemovePreviewComment(commentId);
+                  setActiveCommentTarget(null);
+                }}
+                t={t}
+              />
+            ) : null}
           </div>
         ) : (
           <pre className="viewer-source">{source}</pre>

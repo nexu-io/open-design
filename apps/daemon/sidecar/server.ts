@@ -62,13 +62,13 @@ function attachParentMonitor(stop: () => Promise<void>): void {
 }
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
-  const serverHandle = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true }) as
+  const started = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true }) as unknown as
     | Server
     | undefined;
-  if (serverHandle == null) {
+  if (started == null) {
     throw new Error("daemon startServer did not return a server handle");
   }
-  const server = serverHandle;
+  const server = started;
   const address = server.address();
   if (address == null || typeof address === "string") {
     throw new Error("daemon startServer did not bind to a TCP port");

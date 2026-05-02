@@ -9,7 +9,7 @@
  *   - 'stderr'  : incidental stderr. Shown only when the process exits
  *                 non-zero (tail appended to the error message).
  */
-import type { AgentEvent, ChatMessage } from '../types';
+import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type {
   ChatRunCreateResponse,
   ChatRunListResponse,
@@ -51,6 +51,7 @@ export interface DaemonStreamOptions {
   // daemon resolves them inside the project folder, validates they
   // exist, and stitches them into the user message as `@<path>` hints.
   attachments?: string[];
+  commentAttachments?: ChatCommentAttachment[];
   // Per-CLI model + reasoning the user picked in the model menu. Both are
   // optional; the daemon validates them against the agent's declared
   // options and falls back to the CLI default when missing.
@@ -85,6 +86,7 @@ export async function streamViaDaemon({
   skillId,
   designSystemId,
   attachments,
+  commentAttachments,
   model,
   reasoning,
   initialLastEventId,
@@ -108,6 +110,7 @@ export async function streamViaDaemon({
     skillId: skillId ?? null,
     designSystemId: designSystemId ?? null,
     attachments: attachments ?? [],
+    commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
   };

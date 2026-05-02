@@ -1,4 +1,5 @@
 import type { ProjectFile } from './files';
+import type { PreviewCommentPosition } from './comments';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -13,6 +14,7 @@ export interface ChatRequest {
   skillId?: string | null;
   designSystemId?: string | null;
   attachments?: string[];
+  commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
 }
@@ -58,6 +60,19 @@ export interface ChatAttachment {
   size?: number;
 }
 
+export interface ChatCommentAttachment {
+  id: string;
+  order: number;
+  filePath: string;
+  elementId: string;
+  selector: string;
+  label: string;
+  comment: string;
+  currentText: string;
+  pagePosition: PreviewCommentPosition;
+  htmlHint: string;
+}
+
 export type PersistedAgentEvent =
   | { kind: 'status'; label: string; detail?: string }
   | { kind: 'text'; text: string }
@@ -81,5 +96,6 @@ export interface ChatMessage {
   startedAt?: number;
   endedAt?: number;
   attachments?: ChatAttachment[];
+  commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
 }

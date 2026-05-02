@@ -10,9 +10,13 @@ import {
   streamViaDaemon,
 } from '../providers/daemon';
 import {
+  deletePreviewComment,
+  fetchPreviewComments,
   fetchDesignSystem,
   fetchProjectFiles,
   fetchSkill,
+  patchPreviewCommentStatus,
+  upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
 import { composeSystemPrompt } from '@open-design/contracts';
@@ -37,15 +41,24 @@ import type {
   AppConfig,
   Artifact,
   ChatAttachment,
+  ChatCommentAttachment,
   ChatMessage,
   Conversation,
   DesignSystemSummary,
   OpenTabsState,
   Project,
+  PreviewComment,
+  PreviewCommentTarget,
   ProjectFile,
   ProjectTemplate,
   SkillSummary,
 } from '../types';
+import {
+  commentsToAttachments,
+  historyWithCommentAttachmentContext,
+  mergeAttachedComments,
+  removeAttachedComment,
+} from '../comments';
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
@@ -99,6 +112,8 @@ export function ProjectView({
     null,
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
+  const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -167,13 +182,20 @@ export function ProjectView({
   useEffect(() => {
     if (!activeConversationId) {
       setMessages([]);
+      setPreviewComments([]);
+      setAttachedComments([]);
       return;
     }
     let cancelled = false;
     (async () => {
-      const list = await listMessages(project.id, activeConversationId);
+      const [list, comments] = await Promise.all([
+        listMessages(project.id, activeConversationId),
+        fetchPreviewComments(project.id, activeConversationId),
+      ]);
       if (cancelled) return;
       setMessages(list);
+      setPreviewComments(comments);
+      setAttachedComments([]);
       setArtifact(null);
       setError(null);
       savedArtifactRef.current = null;
@@ -390,6 +412,73 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
+  const refreshPreviewComments = useCallback(async () => {
+    if (!activeConversationId) return;
+    const next = await fetchPreviewComments(project.id, activeConversationId);
+    setPreviewComments(next);
+    setAttachedComments((current) =>
+      current
+        .map((attached) => next.find((comment) => comment.id === attached.id))
+        .filter((comment): comment is PreviewComment => Boolean(comment)),
+    );
+  }, [project.id, activeConversationId]);
+
+  const savePreviewComment = useCallback(
+    async (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => {
+      if (!activeConversationId) return null;
+      const saved = await upsertPreviewComment(project.id, activeConversationId, { target, note });
+      if (!saved) return null;
+      setPreviewComments((current) => {
+        const rest = current.filter((comment) => comment.id !== saved.id);
+        return [saved, ...rest];
+      });
+      setAttachedComments((current) =>
+        attachAfterSave ? mergeAttachedComments(current, saved) : current.map((comment) => comment.id === saved.id ? saved : comment),
+      );
+      return saved;
+    },
+    [project.id, activeConversationId],
+  );
+
+  const removePreviewComment = useCallback(
+    async (commentId: string) => {
+      if (!activeConversationId) return;
+      const ok = await deletePreviewComment(project.id, activeConversationId, commentId);
+      if (!ok) return;
+      setPreviewComments((current) => current.filter((comment) => comment.id !== commentId));
+      setAttachedComments((current) => removeAttachedComment(current, commentId));
+    },
+    [project.id, activeConversationId],
+  );
+
+  const attachPreviewComment = useCallback((comment: PreviewComment) => {
+    setAttachedComments((current) => mergeAttachedComments(current, comment));
+  }, []);
+
+  const detachPreviewComment = useCallback((commentId: string) => {
+    setAttachedComments((current) => removeAttachedComment(current, commentId));
+  }, []);
+
+  const patchAttachedStatuses = useCallback(
+    async (attachments: ChatCommentAttachment[], status: PreviewComment['status']) => {
+      if (!activeConversationId || attachments.length === 0) return;
+      setPreviewComments((current) =>
+        current.map((comment) =>
+          attachments.some((attachment) => attachment.id === comment.id)
+            ? { ...comment, status }
+            : comment,
+        ),
+      );
+      await Promise.all(
+        attachments.map((attachment) =>
+          patchPreviewCommentStatus(project.id, activeConversationId, attachment.id, status),
+        ),
+      );
+      void refreshPreviewComments();
+    },
+    [project.id, activeConversationId, refreshPreviewComments],
+  );
+
   useEffect(() => {
     if (!daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
@@ -571,8 +660,13 @@ export function ProjectView({
   ]);
 
   const handleSend = useCallback(
-    async (prompt: string, attachments: ChatAttachment[]) => {
+    async (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
+    ) => {
       if (!activeConversationId) return;
+      if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
@@ -581,6 +675,7 @@ export function ProjectView({
         content: prompt,
         createdAt: startedAt,
         attachments: attachments.length > 0 ? attachments : undefined,
+        commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
       };
       const selectedAgent =
         config.mode === 'daemon' && config.agentId
@@ -612,6 +707,10 @@ export function ProjectView({
       onTouchProject();
       persistMessage(userMsg);
       persistMessage(assistantMsg);
+      if (commentAttachments.length > 0) {
+        void patchAttachedStatuses(commentAttachments, 'applying');
+        setAttachedComments([]);
+      }
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
@@ -724,6 +823,9 @@ export function ProjectView({
             endedAt: Date.now(),
             runStatus: prev.runId ? 'succeeded' : prev.runStatus,
           }));
+          if (commentAttachments.length > 0) {
+            void patchAttachedStatuses(commentAttachments, 'needs_review');
+          }
           setStreaming(false);
           abortRef.current = null;
           cancelRef.current = null;
@@ -762,6 +864,9 @@ export function ProjectView({
             endedAt: Date.now(),
             runStatus: prev.runId || isActiveRunStatus(prev.runStatus) ? 'failed' : prev.runStatus,
           }));
+          if (commentAttachments.length > 0) {
+            void patchAttachedStatuses(commentAttachments, 'failed');
+          }
           setStreaming(false);
           abortRef.current = null;
           cancelRef.current = null;
@@ -793,6 +898,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
+          commentAttachments,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {
@@ -816,8 +922,9 @@ export function ProjectView({
         });
       } else {
         const systemPrompt = await composedSystemPrompt();
+        const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
-        void streamMessage(config, systemPrompt, nextHistory, controller.signal, {
+        void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
           onDelta: (delta) => {
             handlers.onDelta(delta);
             handlers.onAgentEvent({ kind: 'text', text: delta });
@@ -828,6 +935,7 @@ export function ProjectView({
       }
     },
     [
+      attachedComments,
       activeConversationId,
       messages,
       config,
@@ -839,6 +947,7 @@ export function ProjectView({
       refreshProjectFiles,
       persistMessage,
       persistMessageById,
+      patchAttachedStatuses,
       updateMessageById,
       onProjectsRefresh,
     ],
@@ -918,7 +1027,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, []);
+      void handleSend(prompt, [], []);
     },
     [streaming, handleSend],
   );
@@ -939,7 +1048,7 @@ export function ProjectView({
         name: fileName,
         kind: 'file',
       };
-      void handleSend(prompt, [attachment]);
+      void handleSend(prompt, [attachment], []);
     },
     [streaming, handleSend],
   );
@@ -1120,13 +1229,18 @@ export function ProjectView({
           projectFiles={projectFiles}
           projectFileNames={projectFileNames}
           onEnsureProject={handleEnsureProject}
+          previewComments={previewComments}
+          attachedComments={attachedComments}
+          onAttachComment={attachPreviewComment}
+          onDetachComment={detachPreviewComment}
+          onDeleteComment={(commentId) => void removePreviewComment(commentId)}
           onSend={handleSend}
           onStop={handleStop}
           onRequestOpenFile={requestOpenFile}
           initialDraft={initialDraft}
           onSubmitForm={(text) => {
             if (streaming) return;
-            void handleSend(text, []);
+            void handleSend(text, [], []);
           }}
           onContinueRemainingTasks={handleContinueRemainingTasks}
           onNewConversation={handleNewConversation}
@@ -1149,6 +1263,9 @@ export function ProjectView({
           openRequest={openRequest}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
+          previewComments={previewComments}
+          onSavePreviewComment={savePreviewComment}
+          onRemovePreviewComment={removePreviewComment}
         />
       </div>
     </div>

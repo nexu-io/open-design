@@ -354,6 +354,18 @@ export interface Dict {
   'chat.tabChat': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
+  'chat.comments.attached': string;
+  'chat.comments.emptyAttached': string;
+  'chat.comments.saved': string;
+  'chat.comments.emptySaved': string;
+  'chat.comments.add': string;
+  'chat.comments.addAll': string;
+  'chat.comments.remove': string;
+  'chat.comments.placeholder': string;
+  'chat.comments.addSend': string;
+  'chat.comments.updateSend': string;
+  'chat.comments.removeAttachment': string;
+  'chat.comments.removeAttachmentAria': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;

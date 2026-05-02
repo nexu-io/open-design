@@ -57,6 +57,7 @@ import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   deleteConversation,
+  deletePreviewComment,
   deleteProject as dbDeleteProject,
   deleteTemplate,
   getConversation,
@@ -72,15 +73,18 @@ import {
   listDeployments,
   listLatestProjectRunStatuses,
   listMessages,
+  listPreviewComments,
   listProjects,
   listTabs,
   listTemplates,
   openDatabase,
   setTabs,
   updateConversation,
+  updatePreviewCommentStatus,
   updateProject,
   upsertDeployment,
   upsertMessage,
+  upsertPreviewComment,
 } from './db.js';
 import {
   buildDeployFileSet,
@@ -113,6 +117,86 @@ export function resolveProjectRoot(moduleDir: string): string {
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+export function normalizeCommentAttachments(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((raw, index) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const filePath = cleanString(raw.filePath);
+      const elementId = cleanString(raw.elementId);
+      const selector = cleanString(raw.selector);
+      const label = cleanString(raw.label);
+      const comment = cleanString(raw.comment);
+      if (!filePath || !elementId || !selector || !comment) return null;
+      return {
+        id: cleanString(raw.id) || `comment-${index + 1}`,
+        order: Number.isFinite(raw.order) ? Math.max(1, Math.round(raw.order)) : index + 1,
+        filePath,
+        elementId,
+        selector,
+        label,
+        comment,
+        currentText: compactString(raw.currentText, 160),
+        pagePosition: normalizeAttachmentPosition(raw.pagePosition),
+        htmlHint: compactString(raw.htmlHint, 180),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order);
+}
+
+export function renderCommentAttachmentHint(commentAttachments) {
+  if (!commentAttachments.length) return '';
+  const lines = [
+    '',
+    '',
+    '<attached-preview-comments>',
+    'Scope: edit the target element by default. Use the smallest necessary parent wrapper only if the target cannot satisfy the comment. Preserve stable ids and unrelated siblings.',
+  ];
+  for (const item of commentAttachments) {
+    lines.push(
+      '',
+      `${item.order}. ${item.elementId}`,
+      `file: ${item.filePath}`,
+      `selector: ${item.selector}`,
+      `label: ${item.label || '(unlabeled)'}`,
+      `position: ${formatAttachmentPosition(item.pagePosition)}`,
+      `currentText: ${item.currentText || '(empty)'}`,
+      `htmlHint: ${item.htmlHint || '(none)'}`,
+      `comment: ${item.comment}`,
+    );
+  }
+  lines.push('</attached-preview-comments>');
+  return lines.join('\n');
+}
+
+function cleanString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function compactString(value, max) {
+  const text = cleanString(value).replace(/\s+/g, ' ');
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function normalizeAttachmentPosition(input) {
+  const value = input && typeof input === 'object' ? input : {};
+  return {
+    x: finiteAttachmentNumber(value.x),
+    y: finiteAttachmentNumber(value.y),
+    width: finiteAttachmentNumber(value.width),
+    height: finiteAttachmentNumber(value.height),
+  };
+}
+
+function finiteAttachmentNumber(value) {
+  return Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+function formatAttachmentPosition(position) {
+  return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
+}
 
 function isPathWithin(base, target) {
   const relativePath = path.relative(path.resolve(base), path.resolve(target));
@@ -761,6 +845,74 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       // Bump the parent project's updatedAt so the project list re-orders.
       updateProject(db, req.params.id, {});
       res.json({ message: saved });
+    },
+  );
+
+  // ---- Preview comments ----------------------------------------------------
+
+  app.get(
+    '/api/projects/:id/conversations/:cid/comments',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      res.json({ comments: listPreviewComments(db, req.params.id, req.params.cid) });
+    },
+  );
+
+  app.post(
+    '/api/projects/:id/conversations/:cid/comments',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      try {
+        const comment = upsertPreviewComment(db, req.params.id, req.params.cid, req.body || {});
+        updateProject(db, req.params.id, {});
+        res.json({ comment });
+      } catch (err) {
+        res.status(400).json({ error: String(err?.message || err) });
+      }
+    },
+  );
+
+  app.patch(
+    '/api/projects/:id/conversations/:cid/comments/:commentId',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      try {
+        const comment = updatePreviewCommentStatus(
+          db,
+          req.params.id,
+          req.params.cid,
+          req.params.commentId,
+          req.body?.status,
+        );
+        if (!comment) return res.status(404).json({ error: 'comment not found' });
+        updateProject(db, req.params.id, {});
+        res.json({ comment });
+      } catch (err) {
+        res.status(400).json({ error: String(err?.message || err) });
+      }
+    },
+  );
+
+  app.delete(
+    '/api/projects/:id/conversations/:cid/comments/:commentId',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      const ok = deletePreviewComment(db, req.params.id, req.params.cid, req.params.commentId);
+      if (!ok) return res.status(404).json({ error: 'comment not found' });
+      updateProject(db, req.params.id, {});
+      res.json({ ok: true });
     },
   );
 
@@ -1628,6 +1780,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       skillId,
       designSystemId,
       attachments = [],
+      commentAttachments = [],
       model,
       reasoning,
     } = chatBody;
@@ -1639,7 +1792,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const def = getAgentDef(agentId);
     if (!def) return design.runs.fail(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
     if (!def.bin) return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
-    if (typeof message !== 'string' || !message.trim()) {
+    const safeCommentAttachments = normalizeCommentAttachments(commentAttachments);
+    if (
+      (typeof message !== 'string' || !message.trim()) &&
+      safeCommentAttachments.length === 0
+    ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
@@ -1706,6 +1863,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
+    const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
     const daemonSystemPrompt = await composeDaemonSystemPrompt({ projectId, skillId, designSystemId });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -1717,7 +1875,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         : cwdHint
           ? `# Instructions${cwdHint}\n\n---\n`
           : '',
-      `# User request\n\n${message}${attachmentHint}`,
+      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
       safeImages.length ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}` : '',
     ].join('');
 
@@ -2126,7 +2284,9 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  if (returnServer) return server;
+  if (returnServer) {
+    return server;
+  }
 }
 
 function randomId() {

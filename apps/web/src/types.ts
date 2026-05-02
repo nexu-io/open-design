@@ -4,6 +4,7 @@ import type {
   AppVersionResponse,
   AudioKind,
   ChatAttachment,
+  ChatCommentAttachment,
   ChatMessage,
   Conversation,
   DeployConfigResponse,
@@ -14,6 +15,10 @@ import type {
   ProjectDeploymentsResponse,
   PersistedAgentEvent,
   Project,
+  PreviewComment,
+  PreviewCommentStatus,
+  PreviewCommentTarget,
+  PreviewCommentUpsertRequest,
   ProjectDisplayStatus,
   ProjectFile,
   ProjectFileKind,
@@ -68,7 +73,7 @@ export interface AppConfig {
 
 export type AgentEvent = PersistedAgentEvent;
 
-export type { ChatAttachment, ChatMessage };
+export type { ChatAttachment, ChatCommentAttachment, ChatMessage };
 
 export interface Artifact {
   identifier: string;
@@ -130,6 +135,10 @@ export type {
   MediaAspect,
   ProjectDeploymentsResponse,
   Project,
+  PreviewComment,
+  PreviewCommentStatus,
+  PreviewCommentTarget,
+  PreviewCommentUpsertRequest,
   ProjectDisplayStatus,
   ProjectFile,
   ProjectFileKind,
