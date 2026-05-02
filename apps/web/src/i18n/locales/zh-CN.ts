@@ -72,7 +72,7 @@ export const zhCN: Dict = {
   'settings.hide': '隐藏',
   'settings.model': '模型',
   'settings.baseUrl': 'Base URL',
-  'settings.maxTokens': '最大 tokens',
+  'settings.maxTokens': '最大 tokens（可选）',
   'settings.maxTokensHint':
     '响应长度上限。每个 model 有调优过的默认值（在 placeholder 里显示），留空即使用，输入数字则覆盖。',
   'settings.apiHint':

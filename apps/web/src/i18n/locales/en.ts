@@ -73,7 +73,7 @@ export const en: Dict = {
   'settings.hide': 'Hide',
   'settings.model': 'Model',
   'settings.baseUrl': 'Base URL',
-  'settings.maxTokens': 'Max tokens',
+  'settings.maxTokens': 'Max tokens (optional)',
   'settings.maxTokensHint':
     'Cap on the response length. Each model has a tuned default (shown as a placeholder); leave blank to use it, or enter a number to override.',
   'settings.apiHint':

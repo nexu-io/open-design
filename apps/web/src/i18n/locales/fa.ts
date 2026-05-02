@@ -73,7 +73,7 @@ export const fa: Dict = {
   'settings.hide': 'پنهان',
   'settings.model': 'مدل',
   'settings.baseUrl': 'آدرس پایه',
-  'settings.maxTokens': 'حداکثر توکن',
+  'settings.maxTokens': 'حداکثر توکن (اختیاری)',
   'settings.maxTokensHint':
     'سقف طول پاسخ. هر مدل مقدار پیش‌فرض تنظیم‌شدهٔ خود را دارد (در placeholder نمایش داده می‌شود)؛ برای استفاده از آن خالی بگذارید، یا برای جایگزینی، عددی وارد کنید.',
   'settings.apiHint':

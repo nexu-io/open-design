@@ -73,7 +73,7 @@ export const esES: Dict = {
   'settings.hide': 'Ocultar',
   'settings.model': 'Modelo',
   'settings.baseUrl': 'URL base',
-  'settings.maxTokens': 'Tokens máx.',
+  'settings.maxTokens': 'Tokens máx. (opcional)',
   'settings.maxTokensHint':
     'Tope para la longitud de la respuesta. Cada modelo tiene un valor por defecto ajustado (visible en el placeholder); déjalo vacío para usarlo o introduce un número para anularlo.',
   'settings.apiHint':

@@ -73,7 +73,7 @@ export const tr: Dict = {
   'settings.hide': 'Gizle',
   'settings.model': 'Model',
   'settings.baseUrl': 'Temel URL',
-  'settings.maxTokens': 'Maks. token',
+  'settings.maxTokens': 'Maks. token (isteğe bağlı)',
   'settings.maxTokensHint':
     'Yanıt uzunluğu sınırı. Her modelin ayarlanmış bir varsayılanı vardır (yer tutucuda görünür); kullanmak için boş bırakın, üzerine yazmak için bir sayı girin.',
   'settings.apiHint':

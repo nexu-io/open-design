@@ -73,7 +73,7 @@ export const ru: Dict = {
   'settings.hide': 'Скрыть',
   'settings.model': 'Модель',
   'settings.baseUrl': 'Базовый URL',
-  'settings.maxTokens': 'Макс. токенов',
+  'settings.maxTokens': 'Макс. токенов (опционально)',
   'settings.maxTokensHint':
     'Ограничение длины ответа. У каждой модели свой настроенный дефолт (виден в плейсхолдере); оставьте поле пустым, чтобы использовать его, или введите число, чтобы переопределить.',
   'settings.apiHint':

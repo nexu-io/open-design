@@ -73,7 +73,7 @@ export const ptBR: Dict = {
   'settings.hide': 'Ocultar',
   'settings.model': 'Modelo',
   'settings.baseUrl': 'URL base',
-  'settings.maxTokens': 'Tokens máx.',
+  'settings.maxTokens': 'Tokens máx. (opcional)',
   'settings.maxTokensHint':
     'Limite para o comprimento da resposta. Cada modelo tem um valor padrão ajustado (visível no placeholder); deixe em branco para usá-lo ou insira um número para substituí-lo.',
   'settings.apiHint':
