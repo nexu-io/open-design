@@ -103,6 +103,15 @@ export function SettingsDialog({
     };
   }, [languageOpen]);
 
+  // Close the language menu on window resize so its placement (computed on
+  // open) cannot end up stale relative to the new viewport dimensions.
+  useEffect(() => {
+    if (!languageOpen) return;
+    const handleResize = () => setLanguageOpen(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [languageOpen]);
+
   const installedCount = useMemo(
     () => agents.filter((a) => a.available).length,
     [agents],
@@ -534,6 +543,7 @@ export function SettingsDialog({
               {languageOpen && languageMenuRect ? (() => {
                 const spaceBelow = window.innerHeight - languageMenuRect.bottom;
                 const spaceAbove = languageMenuRect.top;
+                // Prefer downward if at least 200px available (enough for ~5 options)
                 const openDownward = spaceBelow >= spaceAbove || spaceBelow >= 200;
                 return (
                 <div
