@@ -1828,8 +1828,13 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       // OS command-line length limit (Windows CreateProcess caps at ~32 KB)
       // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
       const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || needsFilePrompt ? 'pipe' : 'ignore';
+      const spawnEnv = { ...process.env, ...odMediaEnv };
+      // Remove any inherited API key so CLI agents (Claude Code, Copilot, etc.)
+      // authenticate via their own stored credentials (OAuth / subscription)
+      // rather than a key that may be revoked or belong to a different account.
+      delete spawnEnv['ANTHROPIC_API_KEY'];
       child = spawn(resolvedBin, args, {
-        env: { ...process.env, ...odMediaEnv },
+        env: spawnEnv,
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
         shell: useShell,
