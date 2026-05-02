@@ -1,0 +1,26 @@
+services:
+  open-design:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: open-design
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/.od:/app/.od
+    environment:
+      - NODE_ENV=production
+      - OD_PORT=7456
+      - PORT=3000
+      # Optional: pre-configure media providers
+      # - OD_MEDIA_OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # - OD_MEDIA_OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      # - OD_MEDIA_SEEDANCE_API_KEY=${SEEDANCE_API_KEY:-}
+      # - OD_MEDIA_HYPERFRAMES_API_KEY=${HYPERFRAMES_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7456/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

@@ -1,0 +1,54 @@
+# Runtime data
+.od/
+.tmp/
+e2e/.od-data/
+
+# Dependencies (installed in container)
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build output (built in container)
+**/dist/
+**/.next/
+**/.tmp/
+
+# Git & CI
+.git/
+.gitignore
+.github/
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docs not needed in production
+docs/
+assets/
+craft/
+prompt-templates/
+story/
+specs/
+CHANGELOG.md
+README*.md
+CONTRIBUTING*.md
+QUICKSTART*.md
+
+# Desktop / packaging
+apps/desktop/
+apps/packaged/
+
+# E2E tests
+e2e/
+playwright-report/
+playwright.config.ts
+
+# Development tools - keep for workspace resolution but don't build
+tools/pack/node_modules/

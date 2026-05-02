@@ -1,0 +1,27 @@
+services:
+  open-design:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: open-design
+    ports:
+      - "3000:3000"
+      - "7456:7456"
+    volumes:
+      # Persistent data: SQLite DB + project files + artifacts
+      - od-data:/app/.od
+    environment:
+      - NODE_ENV=production
+      - OD_PORT=7456
+      - PORT=3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7456/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  od-data:
+    driver: local
