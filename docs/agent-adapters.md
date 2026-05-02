@@ -150,10 +150,12 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 ### 5.4 Devin for Terminal
 
 - Invocation: `devin --permission-mode dangerous --respect-workspace-trust false acp`.
+- Install/update: macOS/Linux/WSL users can install with `curl -fsSL https://cli.devin.ai/install.sh | bash`; run `devin update` for existing installs.
+- Version requirement: requires a Devin CLI build with the `devin acp` subcommand (verified with `devin 2026.5.1-1`). Check with `devin acp --help`; if the subcommand is missing, update or reinstall Devin for Terminal.
 - Streaming: Agent Client Protocol JSON-RPC over stdio, handled by the daemon's shared `acp-json-rpc` transport.
 - Skill loading: Devin supports `.devin/skills/` and `~/.config/devin/skills/`; OD's current daemon also prompt-injects the selected skill body into the composed prompt, so no per-project skill install is required for generation.
 - Surgical edits: Devin's own edit/write tools handle targeted changes.
-- Permission: `--permission-mode dangerous` avoids headless approval prompts in the web UI; org/team-level policies still apply inside Devin.
+- Permission: `--permission-mode dangerous` avoids headless approval prompts in the web UI; `--respect-workspace-trust false` ensures Devin doesn't block on trust prompts for newly created project dirs. Org/team-level policies still apply inside Devin.
 
 ### 5.5 Cursor Agent
 

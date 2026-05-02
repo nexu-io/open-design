@@ -247,6 +247,10 @@ export const AGENT_DEFS = [
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
+    // Fallback aliases from Devin for Terminal docs
+    // (https://cli.devin.ai/docs/models): `adaptive` appears in the config example;
+    // `opus`, `sonnet`, `swe`, `codex`, `gemini`, and `gpt` are documented
+    // as short model-family names / recommended picks.
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       { id: 'adaptive', label: 'adaptive' },
