@@ -373,6 +373,60 @@ describe('deploy file set', () => {
       details: { missing: ['assets/missing.png'] },
     });
   });
+
+  it('extracts and rewrites url() refs from <style> inside <svg>', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub', 'assets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sub', 'page.html'),
+      '<!doctype html><svg><style>circle{fill:url("assets/icon.svg")}</style></svg>',
+    );
+    await writeFile(path.join(dir, 'sub', 'assets', 'icon.svg'), '<svg/>');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['index.html', 'sub/assets/icon.svg']);
+    expect(index?.data.toString('utf8')).toContain('url("sub/assets/icon.svg")');
+  });
+
+  it('does not rewrite <style>-like text inside <script> string literals', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub'), { recursive: true });
+    const html =
+      '<!doctype html><script>const tpl = \'<style>body{background:url("assets/bg.png")}</style>\';</script>';
+    await writeFile(path.join(dir, 'sub', 'page.html'), html);
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    // The fake <style> lives inside a JS string literal, so it must not
+    // be processed as inline CSS: no asset is bundled and the script
+    // body is preserved byte-for-byte.
+    expect(files.map((f) => f.file)).toEqual(['index.html']);
+    expect(index?.data.toString('utf8')).toContain(
+      "const tpl = '<style>body{background:url(\"assets/bg.png\")}</style>';",
+    );
+  });
+
+  it('does not rewrite <style>-like text inside HTML comments', () => {
+    const html =
+      '<!doctype html><!-- <style>body{background:url("ghost.png")}</style> --><h1>x</h1>';
+    expect(rewriteEntryHtmlReferences(html, 'sub')).toBe(html);
+  });
+
+  it('runs in linear time on pathological unclosed url(', () => {
+    const huge = '('.repeat(100_000);
+    const input = `body{background:url${huge}}`;
+    const startExtract = Date.now();
+    const refs = extractCssReferences(input);
+    expect(Date.now() - startExtract).toBeLessThan(500);
+    expect(refs).toEqual([]);
+
+    const startRewrite = Date.now();
+    expect(rewriteCssReferences(input, 'sub')).toBe(input);
+    expect(Date.now() - startRewrite).toBeLessThan(500);
+  });
 });
 
 describe('deployment link readiness', () => {
