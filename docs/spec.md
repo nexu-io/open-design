@@ -9,7 +9,7 @@
 [multica]: https://github.com/multica-ai/multica
 [ccsw]: https://github.com/farion1231/cc-switch
 [acd]: https://github.com/VoltAgent/awesome-claude-design
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 
 Other docs:
 - Architecture → [`architecture.md`](architecture.md)
