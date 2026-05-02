@@ -75,7 +75,7 @@ export const de: Dict = {
   'settings.baseUrl': 'Base URL',
   'settings.maxTokens': 'Max. Tokens',
   'settings.maxTokensHint':
-    'Obergrenze für die Antwortlänge. Standard: 8192. Erhöhen (z. B. 32768), wenn ein einzelnes Design-Artefakt mitten im Stream abgeschnitten wird.',
+    'Obergrenze für die Antwortlänge. Jedes Modell hat einen abgestimmten Standardwert (im Platzhalter sichtbar); leer lassen, um ihn zu verwenden, oder eine Zahl eingeben, um ihn zu überschreiben.',
   'settings.apiHint':
     'Aufrufe gehen direkt von diesem Browser an die festgelegte Base URL. Kein Proxy. Der Key verlässt localStorage nie.',
   'settings.skipForNow': 'Vorerst überspringen',

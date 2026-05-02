@@ -74,7 +74,7 @@ export const zhCN: Dict = {
   'settings.baseUrl': 'Base URL',
   'settings.maxTokens': '最大 tokens',
   'settings.maxTokensHint':
-    '响应长度上限，默认 8192。当单次生成的 artifact 被截断时，可以调高（例如 32768）。',
+    '响应长度上限。每个 model 有调优过的默认值（在 placeholder 里显示），留空即使用，输入数字则覆盖。',
   'settings.apiHint':
     '请求会从当前浏览器直连你设置的 Base URL，无中转代理。Key 只存放在 localStorage。',
   'settings.skipForNow': '暂时跳过',

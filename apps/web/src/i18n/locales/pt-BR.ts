@@ -75,7 +75,7 @@ export const ptBR: Dict = {
   'settings.baseUrl': 'URL base',
   'settings.maxTokens': 'Tokens máx.',
   'settings.maxTokensHint':
-    'Limite para o comprimento da resposta. Padrão: 8192. Aumente (por exemplo, 32768) quando um artefato de design é truncado no meio do stream.',
+    'Limite para o comprimento da resposta. Cada modelo tem um valor padrão ajustado (visível no placeholder); deixe em branco para usá-lo ou insira um número para substituí-lo.',
   'settings.apiHint':
     'As chamadas vão direto deste navegador para a URL base definida. Sem proxy. A chave nunca sai do localStorage.',
   'settings.skipForNow': 'Pular por enquanto',

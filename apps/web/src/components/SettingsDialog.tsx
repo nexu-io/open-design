@@ -10,6 +10,7 @@ import {
   renderModelOptions,
 } from './modelOptions';
 import { KNOWN_PROVIDERS } from '../state/config';
+import { modelMaxTokensDefault } from '../state/maxTokens';
 import type { AgentInfo, AppConfig, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
@@ -452,9 +453,15 @@ export function SettingsDialog({
                   min={1024}
                   max={200000}
                   step={1024}
-                  value={cfg.maxTokens ?? 8192}
+                  placeholder={String(modelMaxTokensDefault(cfg.model))}
+                  value={cfg.maxTokens ?? ''}
                   onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
+                    const raw = e.target.value.trim();
+                    if (raw === '') {
+                      setCfg({ ...cfg, maxTokens: undefined });
+                      return;
+                    }
+                    const val = parseInt(raw, 10);
                     setCfg({ ...cfg, maxTokens: Number.isFinite(val) ? val : undefined });
                   }}
                 />
