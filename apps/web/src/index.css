@@ -1197,8 +1197,10 @@ code {
   position: fixed;
   z-index: 1000;
   max-width: calc(100vw - 24px);
-  /* 360px = 9 locales × ~40px; 24px = viewport margin (12px × 2) */
-  max-height: min(360px, calc(100vh - 24px));
+  /* 360px = 9 locales × ~40px; --menu-available-h is set by JS to the
+     distance between the trigger and the viewport top, so the menu never
+     overflows above the viewport regardless of trigger placement. */
+  max-height: min(360px, var(--menu-available-h, 360px));
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;

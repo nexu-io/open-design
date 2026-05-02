@@ -485,11 +485,11 @@ export function SettingsDialog({
                   className="settings-language-menu"
                   role="menu"
                   style={{
-                    top: languageMenuRect.top - 6,
+                    bottom: window.innerHeight - languageMenuRect.top + 6,
                     left: languageMenuRect.left,
                     width: languageMenuRect.width,
-                    transform: 'translateY(-100%)',
-                  }}
+                    '--menu-available-h': `${languageMenuRect.top - 6}px`,
+                  } as React.CSSProperties}
                 >
                   {LOCALES.map((code) => {
                     const active = locale === code;
