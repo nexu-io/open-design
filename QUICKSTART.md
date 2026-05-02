@@ -75,6 +75,28 @@ pnpm typecheck                 # workspace typecheck
 
 `pnpm tools-dev` is the only local lifecycle entry point. Do not use the removed legacy root aliases (`pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, `pnpm start`).
 
+## Windows helper launchers
+
+For native Windows setups that need Open Design to coexist with another local app, this repo includes helper batch files:
+
+```bat
+start_open_design_budcheck.bat
+stop_open_design_budcheck.bat
+```
+
+`start_open_design_budcheck.bat` runs Open Design in the dedicated `budcheck-design` namespace and pins ports to avoid conflict with a typical Bud Check local setup:
+
+- Bud Check frontend: `127.0.0.1:3000`
+- Bud Check backend: `127.0.0.1:8000`
+- Open Design web: `127.0.0.1:5175`
+- Open Design daemon: `127.0.0.1:7457`
+
+Equivalent manual command:
+
+```bash
+corepack pnpm exec tools-dev run web --namespace budcheck-design --daemon-port 7457 --web-port 5175
+```
+
 During local development, `tools-dev` starts the daemon first, passes its port into `apps/web`, and `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to that daemon port so the App Router app can talk to the sibling Express process without CORS setup.
 
 ## Media generation / agent dispatcher checks

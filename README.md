@@ -697,6 +697,15 @@ Issues, PRs, new skills, and new design systems are all welcome. The highest-lev
 
 Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md), [简体中文](CONTRIBUTING.zh-CN.md)).
 
+## Windows local coexistence
+
+If you are running Open Design alongside another local product on Windows, use the bundled helper launchers:
+
+- [`start_open_design_budcheck.bat`](start_open_design_budcheck.bat)
+- [`stop_open_design_budcheck.bat`](stop_open_design_budcheck.bat)
+
+They reserve a separate runtime namespace and fixed ports so Open Design can run next to a Bud Check dev stack without colliding with `127.0.0.1:3000` or `127.0.0.1:8000`.
+
 ## Contributors
 
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
