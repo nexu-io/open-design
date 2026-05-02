@@ -2277,16 +2277,24 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  const server = app.listen(port, () => {
-    resolvedPort = server.address().port;
-    if (!returnServer) {
-      console.log(`[od] daemon listening on http://127.0.0.1:${resolvedPort}`);
-    }
+  // Wait for `listen` to bind so callers always see the resolved URL —
+  // critical when port=0 (ephemeral port) and when the embedding sidecar
+  // needs to advertise the port to a parent process before any request
+  // can flow. Three callers depend on this contract:
+  //   - `apps/daemon/src/cli.ts`            → expects a `url` string
+  //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
+  //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
+  return await new Promise((resolve) => {
+    const server = app.listen(port, () => {
+      const address = server.address();
+      resolvedPort = (address && typeof address === 'object') ? address.port : port;
+      const url = `http://127.0.0.1:${resolvedPort}`;
+      if (!returnServer) {
+        console.log(`[od] daemon listening on ${url}`);
+      }
+      resolve(returnServer ? { url, server } : url);
+    });
   });
-
-  if (returnServer) {
-    return server;
-  }
 }
 
 function randomId() {
