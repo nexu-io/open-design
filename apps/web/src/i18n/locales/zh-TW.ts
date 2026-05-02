@@ -581,7 +581,7 @@ export const zhTW: Dict = {
   'tool.error': '錯誤',
   'tool.done': '完成',
 
-  'assistant.role': 'Claude',
+  'assistant.role': '助手',
   'assistant.workingLabel': '執行中',
   'assistant.doneLabel': '已完成',
   'assistant.outTokens': '{n} 輸出',
