@@ -17,7 +17,7 @@ const argv = process.argv.slice(2);
 // parsed inside each handler.
 
 // Flags accepted by `od media generate`. Whitelisted so a hallucinated
-// `--lenght 5` from the LLM fails fast instead of silently no-op'ing
+// `--length 5` from the LLM fails fast instead of silently no-op'ing
 // while we route a bogus body to the daemon.
 //
 // Hoisted to the top of the module *before* the subcommand dispatch
