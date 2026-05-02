@@ -86,6 +86,11 @@ export const de: Dict = {
   'settings.noAgentSelected': 'kein Agent ausgewählt',
   'settings.language': 'Sprache',
   'settings.languageHint': 'Wechseln Sie die Sprache der Oberfläche. Wird in diesem Browser gespeichert.',
+  'settings.appearance': 'Erscheinungsbild',
+  'settings.appearanceHint': 'Hell, dunkel oder Systemeinstellung übernehmen.',
+  'settings.themeSystem': 'System',
+  'settings.themeLight': 'Hell',
+  'settings.themeDark': 'Dunkel',
   'settings.modelPicker': 'Modell',
   'settings.reasoningPicker': 'Reasoning-Aufwand',
   'settings.modelPickerHint':

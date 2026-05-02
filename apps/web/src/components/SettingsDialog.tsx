@@ -15,7 +15,7 @@ import {
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
-import type { AgentInfo, AppConfig, AppVersionInfo, ExecMode } from '../types';
+import type { AgentInfo, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 
@@ -51,7 +51,7 @@ export function SettingsDialog({
   const [cfg, setCfg] = useState<AppConfig>(initial);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<'execution' | 'media' | 'language' | 'about'>('execution');
+  const [activeSection, setActiveSection] = useState<'execution' | 'media' | 'language' | 'appearance' | 'about'>('execution');
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
@@ -158,6 +158,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.language')}</strong>
                 <small>{t('settings.languageHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
+              onClick={() => setActiveSection('appearance')}
+            >
+              <Icon name="sun-moon" size={18} />
+              <span>
+                <strong>{t('settings.appearance')}</strong>
+                <small>{t('settings.appearanceHint')}</small>
               </span>
             </button>
             <button
@@ -549,6 +560,10 @@ export function SettingsDialog({
           </section>
           ) : null}
 
+          {activeSection === 'appearance' ? (
+            <AppearanceSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
           {activeSection === 'about' ? (
             <section className="settings-section">
               <div className="section-head">
@@ -706,6 +721,46 @@ function MediaProvidersSection({
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+const THEMES: Array<{ value: AppTheme; labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark' }> = [
+  { value: 'system', labelKey: 'settings.themeSystem' },
+  { value: 'light', labelKey: 'settings.themeLight' },
+  { value: 'dark', labelKey: 'settings.themeDark' },
+];
+
+function AppearanceSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const current = cfg.theme ?? 'system';
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.appearance')}</h3>
+          <p className="hint">{t('settings.appearanceHint')}</p>
+        </div>
+      </div>
+      <div className="seg-control" role="group" aria-label={t('settings.appearance')}>
+        {THEMES.map(({ value, labelKey }) => (
+          <button
+            key={value}
+            type="button"
+            className={'seg-btn' + (current === value ? ' active' : '')}
+            aria-pressed={current === value}
+            onClick={() => setCfg((c) => ({ ...c, theme: value }))}
+          >
+            <span className="seg-title">{t(labelKey)}</span>
+          </button>
+        ))}
       </div>
     </section>
   );

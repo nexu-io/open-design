@@ -41,6 +41,8 @@ export interface AgentModelChoice {
   reasoning?: string;
 }
 
+export type AppTheme = 'system' | 'light' | 'dark';
+
 export interface AppConfig {
   mode: ExecMode;
   apiKey: string;
@@ -49,6 +51,7 @@ export interface AppConfig {
   agentId: string | null;
   skillId: string | null;
   designSystemId: string | null;
+  theme?: AppTheme;
   // True once the user has been through the welcome onboarding modal at
   // least once (saved or skipped). Bootstrap skips the auto-popup when
   // this is set so refreshing the page doesn't re-prompt.

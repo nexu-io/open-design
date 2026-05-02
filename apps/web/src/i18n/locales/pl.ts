@@ -86,6 +86,11 @@ export const pl: Dict = {
   'settings.noAgentSelected': 'nie wybrano agenta',
   'settings.language': 'Język',
   'settings.languageHint': 'Zmień język interfejsu. Zapisano w tej przeglądarce.',
+  'settings.appearance': 'Wygląd',
+  'settings.appearanceHint': 'Jasny, ciemny lub zgodny z ustawieniami systemu.',
+  'settings.themeSystem': 'Systemowy',
+  'settings.themeLight': 'Jasny',
+  'settings.themeDark': 'Ciemny',
   'settings.modelPicker': 'Model',
   'settings.reasoningPicker': 'Poziom rozumowania',
   'settings.modelPickerHint':

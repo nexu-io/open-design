@@ -86,6 +86,11 @@ export const ru: Dict = {
   'settings.noAgentSelected': 'агент не выбран',
   'settings.language': 'Язык',
   'settings.languageHint': 'Переключить язык интерфейса. Сохраняется в этом браузере.',
+  'settings.appearance': 'Внешний вид',
+  'settings.appearanceHint': 'Выберите светлую, тёмную или системную тему.',
+  'settings.themeSystem': 'Системная',
+  'settings.themeLight': 'Светлая',
+  'settings.themeDark': 'Тёмная',
   'settings.modelPicker': 'Модель',
   'settings.reasoningPicker': 'Сложность рассуждений',
   'settings.modelPickerHint':

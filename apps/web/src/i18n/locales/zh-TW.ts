@@ -85,6 +85,11 @@ export const zhTW: Dict = {
   'settings.noAgentSelected': '尚未選擇代理',
   'settings.language': '介面語言',
   'settings.languageHint': '切換介面語言，設定僅儲存在當前瀏覽器。',
+  'settings.appearance': '外觀',
+  'settings.appearanceHint': '選擇淺色、深色或跟隨系統設定。',
+  'settings.themeSystem': '系統',
+  'settings.themeLight': '淺色',
+  'settings.themeDark': '深色',
   'settings.modelPicker': '模型',
   'settings.reasoningPicker': '推理強度',
   'settings.modelPickerHint':

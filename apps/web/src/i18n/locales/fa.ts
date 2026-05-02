@@ -86,6 +86,11 @@ export const fa: Dict = {
   'settings.noAgentSelected': 'هیچ عاملی انتخاب نشده',
   'settings.language': 'زبان',
   'settings.languageHint': 'زبان رابط را تغییر دهید. در این مرورگر ذخیره می‌شود.',
+  'settings.appearance': 'ظاهر',
+  'settings.appearanceHint': 'روشن، تاریک یا پیروی از تنظیمات سیستم.',
+  'settings.themeSystem': 'سیستم',
+  'settings.themeLight': 'روشن',
+  'settings.themeDark': 'تاریک',
   'settings.modelPicker': 'مدل',
   'settings.reasoningPicker': 'سطح استدلال',
   'settings.modelPickerHint':

@@ -86,6 +86,11 @@ export const tr: Dict = {
   'settings.noAgentSelected': 'Ajan seçilmedi',
   'settings.language': 'Dil',
   'settings.languageHint': 'Arayüz dilini değiştirin. Bu tarayıcıya kaydedilir.',
+  'settings.appearance': 'Görünüm',
+  'settings.appearanceHint': 'Açık, koyu veya sistem ayarını takip et.',
+  'settings.themeSystem': 'Sistem',
+  'settings.themeLight': 'Açık',
+  'settings.themeDark': 'Koyu',
   'settings.modelPicker': 'Model',
   'settings.reasoningPicker': 'Akıl yürütme eforu',
   'settings.modelPickerHint':

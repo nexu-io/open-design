@@ -86,6 +86,11 @@ export const ptBR: Dict = {
   'settings.noAgentSelected': 'nenhum agente selecionado',
   'settings.language': 'Idioma',
   'settings.languageHint': 'Altere o idioma da interface. Salvo neste navegador.',
+  'settings.appearance': 'Aparência',
+  'settings.appearanceHint': 'Escolha claro, escuro ou seguir as configurações do sistema.',
+  'settings.themeSystem': 'Sistema',
+  'settings.themeLight': 'Claro',
+  'settings.themeDark': 'Escuro',
   'settings.modelPicker': 'Modelo',
   'settings.reasoningPicker': 'Esforço de raciocínio',
   'settings.modelPickerHint':

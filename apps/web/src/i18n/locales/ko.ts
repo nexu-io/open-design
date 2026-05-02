@@ -86,6 +86,11 @@ export const ko: Dict = {
   'settings.noAgentSelected': '선택된 에이전트 없음',
   'settings.language': '언어',
   'settings.languageHint': '인터페이스 언어를 변경합니다. 이 브라우저에 저장됩니다.',
+  'settings.appearance': '화면 모드',
+  'settings.appearanceHint': '라이트, 다크 또는 시스템 설정에 따릅니다.',
+  'settings.themeSystem': '시스템',
+  'settings.themeLight': '라이트',
+  'settings.themeDark': '다크',
   'settings.modelPicker': '모델',
   'settings.reasoningPicker': '추론 (Reasoning)',
   'settings.modelPickerHint':

@@ -55,6 +55,16 @@ export function App() {
   const [bootstrapping, setBootstrapping] = useState(true);
   const route = useRoute();
 
+  // Sync theme preference to the <html> element so CSS variables pick it up.
+  useEffect(() => {
+    const theme = config.theme ?? 'system';
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }, [config.theme]);
+
   // Bootstrap — detect daemon, load pickers, seed sensible defaults.
   useEffect(() => {
     let cancelled = false;

@@ -86,6 +86,11 @@ export const ja: Dict = {
   'settings.noAgentSelected': 'エージェント未選択',
   'settings.language': '言語',
   'settings.languageHint': 'インターフェースの言語を切り替えます。このブラウザに保存されます。',
+  'settings.appearance': '外観',
+  'settings.appearanceHint': 'ライト、ダーク、またはシステム設定に従う。',
+  'settings.themeSystem': 'システム',
+  'settings.themeLight': 'ライト',
+  'settings.themeDark': 'ダーク',
   'settings.modelPicker': 'モデル',
   'settings.reasoningPicker': '推論の強さ',
   'settings.modelPickerHint':

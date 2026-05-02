@@ -60,6 +60,101 @@
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* Dark theme variables — shared between explicit [data-theme="dark"] and the
+   OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1917;
+  --bg-app: #1a1917;
+  --bg-panel: #222120;
+  --bg-subtle: #272523;
+  --bg-muted: #2e2c29;
+  --bg-elevated: #2a2825;
+  --border: #333128;
+  --border-strong: #46433c;
+  --border-soft: #2a2825;
+
+  --text: #e8e4dc;
+  --text-strong: #f2ede4;
+  --text-muted: #9a9690;
+  --text-soft: #6e6b65;
+  --text-faint: #4e4b46;
+
+  --accent: #d97a56;
+  --accent-strong: #e8896a;
+  --accent-soft: #3d2318;
+  --accent-tint: #2e1a12;
+  --accent-hover: #e8896a;
+
+  --green: #4caf72;
+  --green-bg: #0f2a18;
+  --green-border: #1a4028;
+  --blue: #6b8fe8;
+  --blue-bg: #0f1a38;
+  --blue-border: #1a2c58;
+  --purple: #a87dd4;
+  --purple-bg: #1e1030;
+  --purple-border: #321a50;
+  --red: #e06b65;
+  --red-bg: #2a0e0c;
+  --red-border: #451714;
+  --amber: #e09a40;
+  --amber-bg: #2a1a04;
+
+  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* System mode: follow OS preference when no explicit data-theme is set. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #1a1917;
+    --bg-app: #1a1917;
+    --bg-panel: #222120;
+    --bg-subtle: #272523;
+    --bg-muted: #2e2c29;
+    --bg-elevated: #2a2825;
+    --border: #333128;
+    --border-strong: #46433c;
+    --border-soft: #2a2825;
+
+    --text: #e8e4dc;
+    --text-strong: #f2ede4;
+    --text-muted: #9a9690;
+    --text-soft: #6e6b65;
+    --text-faint: #4e4b46;
+
+    --accent: #d97a56;
+    --accent-strong: #e8896a;
+    --accent-soft: #3d2318;
+    --accent-tint: #2e1a12;
+    --accent-hover: #e8896a;
+
+    --green: #4caf72;
+    --green-bg: #0f2a18;
+    --green-border: #1a4028;
+    --blue: #6b8fe8;
+    --blue-bg: #0f1a38;
+    --blue-border: #1a2c58;
+    --purple: #a87dd4;
+    --purple-bg: #1e1030;
+    --purple-border: #321a50;
+    --red: #e06b65;
+    --red-bg: #2a0e0c;
+    --red-border: #451714;
+    --amber: #e09a40;
+    --amber-bg: #2a1a04;
+
+    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+  }
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; margin: 0; }
@@ -301,7 +396,7 @@ code {
   border-radius: 50%;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #fbeee5 0%, #f5d8cb 100%);
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
   color: var(--accent);
   flex-shrink: 0;
   overflow: hidden;
@@ -333,7 +428,7 @@ code {
   height: 32px;
   padding: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, #fbeee5 0%, #f5d8cb 100%);
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
   border: 1px solid var(--border);
   display: inline-flex;
   align-items: center;
@@ -687,8 +782,8 @@ code {
   font-size: 12.5px;
 }
 .composer-send:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-.composer-send.stop { background: var(--text); border-color: var(--text); }
-.composer-send.stop:hover { background: #000; border-color: #000; }
+.composer-send.stop { background: var(--text); border-color: var(--text); color: var(--bg); }
+.composer-send.stop:hover { background: var(--text-strong); border-color: var(--text-strong); color: var(--bg); }
 .composer-hint {
   font-size: 11px;
   color: var(--text-faint);
@@ -1193,7 +1288,7 @@ code {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #fff 0%, var(--bg-subtle) 100%);
+  background: linear-gradient(135deg, var(--bg-panel) 0%, var(--bg-subtle) 100%);
   border: 1px solid var(--border);
   color: var(--accent);
   flex-shrink: 0;
@@ -1288,7 +1383,7 @@ code {
 }
 .agent-card.active {
   border-color: var(--accent);
-  background: linear-gradient(180deg, #fff 0%, #fff7f3 100%);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--accent-tint) 100%);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .agent-card.disabled {
@@ -1461,7 +1556,7 @@ code {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #fbeee5 0%, #f5d8cb 100%);
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
   color: var(--accent);
   display: inline-flex;
   align-items: center;
@@ -2556,7 +2651,7 @@ code {
 .subtab-pill button:hover:not(.active) { background: rgba(255,255,255,0.6); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
   background: var(--text);
-  color: white;
+  color: var(--bg);
   box-shadow: var(--shadow-xs);
 }
 /* Icon-only variant: any pill button whose sole child is an SVG icon.
@@ -3092,7 +3187,7 @@ code {
 .ws-tab-action:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); border-color: transparent; }
 .ws-tab-action.share {
   background: var(--text);
-  color: white;
+  color: var(--bg);
   border-color: var(--text);
   font-weight: 500;
 }
@@ -3223,7 +3318,7 @@ code {
   position: relative;
 }
 .df-row-icon[data-kind="folder"] { background: var(--bg-muted); color: var(--text-soft); }
-.df-row-icon[data-kind="html"] { background: #fbeee5; color: #b85a3b; }
+.df-row-icon[data-kind="html"] { background: var(--accent-tint); color: var(--accent-strong); }
 .df-row-icon[data-kind="image"] { background: var(--green-bg); color: var(--green); }
 .df-row-icon[data-kind="code"] { background: #fff7d8; color: #8c6700; }
 .df-row-icon[data-kind="text"] { background: var(--bg-subtle); color: var(--text-muted); }
@@ -4824,7 +4919,7 @@ code {
   gap: 12px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, #fdf6f1 0%, var(--bg-panel) 100%);
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 100%);
 }
 .question-form-locked .question-form-head {
   background: var(--bg-subtle);

@@ -85,6 +85,11 @@ export const zhCN: Dict = {
   'settings.noAgentSelected': '尚未选择代理',
   'settings.language': '界面语言',
   'settings.languageHint': '切换界面语言，设置仅保存在当前浏览器。',
+  'settings.appearance': '外观',
+  'settings.appearanceHint': '选择浅色、深色或跟随系统设置。',
+  'settings.themeSystem': '系统',
+  'settings.themeLight': '浅色',
+  'settings.themeDark': '深色',
   'settings.modelPicker': '模型',
   'settings.reasoningPicker': '推理强度',
   'settings.modelPickerHint':

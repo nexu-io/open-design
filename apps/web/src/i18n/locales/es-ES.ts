@@ -86,6 +86,11 @@ export const esES: Dict = {
   'settings.noAgentSelected': 'ningún agente seleccionado',
   'settings.language': 'Idioma',
   'settings.languageHint': 'Cambia el idioma de la interfaz. Se guarda en este navegador.',
+  'settings.appearance': 'Apariencia',
+  'settings.appearanceHint': 'Elige claro, oscuro o seguir la configuración del sistema.',
+  'settings.themeSystem': 'Sistema',
+  'settings.themeLight': 'Claro',
+  'settings.themeDark': 'Oscuro',
   'settings.modelPicker': 'Modelo',
   'settings.reasoningPicker': 'Esfuerzo de razonamiento',
   'settings.modelPickerHint':
