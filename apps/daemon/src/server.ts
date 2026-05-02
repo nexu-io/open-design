@@ -560,7 +560,7 @@ export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INT
   };
 }
 
-export async function startServer({ port = 7456, returnServer = false } = {}) {
+export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '0.0.0.0', returnServer = false } = {}) {
   let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -2373,7 +2373,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    const server = app.listen(port, () => {
+    const server = app.listen(port, host, () => {
       const address = server.address();
       // `address()` can in theory return `string | AddressInfo | null`. For
       // a TCP listener it's always `AddressInfo` with a `.port` — the guard
@@ -2385,7 +2385,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         return;
       }
       resolvedPort = boundPort;
-      const url = `http://127.0.0.1:${resolvedPort}`;
+      // When binding to all interfaces report localhost for local callers;
+      // when binding to a specific address (e.g. a Tailscale IP) report that
+      // address so remote callers and the sidecar use the correct URL.
+      const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+      const url = `http://${reportHost}:${resolvedPort}`;
       if (!returnServer) {
         console.log(`[od] daemon listening on ${url}`);
       }
