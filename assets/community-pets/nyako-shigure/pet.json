@@ -1,0 +1,13 @@
+{
+  "id": "nyako-shigure",
+  "displayName": "Nyako Shigure",
+  "description": "A warm, composed mechanical catgirl dispatcher mascot with chibi cartoon pet proportions.",
+  "spritesheetPath": "spritesheet.webp",
+  "author": "Nyakku Shigure",
+  "tags": [
+    "cute",
+    "animated"
+  ],
+  "source": "codex-pet-share",
+  "sourceUrl": "https://codex-pet-share.pages.dev/#/pets/nyako-shigure"
+}

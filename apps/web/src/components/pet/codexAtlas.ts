@@ -8,14 +8,16 @@
 //   - Grid: 8 columns x 9 rows of 192 x 208 cells.
 //   - Each row encodes one animation state (idle, running-right, …).
 //
-// The Open Design pet overlay only knows how to play a single horizontal
-// strip, so the import flow lets the user pick which row of the atlas to
-// "adopt" and we slice that row into a standalone strip via canvas. The
-// strip is downscaled into a localStorage-friendly PNG before being
-// stashed into `PetCustom.imageUrl`.
+// The pet overlay can render the full atlas and switch the active row
+// based on interaction state (hover, drag direction, idle timeout) —
+// matching the codex-pets-react `PetWidget` behaviour. For users who
+// prefer a single-row loop (or a non-Codex strip) we still expose the
+// `cropAtlasRow` helper, which slices one row into a standalone strip.
 //
 // Source contract:
 // https://github.com/openai/skills/tree/main/skills/.curated/hatch-pet/references
+
+import type { PetAtlasLayout, PetAtlasRowDef } from '../../types';
 
 export const CODEX_ATLAS_COLS = 8;
 export const CODEX_ATLAS_ROWS = 9;
@@ -62,6 +64,22 @@ export const CODEX_ATLAS_ROWS_DEF: CodexAtlasRow[] = [
   { index: 7, id: 'running', frames: 6, fps: 8 },
   { index: 8, id: 'review', frames: 6, fps: 6 },
 ];
+
+// Canonical layout passed to `PetCustom.atlas` when the user adopts a
+// Codex hatch-pet without freezing it to a single row. The overlay reads
+// this to know how to slice the grid + which rows are populated.
+export const CODEX_ATLAS_LAYOUT: PetAtlasLayout = {
+  cols: CODEX_ATLAS_COLS,
+  rows: CODEX_ATLAS_ROWS,
+  rowsDef: CODEX_ATLAS_ROWS_DEF.map(
+    (row): PetAtlasRowDef => ({
+      index: row.index,
+      id: row.id,
+      frames: row.frames,
+      fps: row.fps,
+    }),
+  ),
+};
 
 // Aspect-only check is enough to handle WebP/PNG atlases that have been
 // resized for transport. We accept anything within ~6% of the canonical
@@ -195,6 +213,80 @@ export async function cropAtlasRow(
     width: targetWidth,
     height: targetHeight,
     frames,
+  };
+}
+
+// Same idea as `cropAtlasRow` but keeps every row so the overlay can
+// switch animations on the fly. We downscale to a target cell height
+// (default 80 px → 8x9 grid lands at ~528 KB PNG which fits inside the
+// MAX_DATA_URL_BYTES guard from `image.ts` even for busy spritesheets)
+// while preserving the grid layout 1:1 so background-position math in
+// `PetSpriteFace` stays simple.
+const DEFAULT_FULL_ATLAS_MAX_CELL = 80;
+
+export interface PreparedAtlas {
+  // PNG data URL of the full atlas, ready to drop into
+  // `PetCustom.imageUrl` together with the matching layout.
+  dataUrl: string;
+  // Final pixel dimensions of the downscaled atlas.
+  width: number;
+  height: number;
+  // Layout metadata describing the grid + per-row playback config.
+  layout: PetAtlasLayout;
+}
+
+export async function prepareCodexAtlas(
+  sourceDataUrl: string,
+  options?: { maxCellHeight?: number | null },
+): Promise<PreparedAtlas> {
+  const maxCellHeight =
+    options?.maxCellHeight === null
+      ? null
+      : options?.maxCellHeight ?? DEFAULT_FULL_ATLAS_MAX_CELL;
+  const img = await loadImage(sourceDataUrl);
+  const cellWidth = Math.floor(img.naturalWidth / CODEX_ATLAS_COLS);
+  const cellHeight = Math.floor(img.naturalHeight / CODEX_ATLAS_ROWS);
+  if (cellWidth <= 0 || cellHeight <= 0) {
+    throw new Error('Atlas image is too small to slice.');
+  }
+  const targetCellHeight =
+    maxCellHeight && cellHeight > maxCellHeight ? maxCellHeight : cellHeight;
+  const scale = targetCellHeight / cellHeight;
+  const targetCellWidth = Math.max(1, Math.round(cellWidth * scale));
+  const targetWidth = targetCellWidth * CODEX_ATLAS_COLS;
+  const targetHeight = targetCellHeight * CODEX_ATLAS_ROWS;
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Canvas is unavailable in this browser.');
+  }
+  ctx.imageSmoothingEnabled = false;
+  // Draw cell-by-cell so alignment survives even if the source has a
+  // slightly off canvas size (some tools add a 1 px gutter that would
+  // otherwise smear into adjacent cells under a single drawImage).
+  for (let r = 0; r < CODEX_ATLAS_ROWS; r++) {
+    for (let c = 0; c < CODEX_ATLAS_COLS; c++) {
+      ctx.drawImage(
+        img,
+        c * cellWidth,
+        r * cellHeight,
+        cellWidth,
+        cellHeight,
+        c * targetCellWidth,
+        r * targetCellHeight,
+        targetCellWidth,
+        targetCellHeight,
+      );
+    }
+  }
+  const dataUrl = canvas.toDataURL('image/png');
+  return {
+    dataUrl,
+    width: targetWidth,
+    height: targetHeight,
+    layout: CODEX_ATLAS_LAYOUT,
   };
 }
 

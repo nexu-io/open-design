@@ -62,6 +62,12 @@ const SIDEBAR_MAX = 560;
 const SIDEBAR_DEFAULT = 380;
 const SIDEBAR_STORAGE_KEY = 'od-entry-sidebar-width';
 
+// Lets the user fully remove the right-side pet rail from the entry
+// layout. They re-summon it from the entry-view avatar dropdown — the
+// PetRail's own collapse toggle only narrows the column, so this state
+// is the "the rail isn't there at all" escape hatch.
+const PET_RAIL_HIDDEN_KEY = 'open-design:pet-rail-hidden';
+
 function loadSidebarWidth(): number {
   try {
     const raw = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
@@ -71,6 +77,15 @@ function loadSidebarWidth(): number {
     return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, n));
   } catch {
     return SIDEBAR_DEFAULT;
+  }
+}
+
+function loadPetRailHidden(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(PET_RAIL_HIDDEN_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -101,6 +116,18 @@ export function EntryView({
     useState<PromptTemplateSummary | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [resizing, setResizing] = useState(false);
+  const [petRailHidden, setPetRailHiddenState] = useState<boolean>(() => loadPetRailHidden());
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
+
+  function setPetRailHidden(next: boolean) {
+    setPetRailHiddenState(next);
+    try {
+      window.localStorage.setItem(PET_RAIL_HIDDEN_KEY, next ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === config.agentId) ?? null,
@@ -180,14 +207,39 @@ export function EntryView({
     }
   }, [sidebarWidth]);
 
+  // Dismiss the avatar dropdown on outside-click / Escape so it behaves
+  // like the project-view AvatarMenu (which uses the same shell CSS).
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!avatarMenuRef.current) return;
+      if (!avatarMenuRef.current.contains(e.target as Node)) {
+        setAvatarMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAvatarMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [avatarMenuOpen]);
+
   // The right rail tracks its own collapse state internally and tells
   // us its preferred column width via a CSS variable on the wrapper —
   // we keep both the expanded and collapsed widths declarative here so
   // the grid stays in sync with whatever the rail decides to render.
   return (
     <div
-      className="entry has-pet-rail"
-      style={{ gridTemplateColumns: `${sidebarWidth}px 1fr auto` }}
+      className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
+      style={{
+        gridTemplateColumns: petRailHidden
+          ? `${sidebarWidth}px 1fr`
+          : `${sidebarWidth}px 1fr auto`,
+      }}
     >
       <aside className="entry-side" style={{ width: sidebarWidth }}>
         <div className="entry-brand">
@@ -294,22 +346,63 @@ export function EntryView({
             />
           </div>
           <div className="entry-header-right">
-            {/* Avatar settings live next to tabs to mirror the project view. */}
-            <button
-              type="button"
-              className="avatar-btn"
-              onClick={onOpenSettings}
-              title={t('entry.openSettingsTitle')}
-              aria-label={t('entry.openSettingsAria')}
-            >
-              <img
-                src="/avatar.png"
-                alt=""
-                aria-hidden
-                draggable={false}
-                className="avatar-btn-photo"
-              />
-            </button>
+            {/* Avatar dropdown — mirrors the project-view AvatarMenu so
+                users get the same anchor for cross-cutting options
+                (open settings, hide / show the pet rail). */}
+            <div className="avatar-menu" ref={avatarMenuRef}>
+              <button
+                type="button"
+                className="avatar-btn"
+                onClick={() => setAvatarMenuOpen((v) => !v)}
+                title={t('entry.openSettingsTitle')}
+                aria-label={t('entry.openSettingsAria')}
+                aria-haspopup="menu"
+                aria-expanded={avatarMenuOpen}
+              >
+                <img
+                  src="/avatar.png"
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  className="avatar-btn-photo"
+                />
+              </button>
+              {avatarMenuOpen ? (
+                <div className="avatar-popover" role="menu">
+                  <button
+                    type="button"
+                    className="avatar-item"
+                    onClick={() => {
+                      setPetRailHidden(!petRailHidden);
+                      setAvatarMenuOpen(false);
+                    }}
+                  >
+                    <span className="avatar-item-icon" aria-hidden>
+                      <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
+                    </span>
+                    <span>
+                      {petRailHidden
+                        ? t('pet.railShow')
+                        : t('pet.railHide')}
+                    </span>
+                  </button>
+                  <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
+                  <button
+                    type="button"
+                    className="avatar-item"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      onOpenSettings();
+                    }}
+                  >
+                    <span className="avatar-item-icon" aria-hidden>
+                      <Icon name="settings" size={14} />
+                    </span>
+                    <span>{t('avatar.settings')}</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="entry-tab-content">
@@ -355,12 +448,15 @@ export function EntryView({
           )}
         </div>
       </main>
-      <PetRail
-        config={config}
-        onAdoptInline={onAdoptPetInline}
-        onOpenPetSettings={onAdoptPet}
-        onTuck={onTogglePet}
-      />
+      {petRailHidden ? null : (
+        <PetRail
+          config={config}
+          onAdoptInline={onAdoptPetInline}
+          onOpenPetSettings={onAdoptPet}
+          onTuck={onTogglePet}
+          onHide={() => setPetRailHidden(true)}
+        />
+      )}
       {previewSystem ? (
         <DesignSystemPreviewModal
           system={previewSystem}

@@ -5,6 +5,8 @@ import type {
   ChatAttachment,
   CodexPetSummary,
   CodexPetsResponse,
+  SyncCommunityPetsRequest,
+  SyncCommunityPetsResponse,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentUpsertRequest,
@@ -56,6 +58,47 @@ export async function fetchCodexPets(): Promise<CodexPetsResponse> {
     return (await resp.json()) as CodexPetsResponse;
   } catch {
     return { pets: [], rootDir: '' };
+  }
+}
+
+// One-click trigger for the daemon-side port of `sync-community-pets`.
+// Always resolves with a summary (even when the daemon errored) so the
+// caller can render a status line without having to wrap in try/catch
+// on every keystroke.
+export async function syncCommunityPets(
+  input?: SyncCommunityPetsRequest,
+): Promise<SyncCommunityPetsResponse & { error?: string }> {
+  try {
+    const resp = await fetch('/api/codex-pets/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input ?? {}),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      return {
+        wrote: 0,
+        skipped: 0,
+        failed: 0,
+        total: 0,
+        rootDir: '',
+        errors: [],
+        error: payload?.error ?? `Sync failed (${resp.status})`,
+      };
+    }
+    return (await resp.json()) as SyncCommunityPetsResponse;
+  } catch (err) {
+    return {
+      wrote: 0,
+      skipped: 0,
+      failed: 0,
+      total: 0,
+      rootDir: '',
+      errors: [],
+      error: err instanceof Error ? err.message : 'Sync request failed',
+    };
   }
 }
 

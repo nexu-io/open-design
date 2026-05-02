@@ -21,6 +21,7 @@ import {
   listCodexPets,
   readCodexPetSpritesheet,
 } from './codex-pets.js';
+import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
@@ -279,6 +280,15 @@ const FRAMES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'frames',
   path.join(PROJECT_ROOT, 'assets', 'frames'),
+);
+// Curated pets baked into the repo via `scripts/bake-community-pets.ts`.
+// `listCodexPets` scans this in addition to `~/.codex/pets/` so the
+// "Recently hatched" grid is non-empty out-of-the-box and users do not
+// need to hit the "Download community pets" button to try a few pets.
+const BUNDLED_PETS_DIR = resolveDaemonResourceDir(
+  DAEMON_RESOURCE_ROOT,
+  'community-pets',
+  path.join(PROJECT_ROOT, 'assets', 'community-pets'),
 );
 const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
@@ -1048,16 +1058,45 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   // pet settings can offer one-click adoption of recently-hatched pets.
   app.get('/api/codex-pets', async (_req, res) => {
     try {
-      const result = await listCodexPets({ baseUrl: '' });
+      const result = await listCodexPets({
+        baseUrl: '',
+        bundledRoot: BUNDLED_PETS_DIR,
+      });
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
   });
 
+  // One-click community sync. Hits the Codex Pet Share + j20 Hatchery
+  // catalogs and drops every pet into `${CODEX_HOME:-$HOME/.codex}/pets/`
+  // so `GET /api/codex-pets` (and the web Pet settings) pick them up
+  // immediately. The body is intentionally tiny — we keep the heavier
+  // tuning knobs (`--limit`, `--concurrency`) on the CLI script and
+  // only surface `force` + `source` here.
+  app.post('/api/codex-pets/sync', async (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const sourceRaw = typeof body.source === 'string' ? body.source : 'all';
+      const source =
+        sourceRaw === 'petshare' || sourceRaw === 'hatchery'
+          ? sourceRaw
+          : 'all';
+      const result = await syncCommunityPets({
+        source,
+        force: Boolean(body.force),
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: String((err && err.message) || err) });
+    }
+  });
+
   app.get('/api/codex-pets/:id/spritesheet', async (req, res) => {
     try {
-      const sheet = await readCodexPetSpritesheet(req.params.id);
+      const sheet = await readCodexPetSpritesheet(req.params.id, {
+        bundledRoot: BUNDLED_PETS_DIR,
+      });
       if (!sheet) {
         return res
           .status(404)

@@ -6632,32 +6632,21 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   position: relative;
   width: 56px;
   height: 56px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-md);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   user-select: none;
   touch-action: none;
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition: transform 160ms ease;
 }
 .pet-sprite:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
 }
 .pet-sprite:active { cursor: grabbing; }
-.pet-sprite::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, var(--pet-accent) 0%, transparent 70%);
-  opacity: 0.18;
-  z-index: -1;
-}
 .pet-sprite-glyph {
   font-size: 30px;
   line-height: 1;
@@ -6821,11 +6810,57 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   cursor: not-allowed;
 }
 
+/* Pet source tabs — pill row that splits the panel into three
+   exclusive surfaces (built-in / custom / community). Sits flush
+   between the section head and the active tab's content so the user
+   reads it as "pick a source, then pick a pet inside it". */
+.pet-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.pet-tabs .subtab-pill {
+  align-self: flex-start;
+}
+.pet-tabs-hint {
+  margin: 0;
+}
+
 .pet-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 4px;
+}
+
+/* The Community tab stacks the codex grid + hatch panel; flatten
+   their default top margins so the spacing reads as one column
+   rather than two ad-hoc cards. */
+.pet-community {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+}
+.pet-community .pet-codex,
+.pet-community .pet-hatch {
+  margin-top: 0;
+}
+
+/* Custom tab dashed wrapper — strip the top margin so it tucks
+   directly under the tab pills. */
+.pet-tabs + .pet-custom,
+.pet-tabs + div + .pet-custom {
+  margin-top: 4px;
+}
+
+/* Highlight the codex card whose name + image match the user's
+   current adoption (community pets land in the custom slot, so we
+   piggy-back on the same "active" affordance used by built-ins). */
+.pet-codex-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
 }
 .pet-card {
   --pet-accent: var(--accent);
@@ -7035,6 +7070,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   justify-content: space-between;
   gap: 6px;
 }
+.pet-rail-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
 .pet-rail-title {
   display: inline-flex;
   align-items: center;
@@ -7049,18 +7090,30 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .pet-rail-collapse {
   width: 22px;
   height: 22px;
+  padding: 0;
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.pet-rail-collapse > svg {
+  flex-shrink: 0;
 }
 .pet-rail-collapse:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border);
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.pet-rail-collapse:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(201, 100, 66, 0.32);
+  border-color: var(--accent);
 }
 .pet-rail-hint {
   font-size: 11.5px;
@@ -7410,8 +7463,27 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   to { background-position-x: 100%; }
 }
 
+/* Full-atlas mode: the sprite renders the active row from a Codex
+   8x9 grid. background-position-y is set inline to the row offset and
+   the keyframe walks frames inside that row. We use a CSS variable
+   for the endpoint so a single keyframe block can drive any row's
+   `frames`/`cols` combination — `--pet-atlas-end-x` is set per row by
+   PetSpriteFace based on `frames / (cols - 1) * 100%`. */
+.pet-image.atlas {
+  background-repeat: no-repeat;
+  /* The sprite element switches rows on the fly; smooth out the
+     row transitions so direction changes feel less jarring without
+     blurring the per-frame `steps()` cadence. */
+  transition: background-position-y 220ms ease;
+}
+@keyframes pet-atlas-frames {
+  from { background-position-x: 0%; }
+  to { background-position-x: var(--pet-atlas-end-x, 100%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pet-image.frames { animation: none !important; background-position-x: 0% !important; }
+  .pet-image.frames,
+  .pet-image.atlas { animation: none !important; background-position-x: 0% !important; }
 }
 
 /* PetSettings — upload row, frames/fps grid, error caption */
@@ -7640,11 +7712,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 .pet-codex-thumb {
+  position: relative;
   width: 56px;
   height: 56px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background-color: var(--surface-2, #f6f4ee);
+  background-image: var(--pet-codex-src);
   background-repeat: no-repeat;
   /* Show only the top-left cell of the 8x9 atlas — that is the
      `idle` row, frame 0, and reads as a recognizable still even
@@ -7652,6 +7726,69 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background-position: 0 0;
   background-size: 800% 900%;
   image-rendering: pixelated;
+}
+
+/* Hover preview — a larger floating overlay that plays through every
+   cell of the 8x9 Codex atlas so users can see what animations (idle,
+   running, waving, jumping, failed, waiting, …) the pet has before they
+   adopt it. The overlay is purely decorative: pointer-events: none
+   prevents it from stealing hover from the card, and aria-hidden keeps
+   it out of the accessibility tree. */
+.pet-codex-thumb-preview {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: 128px;
+  /* 128 * (208/192) ≈ 138.7 — matches a single atlas cell aspect. */
+  height: 139px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--surface-2, #f6f4ee);
+  background-image: var(--pet-codex-src);
+  background-repeat: no-repeat;
+  background-position: 0% 0%;
+  background-size: 800% 900%;
+  image-rendering: pixelated;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px) scale(0.82);
+  transform-origin: 50% 100%;
+  transition:
+    opacity 140ms ease,
+    transform 160ms ease;
+  z-index: 20;
+}
+
+.pet-codex-card:hover .pet-codex-thumb-preview,
+.pet-codex-card:focus-within .pet-codex-thumb-preview {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  /* 8 column steps (1 row) in 0.6s → ~13 fps per animation, then the row
+     index advances every 0.6s for a full 5.4s sweep through all 9 rows.
+     Animating background-position-x + -y as two independent animations
+     keeps the nested loop in pure CSS. */
+  animation:
+    pet-codex-preview-col 0.6s steps(8, jump-none) infinite,
+    pet-codex-preview-row 5.4s steps(9, jump-none) infinite;
+}
+
+@keyframes pet-codex-preview-col {
+  from { background-position-x: 0%; }
+  to { background-position-x: 100%; }
+}
+
+@keyframes pet-codex-preview-row {
+  from { background-position-y: 0%; }
+  to { background-position-y: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-codex-card:hover .pet-codex-thumb-preview,
+  .pet-codex-card:focus-within .pet-codex-thumb-preview {
+    animation: none;
+    background-position: 0% 0%;
+  }
 }
 
 .pet-codex-meta {

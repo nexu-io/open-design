@@ -27,6 +27,8 @@ import type {
   ProjectTemplate,
   CodexPetSummary,
   CodexPetsResponse,
+  SyncCommunityPetsRequest,
+  SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,
@@ -50,6 +52,34 @@ export interface AgentModelChoice {
 
 export type AppTheme = 'system' | 'light' | 'dark';
 
+// One animation row inside a pet's sprite atlas. Mirrors the Codex
+// hatch-pet `animation-rows.md` reference — `id` lets the overlay map
+// interaction states (idle / hover / drag direction / waiting) to the
+// correct row regardless of how many rows a particular pet ships.
+export interface PetAtlasRowDef {
+  // Row index in the atlas, top to bottom.
+  index: number;
+  // Stable id used by the interaction state machine and i18n keys.
+  // Matches the canonical Codex row ids: 'idle', 'running-right', etc.
+  id: string;
+  // Number of leading frames the row uses. The remaining cells in the
+  // row are expected to be transparent / empty.
+  frames: number;
+  // Frames-per-second the row plays at. Per-row tuning lets idle stay
+  // calm while running-* / jumping feel snappy.
+  fps: number;
+}
+
+// Sprite atlas layout — when present on `PetCustom`, `imageUrl` is the
+// full grid (cols × rows) instead of a single horizontal strip. The
+// overlay then picks one row to render based on user interaction.
+export interface PetAtlasLayout {
+  cols: number;
+  rows: number;
+  // Per-row playback definitions. Order matches the row index.
+  rowsDef: PetAtlasRowDef[];
+}
+
 // User-tunable companion that floats over the workspace. The full catalog
 // lives in `components/pet/pets.ts`; this shape is what gets persisted to
 // localStorage so we can roundtrip a customized pet across reloads.
@@ -68,14 +98,19 @@ export interface PetCustom {
   // present, the overlay / rail / settings render the image instead of
   // the text glyph. Cleared when the user picks "Remove image".
   imageUrl?: string;
-  // Spritesheet config — when `frames > 1` we treat `imageUrl` as a
-  // horizontal strip of `frames` equally-sized cells and step through
-  // them at `fps` frames per second using a CSS `steps()` animation,
-  // matching the codex-pets-react sheet shape (e.g. tater/spritesheet).
-  // `frames === 1` (default) renders the image as a single static cell
-  // with the same gentle float animation as the emoji glyph.
+  // Legacy single-row spritesheet config — when `frames > 1` we treat
+  // `imageUrl` as a horizontal strip of `frames` equally-sized cells and
+  // step through them at `fps` frames per second using a CSS `steps()`
+  // animation, matching the codex-pets-react sheet shape (e.g.
+  // tater/spritesheet). `frames === 1` (default) renders the image as a
+  // single static cell with the same gentle float animation as the
+  // emoji glyph. Ignored when `atlas` is set.
   frames?: number;
   fps?: number;
+  // Optional sprite atlas layout. When present, `imageUrl` is the full
+  // atlas grid and the overlay renders the active row chosen by the
+  // interaction state machine (idle / hover → wave / drag → run / etc.).
+  atlas?: PetAtlasLayout;
 }
 
 export interface PetConfig {
@@ -196,6 +231,8 @@ export type {
   ProjectTemplate,
   CodexPetSummary,
   CodexPetsResponse,
+  SyncCommunityPetsRequest,
+  SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,

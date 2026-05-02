@@ -1,15 +1,18 @@
 // Codex hatch-pet registry. Lists pets that the upstream `hatch-pet`
-// skill packages under `${CODEX_HOME:-$HOME/.codex}/pets/<id>/`.
+// skill packages under `${CODEX_HOME:-$HOME/.codex}/pets/<id>/` and the
+// curated set bundled with this repo under `assets/community-pets/<id>/`.
 //
 // On-disk shape (per the hatch-pet `references/codex-pet-contract.md`):
 //
-//   ${CODEX_HOME:-$HOME/.codex}/pets/<id>/
+//   <root>/<id>/
 //     pet.json          # { id, displayName, description, spritesheetPath }
 //     spritesheet.webp  # 1536x1872 8x9 atlas (or .png / .gif fallback)
 //
-// We scan that folder lazily on every list request — there are usually
-// only a handful of pets per machine, and watching the filesystem would
-// add a daemon-side dependency that doesn't pay off here.
+// We scan both folders lazily on every list request — there are only a
+// handful of pets in either location, and watching the filesystem would
+// add a daemon-side dependency that doesn't pay off here. When the same
+// pet id exists in both, the user's local copy wins so re-baking a
+// bundled pet locally is a supported workflow.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
@@ -23,6 +26,11 @@ export interface CodexPetSummaryRecord {
   spritesheetUrl: string;
   spritesheetExt: string;
   hatchedAt: number;
+  // True when the pet was found in the bundled `assets/community-pets/`
+  // folder rather than the user's `~/.codex/pets/`. Surfaced so the UI
+  // can render a "Bundled" pill and skip prompting the user to sync
+  // pets that already ship with the app.
+  bundled?: boolean;
 }
 
 export interface CodexPetListResult {
@@ -53,17 +61,22 @@ const SPRITESHEET_NAMES = [
   'spritesheet.gif',
 ] as const;
 
-export async function listCodexPets(
-  options: { baseUrl?: string } = {},
-): Promise<CodexPetListResult> {
-  const baseUrl = options.baseUrl ?? '';
-  const root = resolveCodexPetsRoot();
-  const out: CodexPetSummaryRecord[] = [];
+// Scan a single root and append summaries to `out`. Pets already in
+// `seenIds` are skipped — the user-root scan can therefore preempt a
+// bundled pet of the same id without the bundled scan re-emitting a
+// duplicate entry with a conflicting `bundled` flag.
+async function scanRoot(
+  root: string,
+  baseUrl: string,
+  bundled: boolean,
+  out: CodexPetSummaryRecord[],
+  seenIds: Set<string>,
+): Promise<void> {
   let entries: Dirent[] = [];
   try {
     entries = await readdir(root, { withFileTypes: true, encoding: 'utf8' });
   } catch {
-    return { pets: [], rootDir: root };
+    return;
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -75,6 +88,7 @@ export async function listCodexPets(
     // from the folder name) silently 404 the download route.
     const safeFolderId = sanitizeId(entry.name);
     if (!safeFolderId) continue;
+    if (seenIds.has(safeFolderId)) continue;
     const dir = path.join(root, entry.name);
     const manifestPath = path.join(dir, 'pet.json');
     let manifest: PetManifest = {};
@@ -97,6 +111,7 @@ export async function listCodexPets(
     } catch {
       // ignore — listing should not fail on a transient stat error.
     }
+    seenIds.add(safeFolderId);
     const displayName = pickString(manifest.displayName) ?? prettyName(entry.name);
     const description = pickString(manifest.description) ?? '';
     const spritesheetUrl = `${baseUrl}/api/codex-pets/${encodeURIComponent(safeFolderId)}/spritesheet`;
@@ -107,37 +122,63 @@ export async function listCodexPets(
       spritesheetUrl,
       spritesheetExt: sheet.ext,
       hatchedAt: Math.floor(mtimeMs),
+      bundled,
     });
   }
-  // Newest first — matches the "recently hatched" framing in the UI.
+}
+
+export async function listCodexPets(
+  options: { baseUrl?: string; bundledRoot?: string } = {},
+): Promise<CodexPetListResult> {
+  const baseUrl = options.baseUrl ?? '';
+  const userRoot = resolveCodexPetsRoot();
+  const out: CodexPetSummaryRecord[] = [];
+  const seen = new Set<string>();
+  // User pets first so a locally re-baked copy preempts the bundled
+  // one (same id ⇒ user wins).
+  await scanRoot(userRoot, baseUrl, false, out, seen);
+  if (options.bundledRoot) {
+    await scanRoot(options.bundledRoot, baseUrl, true, out, seen);
+  }
+  // Newest-first across both origins. Sorting by mtime keeps the
+  // "recently hatched" framing in the UI honest — a bundled pet from
+  // 2024 still sinks below a fresh user-hatched pet from this morning.
   out.sort((a, b) => b.hatchedAt - a.hatchedAt);
-  return { pets: out, rootDir: root };
+  return { pets: out, rootDir: userRoot };
 }
 
 // Returns { absPath, ext } for the resolved spritesheet of a given pet
 // id, or null if the pet folder / sheet is missing. Used by the
 // `/api/codex-pets/:id/spritesheet` route to safely serve the file —
 // the id is sanitised on both sides so users cannot path-escape into
-// arbitrary folders under their home directory.
-export async function readCodexPetSpritesheet(id: string): Promise<SpritesheetPick | null> {
-  const root = resolveCodexPetsRoot();
+// arbitrary folders under their home directory or the bundled assets.
+export async function readCodexPetSpritesheet(
+  id: string,
+  options: { bundledRoot?: string } = {},
+): Promise<SpritesheetPick | null> {
   const safeId = sanitizeId(id);
   if (!safeId) return null;
-  const dir = path.join(root, safeId);
-  // Re-resolve the manifest so a manifest-declared spritesheetPath wins
-  // when it differs from our default name (matches the hatch-pet
-  // contract).
-  let manifest: PetManifest = {};
-  try {
-    const raw = await readFile(path.join(dir, 'pet.json'), 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      manifest = parsed as PetManifest;
+  const roots: string[] = [resolveCodexPetsRoot()];
+  if (options.bundledRoot) roots.push(options.bundledRoot);
+  for (const root of roots) {
+    const dir = path.join(root, safeId);
+    // Re-resolve the manifest so a manifest-declared spritesheetPath wins
+    // when it differs from our default name (matches the hatch-pet
+    // contract).
+    let manifest: PetManifest = {};
+    try {
+      const raw = await readFile(path.join(dir, 'pet.json'), 'utf8');
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        manifest = parsed as PetManifest;
+      }
+    } catch {
+      // ignore; pickSpritesheet falls back to the canonical names.
     }
-  } catch {
-    // ignore; pickSpritesheet falls back to the canonical names.
+    const sheet = await pickSpritesheet(dir, manifest);
+    if (sheet) return sheet;
   }
-  return pickSpritesheet(dir, manifest);
+  return null;
 }
 
 async function pickSpritesheet(dir: string, manifest: PetManifest): Promise<SpritesheetPick | null> {

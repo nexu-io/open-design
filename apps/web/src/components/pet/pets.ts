@@ -1,4 +1,4 @@
-import type { PetCustom, PetConfig } from '../../types';
+import type { PetAtlasLayout, PetAtlasRowDef, PetCustom, PetConfig } from '../../types';
 
 // Built-in pet catalog. Each pet is a simple emoji glyph plus an accent
 // color that drives the overlay halo, the "speech bubble" border, and
@@ -106,10 +106,15 @@ export interface ResolvedPet {
   // Optional uploaded image data URL. Present only for custom pets that
   // have an image; built-ins fall back to their emoji glyph.
   imageUrl?: string;
+  // Legacy single-row spritesheet config (used when `atlas` is missing).
   // Number of horizontal frames in the imageUrl (1 = static).
   frames?: number;
   // Frames-per-second for the spritesheet step animation.
   fps?: number;
+  // Optional sprite atlas layout. When present, `imageUrl` is the full
+  // grid and `PetSpriteFace` picks one row to play based on the
+  // overlay's interaction state.
+  atlas?: PetAtlasLayout;
 }
 
 // Resolve the pet definition currently in use. Returns `null` only when
@@ -133,6 +138,7 @@ export function resolveActivePet(pet: PetConfig | undefined): ResolvedPet | null
       imageUrl: c.imageUrl,
       frames: clampFrames(c.frames),
       fps: clampFps(c.fps),
+      atlas: sanitizeAtlas(c.atlas),
     };
   }
   const found = BUILT_IN_PETS.find((p) => p.id === pet.petId)
@@ -160,6 +166,90 @@ function clampFrames(value: number | undefined): number {
 function clampFps(value: number | undefined): number {
   if (!Number.isFinite(value as number)) return 6;
   return Math.max(FPS_MIN, Math.min(FPS_MAX, Math.round(value as number)));
+}
+
+// Atlas hardening — strips out malformed entries so the renderer never
+// has to defensively check for NaN cell sizes / negative indices. We
+// keep rows we can validate even if the layout omits a few; missing
+// rows just fall back to `idle` at lookup time.
+function sanitizeAtlas(input: PetAtlasLayout | undefined): PetAtlasLayout | undefined {
+  if (!input) return undefined;
+  const cols = Math.max(1, Math.floor(input.cols));
+  const rows = Math.max(1, Math.floor(input.rows));
+  if (!Number.isFinite(cols) || !Number.isFinite(rows)) return undefined;
+  const seen = new Set<number>();
+  const rowsDef: PetAtlasRowDef[] = [];
+  for (const row of input.rowsDef ?? []) {
+    if (!row || typeof row.id !== 'string' || !row.id.trim()) continue;
+    const index = Math.floor(row.index);
+    if (!Number.isFinite(index) || index < 0 || index >= rows) continue;
+    if (seen.has(index)) continue;
+    seen.add(index);
+    rowsDef.push({
+      index,
+      id: row.id.trim(),
+      frames: Math.max(1, Math.min(cols, Math.floor(row.frames) || 1)),
+      fps: Math.max(FPS_MIN, Math.min(FPS_MAX, Math.floor(row.fps) || 6)),
+    });
+  }
+  if (rowsDef.length === 0) return undefined;
+  rowsDef.sort((a, b) => a.index - b.index);
+  return { cols, rows, rowsDef };
+}
+
+// Logical interaction states that drive the overlay's animation
+// switching. Kept narrow on purpose so the mapping below stays a
+// declarative table rather than a tangle of conditionals.
+export type PetInteraction =
+  | 'idle'
+  | 'hover'
+  | 'drag-right'
+  | 'drag-left'
+  | 'drag-up'
+  | 'drag-down'
+  | 'waiting';
+
+// Preferred Codex atlas row id for each interaction state. When the
+// pet's atlas does not include the preferred row, `pickAtlasRow` walks
+// the fallback chain starting from `idle` so something always plays.
+const INTERACTION_ROW_ID: Record<PetInteraction, string> = {
+  idle: 'idle',
+  hover: 'waving',
+  'drag-right': 'running-right',
+  'drag-left': 'running-left',
+  'drag-up': 'jumping',
+  'drag-down': 'waving',
+  waiting: 'waiting',
+};
+
+const ROW_FALLBACK_ORDER: readonly string[] = [
+  'idle',
+  'waiting',
+  'waving',
+  'running',
+  'running-right',
+];
+
+export function preferredRowId(state: PetInteraction): string {
+  return INTERACTION_ROW_ID[state];
+}
+
+// Resolve the atlas row to play given the desired animation id. We try
+// the requested id first, then walk a sensible fallback chain, then
+// return whichever row the atlas does have so playback never blanks
+// out for a partially-populated pet.
+export function pickAtlasRow(
+  layout: PetAtlasLayout | undefined,
+  preferred: string,
+): PetAtlasRowDef | undefined {
+  if (!layout || layout.rowsDef.length === 0) return undefined;
+  const direct = layout.rowsDef.find((r) => r.id === preferred);
+  if (direct) return direct;
+  for (const id of ROW_FALLBACK_ORDER) {
+    const fallback = layout.rowsDef.find((r) => r.id === id);
+    if (fallback) return fallback;
+  }
+  return layout.rowsDef[0];
 }
 
 // A short pool of "ambient" prompts that the overlay rotates through on

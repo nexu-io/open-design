@@ -17,6 +17,11 @@ interface Props {
   onOpenPetSettings: () => void;
   // Tuck the live overlay without changing the active pet id.
   onTuck: () => void;
+  // Optional "remove the rail entirely" action. When provided, the
+  // header gets a × button that hides the rail from the layout (the
+  // user re-summons it from the avatar dropdown). Distinct from the
+  // existing collapse toggle, which only narrows the column.
+  onHide?: () => void;
 }
 
 const COLLAPSED_KEY = 'open-design:pet-rail-collapsed';
@@ -33,7 +38,7 @@ function loadCollapsed(): boolean {
 // Vertical pet column rendered to the right of the entry view's main
 // content. Doubles as a discovery surface (un-adopted users see the
 // full catalog inline) and a switcher (adopted users tap to swap).
-export function PetRail({ config, onAdoptInline, onOpenPetSettings, onTuck }: Props) {
+export function PetRail({ config, onAdoptInline, onOpenPetSettings, onTuck, onHide }: Props) {
   const t = useT();
   const [collapsed, setCollapsed] = useState<boolean>(() => loadCollapsed());
   const pet: PetConfig = config.pet ?? { ...DEFAULT_PET, custom: defaultCustomPet() };
@@ -72,15 +77,28 @@ export function PetRail({ config, onAdoptInline, onOpenPetSettings, onTuck }: Pr
           <span aria-hidden>🐾</span>
           <strong>{t('pet.railTitle')}</strong>
         </div>
-        <button
-          type="button"
-          className="pet-rail-collapse"
-          onClick={() => setCollapsed(true)}
-          title={t('pet.railCollapse')}
-          aria-label={t('pet.railCollapse')}
-        >
-          <Icon name="chevron-right" size={14} />
-        </button>
+        <div className="pet-rail-head-actions">
+          <button
+            type="button"
+            className="pet-rail-collapse"
+            onClick={() => setCollapsed(true)}
+            title={t('pet.railCollapse')}
+            aria-label={t('pet.railCollapse')}
+          >
+            <Icon name="chevron-right" size={14} />
+          </button>
+          {onHide ? (
+            <button
+              type="button"
+              className="pet-rail-collapse"
+              onClick={onHide}
+              title={t('pet.railHide')}
+              aria-label={t('pet.railHide')}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          ) : null}
+        </div>
       </header>
       <p className="pet-rail-hint">{t('pet.railHint')}</p>
       <div className="pet-rail-status">

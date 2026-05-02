@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import type { PetConfig } from '../../types';
-import { ambientLines, resolveActivePet } from './pets';
+import {
+  ambientLines,
+  preferredRowId,
+  resolveActivePet,
+  type PetInteraction,
+} from './pets';
 import { PetSpriteFace } from './PetSpriteFace';
 
 interface Props {
@@ -21,6 +26,18 @@ interface Position {
 }
 
 const DEFAULT_POSITION: Position = { right: 24, bottom: 24 };
+
+// How long the pet has to sit untouched before the overlay flips to
+// the "waiting" animation row (mirrors the codex-pets-react default).
+const WAITING_AFTER_MS = 6000;
+
+// Filters pointer jitter and accidental nudges before the overlay
+// commits to a directional running animation. Picked to feel
+// responsive without flickering on small mouse wiggles.
+const DRAG_GESTURE_MIN_PX = 14;
+// Require one axis to clearly dominate before swapping running-* for
+// jumping/waving so diagonal drags don't strobe between rows.
+const DRAG_AXIS_BIAS = 1.18;
 
 function loadPosition(): Position {
   if (typeof window === 'undefined') return DEFAULT_POSITION;
@@ -54,13 +71,24 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
   const [bubbleOpen, setBubbleOpen] = useState(false);
   const [ambientIdx, setAmbientIdx] = useState(0);
   const [position, setPosition] = useState<Position>(() => loadPosition());
+  // Interaction state drives which atlas row plays. Only meaningful
+  // for atlas-backed custom pets — the renderer ignores it for emoji
+  // / single-strip pets.
+  const [interaction, setInteraction] = useState<PetInteraction>('idle');
+  const [hovered, setHovered] = useState(false);
   const dragRef = useRef<{
     startX: number;
     startY: number;
     startRight: number;
     startBottom: number;
     moved: boolean;
+    // Last classified gesture direction. Kept on the ref so we don't
+    // trigger a state update + render on every pointermove tick.
+    direction: 'right' | 'left' | 'up' | 'down' | null;
   } | null>(null);
+  // Idle timer that flips the pet to the `waiting` row after a few
+  // seconds without hover or drag. Reset by every interaction.
+  const waitingTimerRef = useRef<number | null>(null);
 
   // Show the greeting briefly the first time the overlay mounts after a
   // wake. Auto-tuck the bubble after 4s so it does not linger forever.
@@ -81,6 +109,32 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
   );
   const visibleLine = lines.length > 0 ? lines[ambientIdx % lines.length] : '';
 
+  // (Re)arms the long-idle waiting timer. Called every time the user
+  // interacts so an active session never falls into "waiting" mid-drag.
+  const armWaitingTimer = useCallback(() => {
+    if (waitingTimerRef.current != null) {
+      window.clearTimeout(waitingTimerRef.current);
+    }
+    waitingTimerRef.current = window.setTimeout(() => {
+      // Only escalate to `waiting` from a calm `idle` baseline; an
+      // active hover / drag should keep their own animation.
+      setInteraction((prev) => (prev === 'idle' ? 'waiting' : prev));
+      waitingTimerRef.current = null;
+    }, WAITING_AFTER_MS);
+  }, []);
+
+  // Start the idle clock when the pet becomes visible / changes.
+  useEffect(() => {
+    if (!active) return;
+    armWaitingTimer();
+    return () => {
+      if (waitingTimerRef.current != null) {
+        window.clearTimeout(waitingTimerRef.current);
+        waitingTimerRef.current = null;
+      }
+    };
+  }, [active?.id, armWaitingTimer]);
+
   if (!active) return null;
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -93,7 +147,9 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
       startRight: position.right,
       startBottom: position.bottom,
       moved: false,
+      direction: null,
     };
+    armWaitingTimer();
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -108,6 +164,32 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     const nextRight = Math.max(8, Math.min(window.innerWidth - 80, drag.startRight - dx));
     const nextBottom = Math.max(8, Math.min(window.innerHeight - 80, drag.startBottom - dy));
     setPosition({ right: nextRight, bottom: nextBottom });
+
+    // Classify the gesture direction once it clears the jitter floor
+    // and one axis clearly dominates the other. The animation then
+    // sticks until the user reverses past the threshold again.
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (absX < DRAG_GESTURE_MIN_PX && absY < DRAG_GESTURE_MIN_PX) return;
+    let dir: 'right' | 'left' | 'up' | 'down' | null = null;
+    if (absX >= absY * DRAG_AXIS_BIAS) {
+      dir = dx > 0 ? 'right' : 'left';
+    } else if (absY >= absX * DRAG_AXIS_BIAS) {
+      dir = dy < 0 ? 'up' : 'down';
+    }
+    if (dir && dir !== drag.direction) {
+      drag.direction = dir;
+      setInteraction(
+        dir === 'right'
+          ? 'drag-right'
+          : dir === 'left'
+            ? 'drag-left'
+            : dir === 'up'
+              ? 'drag-up'
+              : 'drag-down',
+      );
+    }
+    armWaitingTimer();
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -126,6 +208,26 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         return next;
       });
     }
+    // After the drag ends, fall back to the resting animation so the
+    // pet stops "running" the moment the user lets go. Hovered state
+    // wins so a release-into-hover keeps the wave going.
+    setInteraction(hovered ? 'hover' : 'idle');
+    armWaitingTimer();
+  };
+
+  const onPointerEnter = () => {
+    setHovered(true);
+    // Don't override an active drag direction with the hover wave —
+    // the user is mid-gesture and they expect the running cycle to
+    // keep playing until they let go.
+    if (!dragRef.current) setInteraction('hover');
+    armWaitingTimer();
+  };
+
+  const onPointerLeave = () => {
+    setHovered(false);
+    if (!dragRef.current) setInteraction('idle');
+    armWaitingTimer();
   };
 
   return (
@@ -172,13 +274,26 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
         title={t('pet.spriteTitle', { name: active.name })}
         aria-label={t('pet.spriteAria', { name: active.name })}
+        data-pet-state={interaction}
         style={{
-          ['--pet-anim' as string]: `pet-${active.animation}`,
+          // For atlas-backed pets the row swap *is* the animation, so
+          // we let the sprite element sit still and animate frames
+          // inside it. Built-ins / single-strip uploads keep their
+          // gentle CSS-named bob via --pet-anim.
+          ['--pet-anim' as string]: active.atlas
+            ? 'none'
+            : `pet-${active.animation}`,
         }}
       >
-        <PetSpriteFace active={active} className="pet-sprite-glyph" />
+        <PetSpriteFace
+          active={active}
+          className="pet-sprite-glyph"
+          rowId={preferredRowId(interaction)}
+        />
         <span className="pet-sprite-shadow" aria-hidden />
       </div>
     </div>

@@ -24,6 +24,7 @@ import {
   cropAtlasRow,
   loadAtlasImageFromFile,
   looksLikeCodexAtlas,
+  prepareCodexAtlas,
 } from './codexAtlas';
 
 interface Props {
@@ -77,6 +78,28 @@ export function PetSettings({ cfg, setCfg }: Props) {
   const [codexPetsLoading, setCodexPetsLoading] = useState(false);
   const [codexPetsRoot, setCodexPetsRoot] = useState<string>('');
   const [codexAdopting, setCodexAdopting] = useState<string | null>(null);
+
+  // Tab routing — split the panel into three exclusive surfaces
+  // (built-in / custom / community) so each "where do my pets come
+  // from" choice has its own dedicated space and the user feels like
+  // they are picking from a single source rather than hunting through
+  // a long stack of subsections. Default to whichever tab the
+  // currently-adopted pet lives in so reopening Settings lands the
+  // user back where they were.
+  type PetSourceTab = 'builtIn' | 'custom' | 'community';
+  const initialTab: PetSourceTab = BUILT_IN_PETS.some((p) => p.id === pet.petId)
+    ? 'builtIn'
+    : pet.petId === CUSTOM_PET_ID
+      ? 'custom'
+      : 'builtIn';
+  const [activeTab, setActiveTab] = useState<PetSourceTab>(initialTab);
+
+  // Atlas previews are produced from a Custom-tab upload; pin the
+  // user there so the row picker is visible right after they drop
+  // the file in.
+  useEffect(() => {
+    if (atlasPreview) setActiveTab('custom');
+  }, [atlasPreview]);
 
   const refreshCodexPets = useCallback(async () => {
     setCodexPetsLoading(true);
@@ -218,6 +241,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
           imageUrl: cropped.dataUrl,
           frames: cropped.frames,
           fps: def?.fps ?? pet.custom.fps ?? 6,
+          atlas: undefined,
         },
         { focusCustom: true },
       );
@@ -230,14 +254,49 @@ export function PetSettings({ cfg, setCfg }: Props) {
     }
   }
 
+  // "Use full atlas" path — keep the entire downscaled Codex grid plus
+  // its layout metadata so the overlay can drive row switching from
+  // the interaction state machine (idle → hover/waving, drag → running,
+  // long-idle → waiting). Mirrors the upstream `codex-pets-react`
+  // PetWidget behaviour that picks rows on the fly instead of looping
+  // a single strip.
+  async function commitFullAtlas() {
+    if (!atlasPreview) return;
+    setAtlasBusy(true);
+    try {
+      const prepared = await prepareCodexAtlas(atlasPreview.dataUrl);
+      patchCustom(
+        {
+          imageUrl: prepared.dataUrl,
+          atlas: prepared.layout,
+          // Drop the legacy strip params so the renderer goes through
+          // the atlas branch unambiguously, even on configs migrated
+          // from the old single-row import path.
+          frames: 1,
+          fps: prepared.layout.rowsDef[0]?.fps ?? pet.custom.fps ?? 6,
+        },
+        { focusCustom: true },
+      );
+      setAtlasPreview(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not import that atlas.';
+      setUploadError(message);
+    } finally {
+      setAtlasBusy(false);
+    }
+  }
+
   function clearImage() {
-    patchCustom({ imageUrl: undefined, frames: 1 });
+    patchCustom({ imageUrl: undefined, frames: 1, atlas: undefined });
   }
 
   // One-click adopt for a Codex hatch-pet — fetch the spritesheet
-  // from the daemon, slice the idle row out client-side, and stash
-  // the strip as the user's custom pet. Defaults `name`/`greeting`
-  // from the manifest so the speech bubble feels personalized.
+  // from the daemon and stash the FULL 8x9 atlas (downscaled) plus a
+  // matching layout so the overlay can switch animation rows
+  // (idle ↔ waving ↔ running-*) just like the upstream
+  // `codex-pets-react` `PetWidget`. Defaults `name`/`greeting` from the
+  // manifest so the speech bubble feels personalized.
   async function adoptCodexPet(pet: CodexPetSummary) {
     setCodexAdopting(pet.id);
     setUploadError(null);
@@ -246,22 +305,18 @@ export function PetSettings({ cfg, setCfg }: Props) {
       if (!resp.ok) throw new Error('Could not download that pet.');
       const blob = await resp.blob();
       const dataUrl = await blobToDataUrl(blob);
-      // Use the canonical Codex grid + the idle row as the default
-      // adoption target — most expressive at small sizes and works
-      // even when other rows are unfinished.
-      const idle = CODEX_ATLAS_ROWS_DEF[0]!;
-      const cropped = await cropAtlasRow(dataUrl, {
-        rowIndex: idle.index,
-        cols: CODEX_ATLAS_COLS,
-        rows: CODEX_ATLAS_ROWS,
-      });
+      const prepared = await prepareCodexAtlas(dataUrl);
       patchCustom(
         {
           name: pet.displayName || pet.id,
           greeting: pet.description || `Hi! I am ${pet.displayName}.`,
-          imageUrl: cropped.dataUrl,
-          frames: cropped.frames,
-          fps: idle.fps,
+          imageUrl: prepared.dataUrl,
+          // Atlas mode owns frame timing per row — clear the legacy
+          // strip fields so an older config rehydrating into the new
+          // shape does not accidentally fall back to strip rendering.
+          frames: 1,
+          fps: prepared.layout.rowsDef[0]?.fps ?? 6,
+          atlas: prepared.layout,
         },
         { focusCustom: true },
       );
@@ -335,36 +390,83 @@ export function PetSettings({ cfg, setCfg }: Props) {
         </div>
       </div>
 
-      <div className="pet-grid">
-        {BUILT_IN_PETS.map((p) => {
-          const active = pet.adopted && pet.petId === p.id;
-          return (
-            <button
-              type="button"
-              key={p.id}
-              className={`pet-card${active ? ' active' : ''}`}
-              onClick={() => adopt(p.id)}
-              aria-pressed={active}
-              style={{ ['--pet-accent' as string]: p.accent }}
-            >
-              <span className="pet-card-glyph" aria-hidden>{p.glyph}</span>
-              <span className="pet-card-meta">
-                <span className="pet-card-name">{p.name}</span>
-                <span className="pet-card-flavor">{p.flavor}</span>
-              </span>
-              {active ? (
-                <span className="pet-card-badge">
-                  <Icon name="check" size={12} />
-                  <span>{t('pet.adoptedBadge')}</span>
-                </span>
-              ) : (
-                <span className="pet-card-cta">{t('pet.adopt')}</span>
-              )}
-            </button>
-          );
-        })}
+      <div className="pet-tabs">
+        <div
+          className="subtab-pill"
+          role="tablist"
+          aria-label={t('pet.tabsAria')}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'builtIn'}
+            className={activeTab === 'builtIn' ? 'active' : ''}
+            onClick={() => setActiveTab('builtIn')}
+          >
+            {t('pet.tabBuiltIn')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'custom'}
+            className={activeTab === 'custom' ? 'active' : ''}
+            onClick={() => setActiveTab('custom')}
+          >
+            {t('pet.tabCustom')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'community'}
+            className={activeTab === 'community' ? 'active' : ''}
+            onClick={() => setActiveTab('community')}
+          >
+            {t('pet.tabCommunity')}
+          </button>
+        </div>
+        <p className="hint pet-tabs-hint">
+          {activeTab === 'builtIn'
+            ? t('pet.tabBuiltInHint')
+            : activeTab === 'custom'
+              ? t('pet.tabCustomHint')
+              : t('pet.tabCommunityHint')}
+        </p>
       </div>
 
+      {activeTab === 'builtIn' ? (
+        <div className="pet-grid" role="radiogroup" aria-label={t('pet.tabBuiltIn')}>
+          {BUILT_IN_PETS.map((p) => {
+            const active = pet.adopted && pet.petId === p.id;
+            return (
+              <button
+                type="button"
+                key={p.id}
+                role="radio"
+                aria-checked={active}
+                className={`pet-card${active ? ' active' : ''}`}
+                onClick={() => adopt(p.id)}
+                style={{ ['--pet-accent' as string]: p.accent }}
+              >
+                <span className="pet-card-glyph" aria-hidden>{p.glyph}</span>
+                <span className="pet-card-meta">
+                  <span className="pet-card-name">{p.name}</span>
+                  <span className="pet-card-flavor">{p.flavor}</span>
+                </span>
+                {active ? (
+                  <span className="pet-card-badge">
+                    <Icon name="check" size={12} />
+                    <span>{t('pet.adoptedBadge')}</span>
+                  </span>
+                ) : (
+                  <span className="pet-card-cta">{t('pet.adopt')}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {activeTab === 'custom' ? (
       <div className="pet-custom">
         <div className="pet-custom-head">
           <div>
@@ -376,8 +478,15 @@ export function PetSettings({ cfg, setCfg }: Props) {
             className={`seg-btn small${pet.adopted && pet.petId === CUSTOM_PET_ID ? ' active' : ''}`}
             onClick={() => adopt(CUSTOM_PET_ID)}
           >
-            <Icon name="sparkles" size={12} />
-            <span>{t('pet.useCustom')}</span>
+            <Icon
+              name={pet.adopted && pet.petId === CUSTOM_PET_ID ? 'check' : 'sparkles'}
+              size={12}
+            />
+            <span>
+              {pet.adopted && pet.petId === CUSTOM_PET_ID
+                ? t('pet.adoptedBadge')
+                : t('pet.useCustom')}
+            </span>
           </button>
         </div>
         <div
@@ -458,7 +567,10 @@ export function PetSettings({ cfg, setCfg }: Props) {
           {uploadError ? (
             <p className="hint pet-image-error">{uploadError}</p>
           ) : null}
-          {pet.custom.imageUrl ? (
+          {pet.custom.imageUrl && pet.custom.atlas ? (
+            <p className="hint pet-image-atlas-hint">{t('pet.atlasActiveHint')}</p>
+          ) : null}
+          {pet.custom.imageUrl && !pet.custom.atlas ? (
             <div className="pet-image-frames">
               <label className="field">
                 <span className="field-label">{t('pet.fieldFrames')}</span>
@@ -549,8 +661,19 @@ export function PetSettings({ cfg, setCfg }: Props) {
               <button
                 type="button"
                 className="seg-btn small"
+                onClick={() => void commitFullAtlas()}
+                disabled={atlasBusy}
+                title={t('pet.atlasAdoptFullTitle')}
+              >
+                <Icon name={atlasBusy ? 'spinner' : 'sparkles'} size={12} />
+                <span>{t('pet.atlasAdoptFull')}</span>
+              </button>
+              <button
+                type="button"
+                className="seg-btn small ghost"
                 onClick={() => void commitAtlasRow()}
                 disabled={atlasBusy}
+                title={t('pet.atlasAdoptRowTitle')}
               >
                 <Icon name={atlasBusy ? 'spinner' : 'check'} size={12} />
                 <span>{t('pet.atlasAdopt')}</span>
@@ -559,92 +682,6 @@ export function PetSettings({ cfg, setCfg }: Props) {
           </div>
         ) : null}
 
-        <div className="pet-codex">
-          <div className="pet-codex-head">
-            <div>
-              <h4>{t('pet.codexTitle')}</h4>
-              <p className="hint">
-                {codexPetsRoot
-                  ? t('pet.codexSubtitleWithDir', { dir: codexPetsRoot })
-                  : t('pet.codexSubtitle')}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="seg-btn small ghost"
-              onClick={() => void refreshCodexPets()}
-              disabled={codexPetsLoading}
-              title={t('pet.codexRefresh')}
-            >
-              <Icon name={codexPetsLoading ? 'spinner' : 'refresh'} size={12} />
-              <span>{t('pet.codexRefresh')}</span>
-            </button>
-          </div>
-          {codexPets.length === 0 ? (
-            <p className="hint pet-codex-empty">
-              {codexPetsLoading ? t('pet.codexLoading') : t('pet.codexEmpty')}
-            </p>
-          ) : (
-            <div className="pet-codex-grid">
-              {codexPets.map((p) => {
-                const adopting = codexAdopting === p.id;
-                return (
-                  <div className="pet-codex-card" key={p.id}>
-                    <div
-                      className="pet-codex-thumb"
-                      style={{ backgroundImage: `url(${codexPetSpritesheetUrl(p)})` }}
-                      aria-hidden
-                    />
-                    <div className="pet-codex-meta">
-                      <strong>{p.displayName}</strong>
-                      {p.description ? <span>{p.description}</span> : null}
-                    </div>
-                    <button
-                      type="button"
-                      className="seg-btn small"
-                      onClick={() => void adoptCodexPet(p)}
-                      disabled={adopting || codexAdopting !== null}
-                    >
-                      <Icon name={adopting ? 'spinner' : 'check'} size={12} />
-                      <span>{adopting ? t('pet.codexAdopting') : t('pet.codexAdopt')}</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="pet-hatch">
-          <div className="pet-hatch-head">
-            <div>
-              <h4>{t('pet.hatchTitle')}</h4>
-              <p className="hint">{t('pet.hatchHint')}</p>
-            </div>
-          </div>
-          <label className="field">
-            <span className="field-label">{t('pet.hatchConcept')}</span>
-            <input
-              type="text"
-              maxLength={140}
-              value={hatchConcept}
-              placeholder={t('pet.hatchConceptPlaceholder')}
-              onChange={(e) => setHatchConcept(e.target.value)}
-            />
-          </label>
-          <pre className="pet-hatch-prompt" aria-live="polite">{hatchPrompt}</pre>
-          <div className="pet-hatch-actions">
-            <button
-              type="button"
-              className="seg-btn small"
-              onClick={() => void copyHatchPrompt()}
-            >
-              <Icon name={hatchCopied ? 'check' : 'copy'} size={12} />
-              <span>{hatchCopied ? t('pet.hatchCopied') : t('pet.hatchCopy')}</span>
-            </button>
-          </div>
-          <p className="hint pet-hatch-foot">{t('pet.hatchFoot')}</p>
-        </div>
         <div className="pet-custom-fields">
           <label className="field">
             <span className="field-label">{t('pet.fieldName')}</span>
@@ -717,6 +754,120 @@ export function PetSettings({ cfg, setCfg }: Props) {
           </div>
         </div>
       </div>
+      ) : null}
+
+      {activeTab === 'community' ? (
+        <div className="pet-community">
+          <div className="pet-codex">
+            <div className="pet-codex-head">
+              <div>
+                <h4>{t('pet.codexTitle')}</h4>
+                <p className="hint">
+                  {codexPetsRoot
+                    ? t('pet.codexSubtitleWithDir', { dir: codexPetsRoot })
+                    : t('pet.codexSubtitle')}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="seg-btn small ghost"
+                onClick={() => void refreshCodexPets()}
+                disabled={codexPetsLoading}
+                title={t('pet.codexRefresh')}
+              >
+                <Icon name={codexPetsLoading ? 'spinner' : 'refresh'} size={12} />
+                <span>{t('pet.codexRefresh')}</span>
+              </button>
+            </div>
+            {codexPets.length === 0 ? (
+              <p className="hint pet-codex-empty">
+                {codexPetsLoading ? t('pet.codexLoading') : t('pet.codexEmpty')}
+              </p>
+            ) : (
+              <div className="pet-codex-grid" role="radiogroup" aria-label={t('pet.codexTitle')}>
+                {codexPets.map((p) => {
+                  const adopting = codexAdopting === p.id;
+                  const spritesheet = `url(${codexPetSpritesheetUrl(p)})`;
+                  // Best-effort match: community adoption copies the
+                  // pet's display name into `custom.name`, so when the
+                  // user is on a custom slot with a matching name +
+                  // image we treat that card as the active selection.
+                  const isActive =
+                    pet.adopted &&
+                    pet.petId === CUSTOM_PET_ID &&
+                    !!pet.custom.imageUrl &&
+                    pet.custom.name === (p.displayName || p.id);
+                  return (
+                    <div
+                      className={`pet-codex-card${isActive ? ' active' : ''}`}
+                      key={p.id}
+                    >
+                      <div
+                        className="pet-codex-thumb"
+                        style={{ ['--pet-codex-src' as string]: spritesheet }}
+                        aria-hidden
+                      >
+                        <span className="pet-codex-thumb-preview" aria-hidden />
+                      </div>
+                      <div className="pet-codex-meta">
+                        <strong>{p.displayName}</strong>
+                        {p.description ? <span>{p.description}</span> : null}
+                      </div>
+                      <button
+                        type="button"
+                        className={`seg-btn small${isActive ? ' active' : ''}`}
+                        onClick={() => void adoptCodexPet(p)}
+                        disabled={adopting || codexAdopting !== null}
+                        aria-pressed={isActive}
+                      >
+                        <Icon name={adopting ? 'spinner' : 'check'} size={12} />
+                        <span>
+                          {adopting
+                            ? t('pet.codexAdopting')
+                            : isActive
+                              ? t('pet.adoptedBadge')
+                              : t('pet.codexAdopt')}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="pet-hatch">
+            <div className="pet-hatch-head">
+              <div>
+                <h4>{t('pet.hatchTitle')}</h4>
+                <p className="hint">{t('pet.hatchHint')}</p>
+              </div>
+            </div>
+            <label className="field">
+              <span className="field-label">{t('pet.hatchConcept')}</span>
+              <input
+                type="text"
+                maxLength={140}
+                value={hatchConcept}
+                placeholder={t('pet.hatchConceptPlaceholder')}
+                onChange={(e) => setHatchConcept(e.target.value)}
+              />
+            </label>
+            <pre className="pet-hatch-prompt" aria-live="polite">{hatchPrompt}</pre>
+            <div className="pet-hatch-actions">
+              <button
+                type="button"
+                className="seg-btn small"
+                onClick={() => void copyHatchPrompt()}
+              >
+                <Icon name={hatchCopied ? 'check' : 'copy'} size={12} />
+                <span>{hatchCopied ? t('pet.hatchCopied') : t('pet.hatchCopy')}</span>
+              </button>
+            </div>
+            <p className="hint pet-hatch-foot">{t('pet.hatchFoot')}</p>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

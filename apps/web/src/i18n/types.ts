@@ -675,6 +675,14 @@ export interface Dict {
   'pet.subtitle': string;
   'pet.navTitle': string;
   'pet.navHint': string;
+  // Tabs in pet settings — split sources so the choice feels exclusive
+  'pet.tabBuiltIn': string;
+  'pet.tabBuiltInHint': string;
+  'pet.tabCustom': string;
+  'pet.tabCustomHint': string;
+  'pet.tabCommunity': string;
+  'pet.tabCommunityHint': string;
+  'pet.tabsAria': string;
   'pet.adopt': string;
   'pet.adoptedBadge': string;
   'pet.adoptCallout': string;
@@ -703,6 +711,8 @@ export interface Dict {
   'pet.railHint': string;
   'pet.railExpand': string;
   'pet.railCollapse': string;
+  'pet.railHide': string;
+  'pet.railShow': string;
   'pet.railCustomFlavor': string;
   'pet.railCustomize': string;
   // Composer pet menu
@@ -732,6 +742,10 @@ export interface Dict {
   'pet.atlasPickerHint': string;
   'pet.atlasCancel': string;
   'pet.atlasAdopt': string;
+  'pet.atlasAdoptFull': string;
+  'pet.atlasAdoptFullTitle': string;
+  'pet.atlasAdoptRowTitle': string;
+  'pet.atlasActiveHint': string;
   'pet.atlasRow.idle': string;
   'pet.atlasRow.running-right': string;
   'pet.atlasRow.running-left': string;
@@ -766,6 +780,13 @@ export interface Dict {
   'pet.codexRefresh': string;
   'pet.codexAdopt': string;
   'pet.codexAdopting': string;
+  'pet.communitySync': string;
+  'pet.communitySyncing': string;
+  'pet.communitySyncTitle': string;
+  'pet.communitySyncDone': string;
+  'pet.communitySyncFailed': string;
+  'pet.codexBundled': string;
+  'pet.codexBundledTitle': string;
 
   // Sketch editor
   'sketch.toolSelect': string;
