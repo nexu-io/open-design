@@ -310,6 +310,8 @@ export const hu: Dict = {
   'ds.categoryUncategorized': 'Kategorizálatlan',
   'ds.showcase': 'Bemutató',
   'ds.tokens': 'Tokenek',
+  'ds.specToggle': 'DESIGN.md',
+  'ds.specLoading': 'DESIGN.md betöltése…',
 
   'avatar.title': 'Fiók és beállítások',
   'avatar.localCli': 'Helyi CLI',
@@ -405,6 +407,8 @@ export const hu: Dict = {
   'preview.fullscreen': '⤢ Teljes képernyő',
   'preview.closeTitle': 'Bezárás (Esc)',
   'preview.loading': '{label} betöltése…',
+  'preview.showSidebar': '{label} megjelenítése',
+  'preview.hideSidebar': '{label} elrejtése',
 
   'misc.savedTemplate': 'Mentett sablon',
   'misc.primary': 'Elsődleges',
