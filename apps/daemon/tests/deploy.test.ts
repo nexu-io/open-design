@@ -310,6 +310,25 @@ describe('deploy plan and analyzer', () => {
     expect(codes).toEqual(['no-doctype', 'no-viewport']);
   });
 
+  it('flags missing doctype even when a fake doctype lives inside a <script> string', () => {
+    const html =
+      '<html>' +
+      '<head><meta name="viewport" content="width=device-width">' +
+      '<script>const tpl = `<!doctype html><html></html>`;</script>' +
+      '</head><body><h1>hi</h1></body></html>';
+    const { warnings } = analyzeDeployPlan({ entryPath: 'index.html', html, files: [] });
+    expect(warnings.map((w: any) => w.code)).toContain('no-doctype');
+  });
+
+  it('accepts a doctype that follows a leading HTML comment and BOM', () => {
+    const html =
+      '﻿<!-- generated 2026-05-02 -->\n<!doctype html>' +
+      '<meta name="viewport" content="width=device-width">' +
+      '<h1>hi</h1>';
+    const { warnings } = analyzeDeployPlan({ entryPath: 'index.html', html, files: [] });
+    expect(warnings.map((w: any) => w.code)).not.toContain('no-doctype');
+  });
+
   it('flags external scripts and stylesheets', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',
@@ -366,6 +385,19 @@ describe('deploy plan and analyzer', () => {
     expect(warnings).toContainEqual(
       expect.objectContaining({ code: 'large-html', path: 'index.html' }),
     );
+  });
+
+  it('reports large-html against the source entry path, not the renamed deploy file', () => {
+    const huge = Buffer.alloc(DEPLOY_PREFLIGHT_LARGE_HTML_BYTES + 1);
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'pages/landing.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width">',
+      files: [
+        { file: 'index.html', data: huge, contentType: 'text/html', sourcePath: 'pages/landing.html' },
+      ],
+    });
+    const found = warnings.find((w: any) => w.code === 'large-html');
+    expect(found?.path).toBe('pages/landing.html');
   });
 
   it('returns no warnings on a healthy entry HTML', () => {

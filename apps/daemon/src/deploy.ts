@@ -308,6 +308,22 @@ function pushUnique(list, warning) {
 // Walk the entry HTML once to gather signals that affect deployment
 // quality without touching the network. Returns a structured warning
 // list the UI can render verbatim.
+//
+// `entryPath` is used as the warning `path` for HTML-level findings so
+// the UI can deep-link from a warning into the source file the author
+// is actually editing. `files` carries deploy-relative paths (the entry
+// HTML is always renamed to `index.html`) so per-asset warnings live in
+// the deploy namespace.
+/**
+ * @param {{
+ *   entryPath: string,
+ *   html: string,
+ *   files: any[],
+ *   missing?: any[],
+ *   invalid?: any[]
+ * }} input
+ * @returns {{ warnings: any[], totalBytes: number, totalFiles: number }}
+ */
 export function analyzeDeployPlan(input: {
   entryPath: string;
   html: string;
@@ -353,8 +369,11 @@ export function analyzeDeployPlan(input: {
 
   if (entrySize > DEPLOY_PREFLIGHT_LARGE_HTML_BYTES) {
     pushUnique(acc, {
+      // Report against the source entry path so the UI can deep-link
+      // back to the file the author edits, not the deploy-renamed
+      // `index.html` which does not exist in the project tree.
       code: 'large-html',
-      path: 'index.html',
+      path: entryPath,
       size: entrySize,
       message: `Entry HTML is ${formatMib(entrySize)}; large HTML inflates time-to-first-paint.`,
     });
@@ -368,7 +387,14 @@ export function analyzeDeployPlan(input: {
   }
 
   const source = String(html ?? '');
-  if (!/<!doctype\s+html/i.test(source)) {
+  // Anchor to the document prolog so a `<!doctype html>` substring that
+  // happens to live inside a `<script>` template literal or a comment
+  // is not treated as a real declaration. Per HTML5, the prolog may
+  // begin with an optional BOM, then any number of HTML comments and
+  // whitespace, then the doctype. Built via `new RegExp` so the BOM
+  // appears as an explicit U+FEFF escape rather than a literal
+  // zero-width character in the regex source.
+  if (!new RegExp('^\\uFEFF?\\s*(?:<!--[\\s\\S]*?-->\\s*)*<!doctype\\s+html', 'i').test(source)) {
     pushUnique(acc, {
       code: 'no-doctype',
       path: entryPath,
