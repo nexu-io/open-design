@@ -1115,7 +1115,7 @@ code {
 /* Segmented control */
 .seg-control {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(var(--seg-cols, 2), 1fr);
   gap: 6px;
   padding: 4px;
   background: var(--bg-subtle);
@@ -1140,7 +1140,7 @@ code {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
 }
-.seg-btn .seg-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.seg-btn .seg-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg-btn .seg-meta { font-size: 11px; color: var(--text-muted); letter-spacing: 0.01em; }
 .seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 

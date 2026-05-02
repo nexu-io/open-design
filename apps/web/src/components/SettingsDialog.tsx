@@ -749,7 +749,7 @@ function AppearanceSection({
           <p className="hint">{t('settings.appearanceHint')}</p>
         </div>
       </div>
-      <div className="seg-control" role="group" aria-label={t('settings.appearance')}>
+      <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
         {THEMES.map(({ value, labelKey }) => (
           <button
             key={value}
