@@ -1,30 +1,30 @@
 import type { AppConfig } from '../types';
+import litellmData from './litellm-models.json';
 
-// Hand-maintained per-model output cap. Keep in sync with SUGGESTED_MODELS
-// in SettingsDialog.tsx and any new providers added to KNOWN_PROVIDERS.
+// Per-model output cap, used to default `max_tokens` so users on supported
+// models don't have to find Settings to avoid mid-stream truncation.
 //
-// Sources:
-// - claude-* 4.5: Anthropic model cards (64k default, beta extends further)
-// - mimo-v2.5-pro: matches what issue #29 reports as the working ceiling
+// Source of truth: vendored slice of BerriAI/litellm's
+// model_prices_and_context_window.json (MIT). Regenerate with:
+//   node --experimental-strip-types scripts/sync-litellm-models.ts
 //
-// Custom models or unknown ids fall through to FALLBACK_MAX_TOKENS so the
-// previous hardcoded behavior is preserved for anyone we don't recognize.
+// Anything LiteLLM doesn't track (or where its value is wrong for our
+// usage) goes in OVERRIDES; unknown models fall through to FALLBACK.
 export const FALLBACK_MAX_TOKENS = 8192;
 
-const MODEL_MAX_TOKENS: Record<string, number> = {
-  'claude-opus-4-5': 64000,
-  'claude-sonnet-4-5': 64000,
-  'claude-haiku-4-5': 64000,
+const LITELLM_MODELS = litellmData.models as Record<string, number>;
+
+const OVERRIDES: Record<string, number> = {
+  // LiteLLM lists MiMo via OpenRouter and Novita aliases (16k / 32k) but
+  // not the canonical `mimo-v2.5-pro` id we hand to Xiaomi's direct API.
+  // 32k matches what issue #29 reports as the working ceiling.
   'mimo-v2.5-pro': 32768,
 };
 
 export function modelMaxTokensDefault(model: string): number {
-  return MODEL_MAX_TOKENS[model] ?? FALLBACK_MAX_TOKENS;
+  return OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
 }
 
-// Effective cap to send upstream. User override (cfg.maxTokens) wins; if
-// unset, we use the per-model default so the average user never has to
-// touch Settings to avoid a mid-stream truncation.
 export function effectiveMaxTokens(cfg: Pick<AppConfig, 'maxTokens' | 'model'>): number {
   return cfg.maxTokens ?? modelMaxTokensDefault(cfg.model);
 }
