@@ -77,11 +77,14 @@ for (let i = 0; i < argv.length; i++) {
 startServer({ port }).then(url => {
   console.log(`[od] listening on ${url}`);
   if (open) {
-    const opener = process.platform === 'darwin' ? 'open'
-      : process.platform === 'win32' ? 'start'
-      : 'xdg-open';
     import('node:child_process').then(({ spawn }) => {
-      spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
+      if (process.platform === 'win32') {
+        // `start` is a cmd.exe built-in, not a standalone binary — must use shell
+        spawn('cmd', ['/c', 'start', url], { detached: true, stdio: 'ignore', shell: false }).unref();
+      } else {
+        const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+        spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
+      }
     });
   }
 });

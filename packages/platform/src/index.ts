@@ -256,10 +256,13 @@ async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
     "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine | ConvertTo-Json -Compress",
   ].join("; ");
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
+    const child = execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
       if (error) rejectList(error);
       else resolveList(out);
     });
+    // WMI can hang indefinitely on some Windows systems; bail out after 5 s
+    // and return an empty snapshot list so tools-dev can still start.
+    setTimeout(() => { child.kill(); rejectList(new Error("WMI timeout")); }, 5000);
   });
   const payload = stdout.trim();
   if (!payload) return [];
