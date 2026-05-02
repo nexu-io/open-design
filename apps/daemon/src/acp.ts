@@ -2,6 +2,8 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
+import { sanitizeAgentEnv } from './agent-env.js';
+
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
@@ -120,7 +122,9 @@ export async function detectAcpModels({
     const child = spawn(bin, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      // Same rationale as server.ts: don't leak host-agent runtime vars
+      // (OPENCODE_*, CLAUDE_CODE_*, …) into a freshly-spawned agent CLI.
+      env: sanitizeAgentEnv(process.env),
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');

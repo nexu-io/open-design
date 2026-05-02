@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { reattachDaemonRun, streamViaDaemon } from './daemon';
+import { reattachDaemonRun, sanitizeStderrTail, streamViaDaemon } from './daemon';
 import { streamMessageOpenAI } from './openai-compatible';
 import { parseSseFrame } from './sse';
 
@@ -511,6 +511,36 @@ describe('streamMessageOpenAI', () => {
     expect(handlers.onDelta).toHaveBeenCalledWith('hi');
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledWith('hi');
+  });
+});
+
+describe('sanitizeStderrTail', () => {
+  it('returns an empty string for empty input', () => {
+    expect(sanitizeStderrTail('')).toBe('');
+    expect(sanitizeStderrTail('   \n\n\n')).toBe('');
+  });
+
+  it('strips ANSI colour/style SGR escape codes', () => {
+    const raw = '\u001b[91m\u001b[1mError:\u001b[0m Session not found';
+    expect(sanitizeStderrTail(raw)).toBe('Error: Session not found');
+  });
+
+  it('strips cursor-movement and OSC escape sequences', () => {
+    const raw = '\u001b[2K\u001b[1G\u001b]0;title\u0007hello\u001b[0m';
+    expect(sanitizeStderrTail(raw)).toBe('hello');
+  });
+
+  it('collapses blank lines and trims trailing whitespace', () => {
+    const raw = 'line one   \n\n\n   \nline two\n\n';
+    expect(sanitizeStderrTail(raw)).toBe('line one\nline two');
+  });
+
+  it('clips to the last 400 characters of visible output', () => {
+    const head = 'x'.repeat(600);
+    const tail = 'error at the end';
+    const result = sanitizeStderrTail(`${head}\n${tail}`);
+    expect(result.length).toBeLessThanOrEqual(400);
+    expect(result.endsWith(tail)).toBe(true);
   });
 });
 

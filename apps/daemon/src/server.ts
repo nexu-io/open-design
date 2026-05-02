@@ -20,6 +20,7 @@ import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
+import { sanitizeAgentEnv } from './agent-env.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
@@ -1957,7 +1958,13 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
       const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
-      const env = { ...process.env, ...odMediaEnv };
+      // sanitizeAgentEnv strips "host agent runtime" variables (OPENCODE_*,
+      // CLAUDE_CODE_*, …) that the outer shell may have injected if the
+      // daemon itself was launched from inside another agent session.
+      // Leaving them in would make the freshly-spawned child CLI try to
+      // attach to a non-existent host session and exit with
+      // "Session not found" (see issue: pencil-drawing image-poster run).
+      const env = { ...sanitizeAgentEnv(process.env), ...odMediaEnv };
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,

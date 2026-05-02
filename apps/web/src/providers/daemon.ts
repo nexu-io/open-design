@@ -325,16 +325,43 @@ async function consumeDaemonRun({
     if (endStatus === 'canceled') return;
 
     if (endStatus === 'failed' || exitSignal || (exitCode !== null && exitCode !== 0)) {
-      const tail = stderrBuf.trim().slice(-400);
-      handlers.onError(
-        new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
-      );
+      const tail = sanitizeStderrTail(stderrBuf);
+      const how = exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`;
+      handlers.onError(new Error(`agent exited with ${how}${tail ? `\n${tail}` : ''}`));
       return;
     }
     handlers.onDone(acc);
   } finally {
     cancelSignal?.removeEventListener('abort', cancelRun);
   }
+}
+
+// Terminal CLIs (opencode, codex, etc.) print colored errors to stderr. When we
+// surface that tail in the UI, we have to strip ANSI escape sequences first so
+// users don't see raw "[91m [1mError:" fragments. We also collapse blank lines
+// and clip to the last ~400 visible chars so the error toast stays readable.
+export function sanitizeStderrTail(raw: string): string {
+  if (!raw) return '';
+  // ANSI CSI sequences: ESC [ ... final-byte. The no-control-char class would
+  // trip the linter, so we match via \u001b explicitly.
+  // eslint-disable-next-line no-control-regex
+  const ansi = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+  const stripped = raw
+    .replace(ansi, '')
+    // OSC sequences: ESC ] ... BEL or ESC \
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, '')
+    // Remaining lone escape bytes.
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b/g, '');
+
+  const lines = stripped
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0);
+
+  const joined = lines.join('\n').trim();
+  return joined.length > 400 ? joined.slice(-400) : joined;
 }
 
 function isChatRunStatus(value: unknown): value is ChatRunStatus {

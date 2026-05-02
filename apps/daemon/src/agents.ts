@@ -6,8 +6,18 @@ import { delimiter } from 'node:path';
 import path from 'node:path';
 import { detectAcpModels } from './acp.js';
 import { parsePiModels } from './pi-rpc.js';
+import { sanitizeAgentEnv } from './agent-env.js';
 
 const execFileP = promisify(execFile);
+
+/**
+ * Env for short-lived agent CLI invocations (--version, --help,
+ * --list-models). We strip the same host-agent runtime variables as the
+ * main spawn path so that, for example, running `opencode models` from
+ * inside a daemon launched within an opencode session doesn't inherit the
+ * outer session's server credentials.
+ */
+const agentExecEnv = () => sanitizeAgentEnv(process.env);
 
 // Capability flags detected at probe time (per agent id). buildArgs consults
 // this map so we only pass flags the installed CLI actually advertises in
@@ -461,6 +471,7 @@ export const AGENT_DEFS = [
         const { stderr } = await execFileP(resolvedBin, ['--list-models'], {
           timeout: 20_000,
           maxBuffer: 8 * 1024 * 1024,
+          env: agentExecEnv(),
         });
         const parsed = parsePiModels(stderr);
         if (!parsed || parsed.length === 0) return null;
@@ -580,6 +591,7 @@ async function fetchModels(def, resolvedBin) {
       // default 1MB buffer once you include every openrouter model. Bump
       // it so we don't truncate the listing.
       maxBuffer: 8 * 1024 * 1024,
+      env: agentExecEnv(),
     });
     const parsed = def.listModels.parse(stdout);
     // Empty / null parse result means the CLI didn't actually return a
@@ -603,7 +615,7 @@ async function probe(def) {
   }
   let version = null;
   try {
-    const { stdout } = await execFileP(resolved, def.versionArgs, { timeout: 3000 });
+    const { stdout } = await execFileP(resolved, def.versionArgs, { timeout: 3000, env: agentExecEnv() });
     version = stdout.trim().split('\n')[0];
   } catch {
     // binary exists but --version failed; still mark available
@@ -616,6 +628,7 @@ async function probe(def) {
       const { stdout } = await execFileP(resolved, def.helpArgs, {
         timeout: 5000,
         maxBuffer: 4 * 1024 * 1024,
+        env: agentExecEnv(),
       });
       for (const [flag, key] of Object.entries(def.capabilityFlags)) {
         caps[key] = stdout.includes(flag);
