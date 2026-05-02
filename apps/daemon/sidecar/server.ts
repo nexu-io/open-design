@@ -62,23 +62,17 @@ function attachParentMonitor(stop: () => Promise<void>): void {
 }
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
-  const serverHandle = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true }) as
-    | Server
-    | undefined;
-  if (serverHandle == null) {
+  const started = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true });
+  if (!started || typeof started === "string" || !('server' in started)) {
     throw new Error("daemon startServer did not return a server handle");
   }
-  const server = serverHandle;
-  const address = server.address();
-  if (address == null || typeof address === "string") {
-    throw new Error("daemon startServer did not bind to a TCP port");
-  }
+  const serverHandle = started as { server: Server; url: string };
 
   const state: DaemonStatusSnapshot = {
     pid: process.pid,
     state: "running",
     updatedAt: new Date().toISOString(),
-    url: `http://127.0.0.1:${address.port}`,
+    url: serverHandle.url,
   };
   let ipcServer: JsonIpcServerHandle | null = null;
   let stopped = false;
@@ -93,7 +87,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
     state.state = "stopped";
     state.updatedAt = new Date().toISOString();
     await ipcServer?.close().catch(() => undefined);
-    await closeHttpServer(server).catch(() => undefined);
+    await closeHttpServer(serverHandle.server).catch(() => undefined);
     resolveStopped();
   }
 

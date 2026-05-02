@@ -2126,7 +2126,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  if (returnServer) return server;
+  if (returnServer) return { server, url: `http://127.0.0.1:${resolvedPort}` };
 }
 
 function randomId() {
