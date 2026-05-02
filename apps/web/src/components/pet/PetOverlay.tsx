@@ -4,6 +4,7 @@ import { Icon } from '../Icon';
 import type { PetConfig } from '../../types';
 import {
   ambientLines,
+  pickAmbientRow,
   preferredRowId,
   resolveActivePet,
   type PetInteraction,
@@ -28,8 +29,25 @@ interface Position {
 const DEFAULT_POSITION: Position = { right: 24, bottom: 24 };
 
 // How long the pet has to sit untouched before the overlay flips to
-// the "waiting" animation row (mirrors the codex-pets-react default).
-const WAITING_AFTER_MS = 6000;
+// the "waiting" animation row. Sized to sit comfortably past a few
+// ambient beats so the pet clearly feels alive before falling through
+// to the more static "bored" cue.
+const WAITING_AFTER_MS = 45000;
+
+// Ambient idle choreography — while nobody is hovering / dragging, the
+// overlay occasionally swaps the `idle` row for a random non-idle row
+// from the atlas (wave, hop, look around) so the pet visibly has a
+// life of its own instead of breathing in place forever. Each ambient
+// "beat" plays for a chunk of time, then the pet returns to idle for
+// a longer rest window before the next beat. Randomising both windows
+// prevents the rhythm from feeling mechanical, and the rest window is
+// intentionally generous so the pet reads as calm rather than fidgety.
+const AMBIENT_PLAY_MIN_MS = 1400;
+const AMBIENT_PLAY_VARIANCE_MS = 900;
+const AMBIENT_REST_MIN_MS = 9000;
+const AMBIENT_REST_VARIANCE_MS = 9000;
+const AMBIENT_INITIAL_DELAY_MIN_MS = 4000;
+const AMBIENT_INITIAL_DELAY_VARIANCE_MS = 3000;
 
 // Filters pointer jitter and accidental nudges before the overlay
 // commits to a directional running animation. Picked to feel
@@ -75,6 +93,10 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
   // for atlas-backed custom pets — the renderer ignores it for emoji
   // / single-strip pets.
   const [interaction, setInteraction] = useState<PetInteraction>('idle');
+  // Ambient row id that temporarily overrides the `idle` row. Null
+  // whenever the pet is resting on its baseline row so the user-facing
+  // interaction state wins as soon as a gesture fires.
+  const [ambientRowId, setAmbientRowId] = useState<string | null>(null);
   const [hovered, setHovered] = useState(false);
   const dragRef = useRef<{
     startX: number;
@@ -134,6 +156,53 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
       }
     };
   }, [active?.id, armWaitingTimer]);
+
+  // Ambient idle choreography scheduler. Only runs while the pet is in
+  // `idle` and has an atlas with ambient-eligible rows; otherwise we
+  // bail out and leave the base row alone. The effect is deliberately
+  // scoped to `interaction === 'idle'` so any user gesture
+  // (hover / drag / pointerdown) cancels the currently playing beat via
+  // cleanup and the user-facing state takes over instantly.
+  useEffect(() => {
+    if (interaction !== 'idle') {
+      setAmbientRowId(null);
+      return;
+    }
+    const atlas = active?.atlas;
+    if (!atlas || atlas.rowsDef.length === 0) return;
+
+    let playTimer: number | undefined;
+    let restTimer: number | undefined;
+    let lastPlayedId: string | undefined;
+
+    const playBeat = () => {
+      const def = pickAmbientRow(atlas, lastPlayedId);
+      if (!def) return;
+      lastPlayedId = def.id;
+      setAmbientRowId(def.id);
+      const playMs =
+        AMBIENT_PLAY_MIN_MS + Math.floor(Math.random() * AMBIENT_PLAY_VARIANCE_MS);
+      playTimer = window.setTimeout(() => {
+        setAmbientRowId(null);
+        const restMs =
+          AMBIENT_REST_MIN_MS + Math.floor(Math.random() * AMBIENT_REST_VARIANCE_MS);
+        restTimer = window.setTimeout(playBeat, restMs);
+      }, playMs);
+    };
+
+    // Let the pet breathe for a moment before the first beat so a
+    // freshly-woken overlay doesn't snap straight into a flourish.
+    const initialDelay =
+      AMBIENT_INITIAL_DELAY_MIN_MS +
+      Math.floor(Math.random() * AMBIENT_INITIAL_DELAY_VARIANCE_MS);
+    restTimer = window.setTimeout(playBeat, initialDelay);
+
+    return () => {
+      if (playTimer != null) window.clearTimeout(playTimer);
+      if (restTimer != null) window.clearTimeout(restTimer);
+      setAmbientRowId(null);
+    };
+  }, [interaction, active?.id, active?.atlas]);
 
   if (!active) return null;
 
@@ -279,6 +348,7 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         title={t('pet.spriteTitle', { name: active.name })}
         aria-label={t('pet.spriteAria', { name: active.name })}
         data-pet-state={interaction}
+        data-pet-ambient={ambientRowId ?? undefined}
         style={{
           // For atlas-backed pets the row swap *is* the animation, so
           // we let the sprite element sit still and animate frames
@@ -292,7 +362,7 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         <PetSpriteFace
           active={active}
           className="pet-sprite-glyph"
-          rowId={preferredRowId(interaction)}
+          rowId={ambientRowId ?? preferredRowId(interaction)}
         />
         <span className="pet-sprite-shadow" aria-hidden />
       </div>

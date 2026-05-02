@@ -673,7 +673,8 @@ export const ja: Dict = {
 
   'pet.title': 'ペット',
   'pet.tabBuiltIn': '組み込み',
-  'pet.tabBuiltInHint': '厳選された絵文字の仲間 — 選んで一緒に。',
+  'pet.tabBuiltInHint': 'Open Design に同梱された厳選コンパニオン — 選んで迎え入れよう。',
+  'pet.builtInEmpty': '組み込みペットを今は読み込めません。デーモンが復帰したらコミュニティタブを更新してください。',
   'pet.tabCustom': 'カスタム',
   'pet.tabCustomHint': '名前・絵文字・色・スプライトを自分で設定。',
   'pet.tabCommunity': 'コミュニティ',

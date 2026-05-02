@@ -674,7 +674,8 @@ export const ko: Dict = {
 
   'pet.title': '펫',
   'pet.tabBuiltIn': '내장',
-  'pet.tabBuiltInHint': '엄선된 이모지 친구 — 골라서 시작하세요.',
+  'pet.tabBuiltInHint': 'Open Design에 기본 포함된 친구들 — 골라서 입양하세요.',
+  'pet.builtInEmpty': '지금은 기본 제공 펫을 불러올 수 없어요. 데몬이 다시 켜지면 커뮤니티 탭을 새로고침해 주세요.',
   'pet.tabCustom': '커스텀',
   'pet.tabCustomHint': '이름·글리프·색상·스프라이트를 직접 정해 보세요.',
   'pet.tabCommunity': '커뮤니티',

@@ -656,7 +656,8 @@ export const zhCN: Dict = {
 
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',
-  'pet.tabBuiltInHint': '精选的表情宠物 — 一键领养。',
+  'pet.tabBuiltInHint': 'Open Design 内置的精选宠物 — 一键领养。',
+  'pet.builtInEmpty': '暂时无法加载内置宠物。等本地服务恢复后,刷新「社区」页签再试。',
   'pet.tabCustom': '自定义',
   'pet.tabCustomHint': '自己取名、选符号或上传精灵图。',
   'pet.tabCommunity': '社区',

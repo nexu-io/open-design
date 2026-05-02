@@ -673,7 +673,8 @@ export const ru: Dict = {
 
   'pet.title': 'Питомцы',
   'pet.tabBuiltIn': 'Встроенные',
-  'pet.tabBuiltInHint': 'Подобранные emoji-питомцы — выбирайте и вперёд.',
+  'pet.tabBuiltInHint': 'Подобранные питомцы в комплекте Open Design — выберите и забирайте.',
+  'pet.builtInEmpty': 'Встроенные питомцы сейчас недоступны. Обновите вкладку «Сообщество», когда демон снова запустится.',
   'pet.tabCustom': 'Свой',
   'pet.tabCustomHint': 'Своё имя, глиф, цвет или загруженный спрайт.',
   'pet.tabCommunity': 'Сообщество',

@@ -19,6 +19,31 @@ import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+// Pre-scanned set of ids that live under the bundled `assets/community-pets/`
+// root. We resolve the `bundled` flag against this set rather than against
+// "which folder did we end up reading from", so a pet that exists in BOTH
+// the bundled root and the user's `~/.codex/pets/` still surfaces as
+// bundled (the sprite content can still come from the user's local copy
+// — only the flag is determined by the curated set membership).
+type BundledIdSet = Set<string>;
+
+async function readBundledIds(root: string): Promise<BundledIdSet> {
+  const ids: BundledIdSet = new Set();
+  let entries: Dirent[] = [];
+  try {
+    entries = await readdir(root, { withFileTypes: true, encoding: 'utf8' });
+  } catch {
+    return ids;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const safeFolderId = sanitizeId(entry.name);
+    if (!safeFolderId) continue;
+    ids.add(safeFolderId);
+  }
+  return ids;
+}
+
 export interface CodexPetSummaryRecord {
   id: string;
   displayName: string;
@@ -65,10 +90,17 @@ const SPRITESHEET_NAMES = [
 // `seenIds` are skipped — the user-root scan can therefore preempt a
 // bundled pet of the same id without the bundled scan re-emitting a
 // duplicate entry with a conflicting `bundled` flag.
+//
+// `bundledIds` lets us tag a pet as part of the curated set even when
+// the sprite content was read from the user's local `~/.codex/pets/`
+// copy. Without this, a user who synced every community pet via
+// `pnpm sync:community-pets` would always preempt the bundled scan
+// and the "Built-in" tab would render empty.
 async function scanRoot(
   root: string,
   baseUrl: string,
-  bundled: boolean,
+  bundledFallback: boolean,
+  bundledIds: BundledIdSet,
   out: CodexPetSummaryRecord[],
   seenIds: Set<string>,
 ): Promise<void> {
@@ -115,6 +147,10 @@ async function scanRoot(
     const displayName = pickString(manifest.displayName) ?? prettyName(entry.name);
     const description = pickString(manifest.description) ?? '';
     const spritesheetUrl = `${baseUrl}/api/codex-pets/${encodeURIComponent(safeFolderId)}/spritesheet`;
+    // Curated-set membership wins over the source-folder default — a
+    // pet read from the user's `~/.codex/pets/` is still bundled if its
+    // id is part of `assets/community-pets/`.
+    const bundled = bundledIds.has(safeFolderId) ? true : bundledFallback;
     out.push({
       id: safeFolderId,
       displayName,
@@ -134,11 +170,18 @@ export async function listCodexPets(
   const userRoot = resolveCodexPetsRoot();
   const out: CodexPetSummaryRecord[] = [];
   const seen = new Set<string>();
+  // Resolve the curated set membership up front so the user-root scan
+  // can stamp `bundled: true` on any local re-bake, and so the
+  // bundled-root scan only adds the curated pets the user has not
+  // already shadowed.
+  const bundledIds = options.bundledRoot
+    ? await readBundledIds(options.bundledRoot)
+    : new Set<string>();
   // User pets first so a locally re-baked copy preempts the bundled
-  // one (same id ⇒ user wins).
-  await scanRoot(userRoot, baseUrl, false, out, seen);
+  // one (same id ⇒ user wins for sprite content).
+  await scanRoot(userRoot, baseUrl, false, bundledIds, out, seen);
   if (options.bundledRoot) {
-    await scanRoot(options.bundledRoot, baseUrl, true, out, seen);
+    await scanRoot(options.bundledRoot, baseUrl, true, bundledIds, out, seen);
   }
   // Newest-first across both origins. Sorting by mtime keeps the
   // "recently hatched" framing in the UI honest — a bundled pet from

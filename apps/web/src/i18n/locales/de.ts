@@ -674,7 +674,8 @@ export const de: Dict = {
 
   'pet.title': 'Haustiere',
   'pet.tabBuiltIn': 'Vorgegeben',
-  'pet.tabBuiltInHint': 'Kuratierte Emoji-Begleiter — einen wählen und los.',
+  'pet.tabBuiltInHint': 'Mit Open Design gebündelte Begleiter — auswählen und adoptieren.',
+  'pet.builtInEmpty': 'Eingebaute Pets sind gerade nicht verfügbar. Aktualisiere den Community-Tab, sobald der Daemon wieder online ist.',
   'pet.tabCustom': 'Eigenes',
   'pet.tabCustomHint': 'Eigener Name, Glyph, Farbe oder Sprite.',
   'pet.tabCommunity': 'Community',

@@ -656,7 +656,8 @@ export const zhTW: Dict = {
 
   'pet.title': '寵物',
   'pet.tabBuiltIn': '內建',
-  'pet.tabBuiltInHint': '精選的表情寵物 — 一鍵領養。',
+  'pet.tabBuiltInHint': 'Open Design 內建的精選寵物 — 一鍵領養。',
+  'pet.builtInEmpty': '目前無法載入內建寵物。等本地服務恢復後,重新整理「社群」頁籤再試。',
   'pet.tabCustom': '自訂',
   'pet.tabCustomHint': '自己命名、選符號或上傳精靈圖。',
   'pet.tabCommunity': '社群',

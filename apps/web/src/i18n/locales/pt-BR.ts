@@ -673,7 +673,8 @@ export const ptBR: Dict = {
 
   'pet.title': 'Bichinhos',
   'pet.tabBuiltIn': 'Inclusos',
-  'pet.tabBuiltInHint': 'Companheiros emoji selecionados — escolha um e pronto.',
+  'pet.tabBuiltInHint': 'Companheiros incluídos no Open Design — escolha um e adote.',
+  'pet.builtInEmpty': 'Os pets integrados não estão disponíveis agora. Atualize a aba Comunidade quando o daemon voltar.',
   'pet.tabCustom': 'Personalizado',
   'pet.tabCustomHint': 'Defina nome, glifo, cor ou envie um sprite.',
   'pet.tabCommunity': 'Comunidade',

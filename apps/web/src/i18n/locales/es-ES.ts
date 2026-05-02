@@ -675,7 +675,8 @@ export const esES: Dict = {
 
   'pet.title': 'Mascotas',
   'pet.tabBuiltIn': 'Integradas',
-  'pet.tabBuiltInHint': 'Compañeros emoji curados — elige uno y listo.',
+  'pet.tabBuiltInHint': 'Compañeros incluidos con Open Design — elige uno y adóptalo.',
+  'pet.builtInEmpty': 'Las mascotas integradas no están disponibles ahora. Actualiza la pestaña Comunidad cuando el daemon vuelva a estar en línea.',
   'pet.tabCustom': 'Personalizada',
   'pet.tabCustomHint': 'Pon nombre, glifo, color o sube un sprite.',
   'pet.tabCommunity': 'Comunidad',

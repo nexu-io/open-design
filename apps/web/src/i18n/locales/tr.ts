@@ -673,7 +673,8 @@ export const tr: Dict = {
 
   'pet.title': 'Evcil Dostlar',
   'pet.tabBuiltIn': 'Yerleşik',
-  'pet.tabBuiltInHint': 'Seçilmiş emoji dostlar — birini seç ve devam et.',
+  'pet.tabBuiltInHint': 'Open Design ile gelen seçili dostlar — birini seç ve sahiplen.',
+  'pet.builtInEmpty': 'Hazır petler şu an kullanılamıyor. Daemon tekrar çevrimiçi olduğunda Topluluk sekmesini yenile.',
   'pet.tabCustom': 'Özel',
   'pet.tabCustomHint': 'Ad, glif, renk veya sprite\'ını kendin belirle.',
   'pet.tabCommunity': 'Topluluk',

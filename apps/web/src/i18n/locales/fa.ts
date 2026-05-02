@@ -675,7 +675,8 @@ export const fa: Dict = {
 
   'pet.title': 'حیوان خانگی',
   'pet.tabBuiltIn': 'پیش‌فرض',
-  'pet.tabBuiltInHint': 'همراهان ایموجی منتخب — یکی را انتخاب کن.',
+  'pet.tabBuiltInHint': 'همراهان منتخب همراه Open Design — یکی را انتخاب و فرزندخوانده کن.',
+  'pet.builtInEmpty': 'حیوانات داخلی در حال حاضر در دسترس نیستند. وقتی دیمن دوباره فعال شد، تب جامعه را تازه کن.',
   'pet.tabCustom': 'سفارشی',
   'pet.tabCustomHint': 'نام، نشان، رنگ یا اسپرایت دلخواه خودت را تنظیم کن.',
   'pet.tabCommunity': 'انجمن',

@@ -4,9 +4,12 @@ import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import type { AppConfig, CodexPetSummary, PetConfig, PetCustom } from '../../types';
 import { DEFAULT_PET } from '../../state/config';
-import { codexPetSpritesheetUrl, fetchCodexPets } from '../../providers/registry';
 import {
-  BUILT_IN_PETS,
+  codexPetSpritesheetUrl,
+  fetchCodexPets,
+  syncCommunityPets,
+} from '../../providers/registry';
+import {
   CUSTOM_PET_ID,
   defaultCustomPet,
   FPS_MAX,
@@ -78,18 +81,33 @@ export function PetSettings({ cfg, setCfg }: Props) {
   const [codexPetsLoading, setCodexPetsLoading] = useState(false);
   const [codexPetsRoot, setCodexPetsRoot] = useState<string>('');
   const [codexAdopting, setCodexAdopting] = useState<string | null>(null);
+  // Community catalog sync — calls the daemon-side port of the
+  // `sync-community-pets` script which fetches the latest pets from
+  // Codex Pet Share + j20 Hatchery into `~/.codex/pets/`. We surface
+  // the run summary (or error) inline below the head row so users get
+  // direct feedback after the long-running download.
+  const [communitySyncing, setCommunitySyncing] = useState(false);
+  const [communitySyncStatus, setCommunitySyncStatus] = useState<
+    | { kind: 'done'; wrote: number; total: number }
+    | { kind: 'error'; error: string }
+    | null
+  >(null);
 
   // Tab routing — split the panel into three exclusive surfaces
   // (built-in / custom / community) so each "where do my pets come
   // from" choice has its own dedicated space and the user feels like
   // they are picking from a single source rather than hunting through
-  // a long stack of subsections. Default to whichever tab the
-  // currently-adopted pet lives in so reopening Settings lands the
-  // user back where they were.
+  // a long stack of subsections.
+  //
+  // Both bundled (Built-in) and user-hatched (Community) pets adopt
+  // into the custom slot — they share `petId === CUSTOM_PET_ID`. We
+  // bias the initial tab toward "Built-in" since that is the most
+  // discoverable surface; the only time we land in Custom is when the
+  // user has authored a strip-mode custom pet (uploaded image without
+  // a Codex atlas), which can't have come from a bundled adoption.
   type PetSourceTab = 'builtIn' | 'custom' | 'community';
-  const initialTab: PetSourceTab = BUILT_IN_PETS.some((p) => p.id === pet.petId)
-    ? 'builtIn'
-    : pet.petId === CUSTOM_PET_ID
+  const initialTab: PetSourceTab =
+    pet.petId === CUSTOM_PET_ID && pet.custom.imageUrl && !pet.custom.atlas
       ? 'custom'
       : 'builtIn';
   const [activeTab, setActiveTab] = useState<PetSourceTab>(initialTab);
@@ -111,6 +129,33 @@ export function PetSettings({ cfg, setCfg }: Props) {
       setCodexPetsLoading(false);
     }
   }, []);
+
+  const handleCommunitySync = useCallback(async () => {
+    setCommunitySyncing(true);
+    setCommunitySyncStatus(null);
+    try {
+      const result = await syncCommunityPets();
+      if (result.error) {
+        setCommunitySyncStatus({ kind: 'error', error: result.error });
+      } else {
+        setCommunitySyncStatus({
+          kind: 'done',
+          wrote: result.wrote,
+          total: result.total,
+        });
+      }
+      // Pull the freshly-synced pets into the grid even on a partial
+      // failure — the daemon writes whatever succeeded before erroring.
+      await refreshCodexPets();
+    } catch (err) {
+      setCommunitySyncStatus({
+        kind: 'error',
+        error: err instanceof Error ? err.message : 'Sync request failed',
+      });
+    } finally {
+      setCommunitySyncing(false);
+    }
+  }, [refreshCodexPets]);
 
   useEffect(() => {
     void refreshCodexPets();
@@ -369,6 +414,70 @@ export function PetSettings({ cfg, setCfg }: Props) {
     petId: CUSTOM_PET_ID,
   })!;
 
+  // Built-in pets are the bundled spritesheets baked into the repo at
+  // `assets/community-pets/<id>/`; the daemon flags them with
+  // `bundled: true` so they land here. Community pets are the
+  // user-hatched / synced pets that live under `~/.codex/pets/`.
+  const bundledPets = useMemo(
+    () => codexPets.filter((p) => p.bundled),
+    [codexPets],
+  );
+  const communityPets = useMemo(
+    () => codexPets.filter((p) => !p.bundled),
+    [codexPets],
+  );
+
+  // Shared card renderer used by both the Built-in and Community tabs
+  // so the visual treatment stays consistent — the only difference
+  // between the two grids is which subset of `codexPets` they show.
+  function renderCodexCard(p: CodexPetSummary) {
+    const adopting = codexAdopting === p.id;
+    const spritesheet = `url(${codexPetSpritesheetUrl(p)})`;
+    // Best-effort match: bundled / community adoption copies the
+    // pet's display name into `custom.name`, so when the user is on
+    // a custom slot with a matching name + image we treat that card
+    // as the active selection.
+    const isActive =
+      pet.adopted &&
+      pet.petId === CUSTOM_PET_ID &&
+      !!pet.custom.imageUrl &&
+      pet.custom.name === (p.displayName || p.id);
+    return (
+      <div
+        className={`pet-codex-card${isActive ? ' active' : ''}`}
+        key={p.id}
+      >
+        <div
+          className="pet-codex-thumb"
+          style={{ ['--pet-codex-src' as string]: spritesheet }}
+          aria-hidden
+        >
+          <span className="pet-codex-thumb-preview" aria-hidden />
+        </div>
+        <div className="pet-codex-meta">
+          <strong>{p.displayName}</strong>
+          {p.description ? <span>{p.description}</span> : null}
+        </div>
+        <button
+          type="button"
+          className={`seg-btn small${isActive ? ' active' : ''}`}
+          onClick={() => void adoptCodexPet(p)}
+          disabled={adopting || codexAdopting !== null}
+          aria-pressed={isActive}
+        >
+          <Icon name={adopting ? 'spinner' : 'check'} size={12} />
+          <span>
+            {adopting
+              ? t('pet.codexAdopting')
+              : isActive
+                ? t('pet.adoptedBadge')
+                : t('pet.codexAdopt')}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -434,35 +543,25 @@ export function PetSettings({ cfg, setCfg }: Props) {
       </div>
 
       {activeTab === 'builtIn' ? (
-        <div className="pet-grid" role="radiogroup" aria-label={t('pet.tabBuiltIn')}>
-          {BUILT_IN_PETS.map((p) => {
-            const active = pet.adopted && pet.petId === p.id;
-            return (
-              <button
-                type="button"
-                key={p.id}
-                role="radio"
-                aria-checked={active}
-                className={`pet-card${active ? ' active' : ''}`}
-                onClick={() => adopt(p.id)}
-                style={{ ['--pet-accent' as string]: p.accent }}
-              >
-                <span className="pet-card-glyph" aria-hidden>{p.glyph}</span>
-                <span className="pet-card-meta">
-                  <span className="pet-card-name">{p.name}</span>
-                  <span className="pet-card-flavor">{p.flavor}</span>
-                </span>
-                {active ? (
-                  <span className="pet-card-badge">
-                    <Icon name="check" size={12} />
-                    <span>{t('pet.adoptedBadge')}</span>
-                  </span>
-                ) : (
-                  <span className="pet-card-cta">{t('pet.adopt')}</span>
-                )}
-              </button>
-            );
-          })}
+        <div className="pet-built-in">
+          {bundledPets.length === 0 ? (
+            <p className="hint pet-codex-empty">
+              {codexPetsLoading
+                ? t('pet.codexLoading')
+                : t('pet.builtInEmpty')}
+            </p>
+          ) : (
+            <div
+              className="pet-codex-grid"
+              role="radiogroup"
+              aria-label={t('pet.tabBuiltIn')}
+            >
+              {bundledPets.map(renderCodexCard)}
+            </div>
+          )}
+          {uploadError ? (
+            <p className="hint pet-image-error">{uploadError}</p>
+          ) : null}
         </div>
       ) : null}
 
@@ -768,70 +867,65 @@ export function PetSettings({ cfg, setCfg }: Props) {
                     : t('pet.codexSubtitle')}
                 </p>
               </div>
-              <button
-                type="button"
-                className="seg-btn small ghost"
-                onClick={() => void refreshCodexPets()}
-                disabled={codexPetsLoading}
-                title={t('pet.codexRefresh')}
-              >
-                <Icon name={codexPetsLoading ? 'spinner' : 'refresh'} size={12} />
-                <span>{t('pet.codexRefresh')}</span>
-              </button>
+              <div className="pet-codex-head-actions">
+                <button
+                  type="button"
+                  className="seg-btn small"
+                  onClick={() => void handleCommunitySync()}
+                  disabled={communitySyncing}
+                  title={t('pet.communitySyncTitle')}
+                >
+                  <Icon
+                    name={communitySyncing ? 'spinner' : 'download'}
+                    size={12}
+                  />
+                  <span>
+                    {communitySyncing
+                      ? t('pet.communitySyncing')
+                      : t('pet.communitySync')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="seg-btn small ghost"
+                  onClick={() => void refreshCodexPets()}
+                  disabled={codexPetsLoading}
+                  title={t('pet.codexRefresh')}
+                >
+                  <Icon
+                    name={codexPetsLoading ? 'spinner' : 'refresh'}
+                    size={12}
+                  />
+                  <span>{t('pet.codexRefresh')}</span>
+                </button>
+              </div>
             </div>
-            {codexPets.length === 0 ? (
+            {communitySyncStatus ? (
+              <p
+                className={`hint pet-codex-sync-status${communitySyncStatus.kind === 'error' ? ' error' : ''}`}
+                role="status"
+              >
+                {communitySyncStatus.kind === 'done'
+                  ? t('pet.communitySyncDone', {
+                      wrote: communitySyncStatus.wrote,
+                      total: communitySyncStatus.total,
+                    })
+                  : t('pet.communitySyncFailed', {
+                      error: communitySyncStatus.error,
+                    })}
+              </p>
+            ) : null}
+            {communityPets.length === 0 ? (
               <p className="hint pet-codex-empty">
                 {codexPetsLoading ? t('pet.codexLoading') : t('pet.codexEmpty')}
               </p>
             ) : (
-              <div className="pet-codex-grid" role="radiogroup" aria-label={t('pet.codexTitle')}>
-                {codexPets.map((p) => {
-                  const adopting = codexAdopting === p.id;
-                  const spritesheet = `url(${codexPetSpritesheetUrl(p)})`;
-                  // Best-effort match: community adoption copies the
-                  // pet's display name into `custom.name`, so when the
-                  // user is on a custom slot with a matching name +
-                  // image we treat that card as the active selection.
-                  const isActive =
-                    pet.adopted &&
-                    pet.petId === CUSTOM_PET_ID &&
-                    !!pet.custom.imageUrl &&
-                    pet.custom.name === (p.displayName || p.id);
-                  return (
-                    <div
-                      className={`pet-codex-card${isActive ? ' active' : ''}`}
-                      key={p.id}
-                    >
-                      <div
-                        className="pet-codex-thumb"
-                        style={{ ['--pet-codex-src' as string]: spritesheet }}
-                        aria-hidden
-                      >
-                        <span className="pet-codex-thumb-preview" aria-hidden />
-                      </div>
-                      <div className="pet-codex-meta">
-                        <strong>{p.displayName}</strong>
-                        {p.description ? <span>{p.description}</span> : null}
-                      </div>
-                      <button
-                        type="button"
-                        className={`seg-btn small${isActive ? ' active' : ''}`}
-                        onClick={() => void adoptCodexPet(p)}
-                        disabled={adopting || codexAdopting !== null}
-                        aria-pressed={isActive}
-                      >
-                        <Icon name={adopting ? 'spinner' : 'check'} size={12} />
-                        <span>
-                          {adopting
-                            ? t('pet.codexAdopting')
-                            : isActive
-                              ? t('pet.adoptedBadge')
-                              : t('pet.codexAdopt')}
-                        </span>
-                      </button>
-                    </div>
-                  );
-                })}
+              <div
+                className="pet-codex-grid"
+                role="radiogroup"
+                aria-label={t('pet.codexTitle')}
+              >
+                {communityPets.map(renderCodexCard)}
               </div>
             )}
           </div>

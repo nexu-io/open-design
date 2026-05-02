@@ -678,6 +678,7 @@ export interface Dict {
   // Tabs in pet settings — split sources so the choice feels exclusive
   'pet.tabBuiltIn': string;
   'pet.tabBuiltInHint': string;
+  'pet.builtInEmpty': string;
   'pet.tabCustom': string;
   'pet.tabCustomHint': string;
   'pet.tabCommunity': string;

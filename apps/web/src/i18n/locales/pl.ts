@@ -674,7 +674,8 @@ export const pl: Dict = {
 
   'pet.title': 'Pupile',
   'pet.tabBuiltIn': 'Wbudowane',
-  'pet.tabBuiltInHint': 'Wyselekcjonowani towarzysze emoji — wybierz i zacznij.',
+  'pet.tabBuiltInHint': 'Towarzysze dołączeni do Open Design — wybierz jednego i adoptuj.',
+  'pet.builtInEmpty': 'Wbudowane zwierzaki są teraz niedostępne. Odśwież zakładkę Społeczność, gdy daemon wróci.',
   'pet.tabCustom': 'Własny',
   'pet.tabCustomHint': 'Ustaw imię, glif, kolor lub wgraj sprite.',
   'pet.tabCommunity': 'Społeczność',

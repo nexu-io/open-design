@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { PetOverlay } from './components/pet/PetOverlay';
+import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
 import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
 import {
@@ -134,6 +135,34 @@ export function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // One-shot self-healing migration for pets adopted before the
+  // overlay learned atlas-row switching. If the stored pet is a
+  // custom / codex pet whose imageUrl is a single-row strip
+  // (no atlas), we silently re-download the full spritesheet so
+  // hover, drag, and idle-ambient variety all light up on next render.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const upgraded = await migrateCustomPetAtlas(config);
+      if (!upgraded || cancelled) return;
+      setConfig((prev) => {
+        if (!prev.pet) return prev;
+        const next: AppConfig = {
+          ...prev,
+          pet: { ...prev.pet, custom: upgraded },
+        };
+        saveConfig(next);
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Snapshot the config at mount; migration is one-shot per session
+    // and should not re-run every time config changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshProjects = useCallback(async () => {
