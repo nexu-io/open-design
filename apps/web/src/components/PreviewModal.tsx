@@ -24,6 +24,11 @@ export interface PreviewSidebar {
   // Called whenever the open state changes — useful so the parent can
   // lazy-fetch the side content the first time it is revealed.
   onToggle?: (open: boolean) => void;
+  // Stable identity for the side-panel source. When this changes while the
+  // sidebar is open, the lazy-load `onToggle` callback re-fires so the parent
+  // can prime a fresh fetch — e.g. swapping between design systems while the
+  // DESIGN.md panel stays open.
+  contentKey?: string | number;
 }
 
 interface Props {
@@ -90,12 +95,15 @@ export function PreviewModal({
   sidebarToggleRef.current = sidebar?.onToggle;
 
   // Tell the parent every time the side pane toggles so it can lazy-load
-  // the spec body the first time it is revealed. Depends only on the
-  // boolean — `sidebar` is a fresh object on every parent render and would
-  // otherwise re-fire the load constantly.
+  // the spec body the first time it is revealed. Also re-fires when
+  // `sidebar.contentKey` changes so the parent can prime a fresh fetch when
+  // its underlying source swaps (e.g. another design system) while the
+  // sidebar stays open. `sidebar` itself is a fresh object on every parent
+  // render so we can't depend on it.
+  const sidebarContentKey = sidebar?.contentKey;
   useEffect(() => {
     sidebarToggleRef.current?.(sidebarOpen);
-  }, [sidebarOpen]);
+  }, [sidebarOpen, sidebarContentKey]);
 
   // Tell the parent the initial view id so it can prime a fetch. Re-fires on
   // tab change. Guarded against re-firing while the same id is active to
@@ -166,6 +174,10 @@ export function PreviewModal({
   // logical width and visually scale it down to fit. Without this, opening
   // the side panel squeezes the iframe to ~60% width and triggers awkward
   // mid-breakpoint reflows in the showcase HTML.
+  // ResizeObserver is missing from jsdom and from some older embedded
+  // WebViews — guard the constructor and fall back to a window resize
+  // listener so the modal still mounts and just loses element-level
+  // resize tracking.
   useEffect(() => {
     const el = stageFrameRef.current;
     if (!el) return;
@@ -174,9 +186,13 @@ export function PreviewModal({
       setStageSize({ w: r.width, h: r.height });
     };
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
   }, []);
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];

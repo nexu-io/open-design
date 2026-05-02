@@ -77,6 +77,9 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
         label: t('ds.specToggle'),
         defaultOpen: true,
         onToggle: handleSidebarToggle,
+        // Re-fire onToggle when the system swaps under us so the new
+        // DESIGN.md fetch starts even if the sidebar never closed.
+        contentKey: system.id,
         content: (
           <DesignSpecView
             source={specBody}
