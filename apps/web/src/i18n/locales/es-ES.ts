@@ -64,7 +64,7 @@ export const esES: Dict = {
   'settings.rescan': '↻ Reescanear',
   'settings.rescanTitle': 'Reescanear PATH',
   'settings.noAgentsDetected':
-    'Aún no se ha detectado ningún agente. Instala Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI y pulsa Reescanear.',
+    'Aún no se ha detectado ningún agente. Instala Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI y pulsa Reescanear.',
   'settings.apiSection': 'API de Anthropic',
   'settings.apiKey': 'Clave de API',
   'settings.showKey': 'Mostrar clave',

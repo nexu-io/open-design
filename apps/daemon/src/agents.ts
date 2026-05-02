@@ -27,7 +27,7 @@ const agentCapabilities = new Map();
 //                            to show.
 //   - `fallbackModels`     : static hint list. Used as the source of truth
 //                            for CLIs that don't expose a listing command
-//                            (Claude Code, Codex, Gemini CLI, Qwen Code)
+//                            (Claude Code, Codex, Devin for Terminal, Gemini CLI, Qwen Code)
 //                            and as the fallback for the others.
 //   - `reasoningOptions`   : optional reasoning-effort presets (currently
 //                            only Codex exposes this knob).
@@ -234,6 +234,35 @@ export const AGENT_DEFS = [
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'codex',
+  },
+  {
+    id: 'devin',
+    name: 'Devin for Terminal',
+    bin: 'devin',
+    versionArgs: ['--version'],
+    fetchModels: async (resolvedBin) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: ['--permission-mode', 'dangerous', '--respect-workspace-trust', 'false', 'acp'],
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
+    // Fallback aliases from Devin for Terminal docs
+    // (https://cli.devin.ai/docs/models): `adaptive` appears in the config example;
+    // `opus`, `sonnet`, `swe`, `codex`, `gemini`, and `gpt` are documented
+    // as short model-family names / recommended picks.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'adaptive', label: 'adaptive' },
+      { id: 'swe', label: 'swe' },
+      { id: 'opus', label: 'opus' },
+      { id: 'sonnet', label: 'sonnet' },
+      { id: 'codex', label: 'codex' },
+      { id: 'gpt', label: 'gpt' },
+      { id: 'gemini', label: 'gemini' },
+    ],
+    buildArgs: () => ['--permission-mode', 'dangerous', '--respect-workspace-trust', 'false', 'acp'],
+    streamFormat: 'acp-json-rpc',
   },
   {
     id: 'gemini',

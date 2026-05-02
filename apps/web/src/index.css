@@ -1355,9 +1355,12 @@ code {
   z-index: 1000;
   max-width: calc(100vw - 24px);
   /* 360px = 9 locales × ~40px; --menu-available-h is set by JS to the
-     distance between the trigger and the viewport top, so the menu never
-     overflows above the viewport regardless of trigger placement. */
-  max-height: min(360px, var(--menu-available-h, 360px));
+     distance between the trigger and whichever viewport edge the menu
+     opens toward, so the menu never overflows the viewport regardless of
+     placement direction (above or below the trigger). The 60vh cap keeps
+     the menu from feeling cramped on short viewports (mobile landscape,
+     ~400–500px tall). */
+  max-height: min(360px, 60vh, var(--menu-available-h, 360px));
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -1375,6 +1378,7 @@ code {
   align-items: center;
   gap: 12px;
   width: 100%;
+  min-height: 40px;
   padding: 10px 12px;
   border: 0;
   border-radius: 9px;

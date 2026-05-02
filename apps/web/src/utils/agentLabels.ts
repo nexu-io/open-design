@@ -1,6 +1,7 @@
 const AGENT_LABELS: Record<string, string> = {
   claude: 'Claude',
   codex: 'Codex',
+  devin: 'Devin',
   gemini: 'Gemini',
   opencode: 'OpenCode',
   'cursor-agent': 'Cursor',
@@ -12,6 +13,7 @@ const AGENT_LABELS: Record<string, string> = {
 const AGENT_ALIASES: Record<string, string> = {
   'claude code': 'claude',
   'codex cli': 'codex',
+  'devin for terminal': 'devin',
   'gemini cli': 'gemini',
   'cursor agent': 'cursor-agent',
   'qwen code': 'qwen',

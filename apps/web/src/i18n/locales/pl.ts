@@ -64,7 +64,7 @@ export const pl: Dict = {
   'settings.rescan': '↻ Ponów skanowanie',
   'settings.rescanTitle': 'Ponownie skanuj PATH',
   'settings.noAgentsDetected':
-      'Nie wykryto jeszcze żadnych agentów. Zainstaluj Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen lub GitHub Copilot CLI, a następnie kliknij Ponów skanowanie.',
+      'Nie wykryto jeszcze żadnych agentów. Zainstaluj Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen lub GitHub Copilot CLI, a następnie kliknij Ponów skanowanie.',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'Klucz API',
   'settings.showKey': 'Pokaż klucz',

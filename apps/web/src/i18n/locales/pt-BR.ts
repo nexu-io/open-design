@@ -64,7 +64,7 @@ export const ptBR: Dict = {
   'settings.rescan': '↻ Reescanear',
   'settings.rescanTitle': 'Reescanear PATH',
   'settings.noAgentsDetected':
-    'Nenhum agente detectado ainda. Instale Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI e clique em Reescanear.',
+    'Nenhum agente detectado ainda. Instale Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI e clique em Reescanear.',
   'settings.apiSection': 'API da Anthropic',
   'settings.apiKey': 'Chave de API',
   'settings.showKey': 'Mostrar chave',

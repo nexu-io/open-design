@@ -64,7 +64,7 @@ export const ru: Dict = {
   'settings.rescan': '↻ Пересканировать',
   'settings.rescanTitle': 'Пересканировать PATH',
   'settings.noAgentsDetected':
-    'Агенты еще не обнаружены. Установите один из: Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen или GitHub Copilot CLI, затем нажмите Пересканировать.',
+    'Агенты еще не обнаружены. Установите один из: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen или GitHub Copilot CLI, затем нажмите Пересканировать.',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API-ключ',
   'settings.showKey': 'Показать ключ',

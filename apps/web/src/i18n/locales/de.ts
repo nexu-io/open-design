@@ -64,7 +64,7 @@ export const de: Dict = {
   'settings.rescan': '↻ Neu scannen',
   'settings.rescanTitle': 'PATH erneut scannen',
   'settings.noAgentsDetected':
-    'Noch keine Agents erkannt. Installieren Sie Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen oder GitHub Copilot CLI und klicken Sie dann auf Neu scannen.',
+    'Noch keine Agents erkannt. Installieren Sie Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen oder GitHub Copilot CLI und klicken Sie dann auf Neu scannen.',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API-Key',
   'settings.showKey': 'Key anzeigen',
