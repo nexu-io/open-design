@@ -322,6 +322,7 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Infographic: 'Infografik',
   'Anime / Manga': 'Anime / Manga',
   'App / Web Design': 'App- / Webdesign',
+  'Game UI': 'Spiel-UI',
   Illustration: 'Illustration',
   'Profile / Avatar': 'Profil / Avatar',
   'Social Media Post': 'Social-Media-Post',
@@ -337,16 +338,34 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d-render': '3D-Render',
   action: 'Action',
+  'ancient-china': 'Altes China',
   anime: 'Anime',
+  childlike: 'Kindlich',
   cinematic: 'Filmisch',
   'cinematic-romance': 'Filmische Romanze',
+  crayon: 'Wachsmalstift',
   cyberpunk: 'Cyberpunk',
+  dance: 'Tanz',
   fantasy: 'Fantasy',
+  fashion: 'Mode',
   food: 'Food',
+  'game-ui': 'Spiel-UI',
+  'hand-drawn': 'Handgezeichnet',
+  hud: 'HUD',
+  illustration: 'Illustration',
+  'image-to-image': 'Bild-zu-Bild',
+  mmo: 'MMO',
   nature: 'Natur',
+  'open-world': 'Open World',
   portrait: 'Porträt',
   product: 'Produkt',
+  rework: 'Überarbeiten',
+  sequence: 'Sequenz',
+  storyboard: 'Storyboard',
+  'style-transfer': 'Stiltransfer',
+  transform: 'Transformieren',
   typography: 'Typografie',
+  wuxia: 'Wuxia',
 };
 
 const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>> = {
@@ -709,6 +728,21 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     title: 'Wasteland-Factory-Chase',
     summary:
       'Filmischer Prompt für eine High-Speed-Wüsten-Wasteland-Szene mit einer laufenden Industriefabrik auf Beinen und einer Verfolgung per Rebel Bike.',
+  },
+  'game-ui-ancient-china-open-world-mmo-hud': {
+    title: 'Spiel-UI - Altes China, Open-World-MMO-HUD',
+    summary:
+      'Erzeugt ein In-Game-HUD-Screenshot-Mockup für ein AAA-Open-World-MMO im alten China im filmischen photorealistischen Stil von Black Myth: Wukong, zentriert auf eine Schwertkämpferin in einer nebligen Bergszene mit vollständigem MMO-HUD (Charakterpanel, Minimap, Skill-Hotbar, Quest-Tracker, Chat).',
+  },
+  'illustration-crayon-kid-drawing-rework': {
+    title: 'Illustration - Wachsmalstift-Kinderzeichnung-Überarbeitung',
+    summary:
+      'Ein Stiltransfer-Prompt, der jedes Referenzbild in eine handgezeichnete Wachsmalstift-Illustration verwandelt, die wirkt, als hätte sie ein 10-jähriges Kind gemalt. Ersetzt die Originalfarbpalette durch helle, verspielte Wachsmalstifttöne auf sauberem weißem Papier, mit kindlicher Deko wie Schlössern, Süßigkeiten, Sternen und Regenbögen. Funktioniert als Bild-zu-Bild-Edit in GPT-image-2.',
+  },
+  'social-media-post-sensational-girl-dance-storyboard-8-shots': {
+    title: 'Social-Media-Post - Tanz-Storyboard eines Stylish Girls (8 Shots)',
+    summary:
+      'Ein vollständiges 8-Shot-Storyboard-Prompt-Set für die Erzeugung einer kohärenten Bild-für-Bild-Tanzsequenz einer stylischen Figur. Enthält gemeinsame globale Style-Token, einen wiederverwendbaren Negativ-Prompt und acht Einzelshots (Eröffnungspose → Hüftgroove → Body Wave → Beat-Drop-Hüftdreher → seitliche Hüftschwingung → Haarwurf → Power-Stance → Abschlusspose).',
   },
 };
 
