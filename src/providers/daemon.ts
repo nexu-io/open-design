@@ -142,10 +142,7 @@ export async function streamViaDaemon({
     }
 
     if (exitCode !== null && exitCode !== 0) {
-      const tail = stderrBuf.trim().slice(-400);
-      handlers.onError(
-        new Error(`agent exited with code ${exitCode}${tail ? `\n${tail}` : ''}`),
-      );
+      handlers.onError(new Error(formatAgentExitError(exitCode, stderrBuf)));
       return;
     }
     handlers.onDone(acc);
@@ -153,6 +150,33 @@ export async function streamViaDaemon({
     if ((err as Error).name === 'AbortError') return;
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
+}
+
+export function formatAgentExitError(exitCode: number, stderr: string): string {
+  const trimmed = stderr.trim();
+  if (looksLikeWebChallenge(trimmed)) {
+    return (
+      `agent exited with code ${exitCode}\n` +
+      'The selected agent returned an HTML security/challenge page instead of a normal CLI response. ' +
+      'Retry after the agent account/network session is healthy, or run the agent CLI directly to refresh authentication.'
+    );
+  }
+  const tail = trimmed.slice(-400);
+  return `agent exited with code ${exitCode}${tail ? `\n${tail}` : ''}`;
+}
+
+function looksLikeWebChallenge(text: string): boolean {
+  if (!text) return false;
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('<html') &&
+    (
+      normalized.includes('_cf_chl') ||
+      normalized.includes('cloudflare') ||
+      normalized.includes('challenge-platform') ||
+      normalized.includes('just a moment')
+    )
+  );
 }
 
 interface ParsedFrame {
