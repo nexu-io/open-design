@@ -9,6 +9,10 @@ import {
   type StudioSnapshot,
   type StudioSnapshotImportMode,
 } from '../state/studioSnapshot';
+import {
+  restoreStudioSnapshotServerRecords,
+  type StudioSnapshotServerRestoreResult,
+} from '../state/projects';
 import type {
   AgentInfo,
   AppConfig,
@@ -53,6 +57,7 @@ interface Props {
   onDeleteProject: (id: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onOpenSettings: () => void;
+  onWorkspaceRefresh?: () => Promise<void> | void;
 }
 
 const SIDEBAR_MIN = 320;
@@ -87,6 +92,7 @@ export function EntryView({
   onDeleteProject,
   onChangeDefaultDesignSystem,
   onOpenSettings,
+  onWorkspaceRefresh,
 }: Props) {
   const t = useT();
   const [topTab, setTopTab] = useState<TopTab>('workflows');
@@ -97,6 +103,9 @@ export function EntryView({
   const [snapshotImport, setSnapshotImport] = useState<StudioSnapshot | null>(null);
   const [snapshotImportError, setSnapshotImportError] = useState('');
   const [snapshotImportStatus, setSnapshotImportStatus] = useState('');
+  const [selectedServerRecords, setSelectedServerRecords] = useState<Set<string>>(() => new Set());
+  const [serverRestoreAudit, setServerRestoreAudit] = useState<StudioSnapshotServerRestoreResult | null>(null);
+  const [serverRestoreBusy, setServerRestoreBusy] = useState(false);
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === config.agentId) ?? null,
@@ -141,6 +150,27 @@ export function EntryView({
     () => (snapshotImport ? buildStudioSnapshotImportPlan(snapshotImport, snapshotImportMode) : null),
     [snapshotImport, snapshotImportMode],
   );
+  const snapshotServerRows = useMemo(() => {
+    if (!snapshotImport) return [];
+    const projectIds = new Set(projects.map((project) => project.id));
+    const templateIds = new Set(templates.map((template) => template.id));
+    return [
+      ...snapshotImport.projects.map((project) => ({
+        key: serverRecordKey('project', project.id),
+        kind: 'project' as const,
+        id: project.id,
+        name: project.name,
+        conflict: projectIds.has(project.id),
+      })),
+      ...snapshotImport.templates.map((template) => ({
+        key: serverRecordKey('template', template.id),
+        kind: 'template' as const,
+        id: template.id,
+        name: template.name,
+        conflict: templateIds.has(template.id),
+      })),
+    ];
+  }, [projects, snapshotImport, templates]);
 
   function handleCreate(input: CreateInput) {
     onCreateProject(input);
@@ -172,6 +202,11 @@ export function EntryView({
         return;
       }
       setSnapshotImport(snapshot);
+      setServerRestoreAudit(null);
+      setSelectedServerRecords(new Set([
+        ...snapshot.projects.map((project) => serverRecordKey('project', project.id)),
+        ...snapshot.templates.map((template) => serverRecordKey('template', template.id)),
+      ]));
     } catch {
       setSnapshotImport(null);
       setSnapshotImportError('The selected snapshot could not be read.');
@@ -183,6 +218,30 @@ export function EntryView({
     applyStudioSnapshotLocalLibraries(snapshotImportPlan.snapshot, snapshotImportPlan.mode);
     setSnapshotImport(null);
     setSnapshotImportStatus(`Restored ${snapshotImportPlan.totals.restored} local studio records from the snapshot.`);
+  }
+
+  async function restoreSnapshotServerRecords() {
+    if (!snapshotImport || selectedServerRecords.size === 0) return;
+    setServerRestoreBusy(true);
+    setSnapshotImportError('');
+    const selectedProjects = snapshotImport.projects.filter((project) =>
+      selectedServerRecords.has(serverRecordKey('project', project.id)),
+    );
+    const selectedTemplates = snapshotImport.templates.filter((template) =>
+      selectedServerRecords.has(serverRecordKey('template', template.id)),
+    );
+    const result = await restoreStudioSnapshotServerRecords({
+      mode: snapshotImportMode,
+      projects: selectedProjects,
+      templates: selectedTemplates,
+    });
+    setServerRestoreBusy(false);
+    if (!result) {
+      setSnapshotImportError('The selected project and template records could not be restored.');
+      return;
+    }
+    setServerRestoreAudit(result);
+    await onWorkspaceRefresh?.();
   }
 
   const startWidthRef = useRef(0);
@@ -344,6 +403,11 @@ export function EntryView({
               {snapshotImportStatus ? (
                 <div className="entry-snapshot-message" role="status">{snapshotImportStatus}</div>
               ) : null}
+              {serverRestoreAudit ? (
+                <div className="entry-snapshot-message" role="status">
+                  {summarizeServerRestoreAudit(serverRestoreAudit)}
+                </div>
+              ) : null}
               {topTab === 'workflows' ? (
                 <OneShotWorkflows
                   skills={skills}
@@ -439,10 +503,56 @@ export function EntryView({
               <div className="entry-snapshot-row archive">
                 <strong>Project archive</strong>
                 <span>
-                  {snapshotImportPlan.archiveOnly.projects} projects and {snapshotImportPlan.archiveOnly.templates} templates remain audit-only in this restore.
+                  {snapshotImportPlan.archiveOnly.projects} projects and {snapshotImportPlan.archiveOnly.templates} templates can be restored separately below.
                 </span>
               </div>
             </div>
+            {snapshotServerRows.length > 0 ? (
+              <div className="entry-snapshot-server-restore" aria-label="Project and template restore records">
+                <div>
+                  <strong>Server restore</strong>
+                  <span>Select the archived project and template records to write back to the daemon.</span>
+                </div>
+                <div className="entry-snapshot-records">
+                  {snapshotServerRows.map((record) => (
+                    <label className="entry-snapshot-record" key={record.key}>
+                      <input
+                        type="checkbox"
+                        checked={selectedServerRecords.has(record.key)}
+                        onChange={(event) => {
+                          const next = new Set(selectedServerRecords);
+                          if (event.target.checked) next.add(record.key);
+                          else next.delete(record.key);
+                          setSelectedServerRecords(next);
+                        }}
+                      />
+                      <span>
+                        <strong>{record.name}</strong>
+                        <small>{record.kind} - {record.conflict ? 'existing record' : 'new record'}</small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {serverRestoreAudit ? (
+                  <div className="entry-snapshot-audit-log" aria-label="Server restore audit">
+                    {[...serverRestoreAudit.projects, ...serverRestoreAudit.templates].map((item) => (
+                      <div key={`${item.kind}-${item.id}-${item.action}`}>
+                        <strong>{item.name}</strong>
+                        <span>{item.kind} - {item.action} - {item.rollbackNote}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={selectedServerRecords.size === 0 || serverRestoreBusy}
+                  onClick={restoreSnapshotServerRecords}
+                >
+                  {serverRestoreBusy ? 'Restoring records...' : 'Restore selected projects/templates'}
+                </button>
+              </div>
+            ) : null}
             <div className="row">
               <button type="button" className="secondary" onClick={() => setSnapshotImport(null)}>
                 Cancel
@@ -480,6 +590,19 @@ function TopTabButton({
       {label}
     </button>
   );
+}
+
+function serverRecordKey(kind: 'project' | 'template', id: string) {
+  return `${kind}:${id}`;
+}
+
+function summarizeServerRestoreAudit(audit: StudioSnapshotServerRestoreResult) {
+  const items = [...audit.projects, ...audit.templates];
+  const created = items.filter((item) => item.action === 'created').length;
+  const updated = items.filter((item) => item.action === 'updated').length;
+  const skipped = items.filter((item) => item.action === 'skipped').length;
+  const failed = items.filter((item) => item.action === 'failed').length;
+  return `Server restore complete: ${created} created, ${updated} updated, ${skipped} skipped, ${failed} failed.`;
 }
 
 // Map a skill's declared mode to project metadata. Falls back to the same

@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EntryView } from '../src/components/EntryView';
 import type {
@@ -264,7 +265,7 @@ describe('EntryView', () => {
     expect(await screen.findByRole('dialog', { name: 'Studio snapshot restore preview' })).toBeInTheDocument();
     expect(screen.getByLabelText('Snapshot import audit')).toBeInTheDocument();
     expect(screen.getByText('2 incoming - 1 local - 1 conflicts - 1 restored')).toBeInTheDocument();
-    expect(screen.getByText('1 projects and 1 templates remain audit-only in this restore.')).toBeInTheDocument();
+    expect(screen.getByText('1 projects and 1 templates can be restored separately below.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Restore local libraries' }));
 
@@ -284,9 +285,79 @@ describe('EntryView', () => {
       expect.objectContaining({ id: 'incoming-history', direction: 'import' }),
     ]);
   });
+
+  it('restores selected project and template records through the daemon audit endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        projects: [
+          {
+            kind: 'project',
+            id: 'project-from-packet',
+            name: 'Archived project',
+            action: 'created',
+            rollbackNote: 'Delete the restored project if this import was not intended.',
+          },
+        ],
+        templates: [
+          {
+            kind: 'template',
+            id: 'template-from-packet',
+            name: 'Archived template',
+            action: 'created',
+            rollbackNote: 'Delete the restored template if this import was not intended.',
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onWorkspaceRefresh = vi.fn();
+    renderEntryView({ onWorkspaceRefresh });
+
+    const file = new File([JSON.stringify({
+      schema: 'oneshot.studio-snapshot.v1',
+      exportedAt: Date.now(),
+      projects: [project('project-from-packet', 'Archived project')],
+      templates: [template('template-from-packet', 'Archived template')],
+      savedBlueprints: [],
+      inspirationBoards: [],
+      inspirationPins: [],
+      libraryViews: [],
+      libraryTransferHistory: [],
+    })], 'oneshot-studio-snapshot.json', {
+      type: 'application/json',
+    });
+
+    fireEvent.change(screen.getByLabelText('Import snapshot'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByLabelText('Project and template restore records')).toBeInTheDocument();
+    expect(screen.getByText('Archived project')).toBeInTheDocument();
+    expect(screen.getByText('Archived template')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore selected projects/templates' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/studio-snapshot/restore',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('project-from-packet'),
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      mode: 'merge',
+      projects: [expect.objectContaining({ id: 'project-from-packet' })],
+      templates: [expect.objectContaining({ id: 'template-from-packet' })],
+    });
+    await waitFor(() => expect(onWorkspaceRefresh).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('Server restore complete: 2 created, 0 updated, 0 skipped, 0 failed.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Server restore audit')).toBeInTheDocument();
+  });
 });
 
-function renderEntryView() {
+function renderEntryView(overrides: Partial<ComponentProps<typeof EntryView>> = {}) {
   return render(
     <EntryView
       skills={[skill]}
@@ -302,6 +373,7 @@ function renderEntryView() {
       onDeleteProject={vi.fn()}
       onChangeDefaultDesignSystem={vi.fn()}
       onOpenSettings={vi.fn()}
+      {...overrides}
     />,
   );
 }

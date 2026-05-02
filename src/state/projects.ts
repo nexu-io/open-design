@@ -14,6 +14,20 @@ import type {
   ProjectTemplate,
 } from '../types';
 
+export interface StudioSnapshotServerRestoreItem {
+  kind: 'project' | 'template';
+  id: string;
+  name: string;
+  action: 'created' | 'updated' | 'skipped' | 'failed';
+  rollbackNote: string;
+  error?: string;
+}
+
+export interface StudioSnapshotServerRestoreResult {
+  projects: StudioSnapshotServerRestoreItem[];
+  templates: StudioSnapshotServerRestoreItem[];
+}
+
 export async function listProjects(): Promise<Project[]> {
   try {
     const resp = await fetch('/api/projects');
@@ -116,6 +130,24 @@ export async function saveTemplate(input: {
     if (!resp.ok) return null;
     const json = (await resp.json()) as { template: ProjectTemplate };
     return json.template;
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreStudioSnapshotServerRecords(input: {
+  mode: 'merge' | 'replace';
+  projects: Project[];
+  templates: ProjectTemplate[];
+}): Promise<StudioSnapshotServerRestoreResult | null> {
+  try {
+    const resp = await fetch('/api/studio-snapshot/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as StudioSnapshotServerRestoreResult;
   } catch {
     return null;
   }

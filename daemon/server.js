@@ -73,6 +73,7 @@ const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+const SAFE_RECORD_ID_RE = /^[A-Za-z0-9._-]{1,128}$/;
 
 // Windows ENAMETOOLONG mitigation constants
 const CMD_BAT_RE = /\.(cmd|bat)$/i;
@@ -507,6 +508,147 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.delete('/api/templates/:id', (req, res) => {
     deleteTemplate(db, req.params.id);
     res.json({ ok: true });
+  });
+
+  async function restoreSnapshotProject(raw, mode) {
+    const id = safeSnapshotId(raw?.id);
+    const name = typeof raw?.name === 'string' && raw.name.trim()
+      ? raw.name.trim()
+      : 'Restored OneShot project';
+    if (!id) {
+      return restoreAuditItem('project', '', name, 'failed', 'No server write was made.', 'invalid project id');
+    }
+    const existing = getProject(db, id);
+    if (existing && mode === 'merge') {
+      return restoreAuditItem(
+        'project',
+        id,
+        name,
+        'skipped',
+        'Existing project was kept because merge mode does not overwrite server records.',
+      );
+    }
+    const now = Date.now();
+    const projectInput = {
+      id,
+      name,
+      skillId: typeof raw?.skillId === 'string' ? raw.skillId : null,
+      designSystemId: typeof raw?.designSystemId === 'string' ? raw.designSystemId : null,
+      pendingPrompt: typeof raw?.pendingPrompt === 'string'
+        ? raw.pendingPrompt
+        : 'Restored from a OneShot studio snapshot. Review project metadata and continue from the archived record.',
+      metadata: raw?.metadata && typeof raw.metadata === 'object' ? raw.metadata : null,
+      createdAt: Number.isFinite(raw?.createdAt) ? Number(raw.createdAt) : now,
+      updatedAt: Number.isFinite(raw?.updatedAt) ? Number(raw.updatedAt) : now,
+    };
+    try {
+      if (existing) {
+        updateProject(db, id, {
+          name: projectInput.name,
+          skillId: projectInput.skillId,
+          designSystemId: projectInput.designSystemId,
+          pendingPrompt: projectInput.pendingPrompt,
+          metadata: projectInput.metadata,
+          updatedAt: now,
+        });
+        return restoreAuditItem(
+          'project',
+          id,
+          name,
+          'updated',
+          'Project metadata was overwritten; existing files and conversations were left intact.',
+        );
+      }
+      insertProject(db, projectInput);
+      insertConversation(db, {
+        id: randomId(),
+        projectId: id,
+        title: 'Restored from OneShot snapshot',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ensureProject(PROJECTS_DIR, id);
+      return restoreAuditItem(
+        'project',
+        id,
+        name,
+        'created',
+        'Delete the restored project if this import was not intended.',
+      );
+    } catch (err) {
+      return restoreAuditItem('project', id, name, 'failed', 'No rollback was needed for this record.', String(err));
+    }
+  }
+
+  function restoreSnapshotTemplate(raw, mode) {
+    const id = safeSnapshotId(raw?.id);
+    const name = typeof raw?.name === 'string' && raw.name.trim()
+      ? raw.name.trim()
+      : 'Restored OneShot template';
+    if (!id) {
+      return restoreAuditItem('template', '', name, 'failed', 'No server write was made.', 'invalid template id');
+    }
+    const existing = getTemplate(db, id);
+    if (existing && mode === 'merge') {
+      return restoreAuditItem(
+        'template',
+        id,
+        name,
+        'skipped',
+        'Existing template was kept because merge mode does not overwrite server records.',
+      );
+    }
+    const templateInput = {
+      id,
+      name,
+      description: typeof raw?.description === 'string' ? raw.description : null,
+      sourceProjectId: typeof raw?.sourceProjectId === 'string' ? raw.sourceProjectId : null,
+      files: Array.isArray(raw?.files)
+        ? raw.files
+            .filter((file) => file && typeof file.name === 'string' && typeof file.content === 'string')
+            .slice(0, 100)
+        : [],
+      createdAt: Number.isFinite(raw?.createdAt) ? Number(raw.createdAt) : Date.now(),
+    };
+    try {
+      if (existing && mode === 'replace') {
+        deleteTemplate(db, id);
+      }
+      insertTemplate(db, templateInput);
+      return restoreAuditItem(
+        'template',
+        id,
+        name,
+        existing ? 'updated' : 'created',
+        existing
+          ? 'Template snapshot was overwritten; restore the previous snapshot from an older studio export if needed.'
+          : 'Delete the restored template if this import was not intended.',
+      );
+    } catch (err) {
+      return restoreAuditItem('template', id, name, 'failed', 'No rollback was needed for this record.', String(err));
+    }
+  }
+
+  app.post('/api/studio-snapshot/restore', async (req, res) => {
+    try {
+      const { mode = 'merge', projects = [], templates = [] } = req.body || {};
+      if (mode !== 'merge' && mode !== 'replace') {
+        return res.status(400).json({ error: 'invalid restore mode' });
+      }
+      if (!Array.isArray(projects) || !Array.isArray(templates)) {
+        return res.status(400).json({ error: 'projects and templates must be arrays' });
+      }
+      const audit = { projects: [], templates: [] };
+      for (const item of projects.slice(0, 100)) {
+        audit.projects.push(await restoreSnapshotProject(item, mode));
+      }
+      for (const item of templates.slice(0, 100)) {
+        audit.templates.push(restoreSnapshotTemplate(item, mode));
+      }
+      res.json(audit);
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
   });
 
   app.get('/api/agents', async (_req, res) => {
@@ -1241,4 +1383,19 @@ function sanitizeSlug(s) {
 
 function randomId() {
   return randomUUID();
+}
+
+function safeSnapshotId(id) {
+  return typeof id === 'string' && SAFE_RECORD_ID_RE.test(id) ? id : null;
+}
+
+function restoreAuditItem(kind, id, name, action, rollbackNote, error) {
+  return {
+    kind,
+    id,
+    name,
+    action,
+    rollbackNote,
+    ...(error ? { error } : {}),
+  };
 }

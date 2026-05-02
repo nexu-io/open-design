@@ -110,6 +110,15 @@ export function App() {
     setTemplates(list);
   }, []);
 
+  const refreshWorkspaceRecords = useCallback(async () => {
+    const [projectList, templateList] = await Promise.all([
+      listProjects(),
+      listTemplates(),
+    ]);
+    setProjects(projectList);
+    setTemplates(templateList);
+  }, []);
+
   const handleConfigSave = useCallback((next: AppConfig) => {
     // Saving from any settings dialog (welcome or regular) counts as
     // having completed onboarding — the user has actively chosen a
@@ -321,6 +330,7 @@ export function App() {
           onDeleteProject={handleDeleteProject}
           onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
           onOpenSettings={openSettings}
+          onWorkspaceRefresh={refreshWorkspaceRecords}
         />
       )}
       {settingsOpen ? (

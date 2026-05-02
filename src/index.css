@@ -3361,6 +3361,82 @@ code {
   background: var(--bg-subtle);
 }
 
+.entry-snapshot-server-restore {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.entry-snapshot-server-restore > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.entry-snapshot-server-restore > div:first-child strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.entry-snapshot-server-restore > div:first-child span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.entry-snapshot-records,
+.entry-snapshot-audit-log {
+  display: grid;
+  gap: 7px;
+}
+
+.entry-snapshot-record {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.entry-snapshot-record input {
+  flex: 0 0 auto;
+}
+
+.entry-snapshot-record span,
+.entry-snapshot-audit-log div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.entry-snapshot-record strong,
+.entry-snapshot-audit-log strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-snapshot-record small,
+.entry-snapshot-audit-log span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-snapshot-audit-log div {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
 .entry-tab-content {
   flex: 1;
   min-height: 0;

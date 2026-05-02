@@ -444,6 +444,58 @@ Required output:
 
 Keep the concept practical enough to execute in OneShotDesign/HTML motion or a downstream video tool.`,
   },
+  {
+    id: 'ai-opportunity-intelligence',
+    title: 'AI Opportunity Intelligence',
+    category: 'Intelligence packet',
+    outcome: 'Operational Atelier handoff',
+    description:
+      'Turn messy screenshots, Telegram exports, reports, and product ideas into an evidence-backed DESIGN.md, opportunity report, and Codex build brief.',
+    skillCandidates: ['pm-spec', 'docs-page', 'web-prototype'],
+    designSystemCandidates: ['linear-app', 'notion', 'default'],
+    metadata: { kind: 'template', animations: false },
+    checkpoints: ['Source evidence', 'Opportunity ranking', 'Design contract', 'Codex brief'],
+    exports: ['DESIGN.md', 'Opportunity report', 'Codex brief'],
+    exportPackage: [
+      {
+        format: 'Markdown',
+        artifact: 'DESIGN.md',
+        instructions: 'Extract the Operational Atelier design contract, visual direction, anti-patterns, tokens, and implementation rules.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Opportunity intelligence report',
+        instructions: 'Rank product ideas by evidence strength, speed to launch, asset fit, risk, and next build path.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Codex build brief',
+        instructions: 'Provide goal, source folder, output folder, requirements, constraints, verification commands, and file paths.',
+      },
+    ],
+    scorecard: [
+      'Evidence traceability',
+      'Opportunity quality',
+      'Design specificity',
+      'Privacy posture',
+      'Build-readiness',
+    ],
+    prompt: `Create an AI Opportunity Intelligence packet using the Operational Atelier design contract.
+
+Source posture:
+- Treat screenshots, Telegram exports, research links, local reports, and agent outputs as evidence.
+- Preserve source paths and make every claim traceable.
+- Keep humans in control: mark assumptions, risks, private material, and review gates.
+
+Required output:
+1. Evidence inventory: source folders, originals, thumbnails, supporting assets, flagged files, and import/run history.
+2. Opportunity ranking: idea name, evidence links, speed to launch, revenue potential, defensibility, existing asset fit, and risk.
+3. DESIGN.md: visual direction, typography, color tokens, component patterns, layout rules, motion rules, anti-patterns, and first-screen recommendation.
+4. Codex build brief: goal, source folder, output folder, product thesis, requirements, constraints, verification commands, and exact file paths.
+5. Quality scorecard for evidence traceability, opportunity quality, design specificity, privacy posture, and build-readiness.
+
+Use the Operational Atelier style: command center, design studio, evidence room. Avoid generic AI chatbot framing, purple gradients, vague metrics, and unsupported claims.`,
+  },
 ];
 
 const QUALITY_GATES = [

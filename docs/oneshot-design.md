@@ -12,11 +12,14 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Workflow scorecards are now structured metadata, so each production path carries its own critique rubric into the agent prompt even after the starter prompt changes.
 - Workflow export packages are structured metadata, visible on the workflow cards, and injected into the agent prompt as concrete deliverable contracts.
 - OneShot Cover Run now carries a CoverVisionOS handoff contract with production stages, expected files, and downstream router commands.
+- AI Opportunity Intelligence now has its own workflow pack for turning messy screenshots, Telegram exports, reports, and product ideas into `DESIGN.md`, an opportunity report, and a Codex build brief.
+- The Operational Atelier design contract is captured in `docs/DESIGN.md` as the north star for evidence-first OneShot surfaces.
 - Workflow-created projects now show a reusable blueprint strip with gates, exports, scorecards, handoff context, a copyable prompt, and a save action.
 - Saved blueprints appear on the Workflows tab and can start a new project with the original skill, design system, metadata, and reusable prompt. They can also be grouped by workflow category or custom collection, filtered to pinned items, renamed, pinned above recent items, promoted to the top of the library, and deleted after confirmation.
 - The top navigation now includes a dedicated Library Search tab after Design systems. It spans saved blueprints, Inspiration boards, and generated project records, with direct actions to start a blueprint, create an Inspiration brief, or reopen a project.
 - The entry header can export a full OneShot studio snapshot covering generated projects, saved templates, workflow blueprints, Inspiration boards and pins, Library Search views, and Library Search transfer history.
 - Studio snapshots can now be imported through a dry-run restore preview with merge or replace conflict handling before any local library data is changed.
+- Studio snapshot import can now restore selected daemon-backed project and template records with a visible server-write audit and rollback notes.
 - Library Search can now narrow reusable work by source, output type, and recent activity, which keeps large local libraries easier to scan.
 - Library Search views can now be named, saved, grouped by collection or production lane, pinned above recent views, annotated with owner and usage notes, duplicated as quick variants, reapplied, deleted, previewed before transfer, exported, and imported as OneShot JSON packets with rename, replace, or skip conflict handling, before/after packet audits, exportable local transfer history, import replay, and transfer notes for client, machine, or production-lane context, so common filters can become portable studio workbenches.
 - The Inspiration Library adds local Pinterest-style boards and pins for visual references, source links, imported local images, usage notes, tags, and OneShot reference-brief creation.
@@ -24,7 +27,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Inspiration boards recommend the strongest OneShot production paths and can launch a workflow-specific project with the board attached as the reference lock.
 - Inspiration boards can be exported and imported as OneShot JSON packets, so reference libraries can move between machines, backups, and repos.
 - Workflow launches can attach an Inspiration Library board as the reference lock, adding the board context and pins into the generated prompt and workflow metadata.
-- The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, and Motion Explainer.
+- The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, Motion Explainer, and AI Opportunity Intelligence.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
 - The Liquid Glass system includes `design-systems/ios-26-liquid-glass/assets/reference-prototype.html`, a compact visual reference for lock screen widgets, Control Center tiles, app chrome, modal sheets, and reduced-brightness behavior.
 - The app metadata, loading shell, onboarding copy, exported ZIP README, and locale strings now use OneShot Design.
@@ -45,4 +48,4 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Add daemon-backed project/template restore from studio snapshots with per-record confirmation, rollback notes, and server-write audit output.
+1. Build the Operational Atelier intake screen: source rail, precision-tray drop zone, evidence canvas preview, inspector/action panel, and run deck using `docs/DESIGN.md`.
