@@ -57,7 +57,7 @@ export async function streamMessage(
     const stream = client.messages.stream(
       {
         model: cfg.model,
-        max_tokens: 8192,
+        max_tokens: cfg.maxTokens ?? 8192,
         system,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
       },

@@ -58,6 +58,9 @@ export interface AppConfig {
   // Pre-existing configs without this field fall through to the agent's
   // declared default.
   agentModels?: Record<string, AgentModelChoice>;
+  // Caps the upstream completion length in API mode. Defaults to 8192 when
+  // unset; raise it for providers (e.g. MiMo) that allow longer responses.
+  maxTokens?: number;
 }
 
 export type AgentEvent = PersistedAgentEvent;

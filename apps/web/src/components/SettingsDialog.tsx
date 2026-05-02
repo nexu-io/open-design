@@ -445,6 +445,21 @@ export function SettingsDialog({
                   ))}
                 </select>
               </label>
+              <label className="field">
+                <span className="field-label">{t('settings.maxTokens')}</span>
+                <input
+                  type="number"
+                  min={1024}
+                  max={200000}
+                  step={1024}
+                  value={cfg.maxTokens ?? 8192}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setCfg({ ...cfg, maxTokens: Number.isFinite(val) ? val : undefined });
+                  }}
+                />
+                <p className="hint">{t('settings.maxTokensHint')}</p>
+              </label>
               <p className="hint">{t('settings.apiHint')}</p>
             </section>
           )}

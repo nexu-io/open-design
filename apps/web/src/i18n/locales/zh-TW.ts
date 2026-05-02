@@ -72,6 +72,9 @@ export const zhTW: Dict = {
   'settings.hide': '隱藏',
   'settings.model': '模型',
   'settings.baseUrl': 'Base URL',
+  'settings.maxTokens': '最大 tokens',
+  'settings.maxTokensHint':
+    '回應長度上限，預設 8192。當單次生成的 artifact 被截斷時，可以調高（例如 32768）。',
   'settings.apiHint':
     '請求會從當前瀏覽器直連你設定的 Base URL，無中轉代理。Key 只存放在 localStorage。',
   'settings.skipForNow': '暫時跳過',

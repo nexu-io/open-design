@@ -73,6 +73,9 @@ export const ru: Dict = {
   'settings.hide': 'Скрыть',
   'settings.model': 'Модель',
   'settings.baseUrl': 'Базовый URL',
+  'settings.maxTokens': 'Макс. токенов',
+  'settings.maxTokensHint':
+    'Ограничение длины ответа. По умолчанию 8192. Увеличьте (например, до 32768), если один артефакт дизайна обрывается посреди стрима.',
   'settings.apiHint':
     'Вызовы идут напрямую из этого браузера на указанный вами базовый URL. Без прокси. Ключ никогда не покидает localStorage.',
   'settings.skipForNow': 'Пропустить сейчас',

@@ -33,6 +33,7 @@ export async function streamMessageOpenAI(
         model: cfg.model,
         systemPrompt: system,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
+        maxTokens: cfg.maxTokens,
       }),
       signal,
     });

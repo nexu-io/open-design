@@ -73,6 +73,9 @@ export const fa: Dict = {
   'settings.hide': 'پنهان',
   'settings.model': 'مدل',
   'settings.baseUrl': 'آدرس پایه',
+  'settings.maxTokens': 'حداکثر توکن',
+  'settings.maxTokensHint':
+    'سقف طول پاسخ. مقدار پیش‌فرض ۸۱۹۲. اگر یک artifact طراحی در میانهٔ استریم قطع می‌شود، آن را افزایش دهید (مثلاً ۳۲۷۶۸).',
   'settings.apiHint':
     'فراخوانی‌ها مستقیماً از این مرورگر به آدرس پایه‌ای که تعیین کرده‌اید ارسال می‌شوند. بدون پراکسی. کلید هرگز localStorage را ترک نمی‌کند.',
   'settings.skipForNow': 'فعلاً رد کنید',

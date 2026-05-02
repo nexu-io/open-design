@@ -73,6 +73,9 @@ export const esES: Dict = {
   'settings.hide': 'Ocultar',
   'settings.model': 'Modelo',
   'settings.baseUrl': 'URL base',
+  'settings.maxTokens': 'Tokens máx.',
+  'settings.maxTokensHint':
+    'Tope para la longitud de la respuesta. Por defecto 8192. Súbelo (p. ej. 32768) cuando un artefacto de diseño se trunca a mitad del stream.',
   'settings.apiHint':
     'Las llamadas van directamente desde este navegador a la URL base que indiques. Sin proxy. La clave nunca sale de localStorage.',
   'settings.skipForNow': 'Omitir por ahora',

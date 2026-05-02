@@ -73,6 +73,9 @@ export const tr: Dict = {
   'settings.hide': 'Gizle',
   'settings.model': 'Model',
   'settings.baseUrl': 'Temel URL',
+  'settings.maxTokens': 'Maks. token',
+  'settings.maxTokensHint':
+    'Yanıt uzunluğu sınırı. Varsayılan 8192. Bir tasarım artifact akış ortasında kesildiğinde değeri yükseltin (örn. 32768).',
   'settings.apiHint':
     'Çağrılar, bu tarayıcıdan doğrudan belirlediğiniz temel URL’ye yönlendirilir. Vekil sunucu kullanılmaz. Anahtar hiçbir zaman localStorage’dan ayrılmaz.',
   'settings.skipForNow': 'Şimdilik atla',

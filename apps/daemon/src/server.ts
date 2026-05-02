@@ -2051,7 +2051,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
@@ -2067,7 +2067,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
     const payload = {
       model,
-      max_tokens: 8192,
+      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
       system: systemPrompt || '',
       messages: Array.isArray(messages)
@@ -2166,7 +2166,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.post('/api/proxy/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
@@ -2194,7 +2194,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
     const payload = {
       model,
-      max_tokens: 8192,
+      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
       ...(isMiMo ? { tool_choice: 'none', tools: [] } : {}),
       messages: [

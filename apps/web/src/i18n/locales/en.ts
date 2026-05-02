@@ -73,6 +73,9 @@ export const en: Dict = {
   'settings.hide': 'Hide',
   'settings.model': 'Model',
   'settings.baseUrl': 'Base URL',
+  'settings.maxTokens': 'Max tokens',
+  'settings.maxTokensHint':
+    'Cap on the response length. Defaults to 8192. Raise it (e.g. 32768) when a single design artifact gets cut off mid-stream.',
   'settings.apiHint':
     'Calls go directly from this browser to the base URL you set. No proxy. The key never leaves localStorage.',
   'settings.skipForNow': 'Skip for now',
