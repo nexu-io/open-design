@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Image Hero</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.hero{position:relative;height:calc(100vh - 144px);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg)}
+.hero .bg{position:absolute;inset:0;background:
+  radial-gradient(80% 60% at 30% 40%,#ffb38a,transparent 70%),
+  radial-gradient(70% 50% at 75% 60%,#c084fc,transparent 70%),
+  linear-gradient(135deg,#0b1024,#1a2238)}
+.hero .bg.kb{animation:kf-kenburns 12s ease-in-out infinite alternate}
+.hero .overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(10,12,20,.65));}
+.hero .caption{position:absolute;bottom:48px;left:56px;right:56px;color:#fff;z-index:2}
+.hero h1{font-size:72px;line-height:1;font-weight:800;letter-spacing:-.03em;margin:0}
+.hero p{font-size:20px;opacity:.85;margin:14px 0 0;max-width:60ch}
+.hero .pill{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2)}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Image Hero" style="padding:56px">
+  <div class="hero">
+    <div class="bg kb"></div>
+    <div class="overlay"></div>
+    <div class="caption">
+      <span class="pill">Cover · 04</span>
+      <h1 class="mt-s anim-rise-in" data-anim="rise-in">像杂志一样的<br>封面画面感</h1>
+      <p>Ken Burns 缓慢推拉 + 径向渐变 + 中灰叠加。无须真实图片，也能做出高级感。</p>
+    </div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

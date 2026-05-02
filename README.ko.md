@@ -17,6 +17,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#디자인-시스템"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
@@ -24,7 +25,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <b>한국어</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <b>한국어</b> · <a href="README.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -53,6 +54,7 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 | **BYOK 폴백** | OpenAI 호환 프록시 `/api/proxy/stream` — `baseUrl` + `apiKey` + `model`만 붙여 넣으면 어떤 벤더(Anthropic-via-OpenAI 어댑터, DeepSeek, Groq, MiMo, OpenRouter, 자체 호스팅 vLLM, 또는 OpenAI 호환 프로바이더 무엇이든)든 엔진이 됩니다. daemon 경계에서 내부 IP / SSRF를 차단합니다. |
 | **내장 디자인 시스템** | **72개** — 2개의 수작업 스타터 + [`awesome-design-md`][acd2]에서 가져온 70개의 제품 시스템(Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu …) |
 | **내장 Skill** | **31개** — `prototype` 모드 27개(web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs …) + `deck` 모드 4개(`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). picker에서 `scenario`로 그룹화: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **미디어 생성** | 이미지 · 비디오 · 오디오 surface가 디자인 루프와 함께 작동합니다. **gpt-image-2**(Azure / OpenAI)로 포스터, 아바타, 인포그래픽, 일러스트 도시 지도 · **Seedance 2.0**(ByteDance)로 15초 시네마틱 text-to-video / image-to-video · **HyperFrames**([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes))로 HTML→MP4 모션 그래픽(제품 리빌, 키네틱 타이포그래피, 데이터 차트, 소셜 오버레이, 로고 아웃트로). **93개**의 즉시 복제 가능한 prompt 갤러리 — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — 모두 [`prompt-templates/`](prompt-templates/) 아래에 미리보기 썸네일과 출처 표기와 함께 배치. 채팅 입구는 코드와 동일; 실제 `.mp4` / `.png`이 프로젝트 워크스페이스에 chip으로 떨어집니다. |
 | **시각적 방향** | 5개의 엄선된 학파(Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — 각각 결정론적 OKLch 팔레트 + 폰트 스택 제공([`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)) |
 | **기기 프레임** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — 픽셀 정확도, skill 간 공유, [`assets/frames/`](assets/frames/)에 통합 |
 | **에이전트 런타임** | 로컬 daemon이 프로젝트 폴더에서 CLI를 실행 — 에이전트가 실제 디스크 환경에 대한 실제 `Read`, `Write`, `Bash`, `WebFetch` 도구 사용; 모든 어댑터에 Windows `ENAMETOOLONG` 폴백(stdin / 임시 prompt 파일) |
@@ -341,6 +343,7 @@ Daemon은 저장소 루트에 하나의 숨겨진 폴더를 소유합니다. 그
 ```
 open-design/
 ├── README.md                      ← 영어
+├── README.de.md                   ← Deutsch
 ├── README.zh-CN.md                ← 简体中文
 ├── README.ko.md                   ← 한국어 (이 파일)
 ├── QUICKSTART.md                  ← 실행 / 빌드 / 배포 가이드
@@ -480,6 +483,79 @@ open-design/
 
 전체 스펙 → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts).
 
+## 미디어 생성
+
+OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일한 채팅 입구가 **이미지**, **비디오**, **오디오** 생성도 구동합니다 — 모델 어댑터는 daemon의 미디어 파이프라인([`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts), [`apps/web/src/media/models.ts`](apps/web/src/media/models.ts))에 연결되어 있습니다. 모든 렌더링은 프로젝트 워크스페이스에 실제 파일로 떨어지며 — 이미지는 `.png`, 비디오는 `.mp4` — 턴이 끝날 때 다운로드 chip으로 표시됩니다.
+
+오늘날 부하를 짊어진 세 모델 패밀리:
+
+| Surface | 모델 | 제공자 | 용도 |
+|---|---|---|---|
+| **이미지** | `gpt-image-2` | Azure / OpenAI | 포스터, 프로필 아바타, 일러스트 도시 지도, 인포그래픽, 매거진 풍 소셜 카드, 사진 복원, 분해도 제품 일러스트 |
+| **비디오** | `seedance-2.0` | ByteDance Volcengine | 15초 시네마틱 t2v + i2v + 오디오 — 내러티브 쇼트, 인물 클로즈업, 제품 영상, MV 안무 |
+| **비디오** | `hyperframes-html` | [HeyGen / OSS](https://github.com/heygen-com/hyperframes) | HTML→MP4 모션 그래픽 — 제품 리빌, 키네틱 타이포그래피, 데이터 차트, 소셜 오버레이, 로고 아웃트로, 카라오케 자막을 단 세로형 TikTok |
+
+성장하는 **prompt 갤러리**는 [`prompt-templates/`](prompt-templates/)에서 — **즉시 복제 가능한 93개 prompt** 동봉: 43개 이미지(`prompt-templates/image/*.json`), 39개 Seedance(`prompt-templates/video/*.json` 중 `hyperframes-*` 제외), 11개 HyperFrames(`prompt-templates/video/hyperframes-*.json`). 각 항목은 미리보기 썸네일, 원본 prompt 본문, 대상 모델, 화면비, 라이선스 + 저작자 표기를 담은 `source` 블록을 포함합니다. daemon은 `GET /api/prompt-templates`로 서빙하고, 웹 앱은 진입 화면의 **Image templates** / **Video templates** 탭에서 카드 그리드로 보여줍니다; 한 번 클릭하면 적합한 모델이 미리 선택된 prompt가 composer에 떨어집니다.
+
+### gpt-image-2 — 이미지 갤러리(43개 중 5개)
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D Stone Staircase Evolution" /><br/><sub><b>3D Stone Staircase Evolution Infographic</b><br/>3단계 석재 풍 인포그래픽</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated City Food Map" /><br/><sub><b>Illustrated City Food Map</b><br/>편집급 손그림 여행 포스터</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>편집급 패션 단일 프레임</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>프로필 아바타 — 네온 페이스 텍스트</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>편집급 스튜디오 초상</sub></td>
+</tr>
+</table>
+
+전체 목록 → [`prompt-templates/image/`](prompt-templates/image/). 출처: 대부분 [`YouMind-OpenLab/awesome-gpt-image-prompts`](https://github.com/YouMind-OpenLab/awesome-gpt-image-prompts)(CC-BY-4.0)에서, 템플릿마다 작성자 표기를 보존.
+
+### Seedance 2.0 — 비디오 갤러리(39개 중 5개)
+
+<table>
+<tr>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/thumbnails/thumbnail.jpg" alt="Music Podcast Guitar" /></a><br/><sub><b>Music Podcast & Guitar Technique</b><br/>4K 시네마틱 스튜디오 영상</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg" alt="Emotional Face" /></a><br/><sub><b>Emotional Face Close-up</b><br/>시네마틱 미세 표정 연구</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg" alt="Luxury Supercar" /></a><br/><sub><b>Luxury Supercar Cinematic</b><br/>내러티브 제품 영상</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>스타일라이즈드 풍자 쇼트</sub></td>
+<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad253175a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15초 Seedance 2.0 내러티브</sub></td>
+</tr>
+</table>
+
+썸네일을 클릭하면 실제 렌더된 MP4가 재생됩니다. 전체 목록 → [`prompt-templates/video/`](prompt-templates/video/)(`*-seedance-*` 및 Cinematic 태그가 붙은 항목). 출처: [`YouMind-OpenLab/awesome-seedance-2-prompts`](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts)(CC-BY-4.0), 원 트윗 링크와 작성자 핸들 보존.
+
+### HyperFrames — HTML→MP4 모션 그래픽(11개의 즉시 복제 가능한 템플릿)
+
+[**`heygen-com/hyperframes`**](https://github.com/heygen-com/hyperframes)는 HeyGen이 오픈소스화한 에이전트 네이티브 비디오 프레임워크입니다 — 당신(또는 에이전트)이 HTML + CSS + GSAP을 작성하면 HyperFrames가 headless Chrome + FFmpeg로 결정론적으로 MP4를 렌더링합니다. Open Design은 HyperFrames를 일급 비디오 모델(`hyperframes-html`)로 daemon dispatch에 연결하고, 추가로 `skills/hyperframes/` skill을 동봉해 timeline 계약, 씬 트랜지션 규칙, audio-reactive 패턴, 자막/TTS, 카탈로그 블록(`npx hyperframes add <slug>`)을 에이전트에게 가르칩니다.
+
+11개의 HyperFrames prompt가 [`prompt-templates/video/hyperframes-*.json`](prompt-templates/video/)에 들어 있고, 각각이 특정 아키타입을 만들어내는 구체적인 brief입니다:
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-product-reveal-minimal.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Product reveal" /></a><br/><sub><b>5초 미니멀 제품 리빌</b> · 16:9 · 푸시인 타이틀 카드 + 셰이더 트랜지션</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS promo" /></a><br/><sub><b>30초 SaaS 제품 프로모</b> · 16:9 · Linear/ClickUp 풍 + UI 3D 리빌</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok karaoke" /></a><br/><sub><b>TikTok 카라오케 토킹헤드</b> · 9:16 · TTS + 단어 동기화 자막</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Brand sizzle" /></a><br/><sub><b>30초 브랜드 sizzle 릴</b> · 16:9 · 비트 동기화 키네틱 타이포, audio-reactive</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Data chart" /></a><br/><sub><b>애니메이션 bar-chart race</b> · 16:9 · NYT 풍 데이터 인포그래픽</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Flight map" /></a><br/><sub><b>비행 경로 지도(출발 → 도착)</b> · 16:9 · Apple 풍 시네마틱 경로 리빌</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo outro" /></a><br/><sub><b>4초 시네마틱 로고 아웃트로</b> · 16:9 · 조각별 어셈블 + bloom</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Money counter" /></a><br/><sub><b>$0 → $10K 머니 카운터</b> · 9:16 · Apple 풍 hype + 그린 플래시 + 버스트</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-app-showcase-three-phones.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="App showcase" /></a><br/><sub><b>폰 3대 앱 쇼케이스</b> · 16:9 · 떠 있는 폰 + 기능 콜아웃</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-social-overlay-stack.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Social overlay" /></a><br/><sub><b>소셜 오버레이 스택</b> · 9:16 · X · Reddit · Spotify · Instagram 순차</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Website to video" /></a><br/><sub><b>웹사이트→비디오 파이프라인</b> · 16:9 · 3가지 뷰포트 캡처 + 트랜지션</sub></td>
+<td width="25%" valign="top">&nbsp;</td>
+</tr>
+</table>
+
+패턴은 다른 것과 동일합니다: 템플릿을 고르고, brief를 편집하고, 보냅니다. 에이전트는 동봉된 `skills/hyperframes/SKILL.md`(OD 전용 렌더링 워크플로 — composition 소스 파일을 `.hyperframes-cache/`에 격리해 파일 워크스페이스를 어지럽히지 않고, daemon이 `npx hyperframes render`를 대신 실행해 macOS sandbox-exec / Puppeteer 행 현상을 우회하고, 최종 `.mp4`만 프로젝트 chip으로 표시되도록)를 읽고, composition을 작성하고, MP4를 출력합니다. 카탈로그 블록 썸네일은 © HeyGen, 그들의 CDN에서 제공; OSS 프레임워크 자체는 Apache-2.0입니다.
+
+> **연결되었지만 아직 템플릿으로 노출되지 않은 모델:** Kling 2.0 / 1.6 / 1.5, Veo 3 / Veo 2, Sora 2 / Sora 2-Pro(via Fal), MiniMax video-01 — 모두 `VIDEO_MODELS`([`apps/web/src/media/models.ts`](apps/web/src/media/models.ts))에 있습니다. Suno v5 / v4.5, Udio v2, Lyria 2(음악)와 gpt-4o-mini-tts, MiniMax TTS(음성)가 오디오 surface를 커버합니다. 이들 prompt 템플릿은 오픈 컨트리뷰션입니다 — JSON을 `prompt-templates/video/` 또는 `prompt-templates/audio/`에 떨구면 picker에 나타납니다.
+
 ## 채팅 그 이상 — 더 들어 있는 것들
 
 채팅 / 아티팩트 루프가 가장 눈에 잘 띄지만, 이 저장소에는 다른 제품과 비교하기 전에 한번쯤 스캔해 볼 가치가 있는 잘 안 보이는 능력들이 더 있습니다:
@@ -613,7 +689,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 - **디자인 시스템 추가** — 9섹션 스키마를 사용하여 [`design-systems/<brand>/`](design-systems/)에 `DESIGN.md`를 드롭하세요.
 - **새 코딩 에이전트 CLI 연결** — [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts)에 항목 하나 추가.
 
-전체 설명, 병합 기준, 코드 스타일, 받지 않는 것 → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([简体中文](CONTRIBUTING.zh-CN.md)).
+전체 설명, 병합 기준, 코드 스타일, 받지 않는 것 → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md), [简体中文](CONTRIBUTING.zh-CN.md)).
 
 ## 컨트리뷰터
 
@@ -645,6 +721,12 @@ Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다
 
 곡선이 위로 휘면 — 그것이 우리가 찾는 신호입니다. ★를 눌러 위로 밀어주세요.
 
+## 크레딧 / Credits
+
+마스터 [`skills/html-ppt/`](skills/html-ppt/) skill과 [`skills/html-ppt-*/`](skills/) 아래의 15개 per-template wrapper(15개 full-deck 템플릿, 36개 테마, 31개 single-page 레이아웃, 27개 CSS 애니메이션 + 20개 canvas FX, 키보드 runtime, 자석식 카드 presenter mode 포함)는 오픈소스 프로젝트 [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill)(MIT)에서 통합되었습니다. 원본 LICENSE는 [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE)에 보존되어 있고 저작권 표시는 [@lewislulu](https://github.com/lewislulu)에게 있습니다. 각 per-template Examples 카드(`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post` …)는 authoring 가이드를 마스터 skill에 위임하므로, **Use this prompt** 클릭 시 업스트림과 동일한 prompt → 출력 동작이 그대로 보존됩니다.
+
+[`skills/guizang-ppt/`](skills/guizang-ppt/) 매거진/가로 스와이프 deck flow는 [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill)(MIT)에서 통합되었으며, 저작권 표시는 [@op7418](https://github.com/op7418)에게 있습니다.
+
 ## 라이선스
 
-Apache-2.0. 번들된 `skills/guizang-ppt/`는 원래 [LICENSE](skills/guizang-ppt/LICENSE)(MIT)와 [op7418](https://github.com/op7418)에 대한 저작권 표시를 유지합니다.
+Apache-2.0. 번들된 `skills/guizang-ppt/`는 원래 [LICENSE](skills/guizang-ppt/LICENSE)(MIT)와 [op7418](https://github.com/op7418)에 대한 저작권 표시를 유지합니다. 번들된 `skills/html-ppt/`는 원래 [LICENSE](skills/html-ppt/LICENSE)(MIT)와 [lewislulu](https://github.com/lewislulu)에 대한 저작권 표시를 유지합니다.

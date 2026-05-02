@@ -588,7 +588,7 @@ export function listMessages(db, conversationId) {
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
               produced_files_json AS producedFilesJson,
-              started_at AS startedAt, ended_at AS endedAt,
+              created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
         WHERE conversation_id = ?
@@ -675,7 +675,7 @@ export function upsertMessage(db, conversationId, m) {
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
               produced_files_json AS producedFilesJson,
-              started_at AS startedAt, ended_at AS endedAt,
+              created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
     )
@@ -700,6 +700,7 @@ function normalizeMessage(row) {
     events: parseJsonOrUndef(row.eventsJson),
     attachments: parseJsonOrUndef(row.attachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,
   };

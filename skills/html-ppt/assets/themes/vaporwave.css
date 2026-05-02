@@ -1,0 +1,21 @@
+/* theme: vaporwave — 蒸汽波 */
+:root{
+  --bg:#1a0938;--bg-soft:#261050;--surface:rgba(255,255,255,.06);--surface-2:rgba(255,255,255,.1);
+  --border:rgba(255,110,199,.28);--border-strong:rgba(0,245,255,.5);
+  --text-1:#fdf0ff;--text-2:#d4a8e8;--text-3:#8a6ba8;
+  --accent:#ff6ec7;--accent-2:#00f5ff;--accent-3:#ffd166;
+  --grad:linear-gradient(135deg,#ff6ec7 0%,#c94fff 35%,#00f5ff 100%);
+  --grad-soft:linear-gradient(135deg,rgba(255,110,199,.25),rgba(0,245,255,.25));
+  --radius:18px;--radius-sm:10px;--radius-lg:28px;
+  --shadow:0 20px 60px rgba(255,110,199,.2),0 0 1px rgba(0,245,255,.6);
+  --shadow-lg:0 30px 80px rgba(255,110,199,.3),0 0 2px rgba(0,245,255,.8);
+  --font-sans:'Space Grotesk','Inter','Noto Sans SC',sans-serif;
+  --font-display:'Space Grotesk','Inter',sans-serif;
+}
+body{background:
+  linear-gradient(180deg,#1a0938 0%,#3a0f5c 45%,#7a1f6b 85%,#e85d9c 100%),
+  radial-gradient(ellipse at 50% 80%,rgba(0,245,255,.3),transparent 60%)}
+h1.title,.h1{background:var(--grad);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent}
+.card{backdrop-filter:blur(18px)}
+.divider-accent{background:var(--grad);height:4px;width:120px;box-shadow:0 0 20px var(--accent)}

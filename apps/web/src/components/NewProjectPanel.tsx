@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { fetchPromptTemplate } from '../providers/registry';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -9,6 +10,7 @@ import type {
   ProjectMetadata,
   ProjectTemplate,
   MediaProviderCredentials,
+  PromptTemplateSummary,
   SkillSummary,
 } from '../types';
 import {
@@ -27,6 +29,14 @@ import {
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 
+// Snapshot of a curated prompt template, captured at New Project time and
+// folded into ProjectMetadata.promptTemplate. The user may have edited the
+// prompt body before clicking Create — that edited copy lives here.
+type PromptTemplatePick = {
+  summary: PromptTemplateSummary;
+  prompt: string;
+};
+
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 export type CreateTab = 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other';
@@ -43,6 +53,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
+  promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
@@ -64,6 +75,7 @@ export function NewProjectPanel({
   designSystems,
   defaultDesignSystemId,
   templates,
+  promptTemplates,
   onCreate,
   onImportClaudeDesign,
   mediaProviders,
@@ -100,6 +112,26 @@ export function NewProjectPanel({
   const [audioModel, setAudioModel] = useState(DEFAULT_AUDIO_MODEL.speech);
   const [audioDuration, setAudioDuration] = useState(10);
   const [voice, setVoice] = useState('');
+  // Per-surface curated prompt template the user picked. Tracked
+  // independently for image vs video so flipping tabs doesn't clobber the
+  // other one's pick. The body is editable in-line and the edited copy is
+  // what gets carried to the agent — that's the "optimize the template"
+  // affordance the design brief asks for.
+  const [imagePromptTemplate, setImagePromptTemplate] =
+    useState<PromptTemplatePick | null>(null);
+  const [videoPromptTemplate, setVideoPromptTemplate] =
+    useState<PromptTemplatePick | null>(null);
+
+  // Design system is meaningful only for the structured/visual surfaces
+  // (prototype, deck, template, and the freeform "other" canvas). The
+  // media surfaces use prompt templates instead — design tokens don't map
+  // onto image/video/audio generations, and the picker just adds noise
+  // there. Keep this list explicit so future tabs declare their intent.
+  const showDesignSystemPicker =
+    tab === 'prototype' ||
+    tab === 'deck' ||
+    tab === 'template' ||
+    tab === 'other';
 
   // When entering the template tab, snap to the first user-saved template
   // if there is one (and we don't already have a valid pick). The template
@@ -187,8 +219,18 @@ export function NewProjectPanel({
 
   function handleCreate() {
     if (!canCreate) return;
-    const primaryDs = selectedDsIds[0] ?? null;
-    const inspirations = selectedDsIds.slice(1);
+    // Media surfaces don't carry a design system pick. Force the primary
+    // and inspiration ids to empty there so the New Project panel can't
+    // accidentally bind a stale DS that the user can no longer see in the
+    // form (the picker is hidden for image/video/audio).
+    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : null;
+    const inspirations = showDesignSystemPicker ? selectedDsIds.slice(1) : [];
+    const promptTemplatePick =
+      tab === 'image'
+        ? imagePromptTemplate
+        : tab === 'video'
+          ? videoPromptTemplate
+          : null;
     const metadata = buildMetadata({
       tab,
       fidelity,
@@ -207,6 +249,7 @@ export function NewProjectPanel({
       audioDuration,
       voice,
       inspirationIds: inspirations,
+      promptTemplate: promptTemplatePick,
     });
     onCreate({
       name: name.trim() || autoName(tab, t),
@@ -275,15 +318,35 @@ export function NewProjectPanel({
           onChange={(e) => setName(e.target.value)}
         />
 
-        <DesignSystemPicker
-          designSystems={designSystems}
-          defaultDesignSystemId={defaultDesignSystemId}
-          selectedIds={selectedDsIds}
-          multi={dsMulti}
-          onChangeMulti={setDsMulti}
-          onChange={setSelectedDsIds}
-          loading={loading}
-        />
+        {showDesignSystemPicker ? (
+          <DesignSystemPicker
+            designSystems={designSystems}
+            defaultDesignSystemId={defaultDesignSystemId}
+            selectedIds={selectedDsIds}
+            multi={dsMulti}
+            onChangeMulti={setDsMulti}
+            onChange={setSelectedDsIds}
+            loading={loading}
+          />
+        ) : null}
+
+        {tab === 'image' ? (
+          <PromptTemplatePicker
+            surface="image"
+            templates={promptTemplates}
+            value={imagePromptTemplate}
+            onChange={setImagePromptTemplate}
+          />
+        ) : null}
+
+        {tab === 'video' ? (
+          <PromptTemplatePicker
+            surface="video"
+            templates={promptTemplates}
+            value={videoPromptTemplate}
+            onChange={setVideoPromptTemplate}
+          />
+        ) : null}
 
         {tab === 'prototype' ? (
           <FidelityPicker value={fidelity} onChange={setFidelity} />
@@ -564,6 +627,302 @@ function TemplatePicker({
         </div>
       )}
     </div>
+  );
+}
+
+/* ============================================================
+   Prompt template picker — for the image/video tabs only.
+   - Trigger card (mirrors the design-system trigger) opens a popover
+     with a search field and a thumbnail-card list filtered by surface.
+   - When a template is picked we lazily fetch the full prompt body via
+     fetchPromptTemplate(...) and drop it into a textarea so the user
+     can tune ("optimize") the wording before clicking Create.
+   - The (possibly edited) body lands in metadata.promptTemplate.prompt
+     and becomes part of the system prompt — the agent treats it as a
+     stylistic + structural reference for the generation request.
+   ============================================================ */
+function PromptTemplatePicker({
+  surface,
+  templates,
+  value,
+  onChange,
+}: {
+  surface: 'image' | 'video';
+  templates: PromptTemplateSummary[];
+  value: PromptTemplatePick | null;
+  onChange: (next: PromptTemplatePick | null) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Last template we tried to pick that failed — kept so the inline
+  // banner can offer a one-click retry without making the user re-find
+  // the card in the popover (which auto-closed on success). Cleared as
+  // soon as a pick succeeds or the user picks a different template.
+  const [lastFailedPick, setLastFailedPick] =
+    useState<PromptTemplateSummary | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  const surfaceScoped = useMemo(
+    () => templates.filter((tpl) => tpl.surface === surface),
+    [templates, surface],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return surfaceScoped;
+    return surfaceScoped.filter((tpl) => {
+      return (
+        tpl.title.toLowerCase().includes(q) ||
+        tpl.summary.toLowerCase().includes(q) ||
+        (tpl.category || '').toLowerCase().includes(q) ||
+        (tpl.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+      );
+    });
+  }, [surfaceScoped, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = window.setTimeout(() => searchRef.current?.focus(), 30);
+    return () => window.clearTimeout(id);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    const id = window.setTimeout(() => {
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  async function pickTemplate(summary: PromptTemplateSummary) {
+    setLoadingId(summary.id);
+    setError(null);
+    try {
+      const detail = await fetchPromptTemplate(summary.surface, summary.id);
+      if (!detail) {
+        setError(t('promptTemplates.fetchError'));
+        setLastFailedPick(summary);
+        return;
+      }
+      onChange({ summary, prompt: detail.prompt });
+      setLastFailedPick(null);
+      setOpen(false);
+      setQuery('');
+    } catch {
+      // fetchPromptTemplate already swallows errors and returns null in
+      // the happy path; this catch is a defensive net for unexpected
+      // throws so the inline banner still surfaces and the user can
+      // retry instead of being stuck on a permanent loading spinner.
+      setError(t('promptTemplates.fetchError'));
+      setLastFailedPick(summary);
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  function clear() {
+    onChange(null);
+    setLastFailedPick(null);
+    setError(null);
+    setOpen(false);
+    setQuery('');
+  }
+
+  const triggerTitle = value?.summary.title ?? t('newproj.promptTemplateNoneTitle');
+  const triggerSub = value
+    ? value.summary.category || value.summary.summary || t('newproj.promptTemplateRefSub')
+    : t('newproj.promptTemplateNoneSub');
+
+  return (
+    <div className="newproj-section ds-picker prompt-template-picker" ref={wrapRef}>
+      <label className="newproj-label">{t('newproj.promptTemplateLabel')}</label>
+      <button
+        type="button"
+        data-testid="prompt-template-trigger"
+        className={`ds-picker-trigger${open ? ' open' : ''}${value ? '' : ' empty'}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <PromptTemplateAvatar summary={value?.summary ?? null} />
+        <span className="ds-picker-meta">
+          <span className="ds-picker-title">{triggerTitle}</span>
+          <span className="ds-picker-sub">{triggerSub}</span>
+        </span>
+        <Icon
+          name="chevron-down"
+          size={14}
+          className="ds-picker-chevron"
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </button>
+      {open ? (
+        <div className="ds-picker-popover" role="listbox">
+          <div className="ds-picker-head">
+            <input
+              ref={searchRef}
+              data-testid="prompt-template-search"
+              className="ds-picker-search"
+              placeholder={t('newproj.promptTemplateSearch')}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <div className="ds-picker-list">
+            <button
+              type="button"
+              role="option"
+              aria-selected={value === null}
+              className={`ds-picker-item${value === null ? ' active' : ''}`}
+              onClick={clear}
+            >
+              <span className="ds-picker-item-avatar">
+                <NoneAvatar />
+              </span>
+              <span className="ds-picker-item-text">
+                <span className="ds-picker-item-title">
+                  {t('newproj.promptTemplateNoneTitle')}
+                </span>
+                <span className="ds-picker-item-sub">
+                  {t('newproj.promptTemplateNoneSub')}
+                </span>
+              </span>
+            </button>
+            {filtered.length === 0 ? (
+              <div className="ds-picker-empty">
+                {surfaceScoped.length === 0
+                  ? t('newproj.promptTemplateEmpty')
+                  : t('promptTemplates.emptyNoMatch')}
+              </div>
+            ) : (
+              filtered.map((tpl) => {
+                const active = value?.summary.id === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    className={`ds-picker-item${active ? ' active' : ''}`}
+                    onClick={() => void pickTemplate(tpl)}
+                    disabled={loadingId === tpl.id}
+                  >
+                    <span className="ds-picker-item-avatar">
+                      <PromptTemplateAvatar summary={tpl} />
+                    </span>
+                    <span className="ds-picker-item-text">
+                      <span className="ds-picker-item-title">
+                        {tpl.title}
+                        {loadingId === tpl.id ? (
+                          <span className="ds-picker-item-badge">
+                            {t('common.loading')}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="ds-picker-item-sub">
+                        {tpl.summary || tpl.category}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
+      {error ? (
+        <div
+          className="prompt-template-error"
+          role="alert"
+          data-testid="prompt-template-error"
+        >
+          <span className="prompt-template-error-msg">{error}</span>
+          {lastFailedPick ? (
+            <button
+              type="button"
+              className="ghost prompt-template-error-retry"
+              data-testid="prompt-template-retry"
+              onClick={() => void pickTemplate(lastFailedPick)}
+              disabled={loadingId === lastFailedPick.id}
+            >
+              {loadingId === lastFailedPick.id
+                ? t('common.loading')
+                : t('promptTemplates.retry')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {value ? (
+        <div className="prompt-template-edit">
+          <div className="prompt-template-edit-head">
+            <span className="prompt-template-edit-label">
+              {t('newproj.promptTemplateBodyLabel')}
+            </span>
+            <span className="prompt-template-edit-hint">
+              {t('newproj.promptTemplateOptimizeHint')}
+            </span>
+          </div>
+          <textarea
+            data-testid="prompt-template-body"
+            className="prompt-template-edit-textarea"
+            value={value.prompt}
+            rows={6}
+            onChange={(e) =>
+              onChange({ summary: value.summary, prompt: e.target.value })
+            }
+          />
+          {value.prompt.trim().length === 0 ? (
+            <div
+              className="prompt-template-edit-empty"
+              data-testid="prompt-template-empty-hint"
+            >
+              {t('newproj.promptTemplateBodyEmpty')}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PromptTemplateAvatar({
+  summary,
+}: {
+  summary: PromptTemplateSummary | null;
+}) {
+  if (!summary) return <NoneAvatar />;
+  if (summary.previewImageUrl) {
+    return (
+      <span className="ds-avatar prompt-template-avatar" aria-hidden>
+        <img
+          src={summary.previewImageUrl}
+          alt=""
+          loading="lazy"
+          draggable={false}
+        />
+      </span>
+    );
+  }
+  return (
+    <span className="ds-avatar prompt-template-avatar fallback" aria-hidden>
+      <Icon name={summary.surface === 'video' ? 'play' : 'image'} size={14} />
+    </span>
   );
 }
 
@@ -1272,6 +1631,7 @@ function buildMetadata(input: {
   audioDuration: number;
   voice: string;
   inspirationIds: string[];
+  promptTemplate: PromptTemplatePick | null;
 }): ProjectMetadata {
   const kind: ProjectKind = input.tab;
   const inspirations = input.inspirationIds.length > 0
@@ -1304,6 +1664,7 @@ function buildMetadata(input: {
       imageModel: input.imageModel,
       imageAspect: input.imageAspect,
       imageStyle: input.imageStyle.trim() || undefined,
+      ...buildPromptTemplateMetadata(input.promptTemplate),
       ...inspirations,
     };
   }
@@ -1313,6 +1674,7 @@ function buildMetadata(input: {
       videoModel: input.videoModel,
       videoAspect: input.videoAspect,
       videoLength: input.videoLength,
+      ...buildPromptTemplateMetadata(input.promptTemplate),
       ...inspirations,
     };
   }
@@ -1327,6 +1689,36 @@ function buildMetadata(input: {
     };
   }
   return { kind: 'other', ...inspirations };
+}
+
+function buildPromptTemplateMetadata(
+  pick: PromptTemplatePick | null,
+): { promptTemplate?: ProjectMetadata['promptTemplate'] } {
+  if (!pick) return {};
+  const trimmed = pick.prompt.trim();
+  if (trimmed.length === 0) return {};
+  const { summary } = pick;
+  return {
+    promptTemplate: {
+      id: summary.id,
+      surface: summary.surface,
+      title: summary.title,
+      prompt: trimmed,
+      summary: summary.summary || undefined,
+      category: summary.category || undefined,
+      tags: summary.tags && summary.tags.length > 0 ? summary.tags : undefined,
+      model: summary.model,
+      aspect: summary.aspect,
+      source: summary.source
+        ? {
+            repo: summary.source.repo,
+            license: summary.source.license,
+            author: summary.source.author,
+            url: summary.source.url,
+          }
+        : undefined,
+    },
+  };
 }
 
 function titleForTab(tab: CreateTab, t: TranslateFn): string {

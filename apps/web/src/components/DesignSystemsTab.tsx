@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
+import {
+  localizeDesignSystemCategory,
+  localizeDesignSystemSummary,
+} from '../i18n/content';
 import type { DesignSystemSummary, Surface } from '../types';
 
 interface Props {
@@ -37,7 +41,7 @@ function surfaceOf(system: DesignSystemSummary): Surface {
 }
 
 export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const [filter, setFilter] = useState('');
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [category, setCategory] = useState<string>('All');
@@ -67,21 +71,26 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
     return surfaceScoped.filter((s) => {
       if (category !== 'All' && (s.category || 'Uncategorized') !== category) return false;
       if (!q) return true;
+      const summary = localizeDesignSystemSummary(locale, s).toLowerCase();
+      const categoryLabel = localizeDesignSystemCategory(
+        locale,
+        s.category || 'Uncategorized',
+      ).toLowerCase();
       return (
         s.title.toLowerCase().includes(q) ||
-        s.summary.toLowerCase().includes(q)
+        s.summary.toLowerCase().includes(q) ||
+        summary.includes(q) ||
+        categoryLabel.includes(q)
       );
     });
-  }, [surfaceScoped, filter, category]);
+  }, [surfaceScoped, filter, category, locale]);
 
-  // The category metadata coming from each design system is authored in
-  // English. We translate the well-known buckets (All / Uncategorized) but
-  // pass the rest through unchanged so user-facing labels stay aligned with
-  // the underlying tags.
+  // Category metadata is authored in English; keep raw values in state for
+  // filtering while localizing the visible labels for the current UI locale.
   const renderCategory = (c: string) => {
     if (c === 'All') return t('ds.categoryAll');
     if (c === 'Uncategorized') return t('ds.categoryUncategorized');
-    return c;
+    return localizeDesignSystemCategory(locale, c);
   };
 
   return (
@@ -144,7 +153,9 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
                       </span>
                     ) : null}
                   </div>
-                  <div className="ds-row-summary">{s.summary || s.category}</div>
+                  <div className="ds-row-summary">
+                    {localizeDesignSystemSummary(locale, s)}
+                  </div>
                 </div>
                 {s.swatches && s.swatches.length > 0 ? (
                   <div className="ds-row-swatches" aria-hidden>

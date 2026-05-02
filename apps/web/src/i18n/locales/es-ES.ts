@@ -73,6 +73,9 @@ export const esES: Dict = {
   'settings.hide': 'Ocultar',
   'settings.model': 'Modelo',
   'settings.baseUrl': 'URL base',
+  'settings.maxTokens': 'Tokens máx. (opcional)',
+  'settings.maxTokensHint':
+    'Tope para la longitud de la respuesta. Cada modelo tiene un valor por defecto ajustado (visible en el placeholder); déjalo vacío para usarlo o introduce un número para anularlo.',
   'settings.apiHint':
     'Las llamadas van directamente desde este navegador a la URL base que indiques. Sin proxy. La clave nunca sale de localStorage.',
   'settings.skipForNow': 'Omitir por ahora',
@@ -100,6 +103,16 @@ export const esES: Dict = {
   'settings.mediaProviderClear': 'Limpiar',
   'settings.mediaProviderPlaceholder': 'Pega la clave de API',
   'settings.mediaProviderBaseUrlPlaceholder': 'Sobrescribir URL base por defecto',
+  'settings.about': 'Acerca de',
+  'settings.aboutHint': 'Versión y detalles de ejecución',
+  'settings.appVersion': 'Versión',
+  'settings.appChannel': 'Canal',
+  'settings.appRuntime': 'Ejecución',
+  'settings.appPlatform': 'Plataforma',
+  'settings.appArchitecture': 'Arquitectura',
+  'settings.runtimePackaged': 'App empaquetada',
+  'settings.runtimeDevelopment': 'Desarrollo',
+  'settings.versionUnavailable': 'Los detalles de versión no están disponibles mientras el daemon está offline.',
 
   'entry.tabDesigns': 'Diseños',
   'entry.tabExamples': 'Ejemplos',
@@ -108,8 +121,8 @@ export const esES: Dict = {
   'entry.openSettingsAria': 'Abrir ajustes',
   'entry.resizeAria': 'Redimensionar barra lateral',
   'entry.loadingWorkspace': 'Cargando espacio de trabajo…',
-  'entry.tabImageTemplates': 'Prompts de imagen',
-  'entry.tabVideoTemplates': 'Prompts de vídeo',
+  'entry.tabImageTemplates': 'Plantillas de imagen',
+  'entry.tabVideoTemplates': 'Plantillas de vídeo',
   'promptTemplates.searchPlaceholder': 'Buscar plantillas…',
   'promptTemplates.countLabel': '{n} resultados',
   'promptTemplates.emptyImage': 'Aún no hay plantillas de prompt de imagen instaladas.',
@@ -127,6 +140,7 @@ export const esES: Dict = {
   'promptTemplates.openSource': 'Ver original',
   'promptTemplates.openFullscreen': 'Abrir vista previa en pantalla completa',
   'promptTemplates.closeFullscreen': 'Cerrar vista previa en pantalla completa',
+  'promptTemplates.retry': 'Reintentar',
 
   'newproj.tabPrototype': 'Prototipo',
   'newproj.tabDeck': 'Presentación',
@@ -197,6 +211,17 @@ export const esES: Dict = {
   'newproj.audioDurationSeconds': '{n} s',
   'newproj.voiceLabel': 'Voz',
   'newproj.voicePlaceholder': 'Id de voz del proveedor, opcional',
+  'newproj.promptTemplateLabel': 'Plantilla de referencia',
+  'newproj.promptTemplateNoneTitle': 'Ninguna — escribe la tuya',
+  'newproj.promptTemplateNoneSub': 'Sáltate la galería y describe tu propio briefing',
+  'newproj.promptTemplateRefSub': 'Plantilla de referencia',
+  'newproj.promptTemplateSearch': 'Buscar plantillas…',
+  'newproj.promptTemplateEmpty': 'Aún no hay plantillas para este formato.',
+  'newproj.promptTemplateBodyLabel': 'Prompt (editable)',
+  'newproj.promptTemplateOptimizeHint':
+    'Edita lo que quieras — tus cambios se incorporan al briefing del agente.',
+  'newproj.promptTemplateBodyEmpty':
+    'Cuerpo vacío — el agente no recibirá ninguna referencia de plantilla.',
 
   'designs.subRecent': 'Recientes',
   'designs.subYours': 'Tus diseños',
@@ -392,7 +417,7 @@ export const esES: Dict = {
   'designFiles.download': 'Descargar',
   'designFiles.dropTitle': '⤓ Suelta archivos aquí',
   'designFiles.dropDesc':
-    'Imágenes, documentos, referencias, enlaces de Figma o carpetas: Claude los usará como contexto.',
+    'Imágenes, documentos, referencias o carpetas: el agente los usará como contexto.',
   'designFiles.upload.title': 'Subir archivos',
   'designFiles.paste.title': 'Pegar texto como archivo',
   'designFiles.upload.label': 'Subir',

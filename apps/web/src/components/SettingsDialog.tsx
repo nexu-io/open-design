@@ -10,7 +10,12 @@ import {
   renderModelOptions,
 } from './modelOptions';
 import { KNOWN_PROVIDERS } from '../state/config';
-import type { AgentInfo, AppConfig, ExecMode } from '../types';
+import {
+  MAX_MAX_TOKENS,
+  MIN_MAX_TOKENS,
+  modelMaxTokensDefault,
+} from '../state/maxTokens';
+import type { AgentInfo, AppConfig, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 
@@ -18,6 +23,7 @@ interface Props {
   initial: AppConfig;
   agents: AgentInfo[];
   daemonLive: boolean;
+  appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
@@ -35,6 +41,7 @@ export function SettingsDialog({
   initial,
   agents,
   daemonLive,
+  appVersionInfo,
   welcome,
   onSave,
   onClose,
@@ -44,7 +51,7 @@ export function SettingsDialog({
   const [cfg, setCfg] = useState<AppConfig>(initial);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<'execution' | 'media' | 'language'>('execution');
+  const [activeSection, setActiveSection] = useState<'execution' | 'media' | 'language' | 'about'>('execution');
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
@@ -151,6 +158,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.language')}</strong>
                 <small>{t('settings.languageHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'about' ? ' active' : ''}`}
+              onClick={() => setActiveSection('about')}
+            >
+              <Icon name="settings" size={18} />
+              <span>
+                <strong>{t('settings.about')}</strong>
+                <small>{t('settings.aboutHint')}</small>
               </span>
             </button>
           </aside>
@@ -432,6 +450,27 @@ export function SettingsDialog({
                   ))}
                 </select>
               </label>
+              <label className="field">
+                <span className="field-label">{t('settings.maxTokens')}</span>
+                <input
+                  type="number"
+                  min={MIN_MAX_TOKENS}
+                  max={MAX_MAX_TOKENS}
+                  step={MIN_MAX_TOKENS}
+                  placeholder={String(modelMaxTokensDefault(cfg.model))}
+                  value={cfg.maxTokens ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (raw === '') {
+                      setCfg({ ...cfg, maxTokens: undefined });
+                      return;
+                    }
+                    const val = parseInt(raw, 10);
+                    setCfg({ ...cfg, maxTokens: Number.isFinite(val) ? val : undefined });
+                  }}
+                />
+                <p className="hint">{t('settings.maxTokensHint')}</p>
+              </label>
               <p className="hint">{t('settings.apiHint')}</p>
             </section>
           )}
@@ -475,7 +514,8 @@ export function SettingsDialog({
                     bottom: window.innerHeight - languageMenuRect.top + 6,
                     left: languageMenuRect.left,
                     width: languageMenuRect.width,
-                  }}
+                    '--menu-available-h': `${languageMenuRect.top - 6}px`,
+                  } as React.CSSProperties}
                 >
                   {LOCALES.map((code) => {
                     const active = locale === code;
@@ -507,6 +547,47 @@ export function SettingsDialog({
               ) : null}
             </div>
           </section>
+          ) : null}
+
+          {activeSection === 'about' ? (
+            <section className="settings-section">
+              <div className="section-head">
+                <div>
+                  <h3>{t('settings.about')}</h3>
+                  <p className="hint">{t('settings.aboutHint')}</p>
+                </div>
+              </div>
+              {appVersionInfo ? (
+                <dl className="settings-about-list">
+                  <div>
+                    <dt>{t('settings.appVersion')}</dt>
+                    <dd>{appVersionInfo.version}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appChannel')}</dt>
+                    <dd>{appVersionInfo.channel}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appRuntime')}</dt>
+                    <dd>
+                      {appVersionInfo.packaged
+                        ? t('settings.runtimePackaged')
+                        : t('settings.runtimeDevelopment')}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appPlatform')}</dt>
+                    <dd>{appVersionInfo.platform}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appArchitecture')}</dt>
+                    <dd>{appVersionInfo.arch}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <div className="empty-card">{t('settings.versionUnavailable')}</div>
+              )}
+            </section>
           ) : null}
           </div>
         </div>

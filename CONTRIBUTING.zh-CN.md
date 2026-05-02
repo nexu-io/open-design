@@ -4,7 +4,7 @@
 
 这份指南会告诉你：每种贡献该往哪里看、合并之前 PR 需要过哪些线。
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>简体中文</b> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -16,7 +16,7 @@
 | 让 OD 说一种新品牌的视觉语言 | 一套 **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | 一个 Markdown 文件 |
 | 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | 一个数组里 ~10 行 |
 | 加功能、修 bug、从 [`open-codesign`][ocod] 移植一个 UX 模式 | 代码 | `apps/web/src/`、`apps/daemon/` | 普通 PR |
-| 改文档、补中文翻译、修错别字 | 文档 | `README.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
+| 改文档、补德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
 
 不确定自己想做的属于哪一桶？[先开 issue / discussion](https://github.com/nexu-io/open-design/issues/new)，我们告诉你该改哪个面。
 
@@ -189,6 +189,28 @@ design-systems/your-brand/
 1. **真的跑通一次端到端会话** —— 把 daemon 日志贴在 PR 描述里，证明它流出了一个 artifact。
 2. **更新 [`docs/agent-adapters.md`](docs/agent-adapters.md)**，写清楚这个 CLI 的怪癖（要不要 key 文件？支不支持图片输入？非交互模式的 flag 是什么？）。
 3. **README 的「Supported coding agents」表里加一行**。
+
+---
+
+## 更新模型 `max_tokens` 元数据
+
+API 模式下每次请求都会带 `max_tokens` 给上游。Web 端通过 [`apps/web/src/state/maxTokens.ts`](apps/web/src/state/maxTokens.ts) 的三层 lookup 决定这个数字：
+
+1. 用户在 Settings 里手填的覆盖值（如果有）。
+2. 否则用 [`apps/web/src/state/litellm-models.json`](apps/web/src/state/litellm-models.json) 里的 per-model 默认 —— 这是从 [BerriAI/litellm][litellm] 的 `model_prices_and_context_window.json`（MIT）摘的一份切片，覆盖约 2000 个 chat 模型，包括 Anthropic、OpenAI、DeepSeek、Groq、Together、Mistral、Gemini、Bedrock、Vertex、OpenRouter 等。
+3. 都 miss 就走 `FALLBACK_MAX_TOKENS = 8192`。
+
+新模型上线想吃到默认值，重新生成 vendored JSON：
+
+```bash
+node --experimental-strip-types scripts/sync-litellm-models.ts
+```
+
+脚本会拉 LiteLLM 的最新 catalog、过滤 `mode: 'chat'`、把每条投影到 `max_output_tokens`（缺失时 fallback 到 `max_tokens`），写成排好序的快照。把重新生成的 `litellm-models.json` 跟着触发它的 PR 一起提。
+
+`maxTokens.ts` 里的 OVERRIDES 表只用于 LiteLLM 没收 / 收错的 model id —— 比如 `mimo-v2.5-pro`（LiteLLM 只收了 `openrouter/xiaomi/...` 和 `novita/xiaomimimo/...` 两个 alias，model id 跟小米直接 API 用的不一样）。表要保持小：凡是 LiteLLM 已经对的，**不要**抄进来。
+
+[litellm]: https://github.com/BerriAI/litellm
 
 ---
 

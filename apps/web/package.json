@@ -12,6 +12,7 @@
   },
   "files": [
     ".next",
+    "!.next/cache",
     "app",
     "dist",
     "next.config.ts",

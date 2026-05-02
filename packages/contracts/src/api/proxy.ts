@@ -11,6 +11,9 @@ export interface ProxyStreamRequest {
   model: string;
   systemPrompt?: string;
   messages: ProxyMessage[];
+  // Caps the upstream completion length. Defaults to 8192 when unset so
+  // pre-existing clients keep their old behavior.
+  maxTokens?: number;
 }
 
 export interface ProxyStreamStartPayload {

@@ -30,6 +30,7 @@ import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
+import { loadCraftSections } from './craft.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -53,6 +54,7 @@ import {
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
+import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   deleteConversation,
   deleteProject as dbDeleteProject,
@@ -127,9 +129,18 @@ function resolveProcessResourcesPath() {
   // Infer the macOS app Resources directory from that bundled Node path.
   const resourcesMarker = `${path.sep}Contents${path.sep}Resources${path.sep}`;
   const markerIndex = process.execPath.indexOf(resourcesMarker);
-  if (markerIndex === -1) return null;
+  if (markerIndex !== -1) {
+    return process.execPath.slice(0, markerIndex + resourcesMarker.length - 1);
+  }
 
-  return process.execPath.slice(0, markerIndex + resourcesMarker.length - 1);
+  const normalizedExecPath = process.execPath.toLowerCase();
+  const windowsResourceBinMarker = `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
+  const windowsMarkerIndex = normalizedExecPath.indexOf(windowsResourceBinMarker);
+  if (windowsMarkerIndex !== -1) {
+    return process.execPath.slice(0, windowsMarkerIndex + `${path.sep}resources`.length);
+  }
+
+  return null;
 }
 
 export function resolveDaemonResourceRoot({
@@ -170,6 +181,11 @@ const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'design-systems',
   path.join(PROJECT_ROOT, 'design-systems'),
+);
+const CRAFT_DIR = resolveDaemonResourceDir(
+  DAEMON_RESOURCE_ROOT,
+  'craft',
+  path.join(PROJECT_ROOT, 'craft'),
 );
 const FRAMES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
@@ -447,6 +463,7 @@ export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INT
 }
 
 export async function startServer({ port = 7456, returnServer = false } = {}) {
+  let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
@@ -464,8 +481,14 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     app.use(express.static(STATIC_DIR));
   }
 
-  app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, version: '0.1.0' });
+  app.get('/api/health', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    res.json({ ok: true, version: versionInfo.version });
+  });
+
+  app.get('/api/version', async (_req, res) => {
+    const version = await readCurrentAppVersionInfo();
+    res.json({ version });
   });
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -1335,7 +1358,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
-    if (!isLocalSameOrigin(req, port)) {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({
         error: 'cross-origin request rejected: media generation is restricted to the local UI / CLI',
       });
@@ -1417,7 +1440,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
-    if (!isLocalSameOrigin(req, port)) {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
@@ -1467,7 +1490,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.get('/api/projects/:id/media/tasks', (req, res) => {
-    if (!isLocalSameOrigin(req, port)) {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
@@ -1543,12 +1566,24 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     let skillBody;
     let skillName;
     let skillMode;
+    let skillCraftRequires = [];
     if (effectiveSkillId) {
       const skill = (await listSkills(SKILLS_DIR)).find((s) => s.id === effectiveSkillId);
       if (skill) {
         skillBody = skill.body;
         skillName = skill.name;
         skillMode = skill.mode;
+        if (Array.isArray(skill.craftRequires)) skillCraftRequires = skill.craftRequires;
+      }
+    }
+
+    let craftBody;
+    let craftSections;
+    if (skillCraftRequires.length > 0) {
+      const loaded = await loadCraftSections(CRAFT_DIR, skillCraftRequires);
+      if (loaded.body) {
+        craftBody = loaded.body;
+        craftSections = loaded.sections;
       }
     }
 
@@ -1571,6 +1606,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       skillMode,
       designSystemBody,
       designSystemTitle,
+      craftBody,
+      craftSections,
       metadata,
       template,
     });
@@ -1732,7 +1769,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
     const odMediaEnv = {
       OD_BIN,
-      OD_DAEMON_URL: `http://127.0.0.1:${port}`,
+      OD_DAEMON_URL: `http://127.0.0.1:${resolvedPort}`,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
             OD_PROJECT_ID: projectId,
@@ -1926,7 +1963,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
@@ -1942,294 +1979,185 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
     const payload = {
       model,
-      max_tokens: 8192,
+      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      messages: Array.isArray(messages) ? messages : [],
       stream: true,
-      system: systemPrompt || '',
-      messages: Array.isArray(messages)
-        ? messages
-          .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-          .map((m) => ({ role: m.role, content: m.content }))
-        : [],
     };
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payload.system = systemPrompt;
+    }
 
     const sse = createSseResponse(res);
-    const send = sse.send;
-
-    let upstream;
     try {
-      upstream = await fetch(url, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
-          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
       });
-    } catch (fetchErr) {
-      send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', `fetch failed: ${fetchErr.message}`, { retryable: true }));
-      return sse.end();
-    }
 
-    if (!upstream.ok) {
-      const errText = await upstream.text().catch(() => '');
-      const safeErr = redactAuthTokens(errText.slice(0, 500));
-      console.error(`[proxy:anthropic] upstream ${upstream.status}: ${safeErr.slice(0, 200)}`);
-      send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', `upstream ${upstream.status}: ${safeErr}`, { retryable: upstream.status >= 500 }));
-      return sse.end();
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+        sse.send('error', { message: `Upstream error: ${response.status}`, details: errorText });
+        return sse.end();
+      }
 
-    send('start', { model });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    const reader = upstream.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      let match;
-      while ((match = buf.match(/\r?\n\r?\n/)) && match.index != null) {
-        const frame = buf.slice(0, match.index);
-        buf = buf.slice(match.index + match[0].length);
-        const raw = frame
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart())
-          .join('\n')
-          .trim();
-        if (!raw) continue;
-        if (raw === '[DONE]') {
-          send('end', {});
-          return sse.end();
-        }
-        try {
-          const chunk = JSON.parse(raw);
-          if (chunk.type === 'content_block_delta') {
-            const text = chunk.delta?.text ?? chunk.delta?.partial_json ?? '';
-            if (text) send('delta', { text });
-          } else if (chunk.type === 'message_delta') {
-            const text = chunk.delta?.text ?? '';
-            if (text) send('delta', { text });
-          } else if (chunk.type === 'message_stop') {
-            send('end', {});
-            return sse.end();
-          } else if (chunk.type === 'error') {
-            send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', chunk.error?.message || 'upstream error', { retryable: false }));
-            return sse.end();
-          } else if (process.env.NODE_ENV === 'development') {
-            // Anthropic-compatible providers sometimes add vendor-specific
-            // events. Unknown non-text events are ignored but surfaced in dev
-            // logs to make provider compatibility issues easier to diagnose.
-            console.warn(`[proxy:anthropic] skipped upstream event type=${chunk.type || 'unknown'}`);
-          }
-        } catch {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[proxy:anthropic] skipped malformed upstream SSE frame');
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            const event = line.slice(7).trim();
+            const dataLine = lines[lines.indexOf(line) + 1];
+            if (dataLine && dataLine.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(dataLine.slice(6));
+                sse.send(event, data);
+              } catch (e) {
+                // ignore parse errors for partial chunks
+              }
+            }
           }
         }
       }
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:anthropic] internal error: ${err.message}`);
+      sse.send('error', { message: err.message });
+      sse.end();
     }
-
-    send('end', {});
-    sse.end();
   });
 
-  app.post('/api/proxy/stream', async (req, res) => {
+  app.post('/api/proxy/openai/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
 
-    // Validate baseUrl — only allow http/https and block internal IPs (SSRF).
     const validated = validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
       return sendApiError(res, validated.forbidden ? 403 : 400, validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST', validated.error);
     }
 
-    // Build the upstream URL. If the base URL already ends with /v1 (or
-    // /v1/), append /chat/completions directly. Otherwise append
-    // /v1/chat/completions for providers that expect a versioned prefix.
-    let url;
     const clean = baseUrl.replace(/\/+$/, '');
-    if (/\/v\d+$/.test(clean)) {
-      url = clean + '/chat/completions';
-    } else {
-      url = clean + '/v1/chat/completions';
-    }
+    const url = /\/v\d+$/.test(clean) ? `${clean}/chat/completions` : `${clean}/v1/chat/completions`;
+    console.log(`[proxy:openai] ${req.method} ${validated.parsed.hostname} model=${model}`);
 
-    // Force MiMo to behave as a pure text generator (no tool calls)
-    const isMiMo = model.toLowerCase().startsWith('mimo');
-    console.log(`[proxy] ${req.method} ${validated.parsed.hostname} model=${model} miMo=${isMiMo}`);
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
 
     const payload = {
       model,
-      max_tokens: 8192,
+      messages: payloadMessages,
+      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
-      ...(isMiMo ? { tool_choice: 'none', tools: [] } : {}),
-      messages: [
-        { role: 'system', content: systemPrompt || '' },
-        ...(Array.isArray(messages) ? messages : []),
-      ],
     };
-    const body = JSON.stringify(payload);
 
     const sse = createSseResponse(res);
-    const send = sse.send;
-
-    let upstream;
     try {
-      upstream = await fetch(url, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
-        body,
+        body: JSON.stringify(payload),
       });
-    } catch (fetchErr) {
-      send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', `fetch failed: ${fetchErr.message}`, { retryable: true }));
-      return sse.end();
-    }
 
-    if (!upstream.ok) {
-      const errText = await upstream.text().catch(() => '');
-      const safeErr = redactAuthTokens(errText.slice(0, 500));
-      console.error(`[proxy] upstream ${upstream.status}: ${safeErr.slice(0, 200)}`);
-      send('error', createSseErrorPayload('UPSTREAM_UNAVAILABLE', `upstream ${upstream.status}: ${safeErr}`, { retryable: upstream.status >= 500 }));
-      return sse.end();
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+        sse.send('error', { message: `Upstream error: ${response.status}`, details: errorText });
+        return sse.end();
+      }
 
-    send('start', { model });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    const reader = upstream.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = buf.indexOf('\n')) !== -1) {
-        const line = buf.slice(0, idx);
-        buf = buf.slice(idx + 1);
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if (payload === '[DONE]') {
-          send('end', {});
-          return sse.end();
-        }
-        try {
-          const chunk = JSON.parse(payload);
-          const delta = chunk.choices?.[0]?.delta;
-          if (delta) {
-            let text = delta.content ?? '';
-            if (text) {
-              send('delta', { text });
-            }
-            // Structured tool_calls from the API (not in content)
-            if (Array.isArray(delta.tool_calls)) {
-              for (const tc of delta.tool_calls) {
-                const fn = tc.function;
-                if (fn?.name) {
-                  send('delta', { text: `\n\n[${fn.name}]\n` });
-                }
-              }
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') break;
+            try {
+              const data = JSON.parse(dataStr);
+              sse.send('message', data);
+            } catch (e) {
+              // ignore parse errors for partial chunks
             }
           }
-        } catch {
-          // skip malformed chunks
         }
       }
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:openai] internal error: ${err.message}`);
+      sse.send('error', { message: err.message });
+      sse.end();
     }
-
-    send('end', {});
-    sse.end();
   });
 
-  // SPA fallback for the built web app. Put this LAST so it never shadows
-  // /api routes. Only active when out/ exists (production mode).
-  //
-  // Next.js's static export writes a single shell HTML at out/index.html
-  // for the optional catch-all route (`app/[[...slug]]/page.tsx`); project
-  // IDs aren't pre-rendered, so any unknown deep link (e.g. /projects/abc)
-  // needs to fall back to that shell so the client router can pick the
-  // right view at runtime.
-  if (fs.existsSync(STATIC_DIR)) {
-    app.get(/^\/(?!api\/|artifacts\/|frames\/).*/, (_req, res) => {
-      res.sendFile(path.join(STATIC_DIR, 'index.html'));
-    });
-  }
-
-  return new Promise((resolve) => {
-    const server = app.listen(port, '127.0.0.1', () => {
-      const address = server.address();
-      const actualPort = typeof address === 'object' && address ? address.port : port;
-      const url = `http://127.0.0.1:${actualPort}`;
-      resolve(returnServer ? { url, server } : url);
-    });
+  const server = app.listen(port, () => {
+    resolvedPort = server.address().port;
+    if (!returnServer) {
+      console.log(`[od] daemon listening on http://127.0.0.1:${resolvedPort}`);
+    }
   });
-}
 
-// Assemble a skill's example deck from its seed template + a slides
-// snippet. The seed contains the full CSS / WebGL / nav-JS shell with a
-// `<!-- SLIDES_HERE -->` marker; the snippet contributes the actual
-// `<section class="slide ...">` content. We also patch the placeholder
-// `<title>` so the iframe's tab name reads as the skill, not the
-// "[必填] 替换为 PPT 标题" stub.
-function assembleExample(tplHtml, slidesHtml, skillName) {
-  const slidesMarker = /<!--\s*SLIDES_HERE\s*-->/i;
-  const titleTag = /<title>[^<]*<\/title>/i;
-  const safeTitle = `${skillName || 'Magazine Web PPT'} · Example Deck`;
-  const withSlides = slidesMarker.test(tplHtml)
-    ? tplHtml.replace(slidesMarker, slidesHtml)
-    : tplHtml.replace(/<\/body>/i, `${slidesHtml}</body>`);
-  return titleTag.test(withSlides)
-    ? withSlides.replace(titleTag, `<title>${escapeHtml(safeTitle)}</title>`)
-    : withSlides;
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function isLocalSameOrigin(req, port) {
-  const allowedHosts = new Set([
-    `127.0.0.1:${port}`,
-    `localhost:${port}`,
-    `[::1]:${port}`,
-  ]);
-  const allowedOrigins = new Set([
-    `http://127.0.0.1:${port}`,
-    `http://localhost:${port}`,
-    `http://[::1]:${port}`,
-  ]);
-  const host = String(req.headers.host || '');
-  if (!allowedHosts.has(host)) return false;
-  const origin = req.headers.origin;
-  if (origin == null || origin === '') return true;
-  return allowedOrigins.has(String(origin));
-}
-
-function sanitizeSlug(s) {
-  return String(s)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'artifact';
+  if (returnServer) return server;
 }
 
 function randomId() {
   return randomUUID();
+}
+
+function sanitizeSlug(text) {
+  return String(text)
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function assembleExample(templateHtml, slidesHtml, title) {
+  return templateHtml
+    .replace('<!-- SLIDES_HERE -->', slidesHtml)
+    .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
+}
+
+function isLocalSameOrigin(req, port) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // Direct non-browser calls are trusted
+  try {
+    const url = new URL(origin);
+    return (
+      (url.hostname === '127.0.0.1' || url.hostname === 'localhost') &&
+      url.port === String(port)
+    );
+  } catch {
+    return false;
+  }
 }

@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
+import {
+  localizePromptTemplateCategory,
+  localizePromptTemplateSummary,
+} from '../i18n/content';
 import type { PromptTemplateSummary } from '../types';
 import { Icon } from './Icon';
 
@@ -15,7 +19,7 @@ interface Props {
 // images on CMS / Cloudflare Stream, both public). Each card opens a
 // preview modal with the full prompt body and attribution.
 export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const [filter, setFilter] = useState('');
   const [category, setCategory] = useState<string>('All');
 
@@ -37,13 +41,18 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
         return false;
       }
       if (!q) return true;
+      const localized = localizePromptTemplateSummary(locale, tpl);
       return (
         tpl.title.toLowerCase().includes(q)
         || tpl.summary.toLowerCase().includes(q)
         || (tpl.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+        || localized.title.toLowerCase().includes(q)
+        || localized.summary.toLowerCase().includes(q)
+        || localized.category.toLowerCase().includes(q)
+        || (localized.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
       );
     });
-  }, [surfaceScoped, filter, category]);
+  }, [surfaceScoped, filter, category, locale]);
 
   if (surfaceScoped.length === 0) {
     return (
@@ -66,7 +75,7 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           {categories.map((c) => (
             <option key={c} value={c}>
-              {c === 'All' ? t('common.all') : c}
+              {c === 'All' ? t('common.all') : localizePromptTemplateCategory(locale, c)}
             </option>
           ))}
         </select>
@@ -78,13 +87,16 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
         <div className="tab-empty">{t('promptTemplates.emptyNoMatch')}</div>
       ) : (
         <div className="prompt-templates-grid">
-          {filtered.map((tpl) => (
-            <PromptTemplateCard
-              key={tpl.id}
-              tpl={tpl}
-              onPreview={() => onPreview(tpl)}
-            />
-          ))}
+          {filtered.map((tpl) => {
+            const localized = localizePromptTemplateSummary(locale, tpl);
+            return (
+              <PromptTemplateCard
+                key={tpl.id}
+                tpl={localized}
+                onPreview={() => onPreview(localized)}
+              />
+            );
+          })}
         </div>
       )}
       <div className="prompt-templates-footer">

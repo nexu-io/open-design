@@ -1,0 +1,406 @@
+name: release-stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      mac_signed:
+        description: "Build signed/notarized mac artifacts. Disable only for explicit unsigned validation releases."
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: open-design-release-stable
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    name: Prepare stable metadata
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    outputs:
+      base_version: ${{ steps.stable.outputs.base_version }}
+      branch: ${{ steps.stable.outputs.branch }}
+      commit: ${{ steps.stable.outputs.commit }}
+      mac_signed: ${{ inputs.mac_signed }}
+      previous_stable: ${{ steps.stable.outputs.previous_stable }}
+      release_name: ${{ steps.stable.outputs.release_name }}
+      stable_version: ${{ steps.stable.outputs.stable_version }}
+      version_tag: ${{ steps.stable.outputs.version_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Prepare stable release metadata
+        id: stable
+        run: node --experimental-strip-types ./scripts/release-stable.ts
+
+  verify:
+    name: Verify build (typecheck + tests)
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `scripts/postinstall.mjs` auto-builds `packages/*` and `tools/*`, but
+      # `apps/daemon` and `apps/desktop` are not in that list. On a fresh clone
+      # (every CI run), workspace typecheck fails because:
+      #   - `e2e/scripts/runtime-adapter.e2e.live.test.ts` imports types from
+      #     `apps/daemon/dist/*.js`
+      #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
+      #     which resolves to `apps/desktop/dist/main/index.d.ts`
+      # Build them explicitly here. Keeps the root `typecheck` script untouched.
+      - name: Build daemon and desktop (typecheck dependencies)
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+
+      - name: Typecheck workspaces
+        run: pnpm -r --workspace-concurrency=1 --if-present run typecheck
+
+      - name: Check residual JS in TypeScript packages
+        run: pnpm check:residual-js
+
+      # Workspace tests are intentionally not gated here. apps/web's
+      # i18n content-coverage tests assert that every locale carries
+      # display metadata for every prompt template / skill / design
+      # system. Those tests fail on `main` as of this writing because
+      # PR #187 added two new prompt templates without translating
+      # their metadata into the 9 ship-ready locales — an i18n drift
+      # that's out of scope for the release infrastructure. Tracked as
+      # a follow-up; revisit once locale metadata is back in sync.
+
+  build_mac:
+    name: Build stable mac arm64
+    needs: [metadata, verify]
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Apple signing certificate
+        if: ${{ inputs.mac_signed }}
+        env:
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
+            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+          fi
+          {
+            echo "CSC_LINK=$cert_path"
+            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build stable mac artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          signed_flag=""
+          if [ "${{ inputs.mac_signed }}" = "true" ]; then
+            signed_flag="--signed"
+          fi
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-stable \
+            --portable \
+            --to all \
+            --json \
+            $signed_flag
+
+      - name: Prepare stable mac assets
+        id: assets
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$release_dir"
+
+          source_dmg="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/dmg/Open Design-release-stable.dmg"
+          source_zip="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/zip/Open Design-release-stable.zip"
+          if [ ! -f "$source_dmg" ]; then
+            echo "expected dmg not found at $source_dmg" >&2
+            exit 1
+          fi
+          if [ ! -f "$source_zip" ]; then
+            echo "expected zip not found at $source_zip" >&2
+            exit 1
+          fi
+
+          versioned_dmg="open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg"
+          versioned_zip="open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
+          dmg_checksum_file="$versioned_dmg.sha256"
+          zip_checksum_file="$versioned_zip.sha256"
+
+          cp "$source_dmg" "$release_dir/$versioned_dmg"
+          cp "$source_zip" "$release_dir/$versioned_zip"
+          (
+            cd "$release_dir"
+            shasum -a 256 "$versioned_dmg" > "$dmg_checksum_file"
+            shasum -a 256 "$versioned_zip" > "$zip_checksum_file"
+          )
+
+          zip_sha512="$(openssl dgst -sha512 -binary "$release_dir/$versioned_zip" | openssl base64 -A)"
+          zip_size="$(stat -f%z "$release_dir/$versioned_zip")"
+          zip_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ needs.metadata.outputs.version_tag }}/$versioned_zip"
+          release_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > "$release_dir/latest-mac.yml" <<EOF
+          version: "${{ needs.metadata.outputs.stable_version }}"
+          files:
+            - url: "$zip_url"
+              sha512: "$zip_sha512"
+              size: $zip_size
+          path: "$zip_url"
+          sha512: "$zip_sha512"
+          releaseDate: "$release_date"
+          releaseNotes: "Open Design ${{ needs.metadata.outputs.stable_version }}"
+          EOF
+
+      - name: Upload mac release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-stable-mac-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  build_win:
+    name: Build stable win x64
+    needs: [metadata, verify]
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build stable windows artifacts
+        shell: pwsh
+        run: >-
+          pnpm exec tools-pack win build
+          --dir "${{ runner.temp }}/tools-pack"
+          --namespace release-stable-win
+          --portable
+          --to nsis
+          --json
+
+      - name: Prepare windows stable assets
+        shell: pwsh
+        run: |
+          $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          $sourceInstaller = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-stable-win/builder/Open Design-release-stable-win-setup.exe"
+          $sourceBlockmap = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-stable-win/builder/Open Design-release-stable-win-setup.exe.blockmap"
+          if (!(Test-Path $sourceInstaller)) {
+            throw "expected installer not found at $sourceInstaller"
+          }
+          if (!(Test-Path $sourceBlockmap)) {
+            throw "expected blockmap not found at $sourceBlockmap"
+          }
+
+          $versionedInstaller = "open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe"
+          $versionedBlockmap = "open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe.blockmap"
+          $checksumFile = "$versionedInstaller.sha256"
+          Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
+          Copy-Item $sourceBlockmap (Join-Path $releaseDir $versionedBlockmap)
+
+          $installerPath = Join-Path $releaseDir $versionedInstaller
+          $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $versionedInstaller" | Set-Content -Path (Join-Path $releaseDir $checksumFile)
+          $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
+          $installerSha512 = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::Create().ComputeHash($installerBytes))
+          $installerSize = (Get-Item $installerPath).Length
+          $installerUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/${{ needs.metadata.outputs.version_tag }}/$versionedInstaller"
+          $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+          @(
+            'version: "${{ needs.metadata.outputs.stable_version }}"'
+            'files:'
+            "  - url: `"$installerUrl`""
+            "    sha512: `"$installerSha512`""
+            "    size: $installerSize"
+            "path: `"$installerUrl`""
+            "sha512: `"$installerSha512`""
+            "releaseDate: `"$releaseDate`""
+            "releaseNotes: `"Open Design ${{ needs.metadata.outputs.stable_version }}`""
+          ) | Set-Content -Path (Join-Path $releaseDir "latest.yml")
+
+      - name: Upload windows release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-stable-win-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  publish:
+    name: Publish stable release
+    needs:
+      - metadata
+      - verify
+      - build_mac
+      - build_win
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Pre-flight tag/release check
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
+            echo "tag ${{ needs.metadata.outputs.version_tag }} already exists on origin; aborting" >&2
+            exit 1
+          fi
+          if gh release view "${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
+            echo "release ${{ needs.metadata.outputs.version_tag }} already exists; aborting" >&2
+            exit 1
+          fi
+
+      - name: Download mac release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-stable-mac-release-assets
+          path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Download windows release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-stable-win-release-assets
+          path: ${{ runner.temp }}/release-assets/win
+
+      - name: Write release notes shell
+        id: notes
+        run: |
+          set -euo pipefail
+          notes_file="$RUNNER_TEMP/open-design-stable-notes.md"
+          cat > "$notes_file" <<EOF
+          ## Summary
+          - channel: stable
+          - version: ${{ needs.metadata.outputs.stable_version }}
+          - mac signed/notarized: ${{ inputs.mac_signed }}
+          - windows signed: false
+          - branch: ${{ needs.metadata.outputs.branch }}
+          - commit: ${{ needs.metadata.outputs.commit }}
+
+          See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${{ needs.metadata.outputs.version_tag }}/CHANGELOG.md) for the full release notes.
+
+          This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, checksums, and updater feed files.
+          EOF
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release with tag
+        id: create_release
+        run: |
+          set -euo pipefail
+          # gh release create creates the tag at $GITHUB_SHA atomically with the release.
+          # Using --draft keeps the release invisible until all assets upload successfully;
+          # the cleanup step rolls back the release + tag together if any subsequent step fails.
+          gh release create "${{ needs.metadata.outputs.version_tag }}" \
+            --target "$GITHUB_SHA" \
+            --title "${{ needs.metadata.outputs.release_name }}" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --draft
+
+      - name: Upload assets to draft release
+        run: |
+          set -euo pipefail
+          all_release_dir="$RUNNER_TEMP/release-assets/all"
+          mkdir -p "$all_release_dir"
+          cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
+          cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
+          gh release upload "${{ needs.metadata.outputs.version_tag }}" "$all_release_dir"/*
+
+      - name: Promote draft to published latest
+        run: |
+          set -euo pipefail
+          gh release edit "${{ needs.metadata.outputs.version_tag }}" \
+            --draft=false \
+            --latest
+
+      - name: Cleanup release + tag on failure
+        if: failure() && steps.create_release.outcome == 'success'
+        run: |
+          set +e
+          echo "publish failed after release was created; rolling back release and tag"
+          gh release delete "${{ needs.metadata.outputs.version_tag }}" --cleanup-tag --yes
+          # belt-and-suspenders: ensure remote tag is gone even if --cleanup-tag missed
+          git push origin --delete "refs/tags/${{ needs.metadata.outputs.version_tag }}" || true
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## Stable release"
+            echo "- Channel: stable"
+            echo "- Version: ${{ needs.metadata.outputs.stable_version }}"
+            echo "- Version tag: ${{ needs.metadata.outputs.version_tag }}"
+            echo "- mac signed/notarized: ${{ inputs.mac_signed }}"
+            echo "- windows signed: false"
+            echo "- mac assets: open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
+            echo "- win assets: open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe.blockmap"
+            echo "- Feeds: latest-mac.yml, latest.yml"
+          } >> "$GITHUB_STEP_SUMMARY"

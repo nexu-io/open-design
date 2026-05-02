@@ -1,5 +1,7 @@
 # Quickstart
 
+<p align="center"><b>English</b> · <a href="QUICKSTART.de.md">Deutsch</a></p>
+
 Run the full product locally.
 
 ## Environment requirements
@@ -45,7 +47,7 @@ pnpm tools-dev # starts daemon + web + desktop in the background
 
 On first load, the app detects your installed code-agent CLI (Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen), picks it automatically, and defaults to `web-prototype` skill + `Neutral Modern` design system. Type a prompt and hit **Send**. The agent streams into the left pane; the `<artifact>` tag is parsed out and the HTML renders live on the right. When it finishes, click **Save to disk** to persist the artifact under `./.od/artifacts/<timestamp>-<slug>/index.html`.
 
-The **Design system** dropdown ships with 71 built-in systems — 2 hand-authored starters (Neutral Modern, Warm Editorial) and 69 product systems imported from [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md), grouped by category (AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive). Pick one to skin every prototype in that brand's aesthetic.
+The **Design system** dropdown ships with **129 design systems** — 2 hand-authored starters (Neutral Modern, Warm Editorial), 70 bundled product systems, and 57 design skills sourced from [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Pick one to skin every prototype in that brand's aesthetic.
 
 The **Skill** dropdown groups by mode (Prototype / Deck / Template / Design system) and shows the default skill per mode with a `· default` suffix. Bundled skills:
 
@@ -199,7 +201,7 @@ open-design/
 │   ├── default/               # Neutral Modern (starter)
 │   ├── warm-editorial/        # Warm Editorial (starter)
 │   ├── README.md              # catalog overview
-│   └── …69 product systems    # claude · cohere · linear-app · vercel · stripe · airbnb …
+│   └── …129 systems           # 2 starters · 70 product systems · 57 design skills
 ├── scripts/sync-design-systems.ts    # re-import from upstream getdesign tarball
 ├── docs/                      # product vision + spec
 ├── .od/                       # runtime data (gitignored, auto-created)

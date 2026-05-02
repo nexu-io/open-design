@@ -63,6 +63,8 @@ od:
   design_system:
     requires: true                  # this skill reads the active DESIGN.md
     sections: [color, typography]   # which sections it actually uses (for prompt pruning)
+  craft:                            # universal, brand-agnostic craft references
+    requires: [typography, color, anti-ai-slop]
   inputs:                           # typed inputs the user can fill in the UI
     - name: title
       type: string
@@ -102,6 +104,7 @@ od:
 | `od.preview.type` | picking the right iframe renderer |
 | `od.design_system.requires` | whether to inject `DESIGN.md` |
 | `od.design_system.sections` | pruning the injected DESIGN.md to relevant sections only (token savings) |
+| `od.craft.requires` | which brand-agnostic `craft/<slug>.md` references to inject (e.g. `typography`, `color`, `anti-ai-slop`); injected between DESIGN.md and the skill body |
 | `od.inputs` | rendering a typed form in the sidebar instead of only free-text |
 | `od.parameters` | rendering live sliders that re-prompt on change |
 | `od.outputs.primary` | which file the iframe loads |
@@ -208,6 +211,36 @@ The 9-section DESIGN.md format is **not invented by OD**; it's the [awesome-clau
 ```
 
 Full schema and examples: [`schemas/design-system.md`](schemas/design-system.md) and [`examples/DESIGN.sample.md`](examples/DESIGN.sample.md) (TODO).
+
+## 5.5 Craft references (`craft/`)
+
+Some craft knowledge is **universal** — true regardless of brand. ALL CAPS always needs ≥0.06em letter-spacing; `var(--accent)` should appear at most 2 times per screen; `#6366f1` is always the AI-default tell. These rules don't belong in any one `DESIGN.md` because they apply across every brand.
+
+OD ships these as a third axis at `<projectRoot>/craft/`:
+
+```
+craft/
+├── README.md
+├── typography.md
+├── color.md
+└── anti-ai-slop.md
+```
+
+A skill opts in by listing the slugs it needs:
+
+```yaml
+od:
+  craft:
+    requires: [typography, color, anti-ai-slop]
+```
+
+Resolution at compose time:
+
+1. `apps/daemon/src/skills.ts` reads `od.craft.requires` from front-matter and surfaces it on the skill record.
+2. `apps/daemon/src/craft.ts` reads each `<slug>.md` from `CRAFT_DIR`. Missing files are dropped silently — a skill can forward-reference `craft/motion.md` before we ship it. See [`craft/README.md`](../craft/README.md) for the canonical slug list and the rationale behind the silent-fallback choice.
+3. `apps/daemon/src/prompts/system.ts` injects the concatenated craft body **between** the active DESIGN.md and the skill body. Brand tokens in DESIGN.md win on conflict; craft rules cover everything DESIGN.md does not override.
+
+The split keeps DESIGN.md authors free of universal-craft duplication and keeps craft authors free of brand-specific drift.
 
 ## 6. Skill installation
 

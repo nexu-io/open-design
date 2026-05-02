@@ -8,6 +8,7 @@
  * your own backend.
  */
 import Anthropic from '@anthropic-ai/sdk';
+import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import { streamMessageAnthropicProxy } from './anthropic-compatible';
 import { isOpenAICompatible, streamMessageOpenAI } from './openai-compatible';
@@ -57,7 +58,7 @@ export async function streamMessage(
     const stream = client.messages.stream(
       {
         model: cfg.model,
-        max_tokens: 8192,
+        max_tokens: effectiveMaxTokens(cfg),
         system,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
       },

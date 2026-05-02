@@ -1,6 +1,39 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchProjectFileText } from './registry';
+import { fetchAppVersionInfo, fetchProjectFileText } from './registry';
+
+describe('fetchAppVersionInfo', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns version info from the daemon response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        version: { version: '1.2.3', channel: 'beta', packaged: true, platform: 'darwin', arch: 'arm64' },
+      }), { status: 200 })),
+    );
+
+    await expect(fetchAppVersionInfo()).resolves.toEqual({
+      version: '1.2.3',
+      channel: 'beta',
+      packaged: true,
+      platform: 'darwin',
+      arch: 'arm64',
+    });
+  });
+
+  it('returns null when version info is unavailable or malformed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ version: { version: '1.2.3' } }), { status: 200 })),
+    );
+
+    await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
 
 describe('fetchProjectFileText', () => {
   afterEach(() => {

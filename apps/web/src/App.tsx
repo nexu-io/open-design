@@ -5,6 +5,7 @@ import { ProjectView } from './components/ProjectView';
 import { SettingsDialog } from './components/SettingsDialog';
 import {
   daemonIsLive,
+  fetchAppVersionInfo,
   fetchAgents,
   fetchDesignSystems,
   fetchPromptTemplates,
@@ -28,6 +29,7 @@ import {
 import type {
   AgentInfo,
   AppConfig,
+  AppVersionInfo,
   DesignSystemSummary,
   Project,
   ProjectTemplate,
@@ -46,6 +48,7 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplateSummary[]>([]);
+  const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(null);
   // Goes false once the bootstrap effect has finished its initial round of
   // fetches. The entry view uses this to show shimmer / skeleton states
   // instead of an "empty" page that flickers before data lands.
@@ -59,7 +62,7 @@ export function App() {
       const alive = await daemonIsLive();
       if (cancelled) return;
       setDaemonLive(alive);
-      const [agentList, skillList, dsList, projectList, templateList, promptTemplateList] =
+      const [agentList, skillList, dsList, projectList, templateList, promptTemplateList, versionInfo] =
         await Promise.all([
           alive ? fetchAgents() : Promise.resolve([] as AgentInfo[]),
           alive ? fetchSkills() : Promise.resolve([] as SkillSummary[]),
@@ -69,6 +72,7 @@ export function App() {
           alive ? listProjects() : Promise.resolve([] as Project[]),
           alive ? listTemplates() : Promise.resolve([] as ProjectTemplate[]),
           alive ? fetchPromptTemplates() : Promise.resolve([] as PromptTemplateSummary[]),
+          alive ? fetchAppVersionInfo() : Promise.resolve(null),
         ]);
       if (cancelled) return;
       setAgents(agentList);
@@ -77,6 +81,7 @@ export function App() {
       setProjects(projectList);
       setTemplates(templateList);
       setPromptTemplates(promptTemplateList);
+      setAppVersionInfo(versionInfo);
 
       setConfig((prev) => {
         const next = { ...prev };
@@ -343,6 +348,7 @@ export function App() {
           initial={config}
           agents={agents}
           daemonLive={daemonLive}
+          appVersionInfo={appVersionInfo}
           welcome={settingsWelcome}
           onSave={handleConfigSave}
           onClose={() => {

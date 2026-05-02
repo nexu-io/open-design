@@ -91,6 +91,7 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **opencode** | `opencode` | `~/.opencode/` | 〜 | 〜 | ✅ | P2 |
 | **openclaw** | `openclaw` | `~/.openclaw/` | 〜 | 〜 | 〜 | P2 |
 | **copilot** | `copilot` | `~/.copilot/` | ❌ | ✅ (`edit` tool) | ✅ (`--output-format json` JSONL) | P2 |
+| **kiro** | `kiro-cli` | `~/.kiro/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
 
 "P0/P1/P2" correspond to the roadmap phases in [`roadmap.md`](roadmap.md).
 

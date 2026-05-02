@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Terminal</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/terminal-green.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.term{font-family:var(--font-mono);font-size:16px;background:#020803;border:1px solid rgba(0,255,120,.3);border-radius:10px;padding:24px 28px;box-shadow:0 0 60px rgba(0,255,136,.08) inset}
+.term .bar{display:flex;gap:6px;margin-bottom:16px}
+.term .bar span{width:12px;height:12px;border-radius:50%;background:#222;border:1px solid rgba(0,255,136,.3)}
+.term .p{color:var(--accent)}
+.term .c{color:var(--text-1)}
+.term .o{color:var(--text-2)}
+.term .caret{display:inline-block;width:9px;height:18px;background:var(--accent);vertical-align:middle;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Terminal">
+  <p class="kicker">CLI · 一行命令起一个 deck</p>
+  <h2 class="h2" style="color:var(--text-1)">你需要的就是一个终端</h2>
+  <div class="term mt-l">
+    <div class="bar"><span></span><span></span><span></span></div>
+    <div><span class="p">$ </span><span class="c">./scripts/new-deck.sh graphify-talk</span></div>
+    <div class="o">  ✔ created decks/graphify-talk/index.html</div>
+    <div class="o">  ✔ linked theme → aurora</div>
+    <div class="o">  ✔ 12 slides scaffolded from templates/single-page/*</div>
+    <div style="margin-top:12px"><span class="p">$ </span><span class="c">open decks/graphify-talk/index.html</span></div>
+    <div class="o">  ↗ launched in Chrome</div>
+    <div style="margin-top:12px"><span class="p">$ </span><span class="c">./scripts/render.sh decks/graphify-talk/index.html</span></div>
+    <div class="o">  ✔ wrote graphify-talk.png (1920×1080)</div>
+    <div style="margin-top:12px"><span class="p">$ </span><span class="caret"></span></div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

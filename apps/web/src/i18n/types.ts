@@ -1,17 +1,20 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja' | 'ko';
 
-export const LOCALES: Locale[] = ['en', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja', 'ko'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
+  'de': 'Deutsch',
   'zh-CN': '简体中文',
   'zh-TW': '繁體中文',
   'pt-BR': 'Português (Brasil)',
   'es-ES': 'Español (España)',
   'ru': 'Русский',
   'fa': 'فارسی',
+  'ja': '日本語',
+  'ko': '한국어',
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -113,6 +116,16 @@ export interface Dict {
   'settings.mediaProviderClear': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
+  'settings.about': string;
+  'settings.aboutHint': string;
+  'settings.appVersion': string;
+  'settings.appChannel': string;
+  'settings.appRuntime': string;
+  'settings.appPlatform': string;
+  'settings.appArchitecture': string;
+  'settings.runtimePackaged': string;
+  'settings.runtimeDevelopment': string;
+  'settings.versionUnavailable': string;
 
   // Entry view / tabs
   'entry.tabDesigns': string;
@@ -192,6 +205,15 @@ export interface Dict {
   'newproj.audioDurationSeconds': string;
   'newproj.voiceLabel': string;
   'newproj.voicePlaceholder': string;
+  'newproj.promptTemplateLabel': string;
+  'newproj.promptTemplateNoneTitle': string;
+  'newproj.promptTemplateNoneSub': string;
+  'newproj.promptTemplateRefSub': string;
+  'newproj.promptTemplateSearch': string;
+  'newproj.promptTemplateEmpty': string;
+  'newproj.promptTemplateBodyLabel': string;
+  'newproj.promptTemplateOptimizeHint': string;
+  'newproj.promptTemplateBodyEmpty': string;
 
   // Prompt templates
   'promptTemplates.searchPlaceholder': string;
@@ -210,6 +232,7 @@ export interface Dict {
   'promptTemplates.openSource': string;
   'promptTemplates.openFullscreen': string;
   'promptTemplates.closeFullscreen': string;
+  'promptTemplates.retry': string;
 
   // Designs tab
   'designs.subRecent': string;
@@ -458,6 +481,7 @@ export interface Dict {
   'fileViewer.download': string;
   'fileViewer.open': string;
   'fileViewer.imageMeta': string;
+  'fileViewer.reactMeta': string;
   'fileViewer.sketchMeta': string;
   'fileViewer.markdownStreamingMeta': string;
   'fileViewer.markdownErrorMeta': string;
@@ -497,6 +521,8 @@ export interface Dict {
   'fileViewer.exportPptxNa': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
+  'fileViewer.exportJsx': string;
+  'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
   'fileViewer.savingTemplate': string;
   'fileViewer.savedTemplate': string;

@@ -1,0 +1,18 @@
+{
+  "id": "hyperframes-money-counter-hype",
+  "surface": "video",
+  "title": "HyperFrames: $0 → $10K Money Counter Hype (9:16)",
+  "summary": "A 6-second vertical 1080×1920 HyperFrames hype clip — Apple-style $0 → $10,000 counter with green flash, money burst particles, cash-stack icon, kicker headline. Built on the HyperFrames `apple-money-count` catalog block.",
+  "category": "Short Form",
+  "tags": ["hyperframes", "vertical", "hype", "counter", "money"],
+  "model": "hyperframes-html",
+  "aspect": "9:16",
+  "prompt": "Build a 6-second vertical HyperFrames hype clip (1080×1920, 30fps) — a single dramatic counter from $0 to $10,000 with a money burst on landing. Pull `npx hyperframes add apple-money-count` and `npx hyperframes add grain-overlay`. Optional: `npx hyperframes add flash-through-white` for the moment of impact.\n\nVisual identity: deep emerald canvas #052520, single hot-green accent #00ff95, off-white #f5fff8, secondary gold #f0c14b on the burst particles only. Display: \"Druk Wide\" 280px for the counter (with `font-variant-numeric: tabular-nums slashed-zero`); body \"Inter\" 32px tracked +4% small caps for the kicker.\n\nLayer structure:\n• Track 0: full-bleed background — solid #052520 with a soft 540px radial glow #00ff95 at 10% opacity behind the counter, growing to 18% on the impact frame.\n• Track 1: grain-overlay at 6% opacity, full duration.\n• Track 2: kicker line at y=28% — \"WHAT $10K LOOKS LIKE\" small caps, fades in at 0.2s.\n• Track 3: apple-money-count block centered (use as-is — its seeded confetti/burst is deterministic). Override start=0, end=10000, format=USD.\n• Track 4: bottom caption at y=82% — \"day · one\" small caps, fades in at 4.0s.\n• Track 5 (optional): a single flash-through-white frame at 3.4s, 0.18s long.\n\nAnimation (6s total):\n• 0–0.3s — grain ramps in, kicker fades in from y=14→0 ease power3.out 0.5s.\n• 0.5–3.5s — counter ticks $0 → $10,000, 3.0s, ease power2.inOut. Tabular-nums forced. Counter scale: 1.0 the whole way except a +4% pop at $10,000 landing (3.5s) ease back.out.\n• 3.4–3.6s — flash-through-white snap.\n• 3.5–4.0s — green flash on the counter color: text-color tweens to #00ff95 over 0.3s ease power2.out, then fades back to off-white over 0.6s.\n• 3.5–4.5s — money burst block fires its built-in particle system (50 deterministic shards in #f0c14b + #00ff95).\n• 4.5–6.0s — final hold. No exit animations.\n\nNon-negotiables: tabular-nums + slashed-zero on the counter; no Math.random in particle positions — use the block's seed; no `repeat: -1`; entrance-only; deterministic; all timelines paused:true; root data-duration=6, data-width=1080, data-height=1920.\n\nOutput: `money-counter-6s.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/apple-money-count"
+  }
+}

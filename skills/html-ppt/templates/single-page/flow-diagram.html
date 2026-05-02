@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Flow Diagram</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.flow{display:flex;align-items:center;gap:16px;margin-top:40px;max-width:1200px}
+.flow .node{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;text-align:center;box-shadow:var(--shadow);position:relative}
+.flow .node .ic{font-size:32px;margin-bottom:6px}
+.flow .node h4{font-size:16px}
+.flow .node p{font-size:12px;color:var(--text-3);margin:0}
+.flow .arr{color:var(--text-3);font-size:28px;flex-shrink:0}
+.flow .node.hl{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent),var(--shadow)}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Flow">
+  <p class="kicker">Pipeline · 渲染管线</p>
+  <h2 class="h2">从 Markdown 到 PNG，共 5 步</h2>
+  <div class="flow anim-stagger-list" data-anim-target>
+    <div class="node"><div class="ic">📝</div><h4>Markdown</h4><p>你的内容源</p></div>
+    <div class="arr">→</div>
+    <div class="node"><div class="ic">🧩</div><h4>Layouts</h4><p>选择页型</p></div>
+    <div class="arr">→</div>
+    <div class="node hl"><div class="ic">🎨</div><h4>Theme</h4><p>换装</p></div>
+    <div class="arr">→</div>
+    <div class="node"><div class="ic">🌐</div><h4>HTML</h4><p>运行时接管</p></div>
+    <div class="arr">→</div>
+    <div class="node"><div class="ic">📸</div><h4>PNG</h4><p>headless Chrome</p></div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

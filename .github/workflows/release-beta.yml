@@ -166,11 +166,98 @@ jobs:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets
 
+  build_win:
+    name: Build beta win x64
+    needs: metadata
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply beta package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
+
+      - name: Build beta windows artifacts
+        shell: pwsh
+        run: >-
+          pnpm exec tools-pack win build
+          --dir "${{ runner.temp }}/tools-pack"
+          --namespace release-beta-win
+          --portable
+          --to nsis
+          --json
+
+      - name: Prepare windows beta assets
+        shell: pwsh
+        run: |
+          $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          $sourceInstaller = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-beta-win/builder/Open Design-release-beta-win-setup.exe"
+          $sourceBlockmap = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-beta-win/builder/Open Design-release-beta-win-setup.exe.blockmap"
+          if (!(Test-Path $sourceInstaller)) {
+            throw "expected installer not found at $sourceInstaller"
+          }
+          if (!(Test-Path $sourceBlockmap)) {
+            throw "expected blockmap not found at $sourceBlockmap"
+          }
+
+          $windowsAssetSuffix = ".unsigned"
+          $versionedInstaller = "open-design-${{ needs.metadata.outputs.beta_version }}$windowsAssetSuffix-win-x64-setup.exe"
+          $versionedBlockmap = "open-design-${{ needs.metadata.outputs.beta_version }}$windowsAssetSuffix-win-x64-setup.exe.blockmap"
+          $checksumFile = "$versionedInstaller.sha256"
+          Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
+          Copy-Item $sourceBlockmap (Join-Path $releaseDir $versionedBlockmap)
+
+          $installerPath = Join-Path $releaseDir $versionedInstaller
+          $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $versionedInstaller" | Set-Content -Path (Join-Path $releaseDir $checksumFile)
+          $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
+          $installerSha512 = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::Create().ComputeHash($installerBytes))
+          $installerSize = (Get-Item $installerPath).Length
+          $installerUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/${{ needs.metadata.outputs.version_tag }}/$versionedInstaller"
+          $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+          @(
+            'version: "${{ needs.metadata.outputs.beta_version }}"'
+            'files:'
+            "  - url: `"$installerUrl`""
+            "    sha512: `"$installerSha512`""
+            "    size: $installerSize"
+            "path: `"$installerUrl`""
+            "sha512: `"$installerSha512`""
+            "releaseDate: `"$releaseDate`""
+            "releaseNotes: `"Open Design beta ${{ needs.metadata.outputs.beta_version }}$windowsAssetSuffix`""
+          ) | Set-Content -Path (Join-Path $releaseDir "latest.yml")
+
+      - name: Upload windows release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-win-release-assets
+          path: ${{ runner.temp }}/release-assets
+
   publish:
     name: Publish beta release
     needs:
       - metadata
       - build_mac
+      - build_win
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -185,6 +272,12 @@ jobs:
         with:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Download windows release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-win-release-assets
+          path: ${{ runner.temp }}/release-assets/win
 
       - name: Move beta tags to current commit
         run: |
@@ -205,11 +298,12 @@ jobs:
           - channel: beta
           - version: ${{ needs.metadata.outputs.beta_version }}
           - base version: ${{ needs.metadata.outputs.base_version }}
-          - signed: ${{ needs.metadata.outputs.signed }}
+          - mac signed/notarized: ${{ needs.metadata.outputs.signed }}
+          - windows signed: false
           - branch: ${{ needs.metadata.outputs.branch }}
           - commit: ${{ needs.metadata.outputs.commit }}
 
-          This beta release ships mac arm64 DMG, update ZIP, checksums, and a copy of latest-mac.yml.
+          This beta release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, checksums, and updater feed files.
           EOF
           cat > "$latest_notes_file" <<EOF
           ## Summary
@@ -217,7 +311,7 @@ jobs:
           - latest version: ${{ needs.metadata.outputs.beta_version }}
           - latest tag: ${{ needs.metadata.outputs.version_tag }}
 
-          This release is the mutable beta channel feed carrier. It should contain feed assets only.
+          This release is the mutable beta channel feed carrier. It should contain feed assets only: latest-mac.yml and latest.yml.
           EOF
           {
             echo "version_notes_file=$version_notes_file"
@@ -228,6 +322,10 @@ jobs:
         run: |
           set -euo pipefail
           release_dir="$RUNNER_TEMP/release-assets/mac"
+          all_release_dir="$RUNNER_TEMP/release-assets/all"
+          mkdir -p "$all_release_dir"
+          cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
+          cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
           if gh release view "${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
             gh release edit "${{ needs.metadata.outputs.version_tag }}" \
               --title "${{ needs.metadata.outputs.release_name }}" \
@@ -240,12 +338,13 @@ jobs:
               --notes-file "${{ steps.notes.outputs.version_notes_file }}" \
               --prerelease
           fi
-          gh release upload "${{ needs.metadata.outputs.version_tag }}" "$release_dir"/* --clobber
+          gh release upload "${{ needs.metadata.outputs.version_tag }}" "$all_release_dir"/* --clobber
 
       - name: Create or update beta channel feed
         run: |
           set -euo pipefail
           latest_mac_path="$RUNNER_TEMP/release-assets/mac/latest-mac.yml"
+          latest_win_path="$RUNNER_TEMP/release-assets/win/latest.yml"
           if gh release view "${{ needs.metadata.outputs.beta_tag }}" >/dev/null 2>&1; then
             while IFS= read -r asset_name; do
               if [ -n "$asset_name" ]; then
@@ -256,10 +355,10 @@ jobs:
               --title "Open Design Beta Latest" \
               --notes-file "${{ steps.notes.outputs.latest_notes_file }}" \
               --prerelease
-            gh release upload "${{ needs.metadata.outputs.beta_tag }}" "$latest_mac_path" --clobber
+            gh release upload "${{ needs.metadata.outputs.beta_tag }}" "$latest_mac_path" "$latest_win_path" --clobber
           else
             gh release create "${{ needs.metadata.outputs.beta_tag }}" \
-              "$latest_mac_path" \
+              "$latest_mac_path" "$latest_win_path" \
               --target "$GITHUB_SHA" \
               --title "Open Design Beta Latest" \
               --notes-file "${{ steps.notes.outputs.latest_notes_file }}" \
@@ -274,7 +373,9 @@ jobs:
             echo "- Version: ${{ needs.metadata.outputs.beta_version }}"
             echo "- Version tag: ${{ needs.metadata.outputs.version_tag }}"
             echo "- Channel feed tag: ${{ needs.metadata.outputs.beta_tag }}"
-            echo "- Signed: ${{ needs.metadata.outputs.signed }}"
+            echo "- mac signed/notarized: ${{ needs.metadata.outputs.signed }}"
+            echo "- windows signed: false"
             echo "- mac assets: open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.zip"
-            echo "- Feed: latest-mac.yml"
+            echo "- win assets: open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-win-x64-setup.exe.blockmap"
+            echo "- Feeds: latest-mac.yml, latest.yml"
           } >> "$GITHUB_STEP_SUMMARY"

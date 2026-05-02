@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
+import {
+  localizeSkillDescription,
+  localizeSkillPrompt,
+} from '../i18n/content';
 import type { Dict } from '../i18n/types';
 import { fetchSkillExample } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
@@ -93,8 +97,12 @@ function matchesSurface(skill: SkillSummary, filter: SurfaceFilter): boolean {
   return filter === 'all' || surfaceOf(skill) === filter;
 }
 
+function quotePrompt(locale: string, text: string): string {
+  return locale === 'de' ? `„${text}“` : `“${text}”`;
+}
+
 export function ExamplesTab({ skills, onUsePrompt }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
@@ -291,7 +299,10 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       {previewSkill ? (
         <PreviewModal
           title={previewSkill.name}
-          subtitle={previewSkill.examplePrompt || previewSkill.description.replace(/\s+/g, ' ').slice(0, 160)}
+          subtitle={
+            localizeSkillPrompt(locale, previewSkill)
+            ?? localizeSkillDescription(locale, previewSkill).slice(0, 160)
+          }
           views={[
             {
               id: 'preview',
@@ -320,7 +331,7 @@ function ExampleCard({
   onUsePrompt: () => void;
   onOpenPreview: () => void;
 }) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
@@ -345,6 +356,8 @@ function ExampleCard({
   const exportTitle = skill.name;
   const isMobile = skill.platform === 'mobile';
   const isDeck = skill.mode === 'deck';
+  const displayPrompt = localizeSkillPrompt(locale, skill);
+  const displayDescription = localizeSkillDescription(locale, skill).slice(0, 240);
 
   return (
     <div
@@ -402,9 +415,7 @@ function ExampleCard({
           ) : null}
         </div>
         <div className="example-prompt">
-          {skill.examplePrompt
-            ? `“${skill.examplePrompt}”`
-            : skill.description.replace(/\s+/g, ' ').slice(0, 240)}
+          {displayPrompt ? quotePrompt(locale, displayPrompt) : displayDescription}
         </div>
         <div className="example-card-actions">
           <button

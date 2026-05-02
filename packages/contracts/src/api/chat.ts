@@ -74,6 +74,7 @@ export interface ChatMessage {
   agentId?: string;
   agentName?: string;
   events?: PersistedAgentEvent[];
+  createdAt?: number;
   runId?: string;
   runStatus?: ChatRunStatus;
   lastRunEventId?: string;

@@ -9,6 +9,7 @@ import { useT } from '../i18n';
 import { unfinishedTodosFromEvents, type TodoItem } from '../runtime/todos';
 import type { Dict } from '../i18n/types';
 import { agentDisplayName } from '../utils/agentLabels';
+import { exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import type { AgentEvent, ChatMessage, ProjectFile } from '../types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -70,7 +71,10 @@ export function AssistantMessage({
 
   return (
     <div className="msg assistant">
-      <div className="role">{roleLabel}</div>
+      <div className="role">
+        <span>{roleLabel}</span>
+        <MessageTimestamp message={message} t={t} />
+      </div>
       <div className="assistant-flow">
         {blocks.length === 0 && streaming ? (
           <WaitingPill startedAt={message.startedAt} latestStatus={latestStatusLabel(events)} />
@@ -132,6 +136,16 @@ export function AssistantMessage({
         />
       </div>
     </div>
+  );
+}
+
+function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
+  const ts = messageTime(message);
+  if (!ts) return null;
+  return (
+    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
+      {relativeTimeLong(ts, t)}
+    </time>
   );
 }
 

@@ -1,5 +1,7 @@
 import type {
   AgentInfo,
+  AppVersionInfo,
+  AppVersionResponse,
   ChatAttachment,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -101,6 +103,29 @@ export async function daemonIsLive(): Promise<boolean> {
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+function isAppVersionInfo(value: unknown): value is AppVersionInfo {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<AppVersionInfo>;
+  return (
+    typeof candidate.version === 'string' &&
+    typeof candidate.channel === 'string' &&
+    typeof candidate.packaged === 'boolean' &&
+    typeof candidate.platform === 'string' &&
+    typeof candidate.arch === 'string'
+  );
+}
+
+export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
+  try {
+    const resp = await fetch('/api/version');
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as Partial<AppVersionResponse>;
+    return isAppVersionInfo(json.version) ? json.version : null;
+  } catch {
+    return null;
   }
 }
 

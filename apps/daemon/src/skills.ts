@@ -34,6 +34,7 @@ export async function listSkills(skillsRoot) {
         triggers: Array.isArray(data.triggers) ? data.triggers : [],
         mode,
         surface,
+        craftRequires: normalizeCraftRequires(data.od?.craft?.requires),
         platform: normalizePlatform(
           data.od?.platform,
           mode,
@@ -95,6 +96,27 @@ async function dirHasAttachments(dir) {
   } catch {
     return false;
   }
+}
+
+// Craft sections live at <projectRoot>/craft/<name>.md. We accept any
+// alphanumeric+dash slug here so adding a new section is as simple as
+// dropping a file in craft/ and listing its name in the skill — no
+// daemon-side allowlist to keep in sync. The compose path checks the
+// file actually exists before injecting; missing files fall through
+// silently. The frontend can render the requested list verbatim.
+function normalizeCraftRequires(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const v of value) {
+    if (typeof v !== "string") continue;
+    const slug = v.trim().toLowerCase();
+    if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out;
 }
 
 function normalizeDefaultFor(value) {

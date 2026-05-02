@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Timeline</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.tl{position:relative;margin-top:40px}
+.tl::before{content:"";position:absolute;left:0;right:0;top:48px;height:2px;background:var(--border)}
+.tl .row{display:grid;grid-template-columns:repeat(5,1fr);gap:22px;align-items:start}
+.tl .item{position:relative;padding-top:80px;text-align:center}
+.tl .dot{position:absolute;top:36px;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;background:var(--accent);border:4px solid var(--bg);box-shadow:0 0 0 2px var(--accent)}
+.tl .year{font-size:14px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;position:absolute;top:0;left:0;right:0;font-weight:600}
+.tl h4{font-size:18px}
+.tl p{font-size:13px;color:var(--text-2)}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Timeline">
+  <p class="kicker">Roadmap · 时间线</p>
+  <h2 class="h2">html-ppt 是怎么长大的</h2>
+  <div class="tl">
+    <div class="row anim-stagger-list" data-anim-target>
+      <div class="item"><div class="year">2025 Q3</div><div class="dot"></div><h4>起源</h4><p>一套个人 reveal.js 模板</p></div>
+      <div class="item"><div class="year">2025 Q4</div><div class="dot"></div><h4>tokens 化</h4><p>把颜色全部收进 :root</p></div>
+      <div class="item"><div class="year">2026 Q1</div><div class="dot"></div><h4>Agent 接入</h4><p>开放为 AgentSkill</p></div>
+      <div class="item"><div class="year">2026 Q2</div><div class="dot"></div><h4>24 themes</h4><p>从克制到霓虹一应俱全</p></div>
+      <div class="item"><div class="year">2026 Q3</div><div class="dot"></div><h4>渲染管线</h4><p>headless Chrome PNG 出稿</p></div>
+    </div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

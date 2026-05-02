@@ -66,6 +66,34 @@ const agentCapabilities = new Map();
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
+// Map a user-picked reasoning effort to one the chosen model will accept.
+// Codex's CLI accepts `none | minimal | low | medium | high | xhigh`, but
+// real models support narrower subsets — gpt-5.2/5.3/5.4/5.5 reject
+// `minimal`, gpt-5.1 rejects `xhigh`, gpt-5.1-codex-mini accepts only
+// `medium` / `high`.
+// An undefined / 'default' modelId is clamped as if it were gpt-5.5,
+// since that's codex's current default model. Unknown / future model ids
+// pass through unchanged — if the API later rejects, the server error
+// is the signal that a new rule belongs here.
+function clampCodexReasoning(modelId, effort) {
+  if (!effort) return effort;
+  const raw = String(modelId ?? '').trim();
+  const id = raw.includes('/') ? raw.split('/').pop() : raw;
+  const isGpt5LateFamily =
+    !id ||
+    id === 'default' ||
+    id.startsWith('gpt-5.2') ||
+    id.startsWith('gpt-5.3') ||
+    id.startsWith('gpt-5.4') ||
+    id.startsWith('gpt-5.5');
+  if (isGpt5LateFamily && effort === 'minimal') return 'low';
+  if (id === 'gpt-5.1' && effort === 'xhigh') return 'high';
+  if (id === 'gpt-5.1-codex-mini') {
+    return effort === 'high' || effort === 'xhigh' ? 'high' : 'medium';
+  }
+  return effort;
+}
+
 // Parse one-id-per-line stdout from `<cli> models` and prepend the synthetic
 // default option. Used by opencode / cursor-agent.
 function parseLineSeparatedModels(stdout) {
@@ -110,6 +138,13 @@ export const AGENT_DEFS = [
       { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
       { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
     ],
+    // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
+    // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
+    // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
+    // ~32 KB direct, ~8 KB via .cmd shim). `claude -p` with no positional
+    // prompt reads the prompt from stdin under `--input-format text` (the
+    // default), which has no length cap. Mirrors the codex/gemini/opencode/
+    // cursor/qwen entries below.
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const caps = agentCapabilities.get('claude') || {};
       const args = [
@@ -183,9 +218,10 @@ export const AGENT_DEFS = [
         args.push('--model', options.model);
       }
       if (options.reasoning && options.reasoning !== 'default') {
+        const effort = clampCodexReasoning(options.model, options.reasoning);
         // Codex accepts `-c key=value` config overrides; reasoning effort
         // is exposed as `model_reasoning_effort`.
-        args.push('-c', `model_reasoning_effort="${options.reasoning}"`);
+        args.push('-c', `model_reasoning_effort="${effort}"`);
       }
       args.push('-');
       return args;
@@ -470,6 +506,24 @@ export const AGENT_DEFS = [
     // Prompt is sent via RPC `prompt` command on stdin, not as a CLI arg.
     promptViaStdin: true,
     streamFormat: 'pi-rpc',
+  },
+  {
+    id: 'kiro',
+    name: 'Kiro CLI',
+    bin: 'kiro-cli',
+    versionArgs: ['--version'],
+    fetchModels: async (resolvedBin) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: ['acp'],
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+    ],
+    buildArgs: () => ['acp'],
+    streamFormat: 'acp-json-rpc',
   },
 ];
 

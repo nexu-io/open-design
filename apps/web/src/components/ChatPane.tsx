@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
 import type { ChatAttachment, ChatMessage, Conversation, ProjectFile } from '../types';
+import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
 import { Icon } from './Icon';
@@ -352,36 +353,40 @@ export function ChatPane({
                   </div>
                 </div>
               ) : null}
-              {messages.map((m) => {
+              {messages.map((m, i) => {
+                const showDaySeparator = shouldShowDaySeparator(messages[i - 1], m);
                 const messageStreaming =
                   m.role === 'assistant' &&
                   ((streaming && m.id === lastAssistantId) || isActiveRunStatus(m.runStatus));
-                return m.role === 'user' ? (
-                  <UserMessage
-                    key={m.id}
-                    message={m}
-                    projectId={projectId}
-                    projectFileNames={projectFileNames}
-                    onRequestOpenFile={onRequestOpenFile}
-                    t={t}
-                  />
-                ) : (
-                  <AssistantMessage
-                    key={m.id}
-                    message={m}
-                    streaming={messageStreaming}
-                    projectId={projectId}
-                    projectFileNames={projectFileNames}
-                    onRequestOpenFile={onRequestOpenFile}
-                    isLast={m.id === lastAssistantId}
-                    nextUserContent={nextUserContentByAssistantId.get(m.id)}
-                    onSubmitForm={onSubmitForm}
-                    onContinueRemainingTasks={
-                      m.id === lastAssistantId && onContinueRemainingTasks
-                        ? (todos) => onContinueRemainingTasks(m, todos)
-                        : undefined
-                    }
-                  />
+                return (
+                  <Fragment key={m.id}>
+                    {showDaySeparator ? <DaySeparator ts={messageTime(m)} /> : null}
+                    {m.role === 'user' ? (
+                      <UserMessage
+                        message={m}
+                        projectId={projectId}
+                        projectFileNames={projectFileNames}
+                        onRequestOpenFile={onRequestOpenFile}
+                        t={t}
+                      />
+                    ) : (
+                      <AssistantMessage
+                        message={m}
+                        streaming={messageStreaming}
+                        projectId={projectId}
+                        projectFileNames={projectFileNames}
+                        onRequestOpenFile={onRequestOpenFile}
+                        isLast={m.id === lastAssistantId}
+                        nextUserContent={nextUserContentByAssistantId.get(m.id)}
+                        onSubmitForm={onSubmitForm}
+                        onContinueRemainingTasks={
+                          m.id === lastAssistantId && onContinueRemainingTasks
+                            ? (todos) => onContinueRemainingTasks(m, todos)
+                            : undefined
+                        }
+                      />
+                    )}
+                  </Fragment>
                 );
               })}
               {error ? <div className="msg error">{error}</div> : null}
@@ -516,7 +521,10 @@ function UserMessage({
   const attachments = message.attachments ?? [];
   return (
     <div className="msg user">
-      <div className="role">{t('chat.you')}</div>
+      <div className="role">
+        <span>{t('chat.you')}</span>
+        <MessageTimestamp message={message} t={t} />
+      </div>
       {attachments.length > 0 ? (
         <div className="user-attachments">
           {attachments.map((a) => {
@@ -550,6 +558,33 @@ function UserMessage({
       <div className="user-text">{message.content}</div>
     </div>
   );
+}
+
+function DaySeparator({ ts }: { ts: number | undefined }) {
+  if (!ts) return null;
+  return (
+    <div className="chat-day-separator" role="separator">
+      <time dateTime={new Date(ts).toISOString()}>{dayLabel(ts)}</time>
+    </div>
+  );
+}
+
+function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
+  const ts = messageTime(message);
+  if (!ts) return null;
+  return (
+    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
+      {relativeTimeLong(ts, t)}
+    </time>
+  );
+}
+
+function shouldShowDaySeparator(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
+  const currTime = messageTime(curr);
+  if (!currTime) return false;
+  const prevTime = prev ? messageTime(prev) : undefined;
+  if (!prevTime) return true;
+  return dayKey(prevTime) !== dayKey(currTime);
 }
 
 function relTime(ts: number, t: TranslateFn): string {

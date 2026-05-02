@@ -4,15 +4,16 @@ import {
   DeckHtmlRenderer,
   HtmlRenderer,
   MarkdownRenderer,
+  ReactComponentRenderer,
   RendererRegistry,
   SvgRenderer,
+  artifactRendererRegistry,
 } from './renderer-registry';
 import { renderMarkdownToSafeHtml } from './markdown';
 import type { ProjectFile } from '../types';
 
-function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
+function baseFile(overrides: Partial<ProjectFile> & Pick<ProjectFile, 'name'>): ProjectFile {
   return {
-    name: 'artifact.html',
     path: 'artifact.html',
     type: 'file',
     size: 1,
@@ -25,6 +26,7 @@ function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
 
 describe('RendererRegistry', () => {
   const registry = new RendererRegistry([
+    ReactComponentRenderer,
     DeckHtmlRenderer,
     HtmlRenderer,
     MarkdownRenderer,
@@ -119,5 +121,48 @@ describe('RendererRegistry', () => {
     expect(out).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(out).toContain('href="https://example.com/a_b_c"');
     expect(out).not.toContain('<script>');
+  });
+
+  it('routes JSX and TSX files to the React component renderer', () => {
+    expect(
+      artifactRendererRegistry.resolve({
+        file: baseFile({
+          name: 'Hero.jsx',
+          kind: 'code',
+          mime: 'text/javascript; charset=utf-8',
+        }),
+        isDeckHint: false,
+      })?.renderer.id,
+    ).toBe('react-component');
+    expect(
+      artifactRendererRegistry.resolve({
+        file: baseFile({
+          name: 'Hero.tsx',
+          kind: 'code',
+          mime: 'text/typescript; charset=utf-8',
+        }),
+        isDeckHint: false,
+      })?.renderer.id,
+    ).toBe('react-component');
+  });
+
+  it('prefers an explicit React manifest over the coarse code kind', () => {
+    expect(
+      artifactRendererRegistry.resolve({
+        file: baseFile({
+          name: 'entry.txt',
+          kind: 'text',
+          artifactManifest: {
+            version: 1,
+            kind: 'react-component',
+            title: 'Entry',
+            entry: 'entry.txt',
+            renderer: 'react-component',
+            exports: ['jsx', 'html', 'zip'],
+          },
+        }),
+        isDeckHint: false,
+      })?.renderer.id,
+    ).toBe('react-component');
   });
 });
