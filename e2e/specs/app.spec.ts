@@ -756,13 +756,25 @@ async function runDesignFilesDeleteFlow(
     await dialog.accept();
   });
 
+  const pngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+
+  // Upload a sibling file first so that, after deleting trash-me.png, there
+  // is a fallback tab the buggy code would have navigated to. The fix must
+  // keep the user in the Design Files panel instead.
+  await page.getByTestId('design-files-upload-input').setInputFiles({
+    name: 'keep-me.png',
+    mimeType: 'image/png',
+    buffer: pngBytes,
+  });
+  await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
+
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'trash-me.png',
     mimeType: 'image/png',
-    buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
-      'base64',
-    ),
+    buffer: pngBytes,
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
@@ -779,6 +791,15 @@ async function runDesignFilesDeleteFlow(
 
   await expect(fileRow).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
+
+  // Bug #115: deleting from the Design Files panel must not navigate the
+  // user into another tab. The Design Files tab should remain the active
+  // view, and the sibling tab should still exist (just not auto-activated).
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
 }
 
 async function runDesignFilesTabPersistenceFlow(

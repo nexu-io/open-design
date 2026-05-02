@@ -216,9 +216,11 @@ export function FileWorkspace({
         setActiveTab(nextActive ?? DESIGN_FILES_TAB);
       } else {
         // Deletion was triggered from the Design Files panel (or another
-        // tab). Keep the user where they are. Only clear the persisted
-        // active reference when it points at the deleted file so we don't
-        // leave a dangling pointer behind.
+        // tab). We preserve `activeTab` because the user is viewing a
+        // different context (Design Files or another tab) and shouldn't
+        // be navigated away. Only clear the persisted active reference
+        // when it points at the deleted file so we don't leave a dangling
+        // pointer behind.
         const nextActive = tabsState.active === name ? null : tabsState.active;
         onTabsStateChange({ tabs: nextTabs, active: nextActive });
       }

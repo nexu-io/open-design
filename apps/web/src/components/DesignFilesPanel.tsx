@@ -267,7 +267,6 @@ export function DesignFilesPanel({
             href={projectFileUrl(projectId, menuPos.name)}
             download={menuPos.name}
             style={{ textDecoration: 'none' }}
-            onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
