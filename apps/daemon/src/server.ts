@@ -2119,14 +2119,26 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  const server = app.listen(port, () => {
-    resolvedPort = server.address().port;
-    if (!returnServer) {
+  if (returnServer) {
+    return new Promise<{ server: Server; url: string }>((resolve, reject) => {
+      const server = app.listen(port, () => {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('Server did not bind to a TCP port'));
+          return;
+        }
+        resolvedPort = address.port;
+        resolve({ server, url: `http://127.0.0.1:${resolvedPort}` });
+      });
+      server.on('error', reject);
+    });
+  } else {
+    const server = app.listen(port, () => {
+      resolvedPort = server.address().port;
       console.log(`[od] daemon listening on http://127.0.0.1:${resolvedPort}`);
-    }
-  });
-
-  if (returnServer) return { server, url: `http://127.0.0.1:${resolvedPort}` };
+    });
+    return server;
+  }
 }
 
 function randomId() {
