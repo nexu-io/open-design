@@ -98,7 +98,7 @@ Module responsibilities:
 - **We do not ship a model router.** If the user's agent supports 20 providers, great. If it only supports Anthropic, that's the ceiling. We don't layer our own provider abstraction on top of someone else's.
 - **We do not ship a desktop app.** No Electron, no Tauri. The "local" story is a Next.js dev server + a Node daemon. If someone wants a tray icon, that's [`cc-switch`][ccsw]'s job, not ours.
 - **We do not reinvent the agent loop.** No custom tool-use harness, no bespoke context-manager. Everything goes through the detected agent's native loop.
-- **We do not maintain a skill marketplace in v1.** Skills are git URLs and local folders. A browseable UI is v2.
+- **We do not maintain a skill marketplace in v1.** Skills are git URLs and local folders. A browsable UI is v2.
 - **We do not try to compete with Figma.** Output is code (HTML/JSX) and content (`DESIGN.md`, Markdown, PPTX), not editable vector canvases.
 - **We do not implement auth / billing / orgs in MVP.** Single-user, single-machine. Multi-user is post-v1 and optional.
 

@@ -2277,16 +2277,38 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  const server = app.listen(port, () => {
-    resolvedPort = server.address().port;
-    if (!returnServer) {
-      console.log(`[od] daemon listening on http://127.0.0.1:${resolvedPort}`);
-    }
+  // Wait for `listen` to bind so callers always see the resolved URL —
+  // critical when port=0 (ephemeral port) and when the embedding sidecar
+  // needs to advertise the port to a parent process before any request
+  // can flow. Three callers depend on this contract:
+  //   - `apps/daemon/src/cli.ts`            → expects a `url` string
+  //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
+  //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
+  return await new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      const address = server.address();
+      // `address()` can in theory return `string | AddressInfo | null`. For
+      // a TCP listener it's always `AddressInfo` with a `.port` — the guard
+      // is belt-and-braces so an unexpected null never silently produces a
+      // `http://127.0.0.1:0` URL that callers would then try to fetch.
+      const boundPort = address && typeof address === 'object' ? address.port : null;
+      if (!boundPort) {
+        reject(new Error(`[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`));
+        return;
+      }
+      resolvedPort = boundPort;
+      const url = `http://127.0.0.1:${resolvedPort}`;
+      if (!returnServer) {
+        console.log(`[od] daemon listening on ${url}`);
+      }
+      resolve(returnServer ? { url, server } : url);
+    });
+    // `app.listen` throws synchronously when the port is already in use on
+    // some Node versions, but emits an `error` event on others (and for
+    // EACCES / EADDRNOTAVAIL even on the same Node). Wire the event so the
+    // returned Promise always settles instead of hanging forever.
+    server.on('error', reject);
   });
-
-  if (returnServer) {
-    return server;
-  }
 }
 
 function randomId() {

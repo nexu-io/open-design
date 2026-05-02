@@ -1,6 +1,6 @@
 {
   "name": "@open-design/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "./dist/main/index.js",
@@ -18,9 +18,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@open-design/platform": "workspace:0.1.0",
-    "@open-design/sidecar": "workspace:0.1.0",
-    "@open-design/sidecar-proto": "workspace:0.1.0"
+    "@open-design/platform": "workspace:0.2.0",
+    "@open-design/sidecar": "workspace:0.2.0",
+    "@open-design/sidecar-proto": "workspace:0.2.0"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

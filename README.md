@@ -599,8 +599,8 @@ The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf
 | Live todo progress + tool stream | ❌ | ✅ | **✅** (UX pattern from open-codesign) |
 | Sandboxed iframe preview | ❌ | ✅ | **✅** (pattern from open-codesign) |
 | Claude Design ZIP import | n/a | ❌ | **✅ `POST /api/import/claude-design` — keep editing where Anthropic left off** |
-| Comment-mode surgical edits | ❌ | ✅ | 🚧 roadmap (lift from open-codesign) |
-| AI-emitted tweaks panel | ❌ | ✅ | 🟡 partial — [`tweaks` skill](skills/tweaks/) ships, dedicated chat-side panel UX still on roadmap |
+| Comment-mode surgical edits | ❌ | ✅ | 🟡 partial — preview element comments + chat attachments; surgical patch reliability still in progress |
+| AI-emitted tweaks panel | ❌ | ✅ | 🚧 roadmap — dedicated chat-side panel UX is not implemented yet |
 | Filesystem-grade workspace | ❌ | partial (Electron sandbox) | **✅ Real cwd, real tools, persisted SQLite (projects · conversations · messages · tabs · templates)** |
 | 5-dim self-critique | ❌ | ❌ | **✅ Pre-emit gate** |
 | Artifact lint | ❌ | ❌ | **✅ `POST /api/artifacts/lint` — findings fed back to the agent** |
@@ -647,7 +647,7 @@ Every external project this repo borrows from. Each link goes to the source so y
 | [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) and [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Magazine-web-PPT skill bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved. Default for deck mode. P0/P1/P2 checklist culture borrowed for every other skill. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
-| [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection. UX patterns on our roadmap: comment-mode surgical edits, AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
+| [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection, and the first pass of comment-mode preview annotations. UX patterns still on our roadmap: full surgical-edit reliability and AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
 | [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | Source of the 9-section `DESIGN.md` schema and 70 product systems imported via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). |
 | [`bergside/awesome-design-skills`][ads] | Source of 57 design skills added directly as normalized `DESIGN.md` files under `design-systems/`. |
 | [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | Inspiration for symlink-based skill distribution across multiple agent CLIs. |
@@ -665,8 +665,8 @@ Long-form provenance write-up — what we take from each, what we deliberately d
 - [x] Claude Design ZIP import (`/api/import/claude-design`)
 - [x] Sidecar protocol + Electron desktop with IPC automation (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN)
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
-- [ ] Comment-mode surgical edits (click element → instruction → patch) — pattern from [`open-codesign`][ocod]
-- [ ] AI-emitted tweaks panel UX — building block ([`tweaks` skill](skills/tweaks/)) ships; chat-integrated panel still pending
+- [ ] Comment-mode surgical edits — partial shipped: preview element comments and chat attachments; reliable targeted patching remains in progress
+- [ ] AI-emitted tweaks panel UX — not implemented yet
 - [ ] Vercel + tunnel deployment recipe (Topology B)
 - [ ] One-command `npx od init` to scaffold a project with `DESIGN.md`
 - [ ] Skill marketplace (`od skills install <github-repo>`) and `od skill add | list | remove | test` CLI surface (drafted in [`docs/skills-protocol.md`](docs/skills-protocol.md), implementation pending)

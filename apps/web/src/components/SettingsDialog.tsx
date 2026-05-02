@@ -103,6 +103,15 @@ export function SettingsDialog({
     };
   }, [languageOpen]);
 
+  // Close the language menu on window resize so its placement (computed on
+  // open) cannot end up stale relative to the new viewport dimensions.
+  useEffect(() => {
+    if (!languageOpen) return;
+    const handleResize = () => setLanguageOpen(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [languageOpen]);
+
   const installedCount = useMemo(
     () => agents.filter((a) => a.available).length,
     [agents],
@@ -531,15 +540,23 @@ export function SettingsDialog({
                 </span>
                 <Icon name="chevron-down" size={16} />
               </button>
-              {languageOpen && languageMenuRect ? (
+              {languageOpen && languageMenuRect ? (() => {
+                const spaceBelow = window.innerHeight - languageMenuRect.bottom;
+                const spaceAbove = languageMenuRect.top;
+                // Prefer downward if at least 200px available (enough for ~5 options)
+                const openDownward = spaceBelow >= spaceAbove || spaceBelow >= 200;
+                return (
                 <div
                   className="settings-language-menu"
                   role="menu"
                   style={{
-                    bottom: window.innerHeight - languageMenuRect.top + 6,
+                    top: openDownward ? languageMenuRect.bottom + 6 : undefined,
+                    bottom: openDownward
+                      ? undefined
+                      : window.innerHeight - languageMenuRect.top + 6,
                     left: languageMenuRect.left,
                     width: languageMenuRect.width,
-                    '--menu-available-h': `${languageMenuRect.top - 6}px`,
+                    '--menu-available-h': `${(openDownward ? spaceBelow : spaceAbove) - 6}px`,
                   } as React.CSSProperties}
                 >
                   {LOCALES.map((code) => {
@@ -569,7 +586,8 @@ export function SettingsDialog({
                     );
                   })}
                 </div>
-              ) : null}
+                );
+              })() : null}
             </div>
           </section>
           ) : null}
