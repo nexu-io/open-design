@@ -1197,6 +1197,7 @@ code {
   position: fixed;
   z-index: 1000;
   max-width: calc(100vw - 24px);
+  /* 360px = 9 locales × ~40px; 24px = viewport margin (12px × 2) */
   max-height: min(360px, calc(100vh - 24px));
   overflow-y: auto;
   overscroll-behavior: contain;
