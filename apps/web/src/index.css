@@ -8263,8 +8263,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* Scope line-height increase to prose and chat to avoid breaking compact UI chrome */
 [dir="rtl"] .prose,
 [dir="rtl"] .chat-message,
-[dir="rtl"] .msg .user-text,
-[dir="rtl"] p {
+[dir="rtl"] .msg .user-text {
   line-height: 1.7;
 }
 
@@ -8279,7 +8278,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 [dir="rtl"] .icon-btn svg[data-lucide="chevron-left"],
 [dir="rtl"] .icon-btn svg[data-lucide="chevron-right"],
 [dir="rtl"] .icon-btn svg[data-lucide="arrow-left"],
-[dir="rtl"] .icon-btn svg[data-lucide="arrow-right"] {
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-right"],
+[dir="rtl"] .newproj-tabs-arrow svg,
+[dir="rtl"] .icon-only svg[data-lucide="chevron-left"],
+[dir="rtl"] .icon-only svg[data-lucide="chevron-right"],
+[dir="rtl"] .icon-only svg[data-lucide="arrow-left"],
+[dir="rtl"] .icon-only svg[data-lucide="arrow-right"],
+[dir="rtl"] .pet-rail-collapse svg,
+[dir="rtl"] .welcome-pet-teaser svg {
   transform: scaleX(-1);
 }
 
