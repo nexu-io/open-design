@@ -485,9 +485,10 @@ export function SettingsDialog({
                   className="settings-language-menu"
                   role="menu"
                   style={{
-                    bottom: window.innerHeight - languageMenuRect.top + 6,
+                    top: languageMenuRect.top - 6,
                     left: languageMenuRect.left,
                     width: languageMenuRect.width,
+                    transform: 'translateY(-100%)',
                   }}
                 >
                   {LOCALES.map((code) => {

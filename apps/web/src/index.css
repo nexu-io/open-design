@@ -1197,6 +1197,9 @@ code {
   position: fixed;
   z-index: 1000;
   max-width: calc(100vw - 24px);
+  max-height: min(360px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 2px;
