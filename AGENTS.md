@@ -37,6 +37,14 @@ This file is the single source of truth for agents entering this repository. Rea
 - New project-owned entrypoints, modules, scripts, tests, reporters, and configs should default to TypeScript.
 - Residual JavaScript is limited to generated output, vendored dependencies, explicitly documented compatibility build artifacts, and the allowlist in `scripts/check-residual-js.ts`.
 
+## Windows native
+
+- macOS, Linux, and WSL2 are the primary supported paths. Windows native is best-effort — file an issue if it doesn't work.
+- Install Node 24 via `winget install OpenJS.NodeJS.LTS`; do not use a portable Node 22 — see FAQ.
+- `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `npm install -g pnpm@10.33.2` instead.
+- `better-sqlite3` has no prebuilt binary for win32/Node 24; `pnpm install` will compile it from source via node-gyp (~2 min). Requires VS Build Tools. This is expected — not a sign of version incompatibility.
+- `pnpm tools-dev` (no args) starts daemon + web + Electron desktop window in the background. Ports are ephemeral; use `pnpm tools-dev status` to find current URLs.
+
 ## Local lifecycle
 
 - Use `pnpm tools-dev` as the only local development lifecycle entry point.
@@ -130,3 +138,7 @@ The daemon writes `.od/` by default: SQLite at `.od/app.sqlite`, agent CWDs unde
 ## When is `pnpm install` required?
 
 Run `pnpm install` after changing package manifests, workspace layout, command entrypoints, bin/link-related content, or after adding/removing workspace packages.
+
+## Why does the community note say to use Node 22?
+
+That note is stale. It was written when this repo used `better-sqlite3` v8/v9, which had no Node 24 support. The current lockfile pins `better-sqlite3@11.10.0` with `engines: {node: 18 || 20 || >=22}` — Node 24 is fully supported. Use Node 24 as required by `package.json#engines`.
