@@ -20,6 +20,7 @@ import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
 import { pl } from './locales/pl';
+import { hu } from './locales/hu';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -39,6 +40,7 @@ const DICTS: Record<Locale, Dict> = {
   'ja': ja,
   'ko': ko,
   'pl': pl,
+  'hu': hu,
 };
 
 const LS_KEY = 'open-design:locale';
