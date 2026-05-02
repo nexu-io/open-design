@@ -12,6 +12,13 @@ import litellmData from './litellm-models.json';
 // usage) goes in OVERRIDES; unknown models fall through to FALLBACK.
 export const FALLBACK_MAX_TOKENS = 8192;
 
+// Bounds the user can express via the Settings override. Source of truth
+// for both the UI input attributes and runtime validation in
+// `effectiveMaxTokens`, so a stale or hand-edited localStorage value
+// can't sneak past the UI's promise.
+export const MIN_MAX_TOKENS = 1024;
+export const MAX_MAX_TOKENS = 200000;
+
 const LITELLM_MODELS = litellmData.models as Record<string, number>;
 
 const OVERRIDES: Record<string, number> = {
@@ -25,6 +32,19 @@ export function modelMaxTokensDefault(model: string): number {
   return OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
 }
 
+function isValidOverride(value: number | undefined): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= MIN_MAX_TOKENS &&
+    value <= MAX_MAX_TOKENS
+  );
+}
+
 export function effectiveMaxTokens(cfg: Pick<AppConfig, 'maxTokens' | 'model'>): number {
-  return cfg.maxTokens ?? modelMaxTokensDefault(cfg.model);
+  // Out-of-range or non-integer overrides (stale localStorage, hand-edited
+  // config, future schema drift) fall back to the model default rather
+  // than silently shipping an invalid `max_tokens` upstream.
+  if (isValidOverride(cfg.maxTokens)) return cfg.maxTokens;
+  return modelMaxTokensDefault(cfg.model);
 }

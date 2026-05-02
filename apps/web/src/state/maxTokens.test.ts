@@ -4,6 +4,8 @@ import litellmData from './litellm-models.json';
 import {
   effectiveMaxTokens,
   FALLBACK_MAX_TOKENS,
+  MAX_MAX_TOKENS,
+  MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from './maxTokens';
 
@@ -41,5 +43,40 @@ describe('effectiveMaxTokens', () => {
 
   it('falls back to FALLBACK_MAX_TOKENS for unknown models with no override', () => {
     expect(effectiveMaxTokens({ model: 'unknown-model' })).toBe(FALLBACK_MAX_TOKENS);
+  });
+});
+
+describe('effectiveMaxTokens override validation', () => {
+  // Stale localStorage, hand-edited config, or future schema drift can put
+  // anything in cfg.maxTokens. The Settings UI advertises a [1024, 200000]
+  // integer-stepped range, and the daemon proxy already clamps `> 0`, so
+  // we tighten this entry point to match the advertised contract.
+
+  it('rejects negative overrides and falls back to the model default', () => {
+    expect(effectiveMaxTokens({ maxTokens: -5, model: 'claude-sonnet-4-5' })).toBe(64000);
+  });
+
+  it('rejects zero', () => {
+    expect(effectiveMaxTokens({ maxTokens: 0, model: 'claude-sonnet-4-5' })).toBe(64000);
+  });
+
+  it('rejects overrides below MIN_MAX_TOKENS', () => {
+    expect(effectiveMaxTokens({ maxTokens: MIN_MAX_TOKENS - 1, model: 'claude-sonnet-4-5' })).toBe(64000);
+  });
+
+  it('rejects overrides above MAX_MAX_TOKENS', () => {
+    expect(effectiveMaxTokens({ maxTokens: MAX_MAX_TOKENS + 1, model: 'claude-sonnet-4-5' })).toBe(64000);
+    expect(effectiveMaxTokens({ maxTokens: 999_999_999, model: 'claude-sonnet-4-5' })).toBe(64000);
+  });
+
+  it('rejects non-integer overrides', () => {
+    expect(effectiveMaxTokens({ maxTokens: 123.9, model: 'claude-sonnet-4-5' })).toBe(64000);
+    expect(effectiveMaxTokens({ maxTokens: Number.NaN, model: 'claude-sonnet-4-5' })).toBe(64000);
+    expect(effectiveMaxTokens({ maxTokens: Number.POSITIVE_INFINITY, model: 'claude-sonnet-4-5' })).toBe(64000);
+  });
+
+  it('accepts the boundary values exactly', () => {
+    expect(effectiveMaxTokens({ maxTokens: MIN_MAX_TOKENS, model: 'claude-sonnet-4-5' })).toBe(MIN_MAX_TOKENS);
+    expect(effectiveMaxTokens({ maxTokens: MAX_MAX_TOKENS, model: 'claude-sonnet-4-5' })).toBe(MAX_MAX_TOKENS);
   });
 });

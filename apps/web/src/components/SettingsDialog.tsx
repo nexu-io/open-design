@@ -10,7 +10,11 @@ import {
   renderModelOptions,
 } from './modelOptions';
 import { KNOWN_PROVIDERS } from '../state/config';
-import { modelMaxTokensDefault } from '../state/maxTokens';
+import {
+  MAX_MAX_TOKENS,
+  MIN_MAX_TOKENS,
+  modelMaxTokensDefault,
+} from '../state/maxTokens';
 import type { AgentInfo, AppConfig, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
@@ -450,9 +454,9 @@ export function SettingsDialog({
                 <span className="field-label">{t('settings.maxTokens')}</span>
                 <input
                   type="number"
-                  min={1024}
-                  max={200000}
-                  step={1024}
+                  min={MIN_MAX_TOKENS}
+                  max={MAX_MAX_TOKENS}
+                  step={MIN_MAX_TOKENS}
                   placeholder={String(modelMaxTokensDefault(cfg.model))}
                   value={cfg.maxTokens ?? ''}
                   onChange={(e) => {
