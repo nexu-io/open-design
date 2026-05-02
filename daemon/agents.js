@@ -162,8 +162,23 @@ export const AGENT_DEFS = [
     ],
     // Prompt delivered via stdin (`codex exec -`) to avoid Windows
     // `spawn ENAMETOOLONG` while keeping Codex on its structured JSON stream.
+    // OneShot launches Codex as a local agent runner, not as a full Codex
+    // Desktop session. Keep it lean: disable plugin/analytics sync so a
+    // ChatGPT web challenge on those background endpoints cannot fail an
+    // otherwise healthy model run, and use ephemeral sessions so the CLI
+    // does not try to record app rollouts for transient web-agent prompts.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
-      const args = ['exec', '--json', '--skip-git-repo-check', '--full-auto'];
+      const args = [
+        'exec',
+        '--json',
+        '--disable',
+        'plugins',
+        '--disable',
+        'general_analytics',
+        '--ephemeral',
+        '--skip-git-repo-check',
+        '--full-auto',
+      ];
       if (runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
       }
