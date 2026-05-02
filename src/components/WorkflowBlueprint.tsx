@@ -19,10 +19,7 @@ export function WorkflowBlueprint({ metadata, skillId = null, designSystemId = n
 
   if (!metadata?.workflowTitle) return null;
 
-  const exportFormats =
-    metadata.workflowExportPackage?.map((item) => item.format)
-    ?? metadata.workflowExports
-    ?? [];
+  const exportItems = summarizeExportItems(metadata);
   const primaryHandoff = metadata.workflowHandoff;
 
   return (
@@ -65,7 +62,7 @@ export function WorkflowBlueprint({ metadata, skillId = null, designSystemId = n
         {saved ? 'Saved' : 'Save blueprint'}
       </button>
       <BlueprintGroup label="Gates" items={metadata.workflowCheckpoints} />
-      <BlueprintGroup label="Exports" items={exportFormats} />
+      <BlueprintGroup label="Exports" items={exportItems} />
       <BlueprintGroup label="Scorecard" items={metadata.workflowScorecard} />
       {primaryHandoff ? (
         <BlueprintGroup
@@ -111,6 +108,21 @@ function appendList(lines: string[], label: string, items?: string[]) {
   }
 }
 
+function summarizeExportItems(metadata: ProjectMetadata): string[] {
+  if (!metadata.workflowExportPackage || metadata.workflowExportPackage.length === 0) {
+    return metadata.workflowExports ?? [];
+  }
+  const formatCounts = new Map<string, number>();
+  for (const item of metadata.workflowExportPackage) {
+    formatCounts.set(item.format, (formatCounts.get(item.format) ?? 0) + 1);
+  }
+  return metadata.workflowExportPackage.map((item) => (
+    (formatCounts.get(item.format) ?? 0) > 1
+      ? `${item.format}: ${item.artifact}`
+      : item.format
+  ));
+}
+
 function BlueprintGroup({
   label,
   items,
@@ -123,8 +135,8 @@ function BlueprintGroup({
     <div className="project-blueprint-group">
       <span>{label}</span>
       <div>
-        {items.slice(0, 4).map((item) => (
-          <small key={item}>{item}</small>
+        {items.slice(0, 4).map((item, index) => (
+          <small key={`${label}-${index}-${item}`}>{item}</small>
         ))}
         {items.length > 4 ? <small>+{items.length - 4}</small> : null}
       </div>

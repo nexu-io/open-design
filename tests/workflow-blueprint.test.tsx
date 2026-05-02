@@ -55,6 +55,45 @@ describe('WorkflowBlueprint', () => {
     expect(screen.getByText('layout-package')).toBeInTheDocument();
   });
 
+  it('renders duplicate export formats with stable keys and artifact labels', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    render(
+      <WorkflowBlueprint
+        metadata={{
+          kind: 'template',
+          workflowTitle: 'AI Opportunity Intelligence',
+          workflowExportPackage: [
+            {
+              format: 'Markdown',
+              artifact: 'DESIGN.md',
+              instructions: 'Extract the Operational Atelier design contract.',
+            },
+            {
+              format: 'Markdown',
+              artifact: 'Opportunity intelligence report',
+              instructions: 'Rank opportunities against evidence and risk.',
+            },
+            {
+              format: 'Markdown',
+              artifact: 'Codex build brief',
+              instructions: 'Create the next implementation handoff.',
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Markdown: DESIGN.md')).toBeInTheDocument();
+    expect(screen.getByText('Markdown: Opportunity intelligence report')).toBeInTheDocument();
+    expect(screen.getByText('Markdown: Codex build brief')).toBeInTheDocument();
+    expect(
+      consoleError.mock.calls.some(([message]) => (
+        String(message).includes('Encountered two children with the same key')
+      )),
+    ).toBe(false);
+  });
+
   it('stays hidden when a project has no workflow identity', () => {
     const { container } = render(<WorkflowBlueprint metadata={{ kind: 'other' }} />);
 
