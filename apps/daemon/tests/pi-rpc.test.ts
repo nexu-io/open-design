@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parsePiModels } from '../src/pi-rpc.js';
+import { parsePiModels, mapPiRpcEvent } from '../src/pi-rpc.js';
 
 // ─── parsePiModels ─────────────────────────────────────────────────────────
 
@@ -99,10 +99,10 @@ test('parsePiModels skips duplicate default id', () => {
   assert.equal(result[1].id, 'default/some-model');
 });
 
-// ─── RPC event translation (attachPiRpcSession) ────────────────────────────
+// ─── RPC event translation (mapPiRpcEvent) ────────────────────────────────
 //
-// We test the event translation by simulating pi's RPC stdout lines
-// through the same parser pipeline that attachPiRpcSession uses.
+// We test the pure event mapper directly — no child process, no stdin.
+// This catches regressions like tool event ordering bugs.
 
 import { createJsonLineStream } from '../src/acp.js';
 
@@ -111,72 +111,14 @@ function simulateRpcSession(rpcLines, options = {}) {
   const send = (_channel, payload) => {
     events.push(payload);
   };
+  const ctx = { runStartedAt: Date.now(), sentFirstToken: { value: false } };
+
   const parser = createJsonLineStream((raw) => {
-    // Inline the core event translation from attachPiRpcSession
-    // to test the mapping logic in isolation (no child process needed).
+    // Skip non-agent events that mapPiRpcEvent doesn't handle.
+    if (raw.type === 'extension_ui_request') return;
+    if (raw.type === 'response') return;
 
-    if (raw.type === 'extension_ui_request') return; // skip
-    if (raw.type === 'response') return; // skip
-
-    if (raw.type === 'agent_start') {
-      send('agent', { type: 'status', label: 'working' });
-      return;
-    }
-
-    if (raw.type === 'turn_start') {
-      send('agent', { type: 'status', label: 'thinking' });
-      return;
-    }
-
-    if (raw.type === 'message_update' && raw.assistantMessageEvent) {
-      const ev = raw.assistantMessageEvent;
-      if (ev.type === 'text_delta' && typeof ev.delta === 'string') {
-        send('agent', { type: 'text_delta', delta: ev.delta });
-      } else if (ev.type === 'thinking_delta' && typeof ev.delta === 'string') {
-        send('agent', { type: 'thinking_delta', delta: ev.delta });
-      } else if (ev.type === 'thinking_start') {
-        send('agent', { type: 'thinking_start' });
-      } else if (ev.type === 'thinking_end') {
-        send('agent', { type: 'thinking_end' });
-      }
-      return;
-    }
-
-    if (raw.type === 'turn_end' && raw.message?.usage) {
-      const u = raw.message.usage;
-      const usage = {};
-      if (typeof u.input === 'number') usage.input_tokens = u.input;
-      if (typeof u.output === 'number') usage.output_tokens = u.output;
-      if (typeof u.cacheRead === 'number') usage.cached_read_tokens = u.cacheRead;
-      if (typeof u.cacheWrite === 'number') usage.cached_write_tokens = u.cacheWrite;
-      if (Object.keys(usage).length > 0) {
-        send('agent', { type: 'usage', usage, durationMs: 100 });
-      }
-      return;
-    }
-
-    if (raw.type === 'tool_execution_start') {
-      send('agent', { type: 'status', label: 'tool', toolName: raw.toolName ?? null });
-      return;
-    }
-
-    if (raw.type === 'tool_execution_end') {
-      const content = raw.result?.content;
-      const text = Array.isArray(content)
-        ? content.map((c) => (c?.type === 'text' ? c.text : JSON.stringify(c))).join('\n')
-        : typeof content === 'string' ? content : '';
-      send('agent', { type: 'tool_result', toolUseId: raw.toolCallId ?? null, content: text, isError: raw.isError === true });
-      return;
-    }
-
-    if (raw.type === 'compaction_start') {
-      send('agent', { type: 'status', label: 'compacting' });
-      return;
-    }
-    if (raw.type === 'auto_retry_start') {
-      send('agent', { type: 'status', label: 'retrying' });
-      return;
-    }
+    mapPiRpcEvent(raw, send, ctx);
   });
 
   const input = rpcLines.map((l) => JSON.stringify(l)).join('\n') + '\n';
@@ -202,6 +144,7 @@ test('pi RPC: text streaming from message_update events', () => {
   assert.deepEqual(events, [
     { type: 'status', label: 'working' },
     { type: 'status', label: 'thinking' },
+    { type: 'status', label: 'streaming', ttftMs: events[2].ttftMs },
     { type: 'text_delta', delta: 'Hello ' },
     { type: 'text_delta', delta: 'world' },
   ]);
@@ -254,6 +197,7 @@ test('pi RPC: usage extracted from turn_end', () => {
     output_tokens: 50,
     cached_read_tokens: 20,
     cached_write_tokens: 5,
+    total_tokens: 175,
   });
 });
 
@@ -270,7 +214,7 @@ test('pi RPC: tool execution events mapped correctly', () => {
   ]);
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'tool', toolName: 'read' },
+    { type: 'tool_use', id: 'tc-1', name: 'read', input: { path: 'foo.txt' } },
     { type: 'tool_result', toolUseId: 'tc-1', content: 'file contents here', isError: false },
   ]);
 });
@@ -362,8 +306,9 @@ test('pi RPC: full multi-turn session with tools and usage', () => {
     },
   ]);
 
-  // 2 turns × (status + text/tool/usage)
+  // 2 turns with text, tool_use/tool_result, and usage
   assert.ok(events.some((e) => e.type === 'text_delta' && e.delta === 'Let me check.'));
+  assert.ok(events.some((e) => e.type === 'tool_use' && e.id === 'tc-1' && e.name === 'bash'));
   assert.ok(events.some((e) => e.type === 'tool_result' && e.toolUseId === 'tc-1'));
   assert.ok(events.some((e) => e.type === 'text_delta' && e.delta === 'Done!'));
   // Usage from both turns
@@ -371,6 +316,23 @@ test('pi RPC: full multi-turn session with tools and usage', () => {
   assert.equal(usageEvents.length, 2);
   assert.equal(usageEvents[0].usage.input_tokens, 200);
   assert.equal(usageEvents[1].usage.cached_read_tokens, 100);
+});
+
+test('pi RPC: tool_use arrives before tool_result in event order', () => {
+  // Regression: tool_use must be emitted from tool_execution_start,
+  // not message_end, so the UI can pair it with the later tool_result.
+  const events = simulateRpcSession([
+    { type: 'agent_start' },
+    { type: 'turn_start' },
+    { type: 'tool_execution_start', toolCallId: 'tc-1', toolName: 'read', args: { path: 'a.txt' } },
+    { type: 'tool_execution_end', toolCallId: 'tc-1', toolName: 'read', result: { content: [{ type: 'text', text: 'ok' }] }, isError: false },
+  ]);
+
+  const toolUseIdx = events.findIndex((e) => e.type === 'tool_use');
+  const toolResultIdx = events.findIndex((e) => e.type === 'tool_result');
+  assert.ok(toolUseIdx !== -1, 'tool_use event should exist');
+  assert.ok(toolResultIdx !== -1, 'tool_result event should exist');
+  assert.ok(toolUseIdx < toolResultIdx, 'tool_use must arrive before tool_result');
 });
 
 // ─── sendCommand format ─────────────────────────────────────────────────────

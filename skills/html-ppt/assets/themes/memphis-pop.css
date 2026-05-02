@@ -1,0 +1,20 @@
+/* theme: memphis-pop — 孟菲斯波普 */
+:root{
+  --bg:#fef6e8;--bg-soft:#fdebc7;--surface:#ffffff;--surface-2:#fff1d1;
+  --border:#111111;--border-strong:#111111;
+  --text-1:#111111;--text-2:#333333;--text-3:#666666;
+  --accent:#ff3d8b;--accent-2:#37c2d7;--accent-3:#ffcc00;
+  --good:#6ac04c;--warn:#ffcc00;--bad:#ff3d8b;
+  --grad:linear-gradient(135deg,#ff3d8b,#ffcc00 50%,#37c2d7);
+  --grad-soft:linear-gradient(135deg,#fdebc7,#fff1d1);
+  --radius:10px;--radius-sm:6px;--radius-lg:18px;
+  --shadow:5px 5px 0 #111;--shadow-lg:9px 9px 0 #111;
+  --font-sans:'Space Grotesk','Inter','Noto Sans SC',sans-serif;
+  --font-display:'Archivo Black',sans-serif;
+}
+.card{border:2.5px solid #111}
+body{background-image:
+  radial-gradient(circle at 10% 20%,#ff3d8b 3px,transparent 4px),
+  radial-gradient(circle at 80% 40%,#37c2d7 3px,transparent 4px),
+  radial-gradient(circle at 30% 80%,#ffcc00 3px,transparent 4px);
+  background-size:200px 200px,220px 220px,260px 260px}

@@ -75,6 +75,19 @@ describe('inferLegacyManifest', () => {
     expect(inferLegacyManifest({ entry: 'photo.png' })).toBeNull();
     expect(inferLegacyManifest({ entry: 'archive.bin' })).toBeNull();
   });
+
+  it('infers React component artifacts from JSX and TSX entries', () => {
+    expect(inferLegacyManifest({ entry: 'Card.jsx' })).toMatchObject({
+      kind: 'react-component',
+      renderer: 'react-component',
+      exports: ['jsx', 'html', 'zip'],
+    });
+    expect(inferLegacyManifest({ entry: 'Card.tsx' })).toMatchObject({
+      kind: 'react-component',
+      renderer: 'react-component',
+      exports: ['jsx', 'html', 'zip'],
+    });
+  });
 });
 
 describe('artifactManifestNameFor', () => {

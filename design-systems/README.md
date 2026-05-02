@@ -8,6 +8,11 @@ will read it as part of its system prompt.
 
 - **`default/`** — Neutral Modern. Hand-authored starter for the OD spec.
 - **`warm-editorial/`** — Warm Editorial. Hand-authored serif starter.
+- **`kami/`** — 紙 / 纸. Editorial paper system distilled from
+  [`tw93/kami`](https://github.com/tw93/kami) (MIT). Warm parchment canvas,
+  ink-blue accent, serif at one weight, no italic, no cool grays. Pairs with
+  the [`templates/kami-deck.html`](../templates/kami-deck.html) starter for
+  slide work.
 - **57 design skills**, sourced from
   [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills)
   and added directly as normalized 9-section `DESIGN.md` files.
@@ -76,6 +81,10 @@ The 70 product systems are sourced from
 [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)
 (MIT, © VoltAgent contributors). They are aesthetic *inspirations* — none
 of them are official assets of the brands they reference.
+
+The `kami/` system adapts tokens, type rules, and the "ten invariants" from
+[`tw93/kami`](https://github.com/tw93/kami) (MIT, © Tw93 and contributors),
+a Claude skill for typesetting professional documents and slide decks.
 
 The 57 design skills are sourced from
 [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills).

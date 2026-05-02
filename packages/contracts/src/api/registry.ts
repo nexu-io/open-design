@@ -42,6 +42,7 @@ export interface SkillSummary {
   fidelity?: 'wireframe' | 'high-fidelity' | null;
   speakerNotes?: boolean | null;
   animations?: boolean | null;
+  craftRequires?: string[];
   hasBody: boolean;
   examplePrompt: string;
 }

@@ -1,12 +1,17 @@
 // @ts-nocheck
 import { afterEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AGENT_DEFS } from '../src/agents.js';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { AGENT_DEFS, resolveAgentExecutable } from '../src/agents.js';
 
 const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
 const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
+const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
+const originalPath = process.env.PATH;
 
 afterEach(() => {
   if (originalDisablePlugins == null) {
@@ -14,6 +19,7 @@ afterEach(() => {
   } else {
     process.env.OD_CODEX_DISABLE_PLUGINS = originalDisablePlugins;
   }
+  process.env.PATH = originalPath;
 });
 
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
@@ -84,4 +90,174 @@ test('kiro fetchModels falls back to fallbackModels when detection fails', async
   assert.equal(result, null);
   assert.ok(Array.isArray(kiro.fallbackModels));
   assert.equal(kiro.fallbackModels[0].id, 'default');
+});
+
+// ---- reasoning-effort clamp ------------------------------------------------
+// Drives clampCodexReasoning through the public buildArgs surface so the
+// helper stays non-exported. The wire-level `-c model_reasoning_effort="..."`
+// flag is what the codex CLI (and ultimately OpenAI) actually sees.
+
+test('codex buildArgs clamps reasoning effort per model', () => {
+  const cases = [
+    // [model, reasoning, expected wire-level effort]
+    // gpt-5.5 family (and unknown / 'default' which we treat as 5.5):
+    // minimal -> low, others pass through.
+    [undefined,            'minimal', 'low'],
+    ['default',            'minimal', 'low'],
+    ['gpt-5.2',            'minimal', 'low'],
+    ['gpt-5.3',            'minimal', 'low'],
+    ['gpt-5.4',            'minimal', 'low'],
+    ['gpt-5.5',            'minimal', 'low'],
+    ['gpt-5.5',            'low',     'low'],
+    ['gpt-5.5',            'medium',  'medium'],
+    ['gpt-5.5',            'high',    'high'],
+    ['vendor/gpt-5.5-foo', 'minimal', 'low'],     // path-style id
+    // gpt-5.1: xhigh isn't supported, others pass through.
+    ['gpt-5.1',            'xhigh',   'high'],
+    ['gpt-5.1',            'high',    'high'],
+    // gpt-5.1-codex-mini: caps at medium / high only.
+    ['gpt-5.1-codex-mini', 'minimal', 'medium'],
+    ['gpt-5.1-codex-mini', 'low',     'medium'],
+    ['gpt-5.1-codex-mini', 'medium',  'medium'],
+    ['gpt-5.1-codex-mini', 'high',    'high'],
+    ['gpt-5.1-codex-mini', 'xhigh',   'high'],
+    // Unknown / future families: pass through; let the API surface its error
+    // as the signal a new rule belongs in clampCodexReasoning.
+    ['gpt-6',              'minimal', 'minimal'],
+  ];
+  for (const [model, reasoning, expected] of cases) {
+    const args = codex.buildArgs('', [], [], { model, reasoning }, { cwd: '/tmp/od-project' });
+    assert.ok(
+      args.includes(`model_reasoning_effort="${expected}"`),
+      `(model=${model ?? '<none>'}, reasoning=${reasoning}) → expected ${expected}; args=${JSON.stringify(args)}`,
+    );
+  }
+});
+
+test('codex buildArgs omits model_reasoning_effort when reasoning is "default"', () => {
+  const args = codex.buildArgs('', [], [], { reasoning: 'default' }, { cwd: '/tmp/od-project' });
+
+  assert.equal(
+    args.some((a) => typeof a === 'string' && a.startsWith('model_reasoning_effort=')),
+    false,
+  );
+});
+
+test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
+  // Long composed prompts (system prompt + design system + skill body +
+  // user message) routinely exceed Linux MAX_ARG_STRLEN (~128 KB) and the
+  // Windows CreateProcess command-line cap (~32 KB direct, ~8 KB via .cmd
+  // shim). The fix is to deliver the prompt on stdin instead of argv —
+  // these assertions guard that contract.
+  assert.equal(claude.promptViaStdin, true);
+
+  const longPrompt = 'x'.repeat(200_000);
+  const args = claude.buildArgs(longPrompt, [], [], {}, { cwd: '/tmp/od-project' });
+
+  assert.ok(Array.isArray(args), 'claude.buildArgs must return argv');
+  assert.equal(args.includes(longPrompt), false, 'prompt must not appear in argv');
+  for (const arg of args) {
+    assert.ok(
+      typeof arg === 'string' && arg.length < 1000,
+      `no argv entry should carry the prompt body (saw length ${arg.length})`,
+    );
+  }
+  // `-p` (print mode) must still be present; without it claude drops into
+  // an interactive REPL that the daemon has no TTY for.
+  assert.ok(args.includes('-p'), 'claude argv must include -p');
+});
+
+// ---- OpenClaude fallback (issue #235) -------------------------------------
+// OpenClaude (https://github.com/Gitlawb/openclaude) is a Claude Code fork
+// that ships under a different binary name but speaks an argv-compatible
+// CLI. Users with only `openclaude` on PATH should be auto-detected as the
+// Claude Code agent without writing a wrapper script. The mechanism is the
+// `fallbackBins` array on the Claude AGENT_DEF, consumed by
+// `resolveAgentExecutable`.
+
+test('claude entry declares openclaude as a fallback bin (issue #235)', () => {
+  assert.ok(
+    Array.isArray(claude.fallbackBins),
+    'claude.fallbackBins must be an array',
+  );
+  assert.ok(
+    claude.fallbackBins.includes('openclaude'),
+    `claude.fallbackBins must include 'openclaude'; got ${JSON.stringify(claude.fallbackBins)}`,
+  );
+});
+
+// resolveAgentExecutable touches the filesystem via existsSync; on
+// Windows resolveOnPath also walks PATHEXT extensions, which our fixture
+// files don't carry. Skip the filesystem-backed cases there — the
+// declarative `fallbackBins`-on-claude assertion above still runs on
+// every platform and is what catches regressions in the AGENT_DEF.
+const fsTest = process.platform === 'win32' ? test.skip : test;
+
+fsTest('resolveAgentExecutable prefers def.bin over fallbackBins when bin is on PATH', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
+  try {
+    writeFileSync(join(dir, 'claude'), '');
+    writeFileSync(join(dir, 'openclaude'), '');
+    chmodSync(join(dir, 'claude'), 0o755);
+    chmodSync(join(dir, 'openclaude'), 0o755);
+    process.env.PATH = dir;
+
+    const resolved = resolveAgentExecutable({
+      bin: 'claude',
+      fallbackBins: ['openclaude'],
+    });
+    assert.equal(resolved, join(dir, 'claude'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable falls back through fallbackBins when def.bin is missing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
+  try {
+    // Only `openclaude` is installed (Claude Code fork-only setup).
+    writeFileSync(join(dir, 'openclaude'), '');
+    chmodSync(join(dir, 'openclaude'), 0o755);
+    process.env.PATH = dir;
+
+    const resolved = resolveAgentExecutable({
+      bin: 'claude',
+      fallbackBins: ['openclaude'],
+    });
+    assert.equal(resolved, join(dir, 'openclaude'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable returns null when neither def.bin nor any fallback is on PATH', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
+  try {
+    process.env.PATH = dir;
+
+    const resolved = resolveAgentExecutable({
+      bin: 'claude',
+      fallbackBins: ['openclaude'],
+    });
+    assert.equal(resolved, null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable still resolves agents without a fallbackBins field', () => {
+  // Guard against a regression that would require every AGENT_DEF to
+  // declare fallbackBins. Most agents (codex / gemini / opencode / ...)
+  // only have a single binary name and must keep working unchanged.
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
+  try {
+    writeFileSync(join(dir, 'codex'), '');
+    chmodSync(join(dir, 'codex'), 0o755);
+    process.env.PATH = dir;
+
+    const resolved = resolveAgentExecutable({ bin: 'codex' });
+    assert.equal(resolved, join(dir, 'codex'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

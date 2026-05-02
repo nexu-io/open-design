@@ -4,6 +4,7 @@ import type {
   AppVersionResponse,
   AudioKind,
   ChatAttachment,
+  ChatCommentAttachment,
   ChatMessage,
   Conversation,
   DeployConfigResponse,
@@ -14,6 +15,10 @@ import type {
   ProjectDeploymentsResponse,
   PersistedAgentEvent,
   Project,
+  PreviewComment,
+  PreviewCommentStatus,
+  PreviewCommentTarget,
+  PreviewCommentUpsertRequest,
   ProjectDisplayStatus,
   ProjectFile,
   ProjectFileKind,
@@ -41,6 +46,8 @@ export interface AgentModelChoice {
   reasoning?: string;
 }
 
+export type AppTheme = 'system' | 'light' | 'dark';
+
 export interface AppConfig {
   mode: ExecMode;
   apiKey: string;
@@ -49,6 +56,7 @@ export interface AppConfig {
   agentId: string | null;
   skillId: string | null;
   designSystemId: string | null;
+  theme?: AppTheme;
   // True once the user has been through the welcome onboarding modal at
   // least once (saved or skipped). Bootstrap skips the auto-popup when
   // this is set so refreshing the page doesn't re-prompt.
@@ -58,14 +66,18 @@ export interface AppConfig {
   // Pre-existing configs without this field fall through to the agent's
   // declared default.
   agentModels?: Record<string, AgentModelChoice>;
+  // Caps the upstream completion length in API mode. Defaults to 8192 when
+  // unset; raise it for providers (e.g. MiMo) that allow longer responses.
+  maxTokens?: number;
 }
 
 export type AgentEvent = PersistedAgentEvent;
 
-export type { ChatAttachment, ChatMessage };
+export type { ChatAttachment, ChatCommentAttachment, ChatMessage };
 
 export interface Artifact {
   identifier: string;
+  artifactType?: string;
   title: string;
   html: string;
   savedUrl?: string;
@@ -123,6 +135,10 @@ export type {
   MediaAspect,
   ProjectDeploymentsResponse,
   Project,
+  PreviewComment,
+  PreviewCommentStatus,
+  PreviewCommentTarget,
+  PreviewCommentUpsertRequest,
   ProjectDisplayStatus,
   ProjectFile,
   ProjectFileKind,

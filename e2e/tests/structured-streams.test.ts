@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClaudeStreamHandler } from '../../apps/daemon/src/claude-stream.js';
 import { createCopilotStreamHandler } from '../../apps/daemon/src/copilot-stream.js';
-import { createJsonLineStream } from '../../apps/daemon/src/acp.js';
+import { mapPiRpcEvent } from '../../apps/daemon/src/pi-rpc.js';
 
 describe('structured agent stream fixtures', () => {
   it('emits TodoWrite tool_use from Claude Code stream JSON', () => {
@@ -37,49 +37,19 @@ describe('structured agent stream fixtures', () => {
 
   it('emits TodoWrite tool_use from Pi RPC tool_execution events', () => {
     const events: unknown[] = [];
-    // Simulate pi's RPC stdout through the same JSONL parser that
-    // attachPiRpcSession uses, then apply the event mapping.
-    const parser = createJsonLineStream((raw: any) => {
-      if (raw.type === 'tool_execution_start') {
-        events.push({
-          type: 'tool_use',
-          id: raw.toolCallId,
-          name: raw.toolName,
-          input: raw.args ?? null,
-        });
-      }
-      if (raw.type === 'tool_execution_end') {
-        const content = raw.result?.content;
-        const text = Array.isArray(content)
-          ? content.map((c: any) => (c?.type === 'text' ? c.text : JSON.stringify(c))).join('\n')
-          : '';
-        events.push({
-          type: 'tool_result',
-          toolUseId: raw.toolCallId,
-          content: text,
-          isError: raw.isError === true,
-        });
-      }
-    });
+    const send = (_channel: string, payload: unknown) => { events.push(payload); };
+    const ctx = { runStartedAt: Date.now(), sentFirstToken: { value: false } };
 
-    parser.feed(
-      JSON.stringify({
-        type: 'tool_execution_start',
-        toolCallId: 'pi-call-1',
-        toolName: 'TodoWrite',
-        args: { todos: [{ content: 'Run QA', status: 'pending' }] },
-      }) + '\n',
+    mapPiRpcEvent(
+      { type: 'tool_execution_start', toolCallId: 'pi-call-1', toolName: 'TodoWrite', args: { todos: [{ content: 'Run QA', status: 'pending' }] } },
+      send,
+      ctx,
     );
-    parser.feed(
-      JSON.stringify({
-        type: 'tool_execution_end',
-        toolCallId: 'pi-call-1',
-        toolName: 'TodoWrite',
-        result: { content: [{ type: 'text', text: 'written' }] },
-        isError: false,
-      }) + '\n',
+    mapPiRpcEvent(
+      { type: 'tool_execution_end', toolCallId: 'pi-call-1', toolName: 'TodoWrite', result: { content: [{ type: 'text', text: 'written' }] }, isError: false },
+      send,
+      ctx,
     );
-    parser.flush();
 
     expect(events).toContainEqual({
       type: 'tool_use',

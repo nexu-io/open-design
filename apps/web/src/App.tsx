@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { ProjectView } from './components/ProjectView';
@@ -54,6 +54,19 @@ export function App() {
   // instead of an "empty" page that flickers before data lands.
   const [bootstrapping, setBootstrapping] = useState(true);
   const route = useRoute();
+
+  // Sync theme preference to the <html> element so CSS variables pick it up.
+  // useLayoutEffect (vs useEffect) fires before the browser paints, so a
+  // live theme switch in Settings applies atomically — no 1-frame flash of
+  // the old theme. Safe here because the component tree is ssr:false.
+  useLayoutEffect(() => {
+    const theme = config.theme ?? 'system';
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }, [config.theme]);
 
   // Bootstrap — detect daemon, load pickers, seed sensible defaults.
   useEffect(() => {

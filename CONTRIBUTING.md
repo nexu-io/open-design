@@ -193,6 +193,28 @@ Bar for merging:
 
 ---
 
+## Updating model `max_tokens` metadata
+
+API-mode chat sends `max_tokens` to the upstream provider on every request. The web client picks that number from a three-tier lookup in [`apps/web/src/state/maxTokens.ts`](apps/web/src/state/maxTokens.ts):
+
+1. The user's explicit override in Settings, if set.
+2. Otherwise, the per-model default in [`apps/web/src/state/litellm-models.json`](apps/web/src/state/litellm-models.json) — a vendored slice of [BerriAI/litellm][litellm]'s `model_prices_and_context_window.json` (MIT). It covers ~2k chat models across Anthropic, OpenAI, DeepSeek, Groq, Together, Mistral, Gemini, Bedrock, Vertex, OpenRouter, and friends.
+3. Otherwise, `FALLBACK_MAX_TOKENS = 8192`.
+
+To pick up a newly-launched model, regenerate the vendored JSON:
+
+```bash
+node --experimental-strip-types scripts/sync-litellm-models.ts
+```
+
+The script fetches LiteLLM's catalog, filters to `mode: 'chat'` entries, projects each to its `max_output_tokens` (or `max_tokens` fallback), and writes a sorted snapshot. Commit the regenerated `litellm-models.json` alongside whatever PR triggered the refresh.
+
+The OVERRIDES table in `maxTokens.ts` is for the rare case where LiteLLM is missing or wrong for a model id we actually use — for example, `mimo-v2.5-pro` (LiteLLM only ships MiMo via the `openrouter/xiaomi/...` and `novita/xiaomimimo/...` aliases, neither of which matches the canonical id Xiaomi's direct API uses). Keep it small; everything that LiteLLM gets right belongs upstream.
+
+[litellm]: https://github.com/BerriAI/litellm
+
+---
+
 ## Localization maintenance
 
 German uses formal `Sie` because OD speaks to a mixed audience of solo creators, agencies, and engineering teams; until project feedback shows that an informal `du` voice fits better, formal German is the least surprising default. Locale PRs should translate UI chrome, core docs, and display-only gallery metadata in `apps/web/src/i18n/content.ts`, but should not translate `skills/`, `design-systems/`, or prompt bodies that agents execute. Those source prompts are maintained as workflow inputs, and keeping one source language avoids multiplying prompt QA across locales. When adding or renaming a skill, design system, or prompt template, update the German display metadata and run `pnpm --filter @open-design/web test`; `content.test.ts` fails if German display coverage drifts. Daemon errors, export filenames, and agent-generated artifact text are known limitations unless a PR explicitly scopes them.

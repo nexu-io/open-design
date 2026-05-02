@@ -722,7 +722,7 @@ async function runElectronBuilder(config: ToolPackConfig, paths: WinPaths): Prom
     appId: "io.open-design.desktop",
     asar: false,
     buildDependenciesFromSource: false,
-    compression: "store",
+    compression: "maximum",
     directories: { output: paths.appBuilderOutputRoot },
     electronDist: config.electronDistPath,
     electronVersion: config.electronVersion,

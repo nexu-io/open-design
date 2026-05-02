@@ -192,6 +192,28 @@ design-systems/your-brand/
 
 ---
 
+## 更新模型 `max_tokens` 元数据
+
+API 模式下每次请求都会带 `max_tokens` 给上游。Web 端通过 [`apps/web/src/state/maxTokens.ts`](apps/web/src/state/maxTokens.ts) 的三层 lookup 决定这个数字：
+
+1. 用户在 Settings 里手填的覆盖值（如果有）。
+2. 否则用 [`apps/web/src/state/litellm-models.json`](apps/web/src/state/litellm-models.json) 里的 per-model 默认 —— 这是从 [BerriAI/litellm][litellm] 的 `model_prices_and_context_window.json`（MIT）摘的一份切片，覆盖约 2000 个 chat 模型，包括 Anthropic、OpenAI、DeepSeek、Groq、Together、Mistral、Gemini、Bedrock、Vertex、OpenRouter 等。
+3. 都 miss 就走 `FALLBACK_MAX_TOKENS = 8192`。
+
+新模型上线想吃到默认值，重新生成 vendored JSON：
+
+```bash
+node --experimental-strip-types scripts/sync-litellm-models.ts
+```
+
+脚本会拉 LiteLLM 的最新 catalog、过滤 `mode: 'chat'`、把每条投影到 `max_output_tokens`（缺失时 fallback 到 `max_tokens`），写成排好序的快照。把重新生成的 `litellm-models.json` 跟着触发它的 PR 一起提。
+
+`maxTokens.ts` 里的 OVERRIDES 表只用于 LiteLLM 没收 / 收错的 model id —— 比如 `mimo-v2.5-pro`（LiteLLM 只收了 `openrouter/xiaomi/...` 和 `novita/xiaomimimo/...` 两个 alias，model id 跟小米直接 API 用的不一样）。表要保持小：凡是 LiteLLM 已经对的，**不要**抄进来。
+
+[litellm]: https://github.com/BerriAI/litellm
+
+---
+
 ## 代码风格
 
 格式我们不抠（保存时跑 Prettier 就行），但有两条不能让 —— 因为它们出现在提示词栈和用户可见的 API 里：

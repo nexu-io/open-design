@@ -447,6 +447,9 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
         [SIDECAR_ENV.WEB_PORT]: String(webPort ?? 0),
         PORT: String(webPort ?? 0),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+        ...(options.prod === true
+          ? { NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "server", OD_WEB_PROD: "1" }
+          : {}),
       },
       logHandle,
     });
@@ -476,7 +479,7 @@ async function ensureWebDevNodeModules(config: ToolDevConfig): Promise<void> {
   const current = await lstat(runtimeNodeModules).catch(() => null);
   if (current?.isSymbolicLink()) return;
   if (current != null) await rm(runtimeNodeModules, { force: true, recursive: true });
-  await symlink(webNodeModules, runtimeNodeModules, "dir");
+  await symlink(webNodeModules, runtimeNodeModules, "junction");
 }
 
 async function writeWebDevTsconfig(config: ToolDevConfig): Promise<void> {
@@ -876,7 +879,8 @@ function addSharedOptions(command: ReturnType<typeof cli.command>) {
 function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
-    .option("--web-port <port>", "force web port; conflict quick-fails");
+    .option("--web-port <port>", "force web port; conflict quick-fails")
+    .option("--prod", "use production build (requires pnpm build first)");
 }
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(

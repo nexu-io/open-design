@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   skillId: null,
   designSystemId: null,
   onboardingCompleted: false,
+  theme: 'system',
   mediaProviders: {},
   agentModels: {},
 };

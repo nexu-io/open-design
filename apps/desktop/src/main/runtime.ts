@@ -66,6 +66,37 @@ export type DesktopRuntimeOptions = {
   discoverUrl(): Promise<string | null>;
 };
 
+const MAC_WINDOW_CHROME =
+  process.platform === "darwin"
+    ? ({
+        titleBarStyle: "hiddenInset" as const,
+        trafficLightPosition: { x: 14, y: 12 },
+      })
+    : {};
+
+const MAC_WINDOW_CHROME_CSS = `
+  .app-chrome-header {
+    --app-chrome-traffic-space: 56px !important;
+    -webkit-app-region: drag;
+  }
+  .app-chrome-traffic-space {
+    flex: 0 0 56px !important;
+    width: 56px !important;
+  }
+  .app-chrome-header button,
+  .app-chrome-header [role="button"],
+  .app-chrome-header [contenteditable],
+  .app-chrome-actions,
+  .app-chrome-actions *,
+  .avatar-popover,
+  .avatar-popover * {
+    -webkit-app-region: no-drag;
+  }
+  .app-chrome-drag {
+    -webkit-app-region: drag;
+  }
+`;
+
 function createPendingHtml(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
@@ -119,12 +150,31 @@ function mapConsoleLevel(level: number): string {
   }
 }
 
+async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
+}
+
+function installWindowChromeCssHook(window: BrowserWindow): void {
+  window.webContents.on("did-finish-load", () => {
+    void applyWindowChromeCss(window).catch((error: unknown) => {
+      console.error("desktop window chrome CSS injection failed", error);
+    });
+  });
+}
+
+function showWindowButtons(window: BrowserWindow): void {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  window.setWindowButtonVisibility(true);
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
     height: 900,
     show: true,
     title: "Open Design",
+    ...MAC_WINDOW_CHROME,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -132,9 +182,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  installWindowChromeCssHook(window);
+  showWindowButtons(window);
   let currentUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+
+  window.on("focus", () => showWindowButtons(window));
+  window.on("blur", () => showWindowButtons(window));
 
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
@@ -149,6 +204,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   await window.loadURL(createPendingHtml());
+  showWindowButtons(window);
 
   const schedule = (delayMs: number) => {
     if (stopped) return;
@@ -165,6 +221,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (url != null && url !== currentUrl) {
         currentUrl = url;
         await window.loadURL(url);
+        showWindowButtons(window);
       }
       schedule(url == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {

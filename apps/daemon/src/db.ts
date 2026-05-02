@@ -8,6 +8,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 let dbInstance = null;
 let dbFile = null;
@@ -88,6 +89,29 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_messages_conv
       ON messages(conversation_id, position);
 
+    CREATE TABLE IF NOT EXISTS preview_comments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      element_id TEXT NOT NULL,
+      selector TEXT NOT NULL,
+      label TEXT NOT NULL,
+      text TEXT NOT NULL,
+      position_json TEXT NOT NULL,
+      html_hint TEXT NOT NULL,
+      note TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(project_id, conversation_id, file_path, element_id),
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation
+      ON preview_comments(project_id, conversation_id, updated_at DESC);
+
     CREATE TABLE IF NOT EXISTS tabs (
       project_id TEXT NOT NULL,
       name TEXT NOT NULL,
@@ -142,6 +166,9 @@ function migrate(db) {
   }
   if (!messageCols.some((c) => c.name === 'last_run_event_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
+  }
+  if (!messageCols.some((c) => c.name === 'comment_attachments_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
   }
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all();
   if (!deploymentCols.some((c) => c.name === 'status')) {
@@ -587,8 +614,9 @@ export function listMessages(db, conversationId) {
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
+              comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
-              started_at AS startedAt, ended_at AS endedAt,
+              created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
         WHERE conversation_id = ?
@@ -608,7 +636,7 @@ export function upsertMessage(db, conversationId, m) {
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
               run_id = ?, run_status = ?, last_run_event_id = ?,
-              events_json = ?, attachments_json = ?,
+              events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, started_at = ?, ended_at = ?
         WHERE id = ?`,
     ).run(
@@ -621,6 +649,7 @@ export function upsertMessage(db, conversationId, m) {
       m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
+      m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
@@ -633,16 +662,17 @@ export function upsertMessage(db, conversationId, m) {
       )
       .get(conversationId);
     const position = (max?.m ?? -1) + 1;
-    // 16 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 17 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
-    // produced_files_json, started_at, ended_at, position, created_at.
+    // comment_attachments_json, produced_files_json, started_at, ended_at,
+    // position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, last_run_event_id, events_json,
-          attachments_json, produced_files_json,
+          attachments_json, comment_attachments_json, produced_files_json,
           started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -655,6 +685,7 @@ export function upsertMessage(db, conversationId, m) {
       m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
+      m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
@@ -674,8 +705,9 @@ export function upsertMessage(db, conversationId, m) {
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
+              comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
-              started_at AS startedAt, ended_at AS endedAt,
+              created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
     )
@@ -685,6 +717,167 @@ export function upsertMessage(db, conversationId, m) {
 
 export function deleteMessage(db, id) {
   db.prepare(`DELETE FROM messages WHERE id = ?`).run(id);
+}
+
+// ---------- preview comments ----------
+
+const PREVIEW_COMMENT_STATUSES = new Set([
+  'open',
+  'attached',
+  'applying',
+  'needs_review',
+  'resolved',
+  'failed',
+]);
+
+export function listPreviewComments(db, projectId, conversationId) {
+  return db
+    .prepare(
+      `SELECT id, project_id AS projectId, conversation_id AS conversationId,
+              file_path AS filePath, element_id AS elementId, selector, label,
+              text, position_json AS positionJson, html_hint AS htmlHint,
+              note, status, created_at AS createdAt, updated_at AS updatedAt
+         FROM preview_comments
+        WHERE project_id = ? AND conversation_id = ?
+        ORDER BY updated_at DESC`,
+    )
+    .all(projectId, conversationId)
+    .map(normalizePreviewComment);
+}
+
+export function upsertPreviewComment(db, projectId, conversationId, input) {
+  const target = input?.target ?? {};
+  const note = typeof input?.note === 'string' ? input.note.trim() : '';
+  if (!note) throw new Error('comment note required');
+  const filePath = cleanRequiredString(target.filePath, 'filePath');
+  const elementId = cleanRequiredString(target.elementId, 'elementId');
+  const selector = cleanRequiredString(target.selector, 'selector');
+  const label = cleanRequiredString(target.label, 'label');
+  const text = typeof target.text === 'string' ? compactWhitespace(target.text).slice(0, 160) : '';
+  const htmlHint = typeof target.htmlHint === 'string' ? compactWhitespace(target.htmlHint).slice(0, 180) : '';
+  const position = normalizePosition(target.position);
+  const now = Date.now();
+  const existing = db
+    .prepare(
+      `SELECT id, created_at AS createdAt
+         FROM preview_comments
+        WHERE project_id = ? AND conversation_id = ? AND file_path = ? AND element_id = ?`,
+    )
+    .get(projectId, conversationId, filePath, elementId);
+  const id = existing?.id ?? randomCommentId();
+  const createdAt = existing?.createdAt ?? now;
+  db.prepare(
+    `INSERT INTO preview_comments
+       (id, project_id, conversation_id, file_path, element_id, selector, label,
+        text, position_json, html_hint, note, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(project_id, conversation_id, file_path, element_id) DO UPDATE SET
+       selector = excluded.selector,
+       label = excluded.label,
+       text = excluded.text,
+       position_json = excluded.position_json,
+       html_hint = excluded.html_hint,
+       note = excluded.note,
+       status = 'open',
+       updated_at = excluded.updated_at`,
+  ).run(
+    id,
+    projectId,
+    conversationId,
+    filePath,
+    elementId,
+    selector,
+    label,
+    text,
+    JSON.stringify(position),
+    htmlHint,
+    note,
+    'open',
+    createdAt,
+    now,
+  );
+  return getPreviewComment(db, projectId, conversationId, id);
+}
+
+export function updatePreviewCommentStatus(db, projectId, conversationId, id, status) {
+  if (!PREVIEW_COMMENT_STATUSES.has(status)) throw new Error('invalid comment status');
+  const now = Date.now();
+  db.prepare(
+    `UPDATE preview_comments
+        SET status = ?, updated_at = ?
+      WHERE id = ? AND project_id = ? AND conversation_id = ?`,
+  ).run(status, now, id, projectId, conversationId);
+  return getPreviewComment(db, projectId, conversationId, id);
+}
+
+export function deletePreviewComment(db, projectId, conversationId, id) {
+  const result = db
+    .prepare(
+      `DELETE FROM preview_comments
+        WHERE id = ? AND project_id = ? AND conversation_id = ?`,
+    )
+    .run(id, projectId, conversationId);
+  return result.changes > 0;
+}
+
+function getPreviewComment(db, projectId, conversationId, id) {
+  const row = db
+    .prepare(
+      `SELECT id, project_id AS projectId, conversation_id AS conversationId,
+              file_path AS filePath, element_id AS elementId, selector, label,
+              text, position_json AS positionJson, html_hint AS htmlHint,
+              note, status, created_at AS createdAt, updated_at AS updatedAt
+         FROM preview_comments
+        WHERE id = ? AND project_id = ? AND conversation_id = ?`,
+    )
+    .get(id, projectId, conversationId);
+  return row ? normalizePreviewComment(row) : null;
+}
+
+function normalizePreviewComment(row) {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    conversationId: row.conversationId,
+    filePath: row.filePath,
+    elementId: row.elementId,
+    selector: row.selector,
+    label: row.label,
+    text: row.text,
+    position: parseJsonOrUndef(row.positionJson) ?? { x: 0, y: 0, width: 0, height: 0 },
+    htmlHint: row.htmlHint,
+    note: row.note,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function cleanRequiredString(value, name) {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} required`);
+  return value.trim();
+}
+
+function compactWhitespace(value) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function normalizePosition(input) {
+  const value = input && typeof input === 'object' ? input : {};
+  return {
+    x: finiteNumber(value.x),
+    y: finiteNumber(value.y),
+    width: finiteNumber(value.width),
+    height: finiteNumber(value.height),
+  };
+}
+
+function finiteNumber(value) {
+  return Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+function randomCommentId() {
+  return `cmt_${randomUUID().slice(0, 8)}`;
 }
 
 function normalizeMessage(row) {
@@ -699,7 +892,9 @@ function normalizeMessage(row) {
     lastRunEventId: row.lastRunEventId ?? undefined,
     events: parseJsonOrUndef(row.eventsJson),
     attachments: parseJsonOrUndef(row.attachmentsJson),
+    commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,
   };

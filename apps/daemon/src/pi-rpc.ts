@@ -64,6 +64,139 @@ function replyExtensionUi(writable, raw) {
 }
 
 /**
+ * Map a single pi RPC event to zero or more daemon UI events.
+ *
+ * No I/O or child process interaction; mutates `ctx.sentFirstToken`
+ * to track streaming state.
+ * `send` callback and `ctx` are provided by the caller.
+ *
+ * @param {object} raw        - parsed JSON from pi's stdout
+ * @param {function} send     - (channel, payload) emitter
+ * @param {object} ctx        - session context
+ * @param {number} ctx.runStartedAt - Date.now() at session start
+ * @param {{ value: boolean }} ctx.sentFirstToken - mutable flag
+ * @returns {string|null} 'agent_end' if the agent is done, null otherwise
+ */
+export function mapPiRpcEvent(raw, send, ctx) {
+  if (raw.type === 'agent_start') {
+    send('agent', { type: 'status', label: 'working' });
+    return null;
+  }
+
+  if (raw.type === 'agent_end') {
+    return 'agent_end';
+  }
+
+  if (raw.type === 'turn_start') {
+    send('agent', { type: 'status', label: 'thinking' });
+    return null;
+  }
+
+  if (raw.type === 'turn_end') {
+    if (raw.message?.usage) {
+      const u = raw.message.usage;
+      const usage = {};
+      if (typeof u.input === 'number') usage.input_tokens = u.input;
+      if (typeof u.output === 'number') usage.output_tokens = u.output;
+      if (typeof u.cacheRead === 'number') usage.cached_read_tokens = u.cacheRead;
+      if (typeof u.cacheWrite === 'number') usage.cached_write_tokens = u.cacheWrite;
+      if (typeof u.totalTokens === 'number') usage.total_tokens = u.totalTokens;
+      if (Object.keys(usage).length > 0) {
+        const cost = u.cost;
+        send('agent', {
+          type: 'usage',
+          usage,
+          costUsd: cost?.total ?? cost?.totalCost ?? null,
+          durationMs: Date.now() - ctx.runStartedAt,
+        });
+      }
+    }
+    return null;
+  }
+
+  if (raw.type === 'message_update' && raw.assistantMessageEvent) {
+    const ev = raw.assistantMessageEvent;
+
+    if (ev.type === 'text_delta' && typeof ev.delta === 'string') {
+      if (!ctx.sentFirstToken.value) {
+        ctx.sentFirstToken.value = true;
+        send('agent', {
+          type: 'status',
+          label: 'streaming',
+          ttftMs: Date.now() - ctx.runStartedAt,
+        });
+      }
+      send('agent', { type: 'text_delta', delta: ev.delta });
+      return null;
+    }
+
+    if (ev.type === 'thinking_delta' && typeof ev.delta === 'string') {
+      send('agent', { type: 'thinking_delta', delta: ev.delta });
+      return null;
+    }
+
+    if (ev.type === 'thinking_start') {
+      send('agent', { type: 'thinking_start' });
+      return null;
+    }
+
+    if (ev.type === 'thinking_end') {
+      send('agent', { type: 'thinking_end' });
+      return null;
+    }
+
+    return null;
+  }
+
+  if (raw.type === 'message_end') {
+    // message_end carries usage (already emitted from turn_end) and
+    // tool call blocks (already emitted from tool_execution_start).
+    // Nothing to extract here.
+    return null;
+  }
+
+  if (raw.type === 'tool_execution_start') {
+    send('agent', {
+      type: 'tool_use',
+      id: raw.toolCallId ?? null,
+      name: raw.toolName ?? null,
+      input: raw.args ?? null,
+    });
+    return null;
+  }
+
+  if (raw.type === 'tool_execution_end') {
+    const content = raw.result?.content;
+    const text =
+      Array.isArray(content)
+        ? content
+            .map((c) => (c?.type === 'text' ? c.text : JSON.stringify(c)))
+            .join('\n')
+        : typeof content === 'string'
+          ? content
+          : '';
+    send('agent', {
+      type: 'tool_result',
+      toolUseId: raw.toolCallId ?? null,
+      content: text,
+      isError: raw.isError === true,
+    });
+    return null;
+  }
+
+  if (raw.type === 'compaction_start') {
+    send('agent', { type: 'status', label: 'compacting' });
+    return null;
+  }
+  if (raw.type === 'auto_retry_start') {
+    send('agent', { type: 'status', label: 'retrying' });
+    return null;
+  }
+
+  return null;
+}
+
+/**
  * Attach a pi RPC session to a spawned child process.
  *
  * @param {object} opts
@@ -78,7 +211,7 @@ export function attachPiRpcSession({ child, prompt, cwd, model, send }) {
   const runStartedAt = Date.now();
   let finished = false;
   let fatal = false;
-  let sentFirstToken = false;
+  const sentFirstToken = { value: false };
 
   let nextRpcId = 1;
 
@@ -125,14 +258,10 @@ export function attachPiRpcSession({ child, prompt, cwd, model, send }) {
       return;
     }
 
-    // ---- Agent events ----
+    // Agent events: delegate to the pure mapper.
+    const result = mapPiRpcEvent(raw, send, { runStartedAt, sentFirstToken });
 
-    if (raw.type === 'agent_start') {
-      send('agent', { type: 'status', label: 'working' });
-      return;
-    }
-
-    if (raw.type === 'agent_end') {
+    if (result === 'agent_end') {
       finished = true;
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
@@ -147,131 +276,6 @@ export function attachPiRpcSession({ child, prompt, cwd, model, send }) {
       setTimeout(() => {
         if (!child.killed) child.kill('SIGTERM');
       }, shutdownMs);
-      return;
-    }
-
-    if (raw.type === 'turn_start') {
-      send('agent', { type: 'status', label: 'thinking' });
-      return;
-    }
-
-    if (raw.type === 'turn_end') {
-      // Extract usage from the completed message if present.
-      if (raw.message?.usage) {
-        const u = raw.message.usage;
-        const usage = {};
-        if (typeof u.input === 'number') usage.input_tokens = u.input;
-        if (typeof u.output === 'number') usage.output_tokens = u.output;
-        if (typeof u.cacheRead === 'number') usage.cached_read_tokens = u.cacheRead;
-        if (typeof u.cacheWrite === 'number') usage.cached_write_tokens = u.cacheWrite;
-        if (typeof u.totalTokens === 'number') usage.total_tokens = u.totalTokens;
-        if (Object.keys(usage).length > 0) {
-          const cost = u.cost;
-          send('agent', {
-            type: 'usage',
-            usage,
-            costUsd: cost?.total ?? cost?.totalCost ?? null,
-            durationMs: Date.now() - runStartedAt,
-          });
-        }
-      }
-      return;
-    }
-
-    if (raw.type === 'message_update' && raw.assistantMessageEvent) {
-      const ev = raw.assistantMessageEvent;
-
-      if (ev.type === 'text_delta' && typeof ev.delta === 'string') {
-        if (!sentFirstToken) {
-          sentFirstToken = true;
-          send('agent', {
-            type: 'status',
-            label: 'streaming',
-            ttftMs: Date.now() - runStartedAt,
-          });
-        }
-        send('agent', { type: 'text_delta', delta: ev.delta });
-        return;
-      }
-
-      if (ev.type === 'thinking_delta' && typeof ev.delta === 'string') {
-        send('agent', { type: 'thinking_delta', delta: ev.delta });
-        return;
-      }
-
-      if (ev.type === 'thinking_start') {
-        send('agent', { type: 'thinking_start' });
-        return;
-      }
-
-      if (ev.type === 'thinking_end') {
-        send('agent', { type: 'thinking_end' });
-        return;
-      }
-
-      return;
-    }
-
-    if (raw.type === 'message_end' && raw.message) {
-      // Extract tool calls from the completed assistant message content.
-      // Note: usage is NOT emitted here because `turn_end` already
-      // emits it. Pi fires both `message_end` and `turn_end` per turn,
-      // both carrying usage; emitting from both would double-count.
-      const msg = raw.message;
-
-      // Extract tool calls from the completed assistant message content.
-      if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          if (block.type === 'toolCall') {
-            send('agent', {
-              type: 'tool_use',
-              id: block.id,
-              name: block.name,
-              input: block.arguments ?? null,
-            });
-          }
-        }
-      }
-      return;
-    }
-
-    if (raw.type === 'tool_execution_start') {
-      send('agent', {
-        type: 'status',
-        label: 'tool',
-        toolName: raw.toolName ?? null,
-      });
-      return;
-    }
-
-    if (raw.type === 'tool_execution_end') {
-      const content = raw.result?.content;
-      const text =
-        Array.isArray(content)
-          ? content
-              .map((c) => (c?.type === 'text' ? c.text : JSON.stringify(c)))
-              .join('\n')
-          : typeof content === 'string'
-            ? content
-            : '';
-      send('agent', {
-        type: 'tool_result',
-        toolUseId: raw.toolCallId ?? null,
-        content: text,
-        isError: raw.isError === true,
-      });
-      return;
-    }
-
-    // Compaction, retry, queue_update — informational only. Forward as
-    // status so the UI stays aware, but don't break the main text flow.
-    if (raw.type === 'compaction_start') {
-      send('agent', { type: 'status', label: 'compacting' });
-      return;
-    }
-    if (raw.type === 'auto_retry_start') {
-      send('agent', { type: 'status', label: 'retrying' });
-      return;
     }
   });
 

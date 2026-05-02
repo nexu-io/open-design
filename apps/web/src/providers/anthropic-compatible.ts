@@ -1,3 +1,4 @@
+import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
@@ -26,6 +27,7 @@ export async function streamMessageAnthropicProxy(
         model: cfg.model,
         systemPrompt: system,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
+        maxTokens: effectiveMaxTokens(cfg),
       }),
       signal,
     });

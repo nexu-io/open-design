@@ -28,6 +28,7 @@ const DE_SKILL_COPY: Record<string, { description?: string; examplePrompt?: stri
     examplePrompt:
       'Entwerfen Sie ‚mutuals‘ — eine Dating-Site für X-Poster. Tägliches Digest-Dashboard mit Statistiken, Balkendiagramm für gegenseitige Matches und Community-Ticker.',
   },
+  'design-brief': {},
   'digital-eguide': {
     examplePrompt:
       'Entwerfen Sie ‚The Creator\'s Style & Format Guide‘ — Coverseite und eine Innenseite für eine Lifestyle-Creator-Brand.',
@@ -60,6 +61,22 @@ const DE_SKILL_COPY: Record<string, { description?: string; examplePrompt?: stri
     examplePrompt:
       'Erstellen Sie einen 30-Tage-Onboardingplan für einen neuen Product Designer in einem 40-Personen-Startup.',
   },
+  'html-ppt': {},
+  'html-ppt-course-module': {},
+  'html-ppt-dir-key-nav-minimal': {},
+  'html-ppt-graphify-dark-graph': {},
+  'html-ppt-hermes-cyber-terminal': {},
+  'html-ppt-knowledge-arch-blueprint': {},
+  'html-ppt-obsidian-claude-gradient': {},
+  'html-ppt-pitch-deck': {},
+  'html-ppt-presenter-mode': {},
+  'html-ppt-product-launch': {},
+  'html-ppt-tech-sharing': {},
+  'html-ppt-testing-safety-alert': {},
+  'html-ppt-weekly-report': {},
+  'html-ppt-xhs-pastel-card': {},
+  'html-ppt-xhs-post': {},
+  'html-ppt-xhs-white-editorial': {},
   'hyperframes': {
     examplePrompt:
       'Ein 5-Sekunden-Product-Reveal: ein minimalistisches High-End-Produkt auf einer sauberen cremefarbenen Fläche, weiches Seitenlicht, langsamer Kamera-Push-in, zurückhaltende Bewegung, keine Text-Overlays.',
@@ -181,6 +198,8 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   hashicorp: 'Infrastrukturautomatisierung. Sauberer Enterprise-Look, Schwarz und Weiß.',
   ibm: 'Enterprise-Technologie. Carbon Design System, strukturierte blaue Palette.',
   intercom: 'Customer Messaging. Freundliche blaue Palette, konversationelle UI-Muster.',
+  kami:
+    'Editoriales Papiersystem. Warme Pergament-Leinwand, tintenblauer Akzent, Serif in nur einem Schnitt — gemacht für Lebensläufe, One-Pager, White-Paper, Portfolios und Slide-Decks.',
   kraken: 'Krypto-Trading. Dunkle UI mit violettem Akzent, datenreiche Dashboards.',
   lamborghini: 'Supercar-Marke. Echtschwarze Flächen, Goldakzente, dramatische Großbuchstaben-Typografie.',
   'linear-app': 'Projektmanagement. Ultraminimal, präzise, violetter Akzent.',
@@ -253,6 +272,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'E-Commerce & Retail': 'E-Commerce & Handel',
   'Media & Consumer': 'Medien & Consumer',
   Automotive: 'Automotive',
+  'Editorial & Print': 'Editorial & Print',
   'Retro & Nostalgic': 'Retro & Nostalgisch',
   'Themed & Unique': 'Thematisch & Einzigartig',
   Uncategorized: 'Nicht kategorisiert',
@@ -333,39 +353,113 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   'VFX / Fantasy': 'VFX / Fantasy',
   Anime: 'Anime',
   'Social / Meme': 'Social / Meme',
+  Branding: 'Branding',
+  Data: 'Daten',
+  'Game UI': 'Game UI',
+  Marketing: 'Marketing',
+  Product: 'Produkt',
+  'Short Form': 'Short Form',
+  Travel: 'Reise',
 };
 
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
+  '3d': '3D',
   '3d-render': '3D-Render',
   action: 'Action',
   'ancient-china': 'Altes China',
   anime: 'Anime',
+  'app-showcase': 'App-Showcase',
+  'audio-reactive': 'Audio-reaktiv',
+  archery: 'Archery',
+  arpg: 'ARPG',
+  'boss-fight': 'Boss Fight',
+  brand: 'Brand',
+  branding: 'Branding',
+  captions: 'Untertitel',
+  cavalry: 'Cavalry',
+  chart: 'Chart',
   childlike: 'Kindlich',
+  choreography: 'Choreography',
   cinematic: 'Filmisch',
   'cinematic-romance': 'Filmische Romanze',
+  combat: 'Combat',
+  combo: 'Combo',
+  'companion-to-image': 'Companion to Image',
+  counter: 'Counter',
   crayon: 'Wachsmalstift',
   cyberpunk: 'Cyberpunk',
   dance: 'Tanz',
+  'data-viz': 'Data-Viz',
+  editorial: 'Editorial',
+  'elden-ring': 'Elden Ring',
+  endcard: 'End Card',
+  escort: 'Escort',
+  'escort-mission': 'Escort Mission',
   fantasy: 'Fantasy',
   fashion: 'Mode',
+  'fighting-game': 'Fighting Game',
   food: 'Food',
+  'game-cinematic': 'Game Cinematic',
   'game-ui': 'Spiel-UI',
+  'grid-sheet': 'Grid Sheet',
+  guanyu: 'Guanyu',
   'hand-drawn': 'Handgezeichnet',
   hud: 'HUD',
+  'hud-safe': 'HUD Safe',
+  hype: 'Hype',
+  hyperframes: 'HyperFrames',
+  idol: 'Idol',
   illustration: 'Illustration',
   'image-to-image': 'Bild-zu-Bild',
+  infographic: 'Infografik',
+  japanese: 'Japanese',
+  karaoke: 'Karaoke',
+  'key-visual': 'Key Visual',
+  'kinetic-typography': 'Kinetische Typografie',
+  'linear-style': 'Linear-Stil',
+  logo: 'Logo',
+  lyubu: 'Lyu Bu',
+  map: 'Karte',
+  marketing: 'Marketing',
+  minimal: 'Minimal',
   mmo: 'MMO',
+  mobile: 'Mobile',
+  money: 'Geld',
+  'mounted-combat': 'Mounted Combat',
   nature: 'Natur',
   'open-world': 'Open World',
+  'otaku-dance': 'Otaku Dance',
+  outro: 'Outro',
+  overlay: 'Overlay',
+  pipeline: 'Pipeline',
+  'pose-reference': 'Pose Reference',
   portrait: 'Porträt',
   product: 'Produkt',
+  'product-promo': 'Produkt-Promo',
   rework: 'Überarbeiten',
+  route: 'Route',
+  saas: 'SaaS',
   sequence: 'Sequenz',
+  sizzle: 'Sizzle',
+  social: 'Social',
   storyboard: 'Storyboard',
+  'street-fighter': 'Street Fighter',
   'style-transfer': 'Stiltransfer',
+  tekken: 'Tekken',
+  'three-kingdoms': 'Three Kingdoms',
+  tiktok: 'TikTok',
+  'title-card': 'Title Card',
   transform: 'Transformieren',
+  travel: 'Reise',
+  tts: 'TTS',
   typography: 'Typografie',
+  'unreal-engine-5': 'Unreal Engine 5',
+  vertical: 'Vertikal',
+  'video-reference': 'Video Reference',
+  'vs-screen': 'VS Screen',
+  'website-to-video': 'Website-zu-Video',
   wuxia: 'Wuxia',
+  zhaoyun: 'Zhaoyun',
 };
 
 const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>> = {
@@ -389,6 +483,7 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Erzeugt eine handgezeichnete Tourist Map im Aquarellstil mit nummerierten lokalen Spezialitäten, Sehenswürdigkeiten und Legende.',
   },
+  'infographic-otaku-dance-choreography-breakdown-gokurakujodo-16-panels': {},
   'momotaro-explainer-slide-in-hybrid-style': {
     title: 'Momotaro-Erklärslide im Hybrid-Stil',
     summary:
@@ -529,6 +624,7 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Warme Editorial-Seite zu einem japanischen Feiertag mit Anime-Charakterkunst, nostalgischer Showa-Straßenszene und Magazinlayout.',
   },
+  'social-media-post-sensational-girl-dance-storyboard-8-shots': {},
   'social-media-post-social-media-fashion-outfit-generation': {
     title: 'Social-Media-Post - Fashion-Outfit-Generierung',
     summary:
@@ -644,10 +740,70 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Komplexer Dark-Comedy-Prompt für Seedance 2.0 mit einem orangefarbenen Katzenbeamten und einem Hyänenkaiser in einer satirischen Qing-Dynastie-Szene.',
   },
+  'game-screenshot-anime-fighting-game-captain-ryuuga-vs-kaze-renshin': {},
+  'game-screenshot-three-kingdoms-guanyu-slaying-yanliang': {},
+  'game-screenshot-three-kingdoms-lyubu-yuanmen-archery': {},
+  'game-screenshot-three-kingdoms-zhaoyun-cradle-escape': {},
+  'game-ui-ancient-china-open-world-mmo-hud': {},
   'hollywood-haute-couture-fantasy-video-prompt': {
     title: 'Hollywood-Haute-Couture-Fantasy-Video-Prompt',
     summary:
       'Detaillierter Multi-Scene-Video-Prompt für Seedance 2.0, ausgelegt auf einen Hollywood-Haute-Couture-Fantasy-Film mit 8K/Unreal-Engine-Ästhetik.',
+  },
+  'hyperframes-app-showcase-three-phones': {
+    title: 'HyperFrames: 12-Sekunden-App-Showcase – drei schwebende Phones',
+    summary:
+      'Eine 12-sekündige 16:9-App-Showcase-Komposition – drei schwebende iPhone-Screens schweben im 3D-Raum, jedes rotiert nacheinander, um ein anderes Feature zu zeigen, beat-synchrone Label-Callouts, End-Logo-Lockup. Direkt auf dem HyperFrames-`app-showcase`-Catalog-Block aufgebaut.',
+  },
+  'hyperframes-brand-sizzle-reel': {
+    title: 'HyperFrames: 30-Sekunden-Brand-Sizzle-Reel',
+    summary:
+      'Ein 30-sekündiges 16:9-HyperFrames-Sizzle-Reel – schnelle Schnitte, beat-synchrone kinetische Typografie, audio-reaktive Skalierung auf Display-Wörtern, Shader-Übergänge zwischen fünf Szenen, End-Card mit Logo-Bloom. Modelliert nach dem aisoc-hype-Archetyp aus dem Student-Kit.',
+  },
+  'hyperframes-data-bar-chart-race': {
+    title: 'HyperFrames: Animiertes Bar-Chart-Race (NYT-Stil)',
+    summary:
+      'Eine 12-sekündige 16:9-Daten-Infografik – animiertes Balken- und Liniendiagramm mit gestaffeltem Kategorie-Reveal, NYT-artiger Serif-Headline, Quellen-Footnote, kinetische Wert-Labels. Direkt auf dem HyperFrames-`data-chart`-Catalog-Block aufgebaut.',
+  },
+  'hyperframes-flight-map-route': {
+    title: 'HyperFrames: Apple-Style-Flugkarte (Origin → Destination)',
+    summary:
+      'Eine 8-sekündige filmische 16:9-Flugrouten-Karte – realistischer Terrain-Zoom, animiertes Flugzeug, das auf einer geschwungenen Route von Start- zu Zielort gleitet, beschriftete Städte, kinetischer Distanzzähler. Direkt auf dem HyperFrames-`nyc-paris-flight`-Catalog-Block aufgebaut, für jedes Städtepaar wiederverwendbar.',
+  },
+  'hyperframes-logo-outro-cinematic': {
+    title: 'HyperFrames: 4-Sekunden filmisches Logo-Outro',
+    summary:
+      'Ein 4-sekündiges 16:9-Logo-Outro – stückweise Wordmark-Aufbau mit Bloom, Shimmer-Sweep über das finale Lockup, weiches Grain-Overlay, einzeilige CTA. Aufgebaut auf den HyperFrames-Blöcken `logo-outro`, `shimmer-sweep` und `grain-overlay`.',
+  },
+  'hyperframes-money-counter-hype': {
+    title: 'HyperFrames: $0 → $10K Money-Counter-Hype (9:16)',
+    summary:
+      'Ein 6-sekündiger vertikaler 1080×1920-HyperFrames-Hype-Clip – Apple-artiger $0 → $10.000-Counter mit grünem Flash, Money-Burst-Partikeln, Cash-Stack-Icon, Kicker-Headline. Aufgebaut auf dem HyperFrames-`apple-money-count`-Catalog-Block.',
+  },
+  'hyperframes-product-reveal-minimal': {
+    title: 'HyperFrames: 5-Sekunden minimaler Product Reveal',
+    summary:
+      'Eine 5-sekündige HyperFrames-Komposition für einen High-End-Product-Reveal – dunkle Leinwand, einzelner warmer Akzent, langsamer Push-in-Title-Card, kinetische Kicker-Zeile, zurückhaltende Bewegung. Der Agent rendert MP4 aus HTML+GSAP via Puppeteer; kein Stock Footage nötig.',
+  },
+  'hyperframes-saas-product-promo-30s': {
+    title: 'HyperFrames: 30-Sekunden-SaaS-Product-Promo (Linear-Stil)',
+    summary:
+      'Eine 30-sekündige HyperFrames-Komposition modelliert nach Linear/ClickUp-artigen Produktfilmen – UI-3D-Reveals, beat-synchrone kinetische Typografie, animierte UI-Screenshots, End-Card mit Logo-Outro. Aus HF-Catalog-Blöcken (ui-3d-reveal, app-showcase, logo-outro) plus Shader-Übergängen zwischen Szenen aufgebaut.',
+  },
+  'hyperframes-social-overlay-stack': {
+    title: 'HyperFrames: 9:16 Social-Overlay-Stack (X · Reddit · Spotify · Instagram)',
+    summary:
+      'Eine 15-sekündige vertikale 1080×1920-HyperFrames-Komposition, die vier animierte Social-Cards über einen Face-Cam-Loop stapelt – einen X-Post, eine Reddit-Reaktion, eine Spotify-Now-Playing-Card und am Ende eine Instagram-Follow-CTA. Jede Karte ist ein HyperFrames-Catalog-Block; die Choreografie ist das Value-Add.',
+  },
+  'hyperframes-tiktok-karaoke-talking-head': {
+    title: 'HyperFrames: 9:16 TikTok-Talking-Head mit Karaoke-Untertiteln',
+    summary:
+      'Ein vertikaler 1080×1920-HyperFrames-Short – TTS-narrierter Talking-Head über einem Face-Cam-Loop, mit karaoke-artigen wort-synchronen Untertiteln, animiertem Lower Third und einem TikTok-Follow-Overlay am Ende. Spiegelt den may-shorts-19-Archetyp aus dem HyperFrames-Student-Kit.',
+  },
+  'hyperframes-website-to-video-promo': {
+    title: 'HyperFrames: Website-zu-Video-Pipeline (15-Sekunden-Marketing-Cut)',
+    summary:
+      'Eine 15-sekündige 16:9-HyperFrames-Komposition, die eine Live-Website in drei Viewport-Größen erfasst und dann mit einem chromatischen Radial-Split zwischen Szenen animiert. Spiegelt den hyperframes-sizzle-Student-Kit-Archetyp wider, bei dem die Site das Quell-Asset ist.',
   },
   'hunched-character-animation': {
     title: 'Animation einer gebeugten Figur',
@@ -714,6 +870,9 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Umfassender Seedance-2.0-Video-Prompt für einen anmutigen traditionellen Tanz auf Basis von Choreografie- und Identitätsreferenzbildern.',
   },
+  'video-seedance-three-kingdoms-guanyu-slaying-yanliang': {},
+  'video-seedance-three-kingdoms-lyubu-yuanmen-archery': {},
+  'video-seedance-three-kingdoms-zhaoyun-cradle-escape': {},
   'vintage-disney-style-pirate-crocodile-animation': {
     title: 'Piraten-Krokodil-Animation im Vintage-Disney-Stil',
     summary:

@@ -6,7 +6,7 @@ import {
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
-import type { OpenTabsState, ProjectFile } from '../types';
+import type { OpenTabsState, PreviewComment, PreviewCommentTarget, ProjectFile } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import { FileViewer } from './FileViewer';
 import { Icon } from './Icon';
@@ -25,6 +25,9 @@ interface Props {
   // daemon's SQLite store can hold the source of truth and survive reloads.
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
+  previewComments?: PreviewComment[];
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
+  onRemovePreviewComment?: (commentId: string) => Promise<void>;
 }
 
 interface SketchState {
@@ -47,6 +50,9 @@ export function FileWorkspace({
   openRequest,
   tabsState,
   onTabsStateChange,
+  previewComments = [],
+  onSavePreviewComment,
+  onRemovePreviewComment,
 }: Props) {
   const t = useT();
   // Persisted tabs come from the parent. Active tab can transiently point
@@ -392,6 +398,9 @@ export function FileWorkspace({
             isDeck={isDeck}
             onExportAsPptx={onExportAsPptx}
             streaming={streaming}
+            previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
+            onSavePreviewComment={onSavePreviewComment}
+            onRemovePreviewComment={onRemovePreviewComment}
           />
         ) : (
           <div className="viewer-empty">

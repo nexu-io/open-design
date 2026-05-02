@@ -1,0 +1,18 @@
+{
+  "id": "hyperframes-data-bar-chart-race",
+  "surface": "video",
+  "title": "HyperFrames: Animated Bar-Chart Race (NYT-style)",
+  "summary": "A 12-second 16:9 data infographic — animated bar + line chart with staggered category reveal, NYT-style serif headline, footnote source, kinetic value labels. Built directly on the HyperFrames `data-chart` catalog block.",
+  "category": "Data",
+  "tags": ["hyperframes", "data-viz", "chart", "infographic", "editorial"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 12-second HyperFrames data composition (1920×1080, 30fps) showing a 6-bar animated bar-chart race with a NYT-style headline. Pull the catalog block first: `npx hyperframes add data-chart`. Use it as the render surface and override the data via a small JSON inline.\n\nDataset (provide inline; choose the topic from the user's brief or default to AI labs market share):\n• Anthropic — 28%\n• OpenAI — 31%\n• Google — 18%\n• xAI — 9%\n• Meta — 8%\n• Other — 6%\n\nVisual identity: cream canvas #f5efe4, ink text #161312, single rust accent #b14a2c on the active/leading bar only, hairline rules in #b3a692. Display headline: \"Editorial New\" or \"Tiempos Headline\" 84px; deck face \"Inter\" 22px tracked +1%; mono \"JetBrains Mono\" 16px for value labels with `font-variant-numeric: tabular-nums`.\n\nLayout:\n• Top 18% of canvas — headline (one line, max 64 chars) + a 16px-high deck line below, separated by a hairline rule.\n• Middle 64% — the data-chart block, padded 120px left / 80px right.\n• Bottom 18% — source line (small caps, tracked +6%) like \"source · sec filings · may 2026\" and a kinetic ticking timestamp counter (0 → \"may 1 2026\" using apple-money-count-style logic on a date string is wrong — instead do a clean fade-in at 11.0s).\n\nAnimation (12s total):\n• 0–0.4s — page hairline rule wipes in from left, ease power3.out.\n• 0.3–1.2s — headline rises from y=40 → 0 over 0.7s ease expo.out, then deck line fades in at 0.9s over 0.4s.\n• 1.2–9.0s — data-chart block runs its built-in stagger: each bar grows from width 0 → final value over 1.4s, ease power2.out, staggered 180ms per bar; value labels count up tabular-nums at the same easing; the leading bar (`#b14a2c`) gets a 4% scale pulse on landing.\n• 9.5–11.5s — annotation callout pointing at the leader: a 360px box with a one-line analysis (\"Anthropic narrowed the gap to 3 points\") fades + slides in from x=40 over 0.5s.\n• 11.5–12s — final hold. Source line fades in. No exit animations (this is the only scene).\n\nNon-negotiables: tabular-nums on every digit; min 16px on data labels; deterministic; entrance-only; all timelines paused:true; root data-duration=12. Run `npx hyperframes inspect --at 1.5,5,9,11.5` to catch any value-label overflow.\n\nOutput: `data-chart-race-12s.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/data-chart"
+  }
+}

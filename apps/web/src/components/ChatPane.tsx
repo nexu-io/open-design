@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { ChatAttachment, ChatMessage, Conversation, ProjectFile } from '../types';
+import type { ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile } from '../types';
+import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
+import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
 import { Icon } from './Icon';
@@ -51,7 +53,12 @@ interface Props {
   // set to decide whether a path can be opened as a tab.
   projectFileNames?: Set<string>;
   onEnsureProject: () => Promise<string | null>;
-  onSend: (prompt: string, attachments: ChatAttachment[]) => void;
+  previewComments?: PreviewComment[];
+  attachedComments?: PreviewComment[];
+  onAttachComment?: (comment: PreviewComment) => void;
+  onDetachComment?: (commentId: string) => void;
+  onDeleteComment?: (commentId: string) => void;
+  onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[]) => void;
   onStop: () => void;
   // Click-to-open chain: passes a basename up to ProjectView, which sets
   // FileWorkspace's openRequest. Tool cards, attachment chips, and
@@ -87,6 +94,11 @@ export function ChatPane({
   projectFiles,
   projectFileNames,
   onEnsureProject,
+  previewComments = [],
+  attachedComments = [],
+  onAttachComment,
+  onDetachComment,
+  onDeleteComment,
   onSend,
   onStop,
   onRequestOpenFile,
@@ -212,11 +224,9 @@ export function ChatPane({
           <button
             type="button"
             role="tab"
-            aria-selected={false}
-            className="chat-header-tab"
-            disabled
-            title={t('chat.commentsSoon')}
-            data-coming-soon="true"
+            aria-selected={tab === 'comments'}
+            className={`chat-header-tab${tab === 'comments' ? ' active' : ''}`}
+            onClick={() => setTab('comments')}
           >
             {t('chat.tabComments')}
           </button>
@@ -352,36 +362,40 @@ export function ChatPane({
                   </div>
                 </div>
               ) : null}
-              {messages.map((m) => {
+              {messages.map((m, i) => {
+                const showDaySeparator = shouldShowDaySeparator(messages[i - 1], m);
                 const messageStreaming =
                   m.role === 'assistant' &&
                   ((streaming && m.id === lastAssistantId) || isActiveRunStatus(m.runStatus));
-                return m.role === 'user' ? (
-                  <UserMessage
-                    key={m.id}
-                    message={m}
-                    projectId={projectId}
-                    projectFileNames={projectFileNames}
-                    onRequestOpenFile={onRequestOpenFile}
-                    t={t}
-                  />
-                ) : (
-                  <AssistantMessage
-                    key={m.id}
-                    message={m}
-                    streaming={messageStreaming}
-                    projectId={projectId}
-                    projectFileNames={projectFileNames}
-                    onRequestOpenFile={onRequestOpenFile}
-                    isLast={m.id === lastAssistantId}
-                    nextUserContent={nextUserContentByAssistantId.get(m.id)}
-                    onSubmitForm={onSubmitForm}
-                    onContinueRemainingTasks={
-                      m.id === lastAssistantId && onContinueRemainingTasks
-                        ? (todos) => onContinueRemainingTasks(m, todos)
-                        : undefined
-                    }
-                  />
+                return (
+                  <Fragment key={m.id}>
+                    {showDaySeparator ? <DaySeparator ts={messageTime(m)} /> : null}
+                    {m.role === 'user' ? (
+                      <UserMessage
+                        message={m}
+                        projectId={projectId}
+                        projectFileNames={projectFileNames}
+                        onRequestOpenFile={onRequestOpenFile}
+                        t={t}
+                      />
+                    ) : (
+                      <AssistantMessage
+                        message={m}
+                        streaming={messageStreaming}
+                        projectId={projectId}
+                        projectFileNames={projectFileNames}
+                        onRequestOpenFile={onRequestOpenFile}
+                        isLast={m.id === lastAssistantId}
+                        nextUserContent={nextUserContentByAssistantId.get(m.id)}
+                        onSubmitForm={onSubmitForm}
+                        onContinueRemainingTasks={
+                          m.id === lastAssistantId && onContinueRemainingTasks
+                            ? (todos) => onContinueRemainingTasks(m, todos)
+                            : undefined
+                        }
+                      />
+                    )}
+                  </Fragment>
                 );
               })}
               {error ? <div className="msg error">{error}</div> : null}
@@ -405,13 +419,138 @@ export function ChatPane({
             streaming={streaming || hasActiveRunMessage}
             initialDraft={initialDraft}
             onEnsureProject={onEnsureProject}
+            commentAttachments={commentsToAttachments(attachedComments)}
+            onRemoveCommentAttachment={onDetachComment}
             onSend={onSend}
             onStop={onStop}
             onOpenSettings={onOpenSettings}
           />
         </>
       ) : null}
+      {tab === 'comments' ? (
+        <CommentsPanel
+          comments={previewComments}
+          attachedComments={attachedComments}
+          onAttach={onAttachComment}
+          onDetach={onDetachComment}
+          onDelete={onDeleteComment}
+          t={t}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function CommentsPanel({
+  comments,
+  attachedComments,
+  onAttach,
+  onDetach,
+  onDelete,
+  t,
+}: {
+  comments: PreviewComment[];
+  attachedComments: PreviewComment[];
+  onAttach?: (comment: PreviewComment) => void;
+  onDetach?: (commentId: string) => void;
+  onDelete?: (commentId: string) => void;
+  t: TranslateFn;
+}) {
+  const attachedIds = new Set(attachedComments.map((comment) => comment.id));
+  const saved = comments.filter((comment) => !attachedIds.has(comment.id));
+  return (
+    <div className="comments-panel" data-testid="comments-panel">
+      <CommentSection
+        title={t('chat.comments.attached')}
+        empty={t('chat.comments.emptyAttached')}
+        comments={attachedComments}
+        actionLabel={t('chat.comments.remove')}
+        onAction={(comment) => onDetach?.(comment.id)}
+        attached
+      />
+      <CommentSection
+        title={t('chat.comments.saved')}
+        empty={t('chat.comments.emptySaved')}
+        comments={saved}
+        actionLabel={t('chat.comments.add')}
+        onAction={(comment) => onAttach?.(comment)}
+        secondaryActionLabel={t('chat.comments.remove')}
+        onSecondaryAction={(comment) => onDelete?.(comment.id)}
+      />
+      {saved.length > 0 ? (
+        <div className="comments-footer">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => saved.forEach((comment) => onAttach?.(comment))}
+          >
+            {t('chat.comments.addAll')}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CommentSection({
+  title,
+  empty,
+  comments,
+  actionLabel,
+  onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+  attached,
+}: {
+  title: string;
+  empty: string;
+  comments: PreviewComment[];
+  actionLabel: string;
+  onAction: (comment: PreviewComment) => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: (comment: PreviewComment) => void;
+  attached?: boolean;
+}) {
+  return (
+    <section className="comments-section">
+      <h3>{title}</h3>
+      {comments.length === 0 ? (
+        <p className="comments-empty">{empty}</p>
+      ) : (
+        comments.map((comment) => (
+          <article
+            key={comment.id}
+            className={`comment-card${attached ? ' attached' : ''}`}
+            data-testid={`comment-card-${comment.elementId}`}
+          >
+            <div className="comment-card-top">
+              <strong>{comment.elementId}</strong>
+              <div className="comment-card-actions">
+                {secondaryActionLabel && onSecondaryAction ? (
+                  <button
+                    type="button"
+                    className="comment-card-action danger"
+                    onClick={() => onSecondaryAction(comment)}
+                  >
+                    {secondaryActionLabel}
+                  </button>
+                ) : null}
+                <button type="button" className="comment-card-action" onClick={() => onAction(comment)}>
+                  {actionLabel}
+                </button>
+              </div>
+            </div>
+            <p>{comment.note}</p>
+            <div className="comment-card-meta">
+              <span>{comment.id}</span>
+              <span>{comment.filePath}</span>
+              <span>{comment.label}</span>
+              <span>{simplePositionLabel(comment.position)}</span>
+            </div>
+          </article>
+        ))
+      )}
+    </section>
   );
 }
 
@@ -514,9 +653,13 @@ function UserMessage({
   t: TranslateFn;
 }) {
   const attachments = message.attachments ?? [];
+  const commentAttachments = message.commentAttachments ?? [];
   return (
     <div className="msg user">
-      <div className="role">{t('chat.you')}</div>
+      <div className="role">
+        <span>{t('chat.you')}</span>
+        <MessageTimestamp message={message} t={t} />
+      </div>
       {attachments.length > 0 ? (
         <div className="user-attachments">
           {attachments.map((a) => {
@@ -547,9 +690,48 @@ function UserMessage({
           })}
         </div>
       ) : null}
-      <div className="user-text">{message.content}</div>
+      {commentAttachments.length > 0 ? (
+        <div className="user-attachments comment-history-attachments">
+          {commentAttachments.map((a) => (
+            <span key={a.id} className="user-attachment staged-comment">
+              <span className="staged-name">
+                <strong>{a.elementId}</strong>
+                <span>{a.comment}</span>
+              </span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {message.content ? <div className="user-text">{message.content}</div> : null}
     </div>
   );
+}
+
+function DaySeparator({ ts }: { ts: number | undefined }) {
+  if (!ts) return null;
+  return (
+    <div className="chat-day-separator" role="separator">
+      <time dateTime={new Date(ts).toISOString()}>{dayLabel(ts)}</time>
+    </div>
+  );
+}
+
+function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
+  const ts = messageTime(message);
+  if (!ts) return null;
+  return (
+    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
+      {relativeTimeLong(ts, t)}
+    </time>
+  );
+}
+
+function shouldShowDaySeparator(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
+  const currTime = messageTime(curr);
+  if (!currTime) return false;
+  const prevTime = prev ? messageTime(prev) : undefined;
+  if (!prevTime) return true;
+  return dayKey(prevTime) !== dayKey(currTime);
 }
 
 function relTime(ts: number, t: TranslateFn): string {

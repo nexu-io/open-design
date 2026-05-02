@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja' | 'ko' | 'pl' | 'hu';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja', 'ko', 'pl', 'hu'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -14,6 +14,9 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'ru': 'Русский',
   'fa': 'فارسی',
   'ja': '日本語',
+  'ko': '한국어',
+  'pl': 'Polski',
+  'hu': 'Magyar'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -90,6 +93,8 @@ export interface Dict {
   'settings.show': string;
   'settings.hide': string;
   'settings.model': string;
+  'settings.maxTokens': string;
+  'settings.maxTokensHint': string;
   'settings.baseUrl': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
@@ -100,6 +105,11 @@ export interface Dict {
   'settings.noAgentSelected': string;
   'settings.language': string;
   'settings.languageHint': string;
+  'settings.appearance': string;
+  'settings.appearanceHint': string;
+  'settings.themeSystem': string;
+  'settings.themeLight': string;
+  'settings.themeDark': string;
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
@@ -204,6 +214,15 @@ export interface Dict {
   'newproj.audioDurationSeconds': string;
   'newproj.voiceLabel': string;
   'newproj.voicePlaceholder': string;
+  'newproj.promptTemplateLabel': string;
+  'newproj.promptTemplateNoneTitle': string;
+  'newproj.promptTemplateNoneSub': string;
+  'newproj.promptTemplateRefSub': string;
+  'newproj.promptTemplateSearch': string;
+  'newproj.promptTemplateEmpty': string;
+  'newproj.promptTemplateBodyLabel': string;
+  'newproj.promptTemplateOptimizeHint': string;
+  'newproj.promptTemplateBodyEmpty': string;
 
   // Prompt templates
   'promptTemplates.searchPlaceholder': string;
@@ -222,6 +241,7 @@ export interface Dict {
   'promptTemplates.openSource': string;
   'promptTemplates.openFullscreen': string;
   'promptTemplates.closeFullscreen': string;
+  'promptTemplates.retry': string;
 
   // Designs tab
   'designs.subRecent': string;
@@ -335,6 +355,18 @@ export interface Dict {
   'chat.tabChat': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
+  'chat.comments.attached': string;
+  'chat.comments.emptyAttached': string;
+  'chat.comments.saved': string;
+  'chat.comments.emptySaved': string;
+  'chat.comments.add': string;
+  'chat.comments.addAll': string;
+  'chat.comments.remove': string;
+  'chat.comments.placeholder': string;
+  'chat.comments.addSend': string;
+  'chat.comments.updateSend': string;
+  'chat.comments.removeAttachment': string;
+  'chat.comments.removeAttachmentAria': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
@@ -470,6 +502,7 @@ export interface Dict {
   'fileViewer.download': string;
   'fileViewer.open': string;
   'fileViewer.imageMeta': string;
+  'fileViewer.reactMeta': string;
   'fileViewer.sketchMeta': string;
   'fileViewer.markdownStreamingMeta': string;
   'fileViewer.markdownErrorMeta': string;
@@ -509,6 +542,8 @@ export interface Dict {
   'fileViewer.exportPptxNa': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
+  'fileViewer.exportJsx': string;
+  'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
   'fileViewer.savingTemplate': string;
   'fileViewer.savedTemplate': string;

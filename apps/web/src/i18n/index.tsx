@@ -14,10 +14,13 @@ import { en } from './locales/en';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
 import { ja } from './locales/ja';
+import { ko } from './locales/ko';
 import { ptBR } from './locales/pt-BR';
 import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
+import { pl } from './locales/pl';
+import { hu } from './locales/hu';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -35,6 +38,9 @@ const DICTS: Record<Locale, Dict> = {
   'ru': ru,
   'fa': fa,
   'ja': ja,
+  'ko': ko,
+  'pl': pl,
+  'hu': hu,
 };
 
 const LS_KEY = 'open-design:locale';

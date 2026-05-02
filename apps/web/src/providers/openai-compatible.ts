@@ -5,6 +5,7 @@
  * Routes through the daemon proxy to avoid browser CORS issues.
  * BYOK — the key stays on the user's machine.
  */
+import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
@@ -33,6 +34,7 @@ export async function streamMessageOpenAI(
         model: cfg.model,
         systemPrompt: system,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
+        maxTokens: effectiveMaxTokens(cfg),
       }),
       signal,
     });

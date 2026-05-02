@@ -66,6 +66,34 @@ const agentCapabilities = new Map();
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
+// Map a user-picked reasoning effort to one the chosen model will accept.
+// Codex's CLI accepts `none | minimal | low | medium | high | xhigh`, but
+// real models support narrower subsets — gpt-5.2/5.3/5.4/5.5 reject
+// `minimal`, gpt-5.1 rejects `xhigh`, gpt-5.1-codex-mini accepts only
+// `medium` / `high`.
+// An undefined / 'default' modelId is clamped as if it were gpt-5.5,
+// since that's codex's current default model. Unknown / future model ids
+// pass through unchanged — if the API later rejects, the server error
+// is the signal that a new rule belongs here.
+function clampCodexReasoning(modelId, effort) {
+  if (!effort) return effort;
+  const raw = String(modelId ?? '').trim();
+  const id = raw.includes('/') ? raw.split('/').pop() : raw;
+  const isGpt5LateFamily =
+    !id ||
+    id === 'default' ||
+    id.startsWith('gpt-5.2') ||
+    id.startsWith('gpt-5.3') ||
+    id.startsWith('gpt-5.4') ||
+    id.startsWith('gpt-5.5');
+  if (isGpt5LateFamily && effort === 'minimal') return 'low';
+  if (id === 'gpt-5.1' && effort === 'xhigh') return 'high';
+  if (id === 'gpt-5.1-codex-mini') {
+    return effort === 'high' || effort === 'xhigh' ? 'high' : 'medium';
+  }
+  return effort;
+}
+
 // Parse one-id-per-line stdout from `<cli> models` and prepend the synthetic
 // default option. Used by opencode / cursor-agent.
 function parseLineSeparatedModels(stdout) {
@@ -89,6 +117,11 @@ export const AGENT_DEFS = [
     id: 'claude',
     name: 'Claude Code',
     bin: 'claude',
+    // Drop-in forks that ship a CLI argv-compatible with `claude`. Tried in
+    // order if `claude` itself isn't on PATH, so users on a single-binary
+    // install (e.g. only OpenClaude — https://github.com/Gitlawb/openclaude
+    // — issue #235) get auto-detected without writing wrapper scripts.
+    fallbackBins: ['openclaude'],
     versionArgs: ['--version'],
     helpArgs: ['--help'],
     capabilityFlags: {
@@ -110,11 +143,17 @@ export const AGENT_DEFS = [
       { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
       { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
     ],
-    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
+    // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
+    // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
+    // ~32 KB direct, ~8 KB via .cmd shim). `claude -p` with no positional
+    // prompt reads the prompt from stdin under `--input-format text` (the
+    // default), which has no length cap. Mirrors the codex/gemini/opencode/
+    // cursor/qwen entries below.
+    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const caps = agentCapabilities.get('claude') || {};
       const args = [
         '-p',
-        prompt,
         '--output-format',
         'stream-json',
         '--verbose',
@@ -139,6 +178,7 @@ export const AGENT_DEFS = [
       args.push('--permission-mode', 'bypassPermissions');
       return args;
     },
+    promptViaStdin: true,
     streamFormat: 'claude-stream-json',
   },
   {
@@ -183,9 +223,10 @@ export const AGENT_DEFS = [
         args.push('--model', options.model);
       }
       if (options.reasoning && options.reasoning !== 'default') {
+        const effort = clampCodexReasoning(options.model, options.reasoning);
         // Codex accepts `-c key=value` config overrides; reasoning effort
         // is exposed as `model_reasoning_effort`.
-        args.push('-c', `model_reasoning_effort="${options.reasoning}"`);
+        args.push('-c', `model_reasoning_effort="${effort}"`);
       }
       args.push('-');
       return args;
@@ -390,10 +431,8 @@ export const AGENT_DEFS = [
       { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
       { id: 'gpt-5.2', label: 'GPT-5.2' },
     ],
-    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [
-        '-p',
-        prompt,
         '--allow-all-tools',
         '--output-format',
         'json',
@@ -407,6 +446,7 @@ export const AGENT_DEFS = [
       for (const d of dirs) args.push('--add-dir', d);
       return args;
     },
+    promptViaStdin: true,
     streamFormat: 'copilot-stream-json',
   },
   {
@@ -507,6 +547,21 @@ export function resolveOnPath(bin) {
   return null;
 }
 
+// Resolve the first available binary for an agent definition. Tries
+// `def.bin` first, then walks `def.fallbackBins` in order. Used for
+// agents whose forks ship under a different binary name but speak the
+// exact same CLI (Claude Code → OpenClaude, issue #235). Returns null
+// when no candidate is on PATH.
+export function resolveAgentExecutable(def) {
+  if (!def?.bin) return null;
+  const candidates = [def.bin, ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : [])];
+  for (const bin of candidates) {
+    const resolved = resolveOnPath(bin);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
 async function fetchModels(def, resolvedBin) {
   if (typeof def.fetchModels === 'function') {
     try {
@@ -538,7 +593,7 @@ async function fetchModels(def, resolvedBin) {
 }
 
 async function probe(def) {
-  const resolved = resolveOnPath(def.bin);
+  const resolved = resolveAgentExecutable(def);
   if (!resolved) {
     return {
       ...stripFns(def),
@@ -585,8 +640,9 @@ function stripFns(def) {
   // Drop the buildArgs / listModels closures but keep declarative metadata
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
-  // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` are
-  // probe-only metadata and shouldn't bleed into the API response either.
+  // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
+  // `fallbackBins` are probe-only metadata and shouldn't bleed into the
+  // API response either.
   const {
     buildArgs,
     listModels,
@@ -594,6 +650,7 @@ function stripFns(def) {
     fallbackModels,
     helpArgs,
     capabilityFlags,
+    fallbackBins,
     ...rest
   } = def;
   return rest;
@@ -622,7 +679,7 @@ export function getAgentDef(id) {
 export function resolveAgentBin(id) {
   const def = getAgentDef(id);
   if (!def?.bin) return null;
-  return resolveOnPath(def.bin);
+  return resolveAgentExecutable(def);
 }
 
 // Daemon's /api/chat needs to validate the user's model pick against the

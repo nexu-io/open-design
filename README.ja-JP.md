@@ -17,6 +17,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
@@ -25,7 +26,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b></p>
 
 ---
 
@@ -54,6 +55,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 | **BYOK フォールバック** | OpenAI 互換プロキシ `/api/proxy/stream` — `baseUrl` + `apiKey` + `model` を貼れば、任意のベンダー（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、セルフホスト vLLM、その他の OpenAI 互換プロバイダ）がエンジンになります。daemon 側で loopback / link-local / RFC1918 を拒否し SSRF を防御。 |
 | **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
+| **メディア生成** | 画像 · 動画 · 音声サーフェスがデザインループと並走。**gpt-image-2**（Azure / OpenAI）でポスター・アバター・インフォグラフィック・イラスト都市マップ · **Seedance 2.0**（ByteDance）で 15 秒のシネマティック text-to-video / image-to-video · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）で HTML→MP4 のモーショングラフィック（プロダクトリビール、キネティックタイポグラフィ、データチャート、ソーシャルオーバーレイ、ロゴアウトロ）。**93 件**のすぐ複製できる prompt ギャラリー — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames、すべて [`prompt-templates/`](prompt-templates/) にプレビュー画像と出典付きで配置。Chat の入口はコードと同じ；実体の `.mp4` / `.png` がプロジェクトワークスペースに chip として落ちます。 |
 | **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)） |
 | **デバイスフレーム** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — ピクセル単位で正確、Skill 間で共有、[`assets/frames/`](assets/frames/) に集約 |
 | **エージェントランタイム** | ローカル daemon がプロジェクトフォルダ内で CLI を spawn — エージェントは実際のディスク上で `Read` / `Write` / `Bash` / `WebFetch` を使用。各 adapter に Windows `ENAMETOOLONG` フォールバック（stdin / 一時 prompt ファイル）あり |
@@ -479,6 +481,79 @@ open-design/
 | Soft warm | おおらか、低コントラスト、ピーチ系ニュートラル | Notion マーケティングページ · Apple Health |
 
 完全な仕様 → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
+
+## メディア生成
+
+OD はコードで止まりません。`<artifact>` の HTML を生み出すのと同じ chat 入口が、**画像**・**動画**・**音声**の生成も駆動します — モデル adapter は daemon のメディアパイプライン（[`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts)、[`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)）に組み込み済みです。各レンダリングはプロジェクトワークスペースに実ファイル（`.png` / `.mp4`）として落ち、ターン終了時にダウンロード chip として現れます。
+
+主力は今のところこの 3 つのモデルファミリーです：
+
+| サーフェス | モデル | 提供元 | 用途 |
+|---|---|---|---|
+| **画像** | `gpt-image-2` | Azure / OpenAI | ポスター、プロフィールアバター、イラスト都市マップ、インフォグラフィック、雑誌風ソーシャルカード、写真修復、製品爆発図 |
+| **動画** | `seedance-2.0` | ByteDance Volcengine | 15 秒のシネマティック t2v + i2v + 音声 — 物語ショート、人物クローズアップ、プロダクト映像、MV 振付 |
+| **動画** | `hyperframes-html` | [HeyGen / OSS](https://github.com/heygen-com/hyperframes) | HTML→MP4 モーショングラフィック — プロダクトリビール、キネティックタイポグラフィ、データチャート、ソーシャルオーバーレイ、ロゴアウトロ、カラオケキャプション付き縦型 TikTok |
+
+成長中の **prompt ギャラリー** は [`prompt-templates/`](prompt-templates/) — **93 件のすぐ複製できる prompt** が同梱：43 件の画像（`prompt-templates/image/*.json`）、39 件の Seedance（`prompt-templates/video/*.json` のうち `hyperframes-*` 以外）、11 件の HyperFrames（`prompt-templates/video/hyperframes-*.json`）。各エントリにプレビュー画像、prompt 本文、対象モデル、アスペクト比、ライセンス + 帰属を記録した `source` ブロックが付きます。daemon は `GET /api/prompt-templates` で配信し、Web アプリはエントリビューの **Image templates** / **Video templates** タブにカードグリッドとして表示。1 クリックで対応モデルが選択された状態の prompt が composer に流し込まれます。
+
+### gpt-image-2 — 画像ギャラリー（43 件中 5 件）
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D Stone Staircase Evolution" /><br/><sub><b>3D Stone Staircase Evolution Infographic</b><br/>3 段構成・石材調インフォグラフィック</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated City Food Map" /><br/><sub><b>Illustrated City Food Map</b><br/>編集級の手描き旅行ポスター</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>シネマティックなファッション 1 フレーム</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>プロフィールアバター — ネオン顔字</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>編集級スタジオポートレート</sub></td>
+</tr>
+</table>
+
+完全リスト → [`prompt-templates/image/`](prompt-templates/image/)。出典：多くは [`YouMind-OpenLab/awesome-gpt-image-prompts`](https://github.com/YouMind-OpenLab/awesome-gpt-image-prompts)（CC-BY-4.0）から、テンプレート単位で作者帰属を保持。
+
+### Seedance 2.0 — 動画ギャラリー（39 件中 5 件）
+
+<table>
+<tr>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/thumbnails/thumbnail.jpg" alt="Music Podcast Guitar" /></a><br/><sub><b>Music Podcast & Guitar Technique</b><br/>4K シネマティックスタジオ映像</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg" alt="Emotional Face" /></a><br/><sub><b>Emotional Face Close-up</b><br/>シネマティック微表情研究</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg" alt="Luxury Supercar" /></a><br/><sub><b>Luxury Supercar Cinematic</b><br/>物語仕立てのプロダクト映像</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>スタイライズされた風刺ショート</sub></td>
+<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad253175a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15 秒の Seedance 2.0 物語</sub></td>
+</tr>
+</table>
+
+サムネイルをクリックすると実レンダリング MP4 が再生されます。完全リスト → [`prompt-templates/video/`](prompt-templates/video/)（`*-seedance-*` と Cinematic タグ付きエントリ）。出典：[`YouMind-OpenLab/awesome-seedance-2-prompts`](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts)（CC-BY-4.0）、原ツイートリンクと作者ハンドルを保持。
+
+### HyperFrames — HTML→MP4 モーショングラフィック（11 件のすぐ複製できるテンプレート）
+
+[**`heygen-com/hyperframes`**](https://github.com/heygen-com/hyperframes) は HeyGen がオープンソース化したエージェントネイティブな動画フレームワークです — あなた（あるいは agent）が HTML + CSS + GSAP を書くと、HyperFrames は headless Chrome + FFmpeg で確定的に MP4 にレンダリングします。Open Design は HyperFrames を一級の動画モデル（`hyperframes-html`）として daemon dispatch に接続し、さらに `skills/hyperframes/` skill を同梱して timeline 規約・シーンタンスィション規則・オーディオリアクティブパターン・キャプション/TTS・カタログブロック（`npx hyperframes add <slug>`）を agent に教えます。
+
+11 件の HyperFrames prompt は [`prompt-templates/video/hyperframes-*.json`](prompt-templates/video/) に置かれ、それぞれ特定アーキタイプを生む具体的な brief です：
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-product-reveal-minimal.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Product reveal" /></a><br/><sub><b>5s ミニマルなプロダクトリビール</b> · 16:9 · 押し込みタイトルカード + シェーダトランジション</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS promo" /></a><br/><sub><b>30s SaaS プロダクト動画</b> · 16:9 · Linear/ClickUp 風 + UI 3D リビール</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok karaoke" /></a><br/><sub><b>TikTok カラオケトーキングヘッド</b> · 9:16 · TTS + 単語同期キャプション</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Brand sizzle" /></a><br/><sub><b>30s ブランド sizzle リール</b> · 16:9 · ビート同期キネティックタイポグラフィ、audio-reactive</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Data chart" /></a><br/><sub><b>アニメーション bar-chart race</b> · 16:9 · NYT 風データインフォグラフィック</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Flight map" /></a><br/><sub><b>フライトマップ（出発 → 到着）</b> · 16:9 · Apple 風シネマティック経路リビール</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo outro" /></a><br/><sub><b>4s シネマティックロゴアウトロ</b> · 16:9 · ピース単位のアセンブル + bloom</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Money counter" /></a><br/><sub><b>$0 → $10K マネーカウンター</b> · 9:16 · Apple 風 hype + グリーンフラッシュ + バースト</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-app-showcase-three-phones.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="App showcase" /></a><br/><sub><b>3 端末アプリショーケース</b> · 16:9 · 浮遊スマホ + 機能コールアウト</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-social-overlay-stack.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Social overlay" /></a><br/><sub><b>ソーシャルオーバーレイスタック</b> · 9:16 · X · Reddit · Spotify · Instagram を順に</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Website to video" /></a><br/><sub><b>ウェブサイト→動画パイプライン</b> · 16:9 · 3 ビューポート取得 + トランジション</sub></td>
+<td width="25%" valign="top">&nbsp;</td>
+</tr>
+</table>
+
+パターンは他と同じです：テンプレートを選び、brief を編集し、送信。Agent は同梱の `skills/hyperframes/SKILL.md`（OD 専用のレンダリングフロー — composition のソースファイルは `.hyperframes-cache/` に隔離してファイルワークスペースを汚さない、daemon が `npx hyperframes render` を肩代わりして macOS sandbox-exec / Puppeteer のハングを回避、最終 `.mp4` だけがプロジェクトの chip として現れる）を読み、composition を書き、MP4 を出力します。カタログブロックのサムネイルは © HeyGen で同社 CDN から配信、OSS フレームワーク本体は Apache-2.0 です。
+
+> **接続済みだがまだ prompt 化していないモデル：** Kling 2.0 / 1.6 / 1.5、Veo 3 / Veo 2、Sora 2 / Sora 2-Pro（via Fal）、MiniMax video-01 — いずれも `VIDEO_MODELS`（[`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)）にあります。Suno v5 / v4.5、Udio v2、Lyria 2（音楽）と gpt-4o-mini-tts、MiniMax TTS（音声）が音声サーフェスをカバー。これらの prompt テンプレートはオープンコントリビューションです — JSON を `prompt-templates/video/` か `prompt-templates/audio/` に置けば picker に出ます。
 
 ## チャット以外に同梱されているもの
 

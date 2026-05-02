@@ -3,6 +3,9 @@ import type {
   AppVersionInfo,
   AppVersionResponse,
   ChatAttachment,
+  PreviewComment,
+  PreviewCommentStatus,
+  PreviewCommentUpsertRequest,
   DeployConfigResponse,
   DeployProjectFileResponse,
   DesignSystemDetail,
@@ -291,6 +294,83 @@ export async function fetchProjectFileText(
       url: requestUrl,
     });
     return null;
+  }
+}
+
+export async function fetchPreviewComments(
+  projectId: string,
+  conversationId: string,
+): Promise<PreviewComment[]> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`,
+    );
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { comments: PreviewComment[] };
+    return json.comments ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertPreviewComment(
+  projectId: string,
+  conversationId: string,
+  input: PreviewCommentUpsertRequest,
+): Promise<PreviewComment | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { comment: PreviewComment };
+    return json.comment ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function patchPreviewCommentStatus(
+  projectId: string,
+  conversationId: string,
+  commentId: string,
+  status: PreviewCommentStatus,
+): Promise<PreviewComment | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { comment: PreviewComment };
+    return json.comment ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deletePreviewComment(
+  projectId: string,
+  conversationId: string,
+  commentId: string,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments/${encodeURIComponent(commentId)}`,
+      { method: 'DELETE' },
+    );
+    return resp.ok;
+  } catch {
+    return false;
   }
 }
 

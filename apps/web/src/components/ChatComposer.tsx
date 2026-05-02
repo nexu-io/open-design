@@ -8,7 +8,7 @@ import {
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl, uploadProjectFiles } from "../providers/registry";
-import type { ChatAttachment, ProjectFile } from "../types";
+import type { ChatAttachment, ChatCommentAttachment, ProjectFile } from "../types";
 import { Icon } from "./Icon";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -22,7 +22,9 @@ interface Props {
   // project folder exists on disk before files land in it. Returns the
   // project id when ready.
   onEnsureProject: () => Promise<string | null>;
-  onSend: (prompt: string, attachments: ChatAttachment[]) => void;
+  commentAttachments?: ChatCommentAttachment[];
+  onRemoveCommentAttachment?: (id: string) => void;
+  onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[]) => void;
   onStop: () => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
@@ -54,6 +56,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       streaming,
       initialDraft,
       onEnsureProject,
+      commentAttachments = [],
+      onRemoveCommentAttachment,
       onSend,
       onStop,
       onOpenSettings,
@@ -241,8 +245,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function submit() {
       const prompt = draft.trim();
-      if (!prompt || streaming) return;
-      onSend(prompt, staged);
+      if ((!prompt && commentAttachments.length === 0) || streaming) return;
+      onSend(prompt, staged, commentAttachments);
       reset();
     }
 
@@ -277,6 +281,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               attachments={staged}
               projectId={projectId}
               onRemove={removeStaged}
+              t={t}
+            />
+          ) : null}
+          {commentAttachments.length > 0 ? (
+            <StagedCommentAttachments
+              attachments={commentAttachments}
+              onRemove={(id) => onRemoveCommentAttachment?.(id)}
               t={t}
             />
           ) : null}
@@ -389,7 +400,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 className="composer-send"
                 data-testid="chat-send"
                 onClick={() => void submit()}
-                disabled={!draft.trim()}
+                disabled={!draft.trim() && commentAttachments.length === 0}
               >
                 <Icon name="send" size={13} />
                 <span>{t('chat.send')}</span>
@@ -434,6 +445,37 @@ function StagedAttachments({
             onClick={() => onRemove(a.path)}
             title={t('common.delete')}
             aria-label={t('chat.removeAria', { name: a.name })}
+          >
+            <Icon name="close" size={11} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StagedCommentAttachments({
+  attachments,
+  onRemove,
+  t,
+}: {
+  attachments: ChatCommentAttachment[];
+  onRemove: (id: string) => void;
+  t: TranslateFn;
+}) {
+  return (
+    <div className="staged-row comment-staged-row" data-testid="staged-comment-attachments">
+      {attachments.map((a) => (
+        <div key={a.id} className="staged-chip staged-comment">
+          <span className="staged-name" title={`${a.elementId}: ${a.comment}`}>
+            <strong>{a.elementId}</strong>
+            <span>{a.comment}</span>
+          </span>
+          <button
+            className="staged-remove"
+            onClick={() => onRemove(a.id)}
+            title={t('chat.comments.removeAttachment')}
+            aria-label={t('chat.comments.removeAttachmentAria', { name: a.elementId })}
           >
             <Icon name="close" size={11} />
           </button>

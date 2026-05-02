@@ -21,6 +21,7 @@ const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
 const toPosixPath = (value: string) => value.replaceAll('\\', '/');
 
 function resolveDistDir(defaultValue: string) {
+  if (process.env.OD_WEB_PROD === '1') return defaultValue;
   const configured = process.env.OD_WEB_DIST_DIR;
   if (!configured) return defaultValue;
   return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || '.' : configured);

@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  pull_request:
+  # Release validation is owned by the release workflows rather than this CI
+  # workflow: `release-stable` has a verify job before publishing, and
+  # `release-beta` builds from its selected release commit. Keep this trigger
+  # focused on PRs, main, and manual reruns instead of duplicating tag/release
+  # events that would run after those release workflows have already selected
+  # or validated their commit.
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Prefer current-head signal over preserving superseded logs: PR authors often
+  # push fixups while this workflow is still running, and stale runs can report
+  # failures for commits reviewers no longer need to evaluate. Release workflows
+  # use cancel-in-progress: false where preserving build evidence matters more.
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
+      # are needed immediately after install for linked bins and shared
+      # sidecar/platform imports. It intentionally skips app outputs because
+      # building all apps would make every install run a Next/Electron-adjacent
+      # app build, even when a developer only needs packages/tools.
+      #
+      # Fresh CI typecheck/test still need these specific generated declarations:
+      #   - `apps/daemon/dist/*.d.ts` for e2e runtime-adapter tests that import
+      #     daemon runtime modules
+      #   - `apps/desktop/dist/main/index.d.ts` for `apps/packaged` imports of
+      #     `@open-design/desktop/main`
+      #   - `apps/web/dist/sidecar/index.d.ts` for `apps/packaged` imports of
+      #     `@open-design/web/sidecar`
+      # If postinstall grows a targeted app type-generation phase covering these
+      # three exports without broad app builds, this CI prebuild can be removed.
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Typecheck workspaces
+        run: pnpm -r --workspace-concurrency=1 --if-present run typecheck
+
+      - name: Check residual JS in TypeScript packages
+        run: pnpm check:residual-js
+
+      - name: Test
+        run: pnpm test
+
+      # Keep workspace builds serialized so generated dist output and local
+      # runtime artifacts are produced in a deterministic order. Parallel
+      # recursive builds would surface late-package failures sooner, but the
+      # current workspace is small enough that safer logs and fewer shared-FS
+      # races outweigh the lost parallelism; revisit if the package count grows.
+      - name: Build workspaces
+        run: pnpm -r --workspace-concurrency=1 --if-present run build
