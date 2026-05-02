@@ -465,6 +465,7 @@ export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INT
 }
 
 export async function startServer({ port = 7456, returnServer = false } = {}) {
+  let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
@@ -1359,7 +1360,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
-    if (!isLocalSameOrigin(req, port)) {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({
         error: 'cross-origin request rejected: media generation is restricted to the local UI / CLI',
       });
@@ -1441,7 +1442,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
-    if (!isLocalSameOrigin(req, port)) {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
@@ -1491,7 +1492,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.get('/api/projects/:id/media/tasks', (req, res) => {
-    if (!isLocalSameOrigin(req, port)) {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
@@ -1831,7 +1832,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       process.platform === 'win32' && CMD_BAT_RE.test(resolvedBin);
     const odMediaEnv = {
       OD_BIN,
-      OD_DAEMON_URL: `http://127.0.0.1:${port}`,
+      OD_DAEMON_URL: `http://127.0.0.1:${resolvedPort}`,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
             OD_PROJECT_ID: projectId,
@@ -2268,6 +2269,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const server = app.listen(port, '127.0.0.1', () => {
       const address = server.address();
       const actualPort = typeof address === 'object' && address ? address.port : port;
+      resolvedPort = actualPort;
       const url = `http://127.0.0.1:${actualPort}`;
       resolve(returnServer ? { url, server } : url);
     });
