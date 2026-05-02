@@ -11,10 +11,12 @@ import {
   deploymentUrlCandidates,
   extractCssReferences,
   extractHtmlReferences,
+  extractInlineCssReferences,
   injectDeployHookScript,
   isVercelProtectedResponse,
   normalizeDeployHookScriptUrl,
   resolveReferencedPath,
+  rewriteCssReferences,
   rewriteEntryHtmlReferences,
   waitForReachableDeploymentUrl,
 } from '../src/deploy.js';
@@ -242,6 +244,134 @@ describe('deploy file set', () => {
     expect(normalizeDeployHookScriptUrl('https://cdn.example.com/hook.js')).toBe(
       'https://cdn.example.com/hook.js',
     );
+  });
+
+  it('extracts url() and @import refs from inline <style> blocks', () => {
+    const refs = extractInlineCssReferences(
+      '<!doctype html><style>@import "theme.css";body{background:url("bg.png")}</style>',
+    );
+    expect(refs.sort()).toEqual(['bg.png', 'theme.css']);
+  });
+
+  it('extracts url() refs from style="" attributes', () => {
+    const refs = extractInlineCssReferences(
+      "<div style=\"background:url('bg.png')\"></div><span style=\"--bg:url(/abs.png)\"></span>",
+    );
+    expect(refs.sort()).toEqual(['/abs.png', 'bg.png']);
+  });
+
+  it('skips style-like text inside scripts and comments', () => {
+    const refs = extractInlineCssReferences(
+      '<!-- <style>body{background:url("ghost.png")}</style> -->' +
+        '<script>const css = \'<style>body{background:url("missing.png")}</style>\';</script>',
+    );
+    expect(refs).toEqual([]);
+  });
+
+  it('rewrites url() and @import refs in css content relative to baseDir', () => {
+    expect(
+      rewriteCssReferences(
+        '@import "theme.css";body{background:url("bg.png")}',
+        'sub',
+      ),
+    ).toBe('@import "sub/theme.css";body{background:url("sub/bg.png")}');
+  });
+
+  it('keeps remote, data, and absolute css refs intact when rewriting', () => {
+    expect(
+      rewriteCssReferences(
+        'body{background:url("https://cdn.test/a.png");--data:url(data:image/png,abc);--root:url("/abs.png")}',
+        'sub',
+      ),
+    ).toBe(
+      'body{background:url("https://cdn.test/a.png");--data:url(data:image/png,abc);--root:url("/abs.png")}',
+    );
+  });
+
+  it('bundles assets referenced from inline <style> blocks', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'));
+    await mkdir(path.join(dir, 'fonts'));
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><style>' +
+        '@import "theme.css";' +
+        "body{background:url('assets/bg.png')}" +
+        '@font-face{font-family:Custom;src:url("fonts/custom.woff2") format("woff2");}' +
+        '</style>',
+    );
+    await writeFile(path.join(dir, 'theme.css'), 'body{color:red}');
+    await writeFile(path.join(dir, 'assets', 'bg.png'), 'bg');
+    await writeFile(path.join(dir, 'fonts', 'custom.woff2'), 'font');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual([
+      'assets/bg.png',
+      'fonts/custom.woff2',
+      'index.html',
+      'theme.css',
+    ]);
+  });
+
+  it('bundles assets referenced from style="" attributes', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'));
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><div style="background:url(\'assets/hero.png\')">x</div>',
+    );
+    await writeFile(path.join(dir, 'assets', 'hero.png'), 'hero');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['assets/hero.png', 'index.html']);
+  });
+
+  it('rewrites inline <style> url() refs when entry is in a subdirectory', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub', 'assets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sub', 'page.html'),
+      '<!doctype html><style>body{background:url("assets/bg.png")}</style>',
+    );
+    await writeFile(path.join(dir, 'sub', 'assets', 'bg.png'), 'bg');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['index.html', 'sub/assets/bg.png']);
+    expect(index?.data.toString('utf8')).toContain('url("sub/assets/bg.png")');
+  });
+
+  it('rewrites style="" url() refs when entry is in a subdirectory', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sub', 'page.html'),
+      "<!doctype html><div style=\"background:url('hero.png')\">x</div>",
+    );
+    await writeFile(path.join(dir, 'sub', 'hero.png'), 'hero');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['index.html', 'sub/hero.png']);
+    expect(index?.data.toString('utf8')).toContain("url('sub/hero.png')");
+  });
+
+  it('reports inline <style> assets that are missing on disk', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><style>body{background:url("assets/missing.png")}</style>',
+    );
+
+    await expect(
+      buildDeployFileSet(projectsRoot, projectId, 'index.html'),
+    ).rejects.toMatchObject({
+      details: { missing: ['assets/missing.png'] },
+    });
   });
 });
 
