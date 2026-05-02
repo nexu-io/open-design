@@ -168,6 +168,18 @@ function showWindowButtons(window: BrowserWindow): void {
   window.setWindowButtonVisibility(true);
 }
 
+// Windows focus-stealing prevention can leave a detached-spawned GUI
+// window minimized or hidden even when constructed with show:true,
+// leaving users unable to locate the window. Cross-platform safe: only
+// acts when the window is actually minimized or hidden, preserving any
+// user-adjusted window state.
+function ensureWindowVisible(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  if (!window.isVisible()) window.show();
+  window.focus();
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
@@ -205,6 +217,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   await window.loadURL(createPendingHtml());
   showWindowButtons(window);
+  ensureWindowVisible(window);
 
   const schedule = (delayMs: number) => {
     if (stopped) return;
