@@ -355,7 +355,6 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   'Social / Meme': 'Social / Meme',
   Branding: 'Branding',
   Data: 'Daten',
-  'Game UI': 'Game UI',
   Marketing: 'Marketing',
   Product: 'Produkt',
   'Short Form': 'Short Form',
@@ -624,7 +623,6 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Warme Editorial-Seite zu einem japanischen Feiertag mit Anime-Charakterkunst, nostalgischer Showa-Straßenszene und Magazinlayout.',
   },
-  'social-media-post-sensational-girl-dance-storyboard-8-shots': {},
   'social-media-post-social-media-fashion-outfit-generation': {
     title: 'Social-Media-Post - Fashion-Outfit-Generierung',
     summary:
@@ -744,7 +742,6 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
   'game-screenshot-three-kingdoms-guanyu-slaying-yanliang': {},
   'game-screenshot-three-kingdoms-lyubu-yuanmen-archery': {},
   'game-screenshot-three-kingdoms-zhaoyun-cradle-escape': {},
-  'game-ui-ancient-china-open-world-mmo-hud': {},
   'hollywood-haute-couture-fantasy-video-prompt': {
     title: 'Hollywood-Haute-Couture-Fantasy-Video-Prompt',
     summary:
