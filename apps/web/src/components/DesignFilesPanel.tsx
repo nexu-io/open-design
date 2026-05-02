@@ -250,10 +250,12 @@ export function DesignFilesPanel({
           className="df-row-popover"
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               const name = menuPos.name;
               setMenuPos(null);
               onOpenFile(name);
@@ -265,8 +267,15 @@ export function DesignFilesPanel({
             href={projectFileUrl(projectId, menuPos.name)}
             download={menuPos.name}
             style={{ textDecoration: 'none' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" onClick={() => setMenuPos(null)}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuPos(null);
+              }}
+            >
               {t('designFiles.download')}
             </button>
           </a>
@@ -274,7 +283,9 @@ export function DesignFilesPanel({
             type="button"
             className="danger"
             data-testid={`design-file-delete-${menuPos.name}`}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
               const name = menuPos.name;
               setMenuPos(null);
               onDeleteFile(name);
