@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Codex hatch-pet registry. Lists pets that the upstream `hatch-pet`
 // skill packages under `${CODEX_HOME:-$HOME/.codex}/pets/<id>/`.
 //
@@ -13,10 +12,37 @@
 // add a daemon-side dependency that doesn't pay off here.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-export function resolveCodexPetsRoot() {
+export interface CodexPetSummaryRecord {
+  id: string;
+  displayName: string;
+  description: string;
+  spritesheetUrl: string;
+  spritesheetExt: string;
+  hatchedAt: number;
+}
+
+export interface CodexPetListResult {
+  pets: CodexPetSummaryRecord[];
+  rootDir: string;
+}
+
+interface PetManifest {
+  id?: unknown;
+  displayName?: unknown;
+  description?: unknown;
+  spritesheetPath?: unknown;
+}
+
+interface SpritesheetPick {
+  absPath: string;
+  ext: string;
+}
+
+export function resolveCodexPetsRoot(): string {
   const home = process.env.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
   return path.join(home, 'pets');
 }
@@ -25,25 +51,39 @@ const SPRITESHEET_NAMES = [
   'spritesheet.webp',
   'spritesheet.png',
   'spritesheet.gif',
-];
+] as const;
 
-export async function listCodexPets({ baseUrl } = {}) {
+export async function listCodexPets(
+  options: { baseUrl?: string } = {},
+): Promise<CodexPetListResult> {
+  const baseUrl = options.baseUrl ?? '';
   const root = resolveCodexPetsRoot();
-  const out = [];
-  let entries = [];
+  const out: CodexPetSummaryRecord[] = [];
+  let entries: Dirent[] = [];
   try {
-    entries = await readdir(root, { withFileTypes: true });
+    entries = await readdir(root, { withFileTypes: true, encoding: 'utf8' });
   } catch {
     return { pets: [], rootDir: root };
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    // The folder name is the on-disk identity for the pet — the
+    // `/api/codex-pets/:id/spritesheet` route resolves directly against
+    // it, so we use the sanitised folder name as the public id even
+    // when the manifest declares a different `id`. Mirroring the two
+    // would let a manifest typo (or a pet whose sanitised id differs
+    // from the folder name) silently 404 the download route.
+    const safeFolderId = sanitizeId(entry.name);
+    if (!safeFolderId) continue;
     const dir = path.join(root, entry.name);
     const manifestPath = path.join(dir, 'pet.json');
-    let manifest = {};
+    let manifest: PetManifest = {};
     try {
       const raw = await readFile(manifestPath, 'utf8');
-      manifest = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        manifest = parsed as PetManifest;
+      }
     } catch {
       // Manifest is optional — fall back to folder name for the
       // display name so manually-dropped pets still appear.
@@ -57,18 +97,11 @@ export async function listCodexPets({ baseUrl } = {}) {
     } catch {
       // ignore — listing should not fail on a transient stat error.
     }
-    const id = sanitizeId(typeof manifest.id === 'string' && manifest.id ? manifest.id : entry.name);
-    const displayName =
-      typeof manifest.displayName === 'string' && manifest.displayName.trim()
-        ? manifest.displayName.trim()
-        : prettyName(entry.name);
-    const description =
-      typeof manifest.description === 'string' && manifest.description.trim()
-        ? manifest.description.trim()
-        : '';
-    const spritesheetUrl = `${baseUrl ?? ''}/api/codex-pets/${encodeURIComponent(id)}/spritesheet`;
+    const displayName = pickString(manifest.displayName) ?? prettyName(entry.name);
+    const description = pickString(manifest.description) ?? '';
+    const spritesheetUrl = `${baseUrl}/api/codex-pets/${encodeURIComponent(safeFolderId)}/spritesheet`;
     out.push({
-      id,
+      id: safeFolderId,
       displayName,
       description,
       spritesheetUrl,
@@ -86,7 +119,7 @@ export async function listCodexPets({ baseUrl } = {}) {
 // `/api/codex-pets/:id/spritesheet` route to safely serve the file —
 // the id is sanitised on both sides so users cannot path-escape into
 // arbitrary folders under their home directory.
-export async function readCodexPetSpritesheet(id) {
+export async function readCodexPetSpritesheet(id: string): Promise<SpritesheetPick | null> {
   const root = resolveCodexPetsRoot();
   const safeId = sanitizeId(id);
   if (!safeId) return null;
@@ -94,22 +127,26 @@ export async function readCodexPetSpritesheet(id) {
   // Re-resolve the manifest so a manifest-declared spritesheetPath wins
   // when it differs from our default name (matches the hatch-pet
   // contract).
-  let manifest = {};
+  let manifest: PetManifest = {};
   try {
     const raw = await readFile(path.join(dir, 'pet.json'), 'utf8');
-    manifest = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      manifest = parsed as PetManifest;
+    }
   } catch {
     // ignore; pickSpritesheet falls back to the canonical names.
   }
   return pickSpritesheet(dir, manifest);
 }
 
-async function pickSpritesheet(dir, manifest) {
-  const candidates = [];
-  if (typeof manifest.spritesheetPath === 'string' && manifest.spritesheetPath) {
+async function pickSpritesheet(dir: string, manifest: PetManifest): Promise<SpritesheetPick | null> {
+  const candidates: string[] = [];
+  const declaredPath = pickString(manifest.spritesheetPath);
+  if (declaredPath) {
     // Resolve manifest path relative to the pet folder, then ensure it
     // does not escape that folder.
-    const abs = path.resolve(dir, manifest.spritesheetPath);
+    const abs = path.resolve(dir, declaredPath);
     if (abs.startsWith(dir + path.sep) || abs === dir) {
       candidates.push(abs);
     }
@@ -130,18 +167,28 @@ async function pickSpritesheet(dir, manifest) {
 }
 
 // Strip anything that might let a request path-escape, then collapse
-// dots so users cannot point at `..`. We mirror the pet folder names
-// produced by the upstream skill (lowercase + hyphens), but accept
-// alphanumerics + a small set of safe punctuation to handle pets that
-// users authored manually.
-function sanitizeId(value) {
-  return String(value ?? '')
+// runs of dots and reject any that still contain `..` after trimming —
+// the daemon serves these ids straight into a `path.join`, and a value
+// like `foo..bar` would otherwise be interpreted as `foo/../bar`.
+// Mirrors the pet folder names produced by the upstream skill
+// (lowercase + hyphens), but also accepts alphanumerics + a small set
+// of safe punctuation to handle pets that users authored manually.
+function sanitizeId(value: unknown): string {
+  const collapsed = String(value ?? '')
     .replace(/[^a-zA-Z0-9._-]/g, '')
     .replace(/\.+/g, '.')
     .replace(/^[._-]+|[._-]+$/g, '')
     .slice(0, 80);
+  if (collapsed.includes('..')) return '';
+  return collapsed;
 }
 
-function prettyName(folder) {
+function pickString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function prettyName(folder: string): string {
   return folder.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

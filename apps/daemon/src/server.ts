@@ -1071,10 +1071,16 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
             ? 'image/gif'
             : 'image/png';
       res.type(mime);
-      // Allow the web pet settings to draw the bytes onto a canvas
-      // for client-side row slicing without tripping CORS or canvas
-      // tainting.
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // Same-origin callers (the web app proxies `/api/*` through to
+      // the daemon, so PetSettings adoption fetches arrive same-origin)
+      // do not need any CORS header here. We only echo
+      // `Access-Control-Allow-Origin` for sandboxed iframes / data:
+      // URIs (Origin: null) which need it to draw the bytes onto a
+      // canvas without tainting. Local pet bytes should not be exposed
+      // to arbitrary third-party origins via a wildcard ACAO.
+      if (req.headers.origin === 'null') {
+        res.setHeader('Access-Control-Allow-Origin', 'null');
+      }
       res.setHeader('Cache-Control', 'no-store');
       res.sendFile(sheet.absPath);
     } catch (err) {
