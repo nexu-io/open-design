@@ -19,6 +19,7 @@ import { ptBR } from './locales/pt-BR';
 import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
+import { pl } from './locales/pl';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -37,6 +38,7 @@ const DICTS: Record<Locale, Dict> = {
   'fa': fa,
   'ja': ja,
   'ko': ko,
+  'pl': pl,
 };
 
 const LS_KEY = 'open-design:locale';
