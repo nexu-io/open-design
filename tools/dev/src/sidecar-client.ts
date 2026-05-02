@@ -33,7 +33,7 @@ export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs 
   }
 }
 
-export async function waitForDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 35000): Promise<DaemonStatusSnapshot> {
+export async function waitForDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 120000): Promise<DaemonStatusSnapshot> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const snapshot = await inspectDaemonRuntime(runtime, 800);
@@ -51,7 +51,7 @@ export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 8
   }
 }
 
-export async function waitForWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 35000): Promise<WebStatusSnapshot> {
+export async function waitForWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 120000): Promise<WebStatusSnapshot> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const snapshot = await inspectWebRuntime(runtime, 800);

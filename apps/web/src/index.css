@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
+
 /* ============================================================
    Open Design — visual language modeled on claude.ai/design
    ============================================================ */
@@ -8251,4 +8253,30 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.35;
+}
+
+/* --- Arabic & Persian Comfort Pass --- */
+[dir="rtl"] {
+  --sans: "Cairo", "Inter", "Vazirmatn", "Noto Sans Arabic", "Segoe UI Arabic", "Tahoma", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.7;
+}
+
+[dir="rtl"] .avatar-item,
+[dir="rtl"] .settings-tab,
+[dir="rtl"] .ds-item-name {
+  text-align: right;
+}
+
+[dir="rtl"] .app-chrome-back svg,
+[dir="rtl"] .back-btn svg,
+[dir="rtl"] .icon-btn svg[data-lucide="chevron-left"],
+[dir="rtl"] .icon-btn svg[data-lucide="chevron-right"],
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-left"],
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-right"] {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .title,
+[dir="rtl"] .meta {
+  text-align: right;
 }

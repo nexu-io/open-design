@@ -13,6 +13,7 @@ import { de } from './locales/de';
 import { en } from './locales/en';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
+import { ar } from './locales/ar';
 import { ja } from './locales/ja';
 import { ko } from './locales/ko';
 import { ptBR } from './locales/pt-BR';
@@ -37,6 +38,7 @@ const DICTS: Record<Locale, Dict> = {
   'es-ES': esES,
   'ru': ru,
   'fa': fa,
+  'ar': ar,
   'ja': ja,
   'ko': ko,
   'pl': pl,
@@ -77,11 +79,13 @@ interface ProviderProps {
 export function I18nProvider({ initial, children }: ProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectInitialLocale());
 
-  // Keep <html lang="…"> in sync so screen readers and CSS hooks pick the
-  // right language token without each component having to set lang itself.
+  // Keep <html lang="…" dir="…"> in sync so screen readers and CSS hooks
+  // pick the right language token and direction without each component
+  // having to set it itself.
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('lang', locale);
+      document.documentElement.setAttribute('dir', locale === 'ar' || locale === 'fa' ? 'rtl' : 'ltr');
     }
   }, [locale]);
 
