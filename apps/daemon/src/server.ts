@@ -2119,14 +2119,16 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  const server = app.listen(port, () => {
-    resolvedPort = server.address().port;
-    if (!returnServer) {
-      console.log(`[od] daemon listening on http://127.0.0.1:${resolvedPort}`);
-    }
+  const server = app.listen(port);
+  await new Promise((res, rej) => {
+    server.once('listening', res);
+    server.once('error', rej);
   });
-
-  if (returnServer) return server;
+  resolvedPort = server.address().port;
+  const url = `http://127.0.0.1:${resolvedPort}`;
+  if (returnServer) return { server, url };
+  console.log(`[od] daemon listening on ${url}`);
+  return url;
 }
 
 function randomId() {
