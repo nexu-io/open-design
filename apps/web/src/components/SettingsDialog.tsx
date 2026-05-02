@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
@@ -49,6 +49,20 @@ export function SettingsDialog({
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
+
+  // Revert the live theme preview when the dialog closes without saving.
+  // On Save, App's useLayoutEffect fires after unmount and applies the new
+  // saved theme, so this cleanup is effectively a no-op in that path.
+  useLayoutEffect(() => {
+    const saved = initial.theme ?? 'system';
+    return () => {
+      if (saved === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    };
+  }, [initial.theme]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'execution' | 'media' | 'language' | 'appearance' | 'about'>('execution');
@@ -741,6 +755,17 @@ function AppearanceSection({
 }) {
   const { t } = useI18n();
   const current = cfg.theme ?? 'system';
+
+  // Apply the draft theme immediately so the user sees a live preview
+  // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
+  useLayoutEffect(() => {
+    if (current === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', current);
+    }
+  }, [current]);
+
   return (
     <section className="settings-section">
       <div className="section-head">
