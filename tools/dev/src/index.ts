@@ -479,7 +479,7 @@ async function ensureWebDevNodeModules(config: ToolDevConfig): Promise<void> {
   const current = await lstat(runtimeNodeModules).catch(() => null);
   if (current?.isSymbolicLink()) return;
   if (current != null) await rm(runtimeNodeModules, { force: true, recursive: true });
-  await symlink(webNodeModules, runtimeNodeModules, "dir");
+  await symlink(webNodeModules, runtimeNodeModules, "junction");
 }
 
 async function writeWebDevTsconfig(config: ToolDevConfig): Promise<void> {

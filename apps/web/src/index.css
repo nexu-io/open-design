@@ -8258,6 +8258,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* --- Arabic & Persian Comfort Pass --- */
 [dir="rtl"] {
   --sans: "Cairo", "Inter", "Vazirmatn", "Noto Sans Arabic", "Segoe UI Arabic", "Tahoma", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Scope line-height increase to prose and chat to avoid breaking compact UI chrome */
+[dir="rtl"] .prose,
+[dir="rtl"] .chat-message,
+[dir="rtl"] .msg .user-text,
+[dir="rtl"] p {
   line-height: 1.7;
 }
 
