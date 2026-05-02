@@ -1,0 +1,17 @@
+.git
+.github
+.od
+node_modules
+**/node_modules
+**/.next
+**/out
+**/dist
+coverage
+playwright-report
+test-results
+*.log
+.DS_Store
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

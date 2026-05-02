@@ -1,0 +1,20 @@
+services:
+  opendesign:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: OpenDesign
+    environment:
+      OD_HOST: 0.0.0.0
+      OD_PORT: 7456
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "22095:22095"
+    volumes:
+      - opendesign-agent-home:/app/.agent-home
+      - opendesign-data:/app/.od
+    restart: unless-stopped
+
+volumes:
+  opendesign-agent-home:
+  opendesign-data:
