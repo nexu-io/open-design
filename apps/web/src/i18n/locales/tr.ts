@@ -64,7 +64,7 @@ export const tr: Dict = {
   'settings.rescan': '↻ Yeniden tara',
   'settings.rescanTitle': 'PATH’ı yeniden tara',
   'settings.noAgentsDetected':
-    'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
+    'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API anahtarı',
   'settings.showKey': 'Anahtarı göster',

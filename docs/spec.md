@@ -30,7 +30,7 @@ Other docs:
 | # | Bet | [Anthropic Claude Design][cd] | [Open CoDesign][ocod] | OD |
 |---|---|---|---|---|
 | 1 | Where the product runs | claude.ai only | Local Electron app | **Next.js web app + local daemon + desktop loop** — `pnpm tools-dev`, Vercel web deploy |
-| 2 | Who owns the agent loop | Anthropic, closed | [Open CoDesign][ocod] itself, via [`pi-ai`][piai] | **The user's existing code agent CLI** (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, OpenClaw); direct Anthropic API as fallback |
+| 2 | Who owns the agent loop | Anthropic, closed | [Open CoDesign][ocod] itself, via [`pi-ai`][piai] | **The user's existing code agent CLI** (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, OpenClaw); direct Anthropic API as fallback |
 | 3 | What "design skills" are | Proprietary internal tools | TypeScript modules baked into the app | **File-based skills** that follow Claude Code's `SKILL.md` spec — forkable, versionable, shareable, installable by symlink |
 | 4 | How design systems are authored | Implicit in prompt | N/A | **`DESIGN.md` files** following the [awesome-claude-design][acd] 9-section schema |
 | 5 | Extension point | Anthropic only | Custom PRs | **Drop a folder into `skills/`** — composable by third parties |

@@ -64,7 +64,7 @@ export const ko: Dict = {
   'settings.rescan': '↻ 다시 스캔',
   'settings.rescanTitle': 'PATH 다시 스캔',
   'settings.noAgentsDetected':
-    '에이전트가 감지되지 않았습니다. Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen 또는 GitHub Copilot CLI 중 하나를 설치한 후 다시 스캔을 클릭하세요.',
+    '에이전트가 감지되지 않았습니다. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen 또는 GitHub Copilot CLI 중 하나를 설치한 후 다시 스캔을 클릭하세요.',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API 키',
   'settings.showKey': '키 표시',

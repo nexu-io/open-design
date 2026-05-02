@@ -10,6 +10,7 @@ const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
 const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
+const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
 
@@ -80,6 +81,19 @@ test('kiro args use acp subcommand for json-rpc streaming', () => {
 
   assert.deepEqual(args, ['acp']);
   assert.equal(kiro.streamFormat, 'acp-json-rpc');
+});
+
+test('devin args use acp subcommand for json-rpc streaming', () => {
+  const args = devin.buildArgs('', [], [], {});
+
+  assert.deepEqual(args, [
+    '--permission-mode',
+    'dangerous',
+    '--respect-workspace-trust',
+    'false',
+    'acp',
+  ]);
+  assert.equal(devin.streamFormat, 'acp-json-rpc');
 });
 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {

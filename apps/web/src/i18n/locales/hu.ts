@@ -64,7 +64,7 @@ export const hu: Dict = {
   'settings.rescan': '↻ Újraellenőrzés',
   'settings.rescanTitle': 'PATH újraellenőrzése',
   'settings.noAgentsDetected':
-    'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
+    'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
   'settings.apiSection': 'Anthropic API',
   'settings.apiKey': 'API-kulcs',
   'settings.showKey': 'Kulcs megjelenítése',

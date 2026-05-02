@@ -97,7 +97,7 @@ function printRootHelp() {
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
 
 What the daemon does:
-  * scans PATH for installed code-agent CLIs (claude, codex, gemini, opencode, cursor-agent, ...)
+  * scans PATH for installed code-agent CLIs (claude, codex, devin, gemini, opencode, cursor-agent, ...)
   * serves the chat UI at http://localhost:<port>
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
