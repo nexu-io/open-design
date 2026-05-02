@@ -76,7 +76,12 @@ export function publicDeployConfig(config) {
   };
 }
 
-export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
+// Walk the entry HTML and any referenced CSS, producing the full set of
+// files that would be uploaded for a deploy along with the lists of
+// missing and invalid references. Does not throw on a partial result so
+// callers can distinguish between "ready to ship" and "ready except for
+// these specific issues" without parsing an error string.
+export async function buildDeployFilePlan(projectsRoot, projectId, entryName, options = {}) {
   const entryPath = validateProjectPath(entryName);
   if (!/\.html?$/i.test(entryPath)) {
     throw new DeployError('Only HTML files can be deployed.', 400);
@@ -150,17 +155,27 @@ export async function buildDeployFileSet(projectsRoot, projectId, entryName, opt
     }
   }
 
-  if (missing.length || invalid.length) {
+  return {
+    entryPath,
+    html,
+    files: Array.from(files.values()),
+    missing,
+    invalid,
+  };
+}
+
+export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
+  const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
+  if (plan.missing.length || plan.invalid.length) {
     const parts = [];
-    if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
-    if (invalid.length) parts.push(`invalid: ${invalid.join(', ')}`);
+    if (plan.missing.length) parts.push(`missing: ${plan.missing.join(', ')}`);
+    if (plan.invalid.length) parts.push(`invalid: ${plan.invalid.join(', ')}`);
     throw new DeployError(`Could not deploy referenced files (${parts.join('; ')}).`, 400, {
-      missing,
-      invalid,
+      missing: plan.missing,
+      invalid: plan.invalid,
     });
   }
-
-  return Array.from(files.values());
+  return plan.files;
 }
 
 export async function deployToVercel({ config, files, projectId }) {
@@ -263,6 +278,170 @@ export function rewriteEntryHtmlReferences(html, baseDir) {
     const attrs = parseHtmlAttributes(rawAttrs);
     return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir)}>`;
   });
+}
+
+// Soft thresholds chosen against Vercel's v13 deployment shape and
+// typical first-paint budgets. Per-asset is a usability hint, not a
+// hard cap; bundle is a margin against Vercel's 100MB request body
+// (each file is base64-encoded which adds ~33%, so 75MiB pre-encoded
+// is the safer ceiling).
+export const DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES = 4 * 1024 * 1024;
+export const DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES = 75 * 1024 * 1024;
+export const DEPLOY_PREFLIGHT_LARGE_HTML_BYTES = 1 * 1024 * 1024;
+
+function isExternalUrl(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) return true;
+  if (trimmed.startsWith('//')) return true;
+  return false;
+}
+
+function pushUnique(list, warning) {
+  const key = `${warning.code}:${warning.path ?? ''}:${warning.url ?? ''}`;
+  if (list.seen.has(key)) return;
+  list.seen.add(key);
+  list.warnings.push(warning);
+}
+
+// Walk the entry HTML once to gather signals that affect deployment
+// quality without touching the network. Returns a structured warning
+// list the UI can render verbatim.
+export function analyzeDeployPlan(input: {
+  entryPath: string;
+  html: string;
+  files: any[];
+  missing?: any[];
+  invalid?: any[];
+}): { warnings: any[]; totalBytes: number; totalFiles: number } {
+  const { entryPath, html, files } = input;
+  const missing = input.missing ?? [];
+  const invalid = input.invalid ?? [];
+  const acc: { warnings: any[]; seen: Set<string> } = { warnings: [], seen: new Set() };
+
+  for (const ref of missing) {
+    pushUnique(acc, {
+      code: 'broken-reference',
+      path: ref,
+      message: `Referenced file is missing on disk: ${ref}`,
+    });
+  }
+  for (const ref of invalid) {
+    pushUnique(acc, {
+      code: 'invalid-reference',
+      path: ref,
+      message: `Reference is not a valid project path: ${ref}`,
+    });
+  }
+
+  let totalBytes = 0;
+  let entrySize = 0;
+  for (const f of files || []) {
+    const size = f.data?.length ?? 0;
+    totalBytes += size;
+    if (f.file === 'index.html') entrySize = size;
+    if (size > DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES && f.file !== 'index.html') {
+      pushUnique(acc, {
+        code: 'large-asset',
+        path: f.file,
+        size,
+        message: `Asset is ${formatMib(size)}, larger than ${formatMib(DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES)}; consider compressing or hosting on a CDN.`,
+      });
+    }
+  }
+
+  if (entrySize > DEPLOY_PREFLIGHT_LARGE_HTML_BYTES) {
+    pushUnique(acc, {
+      code: 'large-html',
+      path: 'index.html',
+      size: entrySize,
+      message: `Entry HTML is ${formatMib(entrySize)}; large HTML inflates time-to-first-paint.`,
+    });
+  }
+  if (totalBytes > DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES) {
+    pushUnique(acc, {
+      code: 'large-bundle',
+      size: totalBytes,
+      message: `Bundle is ${formatMib(totalBytes)}; Vercel rejects deploy bodies above ~100MB after base64 encoding.`,
+    });
+  }
+
+  const source = String(html ?? '');
+  if (!/<!doctype\s+html/i.test(source)) {
+    pushUnique(acc, {
+      code: 'no-doctype',
+      path: entryPath,
+      message: 'Entry HTML is missing `<!DOCTYPE html>`; browsers may render in quirks mode.',
+    });
+  }
+
+  let hasViewport = false;
+  for (const tag of parseHtmlTags(source)) {
+    const attrs = parseHtmlAttributes(tag.attrs);
+    if (
+      tag.name === 'meta' &&
+      String(attrs.get('name') || '').toLowerCase() === 'viewport'
+    ) {
+      hasViewport = true;
+    }
+    if (tag.name === 'script') {
+      const src = attrs.get('src');
+      if (isExternalUrl(src)) {
+        pushUnique(acc, {
+          code: 'external-script',
+          path: entryPath,
+          url: src,
+          message: `External script will not be vendored into the deploy: ${src}`,
+        });
+      }
+    }
+    if (tag.name === 'link') {
+      const rel = String(attrs.get('rel') || '').toLowerCase();
+      const href = attrs.get('href');
+      if (rel.split(/\s+/).includes('stylesheet') && isExternalUrl(href)) {
+        pushUnique(acc, {
+          code: 'external-stylesheet',
+          path: entryPath,
+          url: href,
+          message: `External stylesheet will not be vendored into the deploy: ${href}`,
+        });
+      }
+    }
+  }
+  if (!hasViewport) {
+    pushUnique(acc, {
+      code: 'no-viewport',
+      path: entryPath,
+      message: 'Entry HTML is missing `<meta name="viewport">`; mobile rendering will be off.',
+    });
+  }
+
+  return { warnings: acc.warnings, totalBytes, totalFiles: (files || []).length };
+}
+
+function formatMib(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+// One-shot orchestrator: build the file plan, run the analyzer, and
+// return the typed preflight payload exposed by the daemon.
+export async function prepareDeployPreflight(projectsRoot, projectId, entryName, options = {}) {
+  const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
+  const { warnings, totalBytes, totalFiles } = analyzeDeployPlan(plan);
+  return {
+    providerId: VERCEL_PROVIDER_ID,
+    entry: plan.entryPath,
+    files: plan.files.map((f) => ({
+      path: f.file,
+      size: f.data?.length ?? 0,
+      mime: f.contentType || 'application/octet-stream',
+      sourcePath: f.sourcePath,
+    })),
+    totalFiles,
+    totalBytes,
+    warnings,
+  };
 }
 
 export function injectDeployHookScript(html, scriptUrl) {

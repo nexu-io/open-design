@@ -96,6 +96,7 @@ import {
   checkDeploymentUrl,
   DeployError,
   deployToVercel,
+  prepareDeployPreflight,
   publicDeployConfig,
   readVercelConfig,
   VERCEL_PROVIDER_ID,
@@ -1389,6 +1390,24 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       const status = err instanceof DeployError ? err.status : 400;
       const init = err instanceof DeployError && err.details ? { details: err.details } : {};
       sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err), init);
+    }
+  });
+
+  app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
+    try {
+      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
+      if (providerId !== VERCEL_PROVIDER_ID) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
+      if (typeof fileName !== 'string' || !fileName.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      /** @type {import('@open-design/contracts').DeployPreflightResponse} */
+      const body = await prepareDeployPreflight(PROJECTS_DIR, req.params.id, fileName);
+      res.json(body);
+    } catch (err) {
+      const status = err instanceof DeployError ? err.status : 400;
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
