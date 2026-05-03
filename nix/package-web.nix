@@ -7,6 +7,7 @@
   nodejs,
   pnpm_10,
   fetchPnpmDeps,
+  pnpmConfigHook,
   src,
 }:
 # Builds the @open-design/web Next.js static export.
@@ -24,7 +25,13 @@
 let
   pname = "open-design-web";
   version = "0.1.0";
-  pnpmDepsHash = "sha256-+aXODhoOgjnd5WpRoWufwCEVER4xUZHeZKZkmGWHUPo=";
+
+  # Vendored pnpm store. The hash MUST be pinned on first build:
+  # `nix build .#web` will fail with the expected hash printed; copy
+  # that into `pnpmDepsHash` below. Bump it whenever pnpm-lock.yaml
+  # changes.
+  pnpmDepsHash = "sha256-0vlBWU0Br1VcOkwuLkRG9apeXtKpfA+qr6kiWhq7Bsk=";
+  # pnpmDepsHash = lib.fakeHash;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;
@@ -32,7 +39,7 @@ in
     nativeBuildInputs = [
       nodejs
       pnpm_10
-      pnpm_10.configHook
+      pnpmConfigHook
     ];
 
     pnpmDeps = fetchPnpmDeps {
