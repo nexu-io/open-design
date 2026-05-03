@@ -782,6 +782,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
 }
 
 export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStopResult> {
+  const paths = resolveLinuxPaths(config);
   const { fallback, marker } = await readDesktopRootIdentityMarker(config);
 
   if (marker == null) {
