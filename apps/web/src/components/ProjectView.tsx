@@ -19,6 +19,7 @@ import {
   upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
+import { useProjectFileEvents } from '../providers/project-events';
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName } from '../utils/agentLabels';
@@ -358,6 +359,15 @@ export function ProjectView({
     if (!daemonLive) return;
     void refreshProjectFiles();
   }, [daemonLive, refreshProjectFiles, filesRefresh]);
+
+  // Live-reload: when the daemon's chokidar watcher reports a file change,
+  // bump filesRefresh so the file list refetches with new mtimes — which
+  // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
+  // cache-bust, triggering an automatic preview reload without a click.
+  const handleProjectFileChange = useCallback(() => {
+    setFilesRefresh((n) => n + 1);
+  }, []);
+  useProjectFileEvents(project.id, daemonLive, handleProjectFileChange);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
