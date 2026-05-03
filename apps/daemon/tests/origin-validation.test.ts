@@ -6,27 +6,33 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 /**
  * Replicate the origin validation middleware from server.ts exactly
  * as it appears in the real daemon, so we test the actual logic
- * including OD_WEB_PORT and Origin: null handling.
+ * including OD_WEB_PORT, Origin: null scoping, and non-loopback host.
  */
-function createOriginMiddleware(resolvedPort) {
+function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
   return (req, res, next) => {
     const origin = req.headers.origin;
     if (origin == null || origin === '') return next();
-    if (origin === 'null') return next();
+    if (origin === 'null') {
+      const isSafeRawPreview =
+        req.method === 'GET' &&
+        /^\/projects\/[^/]+\/raw\//.test(req.path);
+      if (!isSafeRawPreview) {
+        return res.status(403).json({ error: 'Origin: null not allowed for this route' });
+      }
+      return next();
+    }
     if (!resolvedPort) {
       return res.status(403).json({ error: 'Server initializing' });
     }
     const ports = [resolvedPort];
     const webPort = Number(process.env.OD_WEB_PORT);
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
+    const schemes = ['http', 'https'];
+    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
     const allowedOrigins = new Set(
       ports.flatMap((p) => [
-        `http://127.0.0.1:${p}`,
-        `https://127.0.0.1:${p}`,
-        `http://localhost:${p}`,
-        `https://localhost:${p}`,
-        `http://[::1]:${p}`,
-        `https://[::1]:${p}`,
+        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+        ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
     );
     if (!allowedOrigins.has(String(origin))) {
@@ -36,10 +42,10 @@ function createOriginMiddleware(resolvedPort) {
   };
 }
 
-function makeTestApp(port) {
+function makeTestApp(port, host = '127.0.0.1') {
   const app = express();
   app.use(express.json());
-  app.use('/api', createOriginMiddleware(port));
+  app.use('/api', createOriginMiddleware(port, host));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/projects', (_req, res) => res.json({ projects: [] }));
   app.get('/api/projects/:id/raw/:name', (req, res) => {
@@ -133,12 +139,35 @@ describe('daemon origin validation middleware', () => {
 
   // --- Origin: null (sandboxed iframe previews) ---
 
-  it('allows Origin: null for sandboxed iframe preview fetches', async () => {
+  it('allows Origin: null for GET raw-file preview routes', async () => {
     const res = await request(port, 'GET', '/api/projects/abc/raw/design.html', {
       origin: 'null',
     });
     expect(res.status).toBe(200);
     expect(res.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('rejects Origin: null on POST to state-changing endpoints', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: 'null',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Origin: null not allowed for this route' });
+  });
+
+  it('rejects Origin: null on DELETE endpoints', async () => {
+    const res = await request(port, 'DELETE', '/api/projects/abc', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects Origin: null on non-raw-file GET routes', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(403);
   });
 
   // --- Cross-origin rejection ---
@@ -230,5 +259,54 @@ describe('origin validation: fail-closed before port resolution', () => {
   it('still allows non-browser clients when port is not resolved', async () => {
     const res = await request(port, 'GET', '/api/health');
     expect(res.status).toBe(200);
+  });
+});
+
+describe('origin validation: non-loopback bind host', () => {
+  let server;
+  let port;
+  const nonLoopbackHost = '100.64.1.2'; // Tailscale-like address
+
+  beforeAll(
+    () =>
+      new Promise((resolve) => {
+        // Start on port 0 to get a dynamic port, then rebuild with real port
+        const tempApp = makeTestApp(0, nonLoopbackHost);
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = tempServer.address().port;
+          tempServer.close(() => {
+            const realApp = makeTestApp(port, nonLoopbackHost);
+            server = realApp.listen(port, '127.0.0.1', () => resolve());
+          });
+        });
+      }),
+  );
+
+  afterAll(
+    () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  );
+
+  it('allows browser requests from the non-loopback bind host', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://${nonLoopbackHost}:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('still allows localhost origins alongside non-loopback host', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks unknown external origins even with non-loopback host', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://evil.com:${port}`,
+    });
+    expect(res.status).toBe(403);
   });
 });
