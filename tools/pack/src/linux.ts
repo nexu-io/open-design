@@ -790,7 +790,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   const candidate = snapshots.find((s) => s.pid === marker.pid);
   if (candidate == null) {
     return {
-      fallback,
+      fallback: { ...fallback, reason: "marker-pid-not-running" },
       gracefulRequested: false,
       namespace: config.namespace,
       remainingPids: [],
@@ -827,12 +827,28 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
     };
   }
 
+  // Try graceful shutdown via IPC first. mac.ts's pattern: best-effort SHUTDOWN
+  // request with a short timeout so Electron renderers + sidecars get a chance
+  // to flush state (SQLite WAL, logs) before SIGTERM.
+  let gracefulRequested = false;
+  try {
+    await requestJsonIpc(marker.stamp.ipc, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1500 });
+    gracefulRequested = true;
+  } catch {
+    gracefulRequested = false;
+  }
+
   // Gather process tree, then SIGTERM -> SIGKILL via stopProcesses.
   const treePids = collectProcessTreePids(snapshots, [marker.pid]);
   const result = await stopProcesses(treePids);
 
+  // Remove the marker on a clean stop so the next start has a fresh slate.
+  if (result.remainingPids.length === 0) {
+    await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+  }
+
   return {
-    gracefulRequested: true,
+    gracefulRequested,
     namespace: config.namespace,
     remainingPids: result.remainingPids,
     status: result.remainingPids.length === 0 ? "stopped" : "partial",
