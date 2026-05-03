@@ -175,7 +175,13 @@ export async function runMcpStdio({ daemonUrl }) {
           return ok(await getJson(`${baseUrl}/api/projects`));
         case 'get_project': {
           const id = await resolveProjectId(baseUrl, args.project);
-          return ok(await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`));
+          const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+          const project = data?.project ?? data;
+          return ok({
+            ...project,
+            entryFile: project?.metadata?.entryFile ?? null,
+            kind: project?.metadata?.kind ?? null,
+          });
         }
         case 'list_files': {
           const id = await resolveProjectId(baseUrl, args.project);
