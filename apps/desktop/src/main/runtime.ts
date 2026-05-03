@@ -95,6 +95,21 @@ const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-drag {
     -webkit-app-region: drag;
   }
+  .entry-brand,
+  .entry-header {
+    -webkit-app-region: drag;
+  }
+  .entry-brand button,
+  .entry-brand [role="button"],
+  .entry-header button,
+  .entry-header [role="button"],
+  .entry-tabs,
+  .entry-tabs *,
+  .entry-side-resizer,
+  .avatar-popover,
+  .avatar-popover * {
+    -webkit-app-region: no-drag;
+  }
 `;
 
 function createPendingHtml(): string {
