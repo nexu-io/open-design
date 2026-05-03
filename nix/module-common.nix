@@ -9,10 +9,12 @@
 #     NixOS: system systemd units + dynamic user)
 # Everything else — port, autoStart, environmentFile, agents, webFrontend —
 # is identical across both, so it lives here.
-
-{ lib, pkgs, flake, defaultDataDir }:
-
-let
+{
+  lib,
+  pkgs,
+  flake,
+  defaultDataDir,
+}: let
   # Agent CLIs the daemon scans for on PATH (apps/daemon/src/agents.ts).
   # Keep this list in sync with that file.
   supportedAgents = [
@@ -28,15 +30,15 @@ let
   flakePackages =
     if flake ? packages.${pkgs.system}
     then flake.packages.${pkgs.system}
-    else { };
-in
-{
+    else {};
+in {
   enable = lib.mkEnableOption "Open Design — local-first design product daemon";
 
   package = lib.mkOption {
     type = lib.types.package;
-    default = flakePackages.daemon or (throw
-      "open-design: no daemon package available for ${pkgs.system}; set services.open-design.package explicitly");
+    default =
+      flakePackages.daemon or (throw
+        "open-design: no daemon package available for ${pkgs.system}; set services.open-design.package explicitly");
     defaultText = lib.literalExpression "open-design.packages.\${pkgs.system}.daemon";
     description = "The Open Design daemon package providing the `od` binary.";
   };
@@ -54,10 +56,13 @@ in
   dataDir = lib.mkOption {
     type = lib.types.path;
     default = defaultDataDir;
-    defaultText = lib.literalExpression
-      (if defaultDataDir == "/var/lib/open-design"
-       then "\"/var/lib/open-design\""
-       else "\"\${config.home.homeDirectory}/.od\"");
+    defaultText =
+      lib.literalExpression
+      (
+        if defaultDataDir == "/var/lib/open-design"
+        then "\"/var/lib/open-design\""
+        else "\"\${config.home.homeDirectory}/.od\""
+      );
     description = ''
       Directory holding the daemon's runtime state: SQLite database
       (`app.sqlite`), per-project working trees under `projects/<id>/`,
@@ -92,7 +97,7 @@ in
 
   extraEnv = lib.mkOption {
     type = lib.types.attrsOf lib.types.str;
-    default = { };
+    default = {};
     description = ''
       Additional non-secret environment variables for the daemon
       service (e.g. `OD_CODEX_DISABLE_PLUGINS = "1"`). Secrets belong
@@ -107,7 +112,7 @@ in
 
   agents = lib.mkOption {
     type = lib.types.listOf (lib.types.enum supportedAgents);
-    default = [ ];
+    default = [];
     description = ''
       Declarative record of which code-agent CLIs the user intends to
       have on PATH for the daemon to detect. This option is documentary
@@ -117,7 +122,7 @@ in
 
       Supported names: ${lib.concatStringsSep ", " supportedAgents}.
     '';
-    example = [ "claude" "codex" ];
+    example = ["claude" "codex"];
   };
 
   webFrontend = {
@@ -158,8 +163,9 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = flakePackages.web or (throw
-        "open-design: no web package available for ${pkgs.system}; set services.open-design.webFrontend.package explicitly");
+      default =
+        flakePackages.web or (throw
+          "open-design: no web package available for ${pkgs.system}; set services.open-design.webFrontend.package explicitly");
       defaultText = lib.literalExpression "open-design.packages.\${pkgs.system}.web";
       description = "Built static export to serve (Next.js out/ tree).";
     };

@@ -11,11 +11,15 @@
 #     openFirewall = true;
 #     webFrontend.enable = true;
 #   };
-
-{ moduleCommon, flake }:
-{ config, lib, pkgs, ... }:
-
-let
+{
+  moduleCommon,
+  flake,
+}: {
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
   cfg = config.services.open-design;
 
   commonOpts = moduleCommon {
@@ -53,38 +57,41 @@ let
     LockPersonality = true;
   };
 
-  daemonEnvironment = {
-    OD_PORT = toString cfg.port;
-    OD_DATA_DIR = toString cfg.dataDir;
-  } // cfg.extraEnv;
+  daemonEnvironment =
+    {
+      OD_PORT = toString cfg.port;
+      OD_DATA_DIR = toString cfg.dataDir;
+    }
+    // cfg.extraEnv;
 
   webEnvironment = {
     OD_DAEMON_URL = "http://localhost:${toString cfg.port}";
   };
-in
-{
-  options.services.open-design = commonOpts // {
-    user = lib.mkOption {
-      type = lib.types.str;
-      default = "open-design";
-      description = "User the daemon runs as.";
-    };
+in {
+  options.services.open-design =
+    commonOpts
+    // {
+      user = lib.mkOption {
+        type = lib.types.str;
+        default = "open-design";
+        description = "User the daemon runs as.";
+      };
 
-    group = lib.mkOption {
-      type = lib.types.str;
-      default = "open-design";
-      description = "Group the daemon runs as.";
-    };
+      group = lib.mkOption {
+        type = lib.types.str;
+        default = "open-design";
+        description = "Group the daemon runs as.";
+      };
 
-    openFirewall = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = ''
-        Open the daemon `port` in the system firewall, plus
-        `webFrontend.port` when the bundled web service is enabled.
-      '';
+      openFirewall = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Open the daemon `port` in the system firewall, plus
+          `webFrontend.port` when the bundled web service is enabled.
+        '';
+      };
     };
-  };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
@@ -94,7 +101,7 @@ in
         home = cfg.dataDir;
         description = "Open Design daemon";
       };
-      users.groups.${cfg.group} = { };
+      users.groups.${cfg.group} = {};
 
       systemd.tmpfiles.rules = [
         "d ${toString cfg.dataDir} 0750 ${cfg.user} ${cfg.group} - -"
@@ -108,21 +115,23 @@ in
     (lib.mkIf cfg.autoStart {
       systemd.services.open-design = {
         description = "Open Design daemon";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
+        wantedBy = ["multi-user.target"];
+        after = ["network-online.target"];
+        wants = ["network-online.target"];
 
         environment = daemonEnvironment;
 
-        serviceConfig = {
-          Type = "simple";
-          User = cfg.user;
-          Group = cfg.group;
-          ExecStart = "${daemonExe} --port ${toString cfg.port} --no-open";
-          Restart = "on-failure";
-          RestartSec = 3;
-          ReadWritePaths = [ (toString cfg.dataDir) ];
-        } // hardening
+        serviceConfig =
+          {
+            Type = "simple";
+            User = cfg.user;
+            Group = cfg.group;
+            ExecStart = "${daemonExe} --port ${toString cfg.port} --no-open";
+            Restart = "on-failure";
+            RestartSec = 3;
+            ReadWritePaths = [(toString cfg.dataDir)];
+          }
+          // hardening
           // lib.optionalAttrs (cfg.environmentFile != null) {
             EnvironmentFile = toString cfg.environmentFile;
           };
@@ -132,20 +141,22 @@ in
     (lib.mkIf cfg.webFrontend.enable {
       systemd.services.open-design-web = {
         description = "Open Design web frontend (static file server)";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
+        wantedBy = ["multi-user.target"];
+        after = ["network-online.target"];
+        wants = ["network-online.target"];
 
         environment = webEnvironment;
 
-        serviceConfig = {
-          Type = "simple";
-          User = cfg.user;
-          Group = cfg.group;
-          ExecStart = "${lib.getExe caddy} run --config ${caddyfile} --adapter caddyfile";
-          Restart = "on-failure";
-          RestartSec = 3;
-        } // hardening;
+        serviceConfig =
+          {
+            Type = "simple";
+            User = cfg.user;
+            Group = cfg.group;
+            ExecStart = "${lib.getExe caddy} run --config ${caddyfile} --adapter caddyfile";
+            Restart = "on-failure";
+            RestartSec = 3;
+          }
+          // hardening;
       };
     })
   ]);

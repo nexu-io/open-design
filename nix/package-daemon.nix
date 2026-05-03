@@ -24,9 +24,12 @@
 #   are already wired.
 #
 # pnpm version note:
-#   The repo pins `packageManager: pnpm@10.33.2`; nixpkgs ships pnpm
-#   10.33.0 (`pkgs.pnpm_10`). pnpm 10.x is forward-compatible across
-#   patch versions and only emits a warning, not an error.
+#   `package.json` declares `engines.pnpm: ">=10.33.2 <11"` and pnpm
+#   enforces this on `pnpm install` (regardless of `engine-strict`).
+#   nixpkgs currently ships 10.33.0, which is rejected. The flake
+#   overrides `pkgs.pnpm_10` to fetch the 10.33.2 tarball from npm —
+#   see flake.nix for the override and how to bump the hash when
+#   `packageManager` advances.
 #
 # Workspace siblings the daemon depends on (contracts, sidecar-proto,
 # sidecar, platform) are built in dependency order before the daemon

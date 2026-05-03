@@ -12,11 +12,15 @@
 #     autoStart = true;
 #     webFrontend.enable = true;
 #   };
-
-{ moduleCommon, flake }:
-{ config, lib, pkgs, ... }:
-
-let
+{
+  moduleCommon,
+  flake,
+}: {
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
   cfg = config.services.open-design;
 
   commonOpts = moduleCommon {
@@ -51,30 +55,30 @@ let
     }
   '';
 
-  daemonEnv = {
-    OD_PORT = toString cfg.port;
-    OD_DATA_DIR = toString cfg.dataDir;
-  } // cfg.extraEnv;
+  daemonEnv =
+    {
+      OD_PORT = toString cfg.port;
+      OD_DATA_DIR = toString cfg.dataDir;
+    }
+    // cfg.extraEnv;
 
   webEnv = {
     OD_DAEMON_URL = "http://localhost:${toString cfg.port}";
   };
 
   envToList = e: lib.mapAttrsToList (k: v: "${k}=${v}") e;
-in
-{
+in {
   options.services.open-design = commonOpts;
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
-      home.packages = [ cfg.package ];
+      home.packages = [cfg.package];
 
       # Ensure the data directory exists ahead of first daemon launch.
       # mkdir -p so this is safe to re-run.
-      home.activation.openDesignDataDir =
-        lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          run mkdir -p ${lib.escapeShellArg (toString cfg.dataDir)}
-        '';
+      home.activation.openDesignDataDir = lib.hm.dag.entryAfter ["writeBoundary"] ''
+        run mkdir -p ${lib.escapeShellArg (toString cfg.dataDir)}
+      '';
     }
 
     # ----- Linux: systemd --user units --------------------------------
@@ -82,19 +86,21 @@ in
       systemd.user.services.open-design = {
         Unit = {
           Description = "Open Design daemon (user service)";
-          After = [ "network-online.target" ];
-          Wants = [ "network-online.target" ];
+          After = ["network-online.target"];
+          Wants = ["network-online.target"];
         };
-        Install.WantedBy = [ "default.target" ];
-        Service = {
-          Type = "simple";
-          ExecStart = "${daemonExe} --port ${toString cfg.port} --no-open";
-          Environment = envToList daemonEnv;
-          Restart = "on-failure";
-          RestartSec = 3;
-        } // lib.optionalAttrs (cfg.environmentFile != null) {
-          EnvironmentFile = toString cfg.environmentFile;
-        };
+        Install.WantedBy = ["default.target"];
+        Service =
+          {
+            Type = "simple";
+            ExecStart = "${daemonExe} --port ${toString cfg.port} --no-open";
+            Environment = envToList daemonEnv;
+            Restart = "on-failure";
+            RestartSec = 3;
+          }
+          // lib.optionalAttrs (cfg.environmentFile != null) {
+            EnvironmentFile = toString cfg.environmentFile;
+          };
       };
     })
 
@@ -102,10 +108,10 @@ in
       systemd.user.services.open-design-web = {
         Unit = {
           Description = "Open Design web frontend (static file server)";
-          After = [ "network-online.target" ];
-          Wants = [ "network-online.target" ];
+          After = ["network-online.target"];
+          Wants = ["network-online.target"];
         };
-        Install.WantedBy = [ "default.target" ];
+        Install.WantedBy = ["default.target"];
         Service = {
           Type = "simple";
           ExecStart = "${lib.getExe caddy} run --config ${caddyfile} --adapter caddyfile";
@@ -124,7 +130,8 @@ in
           Label = "io.nexu.open-design";
           ProgramArguments = [
             daemonExe
-            "--port" (toString cfg.port)
+            "--port"
+            (toString cfg.port)
             "--no-open"
           ];
           RunAtLoad = true;
@@ -144,8 +151,10 @@ in
           ProgramArguments = [
             (lib.getExe caddy)
             "run"
-            "--config" (toString caddyfile)
-            "--adapter" "caddyfile"
+            "--config"
+            (toString caddyfile)
+            "--adapter"
+            "caddyfile"
           ];
           RunAtLoad = true;
           KeepAlive = true;
