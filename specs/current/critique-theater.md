@@ -21,6 +21,16 @@ This spec is normative for the v1 implementation and protocol. It is the source 
 - Not a new transport. SSE on the existing project event stream carries every new event variant.
 - Not a configurable cast in v1. The five panelists are fixed. Cast extension is reserved for v2.
 
+### Why each non-goal is excluded
+
+The non-goals above are intentional, not arbitrary. Future readers should know the tradeoff that led to each.
+
+- **No parallel processes.** A single CLI session keeps the agent's full context coherent: the Designer's draft and every later panelist's notes share one model context, so the Critic can see the actual hierarchy values the Designer chose, the Brand panelist can read the same DESIGN.md the Designer was passed, and the Copy panelist can pick at the verbs the Designer wrote. Splitting this across processes would require a cross-process artifact handoff and a way to replay prior-panelist notes into each one's context, which adds an estimated two to three weeks to the v1 timeline and turns a debugging session into a multi-process trace correlation problem.
+- **No new agent runtime.** The same on-PATH CLI Open Design already detects (Claude Code, Codex, Cursor Agent, Gemini CLI, etc.) is how this feature reaches users. Building a runtime would replicate work that the existing daemon already does well, would force users onto a model we picked rather than the one they signed up for, and would lose BYOK at every layer.
+- **No new SSE transport.** SSE is already plumbed through the daemon, the web app, the Electron shell, and the desktop sidecar IPC. A second transport would force every consumer to learn a second connection lifecycle, which is exactly the kind of accidental complexity that takes a feature out of v1.
+- **No configurable cast in v1.** A fixed five-panelist roster lets the composite formula and weight defaults stay constant across every artifact. A configurable cast adds UX surface (per-skill picker, override storage, settings sync) and requires the score formula to redistribute weight on the fly. We commit to v2 once we have data on which roles users actually drop or add.
+- **No new skill protocol.** Critique Theater layers on top of the skill loader; it does not change what a skill is. This means the 31 existing skills, the 129 design systems, and any future contributions inherit the panel without per-skill migration work.
+
 ## High-level architecture
 
 ```
@@ -404,6 +414,27 @@ Reopening an artifact loads the badge from SQLite columns. Clicking expand trigg
 | CLI process crash | spawn handle exits non-zero before `<SHIP>` | persist partial transcript, mark `failed` with `rounds_json.cause`, emit `critique.failed`, never silently retry. |
 | Daemon restart mid-run | next boot scans SQLite for rows in state `running` older than `totalTimeoutMs` | mark `interrupted` with `rounds_json.recoveryReason = "daemon_restart"`. Never auto-resume. |
 | Adapter unsupported | adapter fails conformance test in nightly CI | adapter marked `critique:degraded` in adapter registry with 24h TTL. UI shows the degraded banner once per session per adapter. |
+
+### Failure-mode rate targets and recovery
+
+Each failure mode above has an empirical rate target, a deterministic recovery path, and a Prometheus signal so the Phase 12 dashboard and the Phase 11 e2e suite can both pin sane thresholds. Targets are starting values; we tune them with the first 1000 production runs.
+
+| Failure | Target rate | Recovery | Prometheus signal | Alert threshold |
+| --- | --- | --- | --- | --- |
+| `malformed_block` | < 0.5% of runs per adapter | emit `critique.degraded`, fall through to legacy single-pass generation. No retry. | `open_design_critique_degraded_total{reason="malformed_block",adapter="..."}` | sustained > 2% over 1h on any single adapter |
+| `oversize_block` | < 0.1% of runs | same as `malformed_block` plus the parser's position is logged for postmortem | `open_design_critique_degraded_total{reason="oversize_block"}` | any non-zero sustained rate is treated as a model regression and pages |
+| `missing_artifact` | < 0.2% of runs | degraded fallback, prompt template flagged for review (it should make this impossible) | `open_design_critique_degraded_total{reason="missing_artifact"}` | > 1% over 24h |
+| Score never crosses threshold | < 5% of runs at M3 default | apply `fallbackPolicy` (default `ship_best`); badge tagged `below_threshold`; user can re-run | `open_design_critique_runs_total{status="below_threshold"}` | > 15% sustained over 24h is a quality regression |
+| Per-round timeout | < 1% of runs | abort current round, ship best-so-far, badge tagged `timed_out` | `open_design_critique_runs_total{status="timed_out"}` | > 3% over 1h on any adapter |
+| Total timeout | < 0.5% of runs | `SIGTERM` CLI, ship best-so-far, transcript marked partial | same series, distinguished by lifecycle attribute | shares the per-round timeout alert |
+| User Interrupt | not an error; signal of latency or unwanted direction | preserve transcript, ship best-so-far if any round closed | `open_design_critique_interrupted_total{adapter="..."}` | > 10% over 24h is a UX problem worth investigating |
+| CLI process crash | < 0.05% of runs | fail loud with `critique.failed`, no silent retry, daemon process surfaces the cause | `open_design_critique_runs_total{status="failed",cause="cli_exit_nonzero"}` | any non-zero sustained rate pages |
+| Daemon restart mid-run | unbounded (depends on operator action) | persist `interrupted` with `recoveryReason="daemon_restart"`, never auto-resume | `open_design_critique_runs_total{status="interrupted",cause="daemon_restart"}` | informational, no alert |
+| Adapter unsupported | adapter-specific; surfaces during conformance | adapter marked `critique:degraded` in registry with 24h TTL; degraded banner once per session | `open_design_critique_degraded_total{reason="adapter_unsupported",adapter="..."}` | one alert per adapter on first hit, suppressed during TTL |
+
+A run can satisfy multiple labels (a `timed_out` run that also `below_threshold`s, for instance). The `status` label is a single canonical value derived by the orchestrator at run end; downstream histograms attach `cause` and `decision` as separate labels.
+
+The Phase 11 e2e suite synthesizes each row above against a stub adapter and asserts the recovery actually fires. Phase 12 imports the alert thresholds into the Grafana dashboard JSON committed at `tools/dev/dashboards/critique.json` so an operator never has to guess.
 
 ## Concurrency and scalability
 

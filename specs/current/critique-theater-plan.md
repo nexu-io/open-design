@@ -1913,6 +1913,31 @@ git commit -m "feat(web,daemon): Settings toggle Critique Theater (beta)"
 
 ## Phase 10: Adapter conformance harness
 
+### Adapter test matrix and pass criteria
+
+The conformance harness runs against every adapter listed `status: production` in `docs/agent-adapters.md`. v1 production adapters: `claude-code`, `codex`, `cursor-agent`, `gemini-cli`, `devin`, `opencode`, `qwen-code`, `copilot-cli`, `hermes-acp`, `kimi-acp`, `pi-rpc`, `kiro-acp`, plus the `byok-proxy` fallback. Adapters in `status: experimental` are run nightly but do not block the per-adapter green badge.
+
+**Brief templates** (10 templates × 13 adapters = 130 runs per nightly cycle):
+
+| Template | Skill | Stresses |
+| --- | --- | --- |
+| `t01_minimal` | magazine-poster | minimum-token brief, sanity check |
+| `t02_long_brief` | saas-landing | 10 KiB brief input, exercises long context |
+| `t03_two_images` | dashboard | brief with two image attachments |
+| `t04_dense_design_md` | finance-report | 30 KiB DESIGN.md to confirm BRAND panelist scales |
+| `t05_terse_voice` | weekly-update | terse voice DESIGN.md, exercises Copy panelist |
+| `t06_high_a11y_bar` | hr-onboarding | DESIGN.md with explicit AA + AAA mix, A11y panelist target |
+| `t07_must_fix_chain` | kanban-board | brief that historically generated 5+ must-fix per round |
+| `t08_brand_collision` | mobile-app | DESIGN.md whose tokens collide with brief intent on purpose |
+| `t09_cjk_copy` | social-carousel | Japanese copy, exercises i18n in copy review |
+| `t10_three_round_grind` | dating-web | brief that empirically requires all 3 rounds to converge |
+
+**Pass criteria per adapter:** ≥ 90% of the 10 brief templates complete with `critique_status='shipped'` within `totalTimeoutMs`, and ≥ 95% of those parse cleanly (zero `MalformedBlockError`, `OversizeBlockError`, or `MissingArtifactError`). Any adapter that drops under either threshold for two consecutive nightly cycles is automatically marked `critique:degraded` with TTL = 24 hours; the operator gets one alert per adapter at the first failure.
+
+**Retry budget:** any single template that emits `critique.degraded` is retried once with the same brief and adapter. Two consecutive `degraded` runs count as one failure for the rate calculation. Templates that emit `critique.interrupted` due to user action do not count toward conformance (interrupts are user-initiated, not adapter regressions).
+
+**Synthetic adapter fixtures** under `apps/daemon/src/critique/__fixtures__/adapters/` provide deterministic inputs for the harness in CI: `synthetic-good.ts` emits the canonical `happy-3-rounds.txt` content; `synthetic-bad.ts` emits `malformed-unbalanced.txt` to assert the degraded path fires.
+
 ### Task 10.1: Synthetic CLI fixture
 
 **Files:**
@@ -2086,6 +2111,39 @@ git commit -m "ci(quality): check:critique-coverage walks every critique surface
 ---
 
 ## Phase 14: Documentation
+
+### Doc structure (locked before Task 14.1 starts)
+
+The user-facing doc lands as a new file `docs/critique-theater.md`, not a subsection of an existing doc, because it introduces concepts (panel, score, rounds, replay, degraded mode) that have no home in the current docs tree. Outline:
+
+```
+docs/critique-theater.md
+  1. What is Design Jury (one-paragraph elevator + screenshot of Theater Stage)
+  2. How it works
+     - The five panelists and what each scores
+     - Auto-converging rounds (max 3, threshold 8.0/10)
+     - The single CLI session model (no parallel processes, no second transport)
+  3. Settings reference
+     - OD_CRITIQUE_ENABLED env var and the in-app toggle
+     - Per-skill override via SKILL.md frontmatter (od.critique.policy)
+     - Score threshold and weights (read-only in v1)
+  4. Reading the score badge
+     - composite, per-dim swatches, threshold marker
+     - what "below_threshold" / "interrupted" / "degraded" / "failed" each mean
+  5. Replay
+     - opening a transcript
+     - speed picker, scrub, jump-to-round shortcuts
+  6. Troubleshooting
+     - "panel offline this run" - causes and remediation per adapter
+     - "below threshold after 3 rounds" - tuning brief, switching skill
+     - "interrupted at round N" - resume vs ship-as-is vs re-brief
+  7. FAQ
+     - Why five panelists, why fixed?
+     - Why is my adapter marked degraded for 24h?
+     - Can I add my own panelist? (link to v2 roadmap entry)
+```
+
+The README adds a single line under the existing "What you get" table linking to the new doc; no new section in the README itself. `apps/daemon/src/critique/AGENTS.md` and `apps/web/src/components/Theater/AGENTS.md` give engineering-side guidance per the existing convention. `AGENTS.md` (root) gains an entry for `OD_CRITIQUE_ENABLED` in the environment-variables table.
 
 ### Task 14.1: User-facing `docs/critique-theater.md`
 
