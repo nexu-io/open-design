@@ -41,6 +41,8 @@ import { createClaudeStreamHandler } from './claude-stream.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
+import { createRunRegistry } from './critique/run-registry.js';
+import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
@@ -803,6 +805,11 @@ const critiqueCfg = loadCritiqueConfigFromEnv();
 // Adapter denylist for orchestrator routing is implicit: anything that is
 // not the 'plain' streamFormat falls through to legacy single-pass.
 const critiqueWarnedAdapters = new Set<string>();
+
+// In-process registry of in-flight critique runs so the interrupt endpoint
+// can cascade an AbortController to the matching orchestrator invocation.
+// Created once per process; not persisted across daemon restarts.
+const critiqueRunRegistry = createRunRegistry();
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
 
 export function createAgentRuntimeEnv(
@@ -4486,6 +4493,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         // contract payload as event.data.
         const critiqueBus = { emit: (e) => send(e.event, e.data) };
 
+        // Register this run with the in-process registry so the interrupt
+        // endpoint can cascade an AbortController to the orchestrator. The
+        // register call must run BEFORE runOrchestrator is invoked, so a
+        // request that arrives between spawn and orchestrator-start cannot
+        // miss a runId that already has a live child process.
+        const critiqueAbort = new AbortController();
+        critiqueRunRegistry.register({
+          runId: critiqueRunId,
+          projectId: critiqueProjectKey,
+          abort: critiqueAbort,
+          startedAt: Date.now(),
+        });
+
         // Stderr forwarding and child.on('error') must be wired BEFORE the
         // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
         // fill the OS pipe and deadlock the run until the total timeout, and
@@ -4518,6 +4538,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             stdout: stdoutIterable,
             child,
             childExitPromise,
+            signal: critiqueAbort.signal,
           });
           // Map the critique terminal status to the chat run lifecycle.
           // 'shipped' and 'below_threshold' both ran to a ship decision and
@@ -4536,6 +4557,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         } catch (err) {
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
           design.runs.finish(run, 'failed', 1, null);
+        } finally {
+          critiqueRunRegistry.unregister(critiqueProjectKey, critiqueRunId);
         }
         return;
       }
@@ -4883,6 +4906,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.off('close', abortIfResponseClosed);
     }
   });
+
+  // ---- Critique Theater endpoints (Phase 6) --------------------------------
+
+  // POST /api/projects/:projectId/critique/:runId/interrupt
+  // Cascades an AbortController to the in-flight orchestrator for the given run.
+  app.post(
+    '/api/projects/:projectId/critique/:runId/interrupt',
+    handleCritiqueInterrupt(db, critiqueRunRegistry),
+  );
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
