@@ -534,6 +534,7 @@ export const de: Dict = {
   'fileViewer.exportPptxNa': 'PPTX-Export ist hier nicht verfügbar.',
   'fileViewer.exportZip': 'Als .zip herunterladen',
   'fileViewer.exportHtml': 'Als eigenständiges HTML exportieren',
+  'fileViewer.exportMd': 'Als Markdown exportieren',
   'fileViewer.exportJsx': 'Als JSX exportieren',
   'fileViewer.exportReactHtml': 'Vorschau als HTML exportieren',
   'fileViewer.saveAsTemplate': 'Als Template speichern…',

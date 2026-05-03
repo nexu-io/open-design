@@ -17,10 +17,7 @@ import {
   sanitizeCustomModel,
 } from './agents.js';
 import { listSkills } from './skills.js';
-import {
-  listCodexPets,
-  readCodexPetSpritesheet,
-} from './codex-pets.js';
+import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
@@ -47,7 +44,9 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
+import { readAppConfig, writeAppConfig } from './app-config.js';
 import {
+  buildProjectArchive,
   decodeMultipartFilename,
   deleteProjectFile,
   ensureProject,
@@ -115,9 +114,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
-  const daemonDir = base === 'dist' || base === 'src'
-    ? path.dirname(moduleDir)
-    : moduleDir;
+  const daemonDir =
+    base === 'dist' || base === 'src' ? path.dirname(moduleDir) : moduleDir;
   return path.resolve(daemonDir, '../..');
 }
 
@@ -137,7 +135,9 @@ export function normalizeCommentAttachments(input) {
       if (!filePath || !elementId || !selector || !comment) return null;
       return {
         id: cleanString(raw.id) || `comment-${index + 1}`,
-        order: Number.isFinite(raw.order) ? Math.max(1, Math.round(raw.order)) : index + 1,
+        order: Number.isFinite(raw.order)
+          ? Math.max(1, Math.round(raw.order))
+          : index + 1,
         filePath,
         elementId,
         selector,
@@ -206,11 +206,19 @@ function formatAttachmentPosition(position) {
 
 function isPathWithin(base, target) {
   const relativePath = path.relative(path.resolve(base), path.resolve(target));
-  return relativePath === '' || (relativePath.length > 0 && !relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+  return (
+    relativePath === '' ||
+    (relativePath.length > 0 &&
+      !relativePath.startsWith('..') &&
+      !path.isAbsolute(relativePath))
+  );
 }
 
 function resolveProcessResourcesPath() {
-  if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+  if (
+    typeof process.resourcesPath === 'string' &&
+    process.resourcesPath.length > 0
+  ) {
     return process.resourcesPath;
   }
 
@@ -224,10 +232,16 @@ function resolveProcessResourcesPath() {
   }
 
   const normalizedExecPath = process.execPath.toLowerCase();
-  const windowsResourceBinMarker = `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
-  const windowsMarkerIndex = normalizedExecPath.indexOf(windowsResourceBinMarker);
+  const windowsResourceBinMarker =
+    `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
+  const windowsMarkerIndex = normalizedExecPath.indexOf(
+    windowsResourceBinMarker,
+  );
   if (windowsMarkerIndex !== -1) {
-    return process.execPath.slice(0, windowsMarkerIndex + `${path.sep}resources`.length);
+    return process.execPath.slice(
+      0,
+      windowsMarkerIndex + `${path.sep}resources`.length,
+    );
   }
 
   return null;
@@ -245,7 +259,9 @@ export function resolveDaemonResourceRoot({
     .map((base) => path.resolve(base));
 
   if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
-    throw new Error(`${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`);
+    throw new Error(
+      `${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
+    );
   }
 
   return resolved;
@@ -309,8 +325,15 @@ export function normalizeProjectDisplayStatus(status) {
   return status === 'starting' || status === 'queued' ? 'running' : status;
 }
 
-export function composeProjectDisplayStatus(baseStatus, awaitingInputProjects, projectId) {
-  if (baseStatus.value === 'succeeded' && awaitingInputProjects.has(projectId)) {
+export function composeProjectDisplayStatus(
+  baseStatus,
+  awaitingInputProjects,
+  projectId,
+) {
+  if (
+    baseStatus.value === 'succeeded' &&
+    awaitingInputProjects.has(projectId)
+  ) {
     return { ...baseStatus, value: 'awaiting_input' };
   }
   return {
@@ -347,7 +370,23 @@ export function createCompatApiErrorResponse(code, message, init = {}) {
  * @param {Omit<ApiError, 'code' | 'message'>} [init]
  */
 function sendApiError(res, status, code, message, init = {}) {
-  return res.status(status).json(createCompatApiErrorResponse(code, message, init));
+  return res
+    .status(status)
+    .json(createCompatApiErrorResponse(code, message, init));
+}
+
+// Filename slug for the Content-Disposition header on archive downloads.
+// Browsers reject quotes and control bytes; we keep Unicode letters/digits
+// so a project name with non-ASCII characters (e.g. "café-design")
+// survives instead of becoming a row of underscores.
+function sanitizeArchiveFilename(raw) {
+  const cleaned = String(raw ?? '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return cleaned;
 }
 
 /**
@@ -369,7 +408,10 @@ const upload = multer({
     filename: (_req, file, cb) => {
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
+      cb(
+        null,
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`,
+      );
     },
   }),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -381,7 +423,10 @@ const importUpload = multer({
     filename: (_req, file, cb) => {
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
+      cb(
+        null,
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`,
+      );
     },
   }),
   limits: { fileSize: 100 * 1024 * 1024 },
@@ -509,7 +554,10 @@ function notifyTaskWaiters(task) {
   }
 }
 
-export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {}) {
+export function createSseResponse(
+  res,
+  { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {},
+) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -617,7 +665,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         projects: listProjects(db).map((project) => ({
           ...project,
           status: composeProjectDisplayStatus(
-            activeRunStatuses.get(project.id) ?? latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+            activeRunStatuses.get(project.id) ??
+              latestRunStatuses.get(project.id) ?? { value: 'not_started' },
             awaitingInputProjects,
             project.id,
           ),
@@ -681,7 +730,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
           await ensureProject(PROJECTS_DIR, id);
           for (const f of tpl.files) {
-            if (!f || typeof f.name !== 'string' || typeof f.content !== 'string') {
+            if (
+              !f ||
+              typeof f.name !== 'string' ||
+              typeof f.content !== 'string'
+            ) {
               continue;
             }
             try {
@@ -706,59 +759,70 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.post('/api/import/claude-design', importUpload.single('file'), async (req, res) => {
-    try {
-      if (!req.file) return res.status(400).json({ error: 'zip file required' });
-      const originalName = req.file.originalname || 'Claude Design export.zip';
-      if (!/\.zip$/i.test(originalName)) {
+  app.post(
+    '/api/import/claude-design',
+    importUpload.single('file'),
+    async (req, res) => {
+      try {
+        if (!req.file)
+          return res.status(400).json({ error: 'zip file required' });
+        const originalName =
+          req.file.originalname || 'Claude Design export.zip';
+        if (!/\.zip$/i.test(originalName)) {
+          fs.promises.unlink(req.file.path).catch(() => {});
+          return res.status(400).json({ error: 'expected a .zip file' });
+        }
+        const id = randomId();
+        const now = Date.now();
+        const baseName =
+          originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
+        const imported = await importClaudeDesignZip(
+          req.file.path,
+          projectDir(PROJECTS_DIR, id),
+        );
         fs.promises.unlink(req.file.path).catch(() => {});
-        return res.status(400).json({ error: 'expected a .zip file' });
-      }
-      const id = randomId();
-      const now = Date.now();
-      const baseName = originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
-      const imported = await importClaudeDesignZip(req.file.path, projectDir(PROJECTS_DIR, id));
-      fs.promises.unlink(req.file.path).catch(() => {});
 
-      const project = insertProject(db, {
-        id,
-        name: baseName,
-        skillId: null,
-        designSystemId: null,
-        pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
-        metadata: {
-          kind: 'prototype',
-          importedFrom: 'claude-design',
+        const project = insertProject(db, {
+          id,
+          name: baseName,
+          skillId: null,
+          designSystemId: null,
+          pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
+          metadata: {
+            kind: 'prototype',
+            importedFrom: 'claude-design',
+            entryFile: imported.entryFile,
+            sourceFileName: originalName,
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+        const cid = randomId();
+        insertConversation(db, {
+          id: cid,
+          projectId: id,
+          title: 'Imported Claude Design project',
+          createdAt: now,
+          updatedAt: now,
+        });
+        setTabs(db, id, [imported.entryFile], imported.entryFile);
+        res.json({
+          project,
+          conversationId: cid,
           entryFile: imported.entryFile,
-          sourceFileName: originalName,
-        },
-        createdAt: now,
-        updatedAt: now,
-      });
-      const cid = randomId();
-      insertConversation(db, {
-        id: cid,
-        projectId: id,
-        title: 'Imported Claude Design project',
-        createdAt: now,
-        updatedAt: now,
-      });
-      setTabs(db, id, [imported.entryFile], imported.entryFile);
-      res.json({
-        project,
-        conversationId: cid,
-        entryFile: imported.entryFile,
-        files: imported.files,
-      });
-    } catch (err) {
-      if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
-      res.status(400).json({ error: String(err) });
-    }
-  });
+          files: imported.files,
+        });
+      } catch (err) {
+        if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
+        res.status(400).json({ error: String(err) });
+      }
+    },
+  );
 
   app.get('/api/projects/:id', (req, res) => {
     const project = getProject(db, req.params.id);
-    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    if (!project)
+      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project };
     res.json(body);
@@ -768,7 +832,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     try {
       const patch = req.body || {};
       const project = updateProject(db, req.params.id, patch);
-      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      if (!project)
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       /** @type {import('@open-design/contracts').ProjectResponse} */
       const body = { project };
       res.json(body);
@@ -834,64 +899,62 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Messages -------------------------------------------------------------
 
-  app.get(
-    '/api/projects/:id/conversations/:cid/messages',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      res.json({ messages: listMessages(db, req.params.cid) });
-    },
-  );
+  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
+    const conv = getConversation(db, req.params.cid);
+    if (!conv || conv.projectId !== req.params.id) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    res.json({ messages: listMessages(db, req.params.cid) });
+  });
 
-  app.put(
-    '/api/projects/:id/conversations/:cid/messages/:mid',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      const m = req.body || {};
-      if (m.id && m.id !== req.params.mid) {
-        return res.status(400).json({ error: 'id mismatch' });
-      }
-      const saved = upsertMessage(db, req.params.cid, { ...m, id: req.params.mid });
-      // Bump the parent project's updatedAt so the project list re-orders.
-      updateProject(db, req.params.id, {});
-      res.json({ message: saved });
-    },
-  );
+  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
+    const conv = getConversation(db, req.params.cid);
+    if (!conv || conv.projectId !== req.params.id) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    const m = req.body || {};
+    if (m.id && m.id !== req.params.mid) {
+      return res.status(400).json({ error: 'id mismatch' });
+    }
+    const saved = upsertMessage(db, req.params.cid, {
+      ...m,
+      id: req.params.mid,
+    });
+    // Bump the parent project's updatedAt so the project list re-orders.
+    updateProject(db, req.params.id, {});
+    res.json({ message: saved });
+  });
 
   // ---- Preview comments ----------------------------------------------------
 
-  app.get(
-    '/api/projects/:id/conversations/:cid/comments',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      res.json({ comments: listPreviewComments(db, req.params.id, req.params.cid) });
-    },
-  );
+  app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
+    const conv = getConversation(db, req.params.cid);
+    if (!conv || conv.projectId !== req.params.id) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    res.json({
+      comments: listPreviewComments(db, req.params.id, req.params.cid),
+    });
+  });
 
-  app.post(
-    '/api/projects/:id/conversations/:cid/comments',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      try {
-        const comment = upsertPreviewComment(db, req.params.id, req.params.cid, req.body || {});
-        updateProject(db, req.params.id, {});
-        res.json({ comment });
-      } catch (err) {
-        res.status(400).json({ error: String(err?.message || err) });
-      }
-    },
-  );
+  app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
+    const conv = getConversation(db, req.params.cid);
+    if (!conv || conv.projectId !== req.params.id) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    try {
+      const comment = upsertPreviewComment(
+        db,
+        req.params.id,
+        req.params.cid,
+        req.body || {},
+      );
+      updateProject(db, req.params.id, {});
+      res.json({ comment });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message || err) });
+    }
+  });
 
   app.patch(
     '/api/projects/:id/conversations/:cid/comments/:commentId',
@@ -908,7 +971,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           req.params.commentId,
           req.body?.status,
         );
-        if (!comment) return res.status(404).json({ error: 'comment not found' });
+        if (!comment)
+          return res.status(404).json({ error: 'comment not found' });
         updateProject(db, req.params.id, {});
         res.json({ comment });
       } catch (err) {
@@ -924,7 +988,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!conv || conv.projectId !== req.params.id) {
         return res.status(404).json({ error: 'conversation not found' });
       }
-      const ok = deletePreviewComment(db, req.params.id, req.params.cid, req.params.commentId);
+      const ok = deletePreviewComment(
+        db,
+        req.params.id,
+        req.params.cid,
+        req.params.commentId,
+      );
       if (!ok) return res.status(404).json({ error: 'comment not found' });
       updateProject(db, req.params.id, {});
       res.json({ ok: true });
@@ -992,10 +1061,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const files = await listFiles(PROJECTS_DIR, sourceProjectId);
       const snapshot = [];
       for (const f of files) {
-        if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code') continue;
-        const entry = await readProjectFile(PROJECTS_DIR, sourceProjectId, f.name);
+        if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
+          continue;
+        const entry = await readProjectFile(
+          PROJECTS_DIR,
+          sourceProjectId,
+          f.name,
+        );
         if (entry && Buffer.isBuffer(entry.buffer)) {
-          snapshot.push({ name: f.name, content: entry.buffer.toString('utf8') });
+          snapshot.push({
+            name: f.name,
+            content: entry.buffer.toString('utf8'),
+          });
         }
       }
       const t = insertTemplate(db, {
@@ -1142,7 +1219,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
       const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null) return res.status(404).json({ error: 'design system not found' });
+      if (body === null)
+        return res.status(404).json({ error: 'design system not found' });
       res.json({ id: req.params.id, body });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -1167,7 +1245,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         req.params.surface,
         req.params.id,
       );
-      if (!tpl) return res.status(404).json({ error: 'prompt template not found' });
+      if (!tpl)
+        return res.status(404).json({ error: 'prompt template not found' });
       res.json({ promptTemplate: tpl });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -1181,7 +1260,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
       const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null) return res.status(404).type('text/plain').send('not found');
+      if (body === null)
+        return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
       res.type('text/html').send(html);
     } catch (err) {
@@ -1195,7 +1275,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
       const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null) return res.status(404).type('text/plain').send('not found');
+      if (body === null)
+        return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
       res.type('text/html').send(html);
     } catch (err) {
@@ -1255,7 +1336,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res
         .status(404)
         .type('text/plain')
-        .send('no example.html, assets/template.html, or assets/index.html for this skill');
+        .send(
+          'no example.html, assets/template.html, or assets/index.html for this skill',
+        );
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -1355,14 +1438,23 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
       if (providerId !== VERCEL_PROVIDER_ID) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'unsupported deploy provider',
+        );
       }
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const files = await buildDeployFileSet(PROJECTS_DIR, req.params.id, fileName);
+      const files = await buildDeployFileSet(
+        PROJECTS_DIR,
+        req.params.id,
+        fileName,
+      );
       const result = await deployToVercel({
         config: await readVercelConfig(),
         files,
@@ -1388,8 +1480,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       const status = err instanceof DeployError ? err.status : 400;
-      const init = err instanceof DeployError && err.details ? { details: err.details } : {};
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err), init);
+      const init =
+        err instanceof DeployError && err.details
+          ? { details: err.details }
+          : {};
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+        init,
+      );
     }
   });
 
@@ -1397,13 +1498,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
       if (providerId !== VERCEL_PROVIDER_ID) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'unsupported deploy provider',
+        );
       }
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
-      const body = await prepareDeployPreflight(PROJECTS_DIR, req.params.id, fileName);
+      const body = await prepareDeployPreflight(
+        PROJECTS_DIR,
+        req.params.id,
+        fileName,
+      );
       res.json(body);
     } catch (err) {
       // DeployError is a known/expected outcome (validation, missing file).
@@ -1414,33 +1524,51 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         console.error('[deploy/preflight]', err);
       }
       const status = err instanceof DeployError ? err.status : 400;
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err));
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
     }
   });
 
-  app.post('/api/projects/:id/deployments/:deploymentId/check-link', async (req, res) => {
-    try {
-      const existing = getDeploymentById(db, req.params.id, req.params.deploymentId);
-      if (!existing) {
-        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'deployment not found');
+  app.post(
+    '/api/projects/:id/deployments/:deploymentId/check-link',
+    async (req, res) => {
+      try {
+        const existing = getDeploymentById(
+          db,
+          req.params.id,
+          req.params.deploymentId,
+        );
+        if (!existing) {
+          return sendApiError(
+            res,
+            404,
+            'FILE_NOT_FOUND',
+            'deployment not found',
+          );
+        }
+        const result = await checkDeploymentUrl(existing.url);
+        const now = Date.now();
+        /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+        const body = upsertDeployment(db, {
+          ...existing,
+          status: result.reachable ? 'ready' : result.status || 'link-delayed',
+          statusMessage: result.reachable
+            ? 'Public link is ready.'
+            : result.statusMessage ||
+              'Vercel is still preparing the public link.',
+          reachableAt: result.reachable ? now : existing.reachableAt,
+          updatedAt: now,
+        });
+        res.json(body);
+      } catch (err) {
+        sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
       }
-      const result = await checkDeploymentUrl(existing.url);
-      const now = Date.now();
-      /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
-      const body = upsertDeployment(db, {
-        ...existing,
-        status: result.reachable ? 'ready' : (result.status || 'link-delayed'),
-        statusMessage: result.reachable
-          ? 'Public link is ready.'
-          : (result.statusMessage || 'Vercel is still preparing the public link.'),
-        reachableAt: result.reachable ? now : existing.reachableAt,
-        updatedAt: now,
-      });
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-    }
-  });
+    },
+  );
 
   // Shared device frames (iPhone, Android, iPad, MacBook, browser chrome).
   // Skills can compose multi-screen / multi-device layouts by pointing at
@@ -1460,6 +1588,46 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
+  // share menu can hand the user the actual files they uploaded — e.g. the
+  // imported `ui-design/` folder — instead of a one-file snapshot of the
+  // rendered HTML. `root` scopes the archive to a subdirectory; without
+  // it, the whole project is packed.
+  app.get('/api/projects/:id/archive', async (req, res) => {
+    try {
+      const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      const { buffer, baseName } = await buildProjectArchive(
+        PROJECTS_DIR,
+        req.params.id,
+        root,
+      );
+      const project = getProject(db, req.params.id);
+      const fallbackName = project?.name || req.params.id;
+      const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
+      const filename = `${fileSlug}.zip`;
+      // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
+      // `filename*=UTF-8''…` lets modern browsers pick up project names
+      // with non-ASCII characters (accents, CJK, etc.) without mojibake.
+      const asciiFallback =
+        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(buffer);
+    } catch (err) {
+      const code = err && err.code;
+      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
     }
   });
 
@@ -1489,7 +1657,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
     }
   });
 
@@ -1501,28 +1674,56 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
     }
   });
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      const file = await readProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        req.params.name,
+      );
       const preview = await buildDocumentPreview(file);
       res.json(preview);
     } catch (err) {
-      const status = err && err.statusCode ? err.statusCode : err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', err?.message || 'preview unavailable');
+      const status =
+        err && err.statusCode
+          ? err.statusCode
+          : err && err.code === 'ENOENT'
+            ? 404
+            : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        err?.message || 'preview unavailable',
+      );
     }
   });
 
   app.get('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      const file = await readProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        req.params.name,
+      );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
     }
   });
 
@@ -1542,7 +1743,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         await ensureProject(PROJECTS_DIR, req.params.id);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
-          const desiredName = sanitizeName(req.body?.name || req.file.originalname);
+          const desiredName = sanitizeName(
+            req.body?.name || req.file.originalname,
+          );
           const meta = await writeProjectFile(
             PROJECTS_DIR,
             req.params.id,
@@ -1556,21 +1759,40 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         }
         const { name, content, encoding, artifactManifest } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'name and content required');
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'name and content required',
+          );
         }
         if (artifactManifest !== undefined && artifactManifest !== null) {
-          const validated = validateArtifactManifestInput(artifactManifest, name);
+          const validated = validateArtifactManifestInput(
+            artifactManifest,
+            name,
+          );
           if (!validated.ok) {
-            return sendApiError(res, 400, 'BAD_REQUEST', `invalid artifactManifest: ${validated.error}`);
+            return sendApiError(
+              res,
+              400,
+              'BAD_REQUEST',
+              `invalid artifactManifest: ${validated.error}`,
+            );
           }
         }
         const buf =
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf, {
-          artifactManifest,
-        });
+        const meta = await writeProjectFile(
+          PROJECTS_DIR,
+          req.params.id,
+          name,
+          buf,
+          {
+            artifactManifest,
+          },
+        );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
         res.json(body);
@@ -1588,7 +1810,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
     }
   });
 
@@ -1609,7 +1836,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const cfg = await readMaskedConfig(PROJECT_ROOT);
       res.json(cfg);
     } catch (err) {
-      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
     }
   });
 
@@ -1619,14 +1848,45 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(cfg);
     } catch (err) {
       const status = typeof err?.status === 'number' ? err.status : 400;
-      res.status(status).json({ error: String(err && err.message ? err.message : err) });
+      res
+        .status(status)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get('/api/app-config', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      res.json({ config });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.put('/api/app-config', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
+      res.json({ config });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
     }
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({
-        error: 'cross-origin request rejected: media generation is restricted to the local UI / CLI',
+        error:
+          'cross-origin request rejected: media generation is restricted to the local UI / CLI',
       });
     }
 
@@ -1657,9 +1917,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         prompt: req.body?.prompt,
         output: req.body?.output,
         aspect: req.body?.aspect,
-        length: typeof req.body?.length === 'number' ? req.body.length : undefined,
+        length:
+          typeof req.body?.length === 'number' ? req.body.length : undefined,
         duration:
-          typeof req.body?.duration === 'number' ? req.body.duration : undefined,
+          typeof req.body?.duration === 'number'
+            ? req.body.duration
+            : undefined,
         voice: req.body?.voice,
         audioKind: req.body?.audioKind,
         compositionDir: req.body?.compositionDir,
@@ -1823,10 +2086,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
 
-  const composeDaemonSystemPrompt = async ({ projectId, skillId, designSystemId }) => {
-    const project = typeof projectId === 'string' && projectId ? getProject(db, projectId) : null;
-    const effectiveSkillId = typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const effectiveDesignSystemId = typeof designSystemId === 'string' && designSystemId ? designSystemId : project?.designSystemId;
+  const composeDaemonSystemPrompt = async ({
+    projectId,
+    skillId,
+    designSystemId,
+  }) => {
+    const project =
+      typeof projectId === 'string' && projectId
+        ? getProject(db, projectId)
+        : null;
+    const effectiveSkillId =
+      typeof skillId === 'string' && skillId ? skillId : project?.skillId;
+    const effectiveDesignSystemId =
+      typeof designSystemId === 'string' && designSystemId
+        ? designSystemId
+        : project?.designSystemId;
     const metadata = project?.metadata;
 
     let skillBody;
@@ -1834,12 +2108,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let skillMode;
     let skillCraftRequires = [];
     if (effectiveSkillId) {
-      const skill = (await listSkills(SKILLS_DIR)).find((s) => s.id === effectiveSkillId);
+      const skill = (await listSkills(SKILLS_DIR)).find(
+        (s) => s.id === effectiveSkillId,
+      );
       if (skill) {
         skillBody = skill.body;
         skillName = skill.name;
         skillMode = skill.mode;
-        if (Array.isArray(skill.craftRequires)) skillCraftRequires = skill.craftRequires;
+        if (Array.isArray(skill.craftRequires))
+          skillCraftRequires = skill.craftRequires;
       }
     }
 
@@ -1859,12 +2136,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
       const summary = systems.find((s) => s.id === effectiveDesignSystemId);
       designSystemTitle = summary?.title;
-      designSystemBody = await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId) ?? undefined;
+      designSystemBody =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
+        undefined;
     }
 
-    const template = metadata?.kind === 'template' && typeof metadata.templateId === 'string'
-      ? getTemplate(db, metadata.templateId) ?? undefined
-      : undefined;
+    const template =
+      metadata?.kind === 'template' && typeof metadata.templateId === 'string'
+        ? (getTemplate(db, metadata.templateId) ?? undefined)
+        : undefined;
 
     return composeSystemPrompt({
       skillBody,
@@ -1899,14 +2179,24 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       reasoning,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
-    if (typeof conversationId === 'string' && conversationId) run.conversationId = conversationId;
-    if (typeof assistantMessageId === 'string' && assistantMessageId) run.assistantMessageId = assistantMessageId;
-    if (typeof clientRequestId === 'string' && clientRequestId) run.clientRequestId = clientRequestId;
+    if (typeof conversationId === 'string' && conversationId)
+      run.conversationId = conversationId;
+    if (typeof assistantMessageId === 'string' && assistantMessageId)
+      run.assistantMessageId = assistantMessageId;
+    if (typeof clientRequestId === 'string' && clientRequestId)
+      run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
     const def = getAgentDef(agentId);
-    if (!def) return design.runs.fail(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
-    if (!def.bin) return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
-    const safeCommentAttachments = normalizeCommentAttachments(commentAttachments);
+    if (!def)
+      return design.runs.fail(
+        run,
+        'AGENT_UNAVAILABLE',
+        `unknown agent: ${agentId}`,
+      );
+    if (!def.bin)
+      return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    const safeCommentAttachments =
+      normalizeCommentAttachments(commentAttachments);
     if (
       (typeof message !== 'string' || !message.trim()) &&
       safeCommentAttachments.length === 0
@@ -1934,7 +2224,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Sanitise supplied image paths: must live under UPLOAD_DIR.
     const safeImages = imagePaths.filter((p) => {
       const resolved = path.resolve(p);
-      return resolved.startsWith(UPLOAD_DIR + path.sep) && fs.existsSync(resolved);
+      return (
+        resolved.startsWith(UPLOAD_DIR + path.sep) && fs.existsSync(resolved)
+      );
     });
 
     // Project-scoped attachments: project-relative paths inside cwd. Each
@@ -1944,18 +2236,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // to Read it.
     const safeAttachments = cwd
       ? (Array.isArray(attachments) ? attachments : [])
-        .filter((p) => typeof p === 'string' && p.length > 0)
-        .filter((p) => {
-          try {
-            const abs = path.resolve(cwd, p);
-            return (
-              (abs === cwd || abs.startsWith(cwd + path.sep)) &&
-              fs.existsSync(abs)
-            );
-          } catch {
-            return false;
-          }
-        })
+          .filter((p) => typeof p === 'string' && p.length > 0)
+          .filter((p) => {
+            try {
+              const abs = path.resolve(cwd, p);
+              return (
+                (abs === cwd || abs.startsWith(cwd + path.sep)) &&
+                fs.existsSync(abs)
+              );
+            } catch {
+              return false;
+            }
+          })
       : [];
 
     // Local code agents don't accept a separate "system" channel the way the
@@ -1978,7 +2270,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const daemonSystemPrompt = await composeDaemonSystemPrompt({ projectId, skillId, designSystemId });
+    const daemonSystemPrompt = await composeDaemonSystemPrompt({
+      projectId,
+      skillId,
+      designSystemId,
+    });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -1990,7 +2286,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           ? `# Instructions${cwdHint}\n\n---\n`
           : '',
       `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
-      safeImages.length ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}` : '',
+      safeImages.length
+        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
+        : '',
     ].join('');
 
     // Skill seeds (`skills/<id>/assets/template.html`) and design-system
@@ -2000,8 +2298,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Claude Code blocks those reads (issue #6: "no permission to read
     // skills template"). We surface both roots so any agent that honours
     // `--add-dir` can resolve those side files.
-    const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter(
-      (d) => fs.existsSync(d),
+    const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
+      fs.existsSync(d),
     );
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
@@ -2016,7 +2314,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : null;
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null
+        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
 
@@ -2027,16 +2325,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
     // from issue #10.
     if (!resolvedBin) {
-      design.runs.emit(run, 'error', createSseErrorPayload(
-        'AGENT_UNAVAILABLE',
-        `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
-          'Install it and refresh the agent list (GET /api/agents) before retrying.',
-        { retryable: true },
-      ));
+      design.runs.emit(
+        run,
+        'error',
+        createSseErrorPayload(
+          'AGENT_UNAVAILABLE',
+          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+            'Install it and refresh the agent list (GET /api/agents) before retrying.',
+          { retryable: true },
+        ),
+      );
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const args = def.buildArgs(composed, safeImages, extraAllowedDirs, agentOptions, { cwd });
+    const args = def.buildArgs(
+      composed,
+      safeImages,
+      extraAllowedDirs,
+      agentOptions,
+      { cwd },
+    );
     const send = (event, data) => design.runs.emit(run, event, data);
 
     const odMediaEnv = {
@@ -2070,7 +2378,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
-      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      const stdinMode =
+        def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
+          ? 'pipe'
+          : 'ignore';
       const env = { ...process.env, ...odMediaEnv };
       const invocation = createCommandInvocation({
         command: resolvedBin,
@@ -2082,6 +2393,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
         shell: false,
+        // Required when invocation wraps a Windows .cmd/.bat shim through
+        // cmd.exe; without this, Node re-escapes the inner command line and
+        // breaks paths containing spaces (issue #315).
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       run.child = child;
       if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
@@ -2091,13 +2406,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         // below already route the underlying failure to SSE via stderr.
         child.stdin.on('error', (err) => {
           if (err.code !== 'EPIPE') {
-            send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `stdin: ${err.message}`));
+            send(
+              'error',
+              createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                `stdin: ${err.message}`,
+              ),
+            );
           }
         });
         child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
-      design.runs.emit(run, 'error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      design.runs.emit(
+        run,
+        'error',
+        createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          `spawn failed: ${err.message}`,
+        ),
+      );
       return design.runs.finish(run, 'failed', 1, null);
     }
 
@@ -2133,8 +2461,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         send,
       });
     } else if (def.streamFormat === 'json-event-stream') {
-      const handler = createJsonEventStreamHandler(def.eventParser || def.id, (ev) =>
-        send('agent', ev),
+      const handler = createJsonEventStreamHandler(
+        def.eventParser || def.id,
+        (ev) => send('agent', ev),
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
@@ -2144,7 +2473,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
-      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
+      send(
+        'error',
+        createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message),
+      );
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
@@ -2208,7 +2540,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // providers. This keeps BYOK setup zero-config for local users at the cost of
   // one local streaming hop through the daemon.
 
-  const redactAuthTokens = (text) => text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
+  const redactAuthTokens = (text) =>
+    text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
   const validateExternalApiBaseUrl = (baseUrl) => {
     let parsed;
@@ -2235,23 +2568,39 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
+      proxyBody;
     if (!baseUrl || !apiKey || !model) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'baseUrl, apiKey, and model are required',
+      );
     }
 
     const validated = validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
-      return sendApiError(res, validated.forbidden ? 403 : 400, validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST', validated.error);
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
     }
 
     const clean = baseUrl.replace(/\/+$/, '');
-    const url = /\/v\d+$/.test(clean) ? `${clean}/messages` : `${clean}/v1/messages`;
-    console.log(`[proxy:anthropic] ${req.method} ${validated.parsed.hostname} model=${model}`);
+    const url = /\/v\d+$/.test(clean)
+      ? `${clean}/messages`
+      : `${clean}/v1/messages`;
+    console.log(
+      `[proxy:anthropic] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
 
     const payload = {
       model,
-      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      max_tokens:
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       messages: Array.isArray(messages) ? messages : [],
       stream: true,
     };
@@ -2273,8 +2622,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
-        sse.send('error', { message: `Upstream error: ${response.status}`, details: errorText });
+        console.error(
+          `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sse.send('error', {
+          message: `Upstream error: ${response.status}`,
+          details: errorText,
+        });
         return sse.end();
       }
 
@@ -2315,19 +2669,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/proxy/openai/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
+      proxyBody;
     if (!baseUrl || !apiKey || !model) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'baseUrl, apiKey, and model are required',
+      );
     }
 
     const validated = validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
-      return sendApiError(res, validated.forbidden ? 403 : 400, validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST', validated.error);
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
     }
 
     const clean = baseUrl.replace(/\/+$/, '');
-    const url = /\/v\d+$/.test(clean) ? `${clean}/chat/completions` : `${clean}/v1/chat/completions`;
-    console.log(`[proxy:openai] ${req.method} ${validated.parsed.hostname} model=${model}`);
+    const url = /\/v\d+$/.test(clean)
+      ? `${clean}/chat/completions`
+      : `${clean}/v1/chat/completions`;
+    console.log(
+      `[proxy:openai] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
 
     const payloadMessages = Array.isArray(messages) ? [...messages] : [];
     if (typeof systemPrompt === 'string' && systemPrompt) {
@@ -2337,7 +2706,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const payload = {
       model,
       messages: payloadMessages,
-      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      max_tokens:
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
     };
 
@@ -2347,15 +2717,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
-        sse.send('error', { message: `Upstream error: ${response.status}`, details: errorText });
+        console.error(
+          `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sse.send('error', {
+          message: `Upstream error: ${response.status}`,
+          details: errorText,
+        });
         return sse.end();
       }
 
@@ -2405,9 +2780,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       // a TCP listener it's always `AddressInfo` with a `.port` — the guard
       // is belt-and-braces so an unexpected null never silently produces a
       // `http://127.0.0.1:0` URL that callers would then try to fetch.
-      const boundPort = address && typeof address === 'object' ? address.port : null;
+      const boundPort =
+        address && typeof address === 'object' ? address.port : null;
       if (!boundPort) {
-        reject(new Error(`[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`));
+        reject(
+          new Error(
+            `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
+          ),
+        );
         return;
       }
       resolvedPort = boundPort;
@@ -2445,19 +2825,30 @@ function sanitizeSlug(text) {
 function assembleExample(templateHtml, slidesHtml, title) {
   return templateHtml
     .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
+    .replace(
+      /<title>.*?<\/title>/,
+      `<title>${title} | Open Design Example</title>`,
+    );
 }
 
-function isLocalSameOrigin(req, port) {
+export function isLocalSameOrigin(req, port) {
+  const ports = [port];
+  const webPort = Number(process.env.OD_WEB_PORT);
+  if (webPort && webPort !== port) ports.push(webPort);
+
+  const allowedHosts = new Set(
+    ports.flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`, `[::1]:${p}`]),
+  );
+  const allowedOrigins = new Set(
+    ports.flatMap((p) => [
+      `http://127.0.0.1:${p}`,
+      `http://localhost:${p}`,
+      `http://[::1]:${p}`,
+    ]),
+  );
+  const host = String(req.headers.host || '');
+  if (!allowedHosts.has(host)) return false;
   const origin = req.headers.origin;
-  if (!origin) return true; // Direct non-browser calls are trusted
-  try {
-    const url = new URL(origin);
-    return (
-      (url.hostname === '127.0.0.1' || url.hostname === 'localhost') &&
-      url.port === String(port)
-    );
-  } catch {
-    return false;
-  }
+  if (origin == null || origin === '') return true;
+  return allowedOrigins.has(String(origin));
 }

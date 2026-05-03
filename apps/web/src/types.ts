@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  AgentModelPrefs,
   AppVersionInfo,
   AppVersionResponse,
   AudioKind,
@@ -46,10 +47,7 @@ export interface MediaProviderCredentials {
 // keeps its own slot so flipping between Codex and Gemini doesn't reset the
 // other one's choice. Missing entries fall back to the agent's first
 // declared model (`'default'` — let the CLI pick).
-export interface AgentModelChoice {
-  model?: string;
-  reasoning?: string;
-}
+export type AgentModelChoice = AgentModelPrefs;
 
 export type AppTheme = 'system' | 'light' | 'dark';
 

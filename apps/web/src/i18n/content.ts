@@ -288,6 +288,8 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   Uncategorized: 'Nicht kategorisiert',
 };
 
+const DE_SKILL_IDS_WITH_EN_FALLBACK = [] as const;
+
 const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'agentic',
   'ant',
@@ -378,6 +380,8 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Travel: 'Reise',
 };
 
+const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [] as const;
+
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
   '3d-render': '3D-Render',
@@ -385,9 +389,9 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'ancient-china': 'Altes China',
   anime: 'Anime',
   'app-showcase': 'App-Showcase',
-  'audio-reactive': 'Audio-reaktiv',
   archery: 'Archery',
   arpg: 'ARPG',
+  'audio-reactive': 'Audio-reaktiv',
   'boss-fight': 'Boss Fight',
   brand: 'Brand',
   branding: 'Branding',
@@ -395,10 +399,10 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   cavalry: 'Cavalry',
   chart: 'Chart',
   childlike: 'Kindlich',
-  choreography: 'Choreography',
+  choreography: 'Choreografie',
   cinematic: 'Filmisch',
   'cinematic-romance': 'Filmische Romanze',
-  combat: 'Combat',
+  combat: 'Kampf',
   combo: 'Combo',
   'companion-to-image': 'Companion to Image',
   counter: 'Counter',
@@ -421,14 +425,14 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   guanyu: 'Guanyu',
   'hand-drawn': 'Handgezeichnet',
   hud: 'HUD',
-  'hud-safe': 'HUD Safe',
+  'hud-safe': 'HUD-safe',
   hype: 'Hype',
   hyperframes: 'HyperFrames',
   idol: 'Idol',
   illustration: 'Illustration',
   'image-to-image': 'Bild-zu-Bild',
   infographic: 'Infografik',
-  japanese: 'Japanese',
+  japanese: 'Japanisch',
   karaoke: 'Karaoke',
   'key-visual': 'Key Visual',
   'kinetic-typography': 'Kinetische Typografie',
@@ -920,13 +924,19 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
 };
 
 export const GERMAN_CONTENT_IDS = {
-  skills: Object.keys(DE_SKILL_COPY),
+  skills: [
+    ...Object.keys(DE_SKILL_COPY),
+    ...DE_SKILL_IDS_WITH_EN_FALLBACK,
+  ],
   designSystems: [
     ...Object.keys(DE_DESIGN_SYSTEM_SUMMARIES),
     ...DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
   ],
   designSystemCategories: Object.keys(DE_DESIGN_SYSTEM_CATEGORIES),
-  promptTemplates: Object.keys(DE_PROMPT_TEMPLATE_COPY),
+  promptTemplates: [
+    ...Object.keys(DE_PROMPT_TEMPLATE_COPY),
+    ...DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
+  ],
   promptTemplateCategories: Object.keys(DE_PROMPT_TEMPLATE_CATEGORIES),
   promptTemplateTags: Object.keys(DE_PROMPT_TEMPLATE_TAGS),
 };

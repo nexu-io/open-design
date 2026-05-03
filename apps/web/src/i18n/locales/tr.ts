@@ -533,6 +533,7 @@ export const tr: Dict = {
   'fileViewer.exportPptxNa': 'PPTX dışa aktarma burada mevcut değil.',
   'fileViewer.exportZip': 'ZIP olarak indir',
   'fileViewer.exportHtml': 'Tekil HTML olarak dışa aktar',
+  'fileViewer.exportMd': 'Markdown olarak dışa aktar',
   'fileViewer.exportJsx': 'JSX olarak dışa aktar',
   'fileViewer.exportReactHtml': 'Önizlemeyi HTML olarak dışa aktar',
   'fileViewer.saveAsTemplate': 'Şablon olarak kaydet…',

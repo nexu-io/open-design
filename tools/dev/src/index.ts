@@ -302,12 +302,14 @@ async function runLoggedCommand(request: {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   logFd: number;
+  windowsVerbatimArguments?: boolean;
 }): Promise<void> {
   const child = spawn(request.command, request.args, {
     cwd: request.cwd,
     env: request.env,
     stdio: ["ignore", request.logFd, request.logFd],
     windowsHide: process.platform === "win32",
+    windowsVerbatimArguments: request.windowsVerbatimArguments,
   });
 
   await new Promise<void>((resolveRun, rejectRun) => {
@@ -467,6 +469,7 @@ async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promi
     cwd: config.workspaceRoot,
     env: process.env,
     logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 

@@ -580,6 +580,7 @@ async function runPnpm(config: ToolPackConfig, args: string[], extraEnv: NodeJS.
   await execFileAsync(invocation.command, invocation.args, {
     cwd: config.workspaceRoot,
     env: { ...process.env, ...extraEnv },
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 
@@ -588,7 +589,11 @@ async function runNpmInstall(appRoot: string): Promise<void> {
     args: ["install", "--omit=dev", "--no-package-lock"],
     command: process.platform === "win32" ? "npm.cmd" : "npm",
   });
-  await execFileAsync(invocation.command, invocation.args, { cwd: appRoot, env: process.env });
+  await execFileAsync(invocation.command, invocation.args, {
+    cwd: appRoot,
+    env: process.env,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
 }
 
 async function readPackagedVersion(config: ToolPackConfig): Promise<string> {

@@ -533,6 +533,7 @@ export const ru: Dict = {
   'fileViewer.exportPptxNa': 'Экспорт PPTX здесь недоступен.',
   'fileViewer.exportZip': 'Скачать как .zip',
   'fileViewer.exportHtml': 'Экспорт как HTML',
+  'fileViewer.exportMd': 'Экспорт в Markdown',
   'fileViewer.exportJsx': 'Экспорт как JSX',
   'fileViewer.exportReactHtml': 'Экспорт предпросмотра как HTML',
   'fileViewer.saveAsTemplate': 'Сохранить как шаблон…',

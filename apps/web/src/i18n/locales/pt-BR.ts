@@ -533,6 +533,7 @@ export const ptBR: Dict = {
   'fileViewer.exportPptxNa': 'Exportação PPTX não está disponível aqui.',
   'fileViewer.exportZip': 'Baixar como .zip',
   'fileViewer.exportHtml': 'Exportar como HTML independente',
+  'fileViewer.exportMd': 'Exportar como Markdown',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar prévia como HTML',
   'fileViewer.saveAsTemplate': 'Salvar como template…',
