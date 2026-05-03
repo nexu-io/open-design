@@ -46,8 +46,17 @@ const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'h',
 ]);
 
+const MCP_STRING_FLAGS = new Set([
+  'daemon-url',
+]);
+const MCP_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+]);
+
 const SUBCOMMAND_MAP = {
   media: runMedia,
+  mcp: runMcp,
 };
 
 const first = argv.find((a) => !a.startsWith('-'));
@@ -98,6 +107,12 @@ function printRootHelp() {
       Generate a media artifact and write it into the active project.
       Designed to be invoked by a code agent — picks up OD_DAEMON_URL
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
+
+  od mcp [--daemon-url <url>]
+      Run a stdio MCP server that proxies read-only tool calls to a
+      running OD daemon. Wire it into a coding agent (Claude Code,
+      Cursor, Zed) in another repo to pull files from a local OD
+      project without exporting a zip.
 
 Options:
   --port <n>       Port to listen on (default: 7456, env: OD_PORT).
@@ -428,4 +443,68 @@ Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}.
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
 files folder so the FileViewer can preview them immediately.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od mcp
+// ---------------------------------------------------------------------------
+
+async function runMcp(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, {
+      string: MCP_STRING_FLAGS,
+      boolean: MCP_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printMcpHelp();
+    process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    printMcpHelp();
+    return;
+  }
+
+  const daemonUrl =
+    flags['daemon-url'] || process.env.OD_DAEMON_URL || 'http://127.0.0.1:7456';
+
+  const { runMcpStdio } = await import('./mcp.js');
+  await runMcpStdio({ daemonUrl });
+}
+
+function printMcpHelp() {
+  console.log(`Usage: od mcp [--daemon-url <url>]
+
+Run a stdio MCP (Model Context Protocol) server that proxies read-only
+tool calls to a running OD daemon. Wire it into a coding agent in
+another repo so the agent can pull files from a local OD project
+without exporting a zip every iteration.
+
+Options:
+  --daemon-url <url>   OD daemon HTTP base URL (default: env OD_DAEMON_URL,
+                       falling back to http://127.0.0.1:7456).
+
+Tools exposed:
+  list_projects                 list every OD project
+  get_project(project)          single project metadata
+  list_files(project)           project files + artifactManifest sidecars
+  get_file(project, path)       file contents (textual mimes only for now)
+  list_skills / get_skill(id)   installed skills catalog
+  list_design_systems / get_design_system(id)
+
+Wire-up example (Claude Code, Cursor, Zed):
+
+  {
+    "mcpServers": {
+      "open-design": {
+        "command": "od",
+        "args": ["mcp"],
+        "env": { "OD_DAEMON_URL": "http://127.0.0.1:7456" }
+      }
+    }
+  }
+
+The daemon must be running locally for tool calls to succeed; the MCP
+server itself will still launch so the client can list its schema.`);
 }
