@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchAppVersionInfo, fetchProjectFileText } from './registry';
+import { fetchAppVersionInfo, fetchProjectFileText, uploadProjectFiles } from './registry';
 
 describe('fetchAppVersionInfo', () => {
   afterEach(() => {
@@ -94,5 +94,68 @@ describe('fetchProjectFileText', () => {
         url: '/api/projects/project-1/raw/diagram.svg',
       }),
     );
+  });
+});
+
+describe('uploadProjectFiles', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats every response entry as a success regardless of originalName drift', async () => {
+    // Simulates an encoding edge case: the browser File.name carries a
+    // composed CJK name (NFC) but multer round-trips it through latin1 and
+    // returns a slightly different decoded form. The old name-equality
+    // matching marked these as failed even though the server stored them.
+    const composed = '测试.pdf';
+    const decomposed = '测试.pdf'; // pretend the server returned a normalized variant
+    const file = new File(['hello'], composed, { type: 'application/pdf' });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        files: [
+          {
+            name: 'mxk7-test.pdf',
+            path: 'mxk7-test.pdf',
+            size: 5,
+            originalName: decomposed,
+          },
+        ],
+      }), { status: 200 })),
+    );
+
+    const result = await uploadProjectFiles('project-1', [file]);
+
+    expect(result.failed).toEqual([]);
+    expect(result.uploaded).toHaveLength(1);
+    expect(result.uploaded[0]).toMatchObject({
+      path: 'mxk7-test.pdf',
+      name: decomposed,
+      size: 5,
+    });
+  });
+
+  it('marks the unmatched tail as failed when the server drops files mid-flight', async () => {
+    const a = new File(['a'], 'a.txt', { type: 'text/plain' });
+    const b = new File(['b'], 'b.txt', { type: 'text/plain' });
+    const c = new File(['c'], 'c.txt', { type: 'text/plain' });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        files: [
+          { name: 't1-a.txt', path: 't1-a.txt', size: 1, originalName: 'a.txt' },
+          { name: 't2-b.txt', path: 't2-b.txt', size: 1, originalName: 'b.txt' },
+        ],
+      }), { status: 200 })),
+    );
+
+    const result = await uploadProjectFiles('project-1', [a, b, c]);
+
+    expect(result.uploaded).toHaveLength(2);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0]).toMatchObject({ name: 'c.txt' });
   });
 });

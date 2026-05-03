@@ -17,7 +17,7 @@ const argv = process.argv.slice(2);
 // parsed inside each handler.
 
 // Flags accepted by `od media generate`. Whitelisted so a hallucinated
-// `--lenght 5` from the LLM fails fast instead of silently no-op'ing
+// `--length 5` from the LLM fails fast instead of silently no-op'ing
 // while we route a bogus body to the daemon.
 //
 // Hoisted to the top of the module *before* the subcommand dispatch
@@ -60,12 +60,15 @@ if (first && SUBCOMMAND_MAP[first]) {
 
 // Default: daemon mode.
 let port = Number(process.env.OD_PORT) || 7456;
+let host = process.env.OD_BIND_HOST || '0.0.0.0';
 let open = true;
 
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '-p' || a === '--port') {
     port = Number(argv[++i]);
+  } else if (a === '--host') {
+    host = argv[++i];
   } else if (a === '--no-open') {
     open = false;
   } else if (a === '-h' || a === '--help') {
@@ -74,7 +77,7 @@ for (let i = 0; i < argv.length; i++) {
   }
 }
 
-startServer({ port }).then(url => {
+startServer({ port, host }).then(url => {
   console.log(`[od] listening on ${url}`);
   if (open) {
     const opener = process.platform === 'darwin' ? 'open'
@@ -88,7 +91,7 @@ startServer({ port }).then(url => {
 
 function printRootHelp() {
   console.log(`Usage:
-  od [--port <n>] [--no-open]
+  od [--port <n>] [--host <addr>] [--no-open]
       Start the local daemon and open the web UI.
 
   od media generate --surface <image|video|audio> --model <id> [opts]
@@ -96,9 +99,16 @@ function printRootHelp() {
       Designed to be invoked by a code agent — picks up OD_DAEMON_URL
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
 
+Options:
+  --port <n>       Port to listen on (default: 7456, env: OD_PORT).
+  --host <addr>    Interface address to bind to (default: 0.0.0.0, env: OD_BIND_HOST).
+                   Set to a specific IP (e.g. a Tailscale address) to restrict access
+                   to that interface only.
+  --no-open        Do not open the browser after start.
+
 What the daemon does:
-  * scans PATH for installed code-agent CLIs (claude, codex, gemini, opencode, cursor-agent, ...)
-  * serves the chat UI at http://localhost:<port>
+  * scans PATH for installed code-agent CLIs (claude, codex, devin, gemini, opencode, cursor-agent, ...)
+  * serves the chat UI at http://<host>:<port>
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
     dispatcher that the agent calls via \`od media generate\`.`);

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hatch Pet"
+  short_description: "Hatch Codex-compatible animated pet spritesheets"
+  default_prompt: "Hatch a Codex-compatible animated pet from a concept, reference images, or both. Infer missing names/descriptions, use $imagegen for the base and grounded row strips, generate running-right before deciding whether running-left can be safely mirrored, then use this skill's deterministic scripts to ingest outputs, validate frames, assemble the spritesheet, and package the pet under ${CODEX_HOME:-$HOME/.codex}/pets/<pet-name>/."

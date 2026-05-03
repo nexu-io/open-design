@@ -10,9 +10,13 @@ import {
   streamViaDaemon,
 } from '../providers/daemon';
 import {
+  deletePreviewComment,
+  fetchPreviewComments,
   fetchDesignSystem,
   fetchProjectFiles,
   fetchSkill,
+  patchPreviewCommentStatus,
+  upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
 import { composeSystemPrompt } from '@open-design/contracts';
@@ -37,15 +41,24 @@ import type {
   AppConfig,
   Artifact,
   ChatAttachment,
+  ChatCommentAttachment,
   ChatMessage,
   Conversation,
   DesignSystemSummary,
   OpenTabsState,
   Project,
+  PreviewComment,
+  PreviewCommentTarget,
   ProjectFile,
   ProjectTemplate,
   SkillSummary,
 } from '../types';
+import {
+  commentsToAttachments,
+  historyWithCommentAttachmentContext,
+  mergeAttachedComments,
+  removeAttachedComment,
+} from '../comments';
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
@@ -67,6 +80,11 @@ interface Props {
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: () => void;
+  // Pet wiring forwarded to the chat composer so users can adopt /
+  // wake / tuck a pet without leaving the project view.
+  onAdoptPetInline?: (petId: string) => void;
+  onTogglePet?: () => void;
+  onOpenPetSettings?: () => void;
   onBack: () => void;
   onClearPendingPrompt: () => void;
   onTouchProject: () => void;
@@ -87,6 +105,9 @@ export function ProjectView({
   onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
+  onAdoptPetInline,
+  onTogglePet,
+  onOpenPetSettings,
   onBack,
   onClearPendingPrompt,
   onTouchProject,
@@ -99,6 +120,8 @@ export function ProjectView({
     null,
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
+  const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -118,6 +141,8 @@ export function ProjectView({
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
+  const sendTextBufferRef = useRef<BufferedTextUpdates | null>(null);
+  const reattachTextBuffersRef = useRef<Set<BufferedTextUpdates>>(new Set());
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
   const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
@@ -167,13 +192,20 @@ export function ProjectView({
   useEffect(() => {
     if (!activeConversationId) {
       setMessages([]);
+      setPreviewComments([]);
+      setAttachedComments([]);
       return;
     }
     let cancelled = false;
     (async () => {
-      const list = await listMessages(project.id, activeConversationId);
+      const [list, comments] = await Promise.all([
+        listMessages(project.id, activeConversationId),
+        fetchPreviewComments(project.id, activeConversationId),
+      ]);
       if (cancelled) return;
       setMessages(list);
+      setPreviewComments(comments);
+      setAttachedComments([]);
       setArtifact(null);
       setError(null);
       savedArtifactRef.current = null;
@@ -186,6 +218,10 @@ export function ProjectView({
 
   useEffect(() => {
     return () => {
+      sendTextBufferRef.current?.cancel();
+      sendTextBufferRef.current = null;
+      for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
+      reattachTextBuffersRef.current.clear();
       for (const controller of reattachControllersRef.current.values()) {
         controller.abort();
       }
@@ -196,6 +232,20 @@ export function ProjectView({
       reattachCancelControllersRef.current.clear();
     };
   }, [project.id, activeConversationId]);
+
+  const cancelSendTextBuffer = useCallback((flushPending = false) => {
+    if (flushPending) sendTextBufferRef.current?.flush();
+    sendTextBufferRef.current?.cancel();
+    sendTextBufferRef.current = null;
+  }, []);
+
+  const cancelReattachTextBuffers = useCallback((flushPending = false) => {
+    for (const textBuffer of reattachTextBuffersRef.current) {
+      if (flushPending) textBuffer.flush();
+      textBuffer.cancel();
+    }
+    reattachTextBuffersRef.current.clear();
+  }, []);
 
   // Hydrate the open-tabs state once per project. After this initial
   // load, every mutation flows through saveTabsState() which keeps DB +
@@ -390,6 +440,73 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
+  const refreshPreviewComments = useCallback(async () => {
+    if (!activeConversationId) return;
+    const next = await fetchPreviewComments(project.id, activeConversationId);
+    setPreviewComments(next);
+    setAttachedComments((current) =>
+      current
+        .map((attached) => next.find((comment) => comment.id === attached.id))
+        .filter((comment): comment is PreviewComment => Boolean(comment)),
+    );
+  }, [project.id, activeConversationId]);
+
+  const savePreviewComment = useCallback(
+    async (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => {
+      if (!activeConversationId) return null;
+      const saved = await upsertPreviewComment(project.id, activeConversationId, { target, note });
+      if (!saved) return null;
+      setPreviewComments((current) => {
+        const rest = current.filter((comment) => comment.id !== saved.id);
+        return [saved, ...rest];
+      });
+      setAttachedComments((current) =>
+        attachAfterSave ? mergeAttachedComments(current, saved) : current.map((comment) => comment.id === saved.id ? saved : comment),
+      );
+      return saved;
+    },
+    [project.id, activeConversationId],
+  );
+
+  const removePreviewComment = useCallback(
+    async (commentId: string) => {
+      if (!activeConversationId) return;
+      const ok = await deletePreviewComment(project.id, activeConversationId, commentId);
+      if (!ok) return;
+      setPreviewComments((current) => current.filter((comment) => comment.id !== commentId));
+      setAttachedComments((current) => removeAttachedComment(current, commentId));
+    },
+    [project.id, activeConversationId],
+  );
+
+  const attachPreviewComment = useCallback((comment: PreviewComment) => {
+    setAttachedComments((current) => mergeAttachedComments(current, comment));
+  }, []);
+
+  const detachPreviewComment = useCallback((commentId: string) => {
+    setAttachedComments((current) => removeAttachedComment(current, commentId));
+  }, []);
+
+  const patchAttachedStatuses = useCallback(
+    async (attachments: ChatCommentAttachment[], status: PreviewComment['status']) => {
+      if (!activeConversationId || attachments.length === 0) return;
+      setPreviewComments((current) =>
+        current.map((comment) =>
+          attachments.some((attachment) => attachment.id === comment.id)
+            ? { ...comment, status }
+            : comment,
+        ),
+      );
+      await Promise.all(
+        attachments.map((attachment) =>
+          patchPreviewCommentStatus(project.id, activeConversationId, attachment.id, status),
+        ),
+      );
+      void refreshPreviewComments();
+    },
+    [project.id, activeConversationId, refreshPreviewComments],
+  );
+
   useEffect(() => {
     if (!daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
@@ -465,7 +582,16 @@ export function ProjectView({
             clearTimeout(persistTimer);
             persistTimer = null;
           }
+          textBuffer.flush();
           persistMessageById(message.id);
+        };
+        const textBuffer = createBufferedTextUpdates({
+          updateMessage: (updater) => updateMessageById(message.id, updater),
+          persistSoon,
+        });
+        reattachTextBuffersRef.current.add(textBuffer);
+        const unregisterTextBuffer = () => {
+          reattachTextBuffersRef.current.delete(textBuffer);
         };
 
         void reattachDaemonRun({
@@ -475,14 +601,15 @@ export function ProjectView({
           initialLastEventId: message.lastRunEventId ?? null,
           handlers: {
             onDelta: (delta) => {
-              updateMessageById(message.id, (prev) => ({ ...prev, content: prev.content + delta }));
-              persistSoon();
+              textBuffer.appendContent(delta);
             },
             onAgentEvent: (ev) => {
-              updateMessageById(message.id, (prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
-              persistSoon();
+              textBuffer.appendEvent(ev);
             },
             onDone: () => {
+              textBuffer.flush();
+              textBuffer.cancel();
+              unregisterTextBuffer();
               updateMessageById(
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'succeeded', endedAt: prev.endedAt ?? Date.now() }),
@@ -499,6 +626,9 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: (err) => {
+              textBuffer.flush();
+              textBuffer.cancel();
+              unregisterTextBuffer();
               setError(err.message);
               updateMessageById(
                 message.id,
@@ -515,6 +645,7 @@ export function ProjectView({
             },
           },
           onRunStatus: (runStatus) => {
+            textBuffer.flush();
             updateMessageById(
               message.id,
               (prev) => ({
@@ -525,6 +656,8 @@ export function ProjectView({
               true,
             );
             if (runStatus === 'canceled') {
+              textBuffer.cancel();
+              unregisterTextBuffer();
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -535,6 +668,7 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
+            textBuffer.flush();
             updateMessageById(message.id, (prev) => ({ ...prev, lastRunEventId }));
             persistSoon();
           },
@@ -545,6 +679,9 @@ export function ProjectView({
             }
           })
           .finally(() => {
+            textBuffer.flush();
+            textBuffer.cancel();
+            unregisterTextBuffer();
             if (persistTimer) clearTimeout(persistTimer);
             reattachControllersRef.current.delete(runId);
             reattachCancelControllersRef.current.delete(runId);
@@ -571,8 +708,13 @@ export function ProjectView({
   ]);
 
   const handleSend = useCallback(
-    async (prompt: string, attachments: ChatAttachment[]) => {
+    async (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
+    ) => {
       if (!activeConversationId) return;
+      if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
@@ -581,6 +723,7 @@ export function ProjectView({
         content: prompt,
         createdAt: startedAt,
         attachments: attachments.length > 0 ? attachments : undefined,
+        commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
       };
       const selectedAgent =
         config.mode === 'daemon' && config.agentId
@@ -612,6 +755,10 @@ export function ProjectView({
       onTouchProject();
       persistMessage(userMsg);
       persistMessage(assistantMsg);
+      if (commentAttachments.length > 0) {
+        void patchAttachedStatuses(commentAttachments, 'applying');
+        setAttachedComments([]);
+      }
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
@@ -649,6 +796,7 @@ export function ProjectView({
         }, 500);
       };
       const pushEvent = (ev: AgentEvent) => {
+        textBuffer.flush();
         updateAssistant((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
         persistAssistantSoon();
         // Track Write tool invocations so we can auto-open the destination
@@ -677,9 +825,7 @@ export function ProjectView({
         }
       };
 
-      const appendContent = (delta: string) => {
-        updateAssistant((prev) => ({ ...prev, content: prev.content + delta }));
-        persistAssistantSoon();
+      const applyContentDelta = (delta: string) => {
         for (const ev of parser.feed(delta)) {
           if (ev.type === 'artifact:start') {
             liveHtml = '';
@@ -706,14 +852,27 @@ export function ProjectView({
         }
       };
 
+      const textBuffer = createBufferedTextUpdates({
+        updateMessage: updateAssistant,
+        persistSoon: persistAssistantSoon,
+        onContentDelta: applyContentDelta,
+      });
+      sendTextBufferRef.current = textBuffer;
+
       const controller = new AbortController();
       const cancelController = new AbortController();
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
-        onDelta: appendContent,
-        onAgentEvent: pushEvent,
+        onDelta: textBuffer.appendContent,
+        onAgentEvent: (ev: AgentEvent) => {
+          if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
+          else pushEvent(ev);
+        },
         onDone: () => {
+          textBuffer.flush();
+          textBuffer.cancel();
+          cancelSendTextBuffer();
           for (const ev of parser.flush()) {
             if (ev.type === 'artifact:end') {
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
@@ -724,6 +883,9 @@ export function ProjectView({
             endedAt: Date.now(),
             runStatus: prev.runId ? 'succeeded' : prev.runStatus,
           }));
+          if (commentAttachments.length > 0) {
+            void patchAttachedStatuses(commentAttachments, 'needs_review');
+          }
           setStreaming(false);
           abortRef.current = null;
           cancelRef.current = null;
@@ -756,12 +918,18 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: (err: Error) => {
+          textBuffer.flush();
+          textBuffer.cancel();
+          cancelSendTextBuffer();
           setError(err.message);
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
             runStatus: prev.runId || isActiveRunStatus(prev.runStatus) ? 'failed' : prev.runStatus,
           }));
+          if (commentAttachments.length > 0) {
+            void patchAttachedStatuses(commentAttachments, 'failed');
+          }
           setStreaming(false);
           abortRef.current = null;
           cancelRef.current = null;
@@ -793,6 +961,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
+          commentAttachments,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {
@@ -816,8 +985,9 @@ export function ProjectView({
         });
       } else {
         const systemPrompt = await composedSystemPrompt();
+        const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
-        void streamMessage(config, systemPrompt, nextHistory, controller.signal, {
+        void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
           onDelta: (delta) => {
             handlers.onDelta(delta);
             handlers.onAgentEvent({ kind: 'text', text: delta });
@@ -828,6 +998,7 @@ export function ProjectView({
       }
     },
     [
+      attachedComments,
       activeConversationId,
       messages,
       config,
@@ -839,6 +1010,7 @@ export function ProjectView({
       refreshProjectFiles,
       persistMessage,
       persistMessageById,
+      patchAttachedStatuses,
       updateMessageById,
       onProjectsRefresh,
     ],
@@ -918,7 +1090,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, []);
+      void handleSend(prompt, [], []);
     },
     [streaming, handleSend],
   );
@@ -929,23 +1101,47 @@ export function ProjectView({
       const baseTitle = fileName.replace(/\.html?$/i, '') || fileName;
       const prompt =
         `Export @${fileName} as an editable PPTX file titled "${baseTitle}".\n\n` +
-        `Use a PPTX skill (e.g. python-pptx) to produce a real .pptx — one slide per ` +
-        `top-level section/page in the HTML. Preserve text content, headings, and the ` +
-        `general layout intent. Save the file directly into the current project folder ` +
-        `(this conversation's working directory) as \`${baseTitle}.pptx\` so it shows ` +
-        `up in the file list, and report the on-disk path when done.`;
+        `**Generate.** Use python-pptx (preferred — full XML control). Apply the ` +
+        `footer-rail + cursor-flow discipline from \`skills/pptx-html-fidelity-audit/SKILL.md\` ` +
+        `Step 4 from the start: define \`CONTENT_MAX_Y = 6.70"\` and \`FOOTER_TOP = 6.85"\` ` +
+        `as constants, route every content block through a \`Cursor\` that refuses to cross ` +
+        `the rail, and use budget centering (not \`MARGIN_TOP\`) for hero/cover slides. ` +
+        `Preserve \`<em>\` / \`<i>\` as \`italic=True\` on Latin runs only — never on CJK. ` +
+        `Set the \`<a:latin>\` and \`<a:ea>\` typeface slots explicitly so Chinese runs ` +
+        `don't fall back to Microsoft JhengHei.\n\n` +
+        `**Verify (mandatory gate).** After writing, run ` +
+        `\`python skills/pptx-html-fidelity-audit/scripts/verify_layout.py "${baseTitle}.pptx"\` ` +
+        `(quote the path — filenames may contain spaces). Zero rail violations is the gate ` +
+        `for "shippable". If violations remain, walk Steps 2-4 of the SKILL.md ` +
+        `(extract dump → audit table → re-export) — do not declare done by eyeballing the ` +
+        `deck. If 🟡 typography issues surface (italic missing, unexpected \`Calibri\` / ` +
+        `\`Microsoft JhengHei\` in the XML), consult ` +
+        `\`skills/pptx-html-fidelity-audit/references/font-discipline.md\` for the ` +
+        `five-layer font audit.\n\n` +
+        `**Customizing rails.** The default \`CONTENT_MAX_Y = 6.70"\` / ` +
+        `\`FOOTER_TOP = 6.85"\` constants suit a 16:9 canvas with a slim footer. If the ` +
+        `design system needs different rails (wider footer, 4:3 canvas), pass ` +
+        `\`--content-max-y\` / \`--canvas-h\` to \`verify_layout.py\` and update the matching ` +
+        `constants in the export script — see \`references/layout-discipline.md\` §1.\n\n` +
+        `If \`python-pptx\` or the verifier is unavailable in this environment, say so ` +
+        `explicitly — don't claim fidelity is correct without evidence.\n\n` +
+        `Save into the current project folder (this conversation's working directory) as ` +
+        `\`${baseTitle}.pptx\`. Report the on-disk path and a 1-line fidelity summary ` +
+        `(e.g. "0 rail violations across 14 slides") when done.`;
       const attachment: ChatAttachment = {
         path: fileName,
         name: fileName,
         kind: 'file',
       };
-      void handleSend(prompt, [attachment]);
+      void handleSend(prompt, [attachment], []);
     },
     [streaming, handleSend],
   );
 
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
+    cancelSendTextBuffer(true);
+    cancelReattachTextBuffers(true);
     cancelRef.current?.abort();
     cancelRef.current = null;
     for (const controller of reattachCancelControllersRef.current.values()) {
@@ -978,7 +1174,7 @@ export function ProjectView({
       for (const message of finalized) persistMessage(message);
       return next;
     });
-  }, [persistMessage]);
+  }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
     const fresh = await createConversation(project.id);
@@ -1120,13 +1316,18 @@ export function ProjectView({
           projectFiles={projectFiles}
           projectFileNames={projectFileNames}
           onEnsureProject={handleEnsureProject}
+          previewComments={previewComments}
+          attachedComments={attachedComments}
+          onAttachComment={attachPreviewComment}
+          onDetachComment={detachPreviewComment}
+          onDeleteComment={(commentId) => void removePreviewComment(commentId)}
           onSend={handleSend}
           onStop={handleStop}
           onRequestOpenFile={requestOpenFile}
           initialDraft={initialDraft}
           onSubmitForm={(text) => {
             if (streaming) return;
-            void handleSend(text, []);
+            void handleSend(text, [], []);
           }}
           onContinueRemainingTasks={handleContinueRemainingTasks}
           onNewConversation={handleNewConversation}
@@ -1136,6 +1337,10 @@ export function ProjectView({
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
           onOpenSettings={onOpenSettings}
+          petConfig={config.pet}
+          onAdoptPet={onAdoptPetInline}
+          onTogglePet={onTogglePet}
+          onOpenPetSettings={onOpenPetSettings}
         />
         <FileWorkspace
           projectId={project.id}
@@ -1149,6 +1354,9 @@ export function ProjectView({
           openRequest={openRequest}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
+          previewComments={previewComments}
+          onSavePreviewComment={savePreviewComment}
+          onRemovePreviewComment={removePreviewComment}
         />
       </div>
     </div>
@@ -1178,4 +1386,129 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;
+
+function createBufferedTextUpdates({
+  updateMessage,
+  persistSoon,
+  onContentDelta,
+}: {
+  updateMessage: (updater: (prev: ChatMessage) => ChatMessage) => void;
+  persistSoon: () => void;
+  onContentDelta?: (delta: string) => void;
+}) {
+  let pendingContentDelta = '';
+  let pendingTextEventDelta = '';
+  let flushFrame: number | null = null;
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
+  let flushing = false;
+  let needsFlush = false;
+  const hasDocument = typeof document !== 'undefined';
+
+  const cancelScheduledFlush = () => {
+    if (flushFrame !== null) {
+      cancelAnimationFrame(flushFrame);
+      flushFrame = null;
+    }
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+  };
+
+  const flush = () => {
+    if (disposed) return;
+    if (flushing) {
+      needsFlush = true;
+      return;
+    }
+    cancelScheduledFlush();
+    if (!pendingContentDelta && !pendingTextEventDelta && !needsFlush) return;
+    flushing = true;
+    needsFlush = false;
+    const contentDelta = pendingContentDelta;
+    const textEventDelta = pendingTextEventDelta;
+    pendingContentDelta = '';
+    pendingTextEventDelta = '';
+    try {
+      updateMessage((prev) => ({
+        ...prev,
+        content: prev.content + contentDelta,
+        events: textEventDelta
+          ? [...(prev.events ?? []), { kind: 'text', text: textEventDelta }]
+          : prev.events,
+      }));
+      persistSoon();
+      if (contentDelta) onContentDelta?.(contentDelta);
+    } finally {
+      flushing = false;
+    }
+    if (pendingContentDelta || pendingTextEventDelta || needsFlush) {
+      needsFlush = false;
+      scheduleFlush();
+    }
+  };
+
+  const scheduleFlush = () => {
+    if (disposed || flushFrame !== null || flushTimer !== null) return;
+    flushFrame = requestAnimationFrame(() => {
+      flushFrame = null;
+      flush();
+    });
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      flush();
+    }, 250);
+  };
+
+  const appendContent = (delta: string) => {
+    if (disposed) return;
+    pendingContentDelta += delta;
+    needsFlush = true;
+    scheduleFlush();
+  };
+
+  const appendTextEvent = (delta: string) => {
+    if (disposed) return;
+    pendingTextEventDelta += delta;
+    needsFlush = true;
+    scheduleFlush();
+  };
+
+  const appendEvent = (ev: AgentEvent) => {
+    if (disposed) return;
+    if (ev.kind === 'text') {
+      appendTextEvent(ev.text);
+      return;
+    }
+    flush();
+    updateMessage((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
+    persistSoon();
+  };
+
+  const cancel = () => {
+    disposed = true;
+    cancelScheduledFlush();
+    pendingContentDelta = '';
+    pendingTextEventDelta = '';
+    needsFlush = false;
+    if (hasDocument) {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
+  };
+
+  function onVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+      flush();
+    }
+  }
+
+  if (hasDocument) {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  }
+
+  return { appendContent, appendTextEvent, appendEvent, flush, cancel };
 }

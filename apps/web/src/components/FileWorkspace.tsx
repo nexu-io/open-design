@@ -6,7 +6,7 @@ import {
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
-import type { OpenTabsState, ProjectFile } from '../types';
+import type { OpenTabsState, PreviewComment, PreviewCommentTarget, ProjectFile } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import { FileViewer } from './FileViewer';
 import { Icon } from './Icon';
@@ -25,6 +25,9 @@ interface Props {
   // daemon's SQLite store can hold the source of truth and survive reloads.
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
+  previewComments?: PreviewComment[];
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
+  onRemovePreviewComment?: (commentId: string) => Promise<void>;
 }
 
 interface SketchState {
@@ -47,6 +50,9 @@ export function FileWorkspace({
   openRequest,
   tabsState,
   onTabsStateChange,
+  previewComments = [],
+  onSavePreviewComment,
+  onRemovePreviewComment,
 }: Props) {
   const t = useT();
   // Persisted tabs come from the parent. Active tab can transiently point
@@ -202,12 +208,22 @@ export function FileWorkspace({
     if (ok) {
       await onRefreshFiles();
       const nextTabs = persistedTabs.filter((n) => n !== name);
-      const nextActive =
-        tabsState.active === name
-          ? nextTabs[nextTabs.length - 1] ?? null
-          : tabsState.active;
-      onTabsStateChange({ tabs: nextTabs, active: nextActive });
-      setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+      if (activeTab === name) {
+        // User is viewing the file being deleted: fall back to another
+        // open tab (or the Design Files panel if none remain).
+        const nextActive = nextTabs[nextTabs.length - 1] ?? null;
+        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+      } else {
+        // Deletion was triggered from the Design Files panel (or another
+        // tab). We preserve `activeTab` because the user is viewing a
+        // different context (Design Files or another tab) and shouldn't
+        // be navigated away. Only clear the persisted active reference
+        // when it points at the deleted file so we don't leave a dangling
+        // pointer behind.
+        const nextActive = tabsState.active === name ? null : tabsState.active;
+        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+      }
       setSketches((curr) => {
         const next = { ...curr };
         delete next[name];
@@ -392,6 +408,9 @@ export function FileWorkspace({
             isDeck={isDeck}
             onExportAsPptx={onExportAsPptx}
             streaming={streaming}
+            previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
+            onSavePreviewComment={onSavePreviewComment}
+            onRemovePreviewComment={onRemovePreviewComment}
           />
         ) : (
           <div className="viewer-empty">

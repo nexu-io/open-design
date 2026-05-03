@@ -302,12 +302,14 @@ async function runLoggedCommand(request: {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   logFd: number;
+  windowsVerbatimArguments?: boolean;
 }): Promise<void> {
   const child = spawn(request.command, request.args, {
     cwd: request.cwd,
     env: request.env,
     stdio: ["ignore", request.logFd, request.logFd],
     windowsHide: process.platform === "win32",
+    windowsVerbatimArguments: request.windowsVerbatimArguments,
   });
 
   await new Promise<void>((resolveRun, rejectRun) => {
@@ -467,6 +469,7 @@ async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promi
     cwd: config.workspaceRoot,
     env: process.env,
     logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 
@@ -509,16 +512,39 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
   try {
     await buildDesktop(config, logHandle);
     await logHandle.write(`[tools-dev] launching desktop at ${new Date().toISOString()}\n`);
+    const spawnEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...env,
+      ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+    };
+    // ELECTRON_RUN_AS_NODE=1 makes Electron boot as plain Node and skip
+    // main-process API injection (app, BrowserWindow, protocol all become
+    // undefined). Strip it from the spawn env so desktop always boots in
+    // real Electron mode even when the parent shell is an Electron-based
+    // IDE that sets this variable for sidecar reuse.
+    //
+    // Iterate keys with a case-insensitive comparison rather than
+    // `delete spawnEnv.ELECTRON_RUN_AS_NODE`: spreading process.env into
+    // a plain object loses Node's Windows case-insensitive proxy, so any
+    // alternate-cased variant (e.g. `electron_run_as_node`) would still
+    // be passed to the child and Win32 CreateProcess would treat it as
+    // the same variable, undoing the fix.
+    //
+    // Scope is tools-dev only. The packaged runtime intentionally sets
+    // ELECTRON_RUN_AS_NODE on its own daemon/web sidecars (see
+    // apps/packaged/src/sidecars.ts) to reuse the bundled Node binary;
+    // that flow is independent and untouched here.
+    for (const key of Object.keys(spawnEnv)) {
+      if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") {
+        delete spawnEnv[key];
+      }
+    }
     const spawned = await spawnBackgroundProcess({
       args: [config.apps.desktop.mainEntryPath, ...stampArgs],
       command: config.apps.desktop.electronBinaryPath,
       cwd: config.workspaceRoot,
       detached: true,
-      env: {
-        ...process.env,
-        ...env,
-        ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-      },
+      env: spawnEnv,
       logFd: logHandle.fd,
     });
     return { pid: spawned.pid };

@@ -24,6 +24,10 @@
 //   * provider 'volcengine' → Volcengine Ark async tasks API for
 //                              Doubao Seedance 2.0 (video) and Seedream
 //                              (image)
+//   * provider 'grok'       → xAI Imagine API: synchronous
+//                              /v1/images/generations for grok-imagine-image
+//                              and async /v1/videos/generations + GET poll
+//                              for grok-imagine-video (t2v + i2v + audio)
 //
 // The fallback stub handlers are gated behind OD_MEDIA_ALLOW_STUBS=1; in
 // release builds they throw StubProviderDisabledError (mapped to HTTP
@@ -347,6 +351,16 @@ export async function generateMedia(args) {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'volcengine' && surface === 'image') {
       const result = await renderVolcengineImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'grok' && surface === 'image') {
+      const result = await renderGrokImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'grok' && surface === 'video') {
+      const result = await renderGrokVideo(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -944,6 +958,253 @@ async function renderVolcengineImage(ctx, credentials) {
     providerNote: `volcengine/${ctx.model} · ${ctx.aspect} · ${bytes.length} bytes`,
     suggestedExt: '.png',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: xAI Grok Imagine.
+//
+// Docs: https://docs.x.ai/developers/model-capabilities/{images,video}/generation
+//   * Image: POST /v1/images/generations — synchronous, returns
+//            {data:[{b64_json|url}]}; we ask for b64_json so the bytes
+//            arrive in one round-trip.
+//   * Video: POST /v1/videos/generations — may return the finished video
+//            inline ({status:'done', video:{url}}) or an async stub
+//            ({id, status:'pending'}); in the async case we poll
+//            GET /v1/videos/{id} until status flips to done/failed.
+//
+// xAI's video model produces native audio (background music + SFX +
+// ambient) synchronised with the visual; that's the headline
+// differentiator vs Seedance and Sora and is why grok-imagine-video
+// declares the `audio` capability.
+// ---------------------------------------------------------------------------
+
+async function renderGrokImage(ctx, credentials) {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI API key — configure it in Settings or set XAI_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
+
+  const aspectRatio = grokAspectFor(ctx.aspect);
+  const body = {
+    model: ctx.model,
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    n: 1,
+    aspect_ratio: aspectRatio,
+    response_format: 'b64_json',
+  };
+  const resp = await fetch(`${baseUrl}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`grok image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`grok image non-JSON: ${truncate(text, 200)}`);
+  }
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error('grok image response had no data[0]');
+  let bytes;
+  if (entry.b64_json) {
+    bytes = Buffer.from(entry.b64_json, 'base64');
+  } else if (entry.url) {
+    const imgResp = await fetch(entry.url);
+    if (!imgResp.ok) throw new Error(`grok image fetch ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    throw new Error('grok image response missing b64_json/url');
+  }
+  // xAI's Imagine returns JPEG by default (no format option in the API
+  // surface), but PNG/WebP are technically possible. Sniff the magic
+  // bytes so the on-disk extension matches reality — saving JPEG bytes
+  // as `.png` confuses Finder previews and any downstream consumer that
+  // trusts the extension.
+  return {
+    bytes,
+    providerNote: `grok/${ctx.model} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function sniffImageExt(bytes) {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return '.jpg';
+  }
+  if (
+    bytes.length >= 8
+    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+  ) {
+    return '.png';
+  }
+  if (
+    bytes.length >= 12
+    && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return '.webp';
+  }
+  return '.png';
+}
+
+async function renderGrokVideo(ctx, credentials, onProgress) {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI API key — configure it in Settings or set XAI_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
+
+  // Grok caps duration at 15s. The dispatcher already clamps to
+  // VIDEO_LENGTHS_SEC (which goes up to 30) — re-clamp here so a user
+  // who picked 30 doesn't bounce off the upstream API with a 4xx.
+  const requested = ctx.length || 5;
+  const durationSec = Math.min(Math.max(requested, 1), 15);
+  const aspectRatio = grokAspectFor(ctx.aspect);
+
+  const body = {
+    model: ctx.model,
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    duration: durationSec,
+    aspect_ratio: aspectRatio,
+    resolution: '720p',
+  };
+  if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    // grok-imagine-video accepts a base64 data URI in `image` for i2v.
+    // Same surface as Seedance — the dispatcher already produced the
+    // data URL via resolveProjectImage, so we just hand it through.
+    body.image = ctx.imageRef.dataUrl;
+  }
+
+  const submitResp = await fetch(`${baseUrl}/videos/generations`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`grok video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`grok video non-JSON: ${truncate(submitText, 200)}`);
+  }
+
+  // Two paths: (a) the API returned the finished video synchronously
+  // (cached/short jobs), in which case we skip polling; (b) we got an
+  // {id, status:'pending'} stub and need to poll GET /videos/{id}
+  // until status flips to done/failed/expired.
+  let videoUrl = submitData?.video?.url || null;
+  let lastStatus = submitData?.status || '';
+  const requestId = submitData?.id || submitData?.request_id || null;
+
+  if (!videoUrl && requestId) {
+    const startedAt = Date.now();
+    const configuredMaxMs = Number(process.env.OD_GROK_VIDEO_MAX_POLL_MS);
+    const maxMs =
+      Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+        ? configuredMaxMs
+        : 8 * 60 * 1000;
+    if (typeof onProgress === 'function') {
+      const mode = ctx.imageRef ? 'i2v' : 't2v';
+      onProgress(`grok ${mode} task ${requestId} accepted; polling status…`);
+    }
+    while (Date.now() - startedAt < maxMs) {
+      await sleep(4000);
+      const pollResp = await fetch(`${baseUrl}/videos/${encodeURIComponent(requestId)}`, {
+        headers: { 'authorization': `Bearer ${credentials.apiKey}` },
+      });
+      const pollText = await pollResp.text();
+      if (!pollResp.ok) {
+        throw new Error(`grok poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+      }
+      let pollData;
+      try {
+        pollData = JSON.parse(pollText);
+      } catch {
+        throw new Error(`grok poll non-JSON: ${truncate(pollText, 200)}`);
+      }
+      lastStatus = pollData.status || '';
+      if (typeof onProgress === 'function') {
+        const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+        onProgress(`grok task ${requestId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`);
+      }
+      if (lastStatus === 'done' || lastStatus === 'succeeded') {
+        videoUrl = pollData?.video?.url || null;
+        break;
+      }
+      if (lastStatus === 'failed' || lastStatus === 'expired') {
+        const reasonRaw = pollData?.error?.message || pollData?.error || lastStatus;
+        const reason = typeof reasonRaw === 'string' ? reasonRaw : JSON.stringify(reasonRaw);
+        throw new Error(`grok task ${lastStatus}: ${reason}`);
+      }
+    }
+    // Loop exited without a videoUrl. Distinguish the two reachable
+    // cases so operators know which lever to pull: bumping the poll
+    // ceiling (timeout) vs filing a bug against the upstream contract
+    // (status=done but no video.url).
+    if (!videoUrl) {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      const ceilingSec = Math.round(maxMs / 1000);
+      throw new Error(
+        `grok video timed out after ${elapsedSec}s waiting for status=done `
+        + `(last status: ${lastStatus || 'pending'}, ceiling ${ceilingSec}s). `
+        + `If your jobs legitimately need longer, raise OD_GROK_VIDEO_MAX_POLL_MS.`,
+      );
+    }
+  }
+
+  if (!videoUrl) {
+    // Submit returned neither an inline video.url nor a request_id —
+    // upstream broke its own contract. Surfacing the last status helps
+    // pinpoint whether it was a transient API blip or a malformed
+    // response we should add a parser branch for.
+    throw new Error(
+      `grok video submit returned no inline video and no request_id to poll `
+      + `(status=${lastStatus || 'unknown'})`,
+    );
+  }
+
+  const dlResp = await fetch(videoUrl);
+  if (!dlResp.ok) throw new Error(`grok video fetch ${dlResp.status}`);
+  const arr = await dlResp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+
+  return {
+    bytes,
+    providerNote: `grok/${ctx.model} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+function grokAspectFor(aspect) {
+  // xAI accepts a wide list (1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1,
+  // 1:2, 19.5:9, 9:19.5, 20:9, 9:20, auto). Our MEDIA_ASPECTS subset
+  // is a strict subset — pass through known values, otherwise 16:9.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '16:9';
 }
 
 // ---------------------------------------------------------------------------

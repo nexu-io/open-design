@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja' | 'ko' | 'pl';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja', 'ko', 'pl'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -13,9 +13,11 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'es-ES': 'Español (España)',
   'ru': 'Русский',
   'fa': 'فارسی',
+  'ar': 'العربية',
   'ja': '日本語',
   'ko': '한국어',
-  'pl': 'Polski'
+  'pl': 'Polski',
+  'hu': 'Magyar'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -104,6 +106,11 @@ export interface Dict {
   'settings.noAgentSelected': string;
   'settings.language': string;
   'settings.languageHint': string;
+  'settings.appearance': string;
+  'settings.appearanceHint': string;
+  'settings.themeSystem': string;
+  'settings.themeLight': string;
+  'settings.themeDark': string;
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
@@ -323,6 +330,8 @@ export interface Dict {
   'ds.categoryUncategorized': string;
   'ds.showcase': string;
   'ds.tokens': string;
+  'ds.specToggle': string;
+  'ds.specLoading': string;
 
   // Avatar menu (project topbar)
   'avatar.title': string;
@@ -349,6 +358,18 @@ export interface Dict {
   'chat.tabChat': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
+  'chat.comments.attached': string;
+  'chat.comments.emptyAttached': string;
+  'chat.comments.saved': string;
+  'chat.comments.emptySaved': string;
+  'chat.comments.add': string;
+  'chat.comments.addAll': string;
+  'chat.comments.remove': string;
+  'chat.comments.placeholder': string;
+  'chat.comments.addSend': string;
+  'chat.comments.updateSend': string;
+  'chat.comments.removeAttachment': string;
+  'chat.comments.removeAttachmentAria': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
@@ -402,6 +423,8 @@ export interface Dict {
   'preview.fullscreen': string;
   'preview.closeTitle': string;
   'preview.loading': string;
+  'preview.showSidebar': string;
+  'preview.hideSidebar': string;
 
   // Misc fallback names
   'misc.savedTemplate': string;
@@ -444,6 +467,7 @@ export interface Dict {
   'designFiles.sectionImages': string;
   'designFiles.sectionSketches': string;
   'designFiles.sectionOther': string;
+  'designFiles.showMore': string;
   'designFiles.kindHtml': string;
   'designFiles.kindImage': string;
   'designFiles.kindSketch': string;
@@ -524,6 +548,7 @@ export interface Dict {
   'fileViewer.exportPptxNa': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
+  'fileViewer.exportMd': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
@@ -651,6 +676,125 @@ export interface Dict {
   'qf.cardSelected': string;
   'qf.cardRefs': string;
   'qf.cardSampleText': string;
+
+  // Pet (Codex-style floating companion)
+  'pet.title': string;
+  'pet.subtitle': string;
+  'pet.navTitle': string;
+  'pet.navHint': string;
+  // Tabs in pet settings — split sources so the choice feels exclusive
+  'pet.tabBuiltIn': string;
+  'pet.tabBuiltInHint': string;
+  'pet.builtInEmpty': string;
+  'pet.tabCustom': string;
+  'pet.tabCustomHint': string;
+  'pet.tabCommunity': string;
+  'pet.tabCommunityHint': string;
+  'pet.tabsAria': string;
+  'pet.adopt': string;
+  'pet.adoptedBadge': string;
+  'pet.adoptCallout': string;
+  'pet.changePet': string;
+  'pet.wake': string;
+  'pet.tuck': string;
+  'pet.wakeTitle': string;
+  'pet.tuckTitle': string;
+  'pet.settingsTitle': string;
+  'pet.useCustom': string;
+  'pet.customTitle': string;
+  'pet.customHint': string;
+  'pet.customGreetingPlaceholder': string;
+  'pet.fieldName': string;
+  'pet.fieldGlyph': string;
+  'pet.fieldGlyphHint': string;
+  'pet.fieldGreeting': string;
+  'pet.fieldAccent': string;
+  'pet.fieldAccentCustom': string;
+  'pet.overlayAria': string;
+  'pet.spriteAria': string;
+  'pet.spriteTitle': string;
+  // Right-side rail (entry view)
+  'pet.railAria': string;
+  'pet.railTitle': string;
+  'pet.railHint': string;
+  'pet.railExpand': string;
+  'pet.railCollapse': string;
+  'pet.railHide': string;
+  'pet.railShow': string;
+  'pet.railCustomFlavor': string;
+  'pet.railCustomize': string;
+  // Composer pet menu
+  'pet.composerTitle': string;
+  'pet.composerMenuTitle': string;
+  'pet.composerMenuHint': string;
+  'pet.composerOpenSettings': string;
+  // Welcome modal teaser
+  'pet.welcomeTeaserTitle': string;
+  'pet.welcomeTeaserBody': string;
+  'pet.welcomeTeaserCta': string;
+  // Image upload + spritesheet controls
+  'pet.imageUpload': string;
+  'pet.imageReplace': string;
+  'pet.imageRemove': string;
+  'pet.imageHintIdle': string;
+  'pet.imageHintActive': string;
+  'pet.fieldFrames': string;
+  'pet.fieldFramesHint': string;
+  'pet.fieldFps': string;
+  'pet.fieldFpsHint': string;
+
+  // Codex hatch-pet skill — atlas import + AI generation
+  'pet.atlasImport': string;
+  'pet.atlasImportTitle': string;
+  'pet.atlasPickerTitle': string;
+  'pet.atlasPickerHint': string;
+  'pet.atlasCancel': string;
+  'pet.atlasAdopt': string;
+  'pet.atlasAdoptFull': string;
+  'pet.atlasAdoptFullTitle': string;
+  'pet.atlasAdoptRowTitle': string;
+  'pet.atlasActiveHint': string;
+  'pet.atlasRow.idle': string;
+  'pet.atlasRow.running-right': string;
+  'pet.atlasRow.running-left': string;
+  'pet.atlasRow.waving': string;
+  'pet.atlasRow.jumping': string;
+  'pet.atlasRow.failed': string;
+  'pet.atlasRow.waiting': string;
+  'pet.atlasRow.running': string;
+  'pet.atlasRow.review': string;
+  'pet.hatchTitle': string;
+  'pet.hatchHint': string;
+  'pet.hatchConcept': string;
+  'pet.hatchConceptPlaceholder': string;
+  'pet.hatchCopy': string;
+  'pet.hatchCopied': string;
+  'pet.hatchFoot': string;
+  // Slash-command popover in the chat composer
+  'pet.slashPopoverAria': string;
+  'pet.slashPopoverTitle': string;
+  'pet.slashPopoverHint': string;
+  'pet.slashPet': string;
+  'pet.slashPetWake': string;
+  'pet.slashPetTuck': string;
+  'pet.slashHatch': string;
+  'pet.slashHatchArg': string;
+  // Recently-hatched section in pet settings
+  'pet.codexTitle': string;
+  'pet.codexSubtitle': string;
+  'pet.codexSubtitleWithDir': string;
+  'pet.codexEmpty': string;
+  'pet.codexLoading': string;
+  'pet.codexRefresh': string;
+  'pet.codexAdopt': string;
+  'pet.codexAdopting': string;
+  'pet.communitySync': string;
+  'pet.communitySyncing': string;
+  'pet.communitySyncTitle': string;
+  'pet.communitySyncDone': string;
+  'pet.communitySyncFailed': string;
+  'pet.codexBundled': string;
+  'pet.codexBundledTitle': string;
 
   // Sketch editor
   'sketch.toolSelect': string;

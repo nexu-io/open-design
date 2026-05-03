@@ -485,6 +485,7 @@ export async function createJsonIpcServer({
   await prepareIpcPath(socketPath);
   const server = createNetServer((socket) => {
     let buffer = "";
+    socket.on("error", () => {});
     socket.on("data", async (chunk) => {
       buffer += chunk.toString();
       const newlineIndex = buffer.indexOf("\n");

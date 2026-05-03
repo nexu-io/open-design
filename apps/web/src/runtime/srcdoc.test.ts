@@ -40,4 +40,19 @@ describe('buildSrcdoc', () => {
     expect(canSetActive).toContain("list[i].hasAttribute('hidden')");
     expect(canSetActive).not.toContain('findActiveByVisibility');
   });
+
+  it('enables the comment bridge immediately when injected', () => {
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      commentBridge: true,
+    });
+
+    expect(srcdoc).toContain('data-od-comment-bridge');
+    expect(srcdoc).toContain('var enabled = true;');
+    expect(srcdoc).toContain("type: 'od:comment-target'");
+    expect(srcdoc).toContain("type: 'od:comment-hover'");
+    expect(srcdoc).toContain("type: 'od:comment-leave'");
+    expect(srcdoc).toContain("type: 'od:comment-targets'");
+    expect(srcdoc).toContain("document.addEventListener('scroll', schedulePostTargets, true);");
+    expect(srcdoc).toContain('data-od-comment-bridge-style');
+  });
 });

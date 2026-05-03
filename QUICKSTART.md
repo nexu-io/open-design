@@ -1,6 +1,6 @@
 # Quickstart
 
-<p align="center"><b>English</b> · <a href="QUICKSTART.de.md">Deutsch</a></p>
+<p align="center"><b>English</b> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.ja-JP.md">日本語</a></p>
 
 Run the full product locally.
 
@@ -9,7 +9,7 @@ Run the full product locally.
 - **Node.js:** `~24` (Node 24.x). The repo enforces this through `package.json#engines`.
 - **pnpm:** `10.33.x`. The repo pins `pnpm@10.33.2` through `packageManager`; use Corepack so the pinned version is selected automatically.
 - **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native should work for most flows, but WSL2 is the safer baseline.
-- **Optional local agent CLI:** Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
+- **Optional local agent CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
 
 `nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 24 before running pnpm:
 
@@ -45,7 +45,7 @@ For the desktop shell and all managed sidecars in the background:
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-On first load, the app detects your installed code-agent CLI (Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen), picks it automatically, and defaults to `web-prototype` skill + `Neutral Modern` design system. Type a prompt and hit **Send**. The agent streams into the left pane; the `<artifact>` tag is parsed out and the HTML renders live on the right. When it finishes, click **Save to disk** to persist the artifact under `./.od/artifacts/<timestamp>-<slug>/index.html`.
+On first load, the app detects your installed code-agent CLI (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen), picks it automatically, and defaults to `web-prototype` skill + `Neutral Modern` design system. Type a prompt and hit **Send**. The agent streams into the left pane; the `<artifact>` tag is parsed out and the HTML renders live on the right. When it finishes, click **Save to disk** to persist the artifact under `./.od/artifacts/<timestamp>-<slug>/index.html`.
 
 The **Design system** dropdown ships with **129 design systems** — 2 hand-authored starters (Neutral Modern, Warm Editorial), 70 bundled product systems, and 57 design skills sourced from [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Pick one to skin every prototype in that brand's aesthetic.
 
@@ -160,7 +160,7 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin entry
 │   │       ├── server.ts          # /api/* + static serving
-│   │       ├── agents.ts          # PATH scanner for claude/codex/gemini/opencode/cursor-agent/qwen/copilot
+│   │       ├── agents.ts          # PATH scanner for claude/codex/devin/gemini/opencode/cursor-agent/qwen/copilot
 │   │       ├── skills.ts          # SKILL.md loader (frontmatter parser)
 │   │       └── design-systems.ts  # DESIGN.md loader
 │   │   ├── sidecar/           # tools-dev daemon sidecar wrapper
@@ -214,7 +214,7 @@ open-design/
 
 ## Troubleshooting
 
-- **"no agents found on PATH"** — install one of: `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Or switch to "Anthropic API · BYOK" in the top bar and paste a key in **Settings**.
+- **"no agents found on PATH"** — install one of: `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Or switch to "Anthropic API · BYOK" in the top bar and paste a key in **Settings**.
 - **daemon 500 on /api/chat** — check the daemon terminal for the stderr tail; usually the CLI rejected its args. Different CLIs take different argv shapes; see `apps/daemon/src/agents.ts` `buildArgs` if you need to tweak.
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — run the media dispatcher checks above. Do not resume the old CLI session; reopen the project from the Open Design app so the daemon can inject fresh `OD_*` variables.
 - **Codex loads too much plugin context** — start Open Design with `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` to make daemon-spawned Codex processes run with `--disable plugins`.

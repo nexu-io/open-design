@@ -1,9 +1,14 @@
 // Client-side export helpers used by the Share menu in the HTML viewer.
-// Three of the four formats run entirely in the browser:
+// Four of the five formats run entirely in the browser:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
 //   - ZIP  : pack the artifact into a stored-mode ZIP (see ./zip.ts).
+//   - MD   : download the artifact's source verbatim with a `.md` extension
+//            so it can be ingested by markdown-aware tooling (LLM context
+//            windows, vault apps, etc.). No conversion is performed — the
+//            file content is the same source the Source view shows. See
+//            issue #279.
 // PPTX export is fundamentally different — it asks the agent to convert the
 // artifact server-side, so it lives in ProjectView.tsx (not here).
 
@@ -51,6 +56,16 @@ export function exportAsZip(html: string, title: string): void {
   triggerDownload(blob, `${slug}.zip`);
 }
 
+export function exportAsMd(source: string, title: string): void {
+  // Pass-through download: the file body is the artifact source verbatim,
+  // only the extension and Content-Type are flipped to markdown. No
+  // HTML→markdown conversion happens here — users who pipe the file into
+  // markdown-aware tooling (LLM context windows, vault apps) get the same
+  // bytes the Source view displays.
+  const blob = new Blob([source], { type: 'text/markdown;charset=utf-8' });
+  triggerDownload(blob, `${safeFilename(title, 'artifact')}.md`);
+}
+
 type ReactSourceExtension = '.jsx' | '.tsx';
 
 export function exportAsJsx(
@@ -82,6 +97,65 @@ export function exportReactComponentAsZip(
     },
   ]);
   triggerDownload(blob, `${slug}.zip`);
+}
+
+// Project ZIP export — asks the daemon to bundle the on-disk project tree.
+// Used by FileViewer's share menu so the user gets the full uploaded
+// project (e.g. the `ui-design/` folder with its subdirs and assets) rather
+// than just a srcdoc snapshot of the rendered HTML. `filePath` is the
+// active file's project-relative path; if it lives inside a top-level
+// directory we scope the archive to that directory, otherwise we ask the
+// daemon for the whole project. Falls back to the in-memory single-file
+// ZIP on any failure so the action never silently no-ops.
+export async function exportProjectAsZip(opts: {
+  projectId: string;
+  filePath: string;
+  fallbackHtml: string;
+  fallbackTitle: string;
+}): Promise<void> {
+  const root = archiveRootFromFilePath(opts.filePath);
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${
+    root ? `?root=${encodeURIComponent(root)}` : ''
+  }`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
+  } catch (err) {
+    console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
+    exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+  }
+}
+
+// Exported for unit tests. Pure string transform with no DOM dependency.
+export function archiveRootFromFilePath(filePath: string): string {
+  const trimmed = (filePath || '').replace(/^\/+/, '');
+  const slash = trimmed.indexOf('/');
+  if (slash <= 0) return '';
+  return trimmed.slice(0, slash);
+}
+
+// Exported for unit tests so the Content-Disposition fallback chain
+// (UTF-8 → legacy quoted → local slug) can be exercised against mock
+// Response objects without spinning up the daemon.
+export function archiveFilenameFrom(resp: Response, fallbackTitle: string, root: string): string {
+  // Honor the daemon's Content-Disposition (it knows the project name and
+  // handles RFC 5987 UTF-8 encoding). Fall back to the active directory
+  // name, then to the active file title.
+  const header = resp.headers.get('content-disposition') || '';
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star && star[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      // fall through to the legacy filename= or local fallback
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(header);
+  if (plain && plain[1]) return plain[1];
+  const slug = safeFilename(root || fallbackTitle, 'project');
+  return `${slug}.zip`;
 }
 
 // Open the artifact in a new tab via a Blob URL with a self-printing

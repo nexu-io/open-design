@@ -1,6 +1,6 @@
 # Schnellstart
 
-<p align="center"><a href="QUICKSTART.md">English</a> · <b>Deutsch</b></p>
+<p align="center"><a href="QUICKSTART.md">English</a> · <b>Deutsch</b> · <a href="QUICKSTART.ja-JP.md">日本語</a></p>
 
 Führen Sie das vollständige Produkt lokal aus.
 

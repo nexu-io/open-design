@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
@@ -15,9 +15,18 @@ import {
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
-import type { AgentInfo, AppConfig, AppVersionInfo, ExecMode } from '../types';
+import type { AgentInfo, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
+import { PetSettings } from './pet/PetSettings';
+
+export type SettingsSection =
+  | 'execution'
+  | 'media'
+  | 'language'
+  | 'appearance'
+  | 'pet'
+  | 'about';
 
 interface Props {
   initial: AppConfig;
@@ -25,17 +34,51 @@ interface Props {
   daemonLive: boolean;
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
+  // Optional deep-link target so callers (e.g. the entry-view "adopt a
+  // pet" pill) can pop the dialog open straight on a specific section.
+  defaultSection?: SettingsSection;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
   onRefreshAgents: () => void;
 }
 
-const SUGGESTED_MODELS = [
-  'claude-opus-4-5',
-  'claude-sonnet-4-5',
-  'claude-haiku-4-5',
-  'mimo-v2.5-pro',
-];
+const SUGGESTED_MODELS_BY_PROTOCOL = {
+  anthropic: [
+    'claude-opus-4-5',
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'deepseek-chat',
+    'deepseek-reasoner',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.5',
+    'MiniMax-M2.1-highspeed',
+    'MiniMax-M2.1',
+    'MiniMax-M2',
+    'mimo-v2.5-pro',
+  ],
+  openai: [
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o3',
+    'o4-mini',
+    'deepseek-chat',
+    'deepseek-reasoner',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.5',
+    'MiniMax-M2.1-highspeed',
+    'MiniMax-M2.1',
+    'MiniMax-M2',
+    'mimo-v2.5-pro',
+  ],
+} as const;
 
 export function SettingsDialog({
   initial,
@@ -43,15 +86,32 @@ export function SettingsDialog({
   daemonLive,
   appVersionInfo,
   welcome,
+  defaultSection,
   onSave,
   onClose,
   onRefreshAgents,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
+
+  // Revert the live theme preview when the dialog closes without saving.
+  // On Save, App's useLayoutEffect fires after unmount and applies the new
+  // saved theme, so this cleanup is effectively a no-op in that path.
+  useLayoutEffect(() => {
+    const saved = initial.theme ?? 'system';
+    return () => {
+      if (saved === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    };
+  }, [initial.theme]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<'execution' | 'media' | 'language' | 'about'>('execution');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(
+    defaultSection ?? 'execution',
+  );
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
@@ -89,17 +149,61 @@ export function SettingsDialog({
     };
   }, [languageOpen]);
 
+  // Close the language menu on window resize so its placement (computed on
+  // open) cannot end up stale relative to the new viewport dimensions.
+  useEffect(() => {
+    if (!languageOpen) return;
+    const handleResize = () => setLanguageOpen(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [languageOpen]);
+
   const installedCount = useMemo(
     () => agents.filter((a) => a.available).length,
     [agents],
   );
 
   const setMode = (mode: ExecMode) => setCfg((c) => ({ ...c, mode }));
+  const setApiProtocol = (protocol: 'anthropic' | 'openai') => {
+    setCfg((c) => {
+      const currentProvider = c.apiProviderBaseUrl
+        ? KNOWN_PROVIDERS.find((p) => p.baseUrl === c.apiProviderBaseUrl)
+        : undefined;
+      const stillOnSelectedProvider = Boolean(currentProvider && c.baseUrl === currentProvider.baseUrl);
+      const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
+      return {
+        ...c,
+        mode: 'api',
+        apiProtocol: protocol,
+        ...(stillOnSelectedProvider && provider
+          ? { baseUrl: provider.baseUrl, model: provider.model, apiProviderBaseUrl: provider.baseUrl }
+          : { apiProviderBaseUrl: null }),
+      };
+    });
+  };
 
   const canSave =
     cfg.mode === 'daemon'
       ? Boolean(cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available)
       : Boolean(cfg.apiKey.trim() && cfg.model.trim() && cfg.baseUrl.trim());
+
+  const apiProtocol = cfg.apiProtocol ?? 'anthropic';
+  const protocolProviders = useMemo(
+    () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
+    [apiProtocol],
+  );
+  const selectedProviderIndex = protocolProviders.findIndex((p) => p.baseUrl === cfg.baseUrl);
+  const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const apiModelOptions = useMemo(
+    () => Array.from(new Set(
+      selectedProvider?.models?.length
+        ? selectedProvider.models
+        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+    )),
+    [apiProtocol, cfg.baseUrl, selectedProvider],
+  );
+  const apiModelCustom = Boolean(cfg.model) && !apiModelOptions.includes(cfg.model);
+  const apiModelSelectValue = apiModelCustom || !cfg.model ? CUSTOM_MODEL_SENTINEL : cfg.model;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -115,6 +219,26 @@ export function SettingsDialog({
               <span className="kicker">{t('settings.welcomeKicker')}</span>
               <h2>{t('settings.welcomeTitle')}</h2>
               <p className="subtitle">{t('settings.welcomeSubtitle')}</p>
+              {/* First-run users see a mini pet teaser inside the welcome
+                  modal so adoption is part of the warm intro rather than
+                  hidden behind another nav click. The chip nudges them
+                  toward Pets without forcing them to leave the rest of
+                  the welcome flow. */}
+              <button
+                type="button"
+                className="welcome-pet-teaser"
+                onClick={() => setActiveSection('pet')}
+              >
+                <span className="welcome-pet-glyph" aria-hidden>🐾</span>
+                <span className="welcome-pet-copy">
+                  <strong>{t('pet.welcomeTeaserTitle')}</strong>
+                  <span>{t('pet.welcomeTeaserBody')}</span>
+                </span>
+                <span className="welcome-pet-cta">
+                  {t('pet.welcomeTeaserCta')}
+                  <Icon name="chevron-right" size={12} />
+                </span>
+              </button>
             </>
           ) : (
             <>
@@ -162,6 +286,28 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
+              onClick={() => setActiveSection('appearance')}
+            >
+              <Icon name="sun-moon" size={18} />
+              <span>
+                <strong>{t('settings.appearance')}</strong>
+                <small>{t('settings.appearanceHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
+              onClick={() => setActiveSection('pet')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('pet.navTitle')}</strong>
+                <small>{t('pet.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'about' ? ' active' : ''}`}
               onClick={() => setActiveSection('about')}
             >
@@ -179,6 +325,7 @@ export function SettingsDialog({
                 className="seg-control"
                 role="tablist"
                 aria-label={t('settings.modeAria')}
+                style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}
               >
                 <button
                   type="button"
@@ -203,12 +350,22 @@ export function SettingsDialog({
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={cfg.mode === 'api'}
-                  className={'seg-btn' + (cfg.mode === 'api' ? ' active' : '')}
-                  onClick={() => setMode('api')}
+                  aria-selected={cfg.mode === 'api' && apiProtocol === 'anthropic'}
+                  className={'seg-btn' + (cfg.mode === 'api' && apiProtocol === 'anthropic' ? ' active' : '')}
+                  onClick={() => setApiProtocol('anthropic')}
                 >
-                  <span className="seg-title">{t('settings.modeApi')}</span>
-                  <span className="seg-meta">{t('settings.modeApiMeta')}</span>
+                  <span className="seg-title">Anthropic API</span>
+                  <span className="seg-meta">/v1/messages</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cfg.mode === 'api' && apiProtocol === 'openai'}
+                  className={'seg-btn' + (cfg.mode === 'api' && apiProtocol === 'openai' ? ' active' : '')}
+                  onClick={() => setApiProtocol('openai')}
+                >
+                  <span className="seg-title">OpenAI API</span>
+                  <span className="seg-meta">/v1/chat/completions</span>
                 </button>
               </div>
           {cfg.mode === 'daemon' ? (
@@ -386,8 +543,36 @@ export function SettingsDialog({
           ) : (
             <section className="settings-section">
               <div className="section-head">
-                <h3>{t('settings.apiSection')}</h3>
+                <h3>{apiProtocol === 'anthropic' ? 'Anthropic API' : 'OpenAI API'}</h3>
               </div>
+              <label className="field">
+                <span className="field-label">Quick fill provider</span>
+                <select
+                  value={selectedProviderIndex >= 0 ? String(selectedProviderIndex) : ''}
+                  onChange={(e) => {
+                    if (e.target.value === '') {
+                      setCfg((c) => ({ ...c, baseUrl: '', model: '', apiProviderBaseUrl: null }));
+                      return;
+                    }
+                    const idx = Number(e.target.value);
+                    if (!isNaN(idx) && protocolProviders[idx]) {
+                      const p = protocolProviders[idx]!;
+                      setCfg((c) => ({
+                        ...c,
+                        apiProtocol: p.protocol,
+                        baseUrl: p.baseUrl,
+                        model: p.model,
+                        apiProviderBaseUrl: p.baseUrl,
+                      }));
+                    }
+                  }}
+                >
+                  <option value="">Custom provider</option>
+                  {protocolProviders.map((p, i) => (
+                    <option key={p.label} value={i}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
               <label className="field">
                 <span className="field-label">{t('settings.apiKey')}</span>
                 <div className="field-row">
@@ -412,64 +597,43 @@ export function SettingsDialog({
               </label>
               <label className="field">
                 <span className="field-label">{t('settings.model')}</span>
-                <input
-                  type="text"
-                  value={cfg.model}
-                  list="suggested-models"
-                  onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-                />
-                <datalist id="suggested-models">
-                  {SUGGESTED_MODELS.map((m) => (
-                    <option value={m} key={m} />
+                <select
+                  value={apiModelSelectValue}
+                  onChange={(e) => {
+                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                      setCfg((c) => ({ ...c, model: '' }));
+                    } else {
+                      setCfg((c) => ({ ...c, model: e.target.value }));
+                    }
+                  }}
+                >
+                  {apiModelOptions.map((m) => (
+                    <option value={m} key={m}>{m}</option>
                   ))}
-                </datalist>
+                  <option value={CUSTOM_MODEL_SENTINEL}>{t('settings.modelCustom')}</option>
+                </select>
               </label>
+              {!selectedProvider ? (
+                <p className="hint">These are suggested models for this protocol. Your provider may support different models.</p>
+              ) : null}
+              {apiModelCustom || apiModelSelectValue === CUSTOM_MODEL_SENTINEL ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.modelCustomLabel')}</span>
+                  <input
+                    type="text"
+                    value={cfg.model}
+                    placeholder={t('settings.modelCustomPlaceholder')}
+                    onChange={(e) => setCfg({ ...cfg, model: e.target.value.trim() })}
+                  />
+                </label>
+              ) : null}
               <label className="field">
                 <span className="field-label">{t('settings.baseUrl')}</span>
                 <input
                   type="text"
                   value={cfg.baseUrl}
-                  onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
+                  onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value, apiProviderBaseUrl: null })}
                 />
-              </label>
-              <label className="field">
-                <span className="field-label">Quick fill provider</span>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const idx = Number(e.target.value);
-                    if (!isNaN(idx) && KNOWN_PROVIDERS[idx]) {
-                      const p = KNOWN_PROVIDERS[idx]!;
-                      setCfg((c) => ({ ...c, baseUrl: p.baseUrl, model: p.model }));
-                    }
-                  }}
-                >
-                  <option value="">— choose a provider —</option>
-                  {KNOWN_PROVIDERS.map((p, i) => (
-                    <option key={i} value={i}>{p.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">{t('settings.maxTokens')}</span>
-                <input
-                  type="number"
-                  min={MIN_MAX_TOKENS}
-                  max={MAX_MAX_TOKENS}
-                  step={MIN_MAX_TOKENS}
-                  placeholder={String(modelMaxTokensDefault(cfg.model))}
-                  value={cfg.maxTokens ?? ''}
-                  onChange={(e) => {
-                    const raw = e.target.value.trim();
-                    if (raw === '') {
-                      setCfg({ ...cfg, maxTokens: undefined });
-                      return;
-                    }
-                    const val = parseInt(raw, 10);
-                    setCfg({ ...cfg, maxTokens: Number.isFinite(val) ? val : undefined });
-                  }}
-                />
-                <p className="hint">{t('settings.maxTokensHint')}</p>
               </label>
               <p className="hint">{t('settings.apiHint')}</p>
             </section>
@@ -506,15 +670,23 @@ export function SettingsDialog({
                 </span>
                 <Icon name="chevron-down" size={16} />
               </button>
-              {languageOpen && languageMenuRect ? (
+              {languageOpen && languageMenuRect ? (() => {
+                const spaceBelow = window.innerHeight - languageMenuRect.bottom;
+                const spaceAbove = languageMenuRect.top;
+                // Prefer downward if at least 200px available (enough for ~5 options)
+                const openDownward = spaceBelow >= spaceAbove || spaceBelow >= 200;
+                return (
                 <div
                   className="settings-language-menu"
                   role="menu"
                   style={{
-                    bottom: window.innerHeight - languageMenuRect.top + 6,
+                    top: openDownward ? languageMenuRect.bottom + 6 : undefined,
+                    bottom: openDownward
+                      ? undefined
+                      : window.innerHeight - languageMenuRect.top + 6,
                     left: languageMenuRect.left,
                     width: languageMenuRect.width,
-                    '--menu-available-h': `${languageMenuRect.top - 6}px`,
+                    '--menu-available-h': `${(openDownward ? spaceBelow : spaceAbove) - 6}px`,
                   } as React.CSSProperties}
                 >
                   {LOCALES.map((code) => {
@@ -544,9 +716,18 @@ export function SettingsDialog({
                     );
                   })}
                 </div>
-              ) : null}
+                );
+              })() : null}
             </div>
           </section>
+          ) : null}
+
+          {activeSection === 'appearance' ? (
+            <AppearanceSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'pet' ? (
+            <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
           {activeSection === 'about' ? (
@@ -706,6 +887,57 @@ function MediaProvidersSection({
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+const THEMES: Array<{ value: AppTheme; labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark' }> = [
+  { value: 'system', labelKey: 'settings.themeSystem' },
+  { value: 'light', labelKey: 'settings.themeLight' },
+  { value: 'dark', labelKey: 'settings.themeDark' },
+];
+
+function AppearanceSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const current = cfg.theme ?? 'system';
+
+  // Apply the draft theme immediately so the user sees a live preview
+  // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
+  useLayoutEffect(() => {
+    if (current === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', current);
+    }
+  }, [current]);
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.appearance')}</h3>
+          <p className="hint">{t('settings.appearanceHint')}</p>
+        </div>
+      </div>
+      <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
+        {THEMES.map(({ value, labelKey }) => (
+          <button
+            key={value}
+            type="button"
+            className={'seg-btn' + (current === value ? ' active' : '')}
+            aria-pressed={current === value}
+            onClick={() => setCfg((c) => ({ ...c, theme: value }))}
+          >
+            <span className="seg-title">{t(labelKey)}</span>
+          </button>
+        ))}
       </div>
     </section>
   );

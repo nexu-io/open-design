@@ -37,8 +37,9 @@ export async function streamMessage(
   signal: AbortSignal,
   handlers: StreamHandlers,
 ): Promise<void> {
-  // Route to OpenAI-compatible provider for non-Anthropic models.
-  if (isOpenAICompatible(cfg.model, cfg.baseUrl)) {
+  // Prefer the explicit Settings protocol; keep the legacy heuristic as a
+  // fallback for configs saved before apiProtocol existed.
+  if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
     return streamMessageOpenAI(cfg, system, history, signal, handlers);
   }
 

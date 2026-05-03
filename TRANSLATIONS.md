@@ -25,10 +25,12 @@ READMEs covers any locale that has a translated README, dict or no dict.
 | Code    | Language             | UI dict                | README              | Status |
 | ------- | -------------------- | ---------------------- | ------------------- | ------ |
 | `en`    | English              | `en.ts` (source)       | `README.md`         | active |
+| `ar`    | العربية              | `ar.ts`                | —                   | active |
 | `de`    | Deutsch              | `de.ts`                | `README.de.md`      | active |
 | `es-ES` | Español (España)     | `es-ES.ts`             | —                   | active |
 | `fa`    | فارسی                | `fa.ts`                | —                   | active |
-| `ja`    | 日本語               | —                      | `README.ja-JP.md`   | active (README only) |
+| `hu`    | Magyar               | `hu.ts`                | —                   | active |
+| `ja`    | 日本語               | `ja.ts`                | `README.ja-JP.md`   | active |
 | `ko`    | 한국어               | —                      | `README.ko.md`      | active (README only) |
 | `pt-BR` | Português (Brasil)   | `pt-BR.ts`             | —                   | active |
 | `ru`    | Русский              | `ru.ts`                | —                   | active |

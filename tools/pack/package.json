@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -12,9 +12,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@open-design/platform": "workspace:0.1.0",
-    "@open-design/sidecar": "workspace:0.1.0",
-    "@open-design/sidecar-proto": "workspace:0.1.0",
+    "@open-design/platform": "workspace:0.2.0",
+    "@open-design/sidecar": "workspace:0.2.0",
+    "@open-design/sidecar-proto": "workspace:0.2.0",
     "@electron/notarize": "3.1.0",
     "cac": "6.7.14",
     "electron-builder": "26.8.1"

@@ -4,7 +4,7 @@
 
 The adapter layer is OD's most load-bearing design decision. We delegate the **entire agent loop** — model calls, tool use, context management, permission handling, resume, cancel — to the user's existing code agent CLI. OD's job is to detect it, feed it a skill + prompt + working directory, and stream its output back to the web UI.
 
-> **Thesis:** The code agent space has already converged on a few strong implementations (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, OpenClaw). Reimplementing a 7th is worse than just talking to all of them.
+> **Thesis:** The code agent space has already converged on a few strong implementations (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, OpenClaw). Reimplementing another one is worse than just talking to all of them.
 >
 > **Inspiration:** [multica](https://github.com/multica-ai/multica) (PATH-scan detection + daemon architecture) and [cc-switch](https://github.com/farion1231/cc-switch) (per-agent config format knowledge + symlink-based skill distribution).
 
@@ -86,6 +86,7 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **claude-code** | `claude` | `~/.claude/` | `~/.claude/skills/` | ✅ | ✅ | ✅ | P0 (MVP) |
 | **api-fallback** | *(direct Anthropic API)* | — | — | ❌ (prompt-injected) | 〜 | ✅ | P0 (MVP) |
 | **codex** | `codex` | `~/.codex/` | `~/.codex/skills/` | 〜 (varies by version) | 〜 (regenerate w/ scoping) | ✅ | P1 |
+| **devin** | `devin` | `~/.config/devin/` | `~/.config/devin/skills/` | ✅ | ✅ | ✅ (`acp-json-rpc`) | P1 |
 | **cursor-agent** | `cursor-agent` | `~/.cursor/` | n/a (via project `.cursorrules`) | ❌ (prompt-injected) | ✅ | ✅ | P1 |
 | **gemini-cli** | `gemini` | `~/.config/gemini/` | ❌ | ❌ (prompt-injected) | ❌ (regenerate) | ✅ | P2 |
 | **opencode** | `opencode` | `~/.opencode/` | 〜 | 〜 | ✅ | P2 |
@@ -146,7 +147,17 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Surgical edits: Codex's edit tool exists but the tool-call schema is different enough that we regenerate files instead in v1. Revisit in v2.
 - **Gotcha:** Codex's CLI auth state can be "authenticated to wrong org." Detect by running `codex whoami` at detect time.
 
-### 5.4 Cursor Agent
+### 5.4 Devin for Terminal
+
+- Invocation: `devin --permission-mode dangerous --respect-workspace-trust false acp`.
+- Install/update: macOS/Linux/WSL users can install with `curl -fsSL https://cli.devin.ai/install.sh | bash`; run `devin update` for existing installs.
+- Version requirement: requires a Devin CLI build with the `devin acp` subcommand (verified with `devin 2026.5.1-1`). Check with `devin acp --help`; if the subcommand is missing, update or reinstall Devin for Terminal.
+- Streaming: Agent Client Protocol JSON-RPC over stdio, handled by the daemon's shared `acp-json-rpc` transport.
+- Skill loading: Devin supports `.devin/skills/` and `~/.config/devin/skills/`; OD's current daemon also prompt-injects the selected skill body into the composed prompt, so no per-project skill install is required for generation.
+- Surgical edits: Devin's own edit/write tools handle targeted changes.
+- Permission: `--permission-mode dangerous` avoids headless approval prompts in the web UI; `--respect-workspace-trust false` ensures Devin doesn't block on trust prompts for newly created project dirs. Org/team-level policies still apply inside Devin.
+
+### 5.5 Cursor Agent
 
 - Invocation: `cursor-agent --workspace <dir> "<prompt>"` (rough; verify with CLI docs at implementation time).
 - Streaming: yes, JSON lines.
@@ -154,7 +165,7 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Surgical edits: Cursor's inline edit tool is strong; map our `refine` call to its edit protocol.
 - **Gotcha:** Cursor Agent operates on workspaces, not single files. Constrain the workspace to the artifact dir to prevent over-broad changes.
 
-### 5.5 Gemini CLI
+### 5.6 Gemini CLI
 
 - Invocation: `gemini` with the composed prompt delivered via **stdin** (no `-p` flag).
   Gemini CLI enters headless mode automatically when stdin is a pipe and no `-p` flag is
@@ -170,11 +181,11 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - **Gotcha:** Gemini's tool-use format is distinct; we translate our file-write tool to its
   `file_tool` equivalent when that feature is implemented.
 
-### 5.6 OpenCode / OpenClaw
+### 5.7 OpenCode / OpenClaw
 
 - Less-matured CLIs. Targeting P2. Expect bumps; adapter implementations will likely be the thinnest possible "shell out, parse output, synthesize events" approach.
 
-### 5.7 GitHub Copilot CLI
+### 5.8 GitHub Copilot CLI
 
 - Invocation: `copilot -p "<prompt>" --allow-all-tools --output-format json --add-dir <skills> --add-dir <design-systems>`. `--allow-all-tools` is mandatory in non-interactive mode — without it the CLI blocks waiting for human approval on every tool call. Unlike Codex (where `exec` is a dedicated headless subcommand with auto-approve baked in) or Claude Code (which inherits its permission policy from `~/.claude/settings.json`), Copilot's `-p` mode always prompts unless this flag is passed explicitly. `--add-dir` (repeatable) widens the path-level sandbox so Copilot can read skill seeds and design-system specs that live outside the project cwd.
 - Streaming: `--output-format json` emits JSONL with the same expressive shape as Claude Code's stream-json (`assistant.reasoning_delta`, `assistant.message_delta`, `tool.execution_start/complete`, `result`). `apps/daemon/src/copilot-stream.ts` maps these onto the same UI events as `claude-stream.ts`.

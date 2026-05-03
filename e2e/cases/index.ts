@@ -53,6 +53,31 @@ export const uiCases: UICase[] = [
     ],
   },
   {
+    id: 'comment-attachment-flow',
+    title: 'Preview comments attach to chat and send as structured context',
+    kind: 'prototype',
+    flow: 'comment-attachment-flow',
+    automated: true,
+    description:
+      'Exercises V1 comment mode: save a latest element comment, attach/remove it from the composer, and send it as an empty visible prompt with structured comment context.',
+    create: {
+      projectName: 'Comment attachment flow',
+      tab: 'prototype',
+    },
+    prompt: 'Create a commentable preview artifact',
+    mockArtifact: {
+      identifier: 'commentable-artifact',
+      title: 'Commentable Artifact',
+      fileName: 'commentable-artifact.html',
+      heading: 'Prototype headline',
+      html:
+        '<!doctype html><html><body><main data-od-id="hero-section"><h1 data-od-id="hero-title" data-screen-label="Hero title">Prototype headline</h1><p data-od-id="hero-copy">Preview copy for comment mode.</p></main></body></html>',
+    },
+    notes: [
+      'The composer textarea stays empty; selected preview comments are sent through commentAttachments.',
+    ],
+  },
+  {
     id: 'design-system-selection',
     title: 'Selecting a design system carries through project creation',
     kind: 'prototype',

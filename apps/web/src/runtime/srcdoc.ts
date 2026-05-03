@@ -16,7 +16,7 @@
  */
 export function buildSrcdoc(
   html: string,
-  options: { deck?: boolean; baseHref?: string; initialSlideIndex?: number } = {}
+  options: { deck?: boolean; baseHref?: string; initialSlideIndex?: number; commentBridge?: boolean } = {}
 ): string {
   const head = html.trimStart().slice(0, 64).toLowerCase();
   const isFullDoc = head.startsWith("<!doctype") || head.startsWith("<html");
@@ -32,8 +32,8 @@ export function buildSrcdoc(
 </html>`;
   const withBase = options.baseHref ? injectBaseHref(wrapped, options.baseHref) : wrapped;
   const withShim = injectSandboxShim(withBase);
-  if (!options.deck) return withShim;
-  return injectDeckBridge(withShim, options.initialSlideIndex);
+  const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
+  return options.commentBridge ? injectCommentBridge(withDeck) : withDeck;
 }
 
 function injectBaseHref(doc: string, baseHref: string): string {
@@ -94,6 +94,114 @@ function injectSandboxShim(doc: string): string {
   if (/<body[^>]*>/i.test(doc))
     return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
   return shim + doc;
+}
+
+function injectCommentBridge(doc: string): string {
+  const script = `<script data-od-comment-bridge>(function(){
+  var enabled = true;
+  var hoveredId = null;
+  function esc(value){ try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); } catch (_) { return String(value); } }
+  function targetFrom(el){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (!id) return null;
+    var rect = el.getBoundingClientRect();
+    var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
+    var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
+    var html = '';
+    try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
+    return {
+      type: 'od:comment-target',
+      elementId: id,
+      selector: el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]',
+      label: tag + cls,
+      text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+      position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      htmlHint: html.slice(0, 180)
+    };
+  }
+  function allTargets(){
+    var nodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var items = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var item = targetFrom(nodes[i]);
+      if (item) items.push(item);
+    }
+    return items;
+  }
+  var postTargetsPending = false;
+  function postTargets(){
+    if (!enabled) return;
+    window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
+  }
+  function schedulePostTargets(){
+    if (!enabled || postTargetsPending) return;
+    postTargetsPending = true;
+    window.requestAnimationFrame(function(){
+      postTargetsPending = false;
+      postTargets();
+    });
+  }
+  function closestTarget(event){
+    var el = event.target;
+    while (el && el !== document.documentElement) {
+      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+  window.addEventListener('message', function(ev){
+    if (!ev.data || ev.data.type !== 'od:comment-mode') return;
+    enabled = !!ev.data.enabled;
+    document.documentElement.toggleAttribute('data-od-comment-mode', enabled);
+    if (enabled) setTimeout(postTargets, 0);
+    else hoveredId = null;
+  });
+  document.addEventListener('mouseover', function(ev){
+    if (!enabled) return;
+    var el = closestTarget(ev);
+    if (!el) return;
+    var payload = targetFrom(el);
+    if (!payload || payload.elementId === hoveredId) return;
+    hoveredId = payload.elementId;
+    window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
+  }, true);
+  document.addEventListener('mouseout', function(ev){
+    if (!enabled) return;
+    var el = closestTarget(ev);
+    if (!el) return;
+    var next = ev.relatedTarget;
+    while (next && next !== document.documentElement) {
+      if (next === el) return;
+      next = next.parentElement;
+    }
+    hoveredId = null;
+    window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+  }, true);
+  document.addEventListener('click', function(ev){
+    if (!enabled) return;
+    var el = closestTarget(ev);
+    if (!el) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    var payload = targetFrom(el);
+    if (payload) window.parent.postMessage(payload, '*');
+  }, true);
+  window.addEventListener('resize', schedulePostTargets);
+  document.addEventListener('scroll', schedulePostTargets, true);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
+  else setTimeout(postTargets, 0);
+})();</script>`;
+  const style = `<style data-od-comment-bridge-style>
+html[data-od-comment-mode] [data-od-id],
+html[data-od-comment-mode] [data-screen-label] { cursor: crosshair !important; }
+</style>`;
+  const withStyle = /<\/head>/i.test(doc)
+    ? doc.replace(/<\/head>/i, style + '</head>')
+    : /<head[^>]*>/i.test(doc)
+      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
+      : style + doc;
+  if (/<\/body>/i.test(withStyle)) return withStyle.replace(/<\/body>/i, script + '</body>');
+  return withStyle + script;
 }
 
 // The deck bridge supports three deck conventions found across our skills

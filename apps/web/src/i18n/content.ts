@@ -57,6 +57,12 @@ const DE_SKILL_COPY: Record<string, { description?: string; examplePrompt?: stri
     examplePrompt:
       'Erstellen Sie mir ein Magazin-PPT über ‚Ein-Personen-Unternehmen · von AI gefaltete Organisationen‘, 25-minütiger Vortrag, Zielgruppe Designer + Gründer. Empfehlen Sie zuerst eine Richtung (Monocle / WIRED / Kinfolk / Domus / Lab), damit ich wählen kann.',
   },
+  'hatch-pet': {
+    examplePrompt:
+      'Brüten Sie mir ein winziges Pixel-Pet aus — ein freundlicher Shiba in einem kuscheligen Pulli. Nutzen Sie die hatch-pet-Skill durchgehend.',
+    description:
+      'Erstellt, repariert, validiert und packt ein Codex-kompatibles animiertes Pet-Spritesheet (8x9 Atlas, 192x208 Zellen) inklusive QA-Kontaktbogen, Vorschauvideos und pet.json.',
+  },
   'hr-onboarding': {
     examplePrompt:
       'Erstellen Sie einen 30-Tage-Onboardingplan für einen neuen Product Designer in einem 40-Personen-Startup.',
@@ -120,6 +126,10 @@ const DE_SKILL_COPY: Record<string, { description?: string; examplePrompt?: stri
   'pm-spec': {
     examplePrompt:
       'Schreiben Sie mir eine PRD für Two-Factor Auth in unserer SaaS-App — Problem, Scope, Meilensteine, offene Fragen.',
+  },
+  'pptx-html-fidelity-audit': {
+    examplePrompt:
+      'Vergleichen Sie deck.pptx mit deck.html, listen Sie Layout-Drift auf (Fußzeilen-Überlauf, fehlendes Italic, Hero nicht zentriert) und exportieren Sie mit Footer-Rail + Cursor-Flow neu.',
   },
   'pricing-page': {
     examplePrompt:
@@ -278,15 +288,19 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   Uncategorized: 'Nicht kategorisiert',
 };
 
+const DE_SKILL_IDS_WITH_EN_FALLBACK = [] as const;
+
 const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'agentic',
   'ant',
   'application',
+  'arc',
   'artistic',
   'bento',
   'bold',
   'brutalism',
   'cafe',
+  'canva',
   'claymorphism',
   'clean',
   'colorful',
@@ -295,9 +309,11 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'cosmic',
   'creative',
   'dashboard',
+  'discord',
   'dithered',
   'doodle',
   'dramatic',
+  'duolingo',
   'editorial',
   'elegant',
   'energetic',
@@ -307,8 +323,10 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'flat',
   'friendly',
   'futuristic',
+  'github',
   'glassmorphism',
   'gradient',
+  'huggingface',
   'levels',
   'lingo',
   'luxury',
@@ -319,6 +337,7 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'neobrutalism',
   'neon',
   'neumorphism',
+  'openai',
   'pacman',
   'paper',
   'perspective',
@@ -342,6 +361,7 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Infographic: 'Infografik',
   'Anime / Manga': 'Anime / Manga',
   'App / Web Design': 'App- / Webdesign',
+  'Game UI': 'Spiel-UI',
   Illustration: 'Illustration',
   'Profile / Avatar': 'Profil / Avatar',
   'Social Media Post': 'Social-Media-Post',
@@ -354,38 +374,41 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   'Social / Meme': 'Social / Meme',
   Branding: 'Branding',
   Data: 'Daten',
-  'Game UI': 'Game UI',
   Marketing: 'Marketing',
   Product: 'Produkt',
   'Short Form': 'Short Form',
   Travel: 'Reise',
 };
 
+const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [] as const;
+
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
   '3d-render': '3D-Render',
   action: 'Action',
+  'ancient-china': 'Altes China',
   anime: 'Anime',
   'app-showcase': 'App-Showcase',
-  'audio-reactive': 'Audio-reaktiv',
-  'ancient-china': 'Ancient China',
   archery: 'Archery',
   arpg: 'ARPG',
+  'audio-reactive': 'Audio-reaktiv',
   'boss-fight': 'Boss Fight',
   brand: 'Brand',
   branding: 'Branding',
   captions: 'Untertitel',
   cavalry: 'Cavalry',
   chart: 'Chart',
-  choreography: 'Choreography',
+  childlike: 'Kindlich',
+  choreography: 'Choreografie',
   cinematic: 'Filmisch',
   'cinematic-romance': 'Filmische Romanze',
-  combat: 'Combat',
+  combat: 'Kampf',
   combo: 'Combo',
   'companion-to-image': 'Companion to Image',
   counter: 'Counter',
+  crayon: 'Wachsmalstift',
   cyberpunk: 'Cyberpunk',
-  dance: 'Dance',
+  dance: 'Tanz',
   'data-viz': 'Data-Viz',
   editorial: 'Editorial',
   'elden-ring': 'Elden Ring',
@@ -393,20 +416,23 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   escort: 'Escort',
   'escort-mission': 'Escort Mission',
   fantasy: 'Fantasy',
-  fashion: 'Fashion',
+  fashion: 'Mode',
   'fighting-game': 'Fighting Game',
   food: 'Food',
   'game-cinematic': 'Game Cinematic',
-  'game-ui': 'Game UI',
+  'game-ui': 'Spiel-UI',
   'grid-sheet': 'Grid Sheet',
   guanyu: 'Guanyu',
+  'hand-drawn': 'Handgezeichnet',
   hud: 'HUD',
-  'hud-safe': 'HUD Safe',
+  'hud-safe': 'HUD-safe',
   hype: 'Hype',
   hyperframes: 'HyperFrames',
   idol: 'Idol',
+  illustration: 'Illustration',
+  'image-to-image': 'Bild-zu-Bild',
   infographic: 'Infografik',
-  japanese: 'Japanese',
+  japanese: 'Japanisch',
   karaoke: 'Karaoke',
   'key-visual': 'Key Visual',
   'kinetic-typography': 'Kinetische Typografie',
@@ -430,17 +456,20 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   portrait: 'Porträt',
   product: 'Produkt',
   'product-promo': 'Produkt-Promo',
+  rework: 'Überarbeiten',
   route: 'Route',
   saas: 'SaaS',
-  sequence: 'Sequence',
+  sequence: 'Sequenz',
   sizzle: 'Sizzle',
   social: 'Social',
   storyboard: 'Storyboard',
   'street-fighter': 'Street Fighter',
+  'style-transfer': 'Stiltransfer',
   tekken: 'Tekken',
   'three-kingdoms': 'Three Kingdoms',
   tiktok: 'TikTok',
   'title-card': 'Title Card',
+  transform: 'Transformieren',
   travel: 'Reise',
   tts: 'TTS',
   typography: 'Typografie',
@@ -615,7 +644,6 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Warme Editorial-Seite zu einem japanischen Feiertag mit Anime-Charakterkunst, nostalgischer Showa-Straßenszene und Magazinlayout.',
   },
-  'social-media-post-sensational-girl-dance-storyboard-8-shots': {},
   'social-media-post-social-media-fashion-outfit-generation': {
     title: 'Social-Media-Post - Fashion-Outfit-Generierung',
     summary:
@@ -735,7 +763,6 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
   'game-screenshot-three-kingdoms-guanyu-slaying-yanliang': {},
   'game-screenshot-three-kingdoms-lyubu-yuanmen-archery': {},
   'game-screenshot-three-kingdoms-zhaoyun-cradle-escape': {},
-  'game-ui-ancient-china-open-world-mmo-hud': {},
   'hollywood-haute-couture-fantasy-video-prompt': {
     title: 'Hollywood-Haute-Couture-Fantasy-Video-Prompt',
     summary:
@@ -879,16 +906,37 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary
     summary:
       'Filmischer Prompt für eine High-Speed-Wüsten-Wasteland-Szene mit einer laufenden Industriefabrik auf Beinen und einer Verfolgung per Rebel Bike.',
   },
+  'game-ui-ancient-china-open-world-mmo-hud': {
+    title: 'Spiel-UI - Altes China, Open-World-MMO-HUD',
+    summary:
+      'Erzeugt ein In-Game-HUD-Screenshot-Mockup für ein AAA-Open-World-MMO im alten China im filmischen photorealistischen Stil von Black Myth: Wukong, zentriert auf eine Schwertkämpferin in einer nebligen Bergszene mit vollständigem MMO-HUD (Charakterpanel, Minimap, Skill-Hotbar, Quest-Tracker, Chat).',
+  },
+  'illustration-crayon-kid-drawing-rework': {
+    title: 'Illustration - Wachsmalstift-Kinderzeichnung-Überarbeitung',
+    summary:
+      'Ein Stiltransfer-Prompt, der jedes Referenzbild in eine handgezeichnete Wachsmalstift-Illustration verwandelt, die wirkt, als hätte sie ein 10-jähriges Kind gemalt. Ersetzt die Originalfarbpalette durch helle, verspielte Wachsmalstifttöne auf sauberem weißem Papier, mit kindlicher Deko wie Schlössern, Süßigkeiten, Sternen und Regenbögen. Funktioniert als Bild-zu-Bild-Edit in GPT-image-2.',
+  },
+  'social-media-post-sensational-girl-dance-storyboard-8-shots': {
+    title: 'Social-Media-Post - Tanz-Storyboard eines Stylish Girls (8 Shots)',
+    summary:
+      'Ein vollständiges 8-Shot-Storyboard-Prompt-Set für die Erzeugung einer kohärenten Bild-für-Bild-Tanzsequenz einer stylischen Figur. Enthält gemeinsame globale Style-Token, einen wiederverwendbaren Negativ-Prompt und acht Einzelshots (Eröffnungspose → Hüftgroove → Body Wave → Beat-Drop-Hüftdreher → seitliche Hüftschwingung → Haarwurf → Power-Stance → Abschlusspose).',
+  },
 };
 
 export const GERMAN_CONTENT_IDS = {
-  skills: Object.keys(DE_SKILL_COPY),
+  skills: [
+    ...Object.keys(DE_SKILL_COPY),
+    ...DE_SKILL_IDS_WITH_EN_FALLBACK,
+  ],
   designSystems: [
     ...Object.keys(DE_DESIGN_SYSTEM_SUMMARIES),
     ...DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
   ],
   designSystemCategories: Object.keys(DE_DESIGN_SYSTEM_CATEGORIES),
-  promptTemplates: Object.keys(DE_PROMPT_TEMPLATE_COPY),
+  promptTemplates: [
+    ...Object.keys(DE_PROMPT_TEMPLATE_COPY),
+    ...DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
+  ],
   promptTemplateCategories: Object.keys(DE_PROMPT_TEMPLATE_CATEGORIES),
   promptTemplateTags: Object.keys(DE_PROMPT_TEMPLATE_TAGS),
 };

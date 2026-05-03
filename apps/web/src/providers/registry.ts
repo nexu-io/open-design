@@ -3,6 +3,13 @@ import type {
   AppVersionInfo,
   AppVersionResponse,
   ChatAttachment,
+  CodexPetSummary,
+  CodexPetsResponse,
+  SyncCommunityPetsRequest,
+  SyncCommunityPetsResponse,
+  PreviewComment,
+  PreviewCommentStatus,
+  PreviewCommentUpsertRequest,
   DeployConfigResponse,
   DeployProjectFileResponse,
   DesignSystemDetail,
@@ -37,6 +44,69 @@ export async function fetchSkills(): Promise<SkillSummary[]> {
   } catch {
     return [];
   }
+}
+
+// Pets packaged by the Codex `hatch-pet` skill — surfaced so the web
+// pet settings can offer one-click adoption right after the agent run
+// finishes. Returns an empty list (not an error) when the registry
+// folder is missing so the "Recently hatched" UI can simply render an
+// empty state.
+export async function fetchCodexPets(): Promise<CodexPetsResponse> {
+  try {
+    const resp = await fetch('/api/codex-pets');
+    if (!resp.ok) return { pets: [], rootDir: '' };
+    return (await resp.json()) as CodexPetsResponse;
+  } catch {
+    return { pets: [], rootDir: '' };
+  }
+}
+
+// One-click trigger for the daemon-side port of `sync-community-pets`.
+// Always resolves with a summary (even when the daemon errored) so the
+// caller can render a status line without having to wrap in try/catch
+// on every keystroke.
+export async function syncCommunityPets(
+  input?: SyncCommunityPetsRequest,
+): Promise<SyncCommunityPetsResponse & { error?: string }> {
+  try {
+    const resp = await fetch('/api/codex-pets/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input ?? {}),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      return {
+        wrote: 0,
+        skipped: 0,
+        failed: 0,
+        total: 0,
+        rootDir: '',
+        errors: [],
+        error: payload?.error ?? `Sync failed (${resp.status})`,
+      };
+    }
+    return (await resp.json()) as SyncCommunityPetsResponse;
+  } catch (err) {
+    return {
+      wrote: 0,
+      skipped: 0,
+      failed: 0,
+      total: 0,
+      rootDir: '',
+      errors: [],
+      error: err instanceof Error ? err.message : 'Sync request failed',
+    };
+  }
+}
+
+export function codexPetSpritesheetUrl(pet: CodexPetSummary): string {
+  // The daemon stamps an absolute path-prefix in `spritesheetUrl`; if
+  // that prefix is empty (default), it is already a same-origin path
+  // we can hand to <img src> or fetch() as-is.
+  return pet.spritesheetUrl;
 }
 
 export async function fetchSkill(id: string): Promise<SkillDetail | null> {
@@ -294,6 +364,83 @@ export async function fetchProjectFileText(
   }
 }
 
+export async function fetchPreviewComments(
+  projectId: string,
+  conversationId: string,
+): Promise<PreviewComment[]> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`,
+    );
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { comments: PreviewComment[] };
+    return json.comments ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertPreviewComment(
+  projectId: string,
+  conversationId: string,
+  input: PreviewCommentUpsertRequest,
+): Promise<PreviewComment | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { comment: PreviewComment };
+    return json.comment ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function patchPreviewCommentStatus(
+  projectId: string,
+  conversationId: string,
+  commentId: string,
+  status: PreviewCommentStatus,
+): Promise<PreviewComment | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { comment: PreviewComment };
+    return json.comment ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deletePreviewComment(
+  projectId: string,
+  conversationId: string,
+  commentId: string,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments/${encodeURIComponent(commentId)}`,
+      { method: 'DELETE' },
+    );
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function writeProjectTextFile(
   projectId: string,
   name: string,
@@ -411,27 +558,24 @@ export async function uploadProjectFiles(
       const json = (await resp.json()) as {
         files: { name: string; path: string; size?: number; originalName?: string }[];
       };
+      const responseFiles = json.files ?? [];
       uploaded.push(
-        ...(json.files ?? []).map((f) => ({
+        ...responseFiles.map((f) => ({
           path: f.path,
           name: f.originalName ?? f.name,
           kind: looksLikeImage(f.name) ? ('image' as const) : ('file' as const),
           size: f.size,
         })),
       );
-      const uploadedNames = new Map<string, number>();
-      for (const f of json.files ?? []) {
-        const key = f.originalName ?? f.name;
-        uploadedNames.set(key, (uploadedNames.get(key) ?? 0) + 1);
-      }
-      for (const f of batch) {
-        const count = uploadedNames.get(f.name) ?? 0;
-        if (count > 0) {
-          uploadedNames.set(f.name, count - 1);
-          continue;
-        }
+      // Server preserves request order; any dropped files are unmatched at the batch tail.
+      if (responseFiles.length < batch.length) {
         error ??= 'some files could not be stored';
-        failed.push({ name: f.name, error: error });
+        for (const f of batch.slice(responseFiles.length)) {
+          failed.push({
+            name: f.name,
+            error: error ?? 'some files could not be stored',
+          });
+        }
       }
     } catch {
       error = 'upload request failed';
