@@ -729,6 +729,11 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
 
+  // Remove any stale desktop-root.json from a previous run that didn't stop
+  // cleanly (SIGKILL, OOM, crash). Otherwise waitForMarker below would return
+  // instantly on the stale file instead of waiting for the new spawn's marker.
+  await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+
   const stamp = linuxDesktopStamp(config);
 
   // --appimage-extract-and-run bypasses FUSE-mounted SquashFS, which is too slow
