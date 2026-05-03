@@ -930,6 +930,32 @@ export async function uninstallPackedLinuxApp(config: ToolPackConfig): Promise<L
   };
 }
 
-export async function cleanupPackedLinuxNamespace(_config: ToolPackConfig): Promise<unknown> {
-  throw new Error("cleanupPackedLinuxNamespace: implemented in Task 17");
+export type LinuxCleanupResult = {
+  namespace: string;
+  outputRoot: string;
+  removedOutputRoot: boolean;
+  removedRuntimeNamespaceRoot: boolean;
+  runtimeNamespaceRoot: string;
+  stop: LinuxStopResult;
+};
+
+export async function cleanupPackedLinuxNamespace(config: ToolPackConfig): Promise<LinuxCleanupResult> {
+  const stop = await stopPackedLinuxApp(config);
+  const outputRoot = config.roots.output.namespaceRoot;
+  const runtimeNamespaceRoot = config.roots.runtime.namespaceRoot;
+
+  const hadOutput = await pathExists(outputRoot);
+  if (hadOutput) await rm(outputRoot, { force: true, recursive: true });
+
+  const hadRuntime = await pathExists(runtimeNamespaceRoot);
+  if (hadRuntime) await rm(runtimeNamespaceRoot, { force: true, recursive: true });
+
+  return {
+    namespace: config.namespace,
+    outputRoot,
+    removedOutputRoot: hadOutput,
+    removedRuntimeNamespaceRoot: hadRuntime,
+    runtimeNamespaceRoot,
+    stop,
+  };
 }
