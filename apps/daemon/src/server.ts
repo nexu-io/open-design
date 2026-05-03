@@ -353,8 +353,8 @@ function sendApiError(res, status, code, message, init = {}) {
 
 // Filename slug for the Content-Disposition header on archive downloads.
 // Browsers reject quotes and control bytes; we keep Unicode letters/digits
-// so a Chinese project name like "面试训练器" survives instead of becoming
-// a row of underscores.
+// so a project name with non-ASCII characters (e.g. "café-design")
+// survives instead of becoming a row of underscores.
 function sanitizeArchiveFilename(raw) {
   const cleaned = String(raw ?? '')
     .replace(/[\\/:*?"<>|]/g, '_')
@@ -1496,8 +1496,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
       const filename = `${fileSlug}.zip`;
       // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
-      // `filename*=UTF-8''…` lets modern browsers pick up Chinese/Japanese
-      // project names (e.g. 面试训练器.zip) without mojibake.
+      // `filename*=UTF-8''…` lets modern browsers pick up project names
+      // with non-ASCII characters (accents, CJK, etc.) without mojibake.
       const asciiFallback =
         filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
       res.setHeader('Content-Type', 'application/zip');

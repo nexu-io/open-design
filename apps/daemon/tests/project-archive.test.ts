@@ -63,4 +63,27 @@ describe('buildProjectArchive', () => {
     await mkdir(dir, { recursive: true });
     await expect(buildProjectArchive(projectsRoot, projectId, 'empty')).rejects.toThrow(/empty/);
   });
+
+  it('throws ENOENT with "does not exist" when the archive root is missing', async () => {
+    // Distinct from the "empty directory" case so callers — and on-call
+    // engineers reading logs — can tell a deleted project from a project
+    // that simply has no archivable files.
+    await expect(buildProjectArchive(projectsRoot, projectId, 'no-such-dir')).rejects.toMatchObject(
+      { code: 'ENOENT', message: expect.stringMatching(/does not exist/) },
+    );
+  });
+
+  it('preserves non-ASCII characters in baseName', async () => {
+    // Mirrors the server's Content-Disposition encoding: the daemon hands
+    // baseName straight into RFC 5987 filename* via encodeURIComponent, so
+    // multi-byte UTF-8 characters must survive untouched here.
+    const dirName = 'café-design';
+    const dir = path.join(projectsRoot, projectId, dirName);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html>hi');
+    const { baseName, buffer } = await buildProjectArchive(projectsRoot, projectId, dirName);
+    expect(baseName).toBe(dirName);
+    const zip = await JSZip.loadAsync(buffer);
+    expect(Object.keys(zip.files)).toContain('index.html');
+  });
 });

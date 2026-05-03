@@ -113,14 +113,18 @@ export async function exportProjectAsZip(opts: {
   }
 }
 
-function archiveRootFromFilePath(filePath: string): string {
+// Exported for unit tests. Pure string transform with no DOM dependency.
+export function archiveRootFromFilePath(filePath: string): string {
   const trimmed = (filePath || '').replace(/^\/+/, '');
   const slash = trimmed.indexOf('/');
   if (slash <= 0) return '';
   return trimmed.slice(0, slash);
 }
 
-function archiveFilenameFrom(resp: Response, fallbackTitle: string, root: string): string {
+// Exported for unit tests so the Content-Disposition fallback chain
+// (UTF-8 → legacy quoted → local slug) can be exercised against mock
+// Response objects without spinning up the daemon.
+export function archiveFilenameFrom(resp: Response, fallbackTitle: string, root: string): string {
   // Honor the daemon's Content-Disposition (it knows the project name and
   // handles RFC 5987 UTF-8 encoding). Fall back to the active directory
   // name, then to the active file title.

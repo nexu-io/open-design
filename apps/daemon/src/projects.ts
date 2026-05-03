@@ -84,13 +84,28 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
   let archiveBaseName = '';
   if (typeof root === 'string' && root.trim().length > 0) {
     archiveRoot = resolveSafe(projectRoot, root);
-    const st = await stat(archiveRoot);
-    if (!st.isDirectory()) {
-      const err = new Error('archive root is not a directory');
-      err.code = 'ENOTDIR';
-      throw err;
-    }
     archiveBaseName = path.basename(archiveRoot);
+  }
+
+  // Stat the archive root up-front so a missing/non-directory target gives a
+  // clear ENOENT/ENOTDIR error. Without this the recursive walk swallows
+  // ENOENT and we'd report the directory as "empty" instead — confusing if
+  // the project (or a subdir) was deleted concurrently with the download.
+  let rootStat;
+  try {
+    rootStat = await stat(archiveRoot);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      const e = new Error('archive root does not exist');
+      e.code = 'ENOENT';
+      throw e;
+    }
+    throw err;
+  }
+  if (!rootStat.isDirectory()) {
+    const err = new Error('archive root is not a directory');
+    err.code = 'ENOTDIR';
+    throw err;
   }
 
   const entries = [];
@@ -109,6 +124,10 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
       binary: true,
     });
   }
+  // Level 6 is the zlib default — balances speed and ratio for typical
+  // project trees (HTML/CSS/JS plus a handful of assets). Level 9 buys
+  // <5% on already-compressed PNGs/fonts at 2-3× CPU; level 1 produces
+  // noticeably larger archives. Revisit only if profiling says so.
   const buffer = await zip.generateAsync({
     type: 'nodebuffer',
     compression: 'DEFLATE',
