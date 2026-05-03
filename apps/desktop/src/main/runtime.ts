@@ -95,6 +95,21 @@ const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-drag {
     -webkit-app-region: drag;
   }
+  .entry-brand,
+  .entry-header {
+    -webkit-app-region: drag;
+  }
+  .entry-brand button,
+  .entry-brand [role="button"],
+  .entry-header button,
+  .entry-header [role="button"],
+  .entry-tabs,
+  .entry-tabs *,
+  .entry-side-resizer,
+  .avatar-popover,
+  .avatar-popover * {
+    -webkit-app-region: no-drag;
+  }
 `;
 
 function createPendingHtml(): string {
@@ -180,6 +195,30 @@ function ensureWindowVisible(window: BrowserWindow): void {
   window.focus();
 }
 
+// PPTX is rendered by the agent into the project folder and reaches the
+// renderer through a normal `<a download>` link to /api/projects/:id/raw/*.
+// Without this hook Electron writes the bytes straight to the OS Downloads
+// folder, so the user never gets to pick a destination. setSaveDialogOptions
+// makes Electron show the native Save As panel before the download starts.
+const SAVE_AS_EXTENSIONS = new Set([".pptx"]);
+
+function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  window.webContents.session.on("will-download", (_event, item) => {
+    const filename = item.getFilename();
+    const dot = filename.lastIndexOf(".");
+    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+    if (!SAVE_AS_EXTENSIONS.has(ext)) return;
+    item.setSaveDialogOptions({
+      title: "Save As",
+      defaultPath: filename,
+      filters: [
+        { name: "PowerPoint Presentation", extensions: ["pptx"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+  });
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
@@ -196,6 +235,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
   installWindowChromeCssHook(window);
   showWindowButtons(window);
+  attachDownloadSaveAsDialog(window);
   let currentUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;

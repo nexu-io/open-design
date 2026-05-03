@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
+
 /* ============================================================
    Open Design — visual language modeled on claude.ai/design
    ============================================================ */
@@ -578,7 +580,7 @@ code {
 /* -------- Split / panes -------------------------------------------- */
 .split {
   display: grid;
-  grid-template-columns: minmax(380px, 460px) 1fr;
+  grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
   min-height: 0;
 }
 .pane {
@@ -3481,6 +3483,12 @@ code {
   font-weight: 600;
   padding: 12px 20px 6px;
 }
+.df-section-count {
+  margin-left: 8px;
+  color: var(--text-faint);
+  font-weight: 500;
+  letter-spacing: 0;
+}
 .df-row {
   display: grid;
   grid-template-columns: 36px 1fr auto auto;
@@ -3551,6 +3559,23 @@ code {
 }
 .df-row:hover .df-row-menu { opacity: 1; }
 .df-row-menu:hover { background: var(--border); color: var(--text); }
+.df-section-more {
+  margin: 6px 20px 10px;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.df-section-more:hover:not(:disabled) {
+  background: var(--bg-muted);
+  color: var(--text);
+}
 .df-row-collapse {
   background: transparent;
   border: none;
@@ -6353,6 +6378,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
    ============================================================ */
 .viewer-action[data-coming-soon='true'] {
   position: relative;
+  z-index: 5;
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -6363,7 +6389,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text-strong);
+  background: rgba(17, 24, 39, 0.95);
   color: white;
   font-size: 10.5px;
   padding: 4px 8px;
@@ -6380,6 +6406,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .viewer-action[data-coming-soon='true']:hover::after { opacity: 1; }
 .viewer-toggle[data-coming-soon='true'] {
   position: relative;
+  z-index: 5;
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -6390,7 +6417,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text-strong);
+  background: rgba(17, 24, 39, 0.95);
   color: white;
   font-size: 10.5px;
   padding: 4px 8px;
@@ -8251,4 +8278,43 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.35;
+}
+
+/* --- Arabic & Persian Comfort Pass --- */
+[dir="rtl"] {
+  --sans: "Cairo", "Inter", "Vazirmatn", "Noto Sans Arabic", "Segoe UI Arabic", "Tahoma", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Scope line-height increase to prose and chat to avoid breaking compact UI chrome */
+[dir="rtl"] .prose,
+[dir="rtl"] .chat-message,
+[dir="rtl"] .msg .user-text {
+  line-height: 1.7;
+}
+
+[dir="rtl"] .avatar-item,
+[dir="rtl"] .settings-tab,
+[dir="rtl"] .ds-item-name {
+  text-align: right;
+}
+
+[dir="rtl"] .app-chrome-back svg,
+[dir="rtl"] .back-btn svg,
+[dir="rtl"] .icon-btn svg[data-lucide="chevron-left"],
+[dir="rtl"] .icon-btn svg[data-lucide="chevron-right"],
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-left"],
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-right"],
+[dir="rtl"] .newproj-tabs-arrow svg,
+[dir="rtl"] .icon-only svg[data-lucide="chevron-left"],
+[dir="rtl"] .icon-only svg[data-lucide="chevron-right"],
+[dir="rtl"] .icon-only svg[data-lucide="arrow-left"],
+[dir="rtl"] .icon-only svg[data-lucide="arrow-right"],
+[dir="rtl"] .pet-rail-collapse svg,
+[dir="rtl"] .welcome-pet-teaser svg {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .title,
+[dir="rtl"] .meta {
+  text-align: right;
 }

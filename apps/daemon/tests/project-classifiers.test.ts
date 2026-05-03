@@ -98,8 +98,13 @@ describe('mimeFor', () => {
     expect(mimeFor('a.js')).toBe('text/javascript; charset=utf-8');
     expect(mimeFor('a.mjs')).toBe('text/javascript; charset=utf-8');
     expect(mimeFor('a.cjs')).toBe('text/javascript; charset=utf-8');
+    // `.jsx` and `.tsx` are served to browsers running Babel-standalone
+    // (multi-file React prototypes), so they need a JS-family MIME — see
+    // issue #336. `.ts` stays as `text/typescript` because it has no
+    // browser-execution path; tooling reads it as TS source.
+    expect(mimeFor('a.jsx')).toBe('text/javascript; charset=utf-8');
+    expect(mimeFor('a.tsx')).toBe('text/javascript; charset=utf-8');
     expect(mimeFor('a.ts')).toBe('text/typescript; charset=utf-8');
-    expect(mimeFor('a.tsx')).toBe('text/typescript; charset=utf-8');
     expect(mimeFor('a.json')).toBe('application/json; charset=utf-8');
     expect(mimeFor('a.md')).toBe('text/markdown; charset=utf-8');
     expect(mimeFor('a.txt')).toBe('text/plain; charset=utf-8');

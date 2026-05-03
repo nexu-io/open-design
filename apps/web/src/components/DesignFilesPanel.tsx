@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -30,6 +30,8 @@ const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
 };
 
 const SECTION_ORDER: Section[] = ['pages', 'sketches', 'scripts', 'images', 'other'];
+const INITIAL_SECTION_FILE_LIMIT = 30;
+const SECTION_FILE_LIMIT_INCREMENT = 200;
 
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
@@ -55,6 +57,8 @@ export function DesignFilesPanel({
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
+  const [isSectionExpansionPending, startSectionExpansion] = useTransition();
 
   const grouped = useMemo(() => {
     const groups: Record<Section, ProjectFile[]> = {
@@ -156,12 +160,18 @@ export function DesignFilesPanel({
           {files.length === 0 ? (
             <div className="df-empty">{t('designFiles.empty')}</div>
           ) : (
-            SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => (
+            SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => {
+              const sectionFiles = grouped[section];
+              const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
+              const visibleFiles = sectionFiles.slice(0, visibleLimit);
+              const hiddenCount = sectionFiles.length - visibleFiles.length;
+              return (
               <div className="df-section" key={section}>
                 <div className="df-section-label">
                   {t(SECTION_LABEL_KEY[section])}
+                  <span className="df-section-count">{sectionFiles.length}</span>
                 </div>
-                {grouped[section].map((f) => {
+                {visibleFiles.map((f) => {
                   const active = preview === f.name;
                   const isHovered = hover === f.name;
                   return (
@@ -206,8 +216,35 @@ export function DesignFilesPanel({
                     </button>
                   );
                 })}
+                {hiddenCount > 0 ? (
+                  <button
+                    type="button"
+                    className="df-section-more"
+                    disabled={isSectionExpansionPending}
+                    aria-busy={isSectionExpansionPending}
+                    onClick={() =>
+                      startSectionExpansion(() => {
+                        setSectionLimits((curr) => ({
+                          ...curr,
+                          [section]: Math.min(
+                            sectionFiles.length,
+                            visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
+                          ),
+                        }));
+                      })
+                    }
+                  >
+                    <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
+                    <span>
+                      {t('designFiles.showMore', {
+                        n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
+                      })}
+                    </span>
+                  </button>
+                ) : null}
               </div>
-            ))
+              );
+            })
           )}
           <div
             className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
@@ -250,10 +287,12 @@ export function DesignFilesPanel({
           className="df-row-popover"
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               const name = menuPos.name;
               setMenuPos(null);
               onOpenFile(name);
@@ -266,7 +305,13 @@ export function DesignFilesPanel({
             download={menuPos.name}
             style={{ textDecoration: 'none' }}
           >
-            <button type="button" onClick={() => setMenuPos(null)}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuPos(null);
+              }}
+            >
               {t('designFiles.download')}
             </button>
           </a>
@@ -274,7 +319,9 @@ export function DesignFilesPanel({
             type="button"
             className="danger"
             data-testid={`design-file-delete-${menuPos.name}`}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
               const name = menuPos.name;
               setMenuPos(null);
               onDeleteFile(name);

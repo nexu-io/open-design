@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja' | 'ko' | 'pl' | 'hu';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja', 'ko', 'pl', 'hu'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -13,10 +13,12 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'es-ES': 'Español (España)',
   'ru': 'Русский',
   'fa': 'فارسی',
+  'ar': 'العربية',
   'ja': '日本語',
   'ko': '한국어',
   'pl': 'Polski',
-  'hu': 'Magyar'
+  'hu': 'Magyar',
+  'fr': 'Français'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -135,6 +137,32 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+
+  // Notifications (settings + system notifications)
+  'settings.notifications': string;
+  'settings.notificationsHint': string;
+  'settings.notifyCompletionSound': string;
+  'settings.notifyCompletionSoundHint': string;
+  'settings.notifySuccessSound': string;
+  'settings.notifyFailureSound': string;
+  'settings.notifyDesktop': string;
+  'settings.notifyDesktopHint': string;
+  'settings.notifyDesktopBlocked': string;
+  'settings.notifyDesktopUnsupported': string;
+  'settings.notifyTest': string;
+  'settings.notifyTestSent': string;
+  'settings.notifyTestFailed': string;
+  'settings.notifySoundDing': string;
+  'settings.notifySoundChime': string;
+  'settings.notifySoundTwoToneUp': string;
+  'settings.notifySoundPluck': string;
+  'settings.notifySoundBuzz': string;
+  'settings.notifySoundTwoToneDown': string;
+  'settings.notifySoundThud': string;
+  'notify.successTitle': string;
+  'notify.failureTitle': string;
+  'notify.successBody': string;
+  'notify.failureBody': string;
 
   // Entry view / tabs
   'entry.tabDesigns': string;
@@ -466,6 +494,7 @@ export interface Dict {
   'designFiles.sectionImages': string;
   'designFiles.sectionSketches': string;
   'designFiles.sectionOther': string;
+  'designFiles.showMore': string;
   'designFiles.kindHtml': string;
   'designFiles.kindImage': string;
   'designFiles.kindSketch': string;
@@ -546,6 +575,7 @@ export interface Dict {
   'fileViewer.exportPptxNa': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
+  'fileViewer.exportMd': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;

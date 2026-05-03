@@ -5,6 +5,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 export type CommandInvocation = {
   args: string[];
   command: string;
+  // When true, callers must forward this to `child_process.spawn` /
+  // `child_process.execFile` options. Required for Windows `.bat` / `.cmd`
+  // shims so cmd.exe's `/s /c` quoting survives Node's default per-arg
+  // CommandLineToArgvW escaping. See `createCommandInvocation`.
+  windowsVerbatimArguments?: boolean;
 };
 
 export type ProcessStampShape = object;
@@ -147,12 +152,32 @@ function quoteWindowsCommandArg(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+// Build the `cmd.exe /d /s /c "<line>"` invocation Node uses internally for
+// `shell: true`. The outer `"..."` plus `windowsVerbatimArguments: true` is
+// the only shape that survives both layers of quoting:
+//
+// 1. Node would otherwise escape each argv element with CommandLineToArgvW
+//    rules (turning `"path with space"` into `\"path with space\"`), which
+//    cmd.exe does not understand.
+// 2. cmd.exe with `/s /c` strips exactly one leading and one trailing `"`
+//    from the rest of the command line. The outer wrap absorbs that strip
+//    so any inner per-arg quoting stays intact.
+//
+// Without this, paths containing spaces (`C:\Users\First Last\...\foo.cmd`)
+// get split on the first space and cmd.exe reports "not recognized as an
+// internal or external command" — see issue #315.
+function buildCmdShimInvocation(command: string, args: string[], env: NodeJS.ProcessEnv): CommandInvocation {
+  const inner = [command, ...args].map(quoteWindowsCommandArg).join(" ");
+  return {
+    args: ["/d", "/s", "/c", `"${inner}"`],
+    command: env.ComSpec ?? process.env.ComSpec ?? "cmd.exe",
+    windowsVerbatimArguments: true,
+  };
+}
+
 export function createCommandInvocation({ args = [], command, env = process.env }: CommandInvocationRequest): CommandInvocation {
   if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
-    return {
-      args: ["/d", "/s", "/c", [command, ...args].map(quoteWindowsCommandArg).join(" ")],
-      command: env.ComSpec ?? process.env.ComSpec ?? "cmd.exe",
-    };
+    return buildCmdShimInvocation(command, args, env);
   }
   return { args, command };
 }
@@ -161,10 +186,7 @@ export function createPackageManagerInvocation(args: string[], env: NodeJS.Proce
   const execPath = env.npm_execpath;
   if (execPath) return { args: [execPath, ...args], command: process.execPath };
   if (process.platform === "win32") {
-    return {
-      args: ["/d", "/s", "/c", ["pnpm", ...args].map(quoteWindowsCommandArg).join(" ")],
-      command: env.ComSpec ?? process.env.ComSpec ?? "cmd.exe",
-    };
+    return buildCmdShimInvocation("pnpm", args, env);
   }
   return { args, command: "pnpm" };
 }
@@ -188,6 +210,7 @@ export async function spawnBackgroundProcess(request: SpawnProcessRequest): Prom
     env: request.env,
     stdio: createLoggedStdio(request.logFd),
     windowsHide: process.platform === "win32",
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
   await waitForChildSpawn(child);
   if (child.pid == null) throw new Error(`failed to spawn background process: ${invocation.command}`);
@@ -203,6 +226,7 @@ export async function spawnLoggedProcess(request: SpawnProcessRequest): Promise<
     env: request.env,
     stdio: createLoggedStdio(request.logFd),
     windowsHide: process.platform === "win32",
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
   await waitForChildSpawn(child);
   if (child.pid == null) throw new Error(`failed to spawn process: ${invocation.command}`);

@@ -13,6 +13,7 @@ import { de } from './locales/de';
 import { en } from './locales/en';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
+import { ar } from './locales/ar';
 import { ja } from './locales/ja';
 import { ko } from './locales/ko';
 import { ptBR } from './locales/pt-BR';
@@ -21,6 +22,7 @@ import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
 import { pl } from './locales/pl';
 import { hu } from './locales/hu';
+import { fr } from './locales/fr';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -37,10 +39,12 @@ const DICTS: Record<Locale, Dict> = {
   'es-ES': esES,
   'ru': ru,
   'fa': fa,
+  'ar': ar,
   'ja': ja,
   'ko': ko,
   'pl': pl,
   'hu': hu,
+  'fr': fr,
 };
 
 const LS_KEY = 'open-design:locale';
@@ -74,14 +78,19 @@ interface ProviderProps {
   children: ReactNode;
 }
 
+const RTL_LOCALES: Locale[] = ['ar', 'fa'];
+
 export function I18nProvider({ initial, children }: ProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectInitialLocale());
 
-  // Keep <html lang="…"> in sync so screen readers and CSS hooks pick the
-  // right language token without each component having to set lang itself.
+  // Keep <html lang="…" dir="…"> in sync so screen readers and CSS hooks
+  // pick the right language token and direction without each component
+  // having to set it itself.
   useEffect(() => {
     if (typeof document !== 'undefined') {
+      const dir = RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr';
       document.documentElement.setAttribute('lang', locale);
+      document.documentElement.setAttribute('dir', dir);
     }
   }, [locale]);
 

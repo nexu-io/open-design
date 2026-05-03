@@ -9,6 +9,7 @@
 
 import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import JSZip from 'jszip';
 import {
   inferLegacyManifest,
   parsePersistedManifest,
@@ -68,6 +69,93 @@ async function collectFiles(dir, relDir, out) {
       artifactKind: manifest?.kind,
       artifactManifest: manifest,
     });
+  }
+}
+
+// Build a ZIP of every file under the project directory (or under `root`,
+// if it points at a subdirectory). Mirrors listFiles' filtering — dotfiles
+// and `.artifact.json` sidecars are excluded — so the archive matches what
+// the user sees in the file panel. Used by the "Download as .zip" share
+// menu item, which exports the user's actual project tree (e.g. the
+// uploaded `ui-design/` folder), not just the rendered HTML.
+export async function buildProjectArchive(projectsRoot, projectId, root) {
+  const projectRoot = projectDir(projectsRoot, projectId);
+  let archiveRoot = projectRoot;
+  let archiveBaseName = '';
+  if (typeof root === 'string' && root.trim().length > 0) {
+    archiveRoot = resolveSafe(projectRoot, root);
+    archiveBaseName = path.basename(archiveRoot);
+  }
+
+  // Stat the archive root up-front so a missing/non-directory target gives a
+  // clear ENOENT/ENOTDIR error. Without this the recursive walk swallows
+  // ENOENT and we'd report the directory as "empty" instead — confusing if
+  // the project (or a subdir) was deleted concurrently with the download.
+  let rootStat;
+  try {
+    rootStat = await stat(archiveRoot);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      const e = new Error('archive root does not exist');
+      e.code = 'ENOENT';
+      throw e;
+    }
+    throw err;
+  }
+  if (!rootStat.isDirectory()) {
+    const err = new Error('archive root is not a directory');
+    err.code = 'ENOTDIR';
+    throw err;
+  }
+
+  const entries = [];
+  await collectArchiveEntries(archiveRoot, '', entries);
+  if (entries.length === 0) {
+    const err = new Error('archive root is empty');
+    err.code = 'ENOENT';
+    throw err;
+  }
+
+  const zip = new JSZip();
+  for (const entry of entries) {
+    const buf = await readFile(entry.fullPath);
+    zip.file(entry.relPath, buf, {
+      date: new Date(entry.mtime),
+      binary: true,
+    });
+  }
+  // Level 6 is the zlib default — balances speed and ratio for typical
+  // project trees (HTML/CSS/JS plus a handful of assets). Level 9 buys
+  // <5% on already-compressed PNGs/fonts at 2-3× CPU; level 1 produces
+  // noticeably larger archives. Revisit only if profiling says so.
+  const buffer = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+  return { buffer, baseName: archiveBaseName };
+}
+
+async function collectArchiveEntries(dir, relDir, out) {
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return;
+    throw err;
+  }
+  for (const e of entries) {
+    if (e.name.startsWith('.')) continue;
+    if (!e.isDirectory() && !e.isFile()) continue;
+    const rel = relDir ? `${relDir}/${e.name}` : e.name;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      await collectArchiveEntries(full, rel, out);
+      continue;
+    }
+    if (e.name.endsWith('.artifact.json')) continue;
+    const st = await stat(full);
+    out.push({ relPath: rel, fullPath: full, mtime: st.mtimeMs });
   }
 }
 
@@ -245,8 +333,14 @@ const EXT_MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.cjs': 'text/javascript; charset=utf-8',
+  '.jsx': 'text/javascript; charset=utf-8',
   '.ts': 'text/typescript; charset=utf-8',
-  '.tsx': 'text/typescript; charset=utf-8',
+  // `.tsx` previously served as `text/typescript`, which browser module
+  // loaders and strict CSPs do not accept as a JavaScript MIME. Multi-file
+  // React prototypes that load `.tsx` via Babel-standalone (`<script
+  // type="text/babel" src="…">`) need a JS-family Content-Type for the
+  // browser fetch to succeed. Upstream of issue #336.
+  '.tsx': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
