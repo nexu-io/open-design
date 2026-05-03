@@ -388,14 +388,35 @@ function oneLine(s) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Short-lived cache for the project list. A typical agent session
+// makes several name-based lookups in quick succession; without this
+// each one re-fetches /api/projects. The TTL is short so a project
+// renamed in the OD UI shows up within a few seconds.
+const PROJECT_LIST_TTL_MS = 5000;
+let projectListCache = null;
+
+async function fetchProjectList(baseUrl) {
+  const now = Date.now();
+  if (
+    projectListCache &&
+    projectListCache.baseUrl === baseUrl &&
+    now - projectListCache.t < PROJECT_LIST_TTL_MS
+  ) {
+    return projectListCache.list;
+  }
+  const data = await getJson(`${baseUrl}/api/projects`);
+  const list = Array.isArray(data?.projects) ? data.projects : [];
+  projectListCache = { baseUrl, t: now, list };
+  return list;
+}
+
 async function resolveProjectId(baseUrl, arg) {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
   }
   if (UUID_RE.test(arg)) return arg;
 
-  const data = await getJson(`${baseUrl}/api/projects`);
-  const list = Array.isArray(data?.projects) ? data.projects : [];
+  const list = await fetchProjectList(baseUrl);
   if (list.length === 0) {
     throw new Error('no projects on this daemon');
   }
