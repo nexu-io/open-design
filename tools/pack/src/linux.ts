@@ -511,12 +511,20 @@ async function runBuildInContainer(config: ToolPackConfig): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const child = spawn("docker", args, { stdio: "inherit", env: process.env });
-    child.on("exit", (code) => {
-      if (code === 0 || code === null) {
+    // In Node's child-process `exit` event, code === null means the child was
+    // terminated by a signal (SIGTERM, SIGKILL, etc.). A signal-terminated
+    // build is NOT a successful build — the AppImage may be missing or partial,
+    // so we surface it as a failure instead of resolving silently.
+    child.on("exit", (code, signal) => {
+      if (code === 0 && signal == null) {
         resolve();
-      } else {
-        reject(new Error(`docker build exited with code ${code}`));
+        return;
       }
+      if (signal != null) {
+        reject(new Error(`docker build was terminated by signal ${signal}`));
+        return;
+      }
+      reject(new Error(`docker build exited with code ${code}`));
     });
     child.on("error", (error: Error) => {
       reject(error);
