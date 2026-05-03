@@ -19,7 +19,6 @@ import {
   createPackageManagerInvocation,
   createProcessStampArgs,
   listProcessSnapshots,
-  matchesStampedProcess,
   readLogTail,
   spawnBackgroundProcess,
   stopProcesses,
@@ -868,11 +867,27 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
     };
   }
 
-  const stampOk = matchesStampedProcess(
-    candidate,
-    { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source: SIDECAR_SOURCES.TOOLS_PACK },
-    OPEN_DESIGN_SIDECAR_CONTRACT,
-  );
+  // Validate the marker stamp (file content written by apps/packaged itself)
+  // rather than the process command line. Menu launches via the .desktop
+  // entry don't pass createProcessStampArgs to the AppImage -- they only set
+  // OD_NAMESPACE -- so apps/packaged falls back to a SIDECAR_SOURCES.PACKAGED
+  // stamp. Validating the process command would reject those legitimate
+  // launches as `unmanaged`, which on uninstall would also remove the
+  // AppImage/desktop/icon files out from under the still-running app.
+  // Accept either TOOLS_PACK (CLI start) or PACKAGED (menu launch). Mirrors
+  // the dual-source acceptance pattern in mac.ts:709-714.
+  const expectedIpc = resolveAppIpcPath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: config.namespace,
+  });
+  const stampOk =
+    marker.stamp.app === APP_KEYS.DESKTOP &&
+    marker.stamp.mode === SIDECAR_MODES.RUNTIME &&
+    marker.stamp.namespace === config.namespace &&
+    marker.stamp.ipc === expectedIpc &&
+    (marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK ||
+      marker.stamp.source === SIDECAR_SOURCES.PACKAGED);
   const exePath = await readProcessExe(marker.pid);
   const env = await readProcessEnv(marker.pid);
   // marker.appPath is unreliable on Linux (apps/packaged writes "/"). Use the
