@@ -108,6 +108,15 @@ function* drain(state: State): Generator<PanelEvent> {
       if (headEnd < 0) break;
       const head = slice.slice('<PANELIST'.length, headEnd);
       const body = slice.slice(headEnd + 1, closeIdx);
+      // Nesting guard: if another <PANELIST opening appears inside what we believe
+      // is this PANELIST body, the current block was never closed and we are about
+      // to mis-attribute the next sibling's content. Treat as malformed.
+      if (/<PANELIST[\s>]/.test(body)) {
+        throw new MalformedBlockError(
+          `PANELIST block at position ${state.consumed + cursor} never closed before the next <PANELIST opening`,
+          state.consumed + cursor,
+        );
+      }
       const attrs = parseAttrs(head);
       const roleStr = attrs['role'];
 

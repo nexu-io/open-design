@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PanelEvent } from '@open-design/contracts';
 import { parseCritiqueStream } from '../src/critique/parser.js';
+import {
+  MalformedBlockError,
+  OversizeBlockError,
+  MissingArtifactError,
+} from '../src/critique/errors.js';
 
 function fixture(name: string): string {
   return readFileSync(
@@ -87,5 +92,39 @@ describe('parseCritiqueStream -- happy', () => {
       expect(ship.round).toBe(3);
       expect(ship.composite).toBeGreaterThanOrEqual(8.0);
     }
+  });
+});
+
+describe('parseCritiqueStream -- failure modes', () => {
+  it('throws MalformedBlockError on unbalanced tags', async () => {
+    const text = fixture('malformed-unbalanced.txt');
+    await expect(collect(parseCritiqueStream(chunkify(text), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+    }))).rejects.toBeInstanceOf(MalformedBlockError);
+  });
+
+  it('throws OversizeBlockError when a single block exceeds the cap', async () => {
+    const text = fixture('malformed-oversize.txt');
+    await expect(collect(parseCritiqueStream(chunkify(text), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+    }))).rejects.toBeInstanceOf(OversizeBlockError);
+  });
+
+  it('throws MissingArtifactError when designer round 1 has no <ARTIFACT>', async () => {
+    const text = fixture('missing-artifact.txt');
+    await expect(collect(parseCritiqueStream(chunkify(text), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+    }))).rejects.toBeInstanceOf(MissingArtifactError);
+  });
+
+  it('emits parser_warning with kind=duplicate_ship and keeps the first SHIP', async () => {
+    const text = fixture('duplicate-ship.txt');
+    const events = await collect(parseCritiqueStream(chunkify(text), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+    }));
+    expect(events.filter(e => e.type === 'ship').length).toBe(1);
+    expect(
+      events.find(e => e.type === 'parser_warning' && e.kind === 'duplicate_ship')
+    ).toBeDefined();
   });
 });
