@@ -225,6 +225,6 @@ open-design/
 Ce Quickstart est la graine exécutable de la spec dans [`docs/`](docs/). La spec décrit vers quoi le projet grandit (voir [`docs/roadmap.md`](docs/roadmap.md)). Points clés :
 
 - `docs/architecture.md` décrit le stack livré : Next.js 16 App Router devant, daemon local derrière, et rewrites `apps/web/next.config.ts` en dev pour que le navigateur parle toujours à la même surface `/api`.
-- `docs/skills-protocol.md` décrit le frontmatter complet `od:` (typed inputs, sliders, capability gating). Ce MVP lit seulement `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` ; étendez `apps/daemon/src/skills.ts` pour ajouter le reste.
+- `docs/skills-protocol.md` décrit le schéma `od:` complet. Le daemon lit les metadata runtime utiles depuis `SKILL.md` pour router les Skills, composer le prompt, afficher les exemples et configurer les surfaces web / image / vidéo / audio ; le protocole reste la référence pour les champs avancés.
 - `docs/agent-adapters.md` anticipe un dispatch plus riche (capability detection, streaming tool-calls). Notre `apps/daemon/src/agents.ts` est un dispatcher minimal : suffisant pour prouver le câblage.
-- `docs/modes.md` liste quatre modes : prototype / deck / template / design-system. Nous livrons des Skills pour les deux premiers ; le picker filtre déjà par `mode`.
+- `docs/modes.md` décrit les workflows prototype / deck / template / design-system. Le catalogue runtime peut aussi exposer des Skills pour les surfaces image, vidéo et audio ; le picker filtre les entrées par `mode` et `surface`.
