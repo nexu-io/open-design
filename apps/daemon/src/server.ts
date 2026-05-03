@@ -1781,12 +1781,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/projects/:id/files/:name', async (req, res) => {
+  app.get('/api/projects/:id/files/*', async (req, res) => {
     try {
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
-        req.params.name,
+        req.params[0],
       );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
