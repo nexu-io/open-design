@@ -852,6 +852,7 @@ export function OneShotWorkflows({
           tokens: state.tokens,
           deployTarget: state.deployTarget,
           deployCommandEvidence: state.deployCommandEvidence,
+          deployVerification: state.deployVerification,
           adapterStatus: adapter.status,
           qualityReviews: state.qualityReviews,
           pins: state.pins,

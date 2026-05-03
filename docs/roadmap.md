@@ -44,13 +44,17 @@ Latest shipped slice:
 2. Website Studio now generates `site_plan.md`, `section_library.md`, `design_tokens.md`, `codex_build_brief.md`, and `responsive_qa.md` artifact bodies.
 3. Quality gates now carry real `pass`, `needs review`, or `blocked` review state with notes and evidence.
 4. Website Builder adapter stubs now return honest `prepare-only`, `verified-local`, or `verified-deployed` states.
+5. Website Studio project creation now writes the generated markdown packet files into the daemon project folder as real artifacts.
+6. Evidence Studio v1 can scan a local folder and classify source files as originals, thumbnails, supporting assets, or flagged files.
+7. Website Builder adapter verification now checks the target URL through the daemon before awarding local or deployed status.
+8. Website Studio projects now include a Project Packet view for artifacts, gates, pins, adapter state, and evidence trail.
 
 Next implementation slice:
 
-1. Persist generated Website Studio artifact files through the daemon project store, not only workflow metadata.
-2. Add artifact comments and pin overlays that attach to exact Website Studio sections, CoverVision lanes, and Evidence Studio sources.
-3. Expand Evidence Studio v1 from workbench state into real local intake, classification, source-path preservation, `DESIGN.md`, opportunity packet, and Codex brief generation.
-4. Wire Website Builder adapter execution to real commands while preserving the existing honest status contract.
+1. Add exact-position artifact comments and pin overlays inside markdown/preview tabs.
+2. Expand Evidence Studio v1 from folder scan into generated `DESIGN.md`, opportunity packet, and Codex brief files.
+3. Wire Website Builder adapter execution to real prepare/build/deploy commands while preserving the existing honest status contract.
+4. Add Project Packet export history and packet replay so a prior Website Studio packet can be regenerated or transferred cleanly.
 
 Trust rule: website and deployment flows must never invent live URLs or fake published states. If no real deploy URL or verified command exists, the status is prepare-only.
 

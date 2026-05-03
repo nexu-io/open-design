@@ -8,6 +8,10 @@ import type {
   SkillSummary,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
+import type {
+  EvidenceStudioScanResult,
+  WebsiteBuilderAdapterVerification,
+} from '../state/websiteStudio';
 
 export async function fetchAgents(): Promise<AgentInfo[]> {
   try {
@@ -68,6 +72,41 @@ export async function daemonIsLive(): Promise<boolean> {
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+export async function verifyWebsiteAdapterTarget(input: {
+  target: string;
+  commandEvidence?: string;
+}): Promise<WebsiteBuilderAdapterVerification | null> {
+  try {
+    const resp = await fetch('/api/website-adapter/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { verification: WebsiteBuilderAdapterVerification };
+    return json.verification ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function scanEvidenceSource(input: {
+  sourcePath: string;
+}): Promise<EvidenceStudioScanResult | null> {
+  try {
+    const resp = await fetch('/api/evidence/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { scan: EvidenceStudioScanResult };
+    return json.scan ?? null;
+  } catch {
+    return null;
   }
 }
 

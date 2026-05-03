@@ -7,6 +7,32 @@ import {
 export type WebsiteQualityGateStatus = 'pass' | 'needs-review' | 'blocked';
 export type WebsiteBuilderAdapterStatus = 'prepare-only' | 'verified-local' | 'verified-deployed';
 
+export interface WebsiteBuilderAdapterVerification {
+  target: string;
+  status: 'ok' | 'failed';
+  checkedAt: number;
+  httpStatus?: number;
+  detail: string;
+}
+
+export interface EvidenceStudioScanFile {
+  path: string;
+  role: 'original' | 'thumbnail' | 'supporting' | 'flagged';
+  size: number;
+  reason: string;
+}
+
+export interface EvidenceStudioScanResult {
+  sourcePath: string;
+  scannedAt: number;
+  originals: number;
+  thumbnails: number;
+  supportingAssets: number;
+  flaggedFiles: number;
+  files: EvidenceStudioScanFile[];
+  error?: string;
+}
+
 export interface WebsiteStudioPin {
   id: string;
   target: string;
@@ -35,6 +61,7 @@ export interface WebsiteStudioWorkbenchState {
   tokens: Record<string, string>;
   deployTarget: string;
   deployCommandEvidence: string;
+  deployVerification: WebsiteBuilderAdapterVerification | null;
   qualityReviews: WebsiteStudioQualityReview[];
   pins: WebsiteStudioPin[];
   evidenceStudio: {
@@ -44,6 +71,9 @@ export interface WebsiteStudioWorkbenchState {
     supportingAssets: number;
     flaggedFiles: number;
     reviewGate: string;
+    files: EvidenceStudioScanFile[];
+    lastScanAt: number | null;
+    scanError: string | null;
   };
   updatedAt: number;
 }
@@ -80,6 +110,7 @@ export function createDefaultWebsiteStudioState(): WebsiteStudioWorkbenchState {
     tokens: DEFAULT_TOKENS,
     deployTarget: '',
     deployCommandEvidence: '',
+    deployVerification: null,
     qualityReviews: ONESHOT_QUALITY_GATES.map((gate) => ({
       id: gate.id,
       title: gate.title,
@@ -108,6 +139,9 @@ export function createDefaultWebsiteStudioState(): WebsiteStudioWorkbenchState {
       supportingAssets: 0,
       flaggedFiles: 0,
       reviewGate: 'Source paths required before claims become export-ready.',
+      files: [],
+      lastScanAt: null,
+      scanError: null,
     },
     updatedAt: Date.now(),
   };
@@ -146,17 +180,21 @@ export function resolveWebsiteBuilderAdapterStatus(
 } {
   const target = state.deployTarget.trim();
   const commandEvidence = state.deployCommandEvidence.trim();
+  const verified =
+    state.deployVerification?.target === target &&
+    state.deployVerification.status === 'ok';
   if (
+    verified &&
     target.startsWith('http://127.0.0.1') ||
-    target.startsWith('http://localhost')
+    (verified && target.startsWith('http://localhost'))
   ) {
     return {
       status: 'verified-local',
       label: 'Verified local',
-      detail: target,
+      detail: state.deployVerification?.detail ?? target,
     };
   }
-  if (target.startsWith('https://') && commandEvidence.length > 0) {
+  if (verified && target.startsWith('https://') && commandEvidence.length > 0) {
     return {
       status: 'verified-deployed',
       label: 'Verified deployed',
@@ -254,6 +292,12 @@ export function buildWebsiteStudioArtifacts(
       `Supporting assets: ${state.evidenceStudio.supportingAssets}`,
       `Flagged files: ${state.evidenceStudio.flaggedFiles}`,
       `Review gate: ${state.evidenceStudio.reviewGate}`,
+      `Last scan: ${state.evidenceStudio.lastScanAt ? new Date(state.evidenceStudio.lastScanAt).toISOString() : 'not scanned'}`,
+      '',
+      '## Evidence Files',
+      ...(state.evidenceStudio.files.length
+        ? state.evidenceStudio.files.map((file) => `- ${file.role}: ${file.path} (${file.reason})`)
+        : ['- No evidence files scanned yet.']),
     ].join('\n'),
   };
 }
@@ -292,12 +336,17 @@ function normalizeWebsiteStudioState(input: Partial<WebsiteStudioWorkbenchState>
         ? input.selectedSectionIds
         : fallback.selectedSectionIds,
     tokens: { ...fallback.tokens, ...(input.tokens ?? {}) },
+    deployVerification: input.deployVerification ?? fallback.deployVerification,
     qualityReviews:
       Array.isArray(input.qualityReviews) && input.qualityReviews.length > 0
         ? input.qualityReviews
         : fallback.qualityReviews,
     pins: Array.isArray(input.pins) ? input.pins : fallback.pins,
-    evidenceStudio: { ...fallback.evidenceStudio, ...(input.evidenceStudio ?? {}) },
+    evidenceStudio: {
+      ...fallback.evidenceStudio,
+      ...(input.evidenceStudio ?? {}),
+      files: Array.isArray(input.evidenceStudio?.files) ? input.evidenceStudio.files : fallback.evidenceStudio.files,
+    },
     updatedAt: typeof input.updatedAt === 'number' ? input.updatedAt : fallback.updatedAt,
   };
 }

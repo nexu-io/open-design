@@ -15,13 +15,15 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - The shared Design OS model now includes concrete module data for Website Studio sections, shared quality gates, professional output controls, CoverVision OS deepening, Evidence Studio pipeline, and adapter-layer guardrails.
 - Website Studio v1 is now a first-class workflow pack. It persists intake, sitemap, selected sections, tokens, deploy target, deploy command evidence, quality reviews, comments/pins, Evidence Studio counters, and generated artifacts into workflow project metadata.
 - Website Studio now generates deterministic artifact bodies for `site_plan.md`, `section_library.md`, `design_tokens.md`, `codex_build_brief.md`, and `responsive_qa.md`, and injects those exact files into the agent prompt when launching the packet.
+- Website Studio packets are now seeded into the daemon project folder as real markdown files with artifact manifests, so the generated project opens with the plan, section library, tokens, build brief, and responsive QA on disk.
 - The Website Studio v1 workflow includes a future handoff contract for the dedicated Website Builder / Design OS through `generateSitePlan`, `generatePage`, `generateSection`, `validateResponsive`, `exportBuildBrief`, and `publishOrPrepareDeploy`.
-- The Website Studio deploy rule is explicit and visible in the workbench: OneShot must not claim a website is deployed unless a real local URL or verified deployment command exists. The adapter states are `prepare-only`, `verified-local`, and `verified-deployed`.
+- The Website Studio deploy rule is explicit and visible in the workbench: OneShot must not claim a website is deployed unless the daemon has verified a real local URL or an external HTTPS target with recorded deployment command evidence. The adapter states are `prepare-only`, `verified-local`, and `verified-deployed`.
 - CoverVision OS is positioned as the premium book-cover studio inside OneShot, not the whole OneShot identity.
 - CoverVision OS now has a deeper premium studio panel for cover concept lanes, typography lab, series system, and ARC/ad/audiobook crop packs.
-- Evidence Studio now has a visible pipeline for ingesting and classifying sources, preserving evidence trails, generating `DESIGN.md`, and creating opportunity/Codex packets. Website Studio also includes an Evidence Studio v1 source panel so source paths and file counts can travel with the website packet.
+- Evidence Studio now has a visible pipeline for ingesting and classifying sources, preserving evidence trails, generating `DESIGN.md`, and creating opportunity/Codex packets. Website Studio also includes an Evidence Studio v1 source panel that can scan a local source folder, classify originals, thumbnails, supporting assets, and flagged files, and carry the evidence list into the website packet.
 - Professional output controls are now part of the product language: critique panel, quality scorecard, comments and pins, tweak controls, export history, evidence trail, review before export, and no fake deploy/status.
 - Shared quality gates now appear as a cross-studio scorecard with real review state: each gate can be `pass`, `needs review`, or `blocked`, with notes and evidence carried into Website Studio artifacts.
+- Website Studio projects now show a `Project Packet` view summarizing disk artifacts, quality gate state, pins/comments, adapter status, and evidence trail with one-click artifact opening.
 - Workflow cards seed the right project type, skill, design system preference, prompt, quality checkpoints, and export expectations.
 - Workflow-created projects preserve their workflow identity in metadata, show the selected production path in the project header, and inject workflow gates/export expectations into the agent prompt stack.
 - Workflow scorecards are now structured metadata, so each production path carries its own critique rubric into the agent prompt even after the starter prompt changes.
@@ -65,8 +67,8 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Persist generated Website Studio artifact files through the daemon project store, not only workflow metadata.
-2. Add artifact comments and pin overlays to exact Website Studio sections, CoverVision lanes, and Evidence Studio sources.
-3. Build the adapter execution layer behind the Website Studio contract so the dedicated Website Builder / Design OS can plug in later without replacing OneShot's project/library/export core.
+1. Add exact-position artifact comments and pin overlays inside markdown/preview tabs, not only packet-level pin summaries.
+2. Expand Evidence Studio v1 from source scan into generated `DESIGN.md`, opportunity packet, and Codex brief files.
+3. Wire Website Builder adapter execution to real prepare/build/deploy commands while preserving the current honest status contract.
 4. Build the Operational Atelier intake screen: source rail, precision-tray drop zone, evidence canvas preview, inspector/action panel, and run deck using `docs/DESIGN.md`.
-5. Expand Evidence Studio v1 from packet state into real local file intake, classification, source-path preservation, `DESIGN.md`, opportunity packet, and Codex brief generation.
+5. Add Project Packet export history and packet replay so a prior Website Studio packet can be regenerated or transferred cleanly.

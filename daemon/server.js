@@ -178,6 +178,222 @@ function sendMulterError(res, err) {
   return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
 }
 
+async function verifyWebsiteAdapterTarget(target, commandEvidence = '') {
+  const trimmed = typeof target === 'string' ? target.trim() : '';
+  const checkedAt = Date.now();
+  if (!trimmed) {
+    return {
+      target: trimmed,
+      status: 'failed',
+      checkedAt,
+      detail: 'No URL was provided.',
+    };
+  }
+
+  let url;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return {
+      target: trimmed,
+      status: 'failed',
+      checkedAt,
+      detail: 'Target is not a valid URL.',
+    };
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      target: trimmed,
+      status: 'failed',
+      checkedAt,
+      detail: 'Only http and https URLs can be verified.',
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    const hasDeployEvidence = typeof commandEvidence === 'string' && commandEvidence.trim().length > 0;
+    if (url.protocol === 'https:' && !hasDeployEvidence) {
+      return {
+        target: trimmed,
+        status: 'failed',
+        checkedAt,
+        httpStatus: resp.status,
+        detail: 'HTTPS target responded, but deployed state still needs command output evidence.',
+      };
+    }
+    return {
+      target: trimmed,
+      status: resp.ok ? 'ok' : 'failed',
+      checkedAt,
+      httpStatus: resp.status,
+      detail: resp.ok
+        ? `HTTP ${resp.status} response verified.`
+        : `URL responded with HTTP ${resp.status}.`,
+    };
+  } catch (err) {
+    return {
+      target: trimmed,
+      status: 'failed',
+      checkedAt,
+      detail: err && err.name === 'AbortError'
+        ? 'Verification timed out.'
+        : `Verification failed: ${err?.message || String(err)}`,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+const EVIDENCE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.svg']);
+const EVIDENCE_DOC_EXTENSIONS = new Set(['.md', '.txt', '.pdf', '.docx', '.pptx', '.html', '.json', '.csv']);
+const EVIDENCE_SKIP_DIRS = new Set([
+  '.git',
+  '.next',
+  '.od',
+  'node_modules',
+  'dist',
+  'out',
+  'build',
+]);
+
+async function scanEvidenceSource(sourcePath) {
+  const trimmed = typeof sourcePath === 'string' ? sourcePath.trim() : '';
+  const scannedAt = Date.now();
+  const empty = {
+    sourcePath: trimmed,
+    scannedAt,
+    originals: 0,
+    thumbnails: 0,
+    supportingAssets: 0,
+    flaggedFiles: 0,
+    files: [],
+  };
+  if (!trimmed) {
+    return { ...empty, error: 'No source path was provided.' };
+  }
+
+  const root = path.resolve(trimmed);
+  try {
+    const rootStat = await fs.promises.stat(root);
+    if (!rootStat.isDirectory()) {
+      return { ...empty, sourcePath: root, error: 'Source path is not a folder.' };
+    }
+  } catch (err) {
+    return { ...empty, sourcePath: root, error: err?.code === 'ENOENT' ? 'Source folder was not found.' : String(err) };
+  }
+
+  const files = [];
+  await collectEvidenceFiles(root, root, files, { maxFiles: 500, maxDepth: 6 });
+  const scan = {
+    ...empty,
+    sourcePath: root,
+    files,
+  };
+  for (const file of files) {
+    if (file.role === 'original') scan.originals += 1;
+    if (file.role === 'thumbnail') scan.thumbnails += 1;
+    if (file.role === 'supporting') scan.supportingAssets += 1;
+    if (file.role === 'flagged') scan.flaggedFiles += 1;
+  }
+  return scan;
+}
+
+async function collectEvidenceFiles(root, current, out, { maxFiles, maxDepth }, depth = 0) {
+  if (out.length >= maxFiles || depth > maxDepth) return;
+  let entries = [];
+  try {
+    entries = await fs.promises.readdir(current, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (out.length >= maxFiles) return;
+    if (entry.name.startsWith('.') && entry.name !== '.env') continue;
+    const full = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      if (EVIDENCE_SKIP_DIRS.has(entry.name)) continue;
+      await collectEvidenceFiles(root, full, out, { maxFiles, maxDepth }, depth + 1);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const ext = path.extname(entry.name).toLowerCase();
+    if (!EVIDENCE_IMAGE_EXTENSIONS.has(ext) && !EVIDENCE_DOC_EXTENSIONS.has(ext) && entry.name !== '.env') {
+      continue;
+    }
+    const stat = await fs.promises.stat(full);
+    out.push({
+      path: path.relative(root, full).split(path.sep).join('/'),
+      size: stat.size,
+      ...classifyEvidenceFile(entry.name, ext),
+    });
+  }
+}
+
+function classifyEvidenceFile(name, ext) {
+  const lower = name.toLowerCase();
+  if (
+    lower.includes('private') ||
+    lower.includes('secret') ||
+    lower.includes('credential') ||
+    lower.includes('password') ||
+    lower.includes('token') ||
+    lower === '.env'
+  ) {
+    return { role: 'flagged', reason: 'Filename suggests private or sensitive material.' };
+  }
+  if (lower.includes('thumb') || lower.includes('thumbnail') || lower.includes('-sm') || lower.includes('_sm')) {
+    return { role: 'thumbnail', reason: 'Filename suggests a thumbnail or small derivative.' };
+  }
+  if (
+    lower.includes('asset') ||
+    lower.includes('support') ||
+    lower.includes('logo') ||
+    lower.includes('icon') ||
+    lower.includes('reference') ||
+    !EVIDENCE_IMAGE_EXTENSIONS.has(ext)
+  ) {
+    return { role: 'supporting', reason: 'Supporting asset, reference, or non-image source file.' };
+  }
+  return { role: 'original', reason: 'Image source without thumbnail/supporting marker.' };
+}
+
+async function seedWebsiteStudioArtifacts(db, projectId, metadata) {
+  const websiteStudio = metadata && typeof metadata === 'object' ? metadata.websiteStudio : null;
+  const artifacts = websiteStudio && typeof websiteStudio === 'object' ? websiteStudio.artifacts : null;
+  if (!artifacts || typeof artifacts !== 'object' || Array.isArray(artifacts)) return [];
+
+  const written = [];
+  for (const [name, content] of Object.entries(artifacts)) {
+    if (typeof name !== 'string' || typeof content !== 'string') continue;
+    if (!name.endsWith('.md')) continue;
+    const file = await writeProjectFile(PROJECTS_DIR, projectId, name, Buffer.from(content, 'utf8'), {
+      artifactManifest: {
+        kind: 'markdown-document',
+        renderer: 'markdown',
+        exports: ['md', 'txt', 'zip'],
+        title: name,
+        metadata: {
+          source: 'website-studio',
+          packetFile: true,
+        },
+      },
+    });
+    written.push(file.name);
+  }
+  if (written.length > 0) {
+    setTabs(db, projectId, written, written.includes('site_plan.md') ? 'site_plan.md' : written[0]);
+  }
+  return written;
+}
+
 export async function startServer({ port = 7456, returnServer = false } = {}) {
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -194,6 +410,26 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, version: '0.1.0' });
+  });
+
+  app.post('/api/website-adapter/check', async (req, res) => {
+    try {
+      const { target, commandEvidence } = req.body || {};
+      const verification = await verifyWebsiteAdapterTarget(target, commandEvidence);
+      res.json({ verification });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/evidence/scan', async (req, res) => {
+    try {
+      const { sourcePath } = req.body || {};
+      const scan = await scanEvidenceSource(sourcePath);
+      res.json({ scan });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
   });
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -267,6 +503,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
           }
         }
       }
+      await seedWebsiteStudioArtifacts(db, id, metadata);
       res.json({ project, conversationId: cid });
     } catch (err) {
       res.status(400).json({ error: String(err) });

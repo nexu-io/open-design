@@ -6,6 +6,7 @@ import {
   ONESHOT_OUTPUT_CONTROL_MODULES,
   WEBSITE_STUDIO_SECTIONS,
 } from '../oneshotDesignOS';
+import { scanEvidenceSource, verifyWebsiteAdapterTarget } from '../providers/registry';
 import {
   buildWebsiteStudioArtifacts,
   createDefaultWebsiteStudioState,
@@ -40,6 +41,9 @@ const PIN_TARGETS = [
   'CoverVision OS / Concept lanes',
   'Evidence Studio / Source path',
   'Website Builder Adapter',
+  'Artifact / site_plan.md',
+  'Artifact / codex_build_brief.md',
+  'Artifact / responsive_qa.md',
 ] as const;
 
 export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
@@ -48,6 +52,8 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
   const [activeArtifact, setActiveArtifact] = useState<keyof WebsiteStudioArtifacts>('site_plan.md');
   const [pinTarget, setPinTarget] = useState<string>(PIN_TARGETS[0]);
   const [pinNote, setPinNote] = useState('');
+  const [adapterChecking, setAdapterChecking] = useState(false);
+  const [evidenceScanning, setEvidenceScanning] = useState(false);
 
   useEffect(() => {
     saveWebsiteStudioState(state);
@@ -63,6 +69,16 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
 
   function updateState(next: Partial<WebsiteStudioWorkbenchState>) {
     setState((current) => ({ ...current, ...next, updatedAt: Date.now() }));
+  }
+
+  function updateDeployTarget(value: string) {
+    setState((current) => ({
+      ...current,
+      deployTarget: value,
+      deployVerification:
+        current.deployVerification?.target === value.trim() ? current.deployVerification : null,
+      updatedAt: Date.now(),
+    }));
   }
 
   function updateIntake(field: keyof WebsiteStudioWorkbenchState['intake'], value: string) {
@@ -121,6 +137,46 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
       updatedAt: Date.now(),
     }));
     setPinNote('');
+  }
+
+  async function verifyAdapter() {
+    setAdapterChecking(true);
+    const verification = await verifyWebsiteAdapterTarget({
+      target: state.deployTarget,
+      commandEvidence: state.deployCommandEvidence,
+    });
+    setState((current) => ({
+      ...current,
+      deployVerification: verification ?? {
+        target: current.deployTarget.trim(),
+        status: 'failed',
+        checkedAt: Date.now(),
+        detail: 'Verification endpoint did not return a result.',
+      },
+      updatedAt: Date.now(),
+    }));
+    setAdapterChecking(false);
+  }
+
+  async function scanEvidence() {
+    setEvidenceScanning(true);
+    const scan = await scanEvidenceSource({ sourcePath: state.evidenceStudio.sourcePath });
+    setState((current) => ({
+      ...current,
+      evidenceStudio: {
+        ...current.evidenceStudio,
+        sourcePath: scan?.sourcePath ?? current.evidenceStudio.sourcePath,
+        originals: scan?.originals ?? 0,
+        thumbnails: scan?.thumbnails ?? 0,
+        supportingAssets: scan?.supportingAssets ?? 0,
+        flaggedFiles: scan?.flaggedFiles ?? 0,
+        files: scan?.files ?? [],
+        lastScanAt: scan?.scannedAt ?? Date.now(),
+        scanError: scan?.error ?? null,
+      },
+      updatedAt: Date.now(),
+    }));
+    setEvidenceScanning(false);
   }
 
   return (
@@ -296,7 +352,7 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
             <span>Real deploy URL or local verified URL</span>
             <input
               value={state.deployTarget}
-              onChange={(event) => updateState({ deployTarget: event.target.value })}
+              onChange={(event) => updateDeployTarget(event.target.value)}
               placeholder="https://... or http://127.0.0.1:3004"
             />
           </label>
@@ -308,6 +364,20 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
               placeholder="Required before external URLs can be verified-deployed"
             />
           </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void verifyAdapter()}
+            disabled={adapterChecking}
+          >
+            {adapterChecking ? 'Checking adapter...' : 'Verify adapter target'}
+          </button>
+          {state.deployVerification ? (
+            <small className="oneshot-adapter-proof">
+              Last check: {state.deployVerification.status}
+              {state.deployVerification.httpStatus ? ` / HTTP ${state.deployVerification.httpStatus}` : ''}
+            </small>
+          ) : null}
           <div className={`oneshot-deploy-status ${adapterStatus.status}`}>
             <strong>{adapterStatus.label}</strong>
             <span>{adapterStatus.detail}</span>
@@ -437,6 +507,30 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
               />
             </label>
           </div>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void scanEvidence()}
+            disabled={evidenceScanning}
+          >
+            {evidenceScanning ? 'Scanning evidence...' : 'Scan evidence source'}
+          </button>
+          {state.evidenceStudio.scanError ? (
+            <p className="oneshot-evidence-error">{state.evidenceStudio.scanError}</p>
+          ) : null}
+          {state.evidenceStudio.files.length ? (
+            <div className="oneshot-evidence-files">
+              {state.evidenceStudio.files.slice(0, 8).map((file) => (
+                <span key={`${file.role}-${file.path}`}>
+                  <strong>{file.role}</strong>
+                  {file.path}
+                </span>
+              ))}
+              {state.evidenceStudio.files.length > 8 ? (
+                <span>+{state.evidenceStudio.files.length - 8} more source files</span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="oneshot-evidence-outputs">
             <span>Evidence inventory</span>
             <span>DESIGN.md</span>

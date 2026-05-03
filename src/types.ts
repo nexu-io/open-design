@@ -209,6 +209,13 @@ export interface WebsiteStudioMetadata {
   tokens: Record<string, string>;
   deployTarget: string;
   deployCommandEvidence: string;
+  deployVerification?: {
+    target: string;
+    status: 'ok' | 'failed';
+    checkedAt: number;
+    httpStatus?: number;
+    detail: string;
+  } | null;
   adapterStatus: 'prepare-only' | 'verified-local' | 'verified-deployed';
   qualityReviews: Array<{
     id: string;
@@ -230,6 +237,14 @@ export interface WebsiteStudioMetadata {
     supportingAssets: number;
     flaggedFiles: number;
     reviewGate: string;
+    files?: Array<{
+      path: string;
+      role: 'original' | 'thumbnail' | 'supporting' | 'flagged';
+      size: number;
+      reason: string;
+    }>;
+    lastScanAt?: number | null;
+    scanError?: string | null;
   };
   artifacts: Record<string, string>;
 }

@@ -194,6 +194,11 @@ function renderMetadataBlock(
     lines.push(`- **conversion**: ${metadata.websiteStudio.intake.conversion}`);
     lines.push(`- **sourcePath**: ${metadata.websiteStudio.intake.sourcePath}`);
     lines.push(`- **adapterStatus**: ${metadata.websiteStudio.adapterStatus}`);
+    if (metadata.websiteStudio.deployVerification) {
+      lines.push(
+        `- **adapterVerification**: ${metadata.websiteStudio.deployVerification.status} ${metadata.websiteStudio.deployVerification.httpStatus ? `(HTTP ${metadata.websiteStudio.deployVerification.httpStatus})` : ''} ${metadata.websiteStudio.deployVerification.detail}`,
+      );
+    }
     lines.push(`- **selectedSections**: ${metadata.websiteStudio.selectedSectionIds.join(', ')}`);
     lines.push(
       `- **qualityReviews**: ${metadata.websiteStudio.qualityReviews
@@ -205,6 +210,14 @@ function renderMetadataBlock(
         .map((pin) => `${pin.target}: ${pin.note}`)
         .join(' | ')}`,
     );
+    if (metadata.websiteStudio.evidenceStudio.files?.length) {
+      lines.push(
+        `- **evidenceFiles**: ${metadata.websiteStudio.evidenceStudio.files
+          .slice(0, 20)
+          .map((file) => `${file.role}:${file.path}`)
+          .join(', ')}`,
+      );
+    }
     lines.push('');
     lines.push('#### Website Studio artifact files');
     for (const [filename, body] of Object.entries(metadata.websiteStudio.artifacts)) {

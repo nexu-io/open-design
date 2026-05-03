@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OneShotWorkflows } from '../src/components/OneShotWorkflows';
 import {
@@ -102,8 +102,20 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
   });
 
-  it('starts Website Studio from the dedicated workbench and keeps deploy status honest', () => {
+  it('starts Website Studio from the dedicated workbench and keeps deploy status honest', async () => {
     const onCreateProject = vi.fn();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        verification: {
+          target: 'http://127.0.0.1:3004',
+          status: 'ok',
+          checkedAt: 1,
+          httpStatus: 200,
+          detail: 'HTTP 200 response verified.',
+        },
+      }),
+    } as Response);
 
     render(
       <OneShotWorkflows
@@ -120,9 +132,11 @@ describe('OneShotWorkflows', () => {
     fireEvent.change(screen.getByLabelText('Real deploy URL or local verified URL'), {
       target: { value: 'http://127.0.0.1:3004' },
     });
+    expect(screen.getAllByText('Prepare-only').length).toBeGreaterThan(0);
 
-    expect(screen.getAllByText('Verified local').length).toBeGreaterThan(0);
-    expect(screen.getByText('http://127.0.0.1:3004')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Verify adapter target' }));
+    await waitFor(() => expect(screen.getAllByText('Verified local').length).toBeGreaterThan(0));
+    expect(screen.getByText(/HTTP 200 response verified/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Website Studio packet' }));
 

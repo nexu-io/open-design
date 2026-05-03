@@ -45,6 +45,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
+import { ProjectPacketView } from './ProjectPacketView';
 import { WorkflowBlueprint } from './WorkflowBlueprint';
 
 interface Props {
@@ -820,6 +821,11 @@ export function ProjectView({
         metadata={project.metadata}
         skillId={project.skillId}
         designSystemId={project.designSystemId}
+      />
+      <ProjectPacketView
+        project={project}
+        files={projectFiles}
+        onOpenFile={requestOpenFile}
       />
       <div className="split">
         <ChatPane
