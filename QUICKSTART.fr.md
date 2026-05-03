@@ -47,7 +47,7 @@ pnpm tools-dev # démarre daemon + web + desktop en arrière-plan
 
 Au premier chargement, l’app détecte votre CLI de coding agent installée (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen), la sélectionne automatiquement, puis utilise par défaut le Skill `web-prototype` et le Design System `Neutral Modern`. Tapez un prompt et cliquez sur **Send**. L’agent stream dans le panneau gauche ; le tag `<artifact>` est extrait et le HTML est rendu en live à droite. Quand il a terminé, cliquez sur **Save to disk** pour persister l’artifact sous `./.od/artifacts/<timestamp>-<slug>/index.html`.
 
-Le dropdown **Design System** embarque **129 Design Systems** : 2 starters écrits à la main (Neutral Modern, Warm Editorial), 70 product systems intégrés et 57 design skills provenant de [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Choisissez-en un pour habiller chaque prototype dans l’esthétique de cette marque.
+Le dropdown **Design System** charge les Design Systems depuis `design-systems/*/DESIGN.md` : starters écrits à la main, product systems intégrés et design skills normalisés. Choisissez-en un pour habiller chaque prototype dans l’esthétique de cette marque.
 
 Le dropdown **Skill** regroupe par mode (Prototype / Deck / Template / Design System) et affiche le Skill par défaut de chaque mode avec un suffixe `· default`. Skills inclus :
 
@@ -201,7 +201,7 @@ open-design/
 │   ├── default/               # Neutral Modern (starter)
 │   ├── warm-editorial/        # Warm Editorial (starter)
 │   ├── README.md              # aperçu du catalogue
-│   └── …129 systems           # 2 starters · 70 product systems · 57 design skills
+│   └── …systems               # starters · product systems · design skills normalisés
 ├── scripts/sync-design-systems.ts    # réimport depuis le tarball getdesign upstream
 ├── docs/                      # vision produit + spec
 ├── .od/                       # données runtime (gitignored, auto-créées)
