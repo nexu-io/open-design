@@ -339,11 +339,15 @@ async function writeAssembledApp(
 
 async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
   const target = config.to === "dir" ? ["dir"] : ["AppImage"];
+  const namespaceToken = sanitizeNamespace(config.namespace);
+  const packagedVersion = await readPackagedVersion(config);
 
   const builderConfig: Record<string, unknown> = {
     appId: "io.open-design.desktop",
-    productName: PRODUCT_NAME,
-    asar: true,
+    artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
+    asar: false,
+    buildDependenciesFromSource: false,
+    compression: "maximum",
     directories: {
       app: paths.assembledAppRoot,
       output: paths.appBuilderOutputRoot,
@@ -351,10 +355,20 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
     },
     electronVersion: config.electronVersion.replace(/^[^\d]*/, ""),
     electronDist: config.electronDistPath,
+    executableName: PRODUCT_NAME,
+    extraMetadata: {
+      main: "./main.cjs",
+      name: "open-design-packaged-app",
+      productName: PRODUCT_NAME,
+      version: packagedVersion,
+      ...(config.portable ? {} : { odToolsPackRuntimeRoot: config.roots.runtime.namespaceBaseRoot }),
+    },
     extraResources: [
       { from: paths.resourceRoot, to: "open-design" },
       { from: paths.packagedConfigPath, to: "open-design-config.json" },
     ],
+    files: ["**/*", "!**/node_modules/.bin", "!**/node_modules/electron{,/**/*}"],
+    icon: linuxResources.icon,
     linux: {
       target,
       icon: linuxResources.icon,
@@ -362,13 +376,10 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       synopsis: "Open Design",
       maintainer: "Open Design Contributors",
     },
+    nodeGypRebuild: false,
+    npmRebuild: false,
+    productName: PRODUCT_NAME,
   };
-
-  if (!config.portable) {
-    builderConfig.extraMetadata = {
-      odToolsPackRuntimeRoot: config.roots.runtime.namespaceBaseRoot,
-    };
-  }
 
   await mkdir(dirname(paths.appBuilderConfigPath), { recursive: true });
   await writeFile(paths.appBuilderConfigPath, `${JSON.stringify(builderConfig, null, 2)}\n`, "utf8");
