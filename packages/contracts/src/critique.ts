@@ -92,14 +92,18 @@ export type PanelEvent =
   | { type: 'failed';            runId: string; cause: FailedCause }
   | { type: 'parser_warning';    runId: string; kind: ParserWarningKind; position: number };
 
-const PANEL_EVENT_TYPES = new Set<PanelEvent['type']>([
+const PANEL_EVENT_TYPE_LIST = [
   'run_started', 'panelist_open', 'panelist_dim', 'panelist_must_fix',
   'panelist_close', 'round_end', 'ship', 'degraded', 'interrupted',
   'failed', 'parser_warning',
-]);
+] as const satisfies readonly PanelEvent['type'][];
+
+const PANEL_EVENT_TYPES = new Set<PanelEvent['type']>(PANEL_EVENT_TYPE_LIST);
 
 export function isPanelEvent(value: unknown): value is PanelEvent {
   if (!value || typeof value !== 'object') return false;
-  const t = (value as { type?: unknown }).type;
-  return typeof t === 'string' && PANEL_EVENT_TYPES.has(t as PanelEvent['type']);
+  const obj = value as Record<string, unknown>;
+  const t = obj['type'];
+  if (typeof t !== 'string' || !PANEL_EVENT_TYPES.has(t as PanelEvent['type'])) return false;
+  return typeof obj['runId'] === 'string' && (obj['runId'] as string).length > 0;
 }

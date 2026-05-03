@@ -3,6 +3,8 @@ import {
   CritiqueConfigSchema,
   PANELIST_ROLES,
   defaultCritiqueConfig,
+  isPanelEvent,
+  type PanelEvent,
 } from './critique';
 
 describe('CritiqueConfig', () => {
@@ -44,8 +46,6 @@ describe('CritiqueConfig', () => {
   });
 });
 
-import { isPanelEvent, type PanelEvent } from './critique';
-
 describe('PanelEvent', () => {
   it('isPanelEvent recognises every variant', () => {
     const samples: PanelEvent[] = [
@@ -71,5 +71,8 @@ describe('PanelEvent', () => {
     expect(isPanelEvent(undefined)).toBe(false);
     expect(isPanelEvent('string')).toBe(false);
     expect(isPanelEvent(42)).toBe(false);
+    // New: type valid but runId missing -> reject
+    expect(isPanelEvent({ type: 'failed' })).toBe(false);
+    expect(isPanelEvent({ type: 'failed', runId: '' })).toBe(false);
   });
 });
