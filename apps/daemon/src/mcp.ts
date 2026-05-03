@@ -38,17 +38,63 @@ const TEXTUAL_MIME_PATTERNS = [
   /^image\/svg\+xml\b/i,
 ];
 
+// Every tool here is a read against a local daemon owned by the
+// current user, so they're all read-only, idempotent, and operate on
+// a closed (project-scoped) namespace. Pull these into one constant
+// so each tool def doesn't repeat them.
+const READ_ANNOTATIONS = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
 const TOOL_DEFS = [
+  // Discovery + the centerpiece sit at the top: well-behaved LLMs
+  // weight earlier tools more, so the bundle path beats per-file
+  // fetching by default.
   {
     name: 'list_projects',
     description:
       'List every Open Design project on this daemon. Call this first to discover available project ids before using other tools.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List OD projects' },
+  },
+  {
+    name: 'get_artifact',
+    description:
+      'PREFER THIS over multiple get_file calls. Pulls a design artifact bundle in one call: the entry file plus every sibling it references (tokens CSS, JSX modules, images, fonts). Default mode (auto) parses the entry HTML/JSX/CSS and follows relative <script src>, <link href>, <img src>, <iframe src>, srcset, JSX import/from/require, dynamic import(), CSS url() and @import — up to depth 3, skipping CDN/data/anchor URLs. include="all" returns every file in the project (binary files arrive as metadata stubs); include="shallow" returns just the entry. Use maxBytes to cap response size.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project id (UUID) or name substring.',
+        },
+        entry: {
+          type: 'string',
+          description:
+            'Entry file path relative to project root. Defaults to project metadata.entryFile.',
+        },
+        include: {
+          type: 'string',
+          enum: ['auto', 'all', 'shallow'],
+          description: 'auto (default) | all | shallow',
+        },
+        maxBytes: {
+          type: 'number',
+          description:
+            'Soft cap on total textual content size returned (default 1500000 ≈ 1.5MB). Files past the cap are dropped and `truncated: true` is set on the bundle.',
+        },
+      },
+      required: ['project'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Pull design bundle' },
   },
   {
     name: 'get_project',
     description:
-      'Fetch a single project by id, including its name, active skill id, active design system id, and timestamps.',
+      'Fetch a single project: name, active skill/design-system ids, timestamps. entryFile and kind are surfaced at the top level for convenience.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -60,28 +106,12 @@ const TOOL_DEFS = [
       required: ['project'],
       additionalProperties: false,
     },
-  },
-  {
-    name: 'list_files',
-    description:
-      'List the files in a project. Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId so the caller can know which skill + brand produced the file. Optional `since` filters to files modified after the given Unix-ms timestamp — useful for cheap polling.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
-        since: {
-          type: 'number',
-          description: 'Unix-ms; only return files with mtime > since.',
-        },
-      },
-      required: ['project'],
-      additionalProperties: false,
-    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Get OD project' },
   },
   {
     name: 'get_file',
     description:
-      'Read the current contents of a project file. Returns text content for textual mimes (HTML, JSX, CSS, JSON, SVG, Markdown, etc.). Binary files return a clear error — use list_files to inspect their metadata, or extract them via the OD UI for now.',
+      'Read the current contents of a single project file. Returns text content for textual mimes (HTML, JSX, CSS, JSON, SVG, Markdown, etc.). Binary files return a clear error — use list_files to inspect their metadata, or extract them via the OD UI for now. For multi-file design bundles, prefer get_artifact.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -95,47 +125,12 @@ const TOOL_DEFS = [
       required: ['project', 'path'],
       additionalProperties: false,
     },
-  },
-  {
-    name: 'list_skills',
-    description:
-      'List the skills installed in this OD instance. A skill is a brand-aware recipe (HTML/JSX scaffold + checklists + DESIGN.md hooks) like "dating-web", "blog-post", "guizang-ppt".',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  },
-  {
-    name: 'get_skill',
-    description: 'Fetch a single skill\'s metadata and SKILL.md body by id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Skill id (slug, from list_skills).' },
-      },
-      required: ['id'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'list_design_systems',
-    description:
-      'List the design systems installed in this OD instance. Each is a single DESIGN.md file describing one brand\'s visual language.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  },
-  {
-    name: 'get_design_system',
-    description: 'Fetch a single design system\'s metadata and DESIGN.md body by id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Design system id (slug).' },
-      },
-      required: ['id'],
-      additionalProperties: false,
-    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Read project file' },
   },
   {
     name: 'search_files',
     description:
-      'Substring-search across every textual file in a project. Returns up to N matches with file, 1-indexed line, and snippet. Use this to find where a class, component, token, or copy string is defined without fetching every file.',
+      'Case-insensitive literal-substring search across every textual file in a project. Returns up to N matches with file, 1-indexed line, and snippet. Use this to find where a class, component, token, or copy string is defined without fetching every file.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -157,32 +152,66 @@ const TOOL_DEFS = [
       required: ['project', 'query'],
       additionalProperties: false,
     },
+    annotations: { ...READ_ANNOTATIONS, title: 'Search project files' },
   },
   {
-    name: 'get_artifact',
+    name: 'list_files',
     description:
-      'Pull a design artifact bundle: the entry file plus every sibling asset it references (tokens CSS, JSX modules, images, fonts) in one call. Default mode (auto) parses the entry HTML/JSX and follows relative imports / script-src / link-href / img-src / css url() up to depth 3, skipping CDN urls. include="all" returns every textual file in the project; include="shallow" returns just the entry file. PREFER THIS over multiple get_file calls when extending an OD design.',
+      'List the files in a project (metadata only). Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId. Optional `since` filters to files modified strictly after the given Unix-ms timestamp — pass the max mtime you saw last to cheap-poll for changes.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: {
-          type: 'string',
-          description: 'Project id (UUID) or name substring.',
-        },
-        entry: {
-          type: 'string',
-          description:
-            'Entry file path relative to project root. Defaults to project metadata.entryFile.',
-        },
-        include: {
-          type: 'string',
-          enum: ['auto', 'all', 'shallow'],
-          description: 'auto (default) | all | shallow',
+        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
+        since: {
+          type: 'number',
+          description: 'Unix-ms; only return files with mtime > since.',
         },
       },
       required: ['project'],
       additionalProperties: false,
     },
+    annotations: { ...READ_ANNOTATIONS, title: 'List project files' },
+  },
+  // Catalog tools — also exposed as MCP resources at od://...
+  {
+    name: 'list_skills',
+    description:
+      'List the skills installed in this OD instance. A skill is a brand-aware recipe (HTML/JSX scaffold + checklists + DESIGN.md hooks) like "dating-web", "blog-post", "guizang-ppt".',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List OD skills' },
+  },
+  {
+    name: 'get_skill',
+    description: 'Fetch a single skill\'s metadata and SKILL.md body by id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Skill id (slug, from list_skills).' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Get skill' },
+  },
+  {
+    name: 'list_design_systems',
+    description:
+      'List the design systems installed in this OD instance. Each is a single DESIGN.md file describing one brand\'s visual language.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List design systems' },
+  },
+  {
+    name: 'get_design_system',
+    description: 'Fetch a single design system\'s metadata and DESIGN.md body by id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Design system id (slug).' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Get design system' },
   },
 ];
 
@@ -326,7 +355,13 @@ export async function runMcpStdio({ daemonUrl }) {
             await getJson(`${baseUrl}/api/design-systems/${encodeURIComponent(args.id)}`),
           );
         case 'get_artifact':
-          return await getArtifact(baseUrl, args.project, args.entry, args.include);
+          return await getArtifact(
+            baseUrl,
+            args.project,
+            args.entry,
+            args.include,
+            args.maxBytes,
+          );
         case 'search_files': {
           const id = await resolveProjectId(baseUrl, args.project);
           requireString(args.query, 'query');
@@ -483,14 +518,29 @@ async function getFile(baseUrl, project, relPath) {
 }
 
 const VALID_INCLUDE_MODES = new Set(['auto', 'all', 'shallow']);
+const DEFAULT_MAX_BYTES = 1_500_000;
 
-async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
+// Tracks total textual content bytes accumulated; binary stubs don't
+// count (their content is null). Once we cross the cap the caller
+// stops fetching and stamps `truncated: true` on the bundle.
+function totalTextBytes(files) {
+  let n = 0;
+  for (const f of files) {
+    if (!f.binary && typeof f.content === 'string') n += f.content.length;
+  }
+  return n;
+}
+
+async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesArg) {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
   if (!VALID_INCLUDE_MODES.has(include)) {
     return errorResult(
       `invalid include "${includeMode}"; expected one of: auto, all, shallow`,
     );
   }
+  const maxBytes =
+    Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? Number(maxBytesArg) : DEFAULT_MAX_BYTES;
+
   const id = await resolveProjectId(baseUrl, projectArg);
   const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
   const project = data?.project ?? data;
@@ -511,21 +561,26 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
     } catch (err) {
       return errorResult(err && err.message ? err.message : String(err));
     }
-    return okBundle({ project, entry, files: [file] });
+    return okBundle({ project, entry, files: [file], truncated: false });
   }
 
   if (include === 'all') {
     const meta = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
     const fetched = [];
+    let truncated = false;
     for (const f of allFiles) {
+      if (totalTextBytes(fetched) >= maxBytes) {
+        truncated = true;
+        break;
+      }
       try {
         fetched.push(await fetchProjectFile(baseUrl, id, f.name));
       } catch {
         // Skip files that fail to fetch; keep going.
       }
     }
-    return okBundle({ project, entry, files: fetched });
+    return okBundle({ project, entry, files: fetched, truncated });
   }
 
   // Auto mode: BFS from entry. The entry's own fetch must succeed —
@@ -540,17 +595,22 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
   const MAX_DEPTH = 3;
   const visited = new Set([entry]);
   const fetched = [entryFile];
+  let truncated = false;
   let frontier = [];
   if (isTextualMime(entryFile.mime)) {
     frontier = extractRelativeRefs(entryFile.content || '', entry, entryFile.mime).filter(
       (r) => !visited.has(r),
     );
   }
-  for (let depth = 1; depth < MAX_DEPTH && frontier.length > 0; depth++) {
+  outer: for (let depth = 1; depth < MAX_DEPTH && frontier.length > 0; depth++) {
     const next = [];
     for (const refPath of frontier) {
       if (visited.has(refPath)) continue;
       visited.add(refPath);
+      if (totalTextBytes(fetched) >= maxBytes) {
+        truncated = true;
+        break outer;
+      }
       let file;
       try {
         file = await fetchProjectFile(baseUrl, id, refPath);
@@ -566,7 +626,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
     }
     frontier = next;
   }
-  return okBundle({ project, entry, files: fetched });
+  return okBundle({ project, entry, files: fetched, truncated });
 }
 
 async function fetchProjectFile(baseUrl, projectId, relPath) {
@@ -690,6 +750,7 @@ function okBundle(bundle) {
     entryFile: bundle.entry,
     projectId: bundle.project?.id,
     projectName: bundle.project?.name,
+    truncated: bundle.truncated === true,
     files: bundle.files.map((f) => ({
       name: f.name,
       mime: f.mime,
