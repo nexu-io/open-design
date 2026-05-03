@@ -49,10 +49,11 @@ Au premier chargement, l’app détecte votre CLI de coding agent installée (Cl
 
 Le dropdown **Design System** charge les Design Systems depuis `design-systems/*/DESIGN.md` : starters écrits à la main, product systems intégrés et design skills normalisés. Choisissez-en un pour habiller chaque prototype dans l’esthétique de cette marque.
 
-Le dropdown **Skill** regroupe par mode (Prototype / Deck / Template / Design System) et affiche le Skill par défaut de chaque mode avec un suffixe `· default`. Skills inclus :
+Le dropdown **Skill** regroupe les entrées par `mode` / `surface` et affiche le Skill par défaut de chaque mode avec un suffixe `· default`. Le catalogue live vient de [`skills/`](skills/) et couvre les flows web, deck, Design System, image, vidéo et audio. Exemples inclus :
 
 - **Prototype** — `web-prototype` (générique), `saas-landing`, `dashboard`, `pricing-page`, `docs-page`, `blog-post`, `mobile-app`.
 - **Deck / PPT** — `simple-deck` (swipe horizontal single-file) et `magazine-web-ppt` (le bundle `guizang-ppt` depuis [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill), par défaut en deck mode, avec ses propres assets/template + 4 références). Les Skills avec side files reçoivent automatiquement un préambule "Skill root (absolute)" pour que l’agent puisse résoudre `assets/template.html` et `references/*.md` depuis le vrai chemin disque au lieu de son CWD.
+- **Médias et Design System** — par exemple `image-poster`, `video-shortform`, `audio-jingle`, `hyperframes` et `design-brief`.
 
 Associez un Skill, un Design System et un seul prompt : vous obtenez un prototype ou un deck adapté au layout, dans le langage visuel choisi.
 
@@ -160,7 +161,7 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # entrée bin `od`
 │   │       ├── server.ts          # /api/* + static serving
-│   │       ├── agents.ts          # scanner PATH pour claude/codex/devin/gemini/opencode/cursor-agent/qwen/copilot
+│   │       ├── agents.ts          # scanner PATH + adapters CLI de coding agents
 │   │       ├── skills.ts          # loader SKILL.md (frontmatter parser)
 │   │       └── design-systems.ts  # loader DESIGN.md
 │   │   ├── sidecar/           # wrapper sidecar daemon pour tools-dev
@@ -214,7 +215,7 @@ open-design/
 
 ## Dépannage
 
-- **"no agents found on PATH"** — installez l’un de : `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Ou passez à "Anthropic API · BYOK" dans la barre supérieure et collez une clé dans **Settings**.
+- **"no agents found on PATH"** — installez une CLI compatible, par exemple `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `qwen` ou `copilot`. La liste exacte des adapters détectés vit dans `apps/daemon/src/agents.ts`. Ou passez à "Anthropic API · BYOK" dans la barre supérieure et collez une clé dans **Settings**.
 - **daemon 500 sur /api/chat** — vérifiez la fin de stderr dans le terminal daemon ; la CLI a généralement rejeté ses args. Les CLIs n’acceptent pas toutes la même forme d’argv ; consultez `apps/daemon/src/agents.ts` `buildArgs` si vous devez ajuster.
 - **media generation dit que `OD_BIN` manque ou que l’URL daemon vaut `:0`** — exécutez les checks du dispatcher media ci-dessus. Ne reprenez pas l’ancienne session CLI ; rouvrez le projet depuis l’app Open Design pour que le daemon injecte des variables `OD_*` fraîches.
 - **Codex charge trop de contexte plugin** — démarrez Open Design avec `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` pour que les processus Codex lancés par le daemon tournent avec `--disable plugins`.
