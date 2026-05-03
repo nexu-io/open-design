@@ -796,13 +796,25 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
   // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
   // first launch before exec'ing the inner electron, which adds substantial
   // overhead vs mac's direct .app launch.
+  //
+  // If the readiness wait or the post-ready status fetch throws, the detached
+  // child we just spawned is still running but unidentifiable to a future
+  // `linux stop` (the marker is the only persistent identity source). Tear it
+  // down via the same process-tree path stopPackedLinuxApp uses, then rethrow
+  // so the failure surfaces to the caller. Any cleanup error is suppressed --
+  // we want the original failure preserved in the rejection.
   const markerPath = desktopIdentityPath(config);
-  const ready = await waitForMarker(markerPath, 60_000);
-  if (!ready) {
-    throw new Error(`desktop-root.json not written within 60s at ${markerPath}`);
+  let status: DesktopStatusSnapshot | null;
+  try {
+    const ready = await waitForMarker(markerPath, 60_000);
+    if (!ready) {
+      throw new Error(`desktop-root.json not written within 60s at ${markerPath}`);
+    }
+    status = await fetchDesktopStatus(config);
+  } catch (error) {
+    await teardownOrphanedStart(child.pid).catch(() => undefined);
+    throw error;
   }
-
-  const status = await fetchDesktopStatus(config);
 
   return {
     appImagePath,
@@ -813,6 +825,12 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     source,
     status,
   };
+}
+
+async function teardownOrphanedStart(rootPid: number): Promise<void> {
+  const snapshots = await listProcessSnapshots();
+  const treePids = collectProcessTreePids(snapshots, [rootPid]);
+  await stopProcesses(treePids);
 }
 
 export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStopResult> {
