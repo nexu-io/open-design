@@ -9,14 +9,14 @@ both.
 
 ## Outputs
 
-| Output | What it is |
-|---|---|
-| `packages.<system>.daemon` | The `@open-design/daemon` package — produces `bin/od`. Default output. |
-| `packages.<system>.web` | The Next.js static export (`apps/web/out/`) ready to drop into any static file server. |
-| `apps.<system>.default` | `nix run github:nexu-io/open-design` — boots the daemon. |
-| `devShells.<system>.default` | Node 24 + Corepack-pinned pnpm 10.33 — reproduces `pnpm install` locally. |
-| `homeManagerModules.{default,open-design}` | Home Manager module — primary individual-developer interface. |
-| `nixosModules.{default,open-design}` | NixOS module — secondary, for shared/server installs. |
+| Output                                     | What it is                                                                             |
+| ------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `packages.<system>.daemon`                 | The `@open-design/daemon` package — produces `bin/od`. Default output.                 |
+| `packages.<system>.web`                    | The Next.js static export (`apps/web/out/`) ready to drop into any static file server. |
+| `apps.<system>.default`                    | `nix run github:nexu-io/open-design` — boots the daemon.                               |
+| `devShells.<system>.default`               | Node 24 + Corepack-pinned pnpm 10.33 — reproduces `pnpm install` locally.              |
+| `homeManagerModules.{default,open-design}` | Home Manager module — primary individual-developer interface.                          |
+| `nixosModules.{default,open-design}`       | NixOS module — secondary, for shared/server installs.                                  |
 
 ## Try it without installing
 
@@ -88,11 +88,11 @@ configuration prefer the Home Manager module.
 Open Design's frontend is a static SPA that calls the daemon's `/api/*`.
 Three serving options:
 
-| Option | When |
-|---|---|
-| `webFrontend.enable = true` | You want one-line setup. The module spawns a tiny Caddy file server on `webFrontend.port` (default `5174`) pointing at the built export. |
+| Option                                 | When                                                                                                                                                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webFrontend.enable = true`            | You want one-line setup. The module spawns a tiny Caddy file server on `webFrontend.port` (default `5174`) pointing at the built export.                                                           |
 | `webFrontend.enable = false` (default) | You're running nginx / Caddy / Apache / Traefik yourself. Point your server's document root at `${pkgs.open-design.web}` (or the `packages.<system>.web` output) and proxy `/api/*` to the daemon. |
-| Skip the frontend entirely | You only need the daemon's API for headless agent dispatch. |
+| Skip the frontend entirely             | You only need the daemon's API for headless agent dispatch.                                                                                                                                        |
 
 The two services are independent. `autoStart` controls the daemon;
 `webFrontend.enable` controls the static server. Mix freely.
