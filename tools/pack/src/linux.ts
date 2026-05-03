@@ -872,11 +872,19 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   };
 }
 
-export async function readPackedLinuxLogs(_config: ToolPackConfig): Promise<{
+export async function readPackedLinuxLogs(config: ToolPackConfig): Promise<{
   logs: Record<string, { lines: string[]; logPath: string }>;
   namespace: string;
 }> {
-  throw new Error("readPackedLinuxLogs: implemented in Task 15");
+  const logsRoot = join(config.roots.runtime.namespaceRoot, "logs");
+  const apps = [APP_KEYS.DESKTOP, APP_KEYS.WEB, APP_KEYS.DAEMON] as const;
+  const logs: Record<string, { lines: string[]; logPath: string }> = {};
+  for (const app of apps) {
+    const logPath = join(logsRoot, app, "latest.log");
+    const lines = (await pathExists(logPath)) ? await readLogTail(logPath, 200) : [];
+    logs[app] = { lines, logPath };
+  }
+  return { logs, namespace: config.namespace };
 }
 
 export async function uninstallPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
