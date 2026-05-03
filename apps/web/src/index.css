@@ -580,7 +580,7 @@ code {
 /* -------- Split / panes -------------------------------------------- */
 .split {
   display: grid;
-  grid-template-columns: minmax(380px, 460px) 1fr;
+  grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
   min-height: 0;
 }
 .pane {
