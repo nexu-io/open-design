@@ -480,3 +480,30 @@ async function runBuildInContainer(config: ToolPackConfig): Promise<void> {
     });
   });
 }
+
+export async function installPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
+  throw new Error("installPackedLinuxApp: implemented in Task 12");
+}
+
+export async function startPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
+  throw new Error("startPackedLinuxApp: implemented in Task 13");
+}
+
+export async function stopPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
+  throw new Error("stopPackedLinuxApp: implemented in Task 14");
+}
+
+export async function readPackedLinuxLogs(_config: ToolPackConfig): Promise<{
+  logs: Record<string, { lines: string[]; logPath: string }>;
+  namespace: string;
+}> {
+  throw new Error("readPackedLinuxLogs: implemented in Task 15");
+}
+
+export async function uninstallPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
+  throw new Error("uninstallPackedLinuxApp: implemented in Task 16");
+}
+
+export async function cleanupPackedLinuxNamespace(_config: ToolPackConfig): Promise<unknown> {
+  throw new Error("cleanupPackedLinuxNamespace: implemented in Task 17");
+}

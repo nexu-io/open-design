@@ -23,6 +23,15 @@ import {
   stopPackedWinApp,
   uninstallPackedWinApp,
 } from "./win.js";
+import {
+  cleanupPackedLinuxNamespace,
+  installPackedLinuxApp,
+  packLinux,
+  readPackedLinuxLogs,
+  startPackedLinuxApp,
+  stopPackedLinuxApp,
+  uninstallPackedLinuxApp,
+} from "./linux.js";
 
 type CliOptions = ToolPackCliOptions;
 
@@ -148,6 +157,37 @@ addWinLifecycleOptions(
       throw new Error(`unsupported win action: ${action}`);
   }
 });
+
+addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")))
+  .option("--containerized", "build inside electronuserland/builder Docker for distro-agnostic glibc compat")
+  .action(async (action: string, options: CliOptions) => {
+    const config = resolveToolPackConfig("linux", options);
+    switch (action) {
+      case "build":
+        printJson(await packLinux(config));
+        return;
+      case "install":
+        printJson(await installPackedLinuxApp(config));
+        return;
+      case "start":
+        printJson(await startPackedLinuxApp(config));
+        return;
+      case "stop":
+        printJson(await stopPackedLinuxApp(config));
+        return;
+      case "logs":
+        printLogs(await readPackedLinuxLogs(config), options);
+        return;
+      case "uninstall":
+        printJson(await uninstallPackedLinuxApp(config));
+        return;
+      case "cleanup":
+        printJson(await cleanupPackedLinuxNamespace(config));
+        return;
+      default:
+        throw new Error(`unsupported linux action: ${action}`);
+    }
+  });
 
 cli.help();
 cli.parse();
