@@ -60,13 +60,13 @@ describe('EntryView', () => {
     vi.restoreAllMocks();
   });
 
-  it('lets the OneShot workflows surface use the full page', () => {
+  it('lets the OneShot workflows surface use the available page while reserving sidebar space', () => {
     const { container } = renderEntryView();
     const entry = container.querySelector('.entry');
 
     expect(entry).toHaveClass('entry-workflows-full');
-    expect(container.querySelector('.entry-side')).not.toBeInTheDocument();
-    expect(container.querySelector('.entry-header-brand')).toBeInTheDocument();
+    expect(container.querySelector('.entry-side')).toBeInTheDocument();
+    expect(container.querySelector('.oneshot-workflows')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Designs' }));
 

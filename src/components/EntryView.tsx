@@ -285,7 +285,6 @@ export function EntryView({
       className={`entry${workflowsFullPage ? ' entry-workflows-full' : ''}`}
       style={{ '--entry-sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
-      {!workflowsFullPage ? (
       <aside className="entry-side">
         <div className="entry-brand">
           <span className="entry-brand-mark" aria-hidden>
@@ -339,21 +338,9 @@ export function EntryView({
           }}
         />
       </aside>
-      ) : null}
       <main className="entry-main">
         <div className="entry-header">
           <div className="entry-header-tabs-row">
-            {workflowsFullPage ? (
-              <div className="entry-header-brand" aria-label="OneShot Design">
-                <span className="entry-header-brand-mark" aria-hidden>
-                  <img src="/logo.svg" alt="" className="brand-mark-img" draggable={false} />
-                </span>
-                <span className="entry-header-brand-copy">
-                  <strong>{t('app.brand')}</strong>
-                  <small>{t('app.brandSubtitle')}</small>
-                </span>
-              </div>
-            ) : null}
             <div className="entry-tabs" role="tablist">
               <TopTabButton current={topTab} value="workflows" label={t('entry.tabWorkflows')} onClick={setTopTab} />
               <TopTabButton current={topTab} value="inspiration" label="Inspiration" onClick={setTopTab} />
