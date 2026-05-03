@@ -10,12 +10,17 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 
 - The entry screen defaults to a new `Workflows` tab.
 - The Workflows tab now opens with a `Design OS command structure` section that makes the parent architecture explicit: Website Studio, Product UI Studio, Brand Studio, Deck Studio, Marketing Studio, CoverVision OS, Evidence Studio, and Codex Build Studio.
+- The Workflows tab now includes a `Website Studio workbench` surface that turns the Design OS architecture into working studio depth: editable site intake, sitemap/page planner, section library, responsive preview frames, design-token panel, deploy status, and Codex build brief preview.
 - OneShot now has a shared Design OS core model in `src/oneshotDesignOS.ts` covering studios, shared capabilities, professional output controls, and adapter contracts.
+- The shared Design OS model now includes concrete module data for Website Studio sections, shared quality gates, professional output controls, CoverVision OS deepening, Evidence Studio pipeline, and adapter-layer guardrails.
 - Website Studio v1 is now a first-class workflow pack. It creates site intake, sitemap/page plan, landing-page plan, section library, design tokens, responsive preview plan, quality scorecard, and Codex build brief output.
 - The Website Studio v1 workflow includes a future handoff contract for the dedicated Website Builder / Design OS through `generateSitePlan`, `generatePage`, `generateSection`, `validateResponsive`, `exportBuildBrief`, and `publishOrPrepareDeploy`.
-- The Website Studio deploy rule is explicit: OneShot must not claim a website is deployed unless a real deploy URL or verified deployment command exists. Otherwise the status is prepare-only.
+- The Website Studio deploy rule is explicit and visible in the workbench: OneShot must not claim a website is deployed unless a real deploy URL or verified deployment command exists. Otherwise the status is prepare-only.
 - CoverVision OS is positioned as the premium book-cover studio inside OneShot, not the whole OneShot identity.
+- CoverVision OS now has a deeper premium studio panel for cover concept lanes, typography lab, series system, and ARC/ad/audiobook crop packs.
+- Evidence Studio now has a visible pipeline for ingesting and classifying sources, preserving evidence trails, generating `DESIGN.md`, and creating opportunity/Codex packets.
 - Professional output controls are now part of the product language: critique panel, quality scorecard, comments and pins, tweak controls, export history, evidence trail, review before export, and no fake deploy/status.
+- Shared quality gates now appear as a cross-studio scorecard covering visual quality, responsiveness, accessibility, source/evidence traceability, copy clarity, export readiness, build readiness, and risk/privacy notes.
 - Workflow cards seed the right project type, skill, design system preference, prompt, quality checkpoints, and export expectations.
 - Workflow-created projects preserve their workflow identity in metadata, show the selected production path in the project header, and inject workflow gates/export expectations into the agent prompt stack.
 - Workflow scorecards are now structured metadata, so each production path carries its own critique rubric into the agent prompt even after the starter prompt changes.
@@ -59,8 +64,8 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Build Website Studio v1 into a richer native website-builder surface: intake form, sitemap editor, section library, responsive preview frames, design-token editor, and Codex build brief export.
-2. Add the first professional output controls across generated artifacts: critique panel, scorecard panel, comment/pin affordances, export history, and evidence trail.
-3. Build the adapter layer behind the Website Studio contract so the dedicated Website Builder / Design OS can plug in later without replacing OneShot's project/library/export core.
-4. Upgrade CoverVision OS as the premium book-cover studio: concept lanes, typography lab, series system, author brand kit, ARC/ad crop packs, and KDP/Ingram production checklist.
+1. Turn the Website Studio workbench into a persistent project-backed editor: saved intake, editable sitemap rows, selectable sections, and generated build-brief files.
+2. Connect shared quality gates to real artifact review data instead of static starting scores.
+3. Add comment and pin overlays to generated artifacts so output controls attach to exact sections and source evidence.
+4. Build the adapter execution layer behind the Website Studio contract so the dedicated Website Builder / Design OS can plug in later without replacing OneShot's project/library/export core.
 5. Build the Operational Atelier intake screen: source rail, precision-tray drop zone, evidence canvas preview, inspector/action panel, and run deck using `docs/DESIGN.md`.

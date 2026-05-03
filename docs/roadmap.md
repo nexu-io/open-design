@@ -32,11 +32,18 @@ The shared core every studio must use:
 
 Immediate implementation slice:
 
-1. Ship the visible studio architecture in the Workflows tab.
-2. Add Website Studio v1 now, while leaving a future adapter for the dedicated Website Builder / Design OS.
-3. Keep CoverVision OS as the premium book-cover studio inside OneShot.
-4. Add professional output controls across studios: critique panel, quality scorecard, comments/pins, tweak controls, export history, evidence trail, and review-before-export.
-5. Treat all external engines as adapters. They can strengthen OneShot, but they should not replace OneShot's project, library, quality, export, or handoff core.
+1. Ship the visible studio architecture in the Workflows tab. Shipped.
+2. Add Website Studio v1 now, while leaving a future adapter for the dedicated Website Builder / Design OS. Shipped as a workflow pack and dedicated workbench.
+3. Keep CoverVision OS as the premium book-cover studio inside OneShot. Shipped in architecture and deepening panel.
+4. Add professional output controls across studios: critique panel, quality scorecard, comments/pins, tweak controls, export history, evidence trail, and review-before-export. Shipped as cross-studio control modules.
+5. Treat all external engines as adapters. They can strengthen OneShot, but they should not replace OneShot's project, library, quality, export, or handoff core. Shipped as adapter contracts.
+
+Next implementation slice:
+
+1. Persist Website Studio intake, sitemap, selected sections, deploy target, and Codex build brief preview into a project-backed artifact.
+2. Convert quality gates from starting scores into real artifact checks with review notes and pass/block states.
+3. Add artifact comments and pins that attach to Website Studio sections, CoverVision lanes, and Evidence Studio sources.
+4. Add adapter execution stubs that return honest prepare-only, verified-local, or verified-deployed states.
 
 Trust rule: website and deployment flows must never invent live URLs or fake published states. If no real deploy URL or verified command exists, the status is prepare-only.
 

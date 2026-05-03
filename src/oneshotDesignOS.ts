@@ -23,6 +23,31 @@ export interface OneShotAdapterContract {
   guardrail: string;
 }
 
+export interface OneShotQualityGate {
+  id: string;
+  title: string;
+  score: number;
+  status: 'ready' | 'review' | 'blocked';
+  evidence: string;
+}
+
+export interface OneShotStudioModule {
+  id: string;
+  title: string;
+  status: 'native' | 'premium' | 'adapter-ready' | 'planned';
+  description: string;
+  items: string[];
+}
+
+export interface WebsiteStudioIntakeTemplate {
+  business: string;
+  audience: string;
+  offer: string;
+  conversion: string;
+  pages: string[];
+  sourcePath: string;
+}
+
 export const ONESHOT_STUDIOS: OneShotStudio[] = [
   {
     id: 'website-studio',
@@ -218,6 +243,198 @@ export const ONESHOT_ADAPTER_CONTRACTS: OneShotAdapterContract[] = [
     status: 'planned',
     methods: ['importDesignSystem', 'extractTokens', 'validateTokens', 'applyDesignSystem', 'exportDesignSystem'],
     guardrail: 'Imported systems remain traceable to their source and cannot silently override active project rules.',
+  },
+];
+
+export const WEBSITE_STUDIO_DEFAULT_INTAKE: WebsiteStudioIntakeTemplate = {
+  business: 'Professional service, software product, creator brand, or local operator',
+  audience: 'Primary buyer, evaluator, and repeat visitor',
+  offer: 'Clear promise, proof, deliverables, and next step',
+  conversion: 'Book call, buy, join waitlist, download packet, or request build',
+  pages: ['Home', 'Offer', 'Proof', 'Pricing', 'Contact'],
+  sourcePath: 'Add local source folder, reference board, or repo path before export',
+};
+
+export const WEBSITE_STUDIO_SECTIONS: OneShotStudioModule[] = [
+  {
+    id: 'hero',
+    title: 'Hero',
+    status: 'native',
+    description: 'First viewport with literal offer, proof hint, primary CTA, and responsive copy limits.',
+    items: ['Offer lock', 'Proof cue', 'CTA', 'Mobile wrap'],
+  },
+  {
+    id: 'proof',
+    title: 'Proof',
+    status: 'native',
+    description: 'Evidence-backed credibility section with real source notes instead of vague trust badges.',
+    items: ['Case evidence', 'Metrics with source', 'Testimonials', 'Risk notes'],
+  },
+  {
+    id: 'value',
+    title: 'Feature / Value',
+    status: 'native',
+    description: 'Scannable benefits, workflow fit, and product details arranged for serious evaluation.',
+    items: ['Feature blocks', 'Use cases', 'Operator detail', 'Comparison'],
+  },
+  {
+    id: 'conversion',
+    title: 'Conversion',
+    status: 'native',
+    description: 'Pricing, FAQ, booking, and contact patterns with review-before-export checks.',
+    items: ['Offer card', 'FAQ', 'Booking', 'Footer'],
+  },
+];
+
+export const ONESHOT_QUALITY_GATES: OneShotQualityGate[] = [
+  {
+    id: 'visual-quality',
+    title: 'Visual quality',
+    score: 86,
+    status: 'review',
+    evidence: 'Hierarchy, spacing, typography, and polish must pass before export.',
+  },
+  {
+    id: 'responsiveness',
+    title: 'Responsiveness',
+    score: 82,
+    status: 'review',
+    evidence: 'Desktop, tablet, and mobile frames must be checked for overflow and navigation behavior.',
+  },
+  {
+    id: 'accessibility',
+    title: 'Accessibility',
+    score: 80,
+    status: 'review',
+    evidence: 'Contrast, focus states, labels, and reduced-motion posture are required gates.',
+  },
+  {
+    id: 'traceability',
+    title: 'Source/evidence traceability',
+    score: 88,
+    status: 'ready',
+    evidence: 'Claims, references, prompts, and design decisions need visible source paths.',
+  },
+  {
+    id: 'copy-clarity',
+    title: 'Copy clarity',
+    score: 84,
+    status: 'review',
+    evidence: 'Headlines, CTAs, labels, and proof language must stay specific and English-only.',
+  },
+  {
+    id: 'export-readiness',
+    title: 'Export readiness',
+    score: 78,
+    status: 'review',
+    evidence: 'Output format, files, limits, and downstream production requirements must be named.',
+  },
+  {
+    id: 'build-readiness',
+    title: 'Build readiness',
+    score: 83,
+    status: 'review',
+    evidence: 'Codex briefs need exact goals, file plan, constraints, and verification commands.',
+  },
+  {
+    id: 'risk-privacy',
+    title: 'Risk/privacy notes',
+    score: 90,
+    status: 'ready',
+    evidence: 'Private material, assumptions, unsupported claims, and deploy limits remain visible.',
+  },
+];
+
+export const ONESHOT_OUTPUT_CONTROL_MODULES: OneShotStudioModule[] = [
+  {
+    id: 'critique',
+    title: 'Critique panel',
+    status: 'native',
+    description: 'Operator-facing review that finds weaknesses before polish or export.',
+    items: ['Hierarchy', 'Specificity', 'Risk', 'Next pass'],
+  },
+  {
+    id: 'comments-pins',
+    title: 'Comments and pins',
+    status: 'native',
+    description: 'Artifact notes that keep decisions attached to the exact screen, section, or source.',
+    items: ['Artifact pin', 'Source note', 'Owner note', 'Review state'],
+  },
+  {
+    id: 'export-history',
+    title: 'Export history',
+    status: 'native',
+    description: 'Every exported packet records format, source artifact, limits, and next command.',
+    items: ['HTML', 'Markdown', 'PDF plan', 'ZIP plan'],
+  },
+  {
+    id: 'tweak-controls',
+    title: 'Tweak controls',
+    status: 'planned',
+    description: 'Shared placeholders for color, type, spacing, and density adjustments across studios.',
+    items: ['Color', 'Type', 'Spacing', 'Density'],
+  },
+];
+
+export const COVERVISION_STUDIO_DEEPENING: OneShotStudioModule[] = [
+  {
+    id: 'concept-lanes',
+    title: 'Cover concept lanes',
+    status: 'premium',
+    description: 'Three to six cover directions with genre rationale, comp fit, and thumbnail risk.',
+    items: ['Genre signal', 'Composition', 'Art brief', 'Risk'],
+  },
+  {
+    id: 'typography-lab',
+    title: 'Typography lab',
+    status: 'premium',
+    description: 'Title, author, series, and subtitle hierarchy tested before final finishing.',
+    items: ['Title scale', 'Author scale', 'Series badge', 'Thumbnail test'],
+  },
+  {
+    id: 'series-system',
+    title: 'Series system',
+    status: 'premium',
+    description: 'Reusable book-series rules for covers, spines, colors, type, and launch assets.',
+    items: ['Book rules', 'Spine rules', 'Palette', 'Reusable brief'],
+  },
+  {
+    id: 'production-pack',
+    title: 'ARC/ad/audiobook crop packs',
+    status: 'premium',
+    description: 'Derivative asset plan for launch, audiobook, social, ads, and print-production review.',
+    items: ['ARC', 'Audiobook', 'Ads', 'KDP/Ingram'],
+  },
+];
+
+export const EVIDENCE_STUDIO_PIPELINE: OneShotStudioModule[] = [
+  {
+    id: 'ingest',
+    title: 'Ingest and classify',
+    status: 'native',
+    description: 'Bring in screenshots, references, files, exports, links, and repo paths as evidence.',
+    items: ['Originals', 'Thumbnails', 'Supporting assets', 'Flagged files'],
+  },
+  {
+    id: 'trace',
+    title: 'Evidence trail',
+    status: 'native',
+    description: 'Preserve source paths, assumptions, private material, and review gates.',
+    items: ['Source path', 'Assumption', 'Private flag', 'Review gate'],
+  },
+  {
+    id: 'extract',
+    title: 'Generate DESIGN.md',
+    status: 'native',
+    description: 'Turn selected references into visual direction, tokens, layout rules, and anti-patterns.',
+    items: ['Visual rules', 'Tokens', 'Components', 'Anti-patterns'],
+  },
+  {
+    id: 'handoff',
+    title: 'Opportunity and Codex packets',
+    status: 'native',
+    description: 'Create opportunity rankings, quality scorecards, and Codex build briefs with exact paths.',
+    items: ['Ranking', 'Scorecard', 'Build brief', 'Verification'],
   },
 ];
 

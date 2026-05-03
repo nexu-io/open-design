@@ -60,8 +60,24 @@ describe('OneShotWorkflows', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'OneShot Design' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(10);
-    expect(screen.getByText('Website Studio v1')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(11);
+    expect(screen.getByRole('heading', { name: 'Website Studio v1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Website Studio workbench' })).toBeInTheDocument();
+    expect(screen.getAllByText('Site intake').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Sitemap and page planner')).toBeInTheDocument();
+    expect(screen.getAllByText('Section library').length).toBeGreaterThan(0);
+    expect(screen.getByText('Responsive preview frames')).toBeInTheDocument();
+    expect(screen.getByText('Design-token panel')).toBeInTheDocument();
+    expect(screen.getByText('Codex build brief export')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Website Studio packet' })).toBeInTheDocument();
+    expect(screen.getByText('Deploy status')).toBeInTheDocument();
+    expect(screen.getAllByText('Prepare-only').length).toBeGreaterThan(0);
+    expect(screen.getByText('Shared quality gates')).toBeInTheDocument();
+    expect(screen.getByText('Visual quality')).toBeInTheDocument();
+    expect(screen.getAllByText('Professional output controls').length).toBeGreaterThan(0);
+    expect(screen.getByText('CoverVision OS deeper studio')).toBeInTheDocument();
+    expect(screen.getByText('Adapter layer')).toBeInTheDocument();
+    expect(screen.getByText('Evidence Studio pipeline')).toBeInTheDocument();
     expect(screen.getByText('iOS 26 App Prototype')).toBeInTheDocument();
     expect(screen.getByText('BSA Proposal + SOW')).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
@@ -70,7 +86,7 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByText('8 expert studios')).toBeInTheDocument();
     expect(screen.getByText('Design OS command structure')).toBeInTheDocument();
     expect(screen.getAllByText('Website Studio').length).toBeGreaterThan(0);
-    expect(screen.getByText('Website Builder Adapter')).toBeInTheDocument();
+    expect(screen.getAllByText('Website Builder Adapter').length).toBeGreaterThan(0);
     const intelligenceCard = screen.getByText('AI Opportunity Intelligence').closest('.oneshot-card');
     expect(intelligenceCard).not.toBeNull();
     expect(within(intelligenceCard as HTMLElement).getByText('Operational Atelier handoff')).toBeInTheDocument();
@@ -79,6 +95,45 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByText('Author cover pre-visualization module')).toBeInTheDocument();
     expect(screen.getByText('CoverVisionOS handoff')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
+  });
+
+  it('starts Website Studio from the dedicated workbench and keeps deploy status honest', () => {
+    const onCreateProject = vi.fn();
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('saas-landing', 'prototype')]}
+        designSystems={[designSystem('webflow')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    expect(screen.getAllByText('Prepare-only').length).toBeGreaterThan(0);
+    expect(screen.getByText('No live URL claimed. Export a build brief or run a real deploy command first.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Real deploy URL or local verified URL'), {
+      target: { value: 'http://127.0.0.1:3004' },
+    });
+
+    expect(screen.getAllByText('Ready to verify URL').length).toBeGreaterThan(0);
+    expect(screen.getByText('http://127.0.0.1:3004')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Website Studio packet' }));
+
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Website Studio v1',
+        skillId: 'saas-landing',
+        designSystemId: 'webflow',
+        metadata: expect.objectContaining({
+          workflowHandoff: expect.objectContaining({
+            commands: expect.arrayContaining(['publishOrPrepareDeploy']),
+          }),
+        }),
+        pendingPrompt: expect.stringContaining('Do not claim the website is deployed'),
+      }),
+    );
   });
 
   it('seeds the Website Studio v1 workflow with future adapter guardrails', () => {
@@ -93,7 +148,7 @@ describe('OneShotWorkflows', () => {
       />,
     );
 
-    const websiteCard = screen.getByText('Website Studio v1').closest('.oneshot-card');
+    const websiteCard = screen.getByRole('heading', { name: 'Website Studio v1' }).closest('.oneshot-card');
     expect(websiteCard).not.toBeNull();
     fireEvent.click((websiteCard as HTMLElement).querySelector('button') as HTMLButtonElement);
 

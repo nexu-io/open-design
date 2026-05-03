@@ -26,6 +26,7 @@ import {
 import { ONESHOT_STUDIOS, WEBSITE_STUDIO_V1_PROMPT } from '../oneshotDesignOS';
 import { Icon } from './Icon';
 import { OneShotDesignOS } from './OneShotDesignOS';
+import { OneShotStudioDepth } from './OneShotStudioDepth';
 
 type WorkflowKind = 'prototype' | 'deck' | 'template' | 'other';
 
@@ -817,6 +818,10 @@ export function OneShotWorkflows({
     });
   }
 
+  const websiteStudioWorkflow = WORKFLOWS.find(
+    (workflow) => workflow.id === 'website-studio-v1',
+  );
+
   return (
     <div className="oneshot-workflows">
       <section className="oneshot-hero">
@@ -844,6 +849,12 @@ export function OneShotWorkflows({
       </section>
 
       <OneShotDesignOS />
+
+      {websiteStudioWorkflow ? (
+        <OneShotStudioDepth
+          onLaunchWebsiteStudio={() => launchWorkflow(websiteStudioWorkflow)}
+        />
+      ) : null}
 
       {savedBlueprints.length > 0 ? (
         <section className="oneshot-saved" aria-label="Saved blueprints">
