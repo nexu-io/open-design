@@ -2459,6 +2459,10 @@ code {
   background: var(--bg);
 }
 
+.entry.entry-workflows-full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .entry-side {
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
@@ -3198,7 +3202,77 @@ code {
   display: flex;
   align-items: center;
   gap: 24px;
+  min-width: 0;
 }
+
+.entry-header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.entry-header-brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fbeee5 0%, #f5d8cb 100%);
+  box-shadow: inset 0 0 0 1px rgba(132, 84, 56, 0.14);
+  overflow: hidden;
+}
+
+.entry-header-brand-mark .brand-mark-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  padding: 2px;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.entry-header-brand-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.entry-header-brand-copy strong {
+  color: var(--text-strong);
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.entry-header-brand-copy small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.entry-workflows-full .entry-header {
+  padding: 16px 32px 0;
+}
+
+.entry-workflows-full .entry-tab-content {
+  padding: 24px 32px 42px;
+}
+
+.entry-workflows-full .oneshot-workflows {
+  width: 100%;
+  max-width: none;
+}
+
+.entry-workflows-full .oneshot-hero {
+  grid-template-columns: minmax(0, 1.25fr) minmax(460px, 0.75fr);
+}
+
 .entry-tabs {
   display: flex;
   gap: 2px;
@@ -4956,6 +5030,7 @@ code {
 }
 
 @media (max-width: 1080px) {
+  .entry-workflows-full .oneshot-hero,
   .oneshot-hero {
     grid-template-columns: 1fr;
   }
@@ -5017,6 +5092,20 @@ code {
   .entry-header {
     gap: 10px;
     padding: 12px 12px 0;
+  }
+
+  .entry-workflows-full .entry-header,
+  .entry-workflows-full .entry-tab-content {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .entry-header-tabs-row {
+    gap: 10px;
+  }
+
+  .entry-header-brand-copy {
+    display: none;
   }
 
   .entry-snapshot-btn span {

@@ -60,6 +60,20 @@ describe('EntryView', () => {
     vi.restoreAllMocks();
   });
 
+  it('lets the OneShot workflows surface use the full page', () => {
+    const { container } = renderEntryView();
+    const entry = container.querySelector('.entry');
+
+    expect(entry).toHaveClass('entry-workflows-full');
+    expect(container.querySelector('.entry-side')).not.toBeInTheDocument();
+    expect(container.querySelector('.entry-header-brand')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Designs' }));
+
+    expect(entry).not.toHaveClass('entry-workflows-full');
+    expect(container.querySelector('.entry-side')).toBeInTheDocument();
+  });
+
   it('exports a full OneShot studio snapshot from the entry header', async () => {
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const createObjectURL = vi.fn(() => 'blob:oneshot-studio-snapshot');

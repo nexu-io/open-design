@@ -278,11 +278,14 @@ export function EntryView({
     }
   }, [sidebarWidth]);
 
+  const workflowsFullPage = topTab === 'workflows';
+
   return (
     <div
-      className="entry"
+      className={`entry${workflowsFullPage ? ' entry-workflows-full' : ''}`}
       style={{ '--entry-sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
+      {!workflowsFullPage ? (
       <aside className="entry-side">
         <div className="entry-brand">
           <span className="entry-brand-mark" aria-hidden>
@@ -336,20 +339,34 @@ export function EntryView({
           }}
         />
       </aside>
+      ) : null}
       <main className="entry-main">
         <div className="entry-header">
-          <div className="entry-tabs" role="tablist">
-            <TopTabButton current={topTab} value="workflows" label={t('entry.tabWorkflows')} onClick={setTopTab} />
-            <TopTabButton current={topTab} value="inspiration" label="Inspiration" onClick={setTopTab} />
-            <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
-            <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
-            <TopTabButton
-              current={topTab}
-              value="design-systems"
-              label={t('entry.tabDesignSystems')}
-              onClick={setTopTab}
-            />
-            <TopTabButton current={topTab} value="library-search" label="Library Search" onClick={setTopTab} />
+          <div className="entry-header-tabs-row">
+            {workflowsFullPage ? (
+              <div className="entry-header-brand" aria-label="OneShot Design">
+                <span className="entry-header-brand-mark" aria-hidden>
+                  <img src="/logo.svg" alt="" className="brand-mark-img" draggable={false} />
+                </span>
+                <span className="entry-header-brand-copy">
+                  <strong>{t('app.brand')}</strong>
+                  <small>{t('app.brandSubtitle')}</small>
+                </span>
+              </div>
+            ) : null}
+            <div className="entry-tabs" role="tablist">
+              <TopTabButton current={topTab} value="workflows" label={t('entry.tabWorkflows')} onClick={setTopTab} />
+              <TopTabButton current={topTab} value="inspiration" label="Inspiration" onClick={setTopTab} />
+              <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
+              <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
+              <TopTabButton
+                current={topTab}
+                value="design-systems"
+                label={t('entry.tabDesignSystems')}
+                onClick={setTopTab}
+              />
+              <TopTabButton current={topTab} value="library-search" label="Library Search" onClick={setTopTab} />
+            </div>
           </div>
           <div className="entry-header-right">
             <label className="entry-snapshot-btn entry-snapshot-import" title="Import OneShot studio snapshot">
