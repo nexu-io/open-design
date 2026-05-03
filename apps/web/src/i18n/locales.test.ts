@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { en } from './locales/en';
 import { LOCALES, LOCALE_LABEL, type Dict, type Locale } from './types';
 
-const EXPECTED_LOCALES = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu'];
+const EXPECTED_LOCALES = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr'];
 
 function placeholders(value: string): string[] {
   const names: string[] = [];
