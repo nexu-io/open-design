@@ -277,3 +277,67 @@ describe('parseCritiqueStream -- per-block size enforcement (mrcfps review)', ()
     ).rejects.toBeInstanceOf(OversizeBlockError);
   });
 });
+
+describe('parseCritiqueStream -- v1 envelope and shape invariants (mrcfps review 2)', () => {
+  async function* oneChunk(s: string): AsyncGenerator<string> { yield s; }
+
+  it('throws MalformedBlockError when ROUND appears before any <CRITIQUE_RUN>', async () => {
+    const stream = `<ROUND n="1">
+      <PANELIST role="critic" score="6"><DIM name="contrast" score="4">x</DIM></PANELIST>
+    </ROUND>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(MalformedBlockError);
+  });
+
+  it('throws MalformedBlockError when SHIP appears before any <CRITIQUE_RUN>', async () => {
+    const stream = `<SHIP round="1" composite="8" status="shipped">
+      <ARTIFACT mime="text/html"><![CDATA[<p>x</p>]]></ARTIFACT>
+      <SUMMARY>x</SUMMARY>
+    </SHIP>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(MalformedBlockError);
+  });
+
+  it('measures parserMaxBlockBytes as UTF-8 bytes, so multibyte content over the byte cap fails', async () => {
+    const cap = 4096;
+    // Each CJK char encodes to 3 UTF-8 bytes. 1500 chars = 4500 bytes, over the
+    // 4096-byte cap, but the JS string length is only 1500, well under the cap.
+    // The pre-fix code (string-length comparison) would let this through.
+    const giant = '汉'.repeat(1500);
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>${giant}</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+      </ROUND>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: cap,
+      })),
+    ).rejects.toBeInstanceOf(OversizeBlockError);
+  });
+
+  it('throws MalformedBlockError when a PANELIST opener has no > before </PANELIST>', async () => {
+    // The opening tag is missing its closing >. Without the headEnd-ordering
+    // guard the parser would pick up the > of </PANELIST> as the opener end
+    // and emit panelist events for an invalid block.
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="critic" score="8"</PANELIST>
+      </ROUND>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(MalformedBlockError);
+  });
+});

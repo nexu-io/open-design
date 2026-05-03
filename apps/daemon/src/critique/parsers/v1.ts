@@ -54,8 +54,11 @@ export async function* parseV1(
     yield* drain(state);
     // After drain, anything still in the buffer is a partial tag waiting on more input.
     // If that pending block is bigger than the cap, the producer is stuck inside one
-    // unclosed block and we have to fail rather than buffer indefinitely.
-    if (state.buf.length > opts.parserMaxBlockBytes) {
+    // unclosed block and we have to fail rather than buffer indefinitely. Compare in
+    // UTF-8 bytes (mrcfps review #2) so a buffer full of CJK or emoji cannot exceed
+    // the configured byte cap while staying under the JS string length cap.
+    const bufBytes = Buffer.byteLength(state.buf, 'utf8');
+    if (bufBytes > opts.parserMaxBlockBytes) {
       throw new OversizeBlockError(
         `block exceeded ${opts.parserMaxBlockBytes} bytes at position ${state.consumed}`,
         state.consumed,
@@ -106,6 +109,15 @@ function* drain(state: State): Generator<PanelEvent> {
     // <ROUND n="N">
     const roundMatch = slice.match(/^<ROUND\s+([^>]*)>/);
     if (roundMatch) {
+      // Envelope guard (mrcfps review #2): no run-level event may appear before
+      // <CRITIQUE_RUN ...> opens the envelope, otherwise downstream consumers
+      // see contract-shaped events without the required run_started handshake.
+      if (!state.inRun) {
+        throw new MalformedBlockError(
+          `<ROUND> at position ${state.consumed + cursor} appeared before <CRITIQUE_RUN>`,
+          state.consumed + cursor,
+        );
+      }
       const a = parseAttrs(roundMatch[1] ?? '');
       state.currentRound = Number(a['n']);
       cursor += roundMatch[0].length;
@@ -119,13 +131,21 @@ function* drain(state: State): Generator<PanelEvent> {
       slice.startsWith('<PANELIST\t') ||
       slice.startsWith('<PANELIST\n')
     ) {
+      if (!state.inRun) {
+        throw new MalformedBlockError(
+          `<PANELIST> at position ${state.consumed + cursor} appeared before <CRITIQUE_RUN>`,
+          state.consumed + cursor,
+        );
+      }
       const closeIdx = slice.indexOf('</PANELIST>');
       if (closeIdx < 0) break;
       // Per-block size enforcement (mrcfps review): a complete oversized block
       // that arrives in one large chunk would otherwise slip past the post-drain
       // buf-size check because its body would be sliced and emitted before the
-      // check ran. Catch it here, before any work happens.
-      const blockBytes = closeIdx + '</PANELIST>'.length;
+      // check ran. Catch it here, before any work happens. Use UTF-8 byte length
+      // so multibyte content (CJK, emoji) cannot bypass the byte-defined cap.
+      const blockText = slice.slice(0, closeIdx + '</PANELIST>'.length);
+      const blockBytes = Buffer.byteLength(blockText, 'utf8');
       if (blockBytes > state.parserMaxBlockBytes) {
         throw new OversizeBlockError(
           `PANELIST block of ${blockBytes} bytes exceeded ${state.parserMaxBlockBytes} at position ${state.consumed + cursor}`,
@@ -133,7 +153,17 @@ function* drain(state: State): Generator<PanelEvent> {
         );
       }
       const headEnd = slice.indexOf('>');
+      // headEnd must be the opener's closing >, which has to come BEFORE the
+      // matched </PANELIST>. Without this guard a malformed opener like
+      // <PANELIST role="critic" score="8"</PANELIST> (no opening >) would
+      // pick up the closing tag's > and emit panelist events for an invalid block.
       if (headEnd < 0) break;
+      if (headEnd >= closeIdx) {
+        throw new MalformedBlockError(
+          `<PANELIST> opening tag at position ${state.consumed + cursor} has no closing > before </PANELIST>`,
+          state.consumed + cursor,
+        );
+      }
       const head = slice.slice('<PANELIST'.length, headEnd);
       const body = slice.slice(headEnd + 1, closeIdx);
       // Nesting guard: if another <PANELIST opening appears inside what we believe
@@ -196,9 +226,16 @@ function* drain(state: State): Generator<PanelEvent> {
 
     // <ROUND_END n="N" ...>...</ROUND_END>
     if (slice.startsWith('<ROUND_END ')) {
+      if (!state.inRun) {
+        throw new MalformedBlockError(
+          `<ROUND_END> at position ${state.consumed + cursor} appeared before <CRITIQUE_RUN>`,
+          state.consumed + cursor,
+        );
+      }
       const closeIdx = slice.indexOf('</ROUND_END>');
       if (closeIdx < 0) break;
-      const blockBytes = closeIdx + '</ROUND_END>'.length;
+      const blockText = slice.slice(0, closeIdx + '</ROUND_END>'.length);
+      const blockBytes = Buffer.byteLength(blockText, 'utf8');
       if (blockBytes > state.parserMaxBlockBytes) {
         throw new OversizeBlockError(
           `ROUND_END block of ${blockBytes} bytes exceeded ${state.parserMaxBlockBytes} at position ${state.consumed + cursor}`,
@@ -207,6 +244,12 @@ function* drain(state: State): Generator<PanelEvent> {
       }
       const headEnd = slice.indexOf('>');
       if (headEnd < 0) break;
+      if (headEnd >= closeIdx) {
+        throw new MalformedBlockError(
+          `<ROUND_END> opening tag at position ${state.consumed + cursor} has no closing > before </ROUND_END>`,
+          state.consumed + cursor,
+        );
+      }
       const attrs = parseAttrs(slice.slice('<ROUND_END'.length, headEnd));
       const inner = slice.slice(headEnd + 1, closeIdx);
       const reason = (inner.match(/<REASON>([\s\S]*?)<\/REASON>/)?.[1] ?? '').trim();
@@ -246,9 +289,16 @@ function* drain(state: State): Generator<PanelEvent> {
 
     // <SHIP ...>...</SHIP>
     if (slice.startsWith('<SHIP ')) {
+      if (!state.inRun) {
+        throw new MalformedBlockError(
+          `<SHIP> at position ${state.consumed + cursor} appeared before <CRITIQUE_RUN>`,
+          state.consumed + cursor,
+        );
+      }
       const closeIdx = slice.indexOf('</SHIP>');
       if (closeIdx < 0) break;
-      const blockBytes = closeIdx + '</SHIP>'.length;
+      const blockText = slice.slice(0, closeIdx + '</SHIP>'.length);
+      const blockBytes = Buffer.byteLength(blockText, 'utf8');
       if (blockBytes > state.parserMaxBlockBytes) {
         throw new OversizeBlockError(
           `SHIP block of ${blockBytes} bytes exceeded ${state.parserMaxBlockBytes} at position ${state.consumed + cursor}`,
@@ -271,6 +321,12 @@ function* drain(state: State): Generator<PanelEvent> {
       state.shipSeen = true;
       const headEnd = slice.indexOf('>');
       if (headEnd < 0) break;
+      if (headEnd >= closeIdx) {
+        throw new MalformedBlockError(
+          `<SHIP> opening tag at position ${state.consumed + cursor} has no closing > before </SHIP>`,
+          state.consumed + cursor,
+        );
+      }
       const attrs = parseAttrs(slice.slice('<SHIP'.length, headEnd));
       const inner = slice.slice(headEnd + 1, closeIdx);
       const summary = (inner.match(/<SUMMARY>([\s\S]*?)<\/SUMMARY>/)?.[1] ?? '').trim();
