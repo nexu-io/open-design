@@ -12,6 +12,8 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Workflow scorecards are now structured metadata, so each production path carries its own critique rubric into the agent prompt even after the starter prompt changes.
 - Workflow export packages are structured metadata, visible on the workflow cards, and injected into the agent prompt as concrete deliverable contracts.
 - OneShot Cover Run now carries a CoverVisionOS handoff contract with production stages, expected files, and downstream router commands.
+- Claude Design Author Cover Lab now captures Claude Design as an author cover layout, typography, series-system, brief-deck, and pre-generation module for CoverVision workflows.
+- The Claude Design author module is documented in `docs/claude-design-for-authors.md` with 10 workflows, prompt templates, genre calibration, handoff rules, and production pitfalls.
 - AI Opportunity Intelligence now has its own workflow pack for turning messy screenshots, Telegram exports, reports, and product ideas into `DESIGN.md`, an opportunity report, and a Codex build brief.
 - The Operational Atelier design contract is captured in `docs/DESIGN.md` as the north star for evidence-first OneShot surfaces.
 - Workflow-created projects now show a reusable blueprint strip with gates, exports, scorecards, handoff context, a copyable prompt, and a save action.
@@ -27,7 +29,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Inspiration boards recommend the strongest OneShot production paths and can launch a workflow-specific project with the board attached as the reference lock.
 - Inspiration boards can be exported and imported as OneShot JSON packets, so reference libraries can move between machines, backups, and repos.
 - Workflow launches can attach an Inspiration Library board as the reference lock, adding the board context and pins into the generated prompt and workflow metadata.
-- The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, Motion Explainer, and AI Opportunity Intelligence.
+- The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Claude Design Author Cover Lab, Dashboard Mockup, PRD Factory, Motion Explainer, and AI Opportunity Intelligence.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
 - The Liquid Glass system includes `design-systems/ios-26-liquid-glass/assets/reference-prototype.html`, a compact visual reference for lock screen widgets, Control Center tiles, app chrome, modal sheets, and reduced-brightness behavior.
 - The app metadata, loading shell, onboarding copy, exported ZIP README, and locale strings now use OneShot Design.

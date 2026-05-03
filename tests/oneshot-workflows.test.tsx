@@ -60,18 +60,64 @@ describe('OneShotWorkflows', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'OneShot Design' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(8);
+    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(9);
     expect(screen.getByText('iOS 26 App Prototype')).toBeInTheDocument();
     expect(screen.getByText('BSA Proposal + SOW')).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
-    expect(screen.getByText('8 workflow packs')).toBeInTheDocument();
+    expect(screen.getByText('Claude Design Author Cover Lab')).toBeInTheDocument();
+    expect(screen.getByText('9 workflow packs')).toBeInTheDocument();
     const intelligenceCard = screen.getByText('AI Opportunity Intelligence').closest('.oneshot-card');
     expect(intelligenceCard).not.toBeNull();
     expect(within(intelligenceCard as HTMLElement).getByText('Operational Atelier handoff')).toBeInTheDocument();
     expect(within(intelligenceCard as HTMLElement).getByText('Intelligence packet')).toBeInTheDocument();
     expect(screen.getByText('HTML + PNG + Markdown')).toBeInTheDocument();
+    expect(screen.getByText('Author cover pre-visualization module')).toBeInTheDocument();
     expect(screen.getByText('CoverVisionOS handoff')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
+  });
+
+  it('seeds the Claude Design author workflow with CoverVision handoff doctrine', () => {
+    const onCreateProject = vi.fn();
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('digital-eguide', 'template')]}
+        designSystems={[designSystem('warm-editorial')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    const claudeCard = screen.getByText('Claude Design Author Cover Lab').closest('.oneshot-card');
+    expect(claudeCard).not.toBeNull();
+    fireEvent.click((claudeCard as HTMLElement).querySelector('button') as HTMLButtonElement);
+
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Claude Design Author Cover Lab',
+        skillId: 'digital-eguide',
+        designSystemId: 'warm-editorial',
+        metadata: expect.objectContaining({
+          workflowId: 'claude-design-author-cover-lab',
+          workflowTitle: 'Claude Design Author Cover Lab',
+          workflowCategory: 'Book cover production',
+          workflowOutcome: 'Author cover pre-visualization module',
+          workflowCheckpoints: ['Composition lock', 'Type lab', 'Series rules', 'Production handoff'],
+          workflowExports: ['Author module', 'Brief deck', 'Prompt kit', 'QA checklist'],
+          workflowHandoff: expect.objectContaining({
+            system: 'Claude Design + CoverVisionOS',
+            stages: expect.arrayContaining(['Concept mockup', 'Typography lab', 'Production handoff']),
+            artifacts: expect.arrayContaining(['docs/claude-design-for-authors.md']),
+          }),
+          workflowScorecard: expect.arrayContaining([
+            'Genre calibration',
+            'Typography usefulness',
+            'Print-production safety',
+          ]),
+        }),
+        pendingPrompt: expect.stringContaining('Claude Design is a layout, briefing, typography'),
+      }),
+    );
   });
 
   it('seeds a workflow project with matched skill, design system, metadata, and prompt', () => {

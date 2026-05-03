@@ -288,6 +288,99 @@ Required output:
 If exact book metadata is missing, create a clearly marked fill-in packet instead of hallucinating specifics.`,
   },
   {
+    id: 'claude-design-author-cover-lab',
+    title: 'Claude Design Author Cover Lab',
+    category: 'Book cover production',
+    outcome: 'Author cover pre-visualization module',
+    description:
+      'Use Claude Design as an author cover layout, typography, brief-deck, series-system, and crop-pack instrument before art generation and finishing.',
+    skillCandidates: ['digital-eguide', 'magazine-poster', 'pm-spec'],
+    designSystemCandidates: ['warm-editorial', 'claude', 'wired', 'default'],
+    metadata: { kind: 'template', animations: false },
+    checkpoints: ['Composition lock', 'Type lab', 'Series rules', 'Production handoff'],
+    exports: ['Author module', 'Brief deck', 'Prompt kit', 'QA checklist'],
+    exportPackage: [
+      {
+        format: 'Markdown',
+        artifact: 'Claude Design author module',
+        instructions: 'Create a reusable author-facing module based on docs/claude-design-for-authors.md, including workflows, prompts, genre calibration, and tool boundaries.',
+      },
+      {
+        format: 'PDF',
+        artifact: 'Cover brief deck',
+        instructions: 'Prepare a designer-readable brief deck with positioning, mood board, type direction, palette, composition wireframe, must-have, and must-avoid pages.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Prompt kit',
+        instructions: 'Provide copy-ready prompts for concept mockups, typography labs, series systems, thumbnail testing, crop packs, ARC assets, and series bibles.',
+      },
+      {
+        format: 'Checklist',
+        artifact: 'Production handoff checklist',
+        instructions: 'Separate Claude Design responsibilities from Midjourney/Flux, Photoshop/Affinity, KDP/IngramSpark, and human review gates.',
+      },
+    ],
+    scorecard: [
+      'Genre calibration',
+      'Composition specificity',
+      'Typography usefulness',
+      'Series consistency',
+      'Handoff clarity',
+      'Print-production safety',
+    ],
+    handoff: {
+      system: 'Claude Design + CoverVisionOS',
+      stages: [
+        'Comp analysis',
+        'Concept mockup',
+        'Typography lab',
+        'Series design system',
+        'Brief deck',
+        'Thumbnail test',
+        'Crop pack',
+        'Production handoff',
+      ],
+      artifacts: [
+        'docs/claude-design-for-authors.md',
+        'cover_brief_deck.pdf',
+        'claude_design_prompt_kit.md',
+        'thumbnail_test_sheet.pdf',
+        'crop_pack.pdf',
+        'production_handoff_checklist.md',
+      ],
+      commands: [
+        'concept-mockup',
+        'typography-lab',
+        'series-system',
+        'brief-deck',
+        'thumbnail-test',
+        'crop-pack',
+      ],
+    },
+    prompt: `Create a Claude Design for Authors cover-production packet for OneShot Design.
+
+Use docs/claude-design-for-authors.md as the module doctrine.
+
+Core rule:
+- Claude Design is a layout, briefing, typography, series-system, and pre-visualization tool.
+- It is not an image generator.
+- It is not a print-production tool.
+- Midjourney or Flux creates art plates.
+- Photoshop or Affinity finishes typography and retouching.
+- KDP, IngramSpark, InDesign, or Affinity Publisher handle wraps, bleed, trim, CMYK, spine math, and 300 dpi output.
+
+Required output:
+1. Author workflow map covering concept mockup, type lab, series system, cover brief deck, thumbnail test, crop pack, comp analysis, author brand one-pager, ARC pack, and series bible.
+2. Copy-ready Claude Design prompt templates for each workflow.
+3. Genre calibration table with composition, type, color, and failure modes.
+4. Production handoff map from Claude Design to Midjourney/Flux, Photoshop/Affinity, KDP/IngramSpark, and human QA.
+5. Pitfall checklist that prevents authors from treating HTML mockups as finished covers.
+6. Quality scorecard for genre calibration, composition specificity, typography usefulness, series consistency, handoff clarity, and print-production safety.
+
+If book metadata is missing, create a fill-in module and mark assumptions clearly. Do not invent specific title facts, comp covers, or platform specs.`,
+  },
+  {
     id: 'dashboard-mockup',
     title: 'Dashboard Mockup',
     category: 'Product prototype',
