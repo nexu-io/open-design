@@ -96,8 +96,15 @@ export function buildDockerArgs(
   //   - config.portable is a boolean
   // None of these values can contain shell metacharacters, so direct
   // interpolation into the inner command string is safe.
+  //
+  // We invoke pnpm via `corepack pnpm` instead of `corepack enable && pnpm ...`
+  // because the container runs as the host's non-root uid (--user above) and
+  // `corepack enable` writes shims next to the system Node binary, which is
+  // owned by root in electronuserland/builder:base and not writable by the
+  // unprivileged container user. `corepack pnpm` resolves and executes the
+  // pinned packageManager from package.json directly, no shims required.
   const innerArgs = [
-    "pnpm tools-pack linux build",
+    "corepack pnpm tools-pack linux build",
     `--to ${config.to}`,
     `--namespace ${config.namespace}`,
     "--dir /tools-pack",
@@ -105,8 +112,7 @@ export function buildDockerArgs(
   if (config.portable) {
     innerArgs.push("--portable");
   }
-  const innerCommand =
-    "corepack enable && pnpm install --frozen-lockfile && " + innerArgs.join(" ");
+  const innerCommand = "corepack pnpm install --frozen-lockfile && " + innerArgs.join(" ");
 
   return [
     "run",

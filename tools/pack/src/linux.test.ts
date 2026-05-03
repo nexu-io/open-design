@@ -81,10 +81,16 @@ describe("buildDockerArgs", () => {
   it("re-invokes pnpm tools-pack linux build inside the container without --containerized", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    expect(last).toMatch(/corepack enable/);
-    expect(last).toMatch(/pnpm install --frozen-lockfile/);
-    expect(last).toMatch(/pnpm tools-pack linux build --to all --namespace default/);
+    expect(last).toMatch(/corepack pnpm install --frozen-lockfile/);
+    expect(last).toMatch(/corepack pnpm tools-pack linux build --to all --namespace default/);
     expect(last).not.toMatch(/--containerized/);
+  });
+
+  it("invokes pnpm via `corepack pnpm` rather than `corepack enable` (non-root container can't write Node shim dir)", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).not.toMatch(/corepack enable/);
+    expect(last).toMatch(/corepack pnpm/);
   });
 
   it("forwards --dir /tools-pack so inner build output lands under the mounted host dir", () => {
