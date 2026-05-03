@@ -89,7 +89,7 @@ function* drain(state: State): Generator<PanelEvent> {
     // <ROUND n="N">
     const roundMatch = slice.match(/^<ROUND\s+([^>]*)>/);
     if (roundMatch) {
-      const a = parseAttrs(roundMatch[1]);
+      const a = parseAttrs(roundMatch[1] ?? '');
       state.currentRound = Number(a['n']);
       cursor += roundMatch[0].length;
       state.lastAdvance = state.consumed + cursor;
@@ -291,9 +291,9 @@ function* emitInner(
       runId: state.runId,
       round: state.currentRound!,
       role,
-      dimName: dm[1],
+      dimName: dm[1] ?? '',
       dimScore,
-      dimNote: dm[3].trim(),
+      dimNote: (dm[3] ?? '').trim(),
     };
   }
 
@@ -306,7 +306,7 @@ function* emitInner(
       runId: state.runId,
       round: state.currentRound!,
       role,
-      text: mf[1].trim(),
+      text: (mf[1] ?? '').trim(),
     };
   }
 
@@ -321,7 +321,8 @@ function parseAttrs(s: string): Record<string, string> {
   const re = /([a-zA-Z_]+)\s*=\s*"([^"]*)"/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s)) !== null) {
-    out[m[1]] = m[2];
+    const key = m[1];
+    if (key != null) out[key] = m[2] ?? '';
   }
   return out;
 }
