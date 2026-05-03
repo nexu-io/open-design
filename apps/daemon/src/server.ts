@@ -2981,24 +2981,23 @@ function assembleExample(templateHtml, slidesHtml, title) {
     );
 }
 
-export function isLocalSameOrigin(req, port) {
-  const ports = [port];
-  const webPort = Number(process.env.OD_WEB_PORT);
-  if (webPort && webPort !== port) ports.push(webPort);
+// Accept any loopback Host and any loopback Origin (any port). The
+// daemon serves the web on its own port in prod and proxies through
+// a sibling port in dev (tools-dev), and the daemon process never
+// learns the web's port at spawn time. Pinning to a single port broke
+// the dev POST /api/active flow whenever Origin was http://127.0.0.1:
+// <web-port>. Loopback-prefix matching keeps browser cross-origin
+// rejection (evil.com is not loopback) while letting the proxy chain
+// through. Raw LAN HTTP clients can spoof Host/Origin freely, so the
+// real defense for LAN exposure is binding 127.0.0.1; this guard is
+// a CSRF defense, not a network ACL.
+const LOOPBACK_HOST_RE = /^(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/;
+const LOOPBACK_ORIGIN_RE = /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/;
 
-  const allowedHosts = new Set(
-    ports.flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`, `[::1]:${p}`]),
-  );
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
-      `http://127.0.0.1:${p}`,
-      `http://localhost:${p}`,
-      `http://[::1]:${p}`,
-    ]),
-  );
+export function isLocalSameOrigin(req, _port) {
   const host = String(req.headers.host || '');
-  if (!allowedHosts.has(host)) return false;
+  if (!LOOPBACK_HOST_RE.test(host)) return false;
   const origin = req.headers.origin;
   if (origin == null || origin === '') return true;
-  return allowedOrigins.has(String(origin));
+  return LOOPBACK_ORIGIN_RE.test(String(origin));
 }

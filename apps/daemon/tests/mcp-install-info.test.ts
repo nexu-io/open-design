@@ -12,22 +12,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // minimal Express app with the same handler shape rather than booting
 // the full daemon (which needs SQLite, sidecar, fs scaffolding).
 
-function isLocalSameOrigin(req, port) {
-  const allowedHosts = new Set([
-    `127.0.0.1:${port}`,
-    `localhost:${port}`,
-    `[::1]:${port}`,
-  ]);
-  const allowedOrigins = new Set([
-    `http://127.0.0.1:${port}`,
-    `http://localhost:${port}`,
-    `http://[::1]:${port}`,
-  ]);
+// Mirrors the loopback-prefix guard in src/server.ts; the install
+// panel must reject non-loopback origins regardless of port.
+const LOOPBACK_HOST_RE = /^(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/;
+const LOOPBACK_ORIGIN_RE = /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/;
+
+function isLocalSameOrigin(req, _port) {
   const host = String(req.headers.host || '');
-  if (!allowedHosts.has(host)) return false;
+  if (!LOOPBACK_HOST_RE.test(host)) return false;
   const origin = req.headers.origin;
   if (origin == null || origin === '') return true;
-  return allowedOrigins.has(String(origin));
+  return LOOPBACK_ORIGIN_RE.test(String(origin));
 }
 
 interface InstallInfoOpts {
