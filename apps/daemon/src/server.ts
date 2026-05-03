@@ -609,10 +609,40 @@ export function createSseResponse(
   };
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '0.0.0.0', returnServer = false } = {}) {
+export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
   let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
+
+  // Reject cross-origin requests to API endpoints.
+  // Health/version remain open for monitoring probes.
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'OPTIONS') {
+      // Let CORS preflight through so the browser gets a clear rejection
+      // rather than an opaque network error.
+      res.header('Access-Control-Allow-Origin', '');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      return res.sendStatus(204);
+    }
+    // Origin header absent → non-browser client (curl, CLI) → allow.
+    // Origin present → browser request → validate.
+    const origin = req.headers.origin;
+    if (origin == null || origin === '') return next();
+    // Will be validated once resolvedPort is known (set below).
+    // Before the port is resolved, block all browser origins.
+    if (!resolvedPort) {
+      return next(); // port=0 means dynamic; allow until resolved
+    }
+    const allowedOrigins = new Set([
+      `http://127.0.0.1:${resolvedPort}`,
+      `http://localhost:${resolvedPort}`,
+      `http://[::1]:${resolvedPort}`,
+    ]);
+    if (!allowedOrigins.has(String(origin))) {
+      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+    }
+    next();
+  });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {

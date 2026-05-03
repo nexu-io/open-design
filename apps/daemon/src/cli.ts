@@ -60,7 +60,7 @@ if (first && SUBCOMMAND_MAP[first]) {
 
 // Default: daemon mode.
 let port = Number(process.env.OD_PORT) || 7456;
-let host = process.env.OD_BIND_HOST || '0.0.0.0';
+let host = process.env.OD_BIND_HOST || '127.0.0.1';
 let open = true;
 
 for (let i = 0; i < argv.length; i++) {
