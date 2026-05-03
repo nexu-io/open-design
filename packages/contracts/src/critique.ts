@@ -6,22 +6,24 @@ export type PanelistRole = typeof PANELIST_ROLES[number];
 export const FALLBACK_POLICIES = ['ship_best', 'ship_last', 'fail'] as const;
 export type FallbackPolicy = typeof FALLBACK_POLICIES[number];
 
-export const PROTOCOL_VERSION = 1;
+export const CRITIQUE_PROTOCOL_VERSION = 1;
 
-const RoleWeights = z.object({
+export const RoleWeights = z.object({
   designer: z.number().min(0).max(1),
   critic: z.number().min(0).max(1),
   brand: z.number().min(0).max(1),
   a11y: z.number().min(0).max(1),
   copy: z.number().min(0).max(1),
 });
+export type RoleWeights = z.infer<typeof RoleWeights>;
 
 export const CritiqueConfigSchema = z.object({
   enabled: z.boolean(),
   cast: z.array(z.enum(PANELIST_ROLES)).min(1),
   maxRounds: z.number().int().min(1).max(10),
   scoreScale: z.number().int().min(1).max(100),
-  scoreThreshold: z.number().min(0).max(100),
+  scoreThreshold: z.number().min(0).max(100)
+    .describe('Must be <= scoreScale; enforced by cross-field refine'),
   weights: RoleWeights,
   perRoundTimeoutMs: z.number().int().min(1000),
   totalTimeoutMs: z.number().int().min(1000),
@@ -48,7 +50,8 @@ export function defaultCritiqueConfig(): CritiqueConfig {
     totalTimeoutMs: 240_000,
     parserMaxBlockBytes: 262_144,
     fallbackPolicy: 'ship_best',
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion: CRITIQUE_PROTOCOL_VERSION,
+    // Contracts layer cannot call os.cpus(); daemon env layer overrides via OD_CRITIQUE_MAX_CONCURRENT_RUNS.
     maxConcurrentRuns: 4,
   };
 }
