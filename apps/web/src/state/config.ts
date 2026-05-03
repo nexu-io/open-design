@@ -60,6 +60,10 @@ const GLM_MODELS = [
   'glm-4.5',
   'glm-4.5-air',
 ];
+const GLM_DEFAULT_MODEL = 'glm-5.1';
+// Official Coding Plan examples default ordinary coding-agent setup to
+// GLM-4.7; GLM-5.1 remains selectable for heavier tasks.
+const GLM_CODING_PLAN_DEFAULT_MODEL = 'glm-4.7';
 
 // Some providers appear more than once because they expose both
 // Anthropic-compatible (/v1/messages) and OpenAI-compatible
@@ -112,28 +116,28 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Z.AI (Global) — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.z.ai/api/paas/v4',
-    model: 'glm-5.1',
+    model: GLM_DEFAULT_MODEL,
     models: GLM_MODELS,
   },
   {
     label: 'Z.AI Coding Plan (Global) — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.z.ai/api/coding/paas/v4',
-    model: 'glm-4.7',
+    model: GLM_CODING_PLAN_DEFAULT_MODEL,
     models: GLM_MODELS,
   },
   {
     label: 'BigModel (China) — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-5.1',
+    model: GLM_DEFAULT_MODEL,
     models: GLM_MODELS,
   },
   {
     label: 'BigModel Coding Plan (China) — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
-    model: 'glm-4.7',
+    model: GLM_CODING_PLAN_DEFAULT_MODEL,
     models: GLM_MODELS,
   },
   {

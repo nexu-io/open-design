@@ -62,7 +62,7 @@ export async function streamMessageOpenAI(
         const parsed = parseSseFrame(frame);
         if (!parsed || parsed.kind !== 'event') continue;
 
-        if (parsed.event === 'delta' || parsed.event === 'message') {
+        if (isStreamDeltaEvent(parsed.event)) {
           const text = extractOpenAIText(parsed.data);
           if (text) {
             acc += text;
@@ -135,6 +135,10 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   return false;
 }
 
+function isStreamDeltaEvent(event: string): boolean {
+  return event === 'delta' || event === 'message';
+}
+
 function extractOpenAIText(data: unknown): string {
   if (!data || typeof data !== 'object') return '';
   const record = data as Record<string, unknown>;
@@ -149,6 +153,7 @@ function extractOpenAIText(data: unknown): string {
   if (delta && typeof delta === 'object') {
     const deltaRecord = delta as Record<string, unknown>;
     if (typeof deltaRecord.content === 'string') return deltaRecord.content;
+    // Future: reasoning-style OpenAI-compatible streams when GLM supports it.
     if (typeof deltaRecord.reasoning_content === 'string') return deltaRecord.reasoning_content;
   }
 
