@@ -1,5 +1,5 @@
-import type { PanelEvent } from '../critique';
-import type { SseTransportEvent } from './common';
+import type { PanelEvent } from '../critique.js';
+import type { SseTransportEvent } from './common.js';
 
 type PayloadOf<T extends PanelEvent['type']> = Omit<Extract<PanelEvent, { type: T }>, 'type'>;
 

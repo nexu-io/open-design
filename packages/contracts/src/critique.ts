@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export { panelEventToSse } from './sse/critique.js';
+export type { CritiqueSseEvent } from './sse/critique.js';
+
 export const PANELIST_ROLES = ['designer', 'critic', 'brand', 'a11y', 'copy'] as const;
 export type PanelistRole = typeof PANELIST_ROLES[number];
 
