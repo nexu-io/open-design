@@ -887,8 +887,47 @@ export async function readPackedLinuxLogs(config: ToolPackConfig): Promise<{
   return { logs, namespace: config.namespace };
 }
 
-export async function uninstallPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
-  throw new Error("uninstallPackedLinuxApp: implemented in Task 16");
+export type LinuxUninstallResult = {
+  namespace: string;
+  removed: {
+    appImage: "ok" | "already-removed";
+    desktop: "ok" | "already-removed";
+    icon: "ok" | "already-removed";
+  };
+  stop: LinuxStopResult;
+  postUninstall: {
+    desktopDatabase: "ok" | "missing" | "failed";
+    iconCache: "ok" | "missing" | "failed";
+  };
+};
+
+async function tryRemove(path: string): Promise<"ok" | "already-removed"> {
+  if (!(await pathExists(path))) return "already-removed";
+  await rm(path, { force: true });
+  return "ok";
+}
+
+export async function uninstallPackedLinuxApp(config: ToolPackConfig): Promise<LinuxUninstallResult> {
+  const paths = resolveLinuxPaths(config);
+  const stop = await stopPackedLinuxApp(config);
+
+  const removedAppImage = await tryRemove(paths.installAppImagePath);
+  const removedDesktop = await tryRemove(paths.installDesktopFilePath);
+  const removedIcon = await tryRemove(paths.installIconPath);
+
+  const desktopDatabase = await bestEffortRun("update-desktop-database", [
+    join(homedir(), ".local", "share", "applications"),
+  ]);
+  const iconCache = await bestEffortRun("gtk-update-icon-cache", [
+    join(homedir(), ".local", "share", "icons", "hicolor"),
+  ]);
+
+  return {
+    namespace: config.namespace,
+    removed: { appImage: removedAppImage, desktop: removedDesktop, icon: removedIcon },
+    stop,
+    postUninstall: { desktopDatabase, iconCache },
+  };
 }
 
 export async function cleanupPackedLinuxNamespace(_config: ToolPackConfig): Promise<unknown> {
