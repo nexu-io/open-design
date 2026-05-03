@@ -162,4 +162,12 @@ describe("matchesAppImageProcess", () => {
     );
     expect(ok).toBe(false);
   });
+
+  it("rejects extracted-mode when APPIMAGE env is missing", () => {
+    const ok = matchesAppImageProcess(
+      { pid: 1234, executable: "/tmp/.mount_abc123/AppRun", env: {} },
+      installPath,
+    );
+    expect(ok).toBe(false);
+  });
 });
