@@ -133,7 +133,33 @@ export async function runMcpStdio({ daemonUrl }) {
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } },
+    {
+      capabilities: { tools: {} },
+      instructions: [
+        'Open Design (OD) is a local-first design workspace. The user typically',
+        'has OD running on their machine; each project contains a rendered',
+        'artifact (HTML/JSX/CSS) plus its source files.',
+        '',
+        'Pulling design context:',
+        '  - list_projects to discover what is available on this daemon.',
+        '  - get_artifact(project) to pull the entry file PLUS its referenced',
+        '    sibling assets (tokens CSS, component JSX, imported modules) in',
+        '    one call. PREFER THIS over get_file when the user wants to',
+        '    understand or extend a design.',
+        '  - get_file(project, path) for a single known file.',
+        '  - list_files for metadata only.',
+        '',
+        'Project arguments accept either a UUID or a name substring',
+        '(e.g. "recaptr"); the server resolves the latter.',
+        '',
+        'Catalog reads (skills, design systems) are reference material — call',
+        'them when the user asks about brand or skill, not on every request.',
+        '',
+        'When extending an OD design in another codebase, pull the full bundle',
+        'once with get_artifact and work from those files locally — do not',
+        'fetch files one-by-one if you can avoid it.',
+      ].join('\n'),
+    },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
