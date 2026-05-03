@@ -1669,7 +1669,7 @@ async function inlineRelativeAssets(
   const resolved = (await Promise.all(replacements)).filter(
     (item): item is { from: string; to: string } => item !== null,
   );
-  return resolved.reduce((next, { from, to }) => next.replace(from, to), html);
+  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
 }
 
 async function fetchProjectRelativeText(
