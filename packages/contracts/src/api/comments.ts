@@ -1,4 +1,4 @@
-import type { OkResponse } from '../common.js';
+import type { OkResponse } from '../common';
 
 export type PreviewCommentStatus =
   | 'open'

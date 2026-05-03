@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./critique": {
+      "types": "./src/critique.ts",
+      "default": "./src/critique.ts"
     }
   },
   "types": "./src/index.ts",

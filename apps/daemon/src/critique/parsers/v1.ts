@@ -1,4 +1,4 @@
-import type { PanelEvent, PanelistRole } from '@open-design/contracts';
+import type { PanelEvent, PanelistRole } from '@open-design/contracts/critique';
 import { MalformedBlockError, MissingArtifactError, OversizeBlockError } from '../errors.js';
 
 const KNOWN_ROLES: ReadonlySet<string> = new Set(['designer', 'critic', 'brand', 'a11y', 'copy']);
@@ -18,6 +18,11 @@ interface State {
   // Captured from <CRITIQUE_RUN scale="..."> so score bounds match the run's declared scale,
   // not a hardcoded 100. Defaults to DEFAULT_SCORE_SCALE before run_started is parsed.
   scoreScale: number;
+  // Hard cap on bytes between matched open/close tags. Enforced inside drain on
+  // every buffered block (PANELIST, ROUND_END, SHIP) so an oversized block that
+  // arrives intact in one chunk is rejected before its body is sliced and emitted.
+  // The post-drain check on state.buf only catches *unclosed* runaway blocks.
+  parserMaxBlockBytes: number;
   inRun: boolean;
   currentRound: number | null;
   shipSeen: boolean;
@@ -36,6 +41,7 @@ export async function* parseV1(
     adapter: opts.adapter,
     protocolVersion: 1,
     scoreScale: DEFAULT_SCORE_SCALE,
+    parserMaxBlockBytes: opts.parserMaxBlockBytes,
     inRun: false,
     currentRound: null,
     shipSeen: false,
@@ -115,6 +121,17 @@ function* drain(state: State): Generator<PanelEvent> {
     ) {
       const closeIdx = slice.indexOf('</PANELIST>');
       if (closeIdx < 0) break;
+      // Per-block size enforcement (mrcfps review): a complete oversized block
+      // that arrives in one large chunk would otherwise slip past the post-drain
+      // buf-size check because its body would be sliced and emitted before the
+      // check ran. Catch it here, before any work happens.
+      const blockBytes = closeIdx + '</PANELIST>'.length;
+      if (blockBytes > state.parserMaxBlockBytes) {
+        throw new OversizeBlockError(
+          `PANELIST block of ${blockBytes} bytes exceeded ${state.parserMaxBlockBytes} at position ${state.consumed + cursor}`,
+          state.consumed + cursor,
+        );
+      }
       const headEnd = slice.indexOf('>');
       if (headEnd < 0) break;
       const head = slice.slice('<PANELIST'.length, headEnd);
@@ -181,6 +198,13 @@ function* drain(state: State): Generator<PanelEvent> {
     if (slice.startsWith('<ROUND_END ')) {
       const closeIdx = slice.indexOf('</ROUND_END>');
       if (closeIdx < 0) break;
+      const blockBytes = closeIdx + '</ROUND_END>'.length;
+      if (blockBytes > state.parserMaxBlockBytes) {
+        throw new OversizeBlockError(
+          `ROUND_END block of ${blockBytes} bytes exceeded ${state.parserMaxBlockBytes} at position ${state.consumed + cursor}`,
+          state.consumed + cursor,
+        );
+      }
       const headEnd = slice.indexOf('>');
       if (headEnd < 0) break;
       const attrs = parseAttrs(slice.slice('<ROUND_END'.length, headEnd));
@@ -224,6 +248,13 @@ function* drain(state: State): Generator<PanelEvent> {
     if (slice.startsWith('<SHIP ')) {
       const closeIdx = slice.indexOf('</SHIP>');
       if (closeIdx < 0) break;
+      const blockBytes = closeIdx + '</SHIP>'.length;
+      if (blockBytes > state.parserMaxBlockBytes) {
+        throw new OversizeBlockError(
+          `SHIP block of ${blockBytes} bytes exceeded ${state.parserMaxBlockBytes} at position ${state.consumed + cursor}`,
+          state.consumed + cursor,
+        );
+      }
 
       if (state.shipSeen) {
         yield {

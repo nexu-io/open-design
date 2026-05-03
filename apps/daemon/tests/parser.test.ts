@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PanelEvent } from '@open-design/contracts';
+import type { PanelEvent } from '@open-design/contracts/critique';
 import { parseCritiqueStream } from '../src/critique/parser.js';
 import {
   MalformedBlockError,
@@ -214,5 +214,66 @@ describe('parseCritiqueStream -- review-driven invariants', () => {
       events.filter(e => e.type === 'parser_warning' && e.kind === 'score_clamped').length,
     ).toBe(0);
     expect(events.find(e => e.type === 'ship')).toBeDefined();
+  });
+});
+
+describe('parseCritiqueStream -- per-block size enforcement (mrcfps review)', () => {
+  // Yield the whole stream in one chunk, mimicking a transport that batches the
+  // model output. Without per-block enforcement the body would be sliced and
+  // emitted before drain returned, bypassing the post-drain buf-size check.
+  async function* oneChunk(s: string): AsyncGenerator<string> { yield s; }
+
+  it('throws OversizeBlockError for a complete oversized PANELIST arriving in one chunk', async () => {
+    const cap = 4096;
+    const giantNote = 'x'.repeat(cap + 1024);
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>${giantNote}</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+      </ROUND>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: cap,
+      })),
+    ).rejects.toBeInstanceOf(OversizeBlockError);
+  });
+
+  it('throws OversizeBlockError for the malformed-oversize fixture parsed all-at-once', async () => {
+    const text = fixture('malformed-oversize.txt');
+    await expect(
+      collect(parseCritiqueStream(oneChunk(text), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(OversizeBlockError);
+  });
+
+  it('throws OversizeBlockError for a complete oversized SHIP arriving in one chunk', async () => {
+    const cap = 4096;
+    const giantSummary = 'y'.repeat(cap + 512);
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>v1</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+        <PANELIST role="critic" score="8"><DIM name="contrast" score="8">ok</DIM></PANELIST>
+        <PANELIST role="brand" score="8"><DIM name="palette" score="8">ok</DIM></PANELIST>
+        <PANELIST role="a11y" score="8"><DIM name="contrast" score="8">ok</DIM></PANELIST>
+        <PANELIST role="copy" score="8"><DIM name="voice" score="8">ok</DIM></PANELIST>
+        <ROUND_END n="1" composite="8" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="1" composite="8" status="shipped">
+        <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>
+        <SUMMARY>${giantSummary}</SUMMARY>
+      </SHIP>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: cap,
+      })),
+    ).rejects.toBeInstanceOf(OversizeBlockError);
   });
 });
