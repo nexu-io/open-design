@@ -1,7 +1,7 @@
 import { cac } from "cac";
 import type { CAC } from "cac";
 
-import { resolveToolPackConfig, type ToolPackCliOptions } from "./config.js";
+import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
@@ -62,11 +62,20 @@ function addSharedOptions(command: CacCommand) {
     .option("--path <path>", "desktop inspect screenshot path");
 }
 
-function addBuildOptions(command: CacCommand) {
+// Per-platform `--to` help text mirroring resolveToolPackBuildOutput in
+// config.ts. Keep these in sync: the resolver throws on any value not listed
+// here for the given platform.
+const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
+  linux: "build target: all|appimage|dir (default: all)",
+  mac: "build target: all|app|dmg|zip (default: all)",
+  win: "build target: all|dir|nsis (default: nsis)",
+};
+
+function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
   return command
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--signed", "build a signed/notarized mac artifact")
-    .option("--to <target>", "build target: all|app|dmg|zip (default: all)");
+    .option("--to <target>", TO_HELP_BY_PLATFORM[platform]);
 }
 
 function addWinLifecycleOptions(command: CacCommand) {
@@ -80,7 +89,7 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
-addBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup"))).action(
+addBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "mac").action(
   async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("mac", options);
     switch (action) {
@@ -119,6 +128,7 @@ addWinLifecycleOptions(
         "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect",
       ),
     ),
+    "win",
   ),
 ).action(async (action: string, options: CliOptions) => {
   const config = resolveToolPackConfig("win", options);
@@ -158,7 +168,7 @@ addWinLifecycleOptions(
   }
 });
 
-addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")))
+addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "linux")
   .option("--containerized", "build inside electronuserland/builder Docker for distro-agnostic glibc compat")
   .action(async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("linux", options);
