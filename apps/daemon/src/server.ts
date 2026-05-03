@@ -703,6 +703,71 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
   });
 
+  // Surfaces the absolute paths to `node` + `apps/daemon/dist/cli.js`
+  // so the Settings → MCP server panel can render snippets that work
+  // even when `od` isn't on the user's PATH (the common case for
+  // source clones - and macOS/Linux ship a /usr/bin/od octal-dump
+  // tool that shadows ours anyway). Computed from import.meta.url so
+  // both src/ (tsx dev) and dist/ (built) launches resolve to the
+  // same dist/cli.js path. Cached for 5s because the panel pings on
+  // every open and the path lookup + two existsSync calls are cheap
+  // but not free, and these paths cannot change without a daemon
+  // restart anyway.
+  const INSTALL_INFO_TTL_MS = 5000;
+  let installInfoCache: { t: number; payload: object } | null = null;
+
+  app.get('/api/mcp/install-info', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const now = Date.now();
+    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
+      return res.json(installInfoCache.payload);
+    }
+    let cliPath;
+    try {
+      cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+    } catch (err) {
+      return sendApiError(res, 500, 'CLI_RESOLVE_FAILED', String(err));
+    }
+    const cliExists = fs.existsSync(cliPath);
+    // process.execPath is the absolute path to the node binary that
+    // is running the daemon RIGHT NOW. We prefer it over bare `node`
+    // because IDE-spawned MCP clients inherit a minimal PATH from the
+    // OS launcher (Spotlight, Dock, etc.) that often does not see
+    // user-level node installs (nvm, fnm, asdf). On rare occasions
+    // (uninstall mid-session, exotic embeds) the path may not exist
+    // by the time the user copies the snippet; catch that and warn.
+    const nodeExists = fs.existsSync(process.execPath);
+    const hints: string[] = [];
+    if (!cliExists) {
+      hints.push(
+        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` (or just `pnpm build`) and refresh.',
+      );
+    }
+    if (!nodeExists) {
+      hints.push(
+        `Node binary at ${process.execPath} no longer exists. Reinstall Node and restart the daemon.`,
+      );
+    }
+    const payload = {
+      command: process.execPath,
+      args: [cliPath, 'mcp'],
+      daemonUrl: `http://127.0.0.1:${resolvedPort}`,
+      // Surface platform so the install panel can localize path hints
+      // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
+      // (Cmd vs Ctrl). One of 'darwin' | 'linux' | 'win32' in
+      // practice; the panel falls back to POSIX wording for anything
+      // else.
+      platform: process.platform,
+      cliExists,
+      nodeExists,
+      buildHint: hints.length ? hints.join(' ') : null,
+    };
+    installInfoCache = { t: now, payload };
+    res.json(payload);
+  });
+
   app.get('/api/projects', (_req, res) => {
     try {
       const latestRunStatuses = listLatestProjectRunStatuses(db);
