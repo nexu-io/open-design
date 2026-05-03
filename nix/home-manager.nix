@@ -40,6 +40,20 @@
   caddy = pkgs.caddy;
 
   # Synthesize a Caddyfile pointing at the static package's out tree.
+  #
+  # The web frontend is a static SPA bundled at build time with
+  # `OD_DAEMON_URL=""`, so the bundled JS calls relative URLs like
+  # `/api/agents`, `/artifacts/...`, and `/frames/...`. The daemon
+  # serves those routes on `cfg.port`; caddy reverse-proxies them so
+  # the SPA works same-origin without CORS or runtime config.
+  #
+  # /api/* needs SSE-safe proxying:
+  #   * `flush_interval -1`         → stream chunks immediately
+  #   * no `encode` on the API route → gzip would buffer chunked SSE
+  #     responses for ~80s and surface as ERR_INCOMPLETE_CHUNKED_ENCODING
+  #     in browsers (same failure mode QUICKSTART.md calls out for
+  #     nginx).
+  #   * generous read/write timeouts for long-running streams.
   caddyfile = pkgs.writeText "open-design-web.Caddyfile" ''
     {
       auto_https off
@@ -48,10 +62,27 @@
     }
 
     :${toString cfg.webFrontend.port} {
-      root * ${cfg.webFrontend.package}
-      file_server
-      try_files {path} {path}/ /index.html
-      encode gzip
+      handle /api/* {
+        reverse_proxy 127.0.0.1:${toString cfg.port} {
+          flush_interval -1
+          transport http {
+            read_timeout 86400s
+            write_timeout 86400s
+          }
+        }
+      }
+      handle /artifacts/* {
+        reverse_proxy 127.0.0.1:${toString cfg.port}
+      }
+      handle /frames/* {
+        reverse_proxy 127.0.0.1:${toString cfg.port}
+      }
+      handle {
+        root * ${cfg.webFrontend.package}
+        try_files {path} {path}/ /index.html
+        file_server
+        encode gzip
+      }
     }
   '';
 

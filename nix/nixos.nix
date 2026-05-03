@@ -30,6 +30,10 @@
   daemonExe = lib.getExe cfg.package;
   caddy = pkgs.caddy;
 
+  # See nix/home-manager.nix for the rationale behind these handle
+  # blocks. The static SPA calls `/api/*`, `/artifacts/*`, `/frames/*`
+  # at the same origin; caddy proxies those to the daemon. SSE on
+  # `/api/*` requires no buffering (flush_interval, no encode).
   caddyfile = pkgs.writeText "open-design-web.Caddyfile" ''
     {
       auto_https off
@@ -38,10 +42,27 @@
     }
 
     :${toString cfg.webFrontend.port} {
-      root * ${cfg.webFrontend.package}
-      file_server
-      try_files {path} {path}/ /index.html
-      encode gzip
+      handle /api/* {
+        reverse_proxy 127.0.0.1:${toString cfg.port} {
+          flush_interval -1
+          transport http {
+            read_timeout 86400s
+            write_timeout 86400s
+          }
+        }
+      }
+      handle /artifacts/* {
+        reverse_proxy 127.0.0.1:${toString cfg.port}
+      }
+      handle /frames/* {
+        reverse_proxy 127.0.0.1:${toString cfg.port}
+      }
+      handle {
+        root * ${cfg.webFrontend.package}
+        try_files {path} {path}/ /index.html
+        file_server
+        encode gzip
+      }
     }
   '';
 
