@@ -223,6 +223,9 @@ function showViaConstructor(opts: CompletionNotificationOpts): CompletionNotific
     const note = new Notification(opts.title, notificationOptionsFor(opts));
     activeNotifications.add(note);
     const release = () => {
+      note.onclick = null;
+      note.onclose = null;
+      note.onerror = null;
       activeNotifications.delete(note);
     };
     note.onclick = () => {

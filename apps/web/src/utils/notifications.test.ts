@@ -19,6 +19,7 @@ class MockNotification {
   }
 
   close(): void {
+    // Fire synchronously so tests can observe cleanup without browser events.
     this.onclose?.();
   }
 }
