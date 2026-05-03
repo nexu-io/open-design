@@ -2082,6 +2082,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
         shell: false,
+        // Required when invocation wraps a Windows .cmd/.bat shim through
+        // cmd.exe; without this, Node re-escapes the inner command line and
+        // breaks paths containing spaces (issue #315).
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       run.child = child;
       if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
