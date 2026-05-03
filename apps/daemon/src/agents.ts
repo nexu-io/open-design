@@ -441,6 +441,16 @@ export const AGENT_DEFS = [
     name: 'GitHub Copilot CLI',
     bin: 'copilot',
     versionArgs: ['--version'],
+    // `-p -` enters Copilot's prompt mode and tells the CLI to read the
+    // prompt body from stdin instead of expecting it as a positional argv
+    // element. Without it the daemon writes the prompt to the child's
+    // stdin pipe (because `promptViaStdin: true` below) but Copilot stays
+    // in interactive mode, never reads stdin, and rejects the run with
+    // `error: too many arguments. Expected 0 arguments but got N` —
+    // the regression filed in #350. PR #258 standardized agents on stdin
+    // delivery and dropped the per-prompt argv path, but missed flipping
+    // Copilot's mode from interactive to `-p -`.
+    //
     // `--allow-all-tools` is required for non-interactive runs: without it
     // the CLI blocks waiting for human approval on every tool call. Unlike
     // Codex (where `exec` is a dedicated headless subcommand with
@@ -466,6 +476,8 @@ export const AGENT_DEFS = [
     ],
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [
+        '-p',
+        '-',
         '--allow-all-tools',
         '--output-format',
         'json',

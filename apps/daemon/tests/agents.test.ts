@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { AGENT_DEFS, resolveAgentExecutable } from '../src/agents.js';
 
 const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
+const copilot = AGENT_DEFS.find((agent) => agent.id === 'copilot');
 const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
@@ -92,6 +93,61 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
     '--workspace',
     '/tmp/od-project',
   ]);
+});
+
+// `-p -` puts Copilot in prompt mode and tells it to read the body from
+// stdin. Without this pair the daemon writes the prompt to the child's
+// stdin pipe (because `promptViaStdin: true`) but Copilot stays
+// interactive, ignores stdin, and rejects the run with
+// `error: too many arguments. Expected 0 arguments but got N`. Pin the
+// pair as the leading argv elements so the regression in #350 can't
+// drift back. Also pin the order — Copilot expects `-p` before any other
+// flag, including model / add-dir extensions.
+test('copilot args lead with `-p -` so the stdin prompt is actually consumed (regression of #350)', () => {
+  const baseArgs = copilot.buildArgs('', [], [], {});
+  assert.equal(baseArgs[0], '-p');
+  assert.equal(baseArgs[1], '-');
+  assert.deepEqual(baseArgs, [
+    '-p',
+    '-',
+    '--allow-all-tools',
+    '--output-format',
+    'json',
+  ]);
+});
+
+test('copilot args keep `-p -` at the front when model and extra dirs are added', () => {
+  const args = copilot.buildArgs(
+    '',
+    [],
+    ['/tmp/od-skills', '/tmp/od-design-systems'],
+    { model: 'claude-sonnet-4.6' },
+  );
+  assert.equal(args[0], '-p');
+  assert.equal(args[1], '-');
+  assert.deepEqual(args, [
+    '-p',
+    '-',
+    '--allow-all-tools',
+    '--output-format',
+    'json',
+    '--model',
+    'claude-sonnet-4.6',
+    '--add-dir',
+    '/tmp/od-skills',
+    '--add-dir',
+    '/tmp/od-design-systems',
+  ]);
+});
+
+test('copilot drops empty / non-string entries from extraAllowedDirs without breaking the `-p -` lead', () => {
+  const args = copilot.buildArgs('', [], ['', null, '/tmp/od-skills', undefined], {});
+  assert.equal(args[0], '-p');
+  assert.equal(args[1], '-');
+  // Only the one valid path survives.
+  const addDirIndex = args.indexOf('--add-dir');
+  assert.equal(args[addDirIndex + 1], '/tmp/od-skills');
+  assert.equal(args.filter((a) => a === '--add-dir').length, 1);
 });
 
 test('kiro args use acp subcommand for json-rpc streaming', () => {
