@@ -4,6 +4,42 @@
 
 Phased plan from "spec-only today" to "usable MVP" to "published v1." All estimates assume one focused developer; multiply by 0.6 for two and 0.4 for three.
 
+## 2026 Direction Update - OneShot Design OS
+
+OneShot Design is now the parent professional AI Design OS. The product should keep absorbing design engines, expert workflows, external systems, and local evidence sources without becoming a brittle monolith.
+
+The durable app structure is:
+
+- Website Studio
+- Product UI Studio
+- Brand Studio
+- Deck Studio
+- Marketing Studio
+- CoverVision OS
+- Evidence Studio
+- Codex Build Studio
+
+The shared core every studio must use:
+
+- projects
+- artifacts
+- source/reference library
+- design systems
+- versions and export history
+- quality gates
+- Codex build briefs
+- adapter contracts
+
+Immediate implementation slice:
+
+1. Ship the visible studio architecture in the Workflows tab.
+2. Add Website Studio v1 now, while leaving a future adapter for the dedicated Website Builder / Design OS.
+3. Keep CoverVision OS as the premium book-cover studio inside OneShot.
+4. Add professional output controls across studios: critique panel, quality scorecard, comments/pins, tweak controls, export history, evidence trail, and review-before-export.
+5. Treat all external engines as adapters. They can strengthen OneShot, but they should not replace OneShot's project, library, quality, export, or handoff core.
+
+Trust rule: website and deployment flows must never invent live URLs or fake published states. If no real deploy URL or verified command exists, the status is prepare-only.
+
 ---
 
 ## Phase 0 — Spec finalization (current, ~3–5 days)

@@ -1,6 +1,6 @@
 # OneShot Design
 
-> **One prompt, structured brief, polished artifact, critique score, verified export, saved for reuse.** OneShot Design is a local-first, web-deployable professional artifact studio built on the Open Design engine. The app now opens on a production Workflow launcher for BSA proposals, roofing pitch decks, CoverVisionOS book-cover run packets, dashboard mockups, PRDs, and motion explainers.
+> **One prompt, structured brief, polished artifact, critique score, verified export, saved for reuse.** OneShot Design is a local-first, web-deployable professional AI Design OS built on the Open Design engine. The app now opens on a production Workflow launcher and Design OS command structure for Website Studio, Product UI Studio, Brand Studio, Deck Studio, Marketing Studio, CoverVision OS, Evidence Studio, and Codex Build Studio.
 
 > Repository note: the GitHub remote may still be named `nexu-io/open-design` while the product is being renamed. The running product, app chrome, workflow launcher, and export copy now use **OneShot Design**.
 
@@ -24,7 +24,9 @@
 
 ## Why this exists
 
-The new default screen is a Workflows launcher. Instead of starting from a blank prompt, users can start from a production pack: BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, or Motion Explainer. Each pack seeds the project type, skill, design-system preference, quality gates, export expectations, and a professional prompt.
+The new default screen is a Workflows launcher and Design OS command surface. Instead of starting from a blank prompt, users can start from a production pack: Website Studio v1, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Dashboard Mockup, PRD Factory, Motion Explainer, or AI Opportunity Intelligence. Each pack seeds the project type, skill, design-system preference, quality gates, export expectations, and a professional prompt.
+
+OneShot's long-term shape is not a single-purpose book-cover tool or website builder. It is the parent Design OS that can keep attaching expert studios and engines. CoverVision OS is the premium book-cover studio inside OneShot. Website Studio v1 ships now while the dedicated Website Builder / Design OS remains a future adapter target.
 
 Anthropic's [Claude Design][cd] (released 2026-04-17, Opus 4.7) showed what happens when an LLM stops writing prose and starts shipping design artifacts. It went viral — and stayed closed-source, paid-only, cloud-only, locked to Anthropic's model and Anthropic's skills. There is no checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 

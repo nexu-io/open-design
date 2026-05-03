@@ -23,7 +23,9 @@ import {
   listInspirationBoards,
   listInspirationPins,
 } from '../state/inspiration';
+import { ONESHOT_STUDIOS, WEBSITE_STUDIO_V1_PROMPT } from '../oneshotDesignOS';
 import { Icon } from './Icon';
+import { OneShotDesignOS } from './OneShotDesignOS';
 
 type WorkflowKind = 'prototype' | 'deck' | 'template' | 'other';
 
@@ -52,6 +54,77 @@ interface Props {
 }
 
 const WORKFLOWS: WorkflowDefinition[] = [
+  {
+    id: 'website-studio-v1',
+    title: 'Website Studio v1',
+    category: 'Website Studio',
+    outcome: 'Site plan + responsive build brief',
+    description:
+      'Create a professional website packet with site intake, sitemap, section library, landing page plan, responsive checks, design tokens, and Codex handoff.',
+    skillCandidates: ['saas-landing', 'web-prototype', 'docs-page'],
+    designSystemCandidates: ['webflow', 'vercel', 'stripe', 'default'],
+    metadata: { kind: 'prototype', fidelity: 'high-fidelity' },
+    checkpoints: ['Site intake', 'Sitemap', 'Responsive QA', 'Build brief'],
+    exports: ['HTML', 'Sitemap', 'Design tokens', 'Codex brief'],
+    exportPackage: [
+      {
+        format: 'HTML',
+        artifact: 'Website prototype',
+        instructions: 'Create a responsive website or landing-page prototype that reflects the locked site plan.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Sitemap and section plan',
+        instructions: 'Document pages, section order, CTAs, content needs, and build priority.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Design tokens',
+        instructions: 'Define typography, color, spacing, radius, surfaces, motion, and component rules.',
+      },
+      {
+        format: 'Markdown',
+        artifact: 'Codex build brief',
+        instructions: 'Provide exact implementation goals, file paths, constraints, commands, and verification steps.',
+      },
+    ],
+    scorecard: [
+      'Visual quality',
+      'Responsive behavior',
+      'Accessibility',
+      'Copy clarity',
+      'Performance posture',
+      'Deploy honesty',
+      'Build-readiness',
+    ],
+    handoff: {
+      system: 'Website Builder / Design OS',
+      stages: [
+        'Site intake',
+        'Sitemap',
+        'Section library',
+        'Responsive validation',
+        'Build brief',
+        'Prepare deploy or verified publish',
+      ],
+      artifacts: [
+        'site_plan.md',
+        'section_library.md',
+        'design_tokens.md',
+        'codex_build_brief.md',
+        'responsive_qa.md',
+      ],
+      commands: [
+        'generateSitePlan',
+        'generatePage',
+        'generateSection',
+        'validateResponsive',
+        'exportBuildBrief',
+        'publishOrPrepareDeploy',
+      ],
+    },
+    prompt: WEBSITE_STUDIO_V1_PROMPT,
+  },
   {
     id: 'ios-26-app-prototype',
     title: 'iOS 26 App Prototype',
@@ -273,7 +346,12 @@ Use speaker notes for sales talk tracks. Include a pre-export critique scorecard
         'preflight',
       ],
     },
-    prompt: `Create a OneShot Cover production run packet using the CoverVisionOS standard.
+    prompt: `Create a CoverVision OS premium cover-production run packet inside OneShot Design.
+
+Positioning:
+- OneShot Design is the parent professional Design OS.
+- CoverVision OS is the premium book-cover studio inside OneShot.
+- This workflow should stay deeply specialized for authors and publishers while using the shared OneShot project, artifact, source-library, quality-gate, export, and Codex handoff core.
 
 This is for professional book-cover production, not a generic image prompt.
 
@@ -750,6 +828,7 @@ export function OneShotWorkflows({
           </p>
           <div className="oneshot-hero-stats" aria-label="OneShot workflow stats">
             <span>{WORKFLOWS.length} workflow packs</span>
+            <span>{ONESHOT_STUDIOS.length} expert studios</span>
             <span>{QUALITY_GATES.length} quality gates</span>
             <span>English-only output</span>
           </div>
@@ -763,6 +842,8 @@ export function OneShotWorkflows({
           ))}
         </div>
       </section>
+
+      <OneShotDesignOS />
 
       {savedBlueprints.length > 0 ? (
         <section className="oneshot-saved" aria-label="Saved blueprints">

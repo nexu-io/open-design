@@ -1,12 +1,21 @@
 # OneShot Design Product Direction
 
-OneShot Design is the professional artifact studio built on the Open Design engine. The product promise is simple: one prompt becomes a structured brief, a polished artifact, a critique score, a verified export, and a reusable project record.
+OneShot Design is the professional AI Design OS built on the Open Design engine. The product promise is simple: one prompt, source folder, reference board, or rough idea becomes a structured brief, polished artifact, critique score, verified export, and reusable project record.
+
+OneShot should be able to do anything and everything design-related over time. The durable architecture is not one giant monolith; it is a shared core that can keep attaching expert studios, external engines, workflows, adapters, and quality gates without losing project history or operator trust.
 
 The GitHub repository may still be named `nexu-io/open-design` during the rename, but the app-facing product name is OneShot Design.
 
 ## Current Build
 
 - The entry screen defaults to a new `Workflows` tab.
+- The Workflows tab now opens with a `Design OS command structure` section that makes the parent architecture explicit: Website Studio, Product UI Studio, Brand Studio, Deck Studio, Marketing Studio, CoverVision OS, Evidence Studio, and Codex Build Studio.
+- OneShot now has a shared Design OS core model in `src/oneshotDesignOS.ts` covering studios, shared capabilities, professional output controls, and adapter contracts.
+- Website Studio v1 is now a first-class workflow pack. It creates site intake, sitemap/page plan, landing-page plan, section library, design tokens, responsive preview plan, quality scorecard, and Codex build brief output.
+- The Website Studio v1 workflow includes a future handoff contract for the dedicated Website Builder / Design OS through `generateSitePlan`, `generatePage`, `generateSection`, `validateResponsive`, `exportBuildBrief`, and `publishOrPrepareDeploy`.
+- The Website Studio deploy rule is explicit: OneShot must not claim a website is deployed unless a real deploy URL or verified deployment command exists. Otherwise the status is prepare-only.
+- CoverVision OS is positioned as the premium book-cover studio inside OneShot, not the whole OneShot identity.
+- Professional output controls are now part of the product language: critique panel, quality scorecard, comments and pins, tweak controls, export history, evidence trail, review before export, and no fake deploy/status.
 - Workflow cards seed the right project type, skill, design system preference, prompt, quality checkpoints, and export expectations.
 - Workflow-created projects preserve their workflow identity in metadata, show the selected production path in the project header, and inject workflow gates/export expectations into the agent prompt stack.
 - Workflow scorecards are now structured metadata, so each production path carries its own critique rubric into the agent prompt even after the starter prompt changes.
@@ -29,7 +38,7 @@ The GitHub repository may still be named `nexu-io/open-design` during the rename
 - Inspiration boards recommend the strongest OneShot production paths and can launch a workflow-specific project with the board attached as the reference lock.
 - Inspiration boards can be exported and imported as OneShot JSON packets, so reference libraries can move between machines, backups, and repos.
 - Workflow launches can attach an Inspiration Library board as the reference lock, adding the board context and pins into the generated prompt and workflow metadata.
-- The first production packs are iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Claude Design Author Cover Lab, Dashboard Mockup, PRD Factory, Motion Explainer, and AI Opportunity Intelligence.
+- The first production packs are Website Studio v1, iOS 26 App Prototype, BSA Proposal + SOW, Roofing Pitch Deck, OneShot Cover Run, Claude Design Author Cover Lab, Dashboard Mockup, PRD Factory, Motion Explainer, and AI Opportunity Intelligence.
 - James's iOS 26 Liquid Glass reference is available as the `ios-26-liquid-glass` design system and is the default visual route for the iOS 26 App Prototype workflow.
 - The Liquid Glass system includes `design-systems/ios-26-liquid-glass/assets/reference-prototype.html`, a compact visual reference for lock screen widgets, Control Center tiles, app chrome, modal sheets, and reduced-brightness behavior.
 - The app metadata, loading shell, onboarding copy, exported ZIP README, and locale strings now use OneShot Design.
@@ -50,4 +59,8 @@ This makes OneShot different from a blank AI chat. The user starts from a profes
 
 ## Near-Term Build Priorities
 
-1. Build the Operational Atelier intake screen: source rail, precision-tray drop zone, evidence canvas preview, inspector/action panel, and run deck using `docs/DESIGN.md`.
+1. Build Website Studio v1 into a richer native website-builder surface: intake form, sitemap editor, section library, responsive preview frames, design-token editor, and Codex build brief export.
+2. Add the first professional output controls across generated artifacts: critique panel, scorecard panel, comment/pin affordances, export history, and evidence trail.
+3. Build the adapter layer behind the Website Studio contract so the dedicated Website Builder / Design OS can plug in later without replacing OneShot's project/library/export core.
+4. Upgrade CoverVision OS as the premium book-cover studio: concept lanes, typography lab, series system, author brand kit, ARC/ad crop packs, and KDP/Ingram production checklist.
+5. Build the Operational Atelier intake screen: source rail, precision-tray drop zone, evidence canvas preview, inspector/action panel, and run deck using `docs/DESIGN.md`.

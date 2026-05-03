@@ -60,12 +60,17 @@ describe('OneShotWorkflows', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'OneShot Design' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(9);
+    expect(screen.getAllByRole('button', { name: /start/i })).toHaveLength(10);
+    expect(screen.getByText('Website Studio v1')).toBeInTheDocument();
     expect(screen.getByText('iOS 26 App Prototype')).toBeInTheDocument();
     expect(screen.getByText('BSA Proposal + SOW')).toBeInTheDocument();
     expect(screen.getByText('OneShot Cover Run')).toBeInTheDocument();
     expect(screen.getByText('Claude Design Author Cover Lab')).toBeInTheDocument();
-    expect(screen.getByText('9 workflow packs')).toBeInTheDocument();
+    expect(screen.getByText('10 workflow packs')).toBeInTheDocument();
+    expect(screen.getByText('8 expert studios')).toBeInTheDocument();
+    expect(screen.getByText('Design OS command structure')).toBeInTheDocument();
+    expect(screen.getAllByText('Website Studio').length).toBeGreaterThan(0);
+    expect(screen.getByText('Website Builder Adapter')).toBeInTheDocument();
     const intelligenceCard = screen.getByText('AI Opportunity Intelligence').closest('.oneshot-card');
     expect(intelligenceCard).not.toBeNull();
     expect(within(intelligenceCard as HTMLElement).getByText('Operational Atelier handoff')).toBeInTheDocument();
@@ -74,6 +79,53 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByText('Author cover pre-visualization module')).toBeInTheDocument();
     expect(screen.getByText('CoverVisionOS handoff')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search workflows, exports, gates, or outcomes')).toBeInTheDocument();
+  });
+
+  it('seeds the Website Studio v1 workflow with future adapter guardrails', () => {
+    const onCreateProject = vi.fn();
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('saas-landing', 'prototype')]}
+        designSystems={[designSystem('webflow')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    const websiteCard = screen.getByText('Website Studio v1').closest('.oneshot-card');
+    expect(websiteCard).not.toBeNull();
+    fireEvent.click((websiteCard as HTMLElement).querySelector('button') as HTMLButtonElement);
+
+    expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Website Studio v1',
+        skillId: 'saas-landing',
+        designSystemId: 'webflow',
+        metadata: expect.objectContaining({
+          workflowId: 'website-studio-v1',
+          workflowTitle: 'Website Studio v1',
+          workflowCategory: 'Website Studio',
+          workflowOutcome: 'Site plan + responsive build brief',
+          workflowCheckpoints: ['Site intake', 'Sitemap', 'Responsive QA', 'Build brief'],
+          workflowExports: ['HTML', 'Sitemap', 'Design tokens', 'Codex brief'],
+          workflowHandoff: expect.objectContaining({
+            system: 'Website Builder / Design OS',
+            commands: expect.arrayContaining([
+              'generateSitePlan',
+              'validateResponsive',
+              'publishOrPrepareDeploy',
+            ]),
+          }),
+          workflowScorecard: expect.arrayContaining([
+            'Responsive behavior',
+            'Deploy honesty',
+            'Build-readiness',
+          ]),
+        }),
+        pendingPrompt: expect.stringContaining('Do not claim the website is deployed'),
+      }),
+    );
   });
 
   it('seeds the Claude Design author workflow with CoverVision handoff doctrine', () => {
@@ -204,7 +256,7 @@ describe('OneShotWorkflows', () => {
             ],
           },
         }),
-        pendingPrompt: expect.stringContaining('CoverVisionOS standard'),
+        pendingPrompt: expect.stringContaining('CoverVision OS premium cover-production'),
       }),
     );
   });
