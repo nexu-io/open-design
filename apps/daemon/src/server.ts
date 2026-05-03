@@ -614,26 +614,46 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const app = express();
   app.use(express.json({ limit: '4mb' }));
 
+  // Build the set of allowed browser origins for the current bind config.
+  // Shared by the global origin middleware and isLocalSameOrigin() so
+  // both use the same policy (loopback + explicit bind host, HTTP + HTTPS,
+  // OD_WEB_PORT support).
+  function buildAllowedOrigins() {
+    const ports = [resolvedPort];
+    const webPort = Number(process.env.OD_WEB_PORT);
+    if (webPort && webPort !== resolvedPort) ports.push(webPort);
+    const schemes = ['http', 'https'];
+    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
+    return new Set(
+      ports.flatMap((p) => [
+        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+        // When bound to a specific non-loopback address (e.g. Tailscale,
+        // LAN IP, or 0.0.0.0), allow browser requests from that address
+        // too so the documented --host escape hatch remains usable.
+        ...schemes.map((s) => `${s}://${host}:${p}`),
+      ]),
+    );
+  }
+
+  // Routes that serve content to sandboxed iframes (Origin: null) for
+  // read-only purposes.  All other /api routes reject Origin: null.
+  const _NULL_ORIGIN_SAFE_GET_RE =
+    /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
   // Non-browser clients (no Origin header) are always allowed.
-  // Browser requests must originate from the bound address/port or
-  // the web proxy port (OD_WEB_PORT) — matching isLocalSameOrigin()
-  // used by existing per-route guards below.
   app.use('/api', (req, res, next) => {
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
 
     // Origin: null (sandboxed iframes).  Only allowed for safe, read-only
-    // raw-file preview routes (GET /api/projects/:id/raw/*).  All other
-    // API routes reject it to prevent sandboxed documents from reaching
-    // state-changing endpoints.
+    // routes that set their own CORS headers for canvas drawing.
     if (origin === 'null') {
-      const isSafeRawPreview =
-        req.method === 'GET' &&
-        /^\/projects\/[^/]+\/raw\//.test(req.path);
-      if (!isSafeRawPreview) {
+      const isSafeReadOnly =
+        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
+      if (!isSafeReadOnly) {
         return res.status(403).json({ error: 'Origin: null not allowed for this route' });
       }
       return next();
@@ -644,24 +664,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'Server initializing' });
     }
 
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-
-    const allowedOrigins = new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        // When bound to a specific non-loopback address (e.g. Tailscale,
-        // LAN IP, or 0.0.0.0), allow browser requests from that address
-        // too so the documented --host escape hatch remains usable.
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
-
-    if (!allowedOrigins.has(String(origin))) {
+    if (!buildAllowedOrigins().has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
@@ -2885,23 +2888,38 @@ function assembleExample(templateHtml, slidesHtml, title) {
 }
 
 export function isLocalSameOrigin(req, port) {
+  // Accepts http + https, loopback hosts, OD_WEB_PORT, and the explicit
+  // bind host — matching the global origin middleware policy exactly.
+  const host = String(req.headers.host || '');
+  const origin = req.headers.origin;
+
+  // Build allowed set inline (same logic as buildAllowedOrigins in
+  // startServer, but self-contained so the exported helper works
+  // without closing over server-scoped variables).
   const ports = [port];
   const webPort = Number(process.env.OD_WEB_PORT);
   if (webPort && webPort !== port) ports.push(webPort);
-
+  const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
+  const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
   const allowedHosts = new Set(
-    ports.flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`, `[::1]:${p}`]),
-  );
-  const allowedOrigins = new Set(
     ports.flatMap((p) => [
-      `http://127.0.0.1:${p}`,
-      `http://localhost:${p}`,
-      `http://[::1]:${p}`,
+      ...loopbackHosts.map((h) => `${h}:${p}`),
+      `${bindHost}:${p}`,
     ]),
   );
-  const host = String(req.headers.host || '');
+
+  // Reject unknown Host first (DNS rebinding / Host header attack)
   if (!allowedHosts.has(host)) return false;
-  const origin = req.headers.origin;
+
+  // Non-browser client with valid Host → allow
   if (origin == null || origin === '') return true;
+
+  const schemes = ['http', 'https'];
+  const allowedOrigins = new Set(
+    ports.flatMap((p) => [
+      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
+    ]),
+  );
   return allowedOrigins.has(String(origin));
 }

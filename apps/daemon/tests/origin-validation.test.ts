@@ -9,14 +9,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * including OD_WEB_PORT, Origin: null scoping, and non-loopback host.
  */
 function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
+  // Routes that serve content to sandboxed iframes (Origin: null) for
+  // read-only purposes.
+  const _NULL_ORIGIN_SAFE_GET_RE =
+    /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
   return (req, res, next) => {
     const origin = req.headers.origin;
     if (origin == null || origin === '') return next();
     if (origin === 'null') {
-      const isSafeRawPreview =
-        req.method === 'GET' &&
-        /^\/projects\/[^/]+\/raw\//.test(req.path);
-      if (!isSafeRawPreview) {
+      const isSafeReadOnly =
+        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
+      if (!isSafeReadOnly) {
         return res.status(403).json({ error: 'Origin: null not allowed for this route' });
       }
       return next();
@@ -57,6 +60,13 @@ function makeTestApp(port, host = '127.0.0.1') {
   });
   app.post('/api/projects', (req, res) => res.json({ project: req.body }));
   app.delete('/api/projects/:id', (req, res) => res.json({ ok: true }));
+  app.get('/api/codex-pets/:id/spritesheet', (req, res) => {
+    // Mimics the real spritesheet route that sets CORS for Origin: null
+    if (req.headers.origin === 'null') {
+      res.header('Access-Control-Allow-Origin', 'null');
+    }
+    res.type('image/png').send(Buffer.from('fake-sprite'));
+  });
   return app;
 }
 
@@ -145,6 +155,14 @@ describe('daemon origin validation middleware', () => {
     });
     expect(res.status).toBe(200);
     expect(res.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('allows Origin: null for GET codex-pet spritesheet routes', async () => {
+    const res = await request(port, 'GET', '/api/codex-pets/my-pet/spritesheet', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('null');
   });
 
   it('rejects Origin: null on POST to state-changing endpoints', async () => {
