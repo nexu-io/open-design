@@ -533,6 +533,7 @@ export const ja: Dict = {
   'fileViewer.exportPptxNa': 'ここでは PPTX エクスポートは利用できません。',
   'fileViewer.exportZip': '.zip としてダウンロード',
   'fileViewer.exportHtml': 'スタンドアロン HTML としてエクスポート',
+  'fileViewer.exportMd': 'Markdown としてエクスポート',
   'fileViewer.exportJsx': 'JSX としてエクスポート',
   'fileViewer.exportReactHtml': 'プレビューを HTML としてエクスポート',
   'fileViewer.saveAsTemplate': 'テンプレートとして保存…',

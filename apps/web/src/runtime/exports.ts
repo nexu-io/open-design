@@ -1,9 +1,14 @@
 // Client-side export helpers used by the Share menu in the HTML viewer.
-// Three of the four formats run entirely in the browser:
+// Four of the five formats run entirely in the browser:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
 //   - ZIP  : pack the artifact into a stored-mode ZIP (see ./zip.ts).
+//   - MD   : download the artifact's source verbatim with a `.md` extension
+//            so it can be ingested by markdown-aware tooling (LLM context
+//            windows, vault apps, etc.). No conversion is performed — the
+//            file content is the same source the Source view shows. See
+//            issue #279.
 // PPTX export is fundamentally different — it asks the agent to convert the
 // artifact server-side, so it lives in ProjectView.tsx (not here).
 
@@ -49,6 +54,16 @@ export function exportAsZip(html: string, title: string): void {
     },
   ]);
   triggerDownload(blob, `${slug}.zip`);
+}
+
+export function exportAsMd(source: string, title: string): void {
+  // Pass-through download: the file body is the artifact source verbatim,
+  // only the extension and Content-Type are flipped to markdown. No
+  // HTML→markdown conversion happens here — users who pipe the file into
+  // markdown-aware tooling (LLM context windows, vault apps) get the same
+  // bytes the Source view displays.
+  const blob = new Blob([source], { type: 'text/markdown;charset=utf-8' });
+  triggerDownload(blob, `${safeFilename(title, 'artifact')}.md`);
 }
 
 type ReactSourceExtension = '.jsx' | '.tsx';

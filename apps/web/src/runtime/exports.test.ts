@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { archiveFilenameFrom, archiveRootFromFilePath } from './exports';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { archiveFilenameFrom, archiveRootFromFilePath, exportAsMd } from './exports';
 
 function mockResponse(headers: Record<string, string>): Response {
   return { headers: new Headers(headers) } as Response;
@@ -62,5 +62,75 @@ describe('archiveFilenameFrom', () => {
       'content-disposition': "attachment; filename*=UTF-8''%E9%9D",
     });
     expect(archiveFilenameFrom(resp, 'fallback', 'ui-design')).toBe('ui-design.zip');
+  });
+});
+
+// `exportAsMd` is a pass-through (the file body is the artifact source
+// verbatim, only the extension and Content-Type flip). Tests exercise it
+// end-to-end by stubbing the few DOM globals `triggerDownload` touches —
+// we run under `environment: 'node'`, so `document` and `URL` aren't
+// available by default. See issue #279.
+describe('exportAsMd', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('downloads the source bytes verbatim under a `.md` extension', async () => {
+    const source = '<!doctype html>\n<html lang="en"><body>hi</body></html>\n';
+
+    exportAsMd(source, 'TTC — Seed Round · 2026');
+
+    expect(capturedBlob).toBeDefined();
+    expect(capturedBlob!.type).toBe('text/markdown;charset=utf-8');
+    // Critical: no transformation, no normalization, no trimming. Whatever
+    // the Source view shows is what lands in the .md.
+    expect(await capturedBlob!.text()).toBe(source);
+    expect(capturedFilename).toBe('TTC-Seed-Round-2026.md');
+  });
+
+  it('falls back to "artifact.md" when the title is empty or unsafe', () => {
+    exportAsMd('hello', '');
+    expect(capturedFilename).toBe('artifact.md');
+
+    exportAsMd('hello', '???');
+    expect(capturedFilename).toBe('artifact.md');
+  });
+
+  it('keeps multi-byte content (UTF-8) intact end-to-end', async () => {
+    const source = '# 中文标题\n\n这是 markdown 文件 — でも本当は HTML 源代码 (مرحبا)。\n';
+
+    exportAsMd(source, 'mixed');
+
+    expect(await capturedBlob!.text()).toBe(source);
   });
 });

@@ -535,6 +535,7 @@ export const esES: Dict = {
   'fileViewer.exportPptxNa': 'La exportación a PPTX no está disponible aquí.',
   'fileViewer.exportZip': 'Descargar como .zip',
   'fileViewer.exportHtml': 'Exportar como HTML independiente',
+  'fileViewer.exportMd': 'Exportar como Markdown',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar vista previa como HTML',
   'fileViewer.saveAsTemplate': 'Guardar como plantilla…',

@@ -534,6 +534,7 @@ export const hu: Dict = {
   'fileViewer.exportPptxNa': 'A PPTX export itt nem elérhető.',
   'fileViewer.exportZip': 'Letöltés .zip-ként',
   'fileViewer.exportHtml': 'Exportálás önálló HTML-ként',
+  'fileViewer.exportMd': 'Exportálás Markdown-ként',
   'fileViewer.exportJsx': 'Exportálás JSX-ként',
   'fileViewer.exportReactHtml': 'Előnézet exportálása HTML-ként',
   'fileViewer.saveAsTemplate': 'Mentés sablonként…',

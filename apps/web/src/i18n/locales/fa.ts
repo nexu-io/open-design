@@ -534,6 +534,7 @@ export const fa: Dict = {
   'fileViewer.exportPptxNa': 'صادرکردن PPTX اینجا در دسترس نیست.',
   'fileViewer.exportZip': 'دانلود به صورت .zip',
   'fileViewer.exportHtml': 'صادرکردن به HTML مستقل',
+  'fileViewer.exportMd': 'صادرکردن به صورت Markdown',
   'fileViewer.exportJsx': 'صادرکردن به JSX',
   'fileViewer.exportReactHtml': 'صادرکردن پیش‌نمایش به HTML',
   'fileViewer.saveAsTemplate': 'ذخیره به عنوان قالب…',

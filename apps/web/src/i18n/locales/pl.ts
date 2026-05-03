@@ -534,6 +534,7 @@ export const pl: Dict = {
   'fileViewer.exportPptxNa': 'Eksport do PPTX nie jest tutaj dostępny.',
   'fileViewer.exportZip': 'Pobierz jako .zip',
   'fileViewer.exportHtml': 'Eksportuj jako samodzielny HTML',
+  'fileViewer.exportMd': 'Eksportuj jako Markdown',
   'fileViewer.exportJsx': 'Eksportuj jako JSX',
   'fileViewer.exportReactHtml': 'Eksportuj podgląd jako HTML',
   'fileViewer.saveAsTemplate': 'Zapisz jako szablon…',

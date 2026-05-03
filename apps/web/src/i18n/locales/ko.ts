@@ -534,6 +534,7 @@ export const ko: Dict = {
   'fileViewer.exportPptxNa': '이곳에서는 PPTX 내보내기를 할 수 없습니다.',
   'fileViewer.exportZip': '.zip으로 다운로드',
   'fileViewer.exportHtml': '독립 실행형 HTML로 내보내기',
+  'fileViewer.exportMd': 'Markdown으로 내보내기',
   'fileViewer.exportJsx': 'JSX로 내보내기',
   'fileViewer.exportReactHtml': '미리보기를 HTML로 내보내기',
   'fileViewer.saveAsTemplate': '템플릿으로 저장…',

@@ -18,6 +18,7 @@ import type { ProjectFilePreview } from '../providers/registry';
 import {
   exportAsHtml,
   exportAsJsx,
+  exportAsMd,
   exportAsPdf,
   exportProjectAsZip,
   exportReactComponentAsHtml,
@@ -1323,6 +1324,24 @@ function HtmlViewer({
                   >
                     <span className="share-menu-icon"><Icon name="file-code" size={14} /></span>
                     <span>{t('fileViewer.exportHtml')}</span>
+                  </button>
+                  {/* Export as Markdown — pass-through download of the
+                      artifact source with a `.md` extension. No conversion
+                      runs; the file body is identical to the Source view.
+                      Useful for piping the artifact into markdown-aware
+                      tooling (LLM context windows, vault apps). See
+                      issue #279. */}
+                  <button
+                    type="button"
+                    className="share-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setShareMenuOpen(false);
+                      exportAsMd(source ?? '', exportTitle);
+                    }}
+                  >
+                    <span className="share-menu-icon"><Icon name="file" size={14} /></span>
+                    <span>{t('fileViewer.exportMd')}</span>
                   </button>
                   <div className="share-menu-divider" />
                   <button

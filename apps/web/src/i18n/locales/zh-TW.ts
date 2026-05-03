@@ -522,6 +522,7 @@ export const zhTW: Dict = {
   'fileViewer.exportPptxNa': '此處暫不支援匯出 PPTX。',
   'fileViewer.exportZip': '下載為 .zip',
   'fileViewer.exportHtml': '匯出為獨立 HTML',
+  'fileViewer.exportMd': '匯出為 Markdown',
   'fileViewer.exportJsx': '匯出為 JSX',
   'fileViewer.exportReactHtml': '匯出預覽 HTML',
   'fileViewer.saveAsTemplate': '儲存為範本…',
