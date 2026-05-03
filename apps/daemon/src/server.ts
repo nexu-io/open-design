@@ -312,9 +312,16 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
   'prompt-templates',
   path.join(PROJECT_ROOT, 'prompt-templates'),
 );
-const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
-  ? path.resolve(PROJECT_ROOT, process.env.OD_DATA_DIR)
-  : path.join(PROJECT_ROOT, '.od');
+function resolveDataDir(raw) {
+  if (!raw) return path.join(PROJECT_ROOT, '.od');
+  const expanded = raw.startsWith('~/')
+    ? path.join(os.homedir(), raw.slice(2))
+    : raw;
+  return path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(PROJECT_ROOT, expanded);
+}
+const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR);
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
