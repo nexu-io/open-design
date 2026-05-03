@@ -949,6 +949,7 @@ function MediaProvidersSection({
 // must NOT reference bare `od`.
 type McpClientId =
   | 'claude'
+  | 'codex'
   | 'cursor'
   | 'vscode'
   | 'zed'
@@ -978,7 +979,7 @@ interface McpClient {
   // (⌘⇧P vs Ctrl+Shift+P) can be rendered correctly.
   buildInstruction: (info: McpInstallInfo) => string;
   buildSnippet: (info: McpInstallInfo) => string;
-  buildSnippetLang: (info: McpInstallInfo) => 'bash' | 'json';
+  buildSnippetLang: (info: McpInstallInfo) => 'bash' | 'json' | 'toml';
   // Optional one-click install action. Currently only Cursor
   // supports deeplinks of this shape.
   buildDeeplink?: (info: McpInstallInfo) => string;
@@ -1056,6 +1057,33 @@ const MCP_CLIENTS: McpClient[] = [
     },
     buildSnippet: buildSharedMcpJson,
     buildSnippetLang: () => 'json',
+  },
+  {
+    id: 'codex',
+    label: 'Codex',
+    // Codex CLI shares config between the terminal CLI and the IDE
+    // extension at ~/.codex/config.toml (TOML, not JSON, and a
+    // different table key from every other client - mcp_servers
+    // rather than mcpServers / servers / context_servers). Schema
+    // ref: https://developers.openai.com/codex/mcp.
+    //
+    // For our payload (just command + args, both strings/arrays of
+    // strings) JSON.stringify happens to produce valid TOML literal
+    // values, since TOML basic strings use the same double-quote
+    // escape rules and TOML inline arrays match JSON array syntax.
+    buildMethod: () => 'TOML config',
+    buildInstruction: (info) => {
+      const path = homeConfigPath(
+        info.platform,
+        '~/.codex/config.toml',
+        '%USERPROFILE%\\.codex\\config.toml',
+      );
+      return `Append this table to ${path}. The same config is shared between the Codex CLI and the Codex IDE extension.`;
+    },
+    buildSnippet: (info) => `[mcp_servers.open-design]
+command = ${JSON.stringify(info.command)}
+args = ${JSON.stringify(info.args)}`,
+    buildSnippetLang: () => 'toml',
   },
   {
     id: 'cursor',
@@ -1194,7 +1222,9 @@ function IntegrationsSection() {
 
   const client = MCP_CLIENTS.find((c) => c.id === clientId) ?? MCP_CLIENTS[0]!;
   const snippet = info ? client.buildSnippet(info) : '';
-  const snippetLang = info ? client.buildSnippetLang(info) : 'json';
+  const snippetLang: 'bash' | 'json' | 'toml' = info
+    ? client.buildSnippetLang(info)
+    : 'json';
 
   // Reset the "Copied" badge when the user flips to a different
   // client; otherwise the green check sits there next to a snippet
