@@ -80,9 +80,33 @@ export function buildDockerArgs(
   const electronCache = join(config.roots.toolPackRoot, ".docker-cache", "electron");
   const electronBuilderCache = join(config.roots.toolPackRoot, ".docker-cache", "electron-builder");
 
+  // The tool-pack root is mounted at a fixed container path so the inner build
+  // can be told where to write output via `--dir /tools-pack`. Without this
+  // mount + flag, the inner build would default to <workspaceRoot>/.tmp/tools-pack
+  // and silently ignore the caller's `--dir`, breaking any orchestration (CI,
+  // multi-namespace local builds) that pins tools-pack output outside the workspace.
+  // The .docker-home and .docker-cache/* mounts below shadow this parent mount at
+  // their specific paths under /home/builder, which is the supported overlap pattern.
+  //
+  // Shell-interpolation safety for the inner `bash -lc` command:
+  //   - config.namespace is sanitized at config-time by resolveNamespace() in
+  //     @open-design/sidecar-proto (restricted to namespace charset)
+  //   - config.to is enum-validated by resolveToolPackBuildOutput() in config.ts
+  //     to one of "all" | "appimage" | "dir"
+  //   - config.portable is a boolean
+  // None of these values can contain shell metacharacters, so direct
+  // interpolation into the inner command string is safe.
+  const innerArgs = [
+    "pnpm tools-pack linux build",
+    `--to ${config.to}`,
+    `--namespace ${config.namespace}`,
+    "--dir /tools-pack",
+  ];
+  if (config.portable) {
+    innerArgs.push("--portable");
+  }
   const innerCommand =
-    "corepack enable && pnpm install --frozen-lockfile && " +
-    `pnpm tools-pack linux build --to ${config.to} --namespace ${config.namespace}`;
+    "corepack enable && pnpm install --frozen-lockfile && " + innerArgs.join(" ");
 
   return [
     "run",
@@ -91,6 +115,8 @@ export function buildDockerArgs(
     `${user.uid}:${user.gid}`,
     "-v",
     `${config.workspaceRoot}:/project`,
+    "-v",
+    `${config.roots.toolPackRoot}:/tools-pack`,
     "-v",
     `${dockerHome}:/home/builder`,
     "-v",

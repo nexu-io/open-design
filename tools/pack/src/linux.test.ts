@@ -66,6 +66,11 @@ describe("buildDockerArgs", () => {
     );
   });
 
+  it("mounts the tool-pack root at /tools-pack so inner build writes to host-visible output dir", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    expect(args).toContain("/work/.tmp/tools-pack:/tools-pack");
+  });
+
   it("sets HOME and ELECTRON_CACHE env vars", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     expect(args).toContain("HOME=/home/builder");
@@ -80,6 +85,24 @@ describe("buildDockerArgs", () => {
     expect(last).toMatch(/pnpm install --frozen-lockfile/);
     expect(last).toMatch(/pnpm tools-pack linux build --to all --namespace default/);
     expect(last).not.toMatch(/--containerized/);
+  });
+
+  it("forwards --dir /tools-pack so inner build output lands under the mounted host dir", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toMatch(/--dir \/tools-pack/);
+  });
+
+  it("forwards --portable when config.portable is true", () => {
+    const args = buildDockerArgs({ ...makeConfig(), portable: true }, { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toMatch(/--portable/);
+  });
+
+  it("omits --portable when config.portable is false", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).not.toMatch(/--portable/);
   });
 });
 
