@@ -102,6 +102,11 @@
       OD_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
+    // lib.optionalAttrs cfg.webFrontend.enable {
+      # See nix/home-manager.nix — the daemon's /api origin allowlist
+      # needs to know about the caddy port or it will 403 SPA writes.
+      OD_WEB_PORT = toString cfg.webFrontend.port;
+    }
     // cfg.extraEnv;
 
   webEnvironment = {

@@ -122,6 +122,13 @@
       OD_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
+    // lib.optionalAttrs cfg.webFrontend.enable {
+      # Tell the daemon's same-origin allowlist about the caddy port,
+      # otherwise PUT/POST requests from the SPA served on
+      # `webFrontend.port` get 403'd by the /api middleware
+      # (apps/daemon/src/server.ts buildAllowedOrigins).
+      OD_WEB_PORT = toString cfg.webFrontend.port;
+    }
     // cfg.extraEnv;
 
   webEnv = {
