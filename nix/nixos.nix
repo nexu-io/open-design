@@ -57,29 +57,10 @@
     LockPersonality = true;
   };
 
-  # System systemd units launch with a minimal default PATH that excludes
-  # NixOS profile dirs where agent CLIs live. The daemon scans
-  # `process.env.PATH` to discover them, so an explicit PATH is required
-  # or the UI reports "no agents detected". The service runs as a system
-  # user, so per-user profile dirs aren't included by default — operators
-  # who install agents into a specific location should add it via
-  # `services.open-design.extraBinPaths`.
-  daemonPathEntries =
-    [
-      "/run/wrappers/bin"
-      "/run/current-system/sw/bin"
-      "/nix/var/nix/profiles/default/bin"
-      "/usr/local/bin"
-      "/usr/bin"
-      "/bin"
-    ]
-    ++ cfg.extraBinPaths;
-
   daemonEnvironment =
     {
       OD_PORT = toString cfg.port;
       OD_DATA_DIR = toString cfg.dataDir;
-      PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
     // cfg.extraEnv;
 
