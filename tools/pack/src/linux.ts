@@ -32,6 +32,7 @@ const execFileAsync = promisify(execFile);
 
 const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
+const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 
 const INTERNAL_PACKAGES = [
   { directory: "packages/contracts", name: "@open-design/contracts" },
@@ -630,7 +631,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
 
   const logPath = desktopLogPath(config);
   await mkdir(dirname(logPath), { recursive: true });
-  await writeFile(logPath, "", "utf8").catch(() => undefined);
+  await writeFile(logPath, "", "utf8");
 
   const stamp = linuxDesktopStamp(config);
 
@@ -646,12 +647,15 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     env: createSidecarLaunchEnv({
       base: join(config.roots.runtime.namespaceRoot, "runtime"),
       contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      extraEnv: { ...process.env },
+      extraEnv: { ...process.env, [DESKTOP_LOG_ECHO_ENV]: "0" },
       stamp,
     }),
     logFd: null,
   });
 
+  // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
+  // first launch before exec'ing the inner electron, which adds substantial
+  // overhead vs mac's direct .app launch.
   const markerPath = desktopIdentityPath(config);
   const ready = await waitForMarker(markerPath, 60_000);
   if (!ready) {
