@@ -6378,6 +6378,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
    ============================================================ */
 .viewer-action[data-coming-soon='true'] {
   position: relative;
+  z-index: 5;
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -6388,7 +6389,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text-strong);
+  background: rgba(17, 24, 39, 0.95);
   color: white;
   font-size: 10.5px;
   padding: 4px 8px;
@@ -6405,6 +6406,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .viewer-action[data-coming-soon='true']:hover::after { opacity: 1; }
 .viewer-toggle[data-coming-soon='true'] {
   position: relative;
+  z-index: 5;
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -6415,7 +6417,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text-strong);
+  background: rgba(17, 24, 39, 0.95);
   color: white;
   font-size: 10.5px;
   padding: 4px 8px;
