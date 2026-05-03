@@ -112,6 +112,18 @@ export interface PetCustom {
   atlas?: PetAtlasLayout;
 }
 
+export interface NotificationsConfig {
+  // Master switch for the completion sound. Default false — first-run users
+  // hear nothing until they opt in.
+  soundEnabled: boolean;
+  // Sound id played when a turn ends with `runStatus === 'succeeded'`.
+  successSoundId: string;
+  // Sound id played when a turn ends with `runStatus === 'failed'`.
+  failureSoundId: string;
+  // Master switch for the browser Notification API banner. Default false.
+  desktopEnabled: boolean;
+}
+
 export interface PetConfig {
   // True once the user has explicitly picked a pet (built-in or custom).
   // Until then, the entry view shows an "adopt" callout to drive discovery.
@@ -157,6 +169,10 @@ export interface AppConfig {
   // the feature land at `undefined`, which the loader normalizes to a
   // safe default (un-adopted, hidden until the user opts in).
   pet?: PetConfig;
+  // Optional task-completion sound + browser notification settings. Older
+  // configs that pre-date the feature land at `undefined`, which the loader
+  // normalizes to a safe default (everything off).
+  notifications?: NotificationsConfig;
 }
 
 export type AgentEvent = PersistedAgentEvent;

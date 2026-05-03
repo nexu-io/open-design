@@ -576,6 +576,24 @@ export const AGENT_DEFS = [
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
   },
+  {
+    id: 'vibe',
+    name: 'Mistral Vibe CLI',
+    bin: 'vibe-acp',
+    versionArgs: ['--version'],
+    fetchModels: async (resolvedBin) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: [],
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+    ],
+    buildArgs: () => [],
+    streamFormat: 'acp-json-rpc',
+  },
 ];
 
 function existingDirsUnder(root, segments = []) {

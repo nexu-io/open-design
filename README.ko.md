@@ -696,7 +696,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다 — 코드, 문서, 피드백, 새 skill, 새 디자인 시스템, 또는 날카로운 이슈 하나라도. 모든 진짜 기여가 의미 있고, 아래의 벽이 가장 직접적인 "감사합니다"입니다.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-04-30" alt="Open Design 컨트리뷰터" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-03" alt="Open Design 컨트리뷰터" />
 </a>
 
 첫 PR을 보냈다면 — 환영합니다. [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) 레이블이 시작점입니다.
@@ -713,9 +713,9 @@ Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-04-30" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-04-30" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-04-30" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-03" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-03" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-03" />
   </picture>
 </a>
 

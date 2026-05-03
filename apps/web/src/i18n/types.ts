@@ -137,6 +137,32 @@ export interface Dict {
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
 
+  // Notifications (settings + system notifications)
+  'settings.notifications': string;
+  'settings.notificationsHint': string;
+  'settings.notifyCompletionSound': string;
+  'settings.notifyCompletionSoundHint': string;
+  'settings.notifySuccessSound': string;
+  'settings.notifyFailureSound': string;
+  'settings.notifyDesktop': string;
+  'settings.notifyDesktopHint': string;
+  'settings.notifyDesktopBlocked': string;
+  'settings.notifyDesktopUnsupported': string;
+  'settings.notifyTest': string;
+  'settings.notifyTestSent': string;
+  'settings.notifyTestFailed': string;
+  'settings.notifySoundDing': string;
+  'settings.notifySoundChime': string;
+  'settings.notifySoundTwoToneUp': string;
+  'settings.notifySoundPluck': string;
+  'settings.notifySoundBuzz': string;
+  'settings.notifySoundTwoToneDown': string;
+  'settings.notifySoundThud': string;
+  'notify.successTitle': string;
+  'notify.failureTitle': string;
+  'notify.successBody': string;
+  'notify.failureBody': string;
+
   // Entry view / tabs
   'entry.tabDesigns': string;
   'entry.tabExamples': string;

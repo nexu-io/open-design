@@ -10,6 +10,7 @@ const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
 const copilot = AGENT_DEFS.find((agent) => agent.id === 'copilot');
 const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
+const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
@@ -382,4 +383,21 @@ fsTest('resolveAgentExecutable still resolves agents without a fallbackBins fiel
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('vibe args use empty array for acp-json-rpc streaming', () => {
+  const args = vibe.buildArgs('', [], [], {});
+
+  assert.deepEqual(args, []);
+  assert.equal(vibe.streamFormat, 'acp-json-rpc');
+});
+
+test('vibe fetchModels falls back to fallbackModels when detection fails', async () => {
+  // fetchModels rejects when the binary doesn't exist; the daemon's
+  // probe() catches this and uses fallbackModels instead.
+  const result = await vibe.fetchModels('/nonexistent/vibe-acp').catch(() => null);
+
+  assert.equal(result, null);
+  assert.ok(Array.isArray(vibe.fallbackModels));
+  assert.equal(vibe.fallbackModels[0].id, 'default');
 });
