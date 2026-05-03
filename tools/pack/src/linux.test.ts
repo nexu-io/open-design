@@ -170,4 +170,28 @@ describe("matchesAppImageProcess", () => {
     );
     expect(ok).toBe(false);
   });
+
+  it("matches --appimage-extract-and-run mode (executable in /tmp/appimage_extracted_*/<binary>)", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        env: { APPIMAGE: installPath },
+      },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("rejects extract-and-run mode with mismatched APPIMAGE env", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        env: { APPIMAGE: "/elsewhere/Other.AppImage" },
+      },
+      installPath,
+    );
+    expect(ok).toBe(false);
+  });
 });

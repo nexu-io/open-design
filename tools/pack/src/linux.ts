@@ -136,8 +136,13 @@ export function matchesAppImageProcess(
   installPath: string,
 ): boolean {
   if (snapshot.executable === installPath) return true;
+  // Two AppImage launch modes leave different executable paths in /proc/<pid>/exe:
+  //   FUSE-mounted: /tmp/.mount_<hex>/AppRun
+  //   --appimage-extract-and-run: /tmp/appimage_extracted_<hex>/<binary>
+  // In both cases the AppImage runtime sets $APPIMAGE to the original install path.
   const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/AppRun$/.test(snapshot.executable);
-  if (!isMountedRunner) return false;
+  const isExtractedRunner = /^\/tmp\/appimage_extracted_[^/]+\/[^/]+$/.test(snapshot.executable);
+  if (!isMountedRunner && !isExtractedRunner) return false;
   return snapshot.env.APPIMAGE === installPath;
 }
 
@@ -811,9 +816,14 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   );
   const exePath = await readProcessExe(marker.pid);
   const env = await readProcessEnv(marker.pid);
-  const cmdOk = matchesAppImageProcess(
+  // marker.appPath is unreliable on Linux (apps/packaged writes "/"). Use the
+  // canonical install path we know about, falling back to the built AppImage
+  // for not-yet-installed builds.
+  const candidateAppImagePath =
+    (await pathExists(paths.installAppImagePath)) ? paths.installAppImagePath : await findBuiltAppImage(paths);
+  const cmdOk = candidateAppImagePath != null && matchesAppImageProcess(
     { pid: marker.pid, executable: exePath, env },
-    marker.appPath,
+    candidateAppImagePath,
   );
 
   if (!stampOk || !cmdOk || marker.namespaceRoot !== config.roots.runtime.namespaceRoot) {
