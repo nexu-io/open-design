@@ -2128,19 +2128,31 @@ function MarkdownViewer({
   );
 }
 
-// GoogleSlidesViewer — renders a Google Slides /embed iframe whose deck ID is
+// GoogleSlidesViewer renders a Google Slides /embed iframe whose deck ID is
 // stored inside a result.json file the skill writes to the project's cwd.
 //
-// The skill (e.g. wix-ja-slide) calls `gog slides ...` to copy + fill a
-// template, then writes a result.json shaped like:
-//   { deckId, deckUrl, embedUrl, totalPages, layoutsUsed, missingFields, ... }
-// The artifact manifest sets `kind: "google-slides-deck"` so this viewer
-// activates. We render the read-only embed iframe + an "Open in Slides"
-// button for editing in the real Slides UI.
+// The skill writes:
+//   - result.json with `{ deckId, deckUrl, embedUrl, totalPages, ... }`
+//   - result.json.artifact.json sidecar with `kind: "google-slides-deck"`,
+//     `renderer: "google-slides"` so the manifest validator routes here
 //
-// Limitations (Iteration 1): no live reload — when the skill regenerates,
-// the user has to hit refresh. Comment / surgical-edit mode is not wired
-// because Slides /embed is read-only.
+// The viewer is skill-agnostic: any skill that produces the result.json
+// shape and the artifact manifest sidecar will activate this renderer.
+//
+// Security: embedUrl is validated against an allowlist (only Google Slides
+// /embed URLs are accepted) before being assigned to iframe.src — without
+// this an attacker who can write result.json could embed arbitrary origins.
+//
+// Limitations: no live reload — when the skill regenerates, the user has
+// to refresh manually. Comment / surgical-edit mode is not wired because
+// Slides /embed is read-only.
+interface GoogleSlidesImageSlot {
+  page?: number;
+  status?: string;
+  source?: string;
+  reason?: string;
+}
+
 interface GoogleSlidesResult {
   deckId?: string;
   deckUrl?: string;
@@ -2149,7 +2161,20 @@ interface GoogleSlidesResult {
   layoutsUsed?: string[];
   missingFields?: string[];
   missingImages?: string[];
+  imageSlots?: GoogleSlidesImageSlot[];
   knownSideEffects?: string[];
+}
+
+// Strict allowlist for embed iframes. Pattern matches:
+//   https://docs.google.com/presentation/d/<id>/embed[?...]
+// where <id> is alphanumeric + dash + underscore (Google's deck ID shape).
+// Trailing query string is allowed (Google adds start/loop/delayms params).
+// Hash fragments are rejected to keep the surface tight.
+const GOOGLE_SLIDES_EMBED_PATTERN =
+  /^https:\/\/docs\.google\.com\/presentation\/d\/[A-Za-z0-9_-]+\/embed(?:\?[^#]*)?$/;
+
+function isValidGoogleSlidesEmbed(url: unknown): url is string {
+  return typeof url === 'string' && GOOGLE_SLIDES_EMBED_PATTERN.test(url);
 }
 
 function GoogleSlidesViewer({
@@ -2162,15 +2187,17 @@ function GoogleSlidesViewer({
   const t = useT();
   const [result, setResult] = useState<GoogleSlidesResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [fileMissing, setFileMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setResult(null);
     setParseError(null);
+    setFileMissing(false);
     void fetchProjectFileText(projectId, file.name).then((text) => {
       if (cancelled) return;
-      if (text === null) {
-        setParseError('result.json could not be read');
+      if (text === null || text === '') {
+        setFileMissing(true);
         return;
       }
       try {
@@ -2185,8 +2212,11 @@ function GoogleSlidesViewer({
     };
   }, [projectId, file.name, file.mtime]);
 
-  const embedUrl = result?.embedUrl;
+  const embedUrlValid = isValidGoogleSlidesEmbed(result?.embedUrl);
   const deckUrl = result?.deckUrl;
+  const hasResult = result !== null;
+  const embedUrlMissing = hasResult && !result?.embedUrl;
+  const embedUrlInvalid = hasResult && !embedUrlValid && !embedUrlMissing;
 
   return (
     <div className="viewer google-slides-viewer">
@@ -2194,7 +2224,7 @@ function GoogleSlidesViewer({
         <div className="viewer-toolbar-left">
           <span className="viewer-meta">
             {result?.totalPages
-              ? `${result.totalPages} pages`
+              ? `${result.totalPages} ${t('fileViewer.googleSlidesPagesLabel')}`
               : 'Google Slides'}
           </span>
         </div>
@@ -2206,7 +2236,7 @@ function GoogleSlidesViewer({
               target="_blank"
               rel="noreferrer noopener"
             >
-              Open in Slides
+              {t('fileViewer.googleSlidesOpen')}
             </a>
           ) : null}
           <FileActions projectId={projectId} file={file} />
@@ -2215,23 +2245,34 @@ function GoogleSlidesViewer({
       <div className="viewer-body">
         {parseError ? (
           <div className="viewer-empty">{parseError}</div>
-        ) : !embedUrl ? (
+        ) : fileMissing ? (
+          <div className="viewer-empty">{t('fileViewer.googleSlidesNotReady')}</div>
+        ) : embedUrlMissing ? (
+          <div className="viewer-empty">{t('fileViewer.googleSlidesNotReady')}</div>
+        ) : embedUrlInvalid ? (
+          <div className="viewer-empty">{t('fileViewer.googleSlidesInvalidUrl')}</div>
+        ) : !embedUrlValid ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : (
           <iframe
             data-testid="google-slides-embed-frame"
             title={file.name}
-            src={embedUrl}
+            src={result?.embedUrl}
             allow="autoplay; fullscreen"
             referrerPolicy="strict-origin-when-cross-origin"
           />
         )}
       </div>
-      {result?.missingFields?.length || result?.missingImages?.length || result?.knownSideEffects?.length ? (
+      {result?.missingFields?.length ||
+      result?.missingImages?.length ||
+      result?.imageSlots?.some((s) => s.status && s.status !== 'filled') ||
+      result?.knownSideEffects?.length ? (
         <div className="viewer-footer google-slides-warnings">
           {result.missingFields?.length ? (
             <details>
-              <summary>⚠️ Missing fields ({result.missingFields.length})</summary>
+              <summary>
+                {t('fileViewer.googleSlidesMissingFields')} ({result.missingFields.length})
+              </summary>
               <ul>
                 {result.missingFields.map((m, i) => (
                   <li key={i}>{m}</li>
@@ -2241,7 +2282,9 @@ function GoogleSlidesViewer({
           ) : null}
           {result.missingImages?.length ? (
             <details>
-              <summary>⚠️ Missing images ({result.missingImages.length})</summary>
+              <summary>
+                {t('fileViewer.googleSlidesMissingImages')} ({result.missingImages.length})
+              </summary>
               <ul>
                 {result.missingImages.map((m, i) => (
                   <li key={i}>{m}</li>
@@ -2249,9 +2292,30 @@ function GoogleSlidesViewer({
               </ul>
             </details>
           ) : null}
+          {result.imageSlots?.some((s) => s.status && s.status !== 'filled') ? (
+            <details>
+              <summary>
+                Image slots (
+                {result.imageSlots.filter((s) => s.status && s.status !== 'filled').length} pending)
+              </summary>
+              <ul>
+                {result.imageSlots
+                  .filter((s) => s.status && s.status !== 'filled')
+                  .map((s, i) => (
+                    <li key={i}>
+                      page {s.page ?? '?'}: {s.status}
+                      {s.reason ? ` — ${s.reason}` : ''}
+                      {s.source ? ` (${s.source})` : ''}
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          ) : null}
           {result.knownSideEffects?.length ? (
             <details>
-              <summary>⚠️ Known side effects ({result.knownSideEffects.length})</summary>
+              <summary>
+                {t('fileViewer.googleSlidesSideEffects')} ({result.knownSideEffects.length})
+              </summary>
               <ul>
                 {result.knownSideEffects.map((m, i) => (
                   <li key={i}>{m}</li>

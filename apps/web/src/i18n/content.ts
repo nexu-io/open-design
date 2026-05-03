@@ -171,6 +171,12 @@ const DE_SKILL_COPY: Record<string, { description?: string; examplePrompt?: stri
     examplePrompt:
       'Skizzieren Sie ein handgezeichnetes Wireframe v0.1 für ein Portal — vier Varianten als Tabs auf Millimeterpapier, Marker-Headlines, Sticky-Note-Anmerkungen, schraffierte Chart-Platzhalter.',
   },
+  'wix-ja-slide': {
+    description:
+      'Generiert markenkonforme japanische Google Slides aus einem Outline. Wählt aus 130 Wix-MKT-Vorlagenseiten ein passendes Layout aus und füllt Platzhalter unter Beachtung der japanischen Kinsoku-Regeln.',
+    examplePrompt:
+      'Wix Japan Monatsbericht — <industry-event>, <newsletter-project>-Launch, <brand-project>-JA-Fortschritt.',
+  },
 };
 
 const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
@@ -343,6 +349,7 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'tetris',
   'vibrant',
   'vintage',
+  'wix-japan',
 ] as const;
 
 const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {

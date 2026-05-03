@@ -68,10 +68,11 @@ od:
 
 ### 必ず読むファイル（Step 0）
 
-1. **`assets/layouts.json`** — 130 ページの shape catalog。各 canonical layout の `use_for` ヒント・placeholder 仕様・字数制限。
-2. **`references/prompt-rules.md`** — 日本語禁則処理ルール（行頭/行末禁則・分離禁止・助詞改行）。
-3. **`DESIGN.md`**（active design system, `Wix Japan`）— トーン・配色・タイポグラフィ token。
-4. **outline テキスト** — ユーザーがチャットで貼り付けた本文。
+1. **`assets/config.json`** — JP 副本テンプレート ID、デフォルト言語、deck 出力先 などのスキル設定。
+2. **`assets/layouts.json`** — 130 ページの shape catalog。各 canonical layout の `use_for` ヒント・placeholder 仕様・字数制限。
+3. **`references/prompt-rules.md`** — 日本語禁則処理ルール（行頭/行末禁則・分離禁止・助詞改行）。
+4. **`DESIGN.md`**（active design system, `Wix Japan`）— トーン・配色・タイポグラフィ token。
+5. **outline テキスト** — ユーザーがチャットで貼り付けた本文。
 
 ### 絶対禁止（最優先）
 
@@ -230,7 +231,24 @@ def width(s):
     return cells
 ```
 
-各 placeholder の `max_cells_per_line` × `max_lines` 以内に収める。
+各 placeholder の `estimated_max_cells_per_line` × `estimated_max_lines` 以内に収める。
+
+**`verified: true` でない placeholder の扱い（Bug 7 fix）**:
+
+layouts.json の canonical のうち、現時点で字数 limit が **verified** されているのは P53 (T+3B) のみ。他の canonical は `estimated_max_cells_per_line: null` の状態。
+
+null のときは以下の保守的な仮値を使う:
+
+| placeholder role | 仮 max_cells_per_line | 仮 max_lines |
+|---|---|---|
+| title | 24 | 1 |
+| subtitle | 30 | 2 |
+| bullet_N | 14 | 1 |
+| paragraph / body | 28 | 3 |
+| caption | 16 | 1 |
+| その他 (text_N) | 20 | 1 |
+
+仮値で生成して、**ユーザーへの最終 result.json に `unverifiedLimits: true` を立てる**。レビュー時に Jay が POC で実 limit を確認 → layouts.json を update する循環。
 
 #### 5.2 禁則処理
 
@@ -293,42 +311,50 @@ outline に書かれていない情報は **絶対に生成しない**。
 2. **filename heuristic** — outline section 名と画像ファイル名の前方一致（例: section "<industry-event> Recap" + 画像 `dx-week-booth.jpg` → 一致）
 3. **どちらも該当なし** → ユーザーに「このページの画像を指定してください」と返答（ハルシネーション禁止＝架空画像生成しない）
 
-#### 6.2 画像のアップロードと挿入
+#### 6.2 画像のアップロードと挿入（Iteration 1 のスコープ）
+
+**Iteration 1 では partial サポートのみ**。daemon-side `/api/google/slides/insert-image` 未実装のため、placeholder への挿入は**スキップする**。`curl` を呼んではいけない（404 になる）。
+
+代わりに以下の動作を取る:
+
+| layout shape | Iteration 1 の動作 |
+|---|---|
+| `FULL-IMG` (P33 など、全画面画像) | `gog slides replace-slide <slideId> <imagePath>` で全画面置換 ✅ |
+| `T+IMG` (P31 など、framed 画像) | **スキップ**。result.json の `imageSlots` に `{page: N, status: "pending", reason: "Iteration 1: image-into-placeholder API not yet implemented"}` を記録。`missingImages` にも明示。Drive へのアップロードは事前にしておく（gog drive upload）と、後続の手動配置がスムーズ。|
+| `T+IMG×N` (グリッド) | 同上、スキップ + result.json に明示 |
+| `COVER?` (cover hero image) | 同上、スキップ + result.json に明示 |
 
 ```bash
-# Step 6.2.1: ローカル画像を Drive にアップロード
+# 画像 Drive 事前アップロード（後続手動配置用）
 gog drive upload "/path/to/image.jpg" --json
-
-# → 戻り値の id をメモ（例: 1XXXXXXX）
-# → Drive 共有設定が "anyone with link" になっていることを確認
-
-# Step 6.2.2: Slides API で placeholder にイメージ挿入
-# gog には直接の image-into-placeholder コマンドが無いため、
-# daemon の /api/google/slides/insert-image を呼ぶ:
-
-curl -X POST http://localhost:7456/api/google/slides/insert-image \
-  -H "Content-Type: application/json" \
-  -d '{"deckId": "...", "slideId": "...", "placeholderId": "...", "imageDriveId": "1XXXXXXX"}'
+# → returned id を imageSlots[].source に "drive:<id>" 形式で記録
 ```
 
-> **注意**: Iteration 1 では daemon-side `/api/google/slides/*` エンドポイントが未実装の場合、`FULL-IMG`（全画面）以外の画像対応 layout はスキップし、ユーザーに「画像挿入は v2 で対応予定」と告知する。FULL-IMG は `gog slides replace-slide <slideId> <image>` で動く。
+> **重要**: Iteration 1 では agent は画像 placeholder への挿入を**試みない**。スキップして result.json で報告するだけ。Iteration 2 で daemon API 実装後、本 Step を更新。
 
 ### Step 7: Master / Header 設定（Gap 6 fix）
 
-deck の最初の生成時のみ：
+**Iteration 1 ではスキップ**。daemon-side `/api/google/slides/update-master` 未実装。`curl` を呼んではいけない。
 
-1. ユーザーから受け取った `deck_title` と `deck_year` を master の "Presentation name / YYYY" 領域に書き込む
-2. これは slide-level でなく presentation-level の更新が必要
-3. gog では直接できない → daemon の `/api/google/slides/update-master` を呼ぶ（Iteration 1 未実装なら master をそのまま残し、ユーザーに手動更新を促す）
+代わりに以下の動作:
+
+1. master の "Presentation name / YYYY" は**そのまま残す**（書き換えない）。
+2. result.json の `knownSideEffects` に "master header / footer not customized — please edit manually in Slides under Slide → Edit theme" を記録。
+3. ユーザーは Slides UI で手動で master を編集する（5 分作業）。
+
+Iteration 2 で daemon API 実装後、本 Step を更新して `deck_title` / `deck_year` を自動書き込みに切り替える。
 
 ### Step 8: Slides API への書き出し
 
-`gog slides create-from-template` と置換マップで実行する。
+`gog slides create-from-template` と置換マップで実行する。**JP テンプレート ID は Step 0 で読んだ `assets/config.json` の `jp_template_id` から取得する**（ハードコード禁止）。
 
 ```bash
+# Step 0 で読んだ config を使う
+JP_TEMPLATE_ID=$(jq -r '.jp_template_id' assets/config.json)
+
 # 1. JP テンプレートをコピー
-gog slides copy <JP_template_id> "<deck_title>"
-# → new presentation_id を取得
+gog slides copy "$JP_TEMPLATE_ID" "<deck_title>"
+# → new presentation_id を取得（後の手順で使う）
 
 # 2. 置換マップ（前 step で生成した layout-fills を JSON で書き出し）
 cat > /tmp/replacements.json <<EOF
@@ -360,9 +386,11 @@ result.json を書く前に：
 [ ] 行頭・行末禁則を全 bullet で検証
 ```
 
-### Step 10: result.json 出力
+### Step 10: result.json 出力 + artifact manifest sidecar 必須（Bug 1 fix）
 
-最終の output を cwd に書く：
+最終の output を **2 つのファイルに分けて** cwd に書く。両方必須——manifest sidecar が無いと open-design の renderer が起動せず、UI 上で deck が表示されない。
+
+#### 10.1 `result.json` (deck の primary 出力)
 
 ```json
 {
@@ -371,13 +399,43 @@ result.json を書く前に：
   "embedUrl": "https://docs.google.com/presentation/d/1ABC.../embed?start=false&loop=false",
   "totalPages": 8,
   "missingFields": ["[要数値] (page 3, bullet 2)", "[要日付] (page 5)"],
+  "missingImages": ["page 1: cover image — please upload manually"],
   "imageSlots": [
-    {"page": 4, "status": "filled", "source": "user-uploaded:dx-week-booth.jpg"},
-    {"page": 5, "status": "skipped", "reason": "Iteration 1: image-into-placeholder not yet supported"}
+    {"page": 4, "status": "pending", "reason": "Iteration 1: image insert API pending", "source": "drive:1XXX"},
+    {"page": 5, "status": "pending", "reason": "Iteration 1: image insert API pending", "source": "drive:1YYY"}
   ],
-  "layoutsUsed": ["P7", "P53", "P53", "P83", "P31", "P53", "P53", "P110"]
+  "layoutsUsed": ["P7", "P53", "P53", "P83", "P31", "P53", "P53", "P110"],
+  "knownSideEffects": [
+    "Lorem ipsum 文字列が他 12 ページにも置換適用された。最終配布前に手動 cleanup 必要。",
+    "Master header / footer not customized — please edit manually in Slides under Slide → Edit theme"
+  ],
+  "unverifiedLimits": false
 }
 ```
+
+#### 10.2 `result.json.artifact.json` (manifest sidecar)
+
+```json
+{
+  "version": 1,
+  "kind": "google-slides-deck",
+  "title": "Wix Japan 4月 Performance Report",
+  "entry": "result.json",
+  "renderer": "google-slides",
+  "status": "complete",
+  "exports": ["html"],
+  "createdAt": "2026-05-04T10:30:00Z",
+  "updatedAt": "2026-05-04T10:30:00Z",
+  "sourceSkillId": "wix-ja-slide",
+  "designSystemId": "wix-japan",
+  "metadata": {
+    "deckId": "1ABC...",
+    "totalPages": 8
+  }
+}
+```
+
+> **チェック**: `result.json.artifact.json` を書いた後、open-design Web UI の右ペインで Slides /embed iframe が表示されればパイプライン成功。表示されなければ manifest の `kind` または `renderer` 値を確認（`google-slides-deck` / `google-slides` 完全一致）。
 
 `deck-plan.md` も cwd に書き残し、ユーザーが後で「なぜこの layout / なぜこの語彙」を辿れるようにする。
 
@@ -403,10 +461,32 @@ result.json を書く前に：
 
 ## 4. 既知の制限（Iteration 1）
 
-- 画像 placeholder への挿入は FULL-IMG 限定（v2 で全 layout 対応予定）
-- Master / Header の deck 名・年号書き換えは手動（v2 で daemon-side API 経由）
+### 4.1 機能制限
+
+- 画像 placeholder への挿入は **FULL-IMG 限定**（v2 で T+IMG / T+IMG×N / COVER? 対応予定）
+- Master / Header の deck 名・年号書き換えは**手動**（v2 で daemon-side API 経由）
 - Comment / refine の per-element クリック編集はサポート外（Slides /embed が読み取り専用のため）
 - PPTX 導出時の Madefor JP 自動 swap は未対応（v2、Workspace 字体目录推進と並行）
+
+### 4.2 サポート外 shape（Bug 8 fix）
+
+130 ページ catalog のうち以下の shape は Iteration 1 で**選択・利用しない**:
+
+| shape | 理由 | 代替 |
+|---|---|---|
+| `DENSE-8`, `DENSE-9`, `DENSE-10`, `DENSE-11`, `DENSE-12`, `DENSE-13`, `DENSE-17`, `DENSE-19`, `DENSE-22`, `DENSE-27`, `DENSE-39` | 文本 element 数が 8 個以上の高密度 layout（table / multi-column comparison）。canonical 未選定、placeholder ID マッピング困難 | 内容を分割して T+3B / T+5B 複数ページに展開する |
+| `T+2items`, `T+3items`, `T+4items`, `T+5items`, `T+6items` | 箭頭装飾なしの items 並列 layout。canonical 未選定 | 同 N の `T+NB`（箭頭付き）で代替 |
+| `T+4B`, `T+6B` | canonical 未選定（POC 未実施） | T+3B または T+5B に丸める |
+| `T+IMG×2`, `T+IMG×12` | canonical 未選定 | T+IMG×3 または T+IMG×8 に丸める |
+| `EMPTY` | 完全空白 layout、用途不明 | 利用しない |
+
+ユーザー outline がサポート外 shape を要求する場合、agent は代替案を **QuestionForm で確認** してから進む。**catalog にあるからといって発明・推測で利用しない**。
+
+### 4.3 字数 limit verified 状況
+
+11 個の canonical のうち、`estimated_max_cells_per_line` が **verified** されているのは P53 (T+3B) のみ。他 10 個は POC 未実施で null のため、SKILL.md §5.1 の保守的な仮値で運用する。
+
+Iteration 1 期間中に Jay が POC を順次実施 → layouts.json を update する循環。result.json には `unverifiedLimits: true` を立てて警告。
 
 ---
 
@@ -416,6 +496,7 @@ result.json を書く前に：
 skills/wix-ja-slide/
 ├── SKILL.md                 ← このファイル
 ├── assets/
+│   ├── config.json          ← jp_template_id などスキル設定（Step 0 で読む）
 │   ├── layouts.json         ← 130 ページ catalog（auto-generated from gog scan）
 │   └── examples/
 │       └── mock-run-001.md  ← Performance Report 8 ページ mock

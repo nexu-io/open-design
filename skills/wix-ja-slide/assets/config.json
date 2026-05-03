@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "schema_doc": "Wix JA Slide skill configuration. Read by SKILL.md Step 0.",
+  "jp_template_id": "1ENwLW7nzIqR8U_KjzchUh4Uxscd89LfHSuq8E5JOb1w",
+  "jp_template_name": "MKT / Wix Com - Google Slides Template (Black) — JP",
+  "source_template_id": "1UaAYw60JvGotNjx2fqosnZL1EKqZEps-oSq0eCxqT0U",
+  "source_template_name": "MKT / Wix Com - Google Slides Template (Black)",
+  "default_locale": "ja",
+  "default_target_pages": 8,
+  "fallback_cell_limits": {
+    "title": { "max_cells_per_line": 24, "max_lines": 1 },
+    "subtitle": { "max_cells_per_line": 30, "max_lines": 2 },
+    "bullet": { "max_cells_per_line": 14, "max_lines": 1 },
+    "paragraph": { "max_cells_per_line": 28, "max_lines": 3 },
+    "caption": { "max_cells_per_line": 16, "max_lines": 1 },
+    "default": { "max_cells_per_line": 20, "max_lines": 1 }
+  },
+  "embed_url_template": "https://docs.google.com/presentation/d/{deckId}/embed?start=false&loop=false&delayms=3000",
+  "edit_url_template": "https://docs.google.com/presentation/d/{deckId}/edit",
+  "manifest_kind": "google-slides-deck",
+  "manifest_renderer": "google-slides",
+  "iteration_1_unsupported_shapes": [
+    "DENSE-8", "DENSE-9", "DENSE-10", "DENSE-11", "DENSE-12",
+    "DENSE-13", "DENSE-17", "DENSE-19", "DENSE-22", "DENSE-27", "DENSE-39",
+    "T+2items", "T+3items", "T+4items", "T+5items", "T+6items",
+    "T+4B", "T+6B",
+    "T+IMG×2", "T+IMG×12",
+    "EMPTY"
+  ],
+  "notes": [
+    "jp_template_id is Jay's personal copy of the MKT template, JA-fontified and ready for create-from-template.",
+    "If you fork this skill for another team, replace jp_template_id with your team's template copy.",
+    "fallback_cell_limits apply when layouts.json has estimated_max_cells_per_line: null. POC each canonical to verify and update layouts.json over time."
+  ]
+}

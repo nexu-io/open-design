@@ -1,187 +1,154 @@
 ---
-title: Wix Japan — Design System (DESIGN.md)
+title: Wix Japan — Design System
 tags: [project/wix-ja-slide-generator, design-system, brand]
 created: 2026-05-04
+revised: 2026-05-04
 schema: awesome-claude-design 9-section
-deploy_path: design-systems/wix-japan/DESIGN.md
-needs_review_by: Jay (Wix brand book と照合) + <reviewer>（Wix Japan tone 確認）
+source_of_truth: "MKT / Wix Com - Google Slides Template (Black)" 130-page template
+template_id: 1UaAYw60JvGotNjx2fqosnZL1EKqZEps-oSq0eCxqT0U
 ---
 
 # Wix Japan
 
-> **Status**: Draft v0.1。AI が consume する design system spec。Wix HQ の brand guidelines に照合した上で確定する必要あり（特に accent color hex、font weight 指定）。`[要確認]` マーカーは Jay レビュー対象。
+> **このドキュメントの根拠**: Wix HQ の brand book は使用していない。ルールはすべて **130 ページ MKT Slides テンプレートから観察できた範囲のみ**。観察できないこと（具体的な hex 値、font weight 数値）は意図的に書いていない。スキルの agent は「テンプレートに無いことはやらない」を原則とする。
 
 ---
 
 ## Visual Theme & Atmosphere
 
-Wix の現行ブランドは **「自信ある黒、信頼の白、選び抜かれた色彩」** が原則。Japan localization では**呼吸感**と**漢字密度の余白**を意識する。
+テンプレート名 "MKT / Wix Com - Google Slides Template (Black)" + Slide 1 のサブタイトル "Palette Mono / 2024" から **モノクローム基調 + Black テーマ** が骨格。
 
-- **トーン**: 落ち着いた自信 / 過剰装飾なし / プロフェッショナル
-- **想定空気感**: 現代美術館の壁、洗練された Editorial 誌、信頼感のあるビジネス資料
-- **避けるべき空気感**: ポップなテック企業 / カラフル過剰 / kawaii / 装飾過多
+観察できる空気感:
+- Slide 4 タイトル "01 Openers + Badges" → セクション番号付きでビジネス資料的に整理されている
+- Slide 26 / 27 のサンプル文 "This is a long, insightful and engaging quote" → 引用ページが想定されている
+- Slide 110 "Thank you." → クロージング 1 単語、簡潔
+- Slide 109 "010 Closers" → セクション境界が明示的
+- Slide 60 "Full NameTitle" × 12 → メンバー紹介はグリッド形式
 
-deck で表現する基本姿勢:
-- 大胆なタイトル + 静かな本文
-- 余白で語る（情報密度が高くても余白を切らない）
-- 1 ページ 1 メッセージ（複数主張を詰め込まない）
+→ **トーン推定**: 静か、整理された、業務的。装飾より構造。
 
 ---
 
 ## Color Palette & Roles
 
-### Primary
+**観察できる**:
+- テーマ名: "Black"
+- パレット名: "Mono"（Slide 1 サブタイトル "Palette Mono / 2024"）
 
-| Role | Token | Hex | 用途 |
-|---|---|---|---|
-| Primary text | `--ink` | `#000000` | 標題・本文・主役テキスト |
-| Background | `--paper` | `#FFFFFF` | スライド背景・カード地 |
-| Accent | `--accent` | `[要確認: 0C6EFD?]` | 強調・リンク・KPI 数字 (1 ページ最大 2 箇所) |
+**観察できない**（テンプレート メタデータから抽出不可、PDF 渲染して color-pick で取る必要がある）:
+- 具体的な hex 値
+- アクセント色の有無
+- 状態色（success / warning など）の hex
 
-### Supporting
-
-| Role | Token | Hex | 用途 |
-|---|---|---|---|
-| Muted text | `--ink-muted` | `#666666` | 副文・補足・キャプション |
-| Border | `--line` | `#E5E5E5` | 区切り線・テーブル罫線 |
-| Surface alt | `--surface-2` | `#F5F5F5` | hero block・引用ボックス背景 |
-
-### Status (使用は最小限)
-
-| Role | Hex | 用途 |
-|---|---|---|
-| Success | `[要確認]` | 完了・KPI 達成のみ。装飾的に使わない |
-| Warning | `[要確認]` | リスク・注意のみ |
-
-### 制約
-
-- **1 page につき accent 使用は最大 2 箇所**（タイトルの 1 単語 + KPI 数字 など）。乱発すると視覚 noise になる
-- **Status カラーは情報伝達目的のみ**。色だけで意味を伝えない（必ずテキストラベル併用）
-- **グラデーションは禁止**（Wix MKT template に存在しない、AI slop 警告）
+**運用ルール**:
+- skill が deck 生成する際、**色は変更しない**。テンプレートの既存 token をそのまま使う。
+- テキスト色 / 背景色を hex 指定する Slides API call を発行しない（テンプレートの inheritance に任せる）。
+- ユーザーが「色を変えたい」と要望した場合、まず Slides UI で手動編集を依頼。skill 自動変更は v2 以降。
 
 ---
 
 ## Typography Rules
 
-### 字体
+**観察できる**:
+- 130 ページに JP も Latin も混在。Slide 53 / 110 など JP のみのページもある
+- テンプレートの英語名 "MKT / Wix Com" が Wix HQ ライン由来 → Wix Madefor フォントファミリーを想定
 
-| 用途 | Slides 上 (proxy) | Export 後 (PPTX/Keynote, ローカル) |
-|---|---|---|
-| Display / Headline | **Noto Sans JP Bold** | **Wix Madefor Display JP Bold** |
-| Body / Paragraph | **Noto Sans JP Regular** | **Wix Madefor Text JP Regular** |
-| Body emphasis | **Noto Sans JP SemiBold** | **Wix Madefor Text JP SemiBold** |
-| Latin in mixed text | (上に同じ — Noto がカバー) | **Wix Madefor Display / Text** (英文部) |
+**観察できない**（gog read-slide ではフォント名・サイズが返らない）:
+- 各 placeholder の正確なフォント family / weight / size
 
-> **重要**: Google Slides は custom font をサポートしない。Slides 編集中は Noto Sans JP fallback、PPTX エクスポート後にローカルの Wix Madefor JP に置換する 2 段階運用。
+**運用ルール（Slides 編集時）**:
+- skill は **font family を上書き設定しない**。テンプレートの既存 inheritance に任せる。Google Slides サーバが JP フォールバックで Noto Sans CJK JP に自動置換する（POC v2 で確認済み、自然に渲染される）。
+- Wix Madefor JP（Jay 手作り）は **Slides ではなく PPTX エクスポート後** にローカル PowerPoint / Keynote 上で渲染される。Slides 編集時は気にしない。
+- POC v2 の渲染確認: P53 を JP 文字で fill した結果、フォールバックで JP 文字も Latin 文字も統一感ある sans で表示された。
 
-### サイズ階層 (cells based)
+**JA 排版ルール（必須）**:
 
-| 階層 | 用途 | サイズ感 |
-|---|---|---|
-| H1 | スライドタイトル | 36-48 pt（Wix MKT template の P53 タイトル相当） |
-| H2 | サブタイトル / セクション見出し | 24-30 pt |
-| Body | 本文 / Bullet | 14-18 pt |
-| Caption | 補足 / page number | 10-12 pt |
-
-### 行間 / 字間 (JP optimization)
-
-- **行間 (line-height)**: H1 1.2 / H2 1.3 / Body 1.5-1.6 / Caption 1.4
-  - JP 本文は 1.5+ 必須（漢字密度のため英語より高め）
-- **字間 (letter-spacing)**:
-  - H1 (JP): -0.02em（やや詰める）
-  - H1 (Latin): 0em
-  - Body: 0em（標準）
-  - ALL CAPS Latin: +0.06em（craft/typography.md 規則）
-
-### JP 禁則 (詳細は references/prompt-rules.md)
-
-- 行頭禁則・行末禁則・分離禁止を必ず守る
-- 助詞（てにをは）の **後** で改行優先
-- 複合語（漢字熟語、英単語、数字+単位）は絶対に分けない
+`references/prompt-rules.md` に詳述。要点のみ:
+- 行頭禁則 / 行末禁則 / 分離禁則を必ず守る
+- 助詞の **後** で改行優先
+- 複合語（漢字熟語、英単語、数字+単位）絶対不破
+- 字数は cell-based 計算（半角 0.5 / 全角 1）
 
 ---
 
 ## Component Stylings
 
-### Bullet List
+**観察できる**（130 ページの shape 分布から逆算）:
 
-```
-→ Item 一文（17 cells 以内、1 行）
-  - 箭头マーカー: "→"（U+2192）、accent カラー、非太字
-  - インデント: 半角 4 字相当
-  - 改行: 1 bullet = 1 行（折り返さない）
-```
+| component | 出現テンプレート | 観察 |
+|---|---|---|
+| Bullet with arrow "→" | T+3B / T+5B / T+2B / T+4B / T+6B（計 18 ページ） | "→" U+2192 がデコレーション要素として独立配置。本文は別フィールド |
+| Paragraph block | T+SUB / T-LONG（計 15 ページ） | 単行 sample "I'm a paragraph. Click here to..." の長さから 1-3 行想定 |
+| Quote / Pull quote | T-LONG（計 4 ページ、P26-P27 等） | "This is a long, insightful and engaging quote" のような sample |
+| KPI big number | DENSE-8 / DENSE-17（"+300M" pattern, P55-58） | 数値が大文字、単位が小文字、Lorem ipsum で context |
+| Image frame | T+IMG / T+IMG×N / FULL-IMG（計 28 ページ） | Aspect ratio 不明、観察に slide preview が必要 |
+| Section divider | T-ONLY セクションヘッダ（"01 Openers" "02.A Dividers" 等、計 11 個） | 番号 + 名前のみ、簡潔 |
+| Closer | T-ONLY P110 "Thank you." | 1 単語 / 1 文のみ |
 
-### KPI Block
-
-```
-[Big number]    [Label]
-  +28%          開封率（業界平均 +12pt）
-```
-- Big number: H1 サイズ + accent カラー
-- Label: Body Regular + ink-muted
-
-### Quote / Pull Quote
-
-```
-「This is a long, insightful and engaging quote
- from a stakeholder or customer.」
-                              — Source attribution
-```
-- 鉤括弧使用（"" ではなく「」）
-- 引用元は em-dash + 名前 / 役職
-
-### Divider
-
-- ページ全幅の細い罫線（1px、`--line` カラー）
-- セクション間でのみ使用。本文中では使わない
-
-### Image Frame
-
-- フルブリード or padding 24-48 px 内
-- アスペクト 16:9 / 1:1 / 3:4 のいずれか
-- 角丸**禁止**（Wix Madefor 系の硬質感を維持）
+**運用ルール**:
+- skill は component の shape を **追加・改変しない**。catalog の placeholder ID と original_text を引いて文字を差し替えるだけ。
 
 ---
 
 ## Layout Principles
 
-### Grid
+**観察できる**（自動スキャンによる shape 分布、計 130 ページ）:
 
-- 12 カラム グリッド（Wix MKT template 標準）
-- ガター 24 px、左右マージン 64-96 px
+```
+T-ONLY    23 ページ  ←簡潔、divider / opener / closer
+T+IMG     15 ページ  ←画像 + 短文
+T+SUB     11 ページ  ←タイトル + サブ / 段落
+COVER?     7 ページ  ←表紙
+T+3B       7 ページ  ←3 bullet
+T+IMG×8    6 ページ  ←バッジグリッド / メンバー紹介
+T+5B       4 ページ  ←5 bullet チェックリスト
+T-LONG     4 ページ  ←長文 / quote
+T+2B       4 ページ  ←2 bullet 対比
+T+IMG×3    2 ページ  ←3 画像並列
+... その他 (DENSE-N etc.)  約 35 ページ
+```
 
-### Vertical Rhythm
+→ **テンプレート設計者の意図**:
+- 簡潔な単一メッセージ（T-ONLY が最大）
+- ビジュアル単独表現（T+IMG, FULL-IMG）
+- 並列リスト（T+NB family）
+- モノクローム + ミニマル
 
-- セクション間: 48 px
-- 段落間: 16-24 px
-- 行内: line-height で表現
+**運用ルール**:
+- 1 ページ 1 メッセージ（T-ONLY 多用が示すデザイン哲学）
+- 並列構造 ≤6 件（catalog に T+6B はあるが T+7B+ は無い → 7+ は分割）
+- 画像中心 layout が 30+ ページある → ビジュアル優先のスタイル
 
-### Hierarchy
+**Section structure**（テンプレート内蔵）:
 
-- **One H1 per page**。タイトルは必ず最上部か左上
-- 視線誘導は **左上 → 右下** または **上 → 下** の単純な流れ
-- Z パターンや F パターンを意識（特に画像 + テキスト混在ページ）
+```
+01 Openers + Badges        (slide 4)
+02.A Dividers              (slide 17)
+02.B Dividers              (slide 21)
+03 Paragraphs              (slide 25)
+04 Lists / Info            (slide 37)
+05 People                  (slide 59)
+06 Text Highlight          (slide 61)
+07 Infographics & Data     (slide 69)
+08 Images & Text           (slide 79)
+09 Grid boxes              (slide 93)
+010 Closers                (slide 109)
+011 PPT Badges             (slide 111)
+```
 
-### 余白
-
-- 「迷ったら余白を増やす」が原則
-- 1 ページに最大 5 件の情報単位（タイトル・bullet・キャプション含めて）
-- 余白を埋める装飾要素は避ける
+→ deck 構成のリファレンス。skill が長い deck (>10 ページ) を作るときの section divider 候補。
 
 ---
 
 ## Depth & Elevation
 
-Wix MKT template は **flat design**。影・3D・グラデーション・ぼかしを基本使わない。
+**観察できる**: テンプレートに影 / グラデーション / 3D っぽい要素は見当たらない（130 ページ scan の text element 分析、装飾要素は箭頭 "→" のみ）。
 
-- **Shadow**: 一切使わない（modal や dropdown を除く、deck 内では不要）
-- **Border**: 1px solid のみ。装飾的な多重線は使わない
-- **Glow / Blur**: 禁止
+→ **推測**: フラットデザイン。
 
-例外:
-- 画像内には任意の depth 表現があって良い（写真自体の depth）
-- セクション divider は罫線のみで表現（影なし）
+**運用ルール**:
+- skill は depth 効果を**指定しない**（box-shadow / gradient / blur など Slides API パラメータを送らない）。
+- テンプレートの既存スタイルに任せる。
 
 ---
 
@@ -189,80 +156,84 @@ Wix MKT template は **flat design**。影・3D・グラデーション・ぼか
 
 ### Do
 
-- ✅ **静かに語る**: 1 ページ 1 メッセージ、余白を保つ
-- ✅ **数字に語らせる**: 形容詞より KPI 数字を出す（"成功" でなく "8,000 名と接触"）
-- ✅ **漢字熟語を活用**: "推進"・"展開"・"着手" など 2-3 字熟語で密度上げる
-- ✅ **アクセントは scarce**: 1 ページ accent 色 2 箇所以下
-- ✅ **句読点は半角コンマ + 全角句読点併用**: 数字内 "<N>名"、文末 "了。"
-- ✅ **行末助詞ぶら下げ OK**: 「〜を」「〜が」で終わる行は自然
+- ✅ **テンプレートの placeholder text を完全一致で置換**（gog create-from-template --exact）
+- ✅ **言語混在を許容**: <newsletter-project> / Wix Studio / <industry-event> などの英固有名詞はそのまま、和訳しない
+- ✅ **数字 + 単位は半角**: "<N>名" "65%" "12pt"（テンプレートサンプル "+300M" に倣う）
+- ✅ **複合語を保護**: 「開封」「着手」「進捗」を改行で分けない
+- ✅ **箭頭は U+2192 "→"**（テンプレートの装飾要素と一致）
 
 ### Don't
 
-- ❌ **AI slop 警告**:
-  - `#6366f1`（AI default インディゴ）禁止
-  - グラデーション禁止
-  - 過剰絵文字（1 deck に 0-2 個まで、emoji は装飾でなく機能）
-  - 「驚くほど〜」「画期的な〜」など誇大形容詞禁止
-- ❌ **横書き混在**: 縦組みは使わない
-- ❌ **半角片仮名**: ｺﾞｼｯｸ など機能的にも審美的にも禁止
-- ❌ **三点リーダー**: "..." でなく "…"（U+2026）使う
-- ❌ **ALL CAPS の JP 文字**: そもそも JP には CAPS 概念なし、デザイン的にも崩れる
-- ❌ **本文での Wix ロゴ流用**: ロゴは master/footer のみ
+- ❌ **テンプレートに無い色 / フォント / shape を発明しない**
+- ❌ **master / layout 上の固定要素を書き換えない**（"Presentation name / YYYY" 以外）
+- ❌ **outline に書かれていない数値・人名・日付を生成しない**（ハルシネーション禁止、SKILL.md §0 P0 ルール）
+- ❌ **catalog 外のページを参照しない**
+- ❌ **AI slop の典型 hex（`#6366f1` など）を埋め込まない**（craft/anti-ai-slop.md と整合）
+
+### 微妙な領域（テンプレートから判断不可、要 Jay 確認）
+
+- 角丸の有無 → テンプレート画像を見る必要
+- グラデーションの可否 → 同上
+- ALL CAPS の英文表現可否 → 同上
+- emoji の利用可否 → 同上
+
+→ **判定不能項目は skill が自動判断しない**。ユーザー（Jay）の指示があるまで保守的に避ける。
 
 ---
 
 ## Responsive Behavior
 
-このスキルは **Google Slides 16:9 専用**。レスポンシブ対応は不要。
+**観察できる**: テンプレートは 16:9 横長 1 アスペクト固定（Google Slides デフォルト）。
 
-ただし下記のエクスポート対応:
+エクスポート対応:
 
 | Format | 動作 |
 |---|---|
-| Google Slides (in-browser) | 16:9 default、Noto Sans JP fallback で表示 |
-| PPTX export | 16:9 維持、ローカル Wix Madefor JP に切替（フォント置換 v2） |
-| PDF export | 16:9 維持、フォント embed |
-| Print | 横長 A4 や A3 縮小印刷可 |
+| Google Slides (in-browser) | 16:9 / Noto Sans JP fallback で渲染 |
+| PPTX export | 16:9 維持 / ローカルフォント置換は v2 |
+| PDF export | 16:9 維持 / フォント embed |
 
-縦長フォーマット（mobile / portrait）は別スキルで対応予定。
+縦長 / mobile portrait は別 skill で対応予定。
 
 ---
 
 ## Agent Prompt Guide
 
-### deck 生成時に守るべきこと
+skill の agent が deck 生成時に守るべきこと（SKILL.md §0 と整合）:
 
-1. **outline に書かれていない数値・固有名詞は絶対に生成しない**（Step 1.5 で QuestionForm 経由でユーザーに確認）
-2. **layouts.json の canonical layouts のみ使用**。発明禁止。
-3. **deck-plan.md を最初に書く**。トーン・用語辞典を deck 全体で統一
-4. **1 page につき accent 色は 2 箇所以下**。守れない layout は別 canonical に変更
-5. **JP 禁則を全 placeholder で適用**（references/prompt-rules.md）
-6. **画像 source は明示的指定優先**（[image: filename] marker）
-7. **Lorem ipsum / placeholder text を最終 deck に残さない**（self-check P0）
-8. **master / layout 上の固定要素は触らない**（"Presentation name / YYYY" 以外）
+1. **outline に無い情報を生成しない**（数値・人名・日付）。Step 1.5 で QuestionForm 経由でユーザーに確認。
+2. **layouts.json の canonical のみ使用**。発明禁止。
+3. **deck-plan.md を最初に書く**。トーン・用語辞典を deck 全体で統一。
+4. **JP 禁則を全 placeholder で適用**。`references/prompt-rules.md` 参照。
+5. **画像 source は明示マーカー優先**。曖昧なら QuestionForm 経由でユーザーに確認。
+6. **Lorem ipsum / placeholder filler を最終 deck に残さない**（self-check P0）。
+7. **master / layout 上の固定要素は触らない**。
+8. **色・フォントの上書きを skill から発行しない**。テンプレート inheritance に任せる。
 
-### Wix Japan 文体トーン
+### Wix Japan 文体トーン（観察 + 想定）
 
-- フォーマル、客観的、淡々と事実ベース
-- 自慢・誇張なし。数字で語る
-- 「〜と思います」より「〜です」断定形
+テンプレートの sample text "I'm a paragraph. Click here to..." はニュートラルで指示的。Performance Report / 月次ハイライトでの実用想定:
+
+- フォーマル寄り、客観的、淡々と事実ベース
+- 自慢・誇張なし、数字で語る
+- 「〜です」断定形（「〜と思います」より）
 - 関係者への感謝は最後の Closing ページのみ
-- 英単語は無理に和訳しない（"<newsletter-project>"、"Performance Report" など固有名詞そのまま）
+- 英固有名詞そのまま（無理に和訳しない）
 - 略語の初出は full form 併記（"Q3（第 3 四半期）" 以降は "Q3"）
 
-### 章節パターン
+### 章節パターン推奨マッピング
 
-| 章節タイプ | おすすめ layout | 注意点 |
+| 章節タイプ | おすすめ canonical | 注意点 |
 |---|---|---|
-| 月次ハイライト 3 点 | T+3B (P53) | 並列 3 件、各 17 cells 以内 |
-| KPI 集約 | T+3B (P53) または DENSE-8 数字版 | 数字は accent カラー、各 KPI 1 行 |
-| イベント振り返り | T+IMG (P83) | image marker 必須、本文 paragraph 1-3 段 |
-| ローンチ告知 | T+IMG (P31) | hero image + シンプルタイトル |
-| プロセス紹介 | T+5B (P42) | 5 ステップ、順序明示 |
+| 月次ハイライト 3 点 | T+3B (P53) ✅ verified | bullet 17 cells 以内 |
+| KPI 集約 | T+3B (P53) | 数字 + 単位は半角、cell 計算 |
+| イベント振り返り（画像あり） | T+IMG (P31) | image marker 必須 |
+| ローンチ告知 | T+IMG (P31) | hero image + 短タイトル |
+| プロセス 5 ステップ | T+5B (P42) | 順序明示 |
 | 引用 / Quote | T-LONG (P26) | 「」記号、出処明記 |
 | 表紙 | COVER? (P7) | タイトル + 期間 + ブランド画像 |
-| クロージング | T-ONLY (P110) | "ありがとうございました。" のみ、装飾なし |
+| クロージング | T-ONLY (P110) | "ありがとうございました。" のみ |
 
-### 出力チェックリスト
+### 出力前必須チェック
 
-result.json 出力前に、必ず references/check-list.md の P0 / P1 を全項目クリア。
+result.json と result.json.artifact.json を出力する前に、`references/check-list.md` の P0 / P1 全項目クリア。

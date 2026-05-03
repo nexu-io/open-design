@@ -512,6 +512,13 @@ export interface Dict {
   'fileViewer.markdownErrorMeta': string;
   'fileViewer.markdownStreamingStatus': string;
   'fileViewer.markdownErrorStatus': string;
+  'fileViewer.googleSlidesPagesLabel': string;
+  'fileViewer.googleSlidesOpen': string;
+  'fileViewer.googleSlidesNotReady': string;
+  'fileViewer.googleSlidesInvalidUrl': string;
+  'fileViewer.googleSlidesMissingFields': string;
+  'fileViewer.googleSlidesMissingImages': string;
+  'fileViewer.googleSlidesSideEffects': string;
   'fileViewer.videoMeta': string;
   'fileViewer.audioMeta': string;
   'fileViewer.reload': string;

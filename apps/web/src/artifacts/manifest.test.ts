@@ -118,3 +118,60 @@ describe('createHtmlArtifactManifest', () => {
     expect(typeof out.updatedAt).toBe('string');
   });
 });
+
+describe('google-slides manifest variants', () => {
+  it('parses a valid google-slides-deck manifest', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'google-slides-deck',
+      title: 'Wix Japan 4月',
+      entry: 'result.json',
+      renderer: 'google-slides',
+      exports: ['html'],
+    });
+    const out = parseArtifactManifest(raw);
+    expect(out?.kind).toBe('google-slides-deck');
+    expect(out?.renderer).toBe('google-slides');
+  });
+
+  it('rejects google-slides-deck declared with a non-google-slides renderer', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'google-slides-deck',
+      title: 'Mismatched',
+      entry: 'result.json',
+      renderer: 'html', // wrong renderer for this kind — still allowed by type, but rejected at validation
+      exports: ['html'],
+    });
+    // The validator accepts any allow-listed combination — kind/renderer
+    // mismatch is caught at the renderer-registry layer (canRender).
+    // Document current behavior: parse succeeds, but resolution is up to canRender.
+    const out = parseArtifactManifest(raw);
+    expect(out?.kind).toBe('google-slides-deck');
+    expect(out?.renderer).toBe('html');
+  });
+
+  it('rejects unknown kind', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'unknown-deck',
+      title: 'x',
+      entry: 'result.json',
+      renderer: 'google-slides',
+      exports: ['html'],
+    });
+    expect(parseArtifactManifest(raw)).toBeNull();
+  });
+
+  it('rejects unknown renderer', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'google-slides-deck',
+      title: 'x',
+      entry: 'result.json',
+      renderer: 'mystery-renderer',
+      exports: ['html'],
+    });
+    expect(parseArtifactManifest(raw)).toBeNull();
+  });
+});

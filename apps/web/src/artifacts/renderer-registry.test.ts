@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DeckHtmlRenderer,
+  GoogleSlidesRenderer,
   HtmlRenderer,
   MarkdownRenderer,
   ReactComponentRenderer,
@@ -144,6 +145,69 @@ describe('RendererRegistry', () => {
         isDeckHint: false,
       })?.renderer.id,
     ).toBe('react-component');
+  });
+
+  it('resolves google-slides renderer when manifest declares google-slides-deck', () => {
+    const file = baseFile({
+      name: 'result.json',
+      kind: 'text',
+      mime: 'application/json',
+      artifactManifest: {
+        version: 1,
+        kind: 'google-slides-deck',
+        title: 'Wix Japan 4月',
+        entry: 'result.json',
+        renderer: 'google-slides',
+        exports: ['html'],
+      },
+    });
+    const match = artifactRendererRegistry.resolve({ file, isDeckHint: false });
+    expect(match?.renderer.id).toBe('google-slides');
+    expect(match?.manifest.kind).toBe('google-slides-deck');
+  });
+
+  it('does NOT resolve google-slides for a bare result.json without manifest sidecar', () => {
+    const file = baseFile({
+      name: 'result.json',
+      kind: 'text',
+      mime: 'application/json',
+      artifactManifest: undefined,
+    });
+    // Without the artifact.json sidecar, file.name=result.json should NOT
+    // activate the GoogleSlidesRenderer — there's no way for canRender to
+    // peek at file content from here. Skill MUST author the manifest.
+    const match = artifactRendererRegistry.resolve({ file, isDeckHint: false });
+    expect(match?.renderer.id).not.toBe('google-slides');
+  });
+
+  it('GoogleSlidesRenderer canRender requires explicit manifest', () => {
+    const fileWithoutManifest = baseFile({
+      name: 'result.json',
+      kind: 'text',
+      mime: 'application/json',
+      artifactManifest: undefined,
+    });
+    expect(GoogleSlidesRenderer.canRender({ file: fileWithoutManifest, isDeckHint: false })).toBe(false);
+
+    const fileWithManifest = baseFile({
+      name: 'result.json',
+      kind: 'text',
+      mime: 'application/json',
+      artifactManifest: {
+        version: 1,
+        kind: 'google-slides-deck',
+        title: 'Deck',
+        entry: 'result.json',
+        renderer: 'google-slides',
+        exports: ['html'],
+      },
+    });
+    expect(GoogleSlidesRenderer.canRender({ file: fileWithManifest, isDeckHint: false })).toBe(true);
+  });
+
+  it('GoogleSlidesRenderer reports non-streaming', () => {
+    expect(GoogleSlidesRenderer.supportsStreaming).toBe(false);
+    expect(GoogleSlidesRenderer.renderPartial).toBeUndefined();
   });
 
   it('prefers an explicit React manifest over the coarse code kind', () => {
