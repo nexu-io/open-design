@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "./config.js";
-import { buildDockerArgs, renderDesktopTemplate, sanitizeNamespace } from "./linux.js";
+import {
+  buildDockerArgs,
+  matchesAppImageProcess,
+  renderDesktopTemplate,
+  sanitizeNamespace,
+} from "./linux.js";
 
 function makeConfig(): ToolPackConfig {
   return {
@@ -120,5 +125,41 @@ MimeType=x-scheme-handler/od;
 describe("sanitizeNamespace", () => {
   it("replaces non-alphanumeric chars with hyphens", () => {
     expect(sanitizeNamespace("a/b c")).toBe("a-b-c");
+  });
+});
+
+describe("matchesAppImageProcess", () => {
+  const installPath = "/home/u/.local/bin/Open-Design.default.AppImage";
+
+  it("matches FUSE-mode (executable === installPath)", () => {
+    const ok = matchesAppImageProcess(
+      { pid: 1234, executable: installPath, env: {} },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("matches extracted-mode (env.APPIMAGE === installPath, executable matches /tmp/.mount_*/AppRun)", () => {
+    const ok = matchesAppImageProcess(
+      { pid: 1234, executable: "/tmp/.mount_abc123/AppRun", env: { APPIMAGE: installPath } },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("rejects unrelated processes", () => {
+    const ok = matchesAppImageProcess(
+      { pid: 9999, executable: "/usr/bin/node", env: {} },
+      installPath,
+    );
+    expect(ok).toBe(false);
+  });
+
+  it("rejects extracted-mode with mismatched APPIMAGE env", () => {
+    const ok = matchesAppImageProcess(
+      { pid: 1234, executable: "/tmp/.mount_abc/AppRun", env: { APPIMAGE: "/other/path.AppImage" } },
+      installPath,
+    );
+    expect(ok).toBe(false);
   });
 });

@@ -123,3 +123,19 @@ export function renderDesktopTemplate(template: string, values: DesktopTemplateV
     .replace(/@@EXEC_PATH@@/g, values.execPath)
     .replace(/@@ICON_PATH@@/g, values.iconName);
 }
+
+export type AppImageProcessSnapshot = {
+  pid: number;
+  executable: string;
+  env: Record<string, string>;
+};
+
+export function matchesAppImageProcess(
+  snapshot: AppImageProcessSnapshot,
+  installPath: string,
+): boolean {
+  if (snapshot.executable === installPath) return true;
+  const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/AppRun$/.test(snapshot.executable);
+  if (!isMountedRunner) return false;
+  return snapshot.env.APPIMAGE === installPath;
+}
