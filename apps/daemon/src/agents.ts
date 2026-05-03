@@ -202,8 +202,13 @@ export const AGENT_DEFS = [
       { id: 'medium', label: 'Medium' },
       { id: 'high', label: 'High' },
     ],
-    // Prompt delivered via stdin (`codex exec -`) to avoid Windows
-    // `spawn ENAMETOOLONG` while keeping Codex on its structured JSON stream.
+    // Prompt is delivered via stdin pipe (gated by `promptViaStdin: true`
+    // below) to avoid Windows `spawn ENAMETOOLONG` while keeping Codex on
+    // its structured JSON stream. Recent Codex CLI versions reject a bare
+    // `-` argv sentinel — passing both the pipe and `-` produces
+    // `error: unexpected argument '-' found` and the agent exits with
+    // code 2 before any prompt is read (see issue #237). The pipe alone
+    // is sufficient for stdin delivery.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = [
         'exec',
@@ -228,7 +233,6 @@ export const AGENT_DEFS = [
         // is exposed as `model_reasoning_effort`.
         args.push('-c', `model_reasoning_effort="${effort}"`);
       }
-      args.push('-');
       return args;
     },
     promptViaStdin: true,

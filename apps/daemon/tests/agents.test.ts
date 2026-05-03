@@ -38,7 +38,6 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
     '--disable',
     'plugins',
   ]);
-  assert.equal(args.at(-1), '-');
 });
 
 test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', () => {
@@ -48,7 +47,6 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', (
 
   assert.equal(args.includes('--disable'), false);
   assert.equal(args.includes('plugins'), false);
-  assert.equal(args.at(-1), '-');
 });
 
 test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', () => {
@@ -58,7 +56,27 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', (
 
   assert.equal(args.includes('--disable'), false);
   assert.equal(args.includes('plugins'), false);
-  assert.equal(args.at(-1), '-');
+});
+
+// Recent Codex CLI versions reject a bare `-` argv sentinel; passing it
+// alongside the stdin pipe causes `error: unexpected argument '-' found`
+// and exit code 2 before any prompt is read. We deliver the prompt via
+// stdin pipe alone (gated by `promptViaStdin: true`). Regression of #237.
+test('codex args do not include the literal `-` stdin sentinel (regression of #237)', () => {
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  const baseArgs = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  assert.equal(baseArgs.includes('-'), false);
+
+  const withModel = codex.buildArgs('', [], [], { model: 'gpt-5-codex' }, { cwd: '/tmp/od-project' });
+  assert.equal(withModel.includes('-'), false);
+
+  const withReasoning = codex.buildArgs('', [], [], { reasoning: 'high' }, { cwd: '/tmp/od-project' });
+  assert.equal(withReasoning.includes('-'), false);
+
+  process.env.OD_CODEX_DISABLE_PLUGINS = '1';
+  const withDisablePlugins = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  assert.equal(withDisablePlugins.includes('-'), false);
 });
 
 test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
