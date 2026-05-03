@@ -62,25 +62,26 @@ const TOOL_DEFS = [
   {
     name: 'get_active_context',
     description:
-      'Returns the project + file the user has open in OD right now (if any). Use this as the FIRST tool when the user says things like "this file", "the design I have open", "what I\'m looking at" — it answers without forcing the user to type a project id. Returns {active:false} when OD is closed or the user isn\'t on a project page.',
+      'Returns the project + file the user has open in OD right now (if any). Note: get_artifact, get_project, get_file, search_files, and list_files already default to active context when their project arg is omitted, so you usually do NOT need to call this first. Use it only when you want the active project/file explicitly without doing anything else (e.g. answering "what am I looking at?"). Returns {active:false} when OD is closed.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
   },
   {
     name: 'get_artifact',
     description:
-      'PREFER THIS over multiple get_file calls. Pulls a design artifact bundle in one call: the entry file plus every sibling it references (tokens CSS, JSX modules, images, fonts). Default mode (auto) parses the entry HTML/JSX/CSS and follows relative <script src>, <link href>, <img src>, <iframe src>, srcset, JSX import/from/require, dynamic import(), CSS url() and @import — up to depth 3, skipping CDN/data/anchor URLs. include="all" returns every file in the project (binary files arrive as metadata stubs); include="shallow" returns just the entry. Use maxBytes to cap response size.',
+      'PREFER THIS over multiple get_file calls. Pulls a design artifact bundle in one call: the entry file plus every sibling it references (tokens CSS, JSX modules, images, fonts). Default mode (auto) parses the entry HTML/JSX/CSS and follows relative <script src>, <link href>, <img src>, <iframe src>, srcset, JSX import/from/require, dynamic import(), CSS url() and @import — up to depth 3, skipping CDN/data/anchor URLs. include="all" returns every file in the project (binary files arrive as metadata stubs); include="shallow" returns just the entry. Use maxBytes to cap response size. project and entry are optional — when omitted, defaults to the active OD context (the project the user has open and, if available, the file they\'re currently looking at).',
     inputSchema: {
       type: 'object',
       properties: {
         project: {
           type: 'string',
-          description: 'Project id (UUID) or name substring.',
+          description:
+            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
         },
         entry: {
           type: 'string',
           description:
-            'Entry file path relative to project root. Defaults to project metadata.entryFile.',
+            'Entry file path relative to project root. Defaults to the active file (when project is also omitted) or the project\'s metadata.entryFile.',
         },
         include: {
           type: 'string',
@@ -93,7 +94,6 @@ const TOOL_DEFS = [
             'Soft cap on total textual content size returned (default 1500000 ≈ 1.5MB). Files past the cap are dropped and `truncated: true` is set on the bundle.',
         },
       },
-      required: ['project'],
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Pull design bundle' },
@@ -101,16 +101,16 @@ const TOOL_DEFS = [
   {
     name: 'get_project',
     description:
-      'Fetch a single project: name, active skill/design-system ids, timestamps. entryFile and kind are surfaced at the top level for convenience.',
+      'Fetch a single project: name, active skill/design-system ids, timestamps. entryFile and kind are surfaced at the top level for convenience. project is optional — defaults to the active OD project when omitted.',
     inputSchema: {
       type: 'object',
       properties: {
         project: {
           type: 'string',
-          description: 'Project id (UUID) or name substring.',
+          description:
+            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
         },
       },
-      required: ['project'],
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Get OD project' },
@@ -118,18 +118,21 @@ const TOOL_DEFS = [
   {
     name: 'get_file',
     description:
-      'Read the current contents of a single project file. Returns text content for textual mimes (HTML, JSX, CSS, JSON, SVG, Markdown, etc.). Binary files return a clear error — use list_files to inspect their metadata, or extract them via the OD UI for now. For multi-file design bundles, prefer get_artifact.',
+      'Read the current contents of a single project file. Returns text content for textual mimes (HTML, JSX, CSS, JSON, SVG, Markdown, etc.). Binary files return a clear error — use list_files to inspect their metadata, or extract them via the OD UI for now. For multi-file design bundles, prefer get_artifact. project is optional (defaults to active OD project); path is also optional and defaults to the active file when both project and path are omitted.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
+        project: {
+          type: 'string',
+          description:
+            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
+        },
         path: {
           type: 'string',
           description:
-            'File path relative to the project root, e.g. "landing.html" or "subdir/file.html". Forward slashes only.',
+            'File path relative to the project root, e.g. "landing.html" or "subdir/file.html". Forward slashes only. Optional — defaults to the active file when project is also omitted.',
         },
       },
-      required: ['project', 'path'],
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Read project file' },
@@ -137,11 +140,15 @@ const TOOL_DEFS = [
   {
     name: 'search_files',
     description:
-      'Case-insensitive literal-substring search across every textual file in a project. Returns up to N matches with file, 1-indexed line, and snippet. Use this to find where a class, component, token, or copy string is defined without fetching every file.',
+      'Case-insensitive literal-substring search across every textual file in a project. Returns up to N matches with file, 1-indexed line, and snippet. Use this to find where a class, component, token, or copy string is defined without fetching every file. project is optional — defaults to the active OD project when omitted.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
+        project: {
+          type: 'string',
+          description:
+            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
+        },
         query: {
           type: 'string',
           description:
@@ -156,7 +163,7 @@ const TOOL_DEFS = [
           description: 'Cap on matches returned (default 200, hard cap 1000).',
         },
       },
-      required: ['project', 'query'],
+      required: ['query'],
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Search project files' },
@@ -164,17 +171,20 @@ const TOOL_DEFS = [
   {
     name: 'list_files',
     description:
-      'List the files in a project (metadata only). Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId. Optional `since` filters to files modified strictly after the given Unix-ms timestamp — pass the max mtime you saw last to cheap-poll for changes.',
+      'List the files in a project (metadata only). Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId. Optional `since` filters to files modified strictly after the given Unix-ms timestamp — pass the max mtime you saw last to cheap-poll for changes. project is optional — defaults to the active OD project when omitted.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
+        project: {
+          type: 'string',
+          description:
+            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
+        },
         since: {
           type: 'number',
           description: 'Unix-ms; only return files with mtime > since.',
         },
       },
-      required: ['project'],
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'List project files' },
@@ -234,18 +244,27 @@ export async function runMcpStdio({ daemonUrl }) {
         'has OD running on their machine; each project contains a rendered',
         'artifact (HTML/JSX/CSS) plus its source files.',
         '',
+        'Active context: get_artifact, get_project, get_file, search_files,',
+        'and list_files all accept project as OPTIONAL. When omitted, they',
+        'default to the project the user has open in OD right now; get_file',
+        'and get_artifact additionally default to the active file. So when',
+        'the user says "this file" / "the design I have open" / "find X",',
+        'just call the tool without project — no need to ask first. The',
+        'response carries usedActiveContext so you can confirm which',
+        'project/file you hit. Pass project explicitly to override.',
+        '',
         'Pulling design context:',
-        '  - get_active_context() FIRST when the user says "this file" /',
-        '    "the design I have open" / "what I\'m looking at" — it returns',
-        '    the project + file the user is currently on in OD, so you',
-        '    don\'t have to ask. Returns {active:false} if OD is closed.',
-        '  - list_projects to discover what is available on this daemon.',
-        '  - get_artifact(project) to pull the entry file PLUS its referenced',
-        '    sibling assets (tokens CSS, component JSX, imported modules) in',
-        '    one call. PREFER THIS over get_file when the user wants to',
-        '    understand or extend a design.',
-        '  - get_file(project, path) for a single known file.',
+        '  - get_artifact() — entry file PLUS every referenced sibling',
+        '    (tokens CSS, JSX modules, imported assets) in one call.',
+        '    PREFER THIS over multiple get_file calls when the user',
+        '    wants to understand or extend a design.',
+        '  - get_file(path) for a single known file.',
+        '  - search_files(query) to find a class/component/copy string',
+        '    without fetching every file.',
         '  - list_files for metadata only.',
+        '  - list_projects to discover what is available on this daemon.',
+        '  - get_active_context() if you want the active project/file',
+        '    explicitly without making any other tool call.',
         '',
         'Project arguments accept either a UUID or a name substring',
         '(e.g. "recaptr"); the server resolves the latter.',
@@ -352,27 +371,39 @@ export async function runMcpStdio({ daemonUrl }) {
         case 'get_active_context':
           return ok(await getJson(`${baseUrl}/api/active`));
         case 'get_project': {
-          const id = await resolveProjectId(baseUrl, args.project);
+          const { id, active } = await resolveProjectArg(baseUrl, args.project);
           const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
           const project = data?.project ?? data;
-          return ok({
-            ...project,
-            entryFile: project?.metadata?.entryFile ?? null,
-            kind: project?.metadata?.kind ?? null,
-          });
+          return ok(
+            withActiveEcho(
+              {
+                ...project,
+                entryFile: project?.metadata?.entryFile ?? null,
+                kind: project?.metadata?.kind ?? null,
+              },
+              active,
+            ),
+          );
         }
         case 'list_files': {
-          const id = await resolveProjectId(baseUrl, args.project);
+          const { id, active } = await resolveProjectArg(baseUrl, args.project);
           const params = new URLSearchParams();
           if (Number.isFinite(args.since)) params.set('since', String(args.since));
           const qs = params.toString();
           const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
-          return ok(await getJson(url));
+          return ok(withActiveEcho(await getJson(url), active));
         }
         case 'get_file': {
-          const id = await resolveProjectId(baseUrl, args.project);
-          requireString(args.path, 'path');
-          return await getFile(baseUrl, id, args.path);
+          const { id, active } = await resolveProjectArg(baseUrl, args.project);
+          let path = typeof args.path === 'string' ? args.path : '';
+          // When both project and path are omitted, fall back to the
+          // active file. The agent saying "read this file" without
+          // specifying anything is the most natural call site.
+          if (!path && active && active.fileName) {
+            path = active.fileName;
+          }
+          requireString(path, 'path');
+          return await getFile(baseUrl, id, path, active);
         }
         case 'list_skills':
           return ok(await getJson(`${baseUrl}/api/skills`));
@@ -395,14 +426,17 @@ export async function runMcpStdio({ daemonUrl }) {
             args.maxBytes,
           );
         case 'search_files': {
-          const id = await resolveProjectId(baseUrl, args.project);
+          const { id, active } = await resolveProjectArg(baseUrl, args.project);
           requireString(args.query, 'query');
           const params = new URLSearchParams({ q: String(args.query) });
           if (args.pattern) params.set('pattern', String(args.pattern));
           if (args.max) params.set('max', String(args.max));
           return ok(
-            await getJson(
-              `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
+            withActiveEcho(
+              await getJson(
+                `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
+              ),
+              active,
             ),
           );
         }
@@ -477,6 +511,31 @@ async function fetchProjectList(baseUrl) {
   return list;
 }
 
+// When the agent omits `project`, fall back to whatever the user has
+// open in OD. Returns the resolved id plus, for echo-back to the
+// caller, the active-context payload that was used. Throws a clear
+// error when neither is available so the agent can prompt the user
+// rather than guessing.
+async function resolveProjectArg(baseUrl, arg) {
+  if (typeof arg === 'string' && arg.length > 0) {
+    return { id: await resolveProjectId(baseUrl, arg), active: null };
+  }
+  let active;
+  try {
+    active = await getJson(`${baseUrl}/api/active`);
+  } catch (err) {
+    throw new Error(
+      `project arg omitted and active context lookup failed: ${err && err.message ? err.message : err}. Pass project="<id-or-name>".`,
+    );
+  }
+  if (!active || active.active === false || !active.projectId) {
+    throw new Error(
+      'project arg omitted and OD has no active project. Open a project in OD or pass project="<id-or-name>".',
+    );
+  }
+  return { id: active.projectId, active };
+}
+
 async function resolveProjectId(baseUrl, arg) {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
@@ -524,7 +583,7 @@ async function getJson(url) {
   return await resp.json();
 }
 
-async function getFile(baseUrl, project, relPath) {
+async function getFile(baseUrl, project, relPath, active) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -546,7 +605,44 @@ async function getFile(baseUrl, project, relPath) {
     );
   }
   const text = await resp.text();
+  // When active context resolved the project (or path), surface
+  // that as a separate content block so the agent can see what
+  // we chose without polluting the file text itself.
+  if (active) {
+    return {
+      content: [
+        { type: 'text', text: formatActiveEchoLine(active, relPath) },
+        { type: 'text', text },
+      ],
+    };
+  }
   return { content: [{ type: 'text', text }] };
+}
+
+// Stamp `usedActiveContext` onto JSON tool responses when the
+// project came from /api/active. Plain pass-through when the caller
+// supplied project explicitly — keeps token overhead at zero for the
+// explicit path.
+function withActiveEcho(payload, active) {
+  if (!active) return payload;
+  return { ...payload, usedActiveContext: activeEchoPayload(active) };
+}
+
+function activeEchoPayload(active) {
+  return {
+    projectId: active.projectId,
+    projectName: active.projectName ?? null,
+    fileName: active.fileName ?? null,
+    ageMs: active.ageMs ?? null,
+  };
+}
+
+function formatActiveEchoLine(active, resolvedPath) {
+  const proj = active.projectName || active.projectId;
+  const note = `[od:active-context project="${proj}" file="${resolvedPath}"]`;
+  return active.fileName === resolvedPath
+    ? note
+    : `${note} (active file: ${active.fileName ?? 'none'})`;
 }
 
 const VALID_INCLUDE_MODES = new Set(['auto', 'all', 'shallow']);
@@ -573,13 +669,17 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   const maxBytes =
     Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? Number(maxBytesArg) : DEFAULT_MAX_BYTES;
 
-  const id = await resolveProjectId(baseUrl, projectArg);
+  const { id, active } = await resolveProjectArg(baseUrl, projectArg);
   const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
   const project = data?.project ?? data;
-  const entry =
-    typeof entryArg === 'string' && entryArg.length > 0
-      ? entryArg
-      : project?.metadata?.entryFile;
+  // Active-file beats project default entry when project also came
+  // from active context — if the user is on landing.html and asks
+  // "bundle this", they mean landing.html, not whatever
+  // metadata.entryFile happens to be.
+  const explicitEntry = typeof entryArg === 'string' && entryArg.length > 0;
+  const entry = explicitEntry
+    ? entryArg
+    : (active && active.fileName) || project?.metadata?.entryFile;
   if (!entry) {
     return errorResult(
       `no entry file: pass entry="..." or set the project's metadata.entryFile`,
@@ -593,7 +693,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     } catch (err) {
       return errorResult(err && err.message ? err.message : String(err));
     }
-    return okBundle({ project, entry, files: [file], truncated: false });
+    return okBundle({ project, entry, files: [file], truncated: false, active });
   }
 
   if (include === 'all') {
@@ -612,7 +712,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
         // Skip files that fail to fetch; keep going.
       }
     }
-    return okBundle({ project, entry, files: fetched, truncated });
+    return okBundle({ project, entry, files: fetched, truncated, active });
   }
 
   // Auto mode: BFS from entry. The entry's own fetch must succeed —
@@ -658,7 +758,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     }
     frontier = next;
   }
-  return okBundle({ project, entry, files: fetched, truncated });
+  return okBundle({ project, entry, files: fetched, truncated, active });
 }
 
 async function fetchProjectFile(baseUrl, projectId, relPath) {
@@ -778,7 +878,7 @@ function extractRelativeRefs(text, fromPath, fromMime) {
 }
 
 function okBundle(bundle) {
-  return ok({
+  const payload = {
     entryFile: bundle.entry,
     projectId: bundle.project?.id,
     projectName: bundle.project?.name,
@@ -791,7 +891,8 @@ function okBundle(bundle) {
       content: f.binary ? null : f.content,
     })),
     manifest: bundle.project?.metadata ?? null,
-  });
+  };
+  return ok(withActiveEcho(payload, bundle.active));
 }
 
 function isTextualMime(mime) {
