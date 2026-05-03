@@ -27,6 +27,11 @@
     "copilot"
   ];
 
+  # `pkgs.system` is a legacy alias removed when consumers set
+  # `nixpkgs.config.allowAliases = false`. Use the canonical attribute
+  # path so the module evaluates under both default and strict configs.
+  systemAttr = pkgs.stdenv.hostPlatform.system;
+
   flakePackages =
     if flake ? packages.${pkgs.stdenv.hostPlatform.system}
     then flake.packages.${pkgs.stdenv.hostPlatform.system}
@@ -108,6 +113,27 @@ in {
         OD_CODEX_DISABLE_PLUGINS = "1";
       }
     '';
+  };
+
+  extraBinPaths = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [];
+    description = ''
+      Extra absolute directories to prepend to the daemon service's
+      PATH. The daemon discovers agent CLIs (claude, codex, gemini,
+      opencode, ...) by scanning `process.env.PATH` at runtime, but
+      systemd unit and macOS launchd agent invocations launch with a
+      minimal default PATH that excludes Home Manager / NixOS user
+      profiles — so without entries here the daemon will report
+      "no agents detected" even when the CLIs are installed.
+
+      Both modules pre-populate PATH with sensible defaults for their
+      context (Home Manager: the user's HM profile and, on NixOS, the
+      per-user/system profile dirs; NixOS: the system profile and
+      wrapper dirs). Use this option to add additional locations
+      (custom installs under `/opt`, project-local `bin/`, etc.).
+    '';
+    example = lib.literalExpression ''[ "/opt/agents/bin" ]'';
   };
 
   agents = lib.mkOption {

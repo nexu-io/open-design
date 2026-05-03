@@ -55,10 +55,41 @@
     }
   '';
 
+  # systemd --user units (and macOS launchd agents) start with a minimal
+  # default PATH that excludes Home Manager and NixOS user-profile bin
+  # directories. The daemon scans `process.env.PATH` for agent CLIs, so
+  # without an explicit PATH the UI reports "no agents detected" even when
+  # claude / codex / opencode / ... are installed.
+  #
+  # `${config.home.profileDirectory}/bin` covers both standalone HM
+  # (~/.nix-profile/bin) and HM-as-NixOS-module (/etc/profiles/per-user/<u>/bin).
+  # The remaining Linux entries pick up wrappers, the system profile, and
+  # the default Nix profile. Darwin gets the standard launchd PATH.
+  daemonPathEntries =
+    ["${config.home.profileDirectory}/bin"]
+    ++ lib.optionals pkgs.stdenv.isLinux [
+      "/run/wrappers/bin"
+      "/etc/profiles/per-user/${config.home.username}/bin"
+      "/run/current-system/sw/bin"
+      "/nix/var/nix/profiles/default/bin"
+      "/usr/local/bin"
+      "/usr/bin"
+      "/bin"
+    ]
+    ++ lib.optionals pkgs.stdenv.isDarwin [
+      "/usr/local/bin"
+      "/usr/bin"
+      "/bin"
+      "/usr/sbin"
+      "/sbin"
+    ]
+    ++ cfg.extraBinPaths;
+
   daemonEnv =
     {
       OD_PORT = toString cfg.port;
       OD_DATA_DIR = toString cfg.dataDir;
+      PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
     // cfg.extraEnv;
 
