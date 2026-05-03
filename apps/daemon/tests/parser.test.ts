@@ -128,3 +128,91 @@ describe('parseCritiqueStream -- failure modes', () => {
     ).toBeDefined();
   });
 });
+
+describe('parseCritiqueStream -- review-driven invariants', () => {
+  it('rejects a PANELIST that appears before any <ROUND n="..."> opens', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <PANELIST role="critic" score="6.4"><DIM name="contrast" score="4">x</DIM></PANELIST>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(chunkify(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(MalformedBlockError);
+  });
+
+  it('clamps a panelist score against the run-declared scale, not 100', async () => {
+    // scale=10 so a score of 42 is out of range and should clamp + emit a warning.
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>v1 draft</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+        <PANELIST role="critic" score="42">
+          <DIM name="contrast" score="42">over scale</DIM>
+        </PANELIST>
+        <PANELIST role="brand" score="8"><DIM name="palette" score="8">ok</DIM></PANELIST>
+        <PANELIST role="a11y" score="8"><DIM name="contrast" score="8">ok</DIM></PANELIST>
+        <PANELIST role="copy" score="8"><DIM name="voice" score="8">ok</DIM></PANELIST>
+        <ROUND_END n="1" composite="8" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="1" composite="8" status="shipped">
+        <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>
+        <SUMMARY>ok</SUMMARY>
+      </SHIP>
+    </CRITIQUE_RUN>`;
+    const events = await collect(parseCritiqueStream(chunkify(stream), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+    }));
+    const critic = events.find(
+      e => e.type === 'panelist_close' && e.role === 'critic',
+    );
+    expect(critic).toBeDefined();
+    if (critic && critic.type === 'panelist_close') {
+      // Clamped to scale=10, not the legacy 100 ceiling.
+      expect(critic.score).toBe(10);
+    }
+    const dim = events.find(
+      e => e.type === 'panelist_dim' && e.role === 'critic' && e.dimName === 'contrast',
+    );
+    expect(dim).toBeDefined();
+    if (dim && dim.type === 'panelist_dim') {
+      expect(dim.dimScore).toBe(10);
+    }
+    expect(
+      events.filter(e => e.type === 'parser_warning' && e.kind === 'score_clamped').length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('still ships when scale=20 and threshold=18 is below the cap', async () => {
+    // Confirms scale plumbing flows past the parser without losing the value.
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="18" scale="20">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>scale-20 draft</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+        <PANELIST role="critic" score="19"><DIM name="hierarchy" score="19">strong</DIM></PANELIST>
+        <PANELIST role="brand" score="18"><DIM name="palette" score="18">ok</DIM></PANELIST>
+        <PANELIST role="a11y" score="18"><DIM name="contrast" score="18">ok</DIM></PANELIST>
+        <PANELIST role="copy" score="18"><DIM name="voice" score="18">ok</DIM></PANELIST>
+        <ROUND_END n="1" composite="18.4" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="1" composite="18.4" status="shipped">
+        <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>
+        <SUMMARY>ok</SUMMARY>
+      </SHIP>
+    </CRITIQUE_RUN>`;
+    const events = await collect(parseCritiqueStream(chunkify(stream), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+    }));
+    const run = events.find(e => e.type === 'run_started');
+    expect(run).toBeDefined();
+    if (run && run.type === 'run_started') expect(run.scale).toBe(20);
+    expect(
+      events.filter(e => e.type === 'parser_warning' && e.kind === 'score_clamped').length,
+    ).toBe(0);
+    expect(events.find(e => e.type === 'ship')).toBeDefined();
+  });
+});

@@ -32,7 +32,10 @@ export const CritiqueConfigSchema = z.object({
   protocolVersion: z.number().int().min(1),
   maxConcurrentRuns: z.number().int().min(1),
 }).refine(
-  (cfg) => cfg.scoreThreshold <= cfg.scoreScale,
+  // Small epsilon tolerance so a fractional threshold that rounds up against an
+  // integer scale (e.g. 8.0 with floating-point slack) still validates. The
+  // semantic check is "threshold cannot meaningfully exceed scale".
+  (cfg) => cfg.scoreThreshold <= cfg.scoreScale + 1e-9,
   { message: 'scoreThreshold must be <= scoreScale' },
 );
 

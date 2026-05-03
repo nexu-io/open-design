@@ -3,12 +3,21 @@ import { MalformedBlockError, MissingArtifactError, OversizeBlockError } from '.
 
 const KNOWN_ROLES: ReadonlySet<string> = new Set(['designer', 'critic', 'brand', 'a11y', 'copy']);
 
+// Hoisted regexes reused across emitInner invocations. Reset lastIndex before each loop.
+const DIM_RE = /<DIM\s+name="([^"]+)"\s+score="([^"]+)">([\s\S]*?)<\/DIM>/g;
+const MUST_FIX_RE = /<MUST_FIX>([\s\S]*?)<\/MUST_FIX>/g;
+
+const DEFAULT_SCORE_SCALE = 10;
+
 interface State {
   buf: string;
   consumed: number;
   runId: string;
   adapter: string;
   protocolVersion: number;
+  // Captured from <CRITIQUE_RUN scale="..."> so score bounds match the run's declared scale,
+  // not a hardcoded 100. Defaults to DEFAULT_SCORE_SCALE before run_started is parsed.
+  scoreScale: number;
   inRun: boolean;
   currentRound: number | null;
   shipSeen: boolean;
@@ -26,6 +35,7 @@ export async function* parseV1(
     runId: opts.runId,
     adapter: opts.adapter,
     protocolVersion: 1,
+    scoreScale: DEFAULT_SCORE_SCALE,
     inRun: false,
     currentRound: null,
     shipSeen: false,
@@ -36,11 +46,10 @@ export async function* parseV1(
   for await (const chunk of source) {
     state.buf += chunk;
     yield* drain(state);
-    // Overflow check: if the buffer grew past the cap without progress since last drain.
-    if (
-      state.buf.length > opts.parserMaxBlockBytes &&
-      state.consumed - state.lastAdvance < state.buf.length
-    ) {
+    // After drain, anything still in the buffer is a partial tag waiting on more input.
+    // If that pending block is bigger than the cap, the producer is stuck inside one
+    // unclosed block and we have to fail rather than buffer indefinitely.
+    if (state.buf.length > opts.parserMaxBlockBytes) {
       throw new OversizeBlockError(
         `block exceeded ${opts.parserMaxBlockBytes} bytes at position ${state.consumed}`,
         state.consumed,
@@ -71,6 +80,8 @@ function* drain(state: State): Generator<PanelEvent> {
       if (close < 0) break;
       const attrs = parseAttrs(slice.slice('<CRITIQUE_RUN'.length, close));
       state.protocolVersion = Number(attrs['version'] ?? '1');
+      const declaredScale = Number(attrs['scale'] ?? String(DEFAULT_SCORE_SCALE));
+      state.scoreScale = isFinite(declaredScale) && declaredScale > 0 ? declaredScale : DEFAULT_SCORE_SCALE;
       state.inRun = true;
       yield {
         type: 'run_started',
@@ -79,7 +90,7 @@ function* drain(state: State): Generator<PanelEvent> {
         cast: ['designer', 'critic', 'brand', 'a11y', 'copy'],
         maxRounds: Number(attrs['maxRounds'] ?? '3'),
         threshold: Number(attrs['threshold'] ?? '8.0'),
-        scale: Number(attrs['scale'] ?? '10'),
+        scale: state.scoreScale,
       };
       cursor += close + 1;
       state.lastAdvance = state.consumed + cursor;
@@ -133,15 +144,25 @@ function* drain(state: State): Generator<PanelEvent> {
       }
 
       const role = roleStr as PanelistRole;
-      const round = state.currentRound!;
+      // A PANELIST block must appear inside a <ROUND n="..."> envelope. If no round
+      // has been opened (or the n attribute parsed to NaN), the stream is malformed
+      // and emitting events with an invalid round would corrupt every downstream
+      // consumer (reducer, scoreboard, persistence).
+      if (state.currentRound == null || !Number.isFinite(state.currentRound)) {
+        throw new MalformedBlockError(
+          `PANELIST at position ${state.consumed + cursor} appeared before a valid <ROUND n="..."> opening`,
+          state.consumed + cursor,
+        );
+      }
+      const round = state.currentRound;
 
       yield { type: 'panelist_open', runId: state.runId, round, role };
 
       yield* emitInner(state, role, body);
 
       const rawScore = Number(attrs['score'] ?? '0');
-      const score = clampScore(rawScore);
-      if (isOutOfRange(rawScore)) {
+      const score = clampScore(rawScore, state.scoreScale);
+      if (isOutOfRange(rawScore, state.scoreScale)) {
         yield {
           type: 'parser_warning',
           runId: state.runId,
@@ -166,7 +187,11 @@ function* drain(state: State): Generator<PanelEvent> {
       const inner = slice.slice(headEnd + 1, closeIdx);
       const reason = (inner.match(/<REASON>([\s\S]*?)<\/REASON>/)?.[1] ?? '').trim();
 
-      // Round 1 designer must have produced an artifact before round 1 closes.
+      // The wire protocol (spec § Wire protocol parser invariants) requires the
+      // designer to emit exactly one <ARTIFACT> in round 1. Subsequent rounds may
+      // omit ARTIFACT and ship NOTES-only (the designer is iterating in place).
+      // If protocol v2 ever relaxes this to "at any point before SHIP", widen the
+      // check to use a `designerArtifactSeen` flag instead.
       if (state.currentRound === 1 && !state.designerArtifactInRound1) {
         throw new MissingArtifactError(
           `round 1 closed at position ${state.consumed + cursor} without designer ARTIFACT`,
@@ -281,13 +306,21 @@ function* emitInner(
   role: PanelistRole,
   inner: string,
 ): Generator<PanelEvent> {
-  // <DIM name="X" score="Y">note</DIM>
-  const dimRe = /<DIM\s+name="([^"]+)"\s+score="([^"]+)">([\s\S]*?)<\/DIM>/g;
+  // emitInner is on the parser hot path. Reuse the module-level regex objects
+  // and reset lastIndex so successive runs don't see stale match state.
+  const round = state.currentRound;
+  if (round == null || !Number.isFinite(round)) {
+    // Defensive: callers should already have rejected this, but emitting a
+    // panelist_dim with an invalid round value would corrupt downstream state.
+    return;
+  }
+
+  DIM_RE.lastIndex = 0;
   let dm: RegExpExecArray | null;
-  while ((dm = dimRe.exec(inner)) !== null) {
+  while ((dm = DIM_RE.exec(inner)) !== null) {
     const raw = Number(dm[2]);
-    const dimScore = clampScore(raw);
-    if (isOutOfRange(raw)) {
+    const dimScore = clampScore(raw, state.scoreScale);
+    if (isOutOfRange(raw, state.scoreScale)) {
       yield {
         type: 'parser_warning',
         runId: state.runId,
@@ -298,7 +331,7 @@ function* emitInner(
     yield {
       type: 'panelist_dim',
       runId: state.runId,
-      round: state.currentRound!,
+      round,
       role,
       dimName: dm[1] ?? '',
       dimScore,
@@ -306,21 +339,21 @@ function* emitInner(
     };
   }
 
-  // <MUST_FIX>text</MUST_FIX>
-  const mfRe = /<MUST_FIX>([\s\S]*?)<\/MUST_FIX>/g;
+  MUST_FIX_RE.lastIndex = 0;
   let mf: RegExpExecArray | null;
-  while ((mf = mfRe.exec(inner)) !== null) {
+  while ((mf = MUST_FIX_RE.exec(inner)) !== null) {
     yield {
       type: 'panelist_must_fix',
       runId: state.runId,
-      round: state.currentRound!,
+      round,
       role,
       text: (mf[1] ?? '').trim(),
     };
   }
 
-  // Track designer artifact in round 1
-  if (role === 'designer' && state.currentRound === 1 && /<ARTIFACT\b/.test(inner)) {
+  // The round-1 designer artifact invariant is checked at ROUND_END close. We
+  // only flip the flag here so that ROUND_END knows the artifact arrived.
+  if (role === 'designer' && round === 1 && /<ARTIFACT\b/.test(inner)) {
     state.designerArtifactInRound1 = true;
   }
 }
@@ -336,14 +369,17 @@ function parseAttrs(s: string): Record<string, string> {
   return out;
 }
 
-function isOutOfRange(n: number): boolean {
+// Score range and clamp now respect the run's declared scale (captured from
+// <CRITIQUE_RUN scale="..."> into State.scoreScale). Without this a value of
+// 42 in a scale=10 run would sneak through and warp composite math.
+function isOutOfRange(n: number, scale: number): boolean {
   if (!isFinite(n)) return true;
-  return n < 0 || n > 100;
+  return n < 0 || n > scale;
 }
 
-function clampScore(n: number): number {
+function clampScore(n: number, scale: number): number {
   if (!isFinite(n)) return 0;
   if (n < 0) return 0;
-  if (n > 100) return 100;
+  if (n > scale) return scale;
   return n;
 }
