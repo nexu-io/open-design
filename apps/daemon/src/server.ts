@@ -48,6 +48,7 @@ import {
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
 import {
+  buildProjectArchive,
   decodeMultipartFilename,
   deleteProjectFile,
   ensureProject,
@@ -348,6 +349,20 @@ export function createCompatApiErrorResponse(code, message, init = {}) {
  */
 function sendApiError(res, status, code, message, init = {}) {
   return res.status(status).json(createCompatApiErrorResponse(code, message, init));
+}
+
+// Filename slug for the Content-Disposition header on archive downloads.
+// Browsers reject quotes and control bytes; we keep Unicode letters/digits
+// so a Chinese project name like "面试训练器" survives instead of becoming
+// a row of underscores.
+function sanitizeArchiveFilename(raw) {
+  const cleaned = String(raw ?? '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return cleaned;
 }
 
 /**
@@ -1460,6 +1475,46 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
+  // share menu can hand the user the actual files they uploaded — e.g. the
+  // imported `ui-design/` folder — instead of a one-file snapshot of the
+  // rendered HTML. `root` scopes the archive to a subdirectory; without
+  // it, the whole project is packed.
+  app.get('/api/projects/:id/archive', async (req, res) => {
+    try {
+      const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      const { buffer, baseName } = await buildProjectArchive(
+        PROJECTS_DIR,
+        req.params.id,
+        root,
+      );
+      const project = getProject(db, req.params.id);
+      const fallbackName = project?.name || req.params.id;
+      const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
+      const filename = `${fileSlug}.zip`;
+      // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
+      // `filename*=UTF-8''…` lets modern browsers pick up Chinese/Japanese
+      // project names (e.g. 面试训练器.zip) without mojibake.
+      const asciiFallback =
+        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(buffer);
+    } catch (err) {
+      const code = err && err.code;
+      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
     }
   });
 

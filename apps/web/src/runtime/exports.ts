@@ -84,6 +84,61 @@ export function exportReactComponentAsZip(
   triggerDownload(blob, `${slug}.zip`);
 }
 
+// Project ZIP export — asks the daemon to bundle the on-disk project tree.
+// Used by FileViewer's share menu so the user gets the full uploaded
+// project (e.g. the `ui-design/` folder with its subdirs and assets) rather
+// than just a srcdoc snapshot of the rendered HTML. `filePath` is the
+// active file's project-relative path; if it lives inside a top-level
+// directory we scope the archive to that directory, otherwise we ask the
+// daemon for the whole project. Falls back to the in-memory single-file
+// ZIP on any failure so the action never silently no-ops.
+export async function exportProjectAsZip(opts: {
+  projectId: string;
+  filePath: string;
+  fallbackHtml: string;
+  fallbackTitle: string;
+}): Promise<void> {
+  const root = archiveRootFromFilePath(opts.filePath);
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${
+    root ? `?root=${encodeURIComponent(root)}` : ''
+  }`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
+  } catch (err) {
+    console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
+    exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+  }
+}
+
+function archiveRootFromFilePath(filePath: string): string {
+  const trimmed = (filePath || '').replace(/^\/+/, '');
+  const slash = trimmed.indexOf('/');
+  if (slash <= 0) return '';
+  return trimmed.slice(0, slash);
+}
+
+function archiveFilenameFrom(resp: Response, fallbackTitle: string, root: string): string {
+  // Honor the daemon's Content-Disposition (it knows the project name and
+  // handles RFC 5987 UTF-8 encoding). Fall back to the active directory
+  // name, then to the active file title.
+  const header = resp.headers.get('content-disposition') || '';
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star && star[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      // fall through to the legacy filename= or local fallback
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(header);
+  if (plain && plain[1]) return plain[1];
+  const slug = safeFilename(root || fallbackTitle, 'project');
+  return `${slug}.zip`;
+}
+
 // Open the artifact in a new tab via a Blob URL with a self-printing
 // script injected. Going through a Blob URL (rather than `window.open('')`
 // + `document.write`) avoids two failure modes we hit before:

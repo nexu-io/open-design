@@ -19,7 +19,7 @@ import {
   exportAsHtml,
   exportAsJsx,
   exportAsPdf,
-  exportAsZip,
+  exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
 } from '../runtime/exports';
@@ -1301,7 +1301,12 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsZip(source ?? '', exportTitle);
+                      void exportProjectAsZip({
+                        projectId,
+                        filePath: file.name,
+                        fallbackHtml: source ?? '',
+                        fallbackTitle: exportTitle,
+                      });
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="download" size={14} /></span>
