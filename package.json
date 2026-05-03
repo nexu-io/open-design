@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -25,8 +25,8 @@
     "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && pnpm --filter @open-design/daemon build && pnpm check:residual-js"
   },
   "devDependencies": {
-    "@open-design/tools-dev": "workspace:0.2.0",
-    "@open-design/tools-pack": "workspace:0.2.0"
+    "@open-design/tools-dev": "workspace:0.3.0",
+    "@open-design/tools-pack": "workspace:0.3.0"
   },
   "engines": {
     "node": "~24",

@@ -56,6 +56,16 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('auto-fills Google defaults when switching from a selected known provider', () => {
+    expect(switchApiProtocol(baseConfig, 'google')).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'google',
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      model: 'gemini-2.0-flash',
+      apiProviderBaseUrl: 'https://generativelanguage.googleapis.com',
+    });
+  });
+
   it('preserves user-customized known-looking baseUrl when provider tracking was cleared', () => {
     const config: AppConfig = {
       ...baseConfig,

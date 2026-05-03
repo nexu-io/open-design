@@ -14,10 +14,11 @@ const ENTRY_DIR_NAME = path.basename(__dirname);
 
 export const WORKSPACE_ROOT = resolve(__dirname, ENTRY_DIR_NAME === "dist" ? "../../.." : "../../..");
 
-export type ToolPackPlatform = "mac" | "win";
-export type ToolPackBuildOutput = "all" | "app" | "dir" | "dmg" | "nsis" | "zip";
+export type ToolPackPlatform = "mac" | "win" | "linux";
+export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
 
 export type ToolPackCliOptions = {
+  containerized?: boolean;
   dir?: string;
   expr?: string;
   json?: boolean;
@@ -48,6 +49,7 @@ export type ToolPackRoots = {
 };
 
 export type ToolPackConfig = {
+  containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
   electronVersion: string;
@@ -69,6 +71,7 @@ function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | 
   if (value == null || value.length === 0) return platform === "win" ? "nsis" : "all";
   if (platform === "mac" && (value === "all" || value === "app" || value === "dmg" || value === "zip")) return value;
   if (platform === "win" && (value === "all" || value === "dir" || value === "nsis")) return value;
+  if (platform === "linux" && (value === "all" || value === "appimage" || value === "dir")) return value;
   throw new Error(`unsupported ${platform} --to target: ${value}`);
 }
 
@@ -111,6 +114,7 @@ export function resolveToolPackConfig(
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
 
   return {
+    containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT),

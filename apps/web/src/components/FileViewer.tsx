@@ -26,6 +26,7 @@ import {
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
+import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type { DeployConfigResponse, DeployProjectFileResponse, ProjectFile } from '../types';
 import { Icon } from './Icon';
@@ -620,6 +621,13 @@ function HtmlViewer({
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [commentMode, setCommentMode] = useState(false);
+  // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
+  // on the host page. Lets users escape-hatch around the URL-load default
+  // for non-deck HTML that depends on the in-iframe localStorage shim.
+  const forceInline = useMemo(
+    () => (typeof window === 'undefined' ? false : parseForceInline(window.location.search)),
+    [],
+  );
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
@@ -679,9 +687,23 @@ function HtmlViewer({
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const previewSource = inlinedSource ?? source;
+  // When we URL-load the iframe directly, skip every in-host inlining /
+  // srcDoc-rebuilding step. The browser does the asset resolution itself,
+  // which is the whole point of the URL-load path.
+  const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
+    mode,
+    isDeck: effectiveDeck,
+    commentMode,
+    forceInline,
+  });
+  const previewSrcUrl = useMemo(
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    [projectId, file.name, file.mtime, reloadKey],
+  );
 
   useEffect(() => {
     setInlinedSource(null);
+    if (useUrlLoadPreview) return;
     if (!source || effectiveDeck || !hasRelativeAssetRefs(source)) return;
     let cancelled = false;
     void inlineRelativeAssets(source, projectId, file.name).then((next) => {
@@ -690,7 +712,7 @@ function HtmlViewer({
     return () => {
       cancelled = true;
     };
-  }, [source, effectiveDeck, projectId, file.name]);
+  }, [source, effectiveDeck, projectId, file.name, useUrlLoadPreview]);
 
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
@@ -1412,13 +1434,25 @@ function HtmlViewer({
                 transformOrigin: '0 0',
               }}
             >
-              <iframe
-                ref={iframeRef}
-                data-testid="artifact-preview-frame"
-                title={file.name}
-                sandbox="allow-scripts"
-                srcDoc={srcDoc}
-              />
+              {useUrlLoadPreview ? (
+                <iframe
+                  ref={iframeRef}
+                  data-testid="artifact-preview-frame"
+                  data-od-render-mode="url-load"
+                  title={file.name}
+                  sandbox="allow-scripts"
+                  src={previewSrcUrl}
+                />
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  data-testid="artifact-preview-frame"
+                  data-od-render-mode="srcdoc"
+                  title={file.name}
+                  sandbox="allow-scripts"
+                  srcDoc={srcDoc}
+                />
+              )}
             </div>
             {commentMode ? (
               <CommentPreviewOverlays
@@ -1472,7 +1506,21 @@ function HtmlViewer({
           >
             <Icon name="close" size={13} /> {t('fileViewer.exitPresentation')}
           </button>
-          <iframe title="present" sandbox="allow-scripts" srcDoc={srcDoc} />
+          {useUrlLoadPreview ? (
+            <iframe
+              title="present"
+              sandbox="allow-scripts"
+              data-od-render-mode="url-load"
+              src={previewSrcUrl}
+            />
+          ) : (
+            <iframe
+              title="present"
+              sandbox="allow-scripts"
+              data-od-render-mode="srcdoc"
+              srcDoc={srcDoc}
+            />
+          )}
         </div>
       ) : null}
       {deployModalOpen ? (

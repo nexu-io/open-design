@@ -15,7 +15,7 @@ import {
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
-import type { AgentInfo, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
+import type { AgentInfo, ApiProtocol, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
@@ -88,7 +88,42 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2',
     'mimo-v2.5-pro',
   ],
+  azure: [
+    'gpt-4o',
+    'gpt-4o-mini',
+  ],
+  google: [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+  ],
 } as const;
+
+const API_PROTOCOL_TABS: Array<{
+  id: ApiProtocol;
+  title: string;
+  meta: string;
+}> = [
+  { id: 'anthropic', title: 'Anthropic API', meta: '/v1/messages' },
+  { id: 'openai', title: 'OpenAI API', meta: '/v1/chat/completions' },
+  { id: 'azure', title: 'Azure OpenAI', meta: 'deployments/chat/completions' },
+  { id: 'google', title: 'Google Gemini', meta: ':streamGenerateContent' },
+];
+
+const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
+  anthropic: 'Anthropic API',
+  openai: 'OpenAI API',
+  azure: 'Azure OpenAI',
+  google: 'Google Gemini',
+};
+
+const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
+  anthropic: 'sk-ant-...',
+  openai: 'sk-...',
+  azure: 'azure key',
+  google: 'AIza...',
+};
 
 export function SettingsDialog({
   initial,
@@ -174,7 +209,7 @@ export function SettingsDialog({
   );
 
   const setMode = (mode: ExecMode) => setCfg((c) => ({ ...c, mode }));
-  const setApiProtocol = (protocol: 'anthropic' | 'openai') => {
+  const setApiProtocol = (protocol: ApiProtocol) => {
     setCfg((c) => {
       const currentProvider = c.apiProviderBaseUrl
         ? KNOWN_PROVIDERS.find((p) => p.baseUrl === c.apiProviderBaseUrl)
@@ -346,7 +381,7 @@ export function SettingsDialog({
                 className="seg-control"
                 role="tablist"
                 aria-label={t('settings.modeAria')}
-                style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}
+                style={{ gridTemplateColumns: `repeat(${API_PROTOCOL_TABS.length + 1}, 1fr)` }}
               >
                 <button
                   type="button"
@@ -368,26 +403,19 @@ export function SettingsDialog({
                       : t('settings.modeDaemonOfflineMeta')}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={cfg.mode === 'api' && apiProtocol === 'anthropic'}
-                  className={'seg-btn' + (cfg.mode === 'api' && apiProtocol === 'anthropic' ? ' active' : '')}
-                  onClick={() => setApiProtocol('anthropic')}
-                >
-                  <span className="seg-title">Anthropic API</span>
-                  <span className="seg-meta">/v1/messages</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={cfg.mode === 'api' && apiProtocol === 'openai'}
-                  className={'seg-btn' + (cfg.mode === 'api' && apiProtocol === 'openai' ? ' active' : '')}
-                  onClick={() => setApiProtocol('openai')}
-                >
-                  <span className="seg-title">OpenAI API</span>
-                  <span className="seg-meta">/v1/chat/completions</span>
-                </button>
+                {API_PROTOCOL_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={cfg.mode === 'api' && apiProtocol === tab.id}
+                    className={'seg-btn' + (cfg.mode === 'api' && apiProtocol === tab.id ? ' active' : '')}
+                    onClick={() => setApiProtocol(tab.id)}
+                  >
+                    <span className="seg-title">{tab.title}</span>
+                    <span className="seg-meta">{tab.meta}</span>
+                  </button>
+                ))}
               </div>
           {cfg.mode === 'daemon' ? (
             <section className="settings-section">
@@ -564,7 +592,7 @@ export function SettingsDialog({
           ) : (
             <section className="settings-section">
               <div className="section-head">
-                <h3>{apiProtocol === 'anthropic' ? 'Anthropic API' : 'OpenAI API'}</h3>
+                <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
               </div>
               <label className="field">
                 <span className="field-label">Quick fill provider</span>
@@ -599,7 +627,7 @@ export function SettingsDialog({
                 <div className="field-row">
                   <input
                     type={showApiKey ? 'text' : 'password'}
-                    placeholder="sk-ant-..."
+                    placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
                     value={cfg.apiKey}
                     onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
                     autoFocus
@@ -656,6 +684,17 @@ export function SettingsDialog({
                   onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value, apiProviderBaseUrl: null })}
                 />
               </label>
+              {apiProtocol === 'azure' ? (
+                <label className="field">
+                  <span className="field-label">API version</span>
+                  <input
+                    type="text"
+                    value={cfg.apiVersion ?? ''}
+                    placeholder="2024-10-21"
+                    onChange={(e) => setCfg({ ...cfg, apiVersion: e.target.value.trim() })}
+                  />
+                </label>
+              ) : null}
               <p className="hint">{t('settings.apiHint')}</p>
             </section>
           )}

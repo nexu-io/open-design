@@ -22,6 +22,7 @@ import {
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName } from '../utils/agentLabels';
+import { apiProtocolAgentId, apiProtocolLabel } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
@@ -782,11 +783,13 @@ export function ProjectView({
           ? agentsById.get(config.agentId)
           : null;
       const assistantAgentId =
-        config.mode === 'daemon' ? config.agentId ?? undefined : 'anthropic-api';
+        config.mode === 'daemon'
+          ? config.agentId ?? undefined
+          : apiProtocolAgentId(config.apiProtocol);
       const assistantAgentName =
         config.mode === 'daemon'
           ? assistantAgentDisplayName(config.agentId, selectedAgent?.name)
-          : 'Anthropic API';
+          : apiProtocolLabel(config.apiProtocol);
       const assistantId = crypto.randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,

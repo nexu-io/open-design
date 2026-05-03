@@ -60,7 +60,7 @@ if (first && SUBCOMMAND_MAP[first]) {
 
 // Default: daemon mode.
 let port = Number(process.env.OD_PORT) || 7456;
-let host = process.env.OD_BIND_HOST || '0.0.0.0';
+let host = process.env.OD_BIND_HOST || '127.0.0.1';
 let open = true;
 
 for (let i = 0; i < argv.length; i++) {
@@ -101,7 +101,7 @@ function printRootHelp() {
 
 Options:
   --port <n>       Port to listen on (default: 7456, env: OD_PORT).
-  --host <addr>    Interface address to bind to (default: 0.0.0.0, env: OD_BIND_HOST).
+  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: OD_BIND_HOST).
                    Set to a specific IP (e.g. a Tailscale address) to restrict access
                    to that interface only.
   --no-open        Do not open the browser after start.
