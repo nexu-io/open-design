@@ -22,6 +22,8 @@ import {
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName } from '../utils/agentLabels';
+import { playSound, showCompletionNotification } from '../utils/notifications';
+import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import {
   createConversation,
@@ -246,6 +248,56 @@ export function ProjectView({
     }
     reattachTextBuffersRef.current.clear();
   }, []);
+
+  // Detect the streaming `true → false` edge so we can fire the optional
+  // completion sound / desktop notification exactly once per turn. Initial
+  // mount keeps `prevStreamingRef.current = false`, so loading historical
+  // conversations (where `streaming` is also false) never triggers a stray
+  // ding. `messages` is on the dep array so the latest assistant message's
+  // runStatus is visible at the moment we edge-detect; the early-return
+  // guarantees only the edge actually does anything.
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    if (!(wasStreaming && !streaming)) return;
+
+    const last = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!last) return;
+    const status = last.runStatus;
+    if (status !== 'succeeded' && status !== 'failed') return;
+
+    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
+    if (cfg.soundEnabled) {
+      playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
+    }
+
+    if (cfg.desktopEnabled) {
+      // Successes only interrupt when the user is on another tab/window.
+      // Failures alert regardless — losing a long agent run silently is
+      // worse than a small interruption when the page is in focus.
+      const isHidden = typeof document !== 'undefined' && document.hidden;
+      const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
+      if (status === 'failed' || isHidden || !isFocused) {
+        const title = status === 'succeeded'
+          ? t('notify.successTitle')
+          : t('notify.failureTitle');
+        const fallbackBody = status === 'succeeded'
+          ? t('notify.successBody')
+          : t('notify.failureBody');
+        const trimmed = (last.content ?? '').trim();
+        const body = trimmed ? trimmed.slice(0, 80) : fallbackBody;
+        void showCompletionNotification({
+          status,
+          title,
+          body,
+          onClick: () => {
+            if (typeof window !== 'undefined') window.focus();
+          },
+        });
+      }
+    }
+  }, [streaming, messages, config.notifications, t]);
 
   // Hydrate the open-tabs state once per project. After this initial
   // load, every mutation flows through saveTabsState() which keeps DB +
@@ -881,7 +933,7 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: prev.runId ? 'succeeded' : prev.runStatus,
+            runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
@@ -925,7 +977,9 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: prev.runId || isActiveRunStatus(prev.runStatus) ? 'failed' : prev.runStatus,
+            runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
+              ? 'failed'
+              : prev.runStatus,
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'failed');
