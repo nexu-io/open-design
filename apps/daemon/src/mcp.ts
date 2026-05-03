@@ -15,7 +15,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 const SERVER_NAME = 'open-design';
@@ -190,7 +192,7 @@ export async function runMcpStdio({ daemonUrl }) {
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, resources: {} },
       instructions: [
         'Open Design (OD) is a local-first design workspace. The user typically',
         'has OD running on their machine; each project contains a rendered',
@@ -210,6 +212,10 @@ export async function runMcpStdio({ daemonUrl }) {
         '',
         'Catalog reads (skills, design systems) are reference material — call',
         'them when the user asks about brand or skill, not on every request.',
+        'Skills and design systems are also exposed as MCP resources at',
+        '`od://skills/<id>/SKILL.md` and `od://design-systems/<id>/DESIGN.md`;',
+        'clients that surface them passively can read them without an explicit',
+        'tool call.',
         '',
         'When extending an OD design in another codebase, pull the full bundle',
         'once with get_artifact and work from those files locally — do not',
@@ -221,6 +227,63 @@ export async function runMcpStdio({ daemonUrl }) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOL_DEFS,
   }));
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    const [skillsData, dsData] = await Promise.all([
+      getJson(`${baseUrl}/api/skills`).catch(() => ({ skills: [] })),
+      getJson(`${baseUrl}/api/design-systems`).catch(() => ({ designSystems: [] })),
+    ]);
+    const resources = [];
+    for (const s of skillsData?.skills || []) {
+      const desc = typeof s.description === 'string' ? s.description.slice(0, 200) : undefined;
+      resources.push({
+        uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
+        name: `Skill: ${s.name || s.id}`,
+        description: desc,
+        mimeType: 'text/markdown',
+      });
+    }
+    for (const d of dsData?.designSystems || []) {
+      resources.push({
+        uri: `od://design-systems/${encodeURIComponent(d.id)}/DESIGN.md`,
+        name: `Design system: ${d.title || d.name || d.id}`,
+        description:
+          typeof d.summary === 'string' ? d.summary.slice(0, 200) : undefined,
+        mimeType: 'text/markdown',
+      });
+    }
+    return { resources };
+  });
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+    const uri = req.params?.uri;
+    const m = String(uri || '').match(/^od:\/\/(skills|design-systems)\/([^/]+)\/(.+)$/);
+    if (!m) {
+      throw new Error(`unsupported resource URI: ${uri}`);
+    }
+    const [, kind, id] = m;
+    const route = kind === 'skills' ? 'skills' : 'design-systems';
+    const data = await getJson(
+      `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
+    );
+    const text =
+      data?.skill?.body ??
+      data?.skill?.content ??
+      data?.designSystem?.body ??
+      data?.designSystem?.content ??
+      data?.body ??
+      data?.content ??
+      '';
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/markdown',
+          text,
+        },
+      ],
+    };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params?.name;
