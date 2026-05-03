@@ -55,3 +55,51 @@ export function defaultCritiqueConfig(): CritiqueConfig {
     maxConcurrentRuns: 4,
   };
 }
+
+export type DegradedReason =
+  | 'malformed_block'
+  | 'oversize_block'
+  | 'adapter_unsupported'
+  | 'protocol_version_mismatch'
+  | 'missing_artifact';
+
+export type FailedCause =
+  | 'cli_exit_nonzero'
+  | 'per_round_timeout'
+  | 'total_timeout'
+  | 'orchestrator_internal';
+
+export type ParserWarningKind =
+  | 'weak_debate'
+  | 'unknown_role'
+  | 'score_clamped'
+  | 'composite_mismatch'
+  | 'duplicate_ship';
+
+export type RoundDecision = 'continue' | 'ship';
+export type ShipStatus = 'shipped' | 'below_threshold' | 'timed_out' | 'interrupted';
+
+export type PanelEvent =
+  | { type: 'run_started'; runId: string; protocolVersion: number; cast: PanelistRole[]; maxRounds: number; threshold: number; scale: number }
+  | { type: 'panelist_open';     runId: string; round: number; role: PanelistRole }
+  | { type: 'panelist_dim';      runId: string; round: number; role: PanelistRole; dimName: string; dimScore: number; dimNote: string }
+  | { type: 'panelist_must_fix'; runId: string; round: number; role: PanelistRole; text: string }
+  | { type: 'panelist_close';    runId: string; round: number; role: PanelistRole; score: number }
+  | { type: 'round_end';         runId: string; round: number; composite: number; mustFix: number; decision: RoundDecision; reason: string }
+  | { type: 'ship';              runId: string; round: number; composite: number; status: ShipStatus; artifactRef: { projectId: string; artifactId: string }; summary: string }
+  | { type: 'degraded';          runId: string; reason: DegradedReason; adapter: string }
+  | { type: 'interrupted';       runId: string; bestRound: number; composite: number }
+  | { type: 'failed';            runId: string; cause: FailedCause }
+  | { type: 'parser_warning';    runId: string; kind: ParserWarningKind; position: number };
+
+const PANEL_EVENT_TYPES = new Set<PanelEvent['type']>([
+  'run_started', 'panelist_open', 'panelist_dim', 'panelist_must_fix',
+  'panelist_close', 'round_end', 'ship', 'degraded', 'interrupted',
+  'failed', 'parser_warning',
+]);
+
+export function isPanelEvent(value: unknown): value is PanelEvent {
+  if (!value || typeof value !== 'object') return false;
+  const t = (value as { type?: unknown }).type;
+  return typeof t === 'string' && PANEL_EVENT_TYPES.has(t as PanelEvent['type']);
+}
