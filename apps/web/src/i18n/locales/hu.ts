@@ -451,6 +451,7 @@ export const hu: Dict = {
   'designFiles.sectionImages': 'Képek',
   'designFiles.sectionSketches': 'Vázlatok',
   'designFiles.sectionOther': 'Egyéb',
+  'designFiles.showMore': '+{n} további megjelenítése',
   'designFiles.kindHtml': 'HTML oldal',
   'designFiles.kindImage': 'Kép',
   'designFiles.kindSketch': 'Vázlat',

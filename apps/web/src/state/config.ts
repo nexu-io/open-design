@@ -51,6 +51,16 @@ export interface KnownProvider {
   models?: string[];
 }
 
+const GLM_MODELS = [
+  'glm-5.1',
+  'glm-5',
+  'glm-5-turbo',
+  'glm-4.7',
+  'glm-4.6',
+  'glm-4.5',
+  'glm-4.5-air',
+];
+
 // Some providers appear more than once because they expose both
 // Anthropic-compatible (/v1/messages) and OpenAI-compatible
 // (/v1/chat/completions) gateways. Keep those entries separate so the Settings
@@ -97,6 +107,34 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o',
     models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+  },
+  {
+    label: 'Z.AI (Global) — OpenAI',
+    protocol: 'openai',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    model: 'glm-5.1',
+    models: GLM_MODELS,
+  },
+  {
+    label: 'Z.AI Coding Plan (Global) — OpenAI',
+    protocol: 'openai',
+    baseUrl: 'https://api.z.ai/api/coding/paas/v4',
+    model: 'glm-4.7',
+    models: GLM_MODELS,
+  },
+  {
+    label: 'BigModel (China) — OpenAI',
+    protocol: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-5.1',
+    models: GLM_MODELS,
+  },
+  {
+    label: 'BigModel Coding Plan (China) — OpenAI',
+    protocol: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+    model: 'glm-4.7',
+    models: GLM_MODELS,
   },
   {
     label: 'DeepSeek — OpenAI',

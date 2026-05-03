@@ -451,6 +451,7 @@ export const ar: Dict = {
   'designFiles.sectionImages': 'صور',
   'designFiles.sectionSketches': 'رسومات',
   'designFiles.sectionOther': 'أخرى',
+  'designFiles.showMore': 'إظهار {n}+ إضافية',
   'designFiles.kindHtml': 'صفحة HTML',
   'designFiles.kindImage': 'صورة',
   'designFiles.kindSketch': 'رسم',

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIG, loadConfig } from './config';
+import { DEFAULT_CONFIG, KNOWN_PROVIDERS, loadConfig } from './config';
 import type { AppConfig } from '../types';
 
 const store = new Map<string, string>();
@@ -127,5 +127,48 @@ describe('loadConfig', () => {
   it('sets an explicit apiProtocol for new default configs', () => {
     expect(DEFAULT_CONFIG.apiProtocol).toBe('anthropic');
     expect(DEFAULT_CONFIG.configMigrationVersion).toBe(1);
+  });
+});
+
+describe('KNOWN_PROVIDERS', () => {
+  it('includes Z.AI and BigModel OpenAI-compatible presets for general and Coding Plan endpoints', () => {
+    expect(KNOWN_PROVIDERS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Z.AI (Global) — OpenAI',
+          protocol: 'openai',
+          baseUrl: 'https://api.z.ai/api/paas/v4',
+          model: 'glm-5.1',
+          models: expect.arrayContaining(['glm-5.1', 'glm-4.7']),
+        }),
+        expect.objectContaining({
+          label: 'Z.AI Coding Plan (Global) — OpenAI',
+          protocol: 'openai',
+          baseUrl: 'https://api.z.ai/api/coding/paas/v4',
+          model: 'glm-4.7',
+          models: expect.arrayContaining(['glm-5.1', 'glm-4.7']),
+        }),
+        expect.objectContaining({
+          label: 'BigModel (China) — OpenAI',
+          protocol: 'openai',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          model: 'glm-5.1',
+          models: expect.arrayContaining(['glm-5.1', 'glm-4.7']),
+        }),
+        expect.objectContaining({
+          label: 'BigModel Coding Plan (China) — OpenAI',
+          protocol: 'openai',
+          baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+          model: 'glm-4.7',
+          models: expect.arrayContaining(['glm-5.1', 'glm-4.7']),
+        }),
+      ]),
+    );
+  });
+
+  it('keeps quick-fill base URLs unique so provider tracking is unambiguous', () => {
+    const baseUrls = KNOWN_PROVIDERS.map((p) => p.baseUrl);
+
+    expect(new Set(baseUrls).size).toBe(baseUrls.length);
   });
 });

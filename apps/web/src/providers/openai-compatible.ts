@@ -1,6 +1,6 @@
 /**
  * OpenAI-compatible API provider. Works with any service that exposes the
- * /v1/chat/completions endpoint (e.g. MiMo, DeepSeek, Groq, Together, etc.).
+ * /v1/chat/completions endpoint (e.g. Z.AI, BigModel, MiMo, DeepSeek, etc.).
  *
  * Routes through the daemon proxy to avoid browser CORS issues.
  * BYOK — the key stays on the user's machine.
@@ -25,7 +25,7 @@ export async function streamMessageOpenAI(
   let acc = '';
 
   try {
-    const resp = await fetch('/api/proxy/stream', {
+    const resp = await fetch('/api/proxy/openai/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -62,8 +62,8 @@ export async function streamMessageOpenAI(
         const parsed = parseSseFrame(frame);
         if (!parsed || parsed.kind !== 'event') continue;
 
-        if (parsed.event === 'delta') {
-          const text = String(parsed.data.text ?? '');
+        if (parsed.event === 'delta' || parsed.event === 'message') {
+          const text = extractOpenAIText(parsed.data);
           if (text) {
             acc += text;
             handlers.onDelta(text);
@@ -115,9 +115,12 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   if (u.includes('api.deepseek')) return true;
   if (u.includes('api.groq')) return true;
   if (u.includes('api.together')) return true;
+  if (u.includes('api.z.ai/api/paas') || u.includes('api.z.ai/api/coding/paas')) return true;
+  if (u.includes('open.bigmodel.cn/api/paas') || u.includes('open.bigmodel.cn/api/coding/paas')) return true;
   if (u.includes('openrouter')) return true;
   if (u.includes('openai.com')) return true;
   if (m.startsWith('deepseek')) return true;
+  if (m.startsWith('glm-')) return true;
   if (m.startsWith('groq') || m.startsWith('llama') || m.startsWith('mixtral')) return true;
   if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return true;
 
@@ -130,4 +133,30 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   // the existing OpenAI-compatible fallback for third-party providers.
   if (u && !isOfficialAnthropic) return true;
   return false;
+}
+
+function extractOpenAIText(data: unknown): string {
+  if (!data || typeof data !== 'object') return '';
+  const record = data as Record<string, unknown>;
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const first = choices[0];
+  if (!first || typeof first !== 'object') {
+    return typeof record.text === 'string' ? record.text : '';
+  }
+
+  const choice = first as Record<string, unknown>;
+  const delta = choice.delta;
+  if (delta && typeof delta === 'object') {
+    const deltaRecord = delta as Record<string, unknown>;
+    if (typeof deltaRecord.content === 'string') return deltaRecord.content;
+    if (typeof deltaRecord.reasoning_content === 'string') return deltaRecord.reasoning_content;
+  }
+
+  const message = choice.message;
+  if (message && typeof message === 'object') {
+    const content = (message as Record<string, unknown>).content;
+    if (typeof content === 'string') return content;
+  }
+
+  return '';
 }

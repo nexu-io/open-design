@@ -450,6 +450,7 @@ export const tr: Dict = {
   'designFiles.sectionImages': 'Görseller',
   'designFiles.sectionSketches': 'Taslaklar',
   'designFiles.sectionOther': 'Diğer',
+  'designFiles.showMore': '+{n} tane daha göster',
   'designFiles.kindHtml': 'HTML sayfası',
   'designFiles.kindImage': 'Görsel',
   'designFiles.kindSketch': 'Taslak',

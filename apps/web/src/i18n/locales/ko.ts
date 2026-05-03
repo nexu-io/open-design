@@ -451,6 +451,7 @@ export const ko: Dict = {
   'designFiles.sectionImages': '이미지',
   'designFiles.sectionSketches': '스케치',
   'designFiles.sectionOther': '기타',
+  'designFiles.showMore': '+{n}개 더 보기',
   'designFiles.kindHtml': 'HTML 페이지',
   'designFiles.kindImage': '이미지',
   'designFiles.kindSketch': '스케치',

@@ -451,6 +451,7 @@ export const pl: Dict = {
   'designFiles.sectionImages': 'Obrazy',
   'designFiles.sectionSketches': 'Szkice',
   'designFiles.sectionOther': 'Inne',
+  'designFiles.showMore': 'Pokaż jeszcze +{n}',
   'designFiles.kindHtml': 'Strona HTML',
   'designFiles.kindImage': 'Obraz',
   'designFiles.kindSketch': 'Szkic',
