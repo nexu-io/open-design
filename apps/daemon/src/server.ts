@@ -2382,7 +2382,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = { ...process.env, ...odMediaEnv };
+      const env = { ...process.env, ...(def.env || {}), ...odMediaEnv };
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,
