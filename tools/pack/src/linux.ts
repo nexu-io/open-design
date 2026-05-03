@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { access, chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -447,6 +447,36 @@ export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult
   };
 }
 
-async function runBuildInContainer(_config: ToolPackConfig): Promise<void> {
-  throw new Error("runBuildInContainer not yet implemented; see Task 9");
+async function assertDockerAvailable(): Promise<void> {
+  if (!(await commandExists("docker"))) {
+    throw new Error(
+      "tools-pack linux build --containerized requires Docker. Install Docker or omit --containerized for a native build.",
+    );
+  }
+}
+
+async function runBuildInContainer(config: ToolPackConfig): Promise<void> {
+  await assertDockerAvailable();
+
+  await mkdir(join(config.roots.toolPackRoot, ".docker-home"), { recursive: true });
+  await mkdir(join(config.roots.toolPackRoot, ".docker-cache", "electron"), { recursive: true });
+  await mkdir(join(config.roots.toolPackRoot, ".docker-cache", "electron-builder"), { recursive: true });
+
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  const gid = typeof process.getgid === "function" ? process.getgid() : 0;
+  const args = buildDockerArgs(config, { uid, gid });
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("docker", args, { stdio: "inherit", env: process.env });
+    child.on("exit", (code) => {
+      if (code === 0 || code === null) {
+        resolve();
+      } else {
+        reject(new Error(`docker build exited with code ${code}`));
+      }
+    });
+    child.on("error", (error: Error) => {
+      reject(error);
+    });
+  });
 }
