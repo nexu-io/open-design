@@ -963,14 +963,14 @@ export async function readPackedLinuxLogs(config: ToolPackConfig): Promise<{
 export type LinuxUninstallResult = {
   namespace: string;
   removed: {
-    appImage: "ok" | "already-removed";
-    desktop: "ok" | "already-removed";
-    icon: "ok" | "already-removed";
+    appImage: "ok" | "already-removed" | "skipped-process-running";
+    desktop: "ok" | "already-removed" | "skipped-process-running";
+    icon: "ok" | "already-removed" | "skipped-process-running";
   };
   stop: LinuxStopResult;
   postUninstall: {
-    desktopDatabase: "ok" | "missing" | "failed";
-    iconCache: "ok" | "missing" | "failed";
+    desktopDatabase: "ok" | "missing" | "failed" | "skipped";
+    iconCache: "ok" | "missing" | "failed" | "skipped";
   };
 };
 
@@ -980,9 +980,34 @@ async function tryRemove(path: string): Promise<"ok" | "already-removed"> {
   return "ok";
 }
 
+// "stopped" means we just brought the process tree down cleanly.
+// "not-running" means there was nothing to stop in the first place.
+// Either state makes it safe to delete install files. "partial" means
+// remainingPids is non-empty (SIGTERM->SIGKILL didn't take everyone), and
+// "unmanaged" means the marker pointed at a process we couldn't validate as
+// ours -- in both cases something is still using the AppImage's mounted or
+// extracted contents, so destructive removal would leave broken file handles
+// and an orphan with stale state.
+function isSafeToRemoveInstallFiles(stop: LinuxStopResult): boolean {
+  return stop.status === "stopped" || stop.status === "not-running";
+}
+
 export async function uninstallPackedLinuxApp(config: ToolPackConfig): Promise<LinuxUninstallResult> {
   const paths = resolveLinuxPaths(config);
   const stop = await stopPackedLinuxApp(config);
+
+  if (!isSafeToRemoveInstallFiles(stop)) {
+    return {
+      namespace: config.namespace,
+      removed: {
+        appImage: "skipped-process-running",
+        desktop: "skipped-process-running",
+        icon: "skipped-process-running",
+      },
+      stop,
+      postUninstall: { desktopDatabase: "skipped", iconCache: "skipped" },
+    };
+  }
 
   const removedAppImage = await tryRemove(paths.installAppImagePath);
   const removedDesktop = await tryRemove(paths.installDesktopFilePath);
@@ -1009,6 +1034,12 @@ export type LinuxCleanupResult = {
   removedOutputRoot: boolean;
   removedRuntimeNamespaceRoot: boolean;
   runtimeNamespaceRoot: string;
+  // True when stopPackedLinuxApp returned "partial" or "unmanaged" -- the
+  // output and runtime namespace roots may contain files held open by a
+  // surviving process tree, so we leave them in place rather than yanking
+  // SQLite WAL files / log handles / IPC sockets out from under it.
+  // Both removed* flags will be false in this case.
+  skipped: boolean;
   stop: LinuxStopResult;
 };
 
@@ -1016,6 +1047,18 @@ export async function cleanupPackedLinuxNamespace(config: ToolPackConfig): Promi
   const stop = await stopPackedLinuxApp(config);
   const outputRoot = config.roots.output.namespaceRoot;
   const runtimeNamespaceRoot = config.roots.runtime.namespaceRoot;
+
+  if (!isSafeToRemoveInstallFiles(stop)) {
+    return {
+      namespace: config.namespace,
+      outputRoot,
+      removedOutputRoot: false,
+      removedRuntimeNamespaceRoot: false,
+      runtimeNamespaceRoot,
+      skipped: true,
+      stop,
+    };
+  }
 
   const hadOutput = await pathExists(outputRoot);
   if (hadOutput) await rm(outputRoot, { force: true, recursive: true });
@@ -1029,6 +1072,7 @@ export async function cleanupPackedLinuxNamespace(config: ToolPackConfig): Promi
     removedOutputRoot: hadOutput,
     removedRuntimeNamespaceRoot: hadRuntime,
     runtimeNamespaceRoot,
+    skipped: false,
     stop,
   };
 }
