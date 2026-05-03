@@ -110,3 +110,16 @@ export function buildDockerArgs(
     innerCommand,
   ];
 }
+
+export type DesktopTemplateValues = {
+  namespace: string;
+  execPath: string;
+  iconName: string;
+};
+
+export function renderDesktopTemplate(template: string, values: DesktopTemplateValues): string {
+  return template
+    .replace(/@@NAMESPACE@@/g, values.namespace)
+    .replace(/@@EXEC_PATH@@/g, values.execPath)
+    .replace(/@@ICON_PATH@@/g, values.iconName);
+}

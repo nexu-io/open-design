@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "./config.js";
-import { buildDockerArgs } from "./linux.js";
+import { buildDockerArgs, renderDesktopTemplate, sanitizeNamespace } from "./linux.js";
 
 function makeConfig(): ToolPackConfig {
   return {
@@ -75,5 +75,49 @@ describe("buildDockerArgs", () => {
     expect(last).toMatch(/pnpm install --frozen-lockfile/);
     expect(last).toMatch(/pnpm tools-pack linux build --to all --namespace default/);
     expect(last).not.toMatch(/--containerized/);
+  });
+});
+
+describe("renderDesktopTemplate", () => {
+  const template = `[Desktop Entry]
+Type=Application
+Name=Open Design (@@NAMESPACE@@)
+Exec=env OD_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ %U
+Icon=open-design-@@NAMESPACE@@
+MimeType=x-scheme-handler/od;
+`;
+
+  it("substitutes all @@TOKEN@@ placeholders", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "default",
+      execPath: "/home/u/.local/bin/Open-Design.default.AppImage",
+      iconName: "open-design-default",
+    });
+    expect(out).toContain("Name=Open Design (default)");
+    expect(out).toContain("Exec=env OD_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage %U");
+    expect(out).toContain("Icon=open-design-default");
+  });
+
+  it("leaves no @@...@@ tokens unsubstituted", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "ns",
+      execPath: "/x",
+      iconName: "open-design-ns",
+    });
+    expect(out).not.toMatch(/@@[A-Z_]+@@/);
+  });
+
+  it("preserves the MimeType=x-scheme-handler/od; line", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "ns",
+      execPath: "/x",
+      iconName: "open-design-ns",
+    });
+    expect(out).toContain("MimeType=x-scheme-handler/od;");
+  });
+
+  it("uses sanitized namespace via the caller (filenames)", () => {
+    const sanitized = sanitizeNamespace("a/b c");
+    expect(sanitized).toBe("a-b-c");
   });
 });
