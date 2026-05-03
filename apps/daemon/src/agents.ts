@@ -582,13 +582,24 @@ function existingDirsUnder(root, segments = []) {
   return dirs;
 }
 
+const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
 let cachedToolchainHome = null;
 let cachedToolchainDirs = null;
+let cachedToolchainDirsAt = 0;
 
 function userToolchainDirs() {
-  const home = process.env.OD_AGENT_HOME || homedir();
-  if (cachedToolchainHome === home && cachedToolchainDirs) return cachedToolchainDirs;
+  const homeOverride = process.env.OD_AGENT_HOME;
+  const home = homeOverride || homedir();
+  const now = Date.now();
+  if (
+    cachedToolchainHome === home &&
+    cachedToolchainDirs &&
+    now - cachedToolchainDirsAt < TOOLCHAIN_DIR_CACHE_TTL_MS
+  ) {
+    return cachedToolchainDirs;
+  }
   cachedToolchainHome = home;
+  cachedToolchainDirsAt = now;
   cachedToolchainDirs = [
     path.join(home, '.local', 'bin'),
     path.join(home, '.opencode', 'bin'),
@@ -597,7 +608,7 @@ function userToolchainDirs() {
     path.join(home, '.asdf', 'shims'),
     path.join(home, 'Library', 'pnpm'),
     path.join(home, '.cargo', 'bin'),
-    ...(process.platform !== 'win32' ? ['/opt/homebrew/bin', '/usr/local/bin'] : []),
+    ...(process.platform !== 'win32' && !homeOverride ? ['/opt/homebrew/bin', '/usr/local/bin'] : []),
     ...existingDirsUnder(path.join(home, '.local', 'share', 'mise', 'installs', 'node'), ['bin']),
     ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
     ...existingDirsUnder(path.join(home, '.local', 'share', 'fnm', 'node-versions'), ['installation', 'bin']),
