@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { access, chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -572,6 +572,102 @@ export type LinuxStartResult = {
   status: DesktopStatusSnapshot | null;
 };
 
+type DesktopRootIdentityMarker = {
+  appPath: string;
+  executablePath: string;
+  logPath: string;
+  namespaceRoot: string;
+  pid: number;
+  ppid: number;
+  stamp: SidecarStamp;
+  startedAt: string;
+  updatedAt: string;
+  version: 1;
+};
+
+type DesktopRootIdentityFallback = {
+  marker?: Partial<DesktopRootIdentityMarker>;
+  markerPath: string;
+  processCommand?: string;
+  reason: string;
+};
+
+export type LinuxStopResult = {
+  fallback?: DesktopRootIdentityFallback;
+  gracefulRequested: boolean;
+  namespace: string;
+  remainingPids: number[];
+  status: "not-running" | "partial" | "stopped" | "unmanaged";
+  stoppedPids: number[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value != null && !Array.isArray(value);
+}
+
+function isDesktopRootIdentityMarker(value: unknown): value is DesktopRootIdentityMarker {
+  if (!isRecord(value)) return false;
+  return (
+    value.version === 1 &&
+    typeof value.pid === "number" &&
+    typeof value.ppid === "number" &&
+    typeof value.appPath === "string" &&
+    typeof value.executablePath === "string" &&
+    typeof value.logPath === "string" &&
+    typeof value.namespaceRoot === "string" &&
+    typeof value.startedAt === "string" &&
+    typeof value.updatedAt === "string" &&
+    isRecord(value.stamp)
+  );
+}
+
+async function readDesktopRootIdentityMarker(config: ToolPackConfig): Promise<{
+  fallback: DesktopRootIdentityFallback;
+  marker: DesktopRootIdentityMarker | null;
+}> {
+  const markerPath = desktopIdentityPath(config);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await readFile(markerPath, "utf8"));
+  } catch (error) {
+    const code = isRecord(error) && "code" in error ? String(error.code) : null;
+    return {
+      fallback: { markerPath, reason: code === "ENOENT" ? "marker-not-found" : "marker-read-failed" },
+      marker: null,
+    };
+  }
+  if (!isDesktopRootIdentityMarker(payload)) {
+    return { fallback: { markerPath, reason: "marker-invalid-shape" }, marker: null };
+  }
+  return {
+    fallback: { marker: payload, markerPath, reason: "marker-present" },
+    marker: payload,
+  };
+}
+
+async function readProcessEnv(pid: number): Promise<Record<string, string>> {
+  try {
+    const raw = await readFile(`/proc/${pid}/environ`, "utf8");
+    const result: Record<string, string> = {};
+    for (const entry of raw.split("\0")) {
+      const eq = entry.indexOf("=");
+      if (eq <= 0) continue;
+      result[entry.slice(0, eq)] = entry.slice(eq + 1);
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+async function readProcessExe(pid: number): Promise<string> {
+  try {
+    return await readlink(`/proc/${pid}/exe`);
+  } catch {
+    return "";
+  }
+}
+
 function desktopLogPath(config: ToolPackConfig): string {
   return join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log");
 }
@@ -675,8 +771,73 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
   };
 }
 
-export async function stopPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
-  throw new Error("stopPackedLinuxApp: implemented in Task 14");
+export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStopResult> {
+  const { fallback, marker } = await readDesktopRootIdentityMarker(config);
+
+  if (marker == null) {
+    return {
+      fallback,
+      gracefulRequested: false,
+      namespace: config.namespace,
+      remainingPids: [],
+      status: "not-running",
+      stoppedPids: [],
+    };
+  }
+
+  // Validate the marker still represents a live, owned process.
+  const snapshots = await listProcessSnapshots();
+  const candidate = snapshots.find((s) => s.pid === marker.pid);
+  if (candidate == null) {
+    return {
+      fallback,
+      gracefulRequested: false,
+      namespace: config.namespace,
+      remainingPids: [],
+      status: "not-running",
+      stoppedPids: [],
+    };
+  }
+
+  const stampOk = matchesStampedProcess(
+    candidate,
+    { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source: SIDECAR_SOURCES.TOOLS_PACK },
+    OPEN_DESIGN_SIDECAR_CONTRACT,
+  );
+  const exePath = await readProcessExe(marker.pid);
+  const env = await readProcessEnv(marker.pid);
+  const cmdOk = matchesAppImageProcess(
+    { pid: marker.pid, executable: exePath, env },
+    marker.appPath,
+  );
+
+  if (!stampOk || !cmdOk || marker.namespaceRoot !== config.roots.runtime.namespaceRoot) {
+    return {
+      fallback: {
+        ...fallback,
+        marker: { pid: marker.pid, stamp: marker.stamp },
+        processCommand: candidate.command,
+        reason: "marker-validation-failed",
+      },
+      gracefulRequested: false,
+      namespace: config.namespace,
+      remainingPids: [marker.pid],
+      status: "unmanaged",
+      stoppedPids: [],
+    };
+  }
+
+  // Gather process tree, then SIGTERM -> SIGKILL via stopProcesses.
+  const treePids = collectProcessTreePids(snapshots, [marker.pid]);
+  const result = await stopProcesses(treePids);
+
+  return {
+    gracefulRequested: true,
+    namespace: config.namespace,
+    remainingPids: result.remainingPids,
+    status: result.remainingPids.length === 0 ? "stopped" : "partial",
+    stoppedPids: result.stoppedPids,
+  };
 }
 
 export async function readPackedLinuxLogs(_config: ToolPackConfig): Promise<{
