@@ -20,6 +20,7 @@ const ALLOWED_KINDS = new Set([
   'code-snippet',
   'mini-app',
   'design-system',
+  'google-slides-deck',
 ]);
 
 const ALLOWED_RENDERERS = new Set([
@@ -32,6 +33,7 @@ const ALLOWED_RENDERERS = new Set([
   'code',
   'mini-app',
   'design-system',
+  'google-slides',
 ]);
 
 const ALLOWED_EXPORTS = new Set(['html', 'pdf', 'zip', 'pptx', 'jsx', 'md', 'svg', 'txt']);

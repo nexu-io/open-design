@@ -69,6 +69,9 @@ export function FileViewer({
     isDeckHint: Boolean(isDeck),
   });
 
+  if (rendererMatch?.renderer.id === 'google-slides') {
+    return <GoogleSlidesViewer projectId={projectId} file={file} />;
+  }
   if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') {
     return (
       <HtmlViewer
@@ -2121,6 +2124,143 @@ function MarkdownViewer({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// GoogleSlidesViewer — renders a Google Slides /embed iframe whose deck ID is
+// stored inside a result.json file the skill writes to the project's cwd.
+//
+// The skill (e.g. wix-ja-slide) calls `gog slides ...` to copy + fill a
+// template, then writes a result.json shaped like:
+//   { deckId, deckUrl, embedUrl, totalPages, layoutsUsed, missingFields, ... }
+// The artifact manifest sets `kind: "google-slides-deck"` so this viewer
+// activates. We render the read-only embed iframe + an "Open in Slides"
+// button for editing in the real Slides UI.
+//
+// Limitations (Iteration 1): no live reload — when the skill regenerates,
+// the user has to hit refresh. Comment / surgical-edit mode is not wired
+// because Slides /embed is read-only.
+interface GoogleSlidesResult {
+  deckId?: string;
+  deckUrl?: string;
+  embedUrl?: string;
+  totalPages?: number;
+  layoutsUsed?: string[];
+  missingFields?: string[];
+  missingImages?: string[];
+  knownSideEffects?: string[];
+}
+
+function GoogleSlidesViewer({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: ProjectFile;
+}) {
+  const t = useT();
+  const [result, setResult] = useState<GoogleSlidesResult | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResult(null);
+    setParseError(null);
+    void fetchProjectFileText(projectId, file.name).then((text) => {
+      if (cancelled) return;
+      if (text === null) {
+        setParseError('result.json could not be read');
+        return;
+      }
+      try {
+        const parsed = JSON.parse(text) as GoogleSlidesResult;
+        setResult(parsed);
+      } catch (err) {
+        setParseError(`Invalid JSON: ${(err as Error).message}`);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.name, file.mtime]);
+
+  const embedUrl = result?.embedUrl;
+  const deckUrl = result?.deckUrl;
+
+  return (
+    <div className="viewer google-slides-viewer">
+      <div className="viewer-toolbar">
+        <div className="viewer-toolbar-left">
+          <span className="viewer-meta">
+            {result?.totalPages
+              ? `${result.totalPages} pages`
+              : 'Google Slides'}
+          </span>
+        </div>
+        <div className="viewer-toolbar-actions">
+          {deckUrl ? (
+            <a
+              className="ghost-link"
+              href={deckUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              Open in Slides
+            </a>
+          ) : null}
+          <FileActions projectId={projectId} file={file} />
+        </div>
+      </div>
+      <div className="viewer-body">
+        {parseError ? (
+          <div className="viewer-empty">{parseError}</div>
+        ) : !embedUrl ? (
+          <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        ) : (
+          <iframe
+            data-testid="google-slides-embed-frame"
+            title={file.name}
+            src={embedUrl}
+            allow="autoplay; fullscreen"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        )}
+      </div>
+      {result?.missingFields?.length || result?.missingImages?.length || result?.knownSideEffects?.length ? (
+        <div className="viewer-footer google-slides-warnings">
+          {result.missingFields?.length ? (
+            <details>
+              <summary>⚠️ Missing fields ({result.missingFields.length})</summary>
+              <ul>
+                {result.missingFields.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          {result.missingImages?.length ? (
+            <details>
+              <summary>⚠️ Missing images ({result.missingImages.length})</summary>
+              <ul>
+                {result.missingImages.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          {result.knownSideEffects?.length ? (
+            <details>
+              <summary>⚠️ Known side effects ({result.knownSideEffects.length})</summary>
+              <ul>
+                {result.knownSideEffects.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

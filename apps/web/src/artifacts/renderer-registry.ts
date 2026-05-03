@@ -87,6 +87,29 @@ export const SvgRenderer: ArtifactRenderer = {
   },
 };
 
+// Google Slides preview renderer.
+// The skill's agent writes a `result.json` to its cwd containing
+// `{ deckId, deckUrl, embedUrl }`. The viewer reads that file and renders
+// the Google Slides /embed URL in an iframe (read-only preview; users click
+// "Open in Slides" to edit).
+//
+// Triggered when manifest.kind === 'google-slides-deck' or manifest.renderer
+// === 'google-slides'. Manifest is authored by the skill via SDK / written
+// directly into result.json.artifact.json sibling.
+export const GoogleSlidesRenderer: ArtifactRenderer = {
+  id: 'google-slides',
+  supportsStreaming: false,
+  canRender: ({ file }) => {
+    const manifest = resolveManifest(file);
+    if (!manifest) return false;
+    if (manifest.kind === 'google-slides-deck' || manifest.renderer === 'google-slides') return true;
+    // Heuristic fallback: result.json with shape `{ deckId, embedUrl }`. We
+    // can't peek file contents from here, so this only matches when the
+    // skill set the manifest correctly.
+    return false;
+  },
+};
+
 export class RendererRegistry {
   constructor(private readonly renderers: ArtifactRenderer[]) {}
 
@@ -100,6 +123,7 @@ export class RendererRegistry {
 }
 
 export const artifactRendererRegistry = new RendererRegistry([
+  GoogleSlidesRenderer,
   ReactComponentRenderer,
   DeckHtmlRenderer,
   HtmlRenderer,

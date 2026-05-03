@@ -1,0 +1,1750 @@
+{
+  "version": 1,
+  "schema_doc": "see SKILL.md and references/check-list.md",
+  "source_template": "1UaAYw60JvGotNjx2fqosnZL1EKqZEps-oSq0eCxqT0U",
+  "jp_copy": "1ENwLW7nzIqR8U_KjzchUh4Uxscd89LfHSuq8E5JOb1w",
+  "scanned_at": "2026-05-04",
+  "total_pages": 131,
+  "shape_distribution": {
+    "COVER?": 7,
+    "T+IMG×3": 2,
+    "DENSE-13": 4,
+    "T-ONLY": 23,
+    "T+IMG×8": 6,
+    "T+2items": 4,
+    "T+SUB": 11,
+    "T-LONG": 4,
+    "T+IMG": 15,
+    "FULL-IMG": 2,
+    "T+3items": 3,
+    "T+6items": 3,
+    "T+5B": 4,
+    "DENSE-8": 7,
+    "T+4B": 1,
+    "DENSE-11": 3,
+    "T+3B": 7,
+    "T+2B": 4,
+    "DENSE-17": 2,
+    "T+IMG×12": 1,
+    "DENSE-27": 1,
+    "DENSE-22": 1,
+    "DENSE-19": 1,
+    "T+6B": 1,
+    "DENSE-39": 1,
+    "T+5items": 3,
+    "T+IMG×2": 2,
+    "EMPTY": 1,
+    "DENSE-12": 1,
+    "DENSE-9": 2,
+    "T+4items": 1,
+    "DENSE-10": 3
+  },
+  "shape_canonicals": {
+    "T+3B": {
+      "canonical_slide_n": 53,
+      "canonical_slide_id": "g3dbbd34042a_0_0",
+      "use_for": [
+        "3点ハイライト（月次報告・四半期レポート）",
+        "並列の要点提示（特徴・利点・施策）",
+        "進捗チェックポイント（3 段階）",
+        "Before / Now / After の状況対比",
+        "今期注力 3 トピックの紹介"
+      ],
+      "verified": true,
+      "placeholders": [
+        {
+          "object_id": "g3dbbd34042a_0_1",
+          "original_text": "字数上限：48字",
+          "estimated_max_cells_per_line": 48,
+          "estimated_max_lines": 1,
+          "role_hint": "title",
+          "type_hint": "jp",
+          "verified": true
+        },
+        {
+          "object_id": "g3dbbd34042a_0_2",
+          "original_text": "字数上限：54字",
+          "estimated_max_cells_per_line": 17,
+          "estimated_max_lines": 1,
+          "role_hint": "bullet_1",
+          "type_hint": "jp",
+          "verified": true
+        },
+        {
+          "object_id": "g3dbbd34042a_0_4",
+          "original_text": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字",
+          "estimated_max_cells_per_line": 17,
+          "estimated_max_lines": 1,
+          "role_hint": "bullet_2",
+          "type_hint": "jp",
+          "verified": true
+        },
+        {
+          "object_id": "g3dbbd34042a_0_6",
+          "original_text": "Lorem ipsum - Lorem ipsum dolor sit amet, consectetur adipiscing elit tempor incididunt ut labore et dolore.",
+          "estimated_max_cells_per_line": 17,
+          "estimated_max_lines": 1,
+          "role_hint": "bullet_3",
+          "type_hint": "latin",
+          "verified": true
+        }
+      ],
+      "decorative_elements": [
+        {
+          "object_id": "g3dbbd34042a_0_3",
+          "text": "→"
+        },
+        {
+          "object_id": "g3dbbd34042a_0_5",
+          "text": "→"
+        },
+        {
+          "object_id": "g3dbbd34042a_0_7",
+          "text": "→"
+        }
+      ],
+      "has_image": false,
+      "n_image_slots": 0
+    },
+    "T+2B": {
+      "canonical_slide_n": 54,
+      "canonical_slide_id": "g2a6ce35d717_0_2175",
+      "use_for": [
+        "2 つの並列概念（メリット / デメリット など）",
+        "Before / After の対比",
+        "問題と解決策のセット"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2a6ce35d717_0_2185",
+          "original_text": "Lorem ipsum dolor sit amet, consectetur adipiscing.\u000bThese values should be considered for targeted campaigns\nLorem ipsum dolor sit amet, consectetur adipiscing.\u000bEntrepreneurship  and business management are essential for targeted campaigns.\nLorem ipsum dolor sit amet, consectetur adipiscing.\u000bTargeting them with relevant, value-driven campaigns.\nLorem ipsum dolor sit amet, consectetur adipiscing.\u000bCreate a focus on them.",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a9da61df79_4_15",
+          "original_text": "SMALL HEADLINE",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_1",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a9da61df79_4_16",
+          "original_text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_2",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [
+        {
+          "object_id": "g2a6ce35d717_0_2186",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_2188",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_2189",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_2190",
+          "text": "→"
+        }
+      ],
+      "has_image": false,
+      "n_image_slots": 0
+    },
+    "T+5B": {
+      "canonical_slide_n": 42,
+      "canonical_slide_id": "g2a6ce35d717_0_150",
+      "use_for": [
+        "5 つのキーポイント（チェックリスト型）",
+        "プロセスの 5 ステップ",
+        "詳細 agenda（章節 5 個）"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2a6ce35d717_0_163",
+          "original_text": "Lorem ipsum dolor sit amet",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_164",
+          "original_text": "Lorem ipsum dolor",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_1",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_165",
+          "original_text": "Lorem ipsum dolor sit amet",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_2",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_166",
+          "original_text": "Lorem ipsum dolor sit amet",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_3",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_167",
+          "original_text": "Lorem ipsum dolor",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_4",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2a9da61df79_4_3",
+          "original_text": "Design summary",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_5",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [
+        {
+          "object_id": "g2a6ce35d717_0_168",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_169",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_170",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_171",
+          "text": "→"
+        },
+        {
+          "object_id": "g2a6ce35d717_0_172",
+          "text": "→"
+        }
+      ],
+      "has_image": false,
+      "n_image_slots": 0
+    },
+    "T-ONLY": {
+      "canonical_slide_n": 110,
+      "canonical_slide_id": "g2cc43919878_0_222",
+      "use_for": [
+        "クロージング / Thank you ページ",
+        "セクション分け divider",
+        "強調メッセージ単独表示"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2cc43919878_0_223",
+          "original_text": "Thank you.",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [],
+      "has_image": false,
+      "n_image_slots": 0
+    },
+    "T-LONG": {
+      "canonical_slide_n": 26,
+      "canonical_slide_id": "g257aea5e133_0_282",
+      "use_for": [
+        "引用・名言（Quote）",
+        "1 段落の意見・所感",
+        "重要メッセージの強調表示"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2aa6cdee33c_5_180",
+          "original_text": "“This is a short, insightful and meaningful quote by someone super duper interesting.”\nBy Person's Name",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [],
+      "has_image": false,
+      "n_image_slots": 0
+    },
+    "T+SUB": {
+      "canonical_slide_n": 28,
+      "canonical_slide_id": "g2aa6cdee33c_5_192",
+      "use_for": [
+        "見出し + 1 段落の説明",
+        "セクション冒頭の概要",
+        "タイトル + 補足のシンプル構成"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2aa6cdee33c_5_197",
+          "original_text": "“This is a long, insightful\nand meaningful quote \nby someone super duper interesting.”",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2aa6cdee33c_5_198",
+          "original_text": "I'm a paragraph. Click here to add your own text and edit me. It’s easy. Just click “Edit Text” or double click me to add your own content and make changes to the font. Feel free to drag and drop me anywhere you like on your page. I’m a great place for you to tell a story and let your audience know a little more about you.\n​\nThis is a great space to write long text about your company and your services. You can use this space to go into a little more detail about your company. Talk about your team and what services you provide. Tell your visitors the story of how you came up with the idea for your business and what makes you different from your competitors. Make your company stand out and show your visitors who you are.",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "bullet_1",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [],
+      "has_image": false,
+      "n_image_slots": 0
+    },
+    "T+IMG": {
+      "canonical_slide_n": 31,
+      "canonical_slide_id": "g2aa6cdee33c_5_204",
+      "use_for": [
+        "画像 + タイトルの hero ページ",
+        "イベント / 製品ローンチの紹介",
+        "ビジュアル中心の状況報告"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2aa6cdee33c_5_217",
+          "original_text": "This is a title\nI'm a paragraph. Click here to add your own text and edit me. It’s easy. Just click “Edit Text” or double click me to add your own content. Feel free to drag and drop me anywhere you like on your page.\nThis is a great space to write a long text about your company and your services. You can use this space to go into a little more detail about your company.",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [],
+      "has_image": true,
+      "n_image_slots": 1
+    },
+    "COVER?": {
+      "canonical_slide_n": 7,
+      "canonical_slide_id": "g2cc43919878_0_184",
+      "use_for": [
+        "deck 表紙（タイトル + サブタイトル + ブランド画像）",
+        "プレゼン冒頭の hero"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2cc43919878_0_185",
+          "original_text": "Headline\nfirst slide",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2cc43919878_0_186",
+          "original_text": "TEXT HERE",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_1",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [],
+      "has_image": true,
+      "n_image_slots": 1
+    },
+    "T+IMG×3": {
+      "canonical_slide_n": 85,
+      "canonical_slide_id": "g2d13f919f05_0_142",
+      "use_for": [
+        "3 枚の画像並列（製品 / 事例 / メンバー）",
+        "Before / Now / After の写真版",
+        "3 つの選択肢の visual 比較"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2d13f919f05_0_144",
+          "original_text": "Lorem ipsum dolor",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2d13f919f05_0_147",
+          "original_text": "LOREM IPSUM",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_1",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2d13f919f05_0_148",
+          "original_text": "Lorem ipsum",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_2",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2d13f919f05_0_149",
+          "original_text": "LOREM IPSUM",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_3",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2d13f919f05_0_150",
+          "original_text": "Lorem ipsum",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_4",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2d13f919f05_0_151",
+          "original_text": "LOREM IPSUM",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_5",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2d13f919f05_0_152",
+          "original_text": "Lorem ipsum",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_6",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [
+        {
+          "object_id": "g2d13f919f05_0_153",
+          "text": "→"
+        },
+        {
+          "object_id": "g2d13f919f05_0_154",
+          "text": "→"
+        },
+        {
+          "object_id": "g2d13f919f05_0_155",
+          "text": "→"
+        }
+      ],
+      "has_image": true,
+      "n_image_slots": 3
+    },
+    "T+IMG×8": {
+      "canonical_slide_n": 11,
+      "canonical_slide_id": "g2dadf8bb9e5_0_130",
+      "use_for": [
+        "チームメンバー紹介",
+        "8 種類のバッジ・アイコン展示",
+        "ロゴ・パートナーロゴ並列"
+      ],
+      "verified": false,
+      "placeholders": [
+        {
+          "object_id": "g2dadf8bb9e5_0_133",
+          "original_text": "Hey Team!",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "title",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_134",
+          "original_text": "Welcome, Everyone!",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_1",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_135",
+          "original_text": "Round Badges - General",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_2",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_138",
+          "original_text": "Data Dive",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_3",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_139",
+          "original_text": "Numbers in Action",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_4",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_142",
+          "original_text": "Bi - Weekly",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_5",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_143",
+          "original_text": "Monthly",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_6",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_145",
+          "original_text": "Weekly",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_7",
+          "type_hint": "latin"
+        },
+        {
+          "object_id": "g2dadf8bb9e5_0_147",
+          "original_text": "Brief",
+          "estimated_max_cells_per_line": null,
+          "estimated_max_lines": null,
+          "role_hint": "text_8",
+          "type_hint": "latin"
+        }
+      ],
+      "decorative_elements": [],
+      "has_image": true,
+      "n_image_slots": 8
+    },
+    "FULL-IMG": {
+      "canonical_slide_n": 33,
+      "canonical_slide_id": "g2aa6cdee33c_5_210",
+      "use_for": [
+        "フルブリードの hero 写真",
+        "セクション間のビジュアルブレイク"
+      ],
+      "verified": false,
+      "placeholders": [],
+      "decorative_elements": [],
+      "has_image": true,
+      "n_image_slots": 1
+    }
+  },
+  "all_layouts": [
+    {
+      "n": 1,
+      "slide_id": "g2d11dc466ad_0_0",
+      "shape": "COVER?",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Slides ⏎ Template"
+    },
+    {
+      "n": 2,
+      "slide_id": "g2cc43919878_0_110",
+      "shape": "T+IMG×3",
+      "n_content_text": 12,
+      "n_decorative": 0,
+      "n_image": 3,
+      "snippet_first": "→ First use the GRID system only:"
+    },
+    {
+      "n": 3,
+      "slide_id": "g2d11dc466ad_0_58",
+      "shape": "DENSE-13",
+      "n_content_text": 13,
+      "n_decorative": 5,
+      "n_image": 0,
+      "snippet_first": "01.Openers"
+    },
+    {
+      "n": 4,
+      "slide_id": "g2a6cd503836_0_8",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "01 Openers + Badges"
+    },
+    {
+      "n": 5,
+      "slide_id": "g2cc43919878_0_55",
+      "shape": "COVER?",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Headline ⏎ first slide"
+    },
+    {
+      "n": 6,
+      "slide_id": "g2c869a3f47c_0_4",
+      "shape": "COVER?",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Headline ⏎ first slide"
+    },
+    {
+      "n": 7,
+      "slide_id": "g2cc43919878_0_184",
+      "shape": "COVER?",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Headline ⏎ first slide"
+    },
+    {
+      "n": 8,
+      "slide_id": "g2c869a3f47c_0_8",
+      "shape": "COVER?",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Headline ⏎ first slide"
+    },
+    {
+      "n": 9,
+      "slide_id": "g2cc43919878_0_521",
+      "shape": "COVER?",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "First slide"
+    },
+    {
+      "n": 10,
+      "slide_id": "g2c869a3f47c_0_13",
+      "shape": "COVER?",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "First slide"
+    },
+    {
+      "n": 11,
+      "slide_id": "g2dadf8bb9e5_0_130",
+      "shape": "T+IMG×8",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 8,
+      "snippet_first": "Hey Team!"
+    },
+    {
+      "n": 12,
+      "slide_id": "g2dadf8bb9e5_0_110",
+      "shape": "T+IMG×8",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 8,
+      "snippet_first": "Round Badges - Kick off"
+    },
+    {
+      "n": 13,
+      "slide_id": "g2dadf8bb9e5_0_150",
+      "shape": "T+IMG×8",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 8,
+      "snippet_first": "MKT Studio"
+    },
+    {
+      "n": 14,
+      "slide_id": "g2aa6cdee33c_5_153",
+      "shape": "T+2items",
+      "n_content_text": 3,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "This is the main title. Click here to ed"
+    },
+    {
+      "n": 15,
+      "slide_id": "g2aa6cdee33c_5_161",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "This is section 01"
+    },
+    {
+      "n": 16,
+      "slide_id": "g2aa6cdee33c_5_171",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "This is section 01"
+    },
+    {
+      "n": 17,
+      "slide_id": "g2a6ce35d717_0_15",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "02.A Dividers"
+    },
+    {
+      "n": 18,
+      "slide_id": "g2a6ce35d717_0_19",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor semt"
+    },
+    {
+      "n": 19,
+      "slide_id": "g2a6ce35d717_0_24",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Oneword"
+    },
+    {
+      "n": 20,
+      "slide_id": "g2a6ce35d717_0_30",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Group A"
+    },
+    {
+      "n": 21,
+      "slide_id": "g2cc43919878_0_190",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "02.B Dividers"
+    },
+    {
+      "n": 22,
+      "slide_id": "g2cc43919878_0_194",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor semt"
+    },
+    {
+      "n": 23,
+      "slide_id": "g2cc43919878_0_198",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Oneword"
+    },
+    {
+      "n": 24,
+      "slide_id": "g2cc43919878_0_203",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Group A"
+    },
+    {
+      "n": 25,
+      "slide_id": "g2a6ce35d717_0_37",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "03 Paragraphs"
+    },
+    {
+      "n": 26,
+      "slide_id": "g257aea5e133_0_282",
+      "shape": "T-LONG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "“This is a short, insightful and meaning"
+    },
+    {
+      "n": 27,
+      "slide_id": "g2aa6cdee33c_5_181",
+      "shape": "T-LONG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "“This is a long, insightful and meaningf"
+    },
+    {
+      "n": 28,
+      "slide_id": "g2aa6cdee33c_5_192",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "“This is a long, insightful ⏎ and meaningf"
+    },
+    {
+      "n": 29,
+      "slide_id": "g2aa6cdee33c_5_199",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "I'm a paragraph. Click here to add your "
+    },
+    {
+      "n": 30,
+      "slide_id": "g2cc43919878_0_214",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "I'm a paragraph. Click here to add your "
+    },
+    {
+      "n": 31,
+      "slide_id": "g2aa6cdee33c_5_204",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "This is a title ⏎ I'm a paragraph. Click h"
+    },
+    {
+      "n": 32,
+      "slide_id": "g2aa6cdee33c_5_207",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "“This is a long, insightful and meaningf"
+    },
+    {
+      "n": 33,
+      "slide_id": "g2aa6cdee33c_5_210",
+      "shape": "FULL-IMG",
+      "n_content_text": 0,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": ""
+    },
+    {
+      "n": 34,
+      "slide_id": "g2aa6cdee33c_5_176",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 35,
+      "slide_id": "g2a6ce35d717_0_50",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Add your text here ⏎ and here"
+    },
+    {
+      "n": 36,
+      "slide_id": "g2a6ce35d717_0_1650",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 37,
+      "slide_id": "g2a6ce35d717_0_55",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "04 Lists / Info"
+    },
+    {
+      "n": 38,
+      "slide_id": "g2a6ce35d717_0_59",
+      "shape": "T+3items",
+      "n_content_text": 4,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "List title ⏎ → Item 01 ⏎ → Item 02 ⏎ → Item 03"
+    },
+    {
+      "n": 39,
+      "slide_id": "g2c250eedf57_0_50",
+      "shape": "T+6items",
+      "n_content_text": 7,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "List title ⏎ → Item 01 ⏎ → Item 02 ⏎ → Item 03"
+    },
+    {
+      "n": 40,
+      "slide_id": "g2a9bfd76043_0_43",
+      "shape": "T+3items",
+      "n_content_text": 4,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "List title ⏎ → Add your long item here  ⏎ → "
+    },
+    {
+      "n": 41,
+      "slide_id": "g2a9bfd76043_0_53",
+      "shape": "T+2items",
+      "n_content_text": 3,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "→ Add your long item here  ⏎ → Add your lo"
+    },
+    {
+      "n": 42,
+      "slide_id": "g2a6ce35d717_0_150",
+      "shape": "T+5B",
+      "n_content_text": 6,
+      "n_decorative": 5,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet"
+    },
+    {
+      "n": 43,
+      "slide_id": "g2c250eedf57_0_89",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 2,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 44,
+      "slide_id": "g2c250eedf57_0_129",
+      "shape": "T+3items",
+      "n_content_text": 4,
+      "n_decorative": 1,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 45,
+      "slide_id": "g2c2b2431b2d_4_0",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor"
+    },
+    {
+      "n": 46,
+      "slide_id": "g2a6ce35d717_0_1936",
+      "shape": "T+5B",
+      "n_content_text": 6,
+      "n_decorative": 11,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 47,
+      "slide_id": "g2a6ce35d717_0_1970",
+      "shape": "T+4B",
+      "n_content_text": 5,
+      "n_decorative": 4,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 48,
+      "slide_id": "g2c2b2431b2d_4_88",
+      "shape": "DENSE-11",
+      "n_content_text": 11,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "SMALL HEADLINE"
+    },
+    {
+      "n": 49,
+      "slide_id": "g2c2b2431b2d_4_172",
+      "shape": "T+5B",
+      "n_content_text": 6,
+      "n_decorative": 4,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 50,
+      "slide_id": "g2c2b2431b2d_4_249",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 51,
+      "slide_id": "g2cc43919878_0_226",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 52,
+      "slide_id": "g2c2b2431b2d_4_286",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 53,
+      "slide_id": "g3dbbd34042a_0_0",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "字数上限：48字"
+    },
+    {
+      "n": 54,
+      "slide_id": "g2a6ce35d717_0_2175",
+      "shape": "T+2B",
+      "n_content_text": 3,
+      "n_decorative": 4,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 55,
+      "slide_id": "g2a6ce35d717_0_2191",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "HEADLINE HERE"
+    },
+    {
+      "n": 56,
+      "slide_id": "g2cc43919878_0_256",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "HEADLINE HERE"
+    },
+    {
+      "n": 57,
+      "slide_id": "g2a6ce35d717_0_2207",
+      "shape": "DENSE-17",
+      "n_content_text": 17,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 58,
+      "slide_id": "g2cc43919878_0_236",
+      "shape": "DENSE-17",
+      "n_content_text": 17,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 59,
+      "slide_id": "g2bf3285681e_1_36",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "05 People"
+    },
+    {
+      "n": 60,
+      "slide_id": "g2d13f919f05_0_90",
+      "shape": "T+IMG×12",
+      "n_content_text": 12,
+      "n_decorative": 0,
+      "n_image": 12,
+      "snippet_first": "Full Name\u000bTitle"
+    },
+    {
+      "n": 61,
+      "slide_id": "g2a6ce35d717_0_276",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "06 Text Highlight"
+    },
+    {
+      "n": 62,
+      "slide_id": "g2a6ce35d717_0_280",
+      "shape": "T-LONG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 63,
+      "slide_id": "g2c2b2431b2d_5_12",
+      "shape": "T-LONG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 64,
+      "slide_id": "g2a6ce35d717_0_297",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 65,
+      "slide_id": "g2a6ce35d717_0_303",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 66,
+      "slide_id": "g2cc43919878_0_458",
+      "shape": "T+2items",
+      "n_content_text": 3,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 67,
+      "slide_id": "g2cc43919878_0_508",
+      "shape": "T+2items",
+      "n_content_text": 3,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 68,
+      "slide_id": "g2a6ce35d717_0_322",
+      "shape": "T+SUB",
+      "n_content_text": 2,
+      "n_decorative": 4,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 69,
+      "slide_id": "g2a6ce35d717_0_333",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "07 Infographics & Data"
+    },
+    {
+      "n": 70,
+      "slide_id": "g2d11dc466ad_2_41",
+      "shape": "DENSE-11",
+      "n_content_text": 11,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 71,
+      "slide_id": "g2d11dc466ad_2_0",
+      "shape": "DENSE-11",
+      "n_content_text": 11,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor  ⏎ sit amet, consectetur"
+    },
+    {
+      "n": 72,
+      "slide_id": "g2a6ce35d717_0_372",
+      "shape": "DENSE-13",
+      "n_content_text": 13,
+      "n_decorative": 2,
+      "n_image": 0,
+      "snippet_first": "LINK TO RESEARCH [n > 1000} Sources: Red"
+    },
+    {
+      "n": 73,
+      "slide_id": "g2c2b2431b2d_5_19",
+      "shape": "DENSE-27",
+      "n_content_text": 27,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum"
+    },
+    {
+      "n": 74,
+      "slide_id": "g2a6ce35d717_0_529",
+      "shape": "DENSE-22",
+      "n_content_text": 22,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum"
+    },
+    {
+      "n": 75,
+      "slide_id": "g2c2b2431b2d_5_98",
+      "shape": "DENSE-19",
+      "n_content_text": 19,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Headline here"
+    },
+    {
+      "n": 76,
+      "slide_id": "g2c2b2431b2d_5_209",
+      "shape": "T+6B",
+      "n_content_text": 7,
+      "n_decorative": 12,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit"
+    },
+    {
+      "n": 77,
+      "slide_id": "g2a6ce35d717_0_762",
+      "shape": "DENSE-39",
+      "n_content_text": 39,
+      "n_decorative": 15,
+      "n_image": 0,
+      "snippet_first": "Table of Lorem ipsum"
+    },
+    {
+      "n": 78,
+      "slide_id": "g2a6ce35d717_0_879",
+      "shape": "DENSE-13",
+      "n_content_text": 13,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "July 24"
+    },
+    {
+      "n": 79,
+      "slide_id": "g2a6ce35d717_0_1033",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "08 Images & Text"
+    },
+    {
+      "n": 80,
+      "slide_id": "g2d13f919f05_0_11",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 7,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum? ⏎ Dolorish, sitimi, Amet"
+    },
+    {
+      "n": 81,
+      "slide_id": "g2d13f919f05_0_26",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 7,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum? ⏎ Dolorish, sitimi, Amet"
+    },
+    {
+      "n": 82,
+      "slide_id": "g2d13f919f05_0_41",
+      "shape": "T+5items",
+      "n_content_text": 6,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet consectetur a"
+    },
+    {
+      "n": 83,
+      "slide_id": "g2d13f919f05_0_51",
+      "shape": "T+IMG",
+      "n_content_text": 2,
+      "n_decorative": 1,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor amet consectetur"
+    },
+    {
+      "n": 84,
+      "slide_id": "g2d13f919f05_0_58",
+      "shape": "T+2B",
+      "n_content_text": 3,
+      "n_decorative": 2,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet consectetur"
+    },
+    {
+      "n": 85,
+      "slide_id": "g2d13f919f05_0_142",
+      "shape": "T+IMG×3",
+      "n_content_text": 7,
+      "n_decorative": 3,
+      "n_image": 3,
+      "snippet_first": "Lorem ipsum dolor"
+    },
+    {
+      "n": 86,
+      "slide_id": "g2a6ce35d717_0_1192",
+      "shape": "T+6items",
+      "n_content_text": 7,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor"
+    },
+    {
+      "n": 87,
+      "slide_id": "g2a6ce35d717_0_1223",
+      "shape": "T+5B",
+      "n_content_text": 6,
+      "n_decorative": 9,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 88,
+      "slide_id": "g2a6ce35d717_0_1256",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 89,
+      "slide_id": "g2a6ce35d717_0_1290",
+      "shape": "T+5items",
+      "n_content_text": 6,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 90,
+      "slide_id": "g2a6ce35d717_0_1342",
+      "shape": "T+IMG×2",
+      "n_content_text": 7,
+      "n_decorative": 0,
+      "n_image": 2,
+      "snippet_first": "Lorem ipsum dolor"
+    },
+    {
+      "n": 91,
+      "slide_id": "g2a6ce35d717_0_1356",
+      "shape": "T+2B",
+      "n_content_text": 3,
+      "n_decorative": 2,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 92,
+      "slide_id": "g2a6ce35d717_0_1376",
+      "shape": "EMPTY",
+      "n_content_text": 0,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": ""
+    },
+    {
+      "n": 93,
+      "slide_id": "g2a6ce35d717_0_1387",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "09 Grid boxes"
+    },
+    {
+      "n": 94,
+      "slide_id": "g2cc43919878_0_267",
+      "shape": "DENSE-12",
+      "n_content_text": 12,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet consectetur"
+    },
+    {
+      "n": 95,
+      "slide_id": "g2a6ce35d717_0_1391",
+      "shape": "DENSE-13",
+      "n_content_text": 13,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum"
+    },
+    {
+      "n": 96,
+      "slide_id": "g2a6ce35d717_0_1395",
+      "shape": "DENSE-9",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, conse dolor "
+    },
+    {
+      "n": 97,
+      "slide_id": "g2c3cf0e3d5b_0_0",
+      "shape": "T+5items",
+      "n_content_text": 6,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet"
+    },
+    {
+      "n": 98,
+      "slide_id": "g2a6ce35d717_0_1401",
+      "shape": "T+IMG×2",
+      "n_content_text": 7,
+      "n_decorative": 0,
+      "n_image": 2,
+      "snippet_first": "Lorem ipsum dolor\u000bsit amet"
+    },
+    {
+      "n": 99,
+      "slide_id": "g2a6ce35d717_0_1404",
+      "shape": "T+3B",
+      "n_content_text": 4,
+      "n_decorative": 12,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum"
+    },
+    {
+      "n": 100,
+      "slide_id": "g2a6ce35d717_0_1540",
+      "shape": "T+2B",
+      "n_content_text": 3,
+      "n_decorative": 12,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 101,
+      "slide_id": "g2a6ce35d717_0_1407",
+      "shape": "T+6items",
+      "n_content_text": 7,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet"
+    },
+    {
+      "n": 102,
+      "slide_id": "g2a6ce35d717_0_1410",
+      "shape": "T+4items",
+      "n_content_text": 5,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Big headline"
+    },
+    {
+      "n": 103,
+      "slide_id": "g2a6ce35d717_0_1413",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 9,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur."
+    },
+    {
+      "n": 104,
+      "slide_id": "g2a6ce35d717_0_1416",
+      "shape": "DENSE-10",
+      "n_content_text": 10,
+      "n_decorative": 12,
+      "n_image": 0,
+      "snippet_first": "Big headline here, about whatever you li"
+    },
+    {
+      "n": 105,
+      "slide_id": "g2a6ce35d717_0_1658",
+      "shape": "DENSE-10",
+      "n_content_text": 10,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 106,
+      "slide_id": "g2a6ce35d717_0_1701",
+      "shape": "DENSE-8",
+      "n_content_text": 8,
+      "n_decorative": 12,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor sit amet, consectetur "
+    },
+    {
+      "n": 107,
+      "slide_id": "g2a6ce35d717_0_1742",
+      "shape": "DENSE-9",
+      "n_content_text": 9,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor"
+    },
+    {
+      "n": 108,
+      "slide_id": "g2a6ce35d717_0_1785",
+      "shape": "DENSE-10",
+      "n_content_text": 10,
+      "n_decorative": 3,
+      "n_image": 0,
+      "snippet_first": "Lorem ipsum dolor"
+    },
+    {
+      "n": 109,
+      "slide_id": "g2a898c10fdd_0_1",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "010 Closers"
+    },
+    {
+      "n": 110,
+      "slide_id": "g2cc43919878_0_222",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "Thank you."
+    },
+    {
+      "n": 111,
+      "slide_id": "g2c196acc403_0_16",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "011 PPT Badges"
+    },
+    {
+      "n": 112,
+      "slide_id": "g2c196acc403_0_0",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "011.A Badges colors"
+    },
+    {
+      "n": 113,
+      "slide_id": "g2c0dff1a867_0_14",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 3,
+      "snippet_first": "Vibrant Colors on Black bg"
+    },
+    {
+      "n": 114,
+      "slide_id": "g2c0dff1a867_0_21",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 3,
+      "snippet_first": "Light Colors on Black bg"
+    },
+    {
+      "n": 115,
+      "slide_id": "g2c0dff1a867_0_28",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 4,
+      "snippet_first": "Light Colors on Black bg"
+    },
+    {
+      "n": 116,
+      "slide_id": "g2c0dff1a867_0_36",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 4,
+      "snippet_first": "Light Colors on Black bg"
+    },
+    {
+      "n": 117,
+      "slide_id": "g2c0dff1a867_0_44",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 3,
+      "snippet_first": "Vibrant Colors on white bg"
+    },
+    {
+      "n": 118,
+      "slide_id": "g2c0dff1a867_0_51",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 3,
+      "snippet_first": "Light Colors on white bg"
+    },
+    {
+      "n": 119,
+      "slide_id": "g2c0dff1a867_0_58",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 4,
+      "snippet_first": "Vibrant Colors on white bg"
+    },
+    {
+      "n": 120,
+      "slide_id": "g2c0dff1a867_0_66",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 4,
+      "snippet_first": "Light Colors on white bg"
+    },
+    {
+      "n": 121,
+      "slide_id": "g2c196acc403_0_4",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "011.B Badges animation"
+    },
+    {
+      "n": 122,
+      "slide_id": "g2c0dff1a867_0_78",
+      "shape": "FULL-IMG",
+      "n_content_text": 0,
+      "n_decorative": 0,
+      "n_image": 2,
+      "snippet_first": ""
+    },
+    {
+      "n": 123,
+      "slide_id": "g2c0dff1a867_0_83",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "03 ⏎ The Badges"
+    },
+    {
+      "n": 124,
+      "slide_id": "g2c196acc403_0_8",
+      "shape": "T-ONLY",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 0,
+      "snippet_first": "011.C The badges"
+    },
+    {
+      "n": 125,
+      "slide_id": "g2dadf8bb9e5_0_22",
+      "shape": "T+IMG×8",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 8,
+      "snippet_first": "Round Badges - Kick off"
+    },
+    {
+      "n": 126,
+      "slide_id": "g2c0dff1a867_0_87",
+      "shape": "T+IMG×8",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 8,
+      "snippet_first": "Hey Team!"
+    },
+    {
+      "n": 127,
+      "slide_id": "g2c0dff1a867_0_111",
+      "shape": "T+IMG×8",
+      "n_content_text": 9,
+      "n_decorative": 0,
+      "n_image": 8,
+      "snippet_first": "MKT Studio"
+    },
+    {
+      "n": 128,
+      "slide_id": "g2c0dff1a867_0_123",
+      "shape": "T+IMG",
+      "n_content_text": 2,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Round Badges - MKT Teams"
+    },
+    {
+      "n": 129,
+      "slide_id": "g2d284f16bd0_0_0",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Round Badge - Dark Colors"
+    },
+    {
+      "n": 130,
+      "slide_id": "g2d284f16bd0_0_5",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Round Badge - Light Colors"
+    },
+    {
+      "n": 131,
+      "slide_id": "g2d284f16bd0_0_10",
+      "shape": "T+IMG",
+      "n_content_text": 1,
+      "n_decorative": 0,
+      "n_image": 1,
+      "snippet_first": "Square Badge - Light Colors"
+    }
+  ],
+  "limitations": [
+    "Only T+3B (P53) has VERIFIED max_cells_per_line. Other canonicals are estimates pending POC validation.",
+    "Image-into-placeholder operations require daemon-side Slides API (Iteration 2). FULL-IMG works via gog slides replace-slide.",
+    "Master/header text (Presentation name / YYYY) not editable via gog. Iteration 2 daemon API needed."
+  ]
+}

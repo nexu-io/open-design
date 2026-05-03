@@ -17,6 +17,7 @@ const ALLOWED_KINDS: ReadonlySet<ArtifactKind> = new Set([
   'code-snippet',
   'mini-app',
   'design-system',
+  'google-slides-deck',
 ]);
 const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
   'html',
@@ -28,6 +29,7 @@ const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
   'code',
   'mini-app',
   'design-system',
+  'google-slides',
 ]);
 const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
   'html',
@@ -168,7 +170,9 @@ export function inferLegacyManifest(input: {
               ? 'code'
               : kind === 'deck'
                 ? 'deck-html'
-                : kind;
+                : kind === 'google-slides-deck'
+                  ? 'google-slides'
+                  : kind;
   const resolvedKind = isDeck ? 'deck' : kind;
   return {
     version: MANIFEST_VERSION,

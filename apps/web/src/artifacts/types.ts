@@ -7,7 +7,8 @@ export type ArtifactKind =
   | 'diagram'
   | 'code-snippet'
   | 'mini-app'
-  | 'design-system';
+  | 'design-system'
+  | 'google-slides-deck';
 
 export type ArtifactRendererId =
   | 'html'
@@ -18,7 +19,8 @@ export type ArtifactRendererId =
   | 'diagram'
   | 'code'
   | 'mini-app'
-  | 'design-system';
+  | 'design-system'
+  | 'google-slides';
 
 export type ArtifactExportKind =
   | 'html'
