@@ -28,8 +28,8 @@
   ];
 
   flakePackages =
-    if flake ? packages.${pkgs.system}
-    then flake.packages.${pkgs.system}
+    if flake ? packages.${pkgs.stdenv.hostPlatform.system}
+    then flake.packages.${pkgs.stdenv.hostPlatform.system}
     else {};
 in {
   enable = lib.mkEnableOption "Open Design — local-first design product daemon";
@@ -38,8 +38,8 @@ in {
     type = lib.types.package;
     default =
       flakePackages.daemon or (throw
-        "open-design: no daemon package available for ${pkgs.system}; set services.open-design.package explicitly");
-    defaultText = lib.literalExpression "open-design.packages.\${pkgs.system}.daemon";
+        "open-design: no daemon package available for ${pkgs.stdenv.hostPlatform.system}; set services.open-design.package explicitly");
+    defaultText = lib.literalExpression "open-design.packages.\${pkgs.stdenv.hostPlatform.system}.daemon";
     description = "The Open Design daemon package providing the `od` binary.";
   };
 
@@ -165,8 +165,8 @@ in {
       type = lib.types.package;
       default =
         flakePackages.web or (throw
-          "open-design: no web package available for ${pkgs.system}; set services.open-design.webFrontend.package explicitly");
-      defaultText = lib.literalExpression "open-design.packages.\${pkgs.system}.web";
+          "open-design: no web package available for ${pkgs.stdenv.hostPlatform.system}; set services.open-design.webFrontend.package explicitly");
+      defaultText = lib.literalExpression "open-design.packages.\${pkgs.stdenv.hostPlatform.system}.web";
       description = "Built static export to serve (Next.js out/ tree).";
     };
   };
