@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "dev": "tsx ./src/index.ts",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -23,7 +24,8 @@
     "@types/node": "24.12.2",
     "esbuild": "0.27.7",
     "tsx": "4.21.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": "~24"
