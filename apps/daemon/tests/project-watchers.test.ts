@@ -129,6 +129,33 @@ describe('project-watchers (real chokidar)', () => {
     }
   }, 8_000);
 
+  it('still emits events when the watch root is itself nested under .od/ (production layout)', async () => {
+    // Reproduces the layout the daemon actually uses:
+    //   <RUNTIME_DATA_DIR>/.od/projects/<id>/...
+    // The ignore predicate must not match the watch root's ancestor directories,
+    // only segments inside the watched tree.
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'od-data-'));
+    const projectsRoot = path.join(dataRoot, '.od', 'projects');
+    const projectId = 'proj-' + Math.random().toString(36).slice(2, 10);
+    await mkdir(path.join(projectsRoot, projectId, 'prototype'), { recursive: true });
+
+    const events = [];
+    const sub = subscribe(projectsRoot, projectId, (e) => events.push(e));
+    await sub.ready;
+
+    try {
+      const filePath = path.join(projectsRoot, projectId, 'prototype', 'App.jsx');
+      await writeFile(filePath, 'export default () => null;');
+      await waitFor(
+        () => events.some((e) => e.kind === 'add' && e.path === 'prototype/App.jsx'),
+        { timeout: 4000 },
+      );
+    } finally {
+      await sub.unsubscribe();
+      await rm(dataRoot, { recursive: true, force: true });
+    }
+  }, 8_000);
+
   it('ignores files inside .od/ and node_modules/', async () => {
     const { root, projectId } = await makeProjectsRoot();
     const events = [];

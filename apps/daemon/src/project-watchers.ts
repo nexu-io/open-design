@@ -13,11 +13,18 @@ import { projectDir } from './projects.js';
  * looking at.
  */
 
-// chokidar's glob support varies across versions; using a path-substring
-// predicate is more robust than `**/foo/**` patterns and matches anywhere
-// in the relative path from the watched root.
-const IGNORE_RE = /(^|[\\/])(\.git|node_modules|\.od|debug|\.DS_Store)([\\/]|$)/;
-export const DEFAULT_IGNORED = (p) => IGNORE_RE.test(p);
+// Names we never want to surface as project file changes. Tested per-segment
+// against the path *relative to the watch root* so that ancestor directories
+// (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
+// not accidentally match and silence every event in the tree.
+const IGNORE_NAMES = new Set(['.git', 'node_modules', '.od', 'debug', '.DS_Store']);
+export function makeIgnored(rootDir) {
+  return (absPath) => {
+    const rel = path.relative(rootDir, absPath);
+    if (!rel || rel === '' || rel.startsWith('..')) return false; // never ignore root itself
+    return rel.split(/[\\/]/).some((seg) => IGNORE_NAMES.has(seg));
+  };
+}
 
 export const DEFAULT_AWAIT_WRITE_FINISH = {
   stabilityThreshold: 200,
@@ -81,7 +88,7 @@ export function subscribe(projectsRoot, projectId, onEvent, opts = {}) {
   if (!entry) {
     const factory = opts._watcherFactory || makeEntry;
     entry = factory(dir, {
-      ignored: opts.ignored || DEFAULT_IGNORED,
+      ignored: opts.ignored || makeIgnored(dir),
       awaitWriteFinish: opts.awaitWriteFinish || DEFAULT_AWAIT_WRITE_FINISH,
     });
     registry.set(key, entry);

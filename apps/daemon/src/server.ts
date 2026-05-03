@@ -60,7 +60,6 @@ import {
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
-import { subscribe as subscribeProjectFiles } from './project-watchers.js';
 import {
   deleteConversation,
   deletePreviewComment,
@@ -930,6 +929,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   // SSE stream of file-changed events for a project. Drives preview live-reload.
+  // Receipt of a `file-changed` event triggers a file-list refresh, which
+  // propagates new mtimes through to FileViewer iframes (the URL-load
+  // `?v=${mtime}` cache-bust from PR #384 then reloads the iframe automatically).
   // Subscribers come and go as users open/close project tabs; the underlying
   // chokidar watcher is refcounted in project-watchers.ts so we never hold
   // descriptors for projects no UI is looking at.
@@ -937,25 +939,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (!getProject(db, req.params.id)) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
-    let unsubscribe;
+    let sub;
     try {
       const sse = createSseResponse(res);
-      sse.send('ready', { projectId: req.params.id });
-      unsubscribe = subscribeProjectFiles(PROJECTS_DIR, req.params.id, (evt) => {
+      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
       });
+      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
       const cleanup = () => {
-        if (unsubscribe) {
-          const off = unsubscribe;
-          unsubscribe = null;
-          Promise.resolve(off()).catch(() => {});
+        if (sub) {
+          const { unsubscribe } = sub;
+          sub = null;
+          Promise.resolve(unsubscribe()).catch(() => {});
         }
       };
       res.on('close', cleanup);
       res.on('finish', cleanup);
     } catch (err) {
-      if (unsubscribe) Promise.resolve(unsubscribe()).catch(() => {});
-      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
+      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
@@ -1693,35 +1695,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // Live file-change events for the active project. The web app subscribes
-  // when a project view mounts; receipt of a `file-changed` event triggers a
-  // file-list refresh, which propagates new mtimes through to FileViewer
-  // iframes (the URL-load `?v=${mtime}` cache-bust from PR #384 then reloads
-  // the iframe automatically). One chokidar watcher per project, refcounted —
-  // so we never hold descriptors for projects no UI is looking at.
-  app.get('/api/projects/:id/events', (req, res) => {
-    let sub;
-    try {
-      const sse = createSseResponse(res);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
-        sse.send('file-changed', evt);
-      });
-      sub.ready.then(() => sse.send('ready', { ok: true })).catch(() => {});
-      const cleanup = () => {
-        if (sub) {
-          const off = sub.unsubscribe;
-          sub = null;
-          void off();
-        }
-      };
-      res.on('close', cleanup);
-      res.on('finish', cleanup);
-    } catch (err) {
-      if (sub) void sub.unsubscribe();
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
