@@ -582,9 +582,14 @@ function existingDirsUnder(root, segments = []) {
   return dirs;
 }
 
+let cachedToolchainHome = null;
+let cachedToolchainDirs = null;
+
 function userToolchainDirs() {
   const home = process.env.OD_AGENT_HOME || homedir();
-  return [
+  if (cachedToolchainHome === home && cachedToolchainDirs) return cachedToolchainDirs;
+  cachedToolchainHome = home;
+  cachedToolchainDirs = [
     path.join(home, '.local', 'bin'),
     path.join(home, '.opencode', 'bin'),
     path.join(home, '.bun', 'bin'),
@@ -592,21 +597,22 @@ function userToolchainDirs() {
     path.join(home, '.asdf', 'shims'),
     path.join(home, 'Library', 'pnpm'),
     path.join(home, '.cargo', 'bin'),
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
+    ...(process.platform !== 'win32' ? ['/opt/homebrew/bin', '/usr/local/bin'] : []),
     ...existingDirsUnder(path.join(home, '.local', 'share', 'mise', 'installs', 'node'), ['bin']),
     ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
     ...existingDirsUnder(path.join(home, '.local', 'share', 'fnm', 'node-versions'), ['installation', 'bin']),
   ];
+  return cachedToolchainDirs;
 }
 
 function resolvePathDirs() {
   const seen = new Set();
   const dirs = [
     ...(process.env.PATH || '').split(delimiter),
-    // macOS GUI apps often launch with a minimal PATH. Include common
-    // user-level CLI install locations so agent detection matches the
-    // user's shell-installed tools, especially Node version managers.
+    // GUI launchers (macOS .app bundles, Linux .desktop files) often start
+    // with a minimal PATH. Include common user-level CLI install locations
+    // so agent detection matches the user's shell-installed tools,
+    // especially Node version managers.
     ...userToolchainDirs(),
   ];
   return dirs.filter((dir) => {
