@@ -55,7 +55,7 @@ Le dropdown **Skill** regroupe les entrées par `mode` / `surface` et affiche le
 - **Deck / PPT** — `simple-deck` (swipe horizontal single-file) et `magazine-web-ppt` (le bundle `guizang-ppt` depuis [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill), par défaut en deck mode, avec ses propres assets/template + 4 références). Les Skills avec side files reçoivent automatiquement un préambule "Skill root (absolute)" pour que l’agent puisse résoudre `assets/template.html` et `references/*.md` depuis le vrai chemin disque au lieu de son CWD.
 - **Médias et Design System** — par exemple `image-poster`, `video-shortform`, `audio-jingle`, `hyperframes` et `design-brief`.
 
-Associez un Skill, un Design System et un seul prompt : vous obtenez un prototype ou un deck adapté au layout, dans le langage visuel choisi.
+Associez un Skill, un Design System et un seul prompt : vous obtenez un prototype, un deck ou un rendu adapté au mode / à la surface choisie.
 
 ## Autres scripts
 
