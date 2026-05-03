@@ -1034,29 +1034,20 @@ const MCP_CLIENTS: McpClient[] = [
   {
     id: 'claude',
     label: 'Claude Code',
-    // Same JSON shape as every other client. Two ways to apply,
-    // surfaced in the instruction:
-    //   1. `claude mcp add-json --scope user open-design '<JSON>'`
-    //      atomically merges into ~/.claude.json. Works in bash,
-    //      zsh, PowerShell, and Git Bash. Fails in Windows cmd.exe
-    //      because `'` is not a quoting char there.
-    //   2. Hand-edit ~/.claude.json under "mcpServers". Universal,
-    //      but the file is multi-purpose so a syntax slip breaks
-    //      all of Claude Code.
-    // The JSON snippet itself is shell-free, so the panel stays
-    // reliable on every OS regardless of which apply path the user
-    // picks.
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) => {
-      const path = homeConfigPath(
-        info.platform,
-        '~/.claude.json',
-        '%USERPROFILE%\\.claude.json',
-      );
-      return `Recommended: run \`claude mcp add-json --scope user open-design '<paste this JSON>'\` in your terminal (use PowerShell on Windows; cmd.exe will not accept single-quoted JSON). Or merge manually into ${path} under "mcpServers".`;
+    // `claude mcp add-json <name> '<json>'` takes ONLY the inner
+    // server-config object, not the full mcpServers wrapper. We
+    // inline the JSON into the command itself so the snippet is a
+    // real one-liner the user can copy and run, no template
+    // substitution. Single quotes around the JSON work in bash, zsh,
+    // PowerShell, and Git Bash; the only outlier is Windows cmd.exe,
+    // where users would need to swap to PowerShell.
+    buildMethod: () => 'CLI command',
+    buildInstruction: () => 'Run this in your terminal.',
+    buildSnippet: (info) => {
+      const inner = JSON.stringify({ command: info.command, args: info.args });
+      return `claude mcp add-json --scope user open-design '${inner}'`;
     },
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
+    buildSnippetLang: () => 'bash',
   },
   {
     id: 'codex',
