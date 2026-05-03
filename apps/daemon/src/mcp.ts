@@ -126,6 +126,32 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'get_artifact',
+    description:
+      'Pull a design artifact bundle: the entry file plus every sibling asset it references (tokens CSS, JSX modules, images, fonts) in one call. Default mode (auto) parses the entry HTML/JSX and follows relative imports / script-src / link-href / img-src / css url() up to depth 3, skipping CDN urls. include="all" returns every textual file in the project; include="shallow" returns just the entry file. PREFER THIS over multiple get_file calls when extending an OD design.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project id (UUID) or name substring.',
+        },
+        entry: {
+          type: 'string',
+          description:
+            'Entry file path relative to project root. Defaults to project metadata.entryFile.',
+        },
+        include: {
+          type: 'string',
+          enum: ['auto', 'all', 'shallow'],
+          description: 'auto (default) | all | shallow',
+        },
+      },
+      required: ['project'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export async function runMcpStdio({ daemonUrl }) {
@@ -206,6 +232,8 @@ export async function runMcpStdio({ daemonUrl }) {
           return ok(
             await getJson(`${baseUrl}/api/design-systems/${encodeURIComponent(args.id)}`),
           );
+        case 'get_artifact':
+          return await getArtifact(baseUrl, args.project, args.entry, args.include);
         default:
           return errorResult(`unknown tool: ${name}`);
       }
@@ -318,6 +346,141 @@ async function getFile(baseUrl, project, relPath) {
   }
   const text = await resp.text();
   return { content: [{ type: 'text', text }] };
+}
+
+async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
+  const include = includeMode || 'auto';
+  const id = await resolveProjectId(baseUrl, projectArg);
+  const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+  const project = data?.project ?? data;
+  const entry =
+    typeof entryArg === 'string' && entryArg.length > 0
+      ? entryArg
+      : project?.metadata?.entryFile;
+  if (!entry) {
+    return errorResult(
+      `no entry file: pass entry="..." or set the project's metadata.entryFile`,
+    );
+  }
+
+  if (include === 'shallow') {
+    let file;
+    try {
+      file = await fetchProjectFile(baseUrl, id, entry);
+    } catch (err) {
+      return errorResult(err && err.message ? err.message : String(err));
+    }
+    return okBundle({ project, entry, files: [file] });
+  }
+
+  if (include === 'all') {
+    const meta = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
+    const allFiles = Array.isArray(meta?.files) ? meta.files : [];
+    const fetched = [];
+    for (const f of allFiles) {
+      if (!isTextualMime(f.mime)) continue;
+      try {
+        fetched.push(await fetchProjectFile(baseUrl, id, f.name));
+      } catch {
+        // Skip files that fail to fetch; keep going.
+      }
+    }
+    return okBundle({ project, entry, files: fetched });
+  }
+
+  const MAX_DEPTH = 3;
+  const visited = new Set();
+  const fetched = [];
+  let frontier = [entry];
+  for (let depth = 0; depth < MAX_DEPTH && frontier.length > 0; depth++) {
+    const next = [];
+    for (const path of frontier) {
+      if (visited.has(path)) continue;
+      visited.add(path);
+      let file;
+      try {
+        file = await fetchProjectFile(baseUrl, id, path);
+      } catch {
+        continue;
+      }
+      fetched.push(file);
+      if (!isTextualMime(file.mime)) continue;
+      const refs = extractRelativeRefs(file.content || '', path);
+      for (const ref of refs) {
+        if (!visited.has(ref)) next.push(ref);
+      }
+    }
+    frontier = next;
+  }
+  return okBundle({ project, entry, files: fetched });
+}
+
+async function fetchProjectFile(baseUrl, projectId, relPath) {
+  const segments = String(relPath)
+    .split('/')
+    .filter((s) => s.length > 0)
+    .map(encodeURIComponent);
+  const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    const body = await safeText(resp);
+    throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
+  }
+  const mime = (resp.headers.get('content-type') || 'application/octet-stream')
+    .split(';')[0]
+    .trim();
+  const size = Number(resp.headers.get('content-length')) || null;
+  if (!isTextualMime(mime)) {
+    return { name: relPath, mime, size, content: null, binary: true };
+  }
+  const content = await resp.text();
+  return { name: relPath, mime, size: size ?? content.length, content, binary: false };
+}
+
+function extractRelativeRefs(text, fromPath) {
+  if (!text) return [];
+  const refs = new Set();
+  const patterns = [
+    /<script\b[^>]*\bsrc=["']([^"']+)["']/gi,
+    /<link\b[^>]*\bhref=["']([^"']+)["']/gi,
+    /<img\b[^>]*\bsrc=["']([^"']+)["']/gi,
+    /<source\b[^>]*\bsrc=["']([^"']+)["']/gi,
+    /<video\b[^>]*\bsrc=["']([^"']+)["']/gi,
+    /\bimport\s+[^'"]*['"]([^'"]+)['"]/g,
+    /\bfrom\s+['"]([^'"]+)['"]/g,
+    /\burl\(\s*["']?([^"')]+)["']?\s*\)/gi,
+  ];
+  for (const re of patterns) {
+    for (const m of text.matchAll(re)) {
+      const ref = (m[1] || '').trim();
+      if (!ref) continue;
+      if (/^(?:https?:|\/\/|data:|mailto:|tel:|#)/i.test(ref)) continue;
+      const dir = fromPath.includes('/')
+        ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1)
+        : '';
+      const resolved = ref.startsWith('/') ? ref.slice(1) : dir + ref;
+      const clean = resolved.replace(/[?#].*$/, '').replace(/^\.\//, '');
+      if (!clean || clean.includes('..')) continue;
+      refs.add(clean);
+    }
+  }
+  return [...refs];
+}
+
+function okBundle(bundle) {
+  return ok({
+    entryFile: bundle.entry,
+    projectId: bundle.project?.id,
+    projectName: bundle.project?.name,
+    files: bundle.files.map((f) => ({
+      name: f.name,
+      mime: f.mime,
+      size: f.size,
+      binary: f.binary === true,
+      content: f.binary ? null : f.content,
+    })),
+    manifest: bundle.project?.metadata ?? null,
+  });
 }
 
 function isTextualMime(mime) {
