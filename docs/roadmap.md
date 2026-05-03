@@ -38,12 +38,19 @@ Immediate implementation slice:
 4. Add professional output controls across studios: critique panel, quality scorecard, comments/pins, tweak controls, export history, evidence trail, and review-before-export. Shipped as cross-studio control modules.
 5. Treat all external engines as adapters. They can strengthen OneShot, but they should not replace OneShot's project, library, quality, export, or handoff core. Shipped as adapter contracts.
 
+Latest shipped slice:
+
+1. Website Studio workbench state now persists intake, sitemap, selected sections, tokens, deploy target, deploy command evidence, quality reviews, comments/pins, and Evidence Studio counters.
+2. Website Studio now generates `site_plan.md`, `section_library.md`, `design_tokens.md`, `codex_build_brief.md`, and `responsive_qa.md` artifact bodies.
+3. Quality gates now carry real `pass`, `needs review`, or `blocked` review state with notes and evidence.
+4. Website Builder adapter stubs now return honest `prepare-only`, `verified-local`, or `verified-deployed` states.
+
 Next implementation slice:
 
-1. Persist Website Studio intake, sitemap, selected sections, deploy target, and Codex build brief preview into a project-backed artifact.
-2. Convert quality gates from starting scores into real artifact checks with review notes and pass/block states.
-3. Add artifact comments and pins that attach to Website Studio sections, CoverVision lanes, and Evidence Studio sources.
-4. Add adapter execution stubs that return honest prepare-only, verified-local, or verified-deployed states.
+1. Persist generated Website Studio artifact files through the daemon project store, not only workflow metadata.
+2. Add artifact comments and pin overlays that attach to exact Website Studio sections, CoverVision lanes, and Evidence Studio sources.
+3. Expand Evidence Studio v1 from workbench state into real local intake, classification, source-path preservation, `DESIGN.md`, opportunity packet, and Codex brief generation.
+4. Wire Website Builder adapter execution to real commands while preserving the existing honest status contract.
 
 Trust rule: website and deployment flows must never invent live URLs or fake published states. If no real deploy URL or verified command exists, the status is prepare-only.
 

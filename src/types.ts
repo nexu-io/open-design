@@ -196,6 +196,44 @@ export interface WorkflowHandoff {
   commands?: string[];
 }
 
+export interface WebsiteStudioMetadata {
+  intake: {
+    business: string;
+    audience: string;
+    offer: string;
+    conversion: string;
+    sourcePath: string;
+  };
+  sitemap: string[];
+  selectedSectionIds: string[];
+  tokens: Record<string, string>;
+  deployTarget: string;
+  deployCommandEvidence: string;
+  adapterStatus: 'prepare-only' | 'verified-local' | 'verified-deployed';
+  qualityReviews: Array<{
+    id: string;
+    title: string;
+    status: 'pass' | 'needs-review' | 'blocked';
+    note: string;
+    evidence: string;
+  }>;
+  pins: Array<{
+    id: string;
+    target: string;
+    note: string;
+    createdAt: number;
+  }>;
+  evidenceStudio: {
+    sourcePath: string;
+    originals: number;
+    thumbnails: number;
+    supportingAssets: number;
+    flaggedFiles: number;
+    reviewGate: string;
+  };
+  artifacts: Record<string, string>;
+}
+
 export interface ProjectMetadata {
   kind: ProjectKind;
   // OneShot workflow identity. Captured by the launcher so reloads,
@@ -212,6 +250,7 @@ export interface ProjectMetadata {
   workflowReferenceBoardId?: string;
   workflowReferenceBoardTitle?: string;
   workflowReferencePinCount?: number;
+  websiteStudio?: WebsiteStudioMetadata;
   // Prototype: 'wireframe' | 'high-fidelity'. Drives the visual ambition.
   fidelity?: 'wireframe' | 'high-fidelity';
   // Slide deck: whether the user wants speaker notes (less text per slide).

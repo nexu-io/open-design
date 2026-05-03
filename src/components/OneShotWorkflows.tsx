@@ -24,6 +24,12 @@ import {
   listInspirationPins,
 } from '../state/inspiration';
 import { ONESHOT_STUDIOS, WEBSITE_STUDIO_V1_PROMPT } from '../oneshotDesignOS';
+import {
+  buildWebsiteStudioProjectPrompt,
+  resolveWebsiteBuilderAdapterStatus,
+  type WebsiteStudioArtifacts,
+  type WebsiteStudioWorkbenchState,
+} from '../state/websiteStudio';
 import { Icon } from './Icon';
 import { OneShotDesignOS } from './OneShotDesignOS';
 import { OneShotStudioDepth } from './OneShotStudioDepth';
@@ -803,18 +809,61 @@ export function OneShotWorkflows({
   }, [referenceBoardId, selectedReferenceBoard]);
 
   function launchWorkflow(workflow: WorkflowDefinition) {
+    launchWorkflowWithOverrides(workflow);
+  }
+
+  function launchWorkflowWithOverrides(
+    workflow: WorkflowDefinition,
+    overrides?: {
+      metadata?: Partial<ProjectMetadata>;
+      pendingPrompt?: string;
+    },
+  ) {
     const skillId = pickSkillId(workflow, skills);
     const designSystemId = pickDesignSystemId(
       workflow,
       designSystems,
       defaultDesignSystemId,
     );
+    const metadata = metadataForWorkflow(workflow, selectedReferenceBoard, selectedReferencePins);
     onCreateProject({
       name: workflow.title,
       skillId,
       designSystemId,
-      metadata: metadataForWorkflow(workflow, selectedReferenceBoard, selectedReferencePins),
-      pendingPrompt: promptForWorkflow(workflow, selectedReferenceBoard, selectedReferencePins),
+      metadata: { ...metadata, ...(overrides?.metadata ?? {}) },
+      pendingPrompt:
+        overrides?.pendingPrompt ??
+        promptForWorkflow(workflow, selectedReferenceBoard, selectedReferencePins),
+    });
+  }
+
+  function launchWebsiteStudio(
+    state: WebsiteStudioWorkbenchState,
+    artifacts: WebsiteStudioArtifacts,
+  ) {
+    if (!websiteStudioWorkflow) return;
+    const adapter = resolveWebsiteBuilderAdapterStatus(state);
+    launchWorkflowWithOverrides(websiteStudioWorkflow, {
+      metadata: {
+        websiteStudio: {
+          intake: state.intake,
+          sitemap: state.sitemap,
+          selectedSectionIds: state.selectedSectionIds,
+          tokens: state.tokens,
+          deployTarget: state.deployTarget,
+          deployCommandEvidence: state.deployCommandEvidence,
+          adapterStatus: adapter.status,
+          qualityReviews: state.qualityReviews,
+          pins: state.pins,
+          evidenceStudio: state.evidenceStudio,
+          artifacts,
+        },
+      },
+      pendingPrompt: buildWebsiteStudioProjectPrompt(
+        promptForWorkflow(websiteStudioWorkflow, selectedReferenceBoard, selectedReferencePins),
+        state,
+        artifacts,
+      ),
     });
   }
 
@@ -852,7 +901,7 @@ export function OneShotWorkflows({
 
       {websiteStudioWorkflow ? (
         <OneShotStudioDepth
-          onLaunchWebsiteStudio={() => launchWorkflow(websiteStudioWorkflow)}
+          onLaunchWebsiteStudio={launchWebsiteStudio}
         />
       ) : null}
 

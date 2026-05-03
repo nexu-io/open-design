@@ -61,4 +61,70 @@ describe('workflow metadata prompt context', () => {
     expect(prompt).toContain('- **artifacts**: layout_handoff.md, production_specs.md, preflight_report.json');
     expect(prompt).toContain('- **commands**: layout-package, production-specs, preflight');
   });
+
+  it('injects project-backed Website Studio state and artifacts', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'prototype',
+        websiteStudio: {
+          intake: {
+            business: 'OneShot Design',
+            audience: 'Design operators',
+            offer: 'Professional Website Studio',
+            conversion: 'Start a build packet',
+            sourcePath: 'C:\\Users\\james\\projects\\references',
+          },
+          sitemap: ['Home', 'Proof'],
+          selectedSectionIds: ['hero', 'proof'],
+          tokens: {
+            Color: 'Graphite, paper, amber proof',
+          },
+          deployTarget: 'http://127.0.0.1:3004',
+          deployCommandEvidence: '',
+          adapterStatus: 'verified-local',
+          qualityReviews: [
+            {
+              id: 'visual-quality',
+              title: 'Visual quality',
+              status: 'blocked',
+              note: 'Hero proof needs review.',
+              evidence: 'Pinned review note.',
+            },
+          ],
+          pins: [
+            {
+              id: 'pin-proof',
+              target: 'Website Studio / Proof',
+              note: 'Tie testimonial to source path.',
+              createdAt: 1,
+            },
+          ],
+          evidenceStudio: {
+            sourcePath: 'C:\\Users\\james\\projects\\references',
+            originals: 2,
+            thumbnails: 1,
+            supportingAssets: 3,
+            flaggedFiles: 0,
+            reviewGate: 'Sources reviewed before export.',
+          },
+          artifacts: {
+            'site_plan.md': '# Website Studio Site Plan\nBusiness: OneShot Design',
+            'section_library.md': '# Website Studio Section Library',
+            'design_tokens.md': '# Website Studio Design Tokens',
+            'codex_build_brief.md': '# Codex Build Brief',
+            'responsive_qa.md': '# Responsive QA\nVisual quality: blocked',
+          },
+        },
+      },
+    });
+
+    expect(prompt).toContain('### Website Studio project-backed state');
+    expect(prompt).toContain('- **business**: OneShot Design');
+    expect(prompt).toContain('- **adapterStatus**: verified-local');
+    expect(prompt).toContain('- **qualityReviews**: Visual quality=blocked');
+    expect(prompt).toContain('- **pins**: Website Studio / Proof: Tie testimonial to source path.');
+    expect(prompt).toContain('##### `site_plan.md`');
+    expect(prompt).toContain('# Website Studio Site Plan');
+    expect(prompt).toContain('##### `responsive_qa.md`');
+  });
 });

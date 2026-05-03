@@ -182,6 +182,40 @@ function renderMetadataBlock(
     }
   }
 
+  if (metadata.websiteStudio) {
+    lines.push('');
+    lines.push('### Website Studio project-backed state');
+    lines.push(
+      'Use this state as the source of truth for the Website Studio project. Preserve the generated artifact filenames and keep deploy status honest.',
+    );
+    lines.push(`- **business**: ${metadata.websiteStudio.intake.business}`);
+    lines.push(`- **audience**: ${metadata.websiteStudio.intake.audience}`);
+    lines.push(`- **offer**: ${metadata.websiteStudio.intake.offer}`);
+    lines.push(`- **conversion**: ${metadata.websiteStudio.intake.conversion}`);
+    lines.push(`- **sourcePath**: ${metadata.websiteStudio.intake.sourcePath}`);
+    lines.push(`- **adapterStatus**: ${metadata.websiteStudio.adapterStatus}`);
+    lines.push(`- **selectedSections**: ${metadata.websiteStudio.selectedSectionIds.join(', ')}`);
+    lines.push(
+      `- **qualityReviews**: ${metadata.websiteStudio.qualityReviews
+        .map((gate) => `${gate.title}=${gate.status}`)
+        .join(', ')}`,
+    );
+    lines.push(
+      `- **pins**: ${metadata.websiteStudio.pins
+        .map((pin) => `${pin.target}: ${pin.note}`)
+        .join(' | ')}`,
+    );
+    lines.push('');
+    lines.push('#### Website Studio artifact files');
+    for (const [filename, body] of Object.entries(metadata.websiteStudio.artifacts)) {
+      lines.push('');
+      lines.push(`##### \`${filename}\``);
+      lines.push('```markdown');
+      lines.push(body.length > 8000 ? `${body.slice(0, 8000)}\n... truncated` : body);
+      lines.push('```');
+    }
+  }
+
   if (metadata.kind === 'prototype') {
     lines.push(
       `- **fidelity**: ${metadata.fidelity ?? '(unknown — ask: wireframe vs high-fidelity)'}`,

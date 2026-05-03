@@ -1,17 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   COVERVISION_STUDIO_DEEPENING,
   EVIDENCE_STUDIO_PIPELINE,
   ONESHOT_ADAPTER_CONTRACTS,
   ONESHOT_OUTPUT_CONTROL_MODULES,
-  ONESHOT_QUALITY_GATES,
-  WEBSITE_STUDIO_DEFAULT_INTAKE,
   WEBSITE_STUDIO_SECTIONS,
 } from '../oneshotDesignOS';
+import {
+  buildWebsiteStudioArtifacts,
+  createDefaultWebsiteStudioState,
+  loadWebsiteStudioState,
+  resetWebsiteStudioState,
+  resolveWebsiteBuilderAdapterStatus,
+  saveWebsiteStudioState,
+  type WebsiteStudioArtifacts,
+  type WebsiteStudioWorkbenchState,
+} from '../state/websiteStudio';
 import { Icon } from './Icon';
 
 interface Props {
-  onLaunchWebsiteStudio: () => void;
+  onLaunchWebsiteStudio: (
+    state: WebsiteStudioWorkbenchState,
+    artifacts: WebsiteStudioArtifacts,
+  ) => void;
 }
 
 type PreviewFrame = 'Desktop' | 'Tablet' | 'Mobile';
@@ -22,91 +33,179 @@ const PREVIEW_FRAMES: Array<{ label: PreviewFrame; width: string; note: string }
   { label: 'Mobile', width: '42%', note: '390px layout, no horizontal overflow, sticky action remains readable' },
 ];
 
-const TOKEN_GROUPS = [
-  { label: 'Typography', value: 'Display title, compact UI, mono numerals and paths' },
-  { label: 'Color', value: 'Paper, graphite, amber proof, cyan action telemetry' },
-  { label: 'Spacing', value: 'Dense but calm, 8px rhythm, fixed preview frames' },
-  { label: 'Motion', value: 'Only status, review, and source-to-output transitions' },
-];
+const PIN_TARGETS = [
+  'Website Studio / Hero',
+  'Website Studio / Proof',
+  'Website Studio / Conversion',
+  'CoverVision OS / Concept lanes',
+  'Evidence Studio / Source path',
+  'Website Builder Adapter',
+] as const;
 
 export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
-  const [business, setBusiness] = useState(WEBSITE_STUDIO_DEFAULT_INTAKE.business);
-  const [audience, setAudience] = useState(WEBSITE_STUDIO_DEFAULT_INTAKE.audience);
-  const [offer, setOffer] = useState(WEBSITE_STUDIO_DEFAULT_INTAKE.offer);
-  const [conversion, setConversion] = useState(WEBSITE_STUDIO_DEFAULT_INTAKE.conversion);
-  const [sourcePath, setSourcePath] = useState(WEBSITE_STUDIO_DEFAULT_INTAKE.sourcePath);
-  const [deployUrl, setDeployUrl] = useState('');
+  const [state, setState] = useState<WebsiteStudioWorkbenchState>(() => loadWebsiteStudioState());
   const [activeFrame, setActiveFrame] = useState<PreviewFrame>('Desktop');
+  const [activeArtifact, setActiveArtifact] = useState<keyof WebsiteStudioArtifacts>('site_plan.md');
+  const [pinTarget, setPinTarget] = useState<string>(PIN_TARGETS[0]);
+  const [pinNote, setPinNote] = useState('');
+
+  useEffect(() => {
+    saveWebsiteStudioState(state);
+  }, [state]);
 
   const activePreview =
     PREVIEW_FRAMES.find((frame) => frame.label === activeFrame) ?? PREVIEW_FRAMES[0]!;
-  const cleanedDeployUrl = deployUrl.trim();
-  const hasVerifiedDeployTarget =
-    cleanedDeployUrl.startsWith('https://') || cleanedDeployUrl.startsWith('http://127.0.0.1');
-  const deployStatus = hasVerifiedDeployTarget ? 'Ready to verify URL' : 'Prepare-only';
-  const deployDetail = hasVerifiedDeployTarget
-    ? cleanedDeployUrl
-    : 'No live URL claimed. Export a build brief or run a real deploy command first.';
-
-  const buildBrief = useMemo(
-    () => [
-      `Goal: Build a professional website for ${business}.`,
-      `Audience: ${audience}.`,
-      `Offer: ${offer}.`,
-      `Primary conversion: ${conversion}.`,
-      `Source/reference path: ${sourcePath}.`,
-      `Deploy status: ${deployStatus}.`,
-      'Verification: run typecheck, tests, build, and responsive screenshot checks before publish.',
-    ],
-    [audience, business, conversion, deployStatus, offer, sourcePath],
+  const adapterStatus = useMemo(() => resolveWebsiteBuilderAdapterStatus(state), [state]);
+  const artifacts = useMemo(() => buildWebsiteStudioArtifacts(state), [state]);
+  const selectedSections = WEBSITE_STUDIO_SECTIONS.filter((section) =>
+    state.selectedSectionIds.includes(section.id),
   );
+
+  function updateState(next: Partial<WebsiteStudioWorkbenchState>) {
+    setState((current) => ({ ...current, ...next, updatedAt: Date.now() }));
+  }
+
+  function updateIntake(field: keyof WebsiteStudioWorkbenchState['intake'], value: string) {
+    setState((current) => ({
+      ...current,
+      intake: { ...current.intake, [field]: value },
+      evidenceStudio:
+        field === 'sourcePath'
+          ? { ...current.evidenceStudio, sourcePath: value }
+          : current.evidenceStudio,
+      updatedAt: Date.now(),
+    }));
+  }
+
+  function updateToken(label: string, value: string) {
+    setState((current) => ({
+      ...current,
+      tokens: { ...current.tokens, [label]: value },
+      updatedAt: Date.now(),
+    }));
+  }
+
+  function updateGate(id: string, field: 'status' | 'note' | 'evidence', value: string) {
+    setState((current) => ({
+      ...current,
+      qualityReviews: current.qualityReviews.map((gate) =>
+        gate.id === id ? { ...gate, [field]: value } : gate,
+      ),
+      updatedAt: Date.now(),
+    }));
+  }
+
+  function toggleSection(sectionId: string) {
+    setState((current) => {
+      const selected = current.selectedSectionIds.includes(sectionId)
+        ? current.selectedSectionIds.filter((id) => id !== sectionId)
+        : [...current.selectedSectionIds, sectionId];
+      return { ...current, selectedSectionIds: selected, updatedAt: Date.now() };
+    });
+  }
+
+  function addPin() {
+    const note = pinNote.trim();
+    if (!note) return;
+    setState((current) => ({
+      ...current,
+      pins: [
+        {
+          id: `pin-${Date.now()}`,
+          target: pinTarget,
+          note,
+          createdAt: Date.now(),
+        },
+        ...current.pins,
+      ],
+      updatedAt: Date.now(),
+    }));
+    setPinNote('');
+  }
 
   return (
     <section className="oneshot-depth" aria-label="OneShot working studio depth">
       <div className="oneshot-depth-head">
         <div>
-          <span className="oneshot-depth-kicker">Working studio depth</span>
+          <span className="oneshot-depth-kicker">Project-backed studio depth</span>
           <h2>Website Studio workbench</h2>
           <p>
-            The Design OS architecture is now actionable: intake, sitemap,
-            sections, responsive frames, tokens, quality gates, output controls,
-            adapters, CoverVision depth, and Evidence Studio pipeline.
+            Website Studio now autosaves its intake, sitemap, selected sections,
+            token edits, deploy target, quality reviews, pins, Evidence Studio
+            source state, and generated artifact bodies before project launch.
           </p>
         </div>
-        <button type="button" className="primary" onClick={onLaunchWebsiteStudio}>
-          <Icon name="sparkles" size={13} />
-          Start Website Studio packet
-        </button>
+        <div className="oneshot-depth-actions">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setState(resetWebsiteStudioState())}
+          >
+            <Icon name="refresh" size={13} />
+            Reset workbench
+          </button>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => onLaunchWebsiteStudio(state, artifacts)}
+          >
+            <Icon name="sparkles" size={13} />
+            Start Website Studio packet
+          </button>
+        </div>
+      </div>
+
+      <div className="oneshot-depth-save-state">
+        <span>
+          <Icon name="check" size={12} />
+          Autosaved to project-backed Website Studio state
+        </span>
+        <code>{new Date(state.updatedAt).toLocaleString()}</code>
       </div>
 
       <div className="oneshot-depth-grid">
         <article className="oneshot-website-panel">
-          <PanelTitle icon="file" title="Site intake" meta="Editable v1" />
+          <PanelTitle icon="file" title="Site intake" meta="Persistent" />
           <div className="oneshot-intake-grid">
             <label>
               <span>Business</span>
-              <input value={business} onChange={(event) => setBusiness(event.target.value)} />
+              <input
+                value={state.intake.business}
+                onChange={(event) => updateIntake('business', event.target.value)}
+              />
             </label>
             <label>
               <span>Audience</span>
-              <input value={audience} onChange={(event) => setAudience(event.target.value)} />
+              <input
+                value={state.intake.audience}
+                onChange={(event) => updateIntake('audience', event.target.value)}
+              />
             </label>
             <label>
               <span>Offer</span>
-              <input value={offer} onChange={(event) => setOffer(event.target.value)} />
+              <input
+                value={state.intake.offer}
+                onChange={(event) => updateIntake('offer', event.target.value)}
+              />
             </label>
             <label>
               <span>Conversion</span>
-              <input value={conversion} onChange={(event) => setConversion(event.target.value)} />
+              <input
+                value={state.intake.conversion}
+                onChange={(event) => updateIntake('conversion', event.target.value)}
+              />
             </label>
             <label className="wide">
               <span>Source/reference path</span>
-              <input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} />
+              <input
+                value={state.intake.sourcePath}
+                onChange={(event) => updateIntake('sourcePath', event.target.value)}
+              />
             </label>
           </div>
           <div className="oneshot-sitemap-plan" aria-label="Sitemap and page planner">
-            {WEBSITE_STUDIO_DEFAULT_INTAKE.pages.map((page, index) => (
-              <span key={page}>
+            {state.sitemap.map((page, index) => (
+              <span key={`${page}-${index}`}>
                 <strong>{String(index + 1).padStart(2, '0')}</strong>
                 {page}
               </span>
@@ -115,18 +214,30 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
         </article>
 
         <article className="oneshot-website-panel">
-          <PanelTitle icon="grid" title="Section library" meta="Website Studio v1" />
+          <PanelTitle icon="grid" title="Section library" meta={`${selectedSections.length} selected`} />
           <div className="oneshot-section-library">
             {WEBSITE_STUDIO_SECTIONS.map((section) => (
-              <div key={section.id}>
-                <strong>{section.title}</strong>
+              <label
+                key={section.id}
+                className={`oneshot-section-option${
+                  state.selectedSectionIds.includes(section.id) ? ' selected' : ''
+                }`}
+              >
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={state.selectedSectionIds.includes(section.id)}
+                    onChange={() => toggleSection(section.id)}
+                  />
+                  <strong>{section.title}</strong>
+                </span>
                 <p>{section.description}</p>
                 <div>
                   {section.items.map((item) => (
                     <small key={`${section.id}-${item}`}>{item}</small>
                   ))}
                 </div>
-              </div>
+              </label>
             ))}
           </div>
         </article>
@@ -155,8 +266,8 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
                 <span />
               </div>
               <div className="oneshot-preview-hero">
-                <strong>{offer}</strong>
-                <span>{conversion}</span>
+                <strong>{state.intake.offer}</strong>
+                <span>{state.intake.conversion}</span>
               </div>
               <div className="oneshot-preview-body">
                 <span />
@@ -168,57 +279,171 @@ export function OneShotStudioDepth({ onLaunchWebsiteStudio }: Props) {
         </article>
 
         <article className="oneshot-website-panel">
-          <PanelTitle icon="sliders" title="Design-token panel" meta="Shared system" />
+          <PanelTitle icon="sliders" title="Design-token panel" meta="Autosaved" />
           <div className="oneshot-token-list">
-            {TOKEN_GROUPS.map((group) => (
-              <div key={group.label}>
-                <strong>{group.label}</strong>
-                <span>{group.value}</span>
-              </div>
+            {Object.entries(state.tokens).map(([label, value]) => (
+              <label key={label}>
+                <strong>{label}</strong>
+                <input value={value} onChange={(event) => updateToken(label, event.target.value)} />
+              </label>
             ))}
           </div>
         </article>
 
         <article className="oneshot-website-panel">
-          <PanelTitle icon="link" title="Deploy status" meta={deployStatus} />
+          <PanelTitle icon="link" title="Website Builder adapter stub" meta={adapterStatus.label} />
           <label className="oneshot-deploy-field">
             <span>Real deploy URL or local verified URL</span>
             <input
-              value={deployUrl}
-              onChange={(event) => setDeployUrl(event.target.value)}
+              value={state.deployTarget}
+              onChange={(event) => updateState({ deployTarget: event.target.value })}
               placeholder="https://... or http://127.0.0.1:3004"
             />
           </label>
-          <div className={`oneshot-deploy-status ${hasVerifiedDeployTarget ? 'ready' : 'prepare'}`}>
-            <strong>{deployStatus}</strong>
-            <span>{deployDetail}</span>
+          <label className="oneshot-deploy-field">
+            <span>Deploy command output evidence</span>
+            <input
+              value={state.deployCommandEvidence}
+              onChange={(event) => updateState({ deployCommandEvidence: event.target.value })}
+              placeholder="Required before external URLs can be verified-deployed"
+            />
+          </label>
+          <div className={`oneshot-deploy-status ${adapterStatus.status}`}>
+            <strong>{adapterStatus.label}</strong>
+            <span>{adapterStatus.detail}</span>
           </div>
         </article>
 
         <article className="oneshot-website-panel">
-          <PanelTitle icon="file-code" title="Codex build brief export" meta="Preview" />
-          <div className="oneshot-brief-preview">
-            {buildBrief.map((line) => (
-              <code key={line}>{line}</code>
+          <PanelTitle icon="file-code" title="Generated Website Studio artifacts" meta={activeArtifact} />
+          <div className="oneshot-artifact-tabs" role="tablist" aria-label="Website Studio artifacts">
+            {Object.keys(artifacts).map((name) => (
+              <button
+                key={name}
+                type="button"
+                role="tab"
+                aria-selected={activeArtifact === name}
+                className={activeArtifact === name ? 'active' : ''}
+                onClick={() => setActiveArtifact(name as keyof WebsiteStudioArtifacts)}
+              >
+                {name}
+              </button>
             ))}
           </div>
+          <pre className="oneshot-artifact-preview">{artifacts[activeArtifact]}</pre>
         </article>
       </div>
 
       <div className="oneshot-depth-band">
-        <PanelTitle icon="check" title="Shared quality gates" meta="Required before export" />
+        <PanelTitle icon="check" title="Shared quality gates" meta="Real review state" />
         <div className="oneshot-quality-grid">
-          {ONESHOT_QUALITY_GATES.map((gate) => (
+          {state.qualityReviews.map((gate) => (
             <article key={gate.id} className={gate.status}>
               <div>
                 <strong>{gate.title}</strong>
-                <span>{gate.status}</span>
+                <select
+                  aria-label={`${gate.title} status`}
+                  value={gate.status}
+                  onChange={(event) => updateGate(gate.id, 'status', event.target.value)}
+                >
+                  <option value="pass">pass</option>
+                  <option value="needs-review">needs review</option>
+                  <option value="blocked">blocked</option>
+                </select>
               </div>
-              <meter min="0" max="100" value={gate.score} aria-label={`${gate.title} score`} />
-              <p>{gate.evidence}</p>
+              <label>
+                <span>Review note</span>
+                <input value={gate.note} onChange={(event) => updateGate(gate.id, 'note', event.target.value)} />
+              </label>
+              <label>
+                <span>Evidence</span>
+                <input
+                  value={gate.evidence}
+                  onChange={(event) => updateGate(gate.id, 'evidence', event.target.value)}
+                />
+              </label>
             </article>
           ))}
         </div>
+      </div>
+
+      <div className="oneshot-depth-split">
+        <article className="oneshot-depth-band">
+          <PanelTitle icon="pin" title="Comments and pins" meta={`${state.pins.length} notes`} />
+          <div className="oneshot-pin-composer">
+            <select value={pinTarget} onChange={(event) => setPinTarget(event.target.value)}>
+              {PIN_TARGETS.map((target) => (
+                <option key={target} value={target}>{target}</option>
+              ))}
+            </select>
+            <input
+              value={pinNote}
+              onChange={(event) => setPinNote(event.target.value)}
+              placeholder="Add a review note, source reminder, or production risk"
+            />
+            <button type="button" onClick={addPin}>Add pin</button>
+          </div>
+          <div className="oneshot-pin-list">
+            {state.pins.map((pin) => (
+              <div key={pin.id}>
+                <strong>{pin.target}</strong>
+                <span>{pin.note}</span>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="oneshot-depth-band">
+          <PanelTitle icon="folder" title="Evidence Studio v1" meta="Traceable intake" />
+          <div className="oneshot-evidence-v1">
+            <label className="wide">
+              <span>Evidence source path</span>
+              <input
+                value={state.evidenceStudio.sourcePath}
+                onChange={(event) =>
+                  updateState({
+                    evidenceStudio: { ...state.evidenceStudio, sourcePath: event.target.value },
+                  })
+                }
+              />
+            </label>
+            {(['originals', 'thumbnails', 'supportingAssets', 'flaggedFiles'] as const).map((field) => (
+              <label key={field}>
+                <span>{field}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={state.evidenceStudio[field]}
+                  onChange={(event) =>
+                    updateState({
+                      evidenceStudio: {
+                        ...state.evidenceStudio,
+                        [field]: Number(event.target.value),
+                      },
+                    })
+                  }
+                />
+              </label>
+            ))}
+            <label className="wide">
+              <span>Review gate</span>
+              <input
+                value={state.evidenceStudio.reviewGate}
+                onChange={(event) =>
+                  updateState({
+                    evidenceStudio: { ...state.evidenceStudio, reviewGate: event.target.value },
+                  })
+                }
+              />
+            </label>
+          </div>
+          <div className="oneshot-evidence-outputs">
+            <span>Evidence inventory</span>
+            <span>DESIGN.md</span>
+            <span>Opportunity packet</span>
+            <span>Codex build brief</span>
+          </div>
+        </article>
       </div>
 
       <div className="oneshot-depth-split">

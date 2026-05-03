@@ -68,12 +68,17 @@ describe('OneShotWorkflows', () => {
     expect(screen.getAllByText('Section library').length).toBeGreaterThan(0);
     expect(screen.getByText('Responsive preview frames')).toBeInTheDocument();
     expect(screen.getByText('Design-token panel')).toBeInTheDocument();
-    expect(screen.getByText('Codex build brief export')).toBeInTheDocument();
+    expect(screen.getByText('Generated Website Studio artifacts')).toBeInTheDocument();
+    expect(screen.getByText('codex_build_brief.md')).toBeInTheDocument();
+    expect(screen.getByText('responsive_qa.md')).toBeInTheDocument();
+    expect(screen.getByText('Autosaved to project-backed Website Studio state')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start Website Studio packet' })).toBeInTheDocument();
-    expect(screen.getByText('Deploy status')).toBeInTheDocument();
+    expect(screen.getByText('Website Builder adapter stub')).toBeInTheDocument();
     expect(screen.getAllByText('Prepare-only').length).toBeGreaterThan(0);
     expect(screen.getByText('Shared quality gates')).toBeInTheDocument();
     expect(screen.getByText('Visual quality')).toBeInTheDocument();
+    expect(screen.getAllByText('Comments and pins').length).toBeGreaterThan(0);
+    expect(screen.getByText('Evidence Studio v1')).toBeInTheDocument();
     expect(screen.getAllByText('Professional output controls').length).toBeGreaterThan(0);
     expect(screen.getByText('CoverVision OS deeper studio')).toBeInTheDocument();
     expect(screen.getByText('Adapter layer')).toBeInTheDocument();
@@ -116,7 +121,7 @@ describe('OneShotWorkflows', () => {
       target: { value: 'http://127.0.0.1:3004' },
     });
 
-    expect(screen.getAllByText('Ready to verify URL').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Verified local').length).toBeGreaterThan(0);
     expect(screen.getByText('http://127.0.0.1:3004')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Website Studio packet' }));
@@ -130,9 +135,66 @@ describe('OneShotWorkflows', () => {
           workflowHandoff: expect.objectContaining({
             commands: expect.arrayContaining(['publishOrPrepareDeploy']),
           }),
+          websiteStudio: expect.objectContaining({
+            adapterStatus: 'verified-local',
+            artifacts: expect.objectContaining({
+              'site_plan.md': expect.stringContaining('# Website Studio Site Plan'),
+              'codex_build_brief.md': expect.stringContaining('Deploy adapter status: verified-local'),
+              'responsive_qa.md': expect.stringContaining('Adapter status: Verified local'),
+            }),
+          }),
         }),
         pendingPrompt: expect.stringContaining('Do not claim the website is deployed'),
       }),
+    );
+    expect(onCreateProject.mock.calls[0][0].pendingPrompt).toContain('Project-backed Website Studio state:');
+    expect(onCreateProject.mock.calls[0][0].pendingPrompt).toContain('## site_plan.md');
+  });
+
+  it('persists Website Studio review gates and pins into project metadata', () => {
+    const onCreateProject = vi.fn();
+
+    render(
+      <OneShotWorkflows
+        skills={[skill('saas-landing', 'prototype')]}
+        designSystems={[designSystem('webflow')]}
+        defaultDesignSystemId="default"
+        onCreateProject={onCreateProject}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Visual quality status'), {
+      target: { value: 'blocked' },
+    });
+    fireEvent.change(screen.getAllByLabelText('Review note')[0]!, {
+      target: { value: 'Hero section needs stronger proof before export.' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Add a review note, source reminder, or production risk'), {
+      target: { value: 'Pin testimonial proof to the conversion section.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add pin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Website Studio packet' }));
+
+    const project = onCreateProject.mock.calls[0][0];
+    expect(project.metadata.websiteStudio.qualityReviews).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Visual quality',
+          status: 'blocked',
+          note: 'Hero section needs stronger proof before export.',
+        }),
+      ]),
+    );
+    expect(project.metadata.websiteStudio.pins).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: 'Website Studio / Hero',
+          note: 'Pin testimonial proof to the conversion section.',
+        }),
+      ]),
+    );
+    expect(project.metadata.websiteStudio.artifacts['responsive_qa.md']).toContain(
+      'Visual quality: blocked. Hero section needs stronger proof before export.',
     );
   });
 

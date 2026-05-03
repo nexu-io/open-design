@@ -3919,6 +3919,40 @@ code {
   flex: 0 0 auto;
 }
 
+.oneshot-depth-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.oneshot-depth-save-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.oneshot-depth-save-state span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.oneshot-depth-save-state code {
+  background: var(--bg-panel);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+}
+
 .oneshot-depth-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4045,7 +4079,9 @@ code {
 }
 
 .oneshot-section-library > div,
+.oneshot-section-option,
 .oneshot-token-list > div,
+.oneshot-token-list label,
 .oneshot-module-list section {
   display: flex;
   flex-direction: column;
@@ -4055,6 +4091,27 @@ code {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
+}
+
+.oneshot-section-option {
+  cursor: pointer;
+}
+
+.oneshot-section-option.selected {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+}
+
+.oneshot-section-option > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.oneshot-section-option input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
 }
 
 .oneshot-section-library strong,
@@ -4179,7 +4236,8 @@ code {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.oneshot-token-list > div {
+.oneshot-token-list > div,
+.oneshot-token-list label {
   background: var(--bg-panel);
 }
 
@@ -4187,6 +4245,10 @@ code {
   color: var(--text-muted);
   font-size: 11.5px;
   line-height: 1.35;
+}
+
+.oneshot-token-list input {
+  font-size: 12px;
 }
 
 .oneshot-deploy-status {
@@ -4199,9 +4261,15 @@ code {
   background: var(--amber-bg);
 }
 
-.oneshot-deploy-status.ready {
+.oneshot-deploy-status.ready,
+.oneshot-deploy-status.verified-local,
+.oneshot-deploy-status.verified-deployed {
   border-color: var(--green-border);
   background: var(--green-bg);
+}
+
+.oneshot-deploy-status.prepare-only {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--border));
 }
 
 .oneshot-deploy-status strong {
@@ -4232,6 +4300,40 @@ code {
   overflow-wrap: anywhere;
 }
 
+.oneshot-artifact-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.oneshot-artifact-tabs button {
+  padding: 5px 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.oneshot-artifact-tabs button.active {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-hover);
+}
+
+.oneshot-artifact-preview {
+  min-height: 220px;
+  max-height: 360px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .oneshot-quality-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4252,6 +4354,16 @@ code {
 .oneshot-quality-grid article.ready {
   border-color: var(--green-border);
   background: var(--green-bg);
+}
+
+.oneshot-quality-grid article.pass {
+  border-color: var(--green-border);
+  background: var(--green-bg);
+}
+
+.oneshot-quality-grid article.blocked {
+  border-color: var(--red-border);
+  background: var(--red-bg);
 }
 
 .oneshot-quality-grid article > div,
@@ -4289,6 +4401,25 @@ code {
   line-height: 1.35;
 }
 
+.oneshot-quality-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.oneshot-quality-grid label span {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.oneshot-quality-grid input,
+.oneshot-quality-grid select {
+  min-height: 30px;
+  font-size: 11.5px;
+}
+
 .oneshot-depth-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4297,6 +4428,83 @@ code {
 
 .oneshot-module-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.oneshot-pin-composer {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.65fr) minmax(0, 1fr) auto;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.oneshot-pin-composer button {
+  white-space: nowrap;
+}
+
+.oneshot-pin-list {
+  display: grid;
+  gap: 7px;
+}
+
+.oneshot-pin-list div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.oneshot-pin-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.oneshot-pin-list span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.oneshot-evidence-v1 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.oneshot-evidence-v1 label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.oneshot-evidence-v1 label.wide {
+  grid-column: 1 / -1;
+}
+
+.oneshot-evidence-v1 label span {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.oneshot-evidence-outputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.oneshot-evidence-outputs span {
+  padding: 5px 7px;
+  border: 1px solid var(--blue-border);
+  border-radius: var(--radius-sm);
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .oneshot-section {
@@ -4619,6 +4827,10 @@ code {
     flex-direction: column;
   }
 
+  .oneshot-depth-actions {
+    justify-content: flex-start;
+  }
+
   .oneshot-depth-grid,
   .oneshot-quality-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4722,6 +4934,20 @@ code {
 
   .oneshot-panel-title small {
     text-align: left;
+  }
+
+  .oneshot-depth-save-state,
+  .oneshot-pin-composer {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .oneshot-depth-save-state {
+    flex-direction: column;
+  }
+
+  .oneshot-evidence-v1 {
+    grid-template-columns: 1fr;
   }
 
   .oneshot-studio-card {
