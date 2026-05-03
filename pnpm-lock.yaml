@@ -139,7 +139,7 @@ importers:
         version: 16.2.4(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       openai:
         specifier: ^6.35.0
-        version: 6.35.0
+        version: 6.35.0(zod@3.25.76)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -191,10 +191,17 @@ importers:
         version: 2.1.9(@types/node@20.19.39)(jsdom@29.1.0)
 
   packages/contracts:
+    dependencies:
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.0)
 
   packages/platform:
     devDependencies:
@@ -3007,6 +3014,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   7zip-bin@5.2.0: {}
@@ -4961,7 +4971,9 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@6.35.0: {}
+  openai@6.35.0(zod@3.25.76):
+    optionalDependencies:
+      zod: 3.25.76
 
   p-cancelable@2.1.1: {}
 
@@ -5772,3 +5784,5 @@ snapshots:
       fd-slicer: 1.1.0
 
   yocto-queue@0.1.0: {}
+
+  zod@3.25.76: {}
