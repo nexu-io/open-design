@@ -127,6 +127,32 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'search_files',
+    description:
+      'Substring-search across every textual file in a project. Returns up to N matches with file, 1-indexed line, and snippet. Use this to find where a class, component, token, or copy string is defined without fetching every file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
+        query: {
+          type: 'string',
+          description:
+            'Substring to search (case-insensitive, treated as a literal — not a regex).',
+        },
+        pattern: {
+          type: 'string',
+          description: 'Optional glob filter on file name, e.g. "*.jsx".',
+        },
+        max: {
+          type: 'number',
+          description: 'Cap on matches returned (default 200, hard cap 1000).',
+        },
+      },
+      required: ['project', 'query'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'get_artifact',
     description:
       'Pull a design artifact bundle: the entry file plus every sibling asset it references (tokens CSS, JSX modules, images, fonts) in one call. Default mode (auto) parses the entry HTML/JSX and follows relative imports / script-src / link-href / img-src / css url() up to depth 3, skipping CDN urls. include="all" returns every textual file in the project; include="shallow" returns just the entry file. PREFER THIS over multiple get_file calls when extending an OD design.',
@@ -234,6 +260,18 @@ export async function runMcpStdio({ daemonUrl }) {
           );
         case 'get_artifact':
           return await getArtifact(baseUrl, args.project, args.entry, args.include);
+        case 'search_files': {
+          const id = await resolveProjectId(baseUrl, args.project);
+          requireString(args.query, 'query');
+          const params = new URLSearchParams({ q: String(args.query) });
+          if (args.pattern) params.set('pattern', String(args.pattern));
+          if (args.max) params.set('max', String(args.max));
+          return ok(
+            await getJson(
+              `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
+            ),
+          );
+        }
         default:
           return errorResult(`unknown tool: ${name}`);
       }

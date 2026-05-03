@@ -55,6 +55,7 @@ import {
   readProjectFile,
   removeProjectDir,
   sanitizeName,
+  searchProjectFiles,
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
@@ -1586,6 +1587,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects/:id/search', async (req, res) => {
+    try {
+      const query = String(req.query.q ?? '');
+      if (!query) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
+        return;
+      }
+      const pattern = req.query.pattern ? String(req.query.pattern) : null;
+      const max = Math.min(Number(req.query.max) || 200, 1000);
+      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
+        pattern,
+        max,
+      });
+      res.json({ query, matches });
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
