@@ -2,23 +2,48 @@ name: nix-check
 
 on:
   push:
-    paths:
-      - flake.nix
-      - flake.lock
-      - nix/**
-      - pnpm-lock.yaml
-      - .github/workflows/nix-check.yml
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.txt'
+      - LICENSE
+      - .gitignore
+      - .editorconfig
+      - .vscode/**
+      - .idea/**
+      - docs/**
+      - assets/**
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.gif'
+      - '**/*.svg'
+      - '**/*.webp'
+      - .github/ISSUE_TEMPLATE/**
+      - .github/PULL_REQUEST_TEMPLATE.md
+      - .github/CODEOWNERS
   pull_request:
-    paths:
-      - flake.nix
-      - flake.lock
-      - nix/**
-      - pnpm-lock.yaml
-      - .github/workflows/nix-check.yml
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.txt'
+      - LICENSE
+      - .gitignore
+      - .editorconfig
+      - .vscode/**
+      - .idea/**
+      - docs/**
+      - assets/**
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.gif'
+      - '**/*.svg'
+      - '**/*.webp'
+      - .github/ISSUE_TEMPLATE/**
+      - .github/PULL_REQUEST_TEMPLATE.md
+      - .github/CODEOWNERS
 
-# Full package build to verify daemon + web actually compile and link.
-# `nix flake check` runs first as a fast eval gate; the build steps run
-# next so a build break is distinguishable from a metadata break.
 jobs:
   build:
     runs-on: ubuntu-latest
