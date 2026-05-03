@@ -52,7 +52,7 @@ const TOOL_DEFS = [
       properties: {
         project: {
           type: 'string',
-          description: 'Project id (the `id` field from list_projects).',
+          description: 'Project id (UUID) or name substring.',
         },
       },
       required: ['project'],
@@ -66,7 +66,7 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: 'Project id.' },
+        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
       },
       required: ['project'],
       additionalProperties: false,
@@ -79,7 +79,7 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: 'Project id.' },
+        project: { type: 'string', description: 'Project id (UUID) or name substring.' },
         path: {
           type: 'string',
           description:
@@ -173,18 +173,21 @@ export async function runMcpStdio({ daemonUrl }) {
       switch (name) {
         case 'list_projects':
           return ok(await getJson(`${baseUrl}/api/projects`));
-        case 'get_project':
-          requireString(args.project, 'project');
-          return ok(await getJson(`${baseUrl}/api/projects/${encodeURIComponent(args.project)}`));
-        case 'list_files':
-          requireString(args.project, 'project');
+        case 'get_project': {
+          const id = await resolveProjectId(baseUrl, args.project);
+          return ok(await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`));
+        }
+        case 'list_files': {
+          const id = await resolveProjectId(baseUrl, args.project);
           return ok(
-            await getJson(`${baseUrl}/api/projects/${encodeURIComponent(args.project)}/files`),
+            await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`),
           );
-        case 'get_file':
-          requireString(args.project, 'project');
+        }
+        case 'get_file': {
+          const id = await resolveProjectId(baseUrl, args.project);
           requireString(args.path, 'path');
-          return await getFile(baseUrl, args.project, args.path);
+          return await getFile(baseUrl, id, args.path);
+        }
         case 'list_skills':
           return ok(await getJson(`${baseUrl}/api/skills`));
         case 'get_skill':
@@ -234,6 +237,47 @@ function requireString(v, name) {
   if (typeof v !== 'string' || v.length === 0) {
     throw new Error(`${name} is required (string).`);
   }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveProjectId(baseUrl, arg) {
+  if (typeof arg !== 'string' || !arg) {
+    throw new Error('project is required (string).');
+  }
+  if (UUID_RE.test(arg)) return arg;
+
+  const data = await getJson(`${baseUrl}/api/projects`);
+  const list = Array.isArray(data?.projects) ? data.projects : [];
+  if (list.length === 0) {
+    throw new Error('no projects on this daemon');
+  }
+
+  const lower = arg.toLowerCase();
+  const norm = (s) =>
+    String(s || '')
+      .toLowerCase()
+      .replace(/\s*\(\d+\)\s*$/, '')
+      .replace(/[\s_-]+/g, '-');
+  const target = norm(arg);
+
+  const exact = list.filter((p) => String(p.name || '').toLowerCase() === lower);
+  if (exact.length === 1) return exact[0].id;
+
+  const slugged = list.filter((p) => norm(p.name) === target);
+  if (slugged.length === 1) return slugged[0].id;
+
+  const subs = list.filter((p) =>
+    String(p.name || '').toLowerCase().includes(lower),
+  );
+  if (subs.length === 1) return subs[0].id;
+  if (subs.length > 1) {
+    const opts = subs.map((p) => `${p.name} (${p.id})`).join(', ');
+    throw new Error(
+      `multiple projects match "${arg}": ${opts}. Pass the UUID instead.`,
+    );
+  }
+  throw new Error(`no project matches "${arg}"`);
 }
 
 async function getJson(url) {
