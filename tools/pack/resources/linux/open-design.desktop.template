@@ -4,7 +4,7 @@ Name=Open Design (@@NAMESPACE@@)
 GenericName=Open Design
 Comment=Open Design packaged build (@@NAMESPACE@@)
 Exec=env OD_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ %U
-Icon=open-design-@@NAMESPACE@@
+Icon=@@ICON_PATH@@
 Categories=Development;Utility;
 StartupWMClass=Open Design
 StartupNotify=true

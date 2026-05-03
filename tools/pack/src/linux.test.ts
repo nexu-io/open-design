@@ -83,7 +83,7 @@ describe("renderDesktopTemplate", () => {
 Type=Application
 Name=Open Design (@@NAMESPACE@@)
 Exec=env OD_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ %U
-Icon=open-design-@@NAMESPACE@@
+Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
 `;
 
@@ -115,9 +115,10 @@ MimeType=x-scheme-handler/od;
     });
     expect(out).toContain("MimeType=x-scheme-handler/od;");
   });
+});
 
-  it("uses sanitized namespace via the caller (filenames)", () => {
-    const sanitized = sanitizeNamespace("a/b c");
-    expect(sanitized).toBe("a-b-c");
+describe("sanitizeNamespace", () => {
+  it("replaces non-alphanumeric chars with hyphens", () => {
+    expect(sanitizeNamespace("a/b c")).toBe("a-b-c");
   });
 });
