@@ -29,12 +29,16 @@ export async function ensureProject(projectsRoot, projectId) {
   return dir;
 }
 
-export async function listFiles(projectsRoot, projectId) {
+export async function listFiles(projectsRoot, projectId, opts = {}) {
   const dir = projectDir(projectsRoot, projectId);
   const out = [];
   await collectFiles(dir, '', out);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
+  const since = Number(opts.since);
+  if (Number.isFinite(since) && since > 0) {
+    return out.filter((f) => Number(f.mtime) > since);
+  }
   return out;
 }
 

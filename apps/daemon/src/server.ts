@@ -1583,7 +1583,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // project's own folder (see apps/daemon/src/projects.ts).
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
-      const files = await listFiles(PROJECTS_DIR, req.params.id);
+      const since = Number(req.query?.since);
+      const files = await listFiles(PROJECTS_DIR, req.params.id, {
+        since: Number.isFinite(since) ? since : undefined,
+      });
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);

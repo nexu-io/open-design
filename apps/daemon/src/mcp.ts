@@ -62,11 +62,15 @@ const TOOL_DEFS = [
   {
     name: 'list_files',
     description:
-      'List the files in a project. Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId so the caller can know which skill + brand produced the file.',
+      'List the files in a project. Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId so the caller can know which skill + brand produced the file. Optional `since` filters to files modified after the given Unix-ms timestamp — useful for cheap polling.',
     inputSchema: {
       type: 'object',
       properties: {
         project: { type: 'string', description: 'Project id (UUID) or name substring.' },
+        since: {
+          type: 'number',
+          description: 'Unix-ms; only return files with mtime > since.',
+        },
       },
       required: ['project'],
       additionalProperties: false,
@@ -237,9 +241,11 @@ export async function runMcpStdio({ daemonUrl }) {
         }
         case 'list_files': {
           const id = await resolveProjectId(baseUrl, args.project);
-          return ok(
-            await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`),
-          );
+          const params = new URLSearchParams();
+          if (Number.isFinite(args.since)) params.set('since', String(args.since));
+          const qs = params.toString();
+          const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
+          return ok(await getJson(url));
         }
         case 'get_file': {
           const id = await resolveProjectId(baseUrl, args.project);
