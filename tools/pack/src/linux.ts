@@ -559,8 +559,116 @@ export async function installPackedLinuxApp(config: ToolPackConfig): Promise<Lin
   };
 }
 
-export async function startPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
-  throw new Error("startPackedLinuxApp: implemented in Task 13");
+type LinuxStartSource = "built" | "installed";
+
+export type LinuxStartResult = {
+  appImagePath: string;
+  executablePath: string;
+  logPath: string;
+  namespace: string;
+  pid: number;
+  source: LinuxStartSource;
+  status: DesktopStatusSnapshot | null;
+};
+
+function desktopLogPath(config: ToolPackConfig): string {
+  return join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log");
+}
+
+function desktopIdentityPath(config: ToolPackConfig): string {
+  return join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
+}
+
+function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
+  return {
+    app: APP_KEYS.DESKTOP,
+    ipc: resolveAppIpcPath({
+      app: APP_KEYS.DESKTOP,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: config.namespace,
+    }),
+    mode: SIDECAR_MODES.RUNTIME,
+    namespace: config.namespace,
+    source: SIDECAR_SOURCES.TOOLS_PACK,
+  };
+}
+
+async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await pathExists(markerPath)) return true;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
+}
+
+async function fetchDesktopStatus(config: ToolPackConfig): Promise<DesktopStatusSnapshot | null> {
+  try {
+    const ipc = resolveAppIpcPath({
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: config.namespace,
+      app: APP_KEYS.DESKTOP,
+    });
+    const reply = await requestJsonIpc(ipc, { type: SIDECAR_MESSAGES.STATUS });
+    if (reply == null || typeof reply !== "object") return null;
+    return reply as DesktopStatusSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+export async function startPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStartResult> {
+  const paths = resolveLinuxPaths(config);
+  const installed = await pathExists(paths.installAppImagePath);
+  const built = !installed ? await findBuiltAppImage(paths) : null;
+  const appImagePath = installed ? paths.installAppImagePath : built;
+  const source: LinuxStartSource = installed ? "installed" : "built";
+
+  if (appImagePath == null) {
+    throw new Error("no AppImage found; run `tools-pack linux build` and/or `linux install` first");
+  }
+
+  const logPath = desktopLogPath(config);
+  await mkdir(dirname(logPath), { recursive: true });
+  await writeFile(logPath, "", "utf8").catch(() => undefined);
+
+  const stamp = linuxDesktopStamp(config);
+
+  // --appimage-extract-and-run bypasses FUSE-mounted SquashFS, which is too slow
+  // for daemon startup on first launch (smoke testing showed startup exceeded the
+  // packaged sidecar's 35-second timeout when running from FUSE).
+  const args = ["--appimage-extract-and-run", ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)];
+
+  const child = await spawnBackgroundProcess({
+    args,
+    command: appImagePath,
+    cwd: dirname(appImagePath),
+    env: createSidecarLaunchEnv({
+      base: join(config.roots.runtime.namespaceRoot, "runtime"),
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      extraEnv: { ...process.env },
+      stamp,
+    }),
+    logFd: null,
+  });
+
+  const markerPath = desktopIdentityPath(config);
+  const ready = await waitForMarker(markerPath, 60_000);
+  if (!ready) {
+    throw new Error(`desktop-root.json not written within 60s at ${markerPath}`);
+  }
+
+  const status = await fetchDesktopStatus(config);
+
+  return {
+    appImagePath,
+    executablePath: appImagePath,
+    logPath,
+    namespace: config.namespace,
+    pid: child.pid,
+    source,
+    status,
+  };
 }
 
 export async function stopPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
