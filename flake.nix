@@ -30,6 +30,13 @@
       # against an older binary. Override the upstream tarball to
       # the exact version pinned by `packageManager`. Bump the url
       # + hash in lockstep with package.json#packageManager.
+      #
+      # When bumping versions, run the following to get a new hash:
+      #
+      # ```bash
+      # nix store prefetch-file --hash-type sha256 \
+      #   https://registry.npmjs.org/pnpm/-/pnpm-${NEW_VERSION}.tgz
+      # ```
       pnpm_10 = pkgs.pnpm_10.overrideAttrs (_old: rec {
         version = "10.33.2";
         src = pkgs.fetchurl {
