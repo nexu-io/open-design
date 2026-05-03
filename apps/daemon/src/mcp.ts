@@ -235,11 +235,10 @@ export async function runMcpStdio({ daemonUrl }) {
     ]);
     const resources = [];
     for (const s of skillsData?.skills || []) {
-      const desc = typeof s.description === 'string' ? s.description.slice(0, 200) : undefined;
       resources.push({
         uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
         name: `Skill: ${s.name || s.id}`,
-        description: desc,
+        description: oneLine(s.description),
         mimeType: 'text/markdown',
       });
     }
@@ -247,8 +246,7 @@ export async function runMcpStdio({ daemonUrl }) {
       resources.push({
         uri: `od://design-systems/${encodeURIComponent(d.id)}/DESIGN.md`,
         name: `Design system: ${d.title || d.name || d.id}`,
-        description:
-          typeof d.summary === 'string' ? d.summary.slice(0, 200) : undefined,
+        description: oneLine(d.summary),
         mimeType: 'text/markdown',
       });
     }
@@ -380,6 +378,14 @@ function requireString(v, name) {
   }
 }
 
+// Resource description renderers in some MCP UIs collapse whitespace
+// poorly; keep our descriptions on a single line so they don't break
+// the catalog list layout.
+function oneLine(s) {
+  if (typeof s !== 'string') return undefined;
+  return s.replace(/\s+/g, ' ').trim().slice(0, 200) || undefined;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function resolveProjectId(baseUrl, arg) {
@@ -455,8 +461,15 @@ async function getFile(baseUrl, project, relPath) {
   return { content: [{ type: 'text', text }] };
 }
 
+const VALID_INCLUDE_MODES = new Set(['auto', 'all', 'shallow']);
+
 async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
-  const include = includeMode || 'auto';
+  const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
+  if (!VALID_INCLUDE_MODES.has(include)) {
+    return errorResult(
+      `invalid include "${includeMode}"; expected one of: auto, all, shallow`,
+    );
+  }
   const id = await resolveProjectId(baseUrl, projectArg);
   const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
   const project = data?.project ?? data;
@@ -485,7 +498,6 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
     const fetched = [];
     for (const f of allFiles) {
-      if (!isTextualMime(f.mime)) continue;
       try {
         fetched.push(await fetchProjectFile(baseUrl, id, f.name));
       } catch {
@@ -495,24 +507,38 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode) {
     return okBundle({ project, entry, files: fetched });
   }
 
+  // Auto mode: BFS from entry. The entry's own fetch must succeed —
+  // a 404 there almost always means the agent typo'd `entry:`, and
+  // returning an empty bundle would hide that.
+  let entryFile;
+  try {
+    entryFile = await fetchProjectFile(baseUrl, id, entry);
+  } catch (err) {
+    return errorResult(err && err.message ? err.message : String(err));
+  }
   const MAX_DEPTH = 3;
-  const visited = new Set();
-  const fetched = [];
-  let frontier = [entry];
-  for (let depth = 0; depth < MAX_DEPTH && frontier.length > 0; depth++) {
+  const visited = new Set([entry]);
+  const fetched = [entryFile];
+  let frontier = [];
+  if (isTextualMime(entryFile.mime)) {
+    frontier = extractRelativeRefs(entryFile.content || '', entry, entryFile.mime).filter(
+      (r) => !visited.has(r),
+    );
+  }
+  for (let depth = 1; depth < MAX_DEPTH && frontier.length > 0; depth++) {
     const next = [];
-    for (const path of frontier) {
-      if (visited.has(path)) continue;
-      visited.add(path);
+    for (const refPath of frontier) {
+      if (visited.has(refPath)) continue;
+      visited.add(refPath);
       let file;
       try {
-        file = await fetchProjectFile(baseUrl, id, path);
+        file = await fetchProjectFile(baseUrl, id, refPath);
       } catch {
         continue;
       }
       fetched.push(file);
       if (!isTextualMime(file.mime)) continue;
-      const refs = extractRelativeRefs(file.content || '', path);
+      const refs = extractRelativeRefs(file.content || '', refPath, file.mime);
       for (const ref of refs) {
         if (!visited.has(ref)) next.push(ref);
       }
@@ -536,7 +562,8 @@ async function fetchProjectFile(baseUrl, projectId, relPath) {
   const mime = (resp.headers.get('content-type') || 'application/octet-stream')
     .split(';')[0]
     .trim();
-  const size = Number(resp.headers.get('content-length')) || null;
+  const headerSize = Number(resp.headers.get('content-length'));
+  const size = Number.isFinite(headerSize) && headerSize >= 0 ? headerSize : null;
   if (!isTextualMime(mime)) {
     return { name: relPath, mime, size, content: null, binary: true };
   }
@@ -544,32 +571,95 @@ async function fetchProjectFile(baseUrl, projectId, relPath) {
   return { name: relPath, mime, size: size ?? content.length, content, binary: false };
 }
 
-function extractRelativeRefs(text, fromPath) {
+// Patterns common to HTML and CSS (also fine to run on plain markdown).
+const HTML_REF_PATTERNS = [
+  /<script\b[^>]*\bsrc=["']([^"']+)["']/gi,
+  /<link\b[^>]*\bhref=["']([^"']+)["']/gi,
+  /<img\b[^>]*\bsrc=["']([^"']+)["']/gi,
+  /<source\b[^>]*\bsrc=["']([^"']+)["']/gi,
+  /<video\b[^>]*\bsrc=["']([^"']+)["']/gi,
+  /<audio\b[^>]*\bsrc=["']([^"']+)["']/gi,
+  /<iframe\b[^>]*\bsrc=["']([^"']+)["']/gi,
+];
+
+const CSS_REF_PATTERNS = [
+  /\burl\(\s*["']?([^"')]+)["']?\s*\)/gi,
+  /@import\s+(?:url\()?\s*["']([^"')]+)["']/gi,
+];
+
+// JS/TS only — running these on prose creates false positives on words
+// like "imported from 'X'".
+const JS_REF_PATTERNS = [
+  /\bimport\s+[^'"]*?['"]([^'"]+)['"]/g,
+  /\bfrom\s+['"]([^'"]+)['"]/g,
+  /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
+  /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g,
+];
+
+// `srcset` can list multiple comma-separated candidates.
+const SRCSET_PATTERN = /\bsrcset=["']([^"']+)["']/gi;
+
+function isJsLike(mime, fromPath) {
+  if (mime && /javascript|typescript/i.test(mime)) return true;
+  return /\.(?:m?jsx?|tsx?|cjs)$/i.test(fromPath);
+}
+
+function isCssLike(mime, fromPath) {
+  if (mime && /^text\/css\b/i.test(mime)) return true;
+  return /\.css$/i.test(fromPath);
+}
+
+function isHtmlLike(mime, fromPath) {
+  if (mime && /^text\/html\b/i.test(mime)) return true;
+  return /\.html?$/i.test(fromPath);
+}
+
+function extractRelativeRefs(text, fromPath, fromMime) {
   if (!text) return [];
   const refs = new Set();
-  const patterns = [
-    /<script\b[^>]*\bsrc=["']([^"']+)["']/gi,
-    /<link\b[^>]*\bhref=["']([^"']+)["']/gi,
-    /<img\b[^>]*\bsrc=["']([^"']+)["']/gi,
-    /<source\b[^>]*\bsrc=["']([^"']+)["']/gi,
-    /<video\b[^>]*\bsrc=["']([^"']+)["']/gi,
-    /\bimport\s+[^'"]*['"]([^'"]+)['"]/g,
-    /\bfrom\s+['"]([^'"]+)['"]/g,
-    /\burl\(\s*["']?([^"')]+)["']?\s*\)/gi,
-  ];
-  for (const re of patterns) {
+  const runPatterns = [];
+  if (isHtmlLike(fromMime, fromPath)) {
+    runPatterns.push(...HTML_REF_PATTERNS, ...CSS_REF_PATTERNS);
+  }
+  if (isCssLike(fromMime, fromPath)) {
+    runPatterns.push(...CSS_REF_PATTERNS);
+  }
+  if (isJsLike(fromMime, fromPath)) {
+    runPatterns.push(...JS_REF_PATTERNS);
+  }
+  // Fallback for unknown textual files: only the safest pattern,
+  // url() in case it's a CSS-in-something we don't recognize.
+  if (runPatterns.length === 0) {
+    runPatterns.push(...CSS_REF_PATTERNS);
+  }
+
+  const candidates = [];
+  for (const re of runPatterns) {
     for (const m of text.matchAll(re)) {
       const ref = (m[1] || '').trim();
-      if (!ref) continue;
-      if (/^(?:https?:|\/\/|data:|mailto:|tel:|#)/i.test(ref)) continue;
-      const dir = fromPath.includes('/')
-        ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1)
-        : '';
-      const resolved = ref.startsWith('/') ? ref.slice(1) : dir + ref;
-      const clean = resolved.replace(/[?#].*$/, '').replace(/^\.\//, '');
-      if (!clean || clean.includes('..')) continue;
-      refs.add(clean);
+      if (ref) candidates.push(ref);
     }
+  }
+  // Pull every candidate URL out of any srcset attributes in HTML.
+  if (isHtmlLike(fromMime, fromPath)) {
+    for (const m of text.matchAll(SRCSET_PATTERN)) {
+      const list = m[1] || '';
+      for (const part of list.split(',')) {
+        const url = part.trim().split(/\s+/)[0];
+        if (url) candidates.push(url);
+      }
+    }
+  }
+
+  for (const raw of candidates) {
+    if (/^(?:https?:|\/\/|data:|mailto:|tel:|#)/i.test(raw)) continue;
+    const dir = fromPath.includes('/')
+      ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1)
+      : '';
+    const resolved = raw.startsWith('/') ? raw.slice(1) : dir + raw;
+    const clean = resolved.replace(/[?#].*$/, '').replace(/^\.\//, '');
+    if (!clean || clean.includes('..')) continue;
+    refs.add(clean);
   }
   return [...refs];
 }
