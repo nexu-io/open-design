@@ -641,16 +641,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Projects (DB-backed) -------------------------------------------------
 
-  // Soft "what is the user looking at right now in OD?" channel. The
+  // Soft "what is the user looking at right now in Open Design?" channel. The
   // web UI POSTs the current project + file on every route change;
   // the MCP surface reads it so a coding agent in another repo can
   // resolve "the design I have open" without the user typing the
-  // project id. In-memory only — daemon restart clears it.
+  // project id. In-memory only - daemon restart clears it.
   /** @type {{ projectId: string; fileName: string | null; ts: number } | null} */
   let activeContext = null;
   const ACTIVE_CONTEXT_TTL_MS = 5 * 60 * 1000;
 
+  // Active context is private to the local machine. The daemon binds
+  // 0.0.0.0 by default, so without an origin check a peer on the LAN
+  // could read what the user is currently looking at (GET) or spoof
+  // it to redirect MCP fallbacks (POST). The web proxies same-origin
+  // and the MCP runs in-process via 127.0.0.1, so both legitimate
+  // callers pass the check.
   app.post('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
     try {
       const body = req.body || {};
       if (body.active === false) {
@@ -674,7 +683,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/active', (_req, res) => {
+  app.get('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
     if (!activeContext || Date.now() - activeContext.ts > ACTIVE_CONTEXT_TTL_MS) {
       activeContext = null;
       res.json({ active: false });
