@@ -318,18 +318,31 @@ async function writeAssembledApp(
   const mainStub = `"use strict";\nrequire("@open-design/packaged");\n`;
   await writeFile(paths.assembledMainEntryPath, mainStub, "utf8");
 
+  await writeFile(
+    paths.packagedConfigPath,
+    `${JSON.stringify(
+      {
+        namespace: config.namespace,
+        nodeCommandRelative: "open-design/bin/node",
+        ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
   await runNpmInstall(paths.assembledAppRoot);
 }
 
 // --- Step 5: writeLinuxBuilderConfig helper ---
 
 async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
-  const productNameSafe = `${PRODUCT_NAME}`;
   const target = config.to === "dir" ? ["dir"] : ["AppImage"];
 
   const builderConfig: Record<string, unknown> = {
-    appId: "io.nexu.opendesign",
-    productName: productNameSafe,
+    appId: "io.open-design.desktop",
+    productName: PRODUCT_NAME,
     asar: true,
     directories: {
       app: paths.assembledAppRoot,
@@ -338,6 +351,10 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
     },
     electronVersion: config.electronVersion.replace(/^[^\d]*/, ""),
     electronDist: config.electronDistPath,
+    extraResources: [
+      { from: paths.resourceRoot, to: "open-design" },
+      { from: paths.packagedConfigPath, to: "open-design-config.json" },
+    ],
     linux: {
       target,
       icon: linuxResources.icon,
@@ -345,24 +362,22 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       synopsis: "Open Design",
       maintainer: "Open Design Contributors",
     },
-    appImage: {
-      license: undefined,
-    },
   };
 
   if (!config.portable) {
     builderConfig.extraMetadata = {
-      ...((builderConfig.extraMetadata as Record<string, unknown>) ?? {}),
       odToolsPackRuntimeRoot: config.roots.runtime.namespaceBaseRoot,
     };
   }
 
+  await mkdir(dirname(paths.appBuilderConfigPath), { recursive: true });
   await writeFile(paths.appBuilderConfigPath, `${JSON.stringify(builderConfig, null, 2)}\n`, "utf8");
 }
 
 // --- Step 6: runElectronBuilderLinux + findBuiltAppImage helpers ---
 
 async function runElectronBuilderLinux(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
+  await rm(paths.appBuilderOutputRoot, { force: true, recursive: true });
   const args = [
     config.electronBuilderCliPath,
     "--linux",
@@ -370,6 +385,8 @@ async function runElectronBuilderLinux(config: ToolPackConfig, paths: LinuxPaths
     paths.appBuilderConfigPath,
     "--projectDir",
     paths.assembledAppRoot,
+    "--publish",
+    "never",
   ];
   await execFileAsync(process.execPath, args, {
     cwd: config.workspaceRoot,
