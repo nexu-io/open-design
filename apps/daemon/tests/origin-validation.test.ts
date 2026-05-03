@@ -235,14 +235,8 @@ describe('daemon origin validation middleware', () => {
     expect(res.status).toBe(403);
   });
 
-  // --- Fail-closed when port not resolved ---
-
-  it('fails closed (403) when port is 0 (not yet resolved)', async () => {
-    const res = await request(port, 'GET', '/api/projects', {
-      origin: `http://127.0.0.1:${port}`,
-    }, 0); // This test uses a separate app with port=0
-    // We test this separately below
-  });
+  // Note: fail-closed coverage when port=0 is tested in the dedicated
+  // describe block below ("fail-closed before port resolution").
 });
 
 describe('origin validation: fail-closed before port resolution', () => {
