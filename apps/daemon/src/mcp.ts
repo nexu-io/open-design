@@ -1,6 +1,6 @@
 // @ts-nocheck
 //
-// `od mcp` — stdio MCP server that proxies read-only tool calls to the
+// `od mcp` - stdio MCP server that proxies read-only tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
 // (Claude Code, Cursor, Zed) pull files from a local Open Design
 // project without the export-zip-import dance.
@@ -8,7 +8,7 @@
 // The server itself holds no state and never touches the filesystem;
 // every tool resolves to a fetch() against `OD_DAEMON_URL`. Spawn the
 // MCP server with no daemon running and tool calls return a clear
-// "daemon not reachable" error — the server itself still launches so
+// "daemon not reachable" error - the server itself still launches so
 // the client can list its tool schema.
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -48,40 +48,42 @@ const READ_ANNOTATIONS = {
   openWorldHint: false,
 };
 
+// Description style: short, one purpose-line per tool. Active-context
+// fallback is documented once in the server `instructions` block, so
+// per-tool descriptions just say "project optional" and don't repeat
+// the rationale - that saves ~150 tokens per tools/list response,
+// shipped to the model on every session.
+const PROJECT_ARG = {
+  type: 'string',
+  description: 'Project id (UUID) or name substring. Optional; defaults to the active project.',
+} as const;
+
 const TOOL_DEFS = [
-  // Discovery + the centerpiece sit at the top: well-behaved LLMs
-  // weight earlier tools more, so the bundle path beats per-file
-  // fetching by default.
   {
     name: 'list_projects',
-    description:
-      'List every Open Design project on this daemon. Call this first to discover available project ids before using other tools.',
+    description: 'List every Open Design project on this daemon.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    annotations: { ...READ_ANNOTATIONS, title: 'List OD projects' },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design projects' },
   },
   {
     name: 'get_active_context',
     description:
-      'Returns the project + file the user has open in OD right now (if any). Note: get_artifact, get_project, get_file, search_files, and list_files already default to active context when their project arg is omitted, so you usually do NOT need to call this first. Use it only when you want the active project/file explicitly without doing anything else (e.g. answering "what am I looking at?"). Returns {active:false} when OD is closed.',
+      'Project + file the user has open in Open Design right now. Returns {active:false} if none. Most tools default to this when project is omitted, so you rarely need to call this directly.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
   },
   {
     name: 'get_artifact',
     description:
-      'PREFER THIS over multiple get_file calls. Pulls a design artifact bundle in one call: the entry file plus every sibling it references (tokens CSS, JSX modules, images, fonts). Default mode (auto) parses the entry HTML/JSX/CSS and follows relative <script src>, <link href>, <img src>, <iframe src>, srcset, JSX import/from/require, dynamic import(), CSS url() and @import — up to depth 3, skipping CDN/data/anchor URLs. include="all" returns every file in the project (binary files arrive as metadata stubs); include="shallow" returns just the entry. Use maxBytes to cap response size. project and entry are optional — when omitted, defaults to the active OD context (the project the user has open and, if available, the file they\'re currently looking at).',
+      'PREFER THIS over multiple get_file calls. Bundles the entry file plus every sibling it references (HTML <script>/<link>/<img>/srcset, JSX import/require, CSS url()/@import) up to depth 3, skipping CDN/data URLs. include="all" returns every file in the project; include="shallow" returns just the entry.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: {
-          type: 'string',
-          description:
-            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
-        },
+        project: PROJECT_ARG,
         entry: {
           type: 'string',
           description:
-            'Entry file path relative to project root. Defaults to the active file (when project is also omitted) or the project\'s metadata.entryFile.',
+            "Entry file path relative to project root. Defaults to the active file or project's metadata.entryFile.",
         },
         include: {
           type: 'string',
@@ -91,7 +93,7 @@ const TOOL_DEFS = [
         maxBytes: {
           type: 'number',
           description:
-            'Soft cap on total textual content size returned (default 1500000 ≈ 1.5MB). Files past the cap are dropped and `truncated: true` is set on the bundle.',
+            'Soft cap on total text bytes (default 1_500_000). Excess files are dropped and truncated:true is set.',
         },
       },
       additionalProperties: false,
@@ -101,36 +103,26 @@ const TOOL_DEFS = [
   {
     name: 'get_project',
     description:
-      'Fetch a single project: name, active skill/design-system ids, timestamps. entryFile and kind are surfaced at the top level for convenience. project is optional — defaults to the active OD project when omitted.',
+      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps.',
     inputSchema: {
       type: 'object',
-      properties: {
-        project: {
-          type: 'string',
-          description:
-            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
-        },
-      },
+      properties: { project: PROJECT_ARG },
       additionalProperties: false,
     },
-    annotations: { ...READ_ANNOTATIONS, title: 'Get OD project' },
+    annotations: { ...READ_ANNOTATIONS, title: 'Get Open Design project' },
   },
   {
     name: 'get_file',
     description:
-      'Read the current contents of a single project file. Returns text content for textual mimes (HTML, JSX, CSS, JSON, SVG, Markdown, etc.). Binary files return a clear error — use list_files to inspect their metadata, or extract them via the OD UI for now. For multi-file design bundles, prefer get_artifact. project is optional (defaults to active OD project); path is also optional and defaults to the active file when both project and path are omitted.',
+      'Read one project file. Text mimes only (HTML, JSX, CSS, JSON, SVG, Markdown). Binary files return an error; use list_files for metadata. For multi-file designs prefer get_artifact.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: {
-          type: 'string',
-          description:
-            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
-        },
+        project: PROJECT_ARG,
         path: {
           type: 'string',
           description:
-            'File path relative to the project root, e.g. "landing.html" or "subdir/file.html". Forward slashes only. Optional — defaults to the active file when project is also omitted.',
+            'File path relative to project root, forward slashes. Optional; defaults to the active file when project is also omitted.',
         },
       },
       additionalProperties: false,
@@ -140,27 +132,22 @@ const TOOL_DEFS = [
   {
     name: 'search_files',
     description:
-      'Case-insensitive literal-substring search across every textual file in a project. Returns up to N matches with file, 1-indexed line, and snippet. Use this to find where a class, component, token, or copy string is defined without fetching every file. project is optional — defaults to the active OD project when omitted.',
+      'Case-insensitive literal-substring search across textual files in a project. Returns up to max matches with file, 1-indexed line, and snippet.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: {
-          type: 'string',
-          description:
-            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
-        },
+        project: PROJECT_ARG,
         query: {
           type: 'string',
-          description:
-            'Substring to search (case-insensitive, treated as a literal — not a regex).',
+          description: 'Literal substring (not a regex), case-insensitive.',
         },
         pattern: {
           type: 'string',
-          description: 'Optional glob filter on file name, e.g. "*.jsx".',
+          description: 'Optional glob on file name, e.g. "*.jsx".',
         },
         max: {
           type: 'number',
-          description: 'Cap on matches returned (default 200, hard cap 1000).',
+          description: 'Cap on matches (default 200, hard cap 1000).',
         },
       },
       required: ['query'],
@@ -171,15 +158,11 @@ const TOOL_DEFS = [
   {
     name: 'list_files',
     description:
-      'List the files in a project (metadata only). Each entry includes name, path (relative), mime, kind, size, mtime, and (when present) artifactManifest with sourceSkillId / designSystemId. Optional `since` filters to files modified strictly after the given Unix-ms timestamp — pass the max mtime you saw last to cheap-poll for changes. project is optional — defaults to the active OD project when omitted.',
+      'Project file metadata: name, path, mime, kind, size, mtime, optional artifactManifest. Pass since=<unix-ms> to cheap-poll for changes.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: {
-          type: 'string',
-          description:
-            'Project id (UUID) or name substring. Optional — defaults to the active OD project when omitted.',
-        },
+        project: PROJECT_ARG,
         since: {
           type: 'number',
           description: 'Unix-ms; only return files with mtime > since.',
@@ -189,47 +172,13 @@ const TOOL_DEFS = [
     },
     annotations: { ...READ_ANNOTATIONS, title: 'List project files' },
   },
-  // Catalog tools — also exposed as MCP resources at od://...
-  {
-    name: 'list_skills',
-    description:
-      'List the skills installed in this OD instance. A skill is a brand-aware recipe (HTML/JSX scaffold + checklists + DESIGN.md hooks) like "dating-web", "blog-post", "guizang-ppt".',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    annotations: { ...READ_ANNOTATIONS, title: 'List OD skills' },
-  },
-  {
-    name: 'get_skill',
-    description: 'Fetch a single skill\'s metadata and SKILL.md body by id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Skill id (slug, from list_skills).' },
-      },
-      required: ['id'],
-      additionalProperties: false,
-    },
-    annotations: { ...READ_ANNOTATIONS, title: 'Get skill' },
-  },
-  {
-    name: 'list_design_systems',
-    description:
-      'List the design systems installed in this OD instance. Each is a single DESIGN.md file describing one brand\'s visual language.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    annotations: { ...READ_ANNOTATIONS, title: 'List design systems' },
-  },
-  {
-    name: 'get_design_system',
-    description: 'Fetch a single design system\'s metadata and DESIGN.md body by id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Design system id (slug).' },
-      },
-      required: ['id'],
-      additionalProperties: false,
-    },
-    annotations: { ...READ_ANNOTATIONS, title: 'Get design system' },
-  },
+  // Catalog (skills, design systems) is intentionally NOT exposed as
+  // MCP tools. Skills are recipes that Open Design itself uses to
+  // generate artifacts; an external coding agent consuming Open
+  // Design's output can't run them. Design systems are reference material a
+  // user can opt into via the resource URIs (od://design-systems/...)
+  // when they actually want them, instead of paying tool-description
+  // tokens on every turn.
 ];
 
 export async function runMcpStdio({ daemonUrl }) {
@@ -249,36 +198,35 @@ export async function runMcpStdio({ daemonUrl }) {
         'default to the project the user has open in OD right now; get_file',
         'and get_artifact additionally default to the active file. So when',
         'the user says "this file" / "the design I have open" / "find X",',
-        'just call the tool without project — no need to ask first. The',
+        'just call the tool without project - no need to ask first. The',
         'response carries usedActiveContext so you can confirm which',
         'project/file you hit. Pass project explicitly to override.',
         '',
         'Pulling design context:',
-        '  - get_artifact() — entry file PLUS every referenced sibling',
+        ' - get_artifact() - entry file PLUS every referenced sibling',
         '    (tokens CSS, JSX modules, imported assets) in one call.',
         '    PREFER THIS over multiple get_file calls when the user',
         '    wants to understand or extend a design.',
-        '  - get_file(path) for a single known file.',
-        '  - search_files(query) to find a class/component/copy string',
+        ' - get_file(path) for a single known file.',
+        ' - search_files(query) to find a class/component/copy string',
         '    without fetching every file.',
-        '  - list_files for metadata only.',
-        '  - list_projects to discover what is available on this daemon.',
-        '  - get_active_context() if you want the active project/file',
+        ' - list_files for metadata only.',
+        ' - list_projects to discover what is available on this daemon.',
+        ' - get_active_context() if you want the active project/file',
         '    explicitly without making any other tool call.',
         '',
         'Project arguments accept either a UUID or a name substring',
         '(e.g. "recaptr"); the server resolves the latter.',
         '',
-        'Catalog reads (skills, design systems) are reference material — call',
-        'them when the user asks about brand or skill, not on every request.',
-        'Skills and design systems are also exposed as MCP resources at',
-        '`od://skills/<id>/SKILL.md` and `od://design-systems/<id>/DESIGN.md`;',
-        'clients that surface them passively can read them without an explicit',
-        'tool call.',
+        'Reference material is exposed as MCP resources, not tools - read',
+        'od://design-systems/<id>/DESIGN.md when you need the brand spec',
+        'for a design (palette, typography, voice). Skills are similarly',
+        'available at od://skills/<id>/SKILL.md but are mostly relevant',
+        'when the user asks about how a particular artifact was generated.',
         '',
-        'When extending an OD design in another codebase, pull the full bundle',
-        'once with get_artifact and work from those files locally — do not',
-        'fetch files one-by-one if you can avoid it.',
+        'When extending an Open Design design in another codebase, pull',
+        'the full bundle once with get_artifact and work from those files',
+        'locally - do not fetch files one-by-one if you can avoid it.',
       ].join('\n'),
     },
   );
@@ -295,8 +243,8 @@ export async function runMcpStdio({ daemonUrl }) {
     const resources = [
       {
         uri: 'od://focus/active',
-        name: 'Active OD context',
-        description: 'The project/file the user has open in OD right now.',
+        name: 'Active Open Design context',
+        description: 'The project/file the user has open in Open Design right now.',
         mimeType: 'application/json',
       },
     ];
@@ -405,18 +353,6 @@ export async function runMcpStdio({ daemonUrl }) {
           requireString(path, 'path');
           return await getFile(baseUrl, id, path, active);
         }
-        case 'list_skills':
-          return ok(await getJson(`${baseUrl}/api/skills`));
-        case 'get_skill':
-          requireString(args.id, 'id');
-          return ok(await getJson(`${baseUrl}/api/skills/${encodeURIComponent(args.id)}`));
-        case 'list_design_systems':
-          return ok(await getJson(`${baseUrl}/api/design-systems`));
-        case 'get_design_system':
-          requireString(args.id, 'id');
-          return ok(
-            await getJson(`${baseUrl}/api/design-systems/${encodeURIComponent(args.id)}`),
-          );
         case 'get_artifact':
           return await getArtifact(
             baseUrl,
@@ -492,7 +428,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Short-lived cache for the project list. A typical agent session
 // makes several name-based lookups in quick succession; without this
 // each one re-fetches /api/projects. The TTL is short so a project
-// renamed in the OD UI shows up within a few seconds.
+// renamed in the Open Design UI shows up within a few seconds.
 const PROJECT_LIST_TTL_MS = 5000;
 let projectListCache = null;
 
@@ -512,7 +448,7 @@ async function fetchProjectList(baseUrl) {
 }
 
 // When the agent omits `project`, fall back to whatever the user has
-// open in OD. Returns the resolved id plus, for echo-back to the
+// open in Open Design. Returns the resolved id plus, for echo-back to the
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
@@ -530,7 +466,7 @@ async function resolveProjectArg(baseUrl, arg) {
   }
   if (!active || active.active === false || !active.projectId) {
     throw new Error(
-      'project arg omitted and OD has no active project. Open a project in OD or pass project="<id-or-name>".',
+      'project arg omitted and Open Design has no active project. Open a project in Open Design or pass project="<id-or-name>".',
     );
   }
   return { id: active.projectId, active };
@@ -621,7 +557,7 @@ async function getFile(baseUrl, project, relPath, active) {
 
 // Stamp `usedActiveContext` onto JSON tool responses when the
 // project came from /api/active. Plain pass-through when the caller
-// supplied project explicitly — keeps token overhead at zero for the
+// supplied project explicitly - keeps token overhead at zero for the
 // explicit path.
 function withActiveEcho(payload, active) {
   if (!active) return payload;
@@ -673,7 +609,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
   const project = data?.project ?? data;
   // Active-file beats project default entry when project also came
-  // from active context — if the user is on landing.html and asks
+  // from active context - if the user is on landing.html and asks
   // "bundle this", they mean landing.html, not whatever
   // metadata.entryFile happens to be.
   const explicitEntry = typeof entryArg === 'string' && entryArg.length > 0;
@@ -715,7 +651,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     return okBundle({ project, entry, files: fetched, truncated, active });
   }
 
-  // Auto mode: BFS from entry. The entry's own fetch must succeed —
+  // Auto mode: BFS from entry. The entry's own fetch must succeed - 
   // a 404 there almost always means the agent typo'd `entry:`, and
   // returning an empty bundle would hide that.
   let entryFile;
@@ -800,7 +736,7 @@ const CSS_REF_PATTERNS = [
   /@import\s+(?:url\()?\s*["']([^"')]+)["']/gi,
 ];
 
-// JS/TS only — running these on prose creates false positives on words
+// JS/TS only - running these on prose creates false positives on words
 // like "imported from 'X'".
 const JS_REF_PATTERNS = [
   /\bimport\s+[^'"]*?['"]([^'"]+)['"]/g,
@@ -912,7 +848,7 @@ function formatError(err, daemonUrl) {
   const code = err && (err.cause?.code || err.code);
   const msg = err && err.message ? err.message : String(err);
   if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
-    return `cannot reach OD daemon at ${daemonUrl}. Is it running? Start it with \`pnpm tools-dev\` or \`od\`.`;
+    return `cannot reach the Open Design daemon at ${daemonUrl}. Is it running? Start it with \`pnpm tools-dev\`.`;
   }
   return msg;
 }

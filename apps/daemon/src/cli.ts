@@ -105,14 +105,15 @@ function printRootHelp() {
 
   od media generate --surface <image|video|audio> --model <id> [opts]
       Generate a media artifact and write it into the active project.
-      Designed to be invoked by a code agent — picks up OD_DAEMON_URL
+      Designed to be invoked by a code agent - picks up OD_DAEMON_URL
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
 
   od mcp [--daemon-url <url>]
       Run a stdio MCP server that proxies read-only tool calls to a
-      running OD daemon. Wire it into a coding agent (Claude Code,
-      Cursor, Zed) in another repo to pull files from a local OD
-      project without exporting a zip.
+      running Open Design daemon. Wire it into a coding agent
+      (Claude Code, Cursor, VS Code, Zed, Windsurf) in another repo
+      to pull files from a local Open Design project without
+      exporting a zip.
 
 Options:
   --port <n>       Port to listen on (default: 7456, env: OD_PORT).
@@ -360,7 +361,7 @@ function surfaceFetchError(err, daemonUrl) {
     console.error(
       'hint: outbound connect was denied by a sandbox. If you launched ' +
         'this command from a code agent, check the agent\'s sandbox / ' +
-        'network policy. The OD daemon itself is unaffected — it can be ' +
+        'network policy. The Open Design daemon itself is unaffected - it can be ' +
         'reached from a regular shell.',
     );
   }
@@ -477,34 +478,31 @@ function printMcpHelp() {
   console.log(`Usage: od mcp [--daemon-url <url>]
 
 Run a stdio MCP (Model Context Protocol) server that proxies read-only
-tool calls to a running OD daemon. Wire it into a coding agent in
-another repo so the agent can pull files from a local OD project
-without exporting a zip every iteration.
+tool calls to a running Open Design daemon. Wire it into a coding agent
+in another repo so the agent can pull files from a local Open Design
+project without exporting a zip every iteration.
 
 Options:
-  --daemon-url <url>   OD daemon HTTP base URL (default: env OD_DAEMON_URL,
-                       falling back to http://127.0.0.1:7456).
+  --daemon-url <url>   Open Design daemon HTTP base URL (default: env
+                       OD_DAEMON_URL, falling back to http://127.0.0.1:7456).
 
 Tools exposed:
-  list_projects                 list every OD project
-  get_project(project)          single project metadata
-  list_files(project)           project files + artifactManifest sidecars
-  get_file(project, path)       file contents (textual mimes only for now)
-  list_skills / get_skill(id)   installed skills catalog
-  list_design_systems / get_design_system(id)
+  list_projects                  list every Open Design project
+  get_active_context             what project/file the user has open right now
+  get_artifact([project, entry]) bundle: entry file + every referenced sibling
+  get_project([project])         single project metadata
+  get_file([project, path])      file contents (textual mimes only for now)
+  search_files(query[, project]) literal substring search across textual files
+  list_files([project])          project files + artifactManifest sidecars
 
-Wire-up example (Claude Code, Cursor, Zed):
+When project is omitted, get_artifact / get_project / get_file /
+search_files / list_files default to the project the user has open in
+Open Design; get_artifact and get_file additionally default to the
+active file. The response stamps usedActiveContext so callers can see
+which project/file got resolved.
 
-  {
-    "mcpServers": {
-      "open-design": {
-        "command": "od",
-        "args": ["mcp"],
-        "env": { "OD_DAEMON_URL": "http://127.0.0.1:7456" }
-      }
-    }
-  }
-
-The daemon must be running locally for tool calls to succeed; the MCP
-server itself will still launch so the client can list its schema.`);
+For the copy-paste, per-client snippet (with absolute paths resolved
+for your machine, plus a one-click deeplink for Cursor), open Settings
+→ MCP server in the Open Design app. Read-only by design; the daemon
+must be running locally for tool calls to succeed.`);
 }
