@@ -245,8 +245,14 @@ const EXT_MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.cjs': 'text/javascript; charset=utf-8',
+  '.jsx': 'text/javascript; charset=utf-8',
   '.ts': 'text/typescript; charset=utf-8',
-  '.tsx': 'text/typescript; charset=utf-8',
+  // `.tsx` previously served as `text/typescript`, which browser module
+  // loaders and strict CSPs do not accept as a JavaScript MIME. Multi-file
+  // React prototypes that load `.tsx` via Babel-standalone (`<script
+  // type="text/babel" src="…">`) need a JS-family Content-Type for the
+  // browser fetch to succeed. Upstream of issue #336.
+  '.tsx': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
