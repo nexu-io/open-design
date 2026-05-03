@@ -23,6 +23,8 @@ import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { loadCritiqueConfigFromEnv } from './critique/config.js';
+import { runOrchestrator } from './critique/orchestrator.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
@@ -318,6 +320,11 @@ const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+
+// Load Critique Theater config once at startup so a bad OD_CRITIQUE_* value
+// surfaces immediately as a boot-time RangeError instead of silently at
+// run time. Default: enabled=false (M0 dark launch).
+const critiqueCfg = loadCritiqueConfigFromEnv();
 
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
 
@@ -2487,6 +2494,53 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
+
+    // Critique Theater branch (M0 dark launch, default disabled).
+    // When OD_CRITIQUE_ENABLED=true the orchestrator owns the run end-to-end:
+    // it parses stdout, scores rounds, persists lifecycle, and emits SSE on the
+    // existing run event stream. The legacy code path below is unchanged when
+    // cfg.enabled is false.
+    if (critiqueCfg.enabled) {
+      const critiqueRunId = run.id;
+      const critiqueArtifactId = typeof projectId === 'string' && projectId
+        ? projectId
+        : critiqueRunId;
+      const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueArtifactId);
+      // Convert the child stdout Node stream into an AsyncIterable<string>.
+      const stdoutIterable = (async function* () {
+        for await (const chunk of child.stdout) yield String(chunk);
+      })();
+      const critiqueBus = { emit: (e) => send('agent', e) };
+      // Errors from runOrchestrator surface to the run's error handler via
+      // the existing design.runs.start() catch wrapper.
+      runOrchestrator({
+        runId: critiqueRunId,
+        projectId: typeof projectId === 'string' ? projectId : '',
+        conversationId: typeof conversationId === 'string' ? conversationId : null,
+        artifactId: critiqueArtifactId,
+        artifactDir: critiqueArtifactDir,
+        adapter: typeof agentId === 'string' ? agentId : 'unknown',
+        cfg: critiqueCfg,
+        db,
+        bus: critiqueBus,
+        stdout: stdoutIterable,
+      }).then(() => {
+        // Orchestrator finished; let the child close handler finalize the run.
+      }).catch((err) => {
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
+        design.runs.finish(run, 'failed', 1, null);
+      });
+      child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+      child.on('error', (err) => {
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
+        design.runs.finish(run, 'failed', 1, null);
+      });
+      child.on('close', (code, signal) => {
+        const status = run.cancelRequested ? 'canceled' : code === 0 ? 'succeeded' : 'failed';
+        design.runs.finish(run, status, code, signal);
+      });
+      return;
+    }
 
     // Structured streams (Claude Code) go through a line-delimited JSON
     // parser that turns stream_event objects into UI-friendly events. For
