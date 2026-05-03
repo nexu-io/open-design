@@ -1,5 +1,5 @@
-import type { ProjectFile } from './files';
-import type { PreviewCommentPosition } from './comments';
+import type { ProjectFile } from './files.js';
+import type { PreviewCommentPosition } from './comments.js';
 
 export type ChatRole = 'user' | 'assistant';
 

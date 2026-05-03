@@ -1,9 +1,9 @@
-import type { ChatRequest } from './api/chat';
-import type { ProjectFile } from './api/files';
-import type { HealthResponse } from './api/registry';
-import type { ApiErrorResponse } from './errors';
-import type { ChatSseEvent } from './sse/chat';
-import type { ProxySseEvent } from './sse/proxy';
+import type { ChatRequest } from './api/chat.js';
+import type { ProjectFile } from './api/files.js';
+import type { HealthResponse } from './api/registry.js';
+import type { ApiErrorResponse } from './errors.js';
+import type { ChatSseEvent } from './sse/chat.js';
+import type { ProxySseEvent } from './sse/proxy.js';
 
 export const exampleChatRequest: ChatRequest = {
   agentId: 'claude',
