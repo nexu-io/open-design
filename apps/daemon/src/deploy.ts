@@ -76,7 +76,12 @@ export function publicDeployConfig(config) {
   };
 }
 
-export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
+// Walk the entry HTML and any referenced CSS, producing the full set of
+// files that would be uploaded for a deploy along with the lists of
+// missing and invalid references. Does not throw on a partial result so
+// callers can distinguish between "ready to ship" and "ready except for
+// these specific issues" without parsing an error string.
+export async function buildDeployFilePlan(projectsRoot, projectId, entryName, options = {}) {
   const entryPath = validateProjectPath(entryName);
   if (!/\.html?$/i.test(entryPath)) {
     throw new DeployError('Only HTML files can be deployed.', 400);
@@ -104,6 +109,13 @@ export async function buildDeployFileSet(projectsRoot, projectId, entryName, opt
     ref,
     base: entryBase,
   }));
+
+  // Inline `<style>` blocks and `style="..."` attributes can reference
+  // background images, custom fonts, and stylesheets via @import. They
+  // are resolved relative to the entry HTML, same as src/href.
+  for (const ref of extractInlineCssReferences(html)) {
+    pending.push({ ref, base: entryBase });
+  }
 
   for (const manifestRef of entry.artifactManifest?.supportingFiles ?? []) {
     pending.push({ ref: manifestRef, base: entryBase });
@@ -150,17 +162,27 @@ export async function buildDeployFileSet(projectsRoot, projectId, entryName, opt
     }
   }
 
-  if (missing.length || invalid.length) {
+  return {
+    entryPath,
+    html,
+    files: Array.from(files.values()),
+    missing,
+    invalid,
+  };
+}
+
+export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
+  const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
+  if (plan.missing.length || plan.invalid.length) {
     const parts = [];
-    if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
-    if (invalid.length) parts.push(`invalid: ${invalid.join(', ')}`);
+    if (plan.missing.length) parts.push(`missing: ${plan.missing.join(', ')}`);
+    if (plan.invalid.length) parts.push(`invalid: ${plan.invalid.join(', ')}`);
     throw new DeployError(`Could not deploy referenced files (${parts.join('; ')}).`, 400, {
-      missing,
-      invalid,
+      missing: plan.missing,
+      invalid: plan.invalid,
     });
   }
-
-  return Array.from(files.values());
+  return plan.files;
 }
 
 export async function deployToVercel({ config, files, projectId }) {
@@ -232,14 +254,69 @@ export function extractHtmlReferences(html) {
   return refs;
 }
 
+// Character classes scope the lazy match so unclosed url(((( or
+// `@import "foo` cannot trigger O(n^2) regex backtracking on
+// attacker-controlled CSS. The tradeoff is that quoted urls
+// containing literal `)` characters must be percent-encoded; CSS
+// authors are already expected to do this in practice.
+const CSS_URL_REGEX = /url\(\s*(['"]?)([^)]*?)\1\s*\)/gi;
+const CSS_IMPORT_REGEX = /@import\s+(?:url\(\s*)?(['"])([^'"]*?)\1/gi;
+
 export function extractCssReferences(css) {
   const refs = [];
-  const urlRe = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
+  const urlRe = new RegExp(CSS_URL_REGEX.source, CSS_URL_REGEX.flags);
   let match;
   while ((match = urlRe.exec(css))) refs.push(match[2]);
-  const importRe = /@import\s+(?:url\(\s*)?(['"])(.*?)\1/gi;
+  const importRe = new RegExp(CSS_IMPORT_REGEX.source, CSS_IMPORT_REGEX.flags);
   while ((match = importRe.exec(css))) refs.push(match[2]);
   return refs;
+}
+
+// Collect url() / @import references from inline `<style>` blocks and
+// `style="..."` attributes. These bypass the external-stylesheet path
+// (link rel=stylesheet -> .css file -> extractCssReferences) but still
+// pull in real assets, e.g. background images and @font-face sources.
+//
+// Style-like text that lives inside `<script>` string literals or HTML
+// comments is intentionally skipped, mirroring how extractHtmlReferences
+// treats those raw-text regions.
+export function extractInlineCssReferences(html) {
+  const source = String(html);
+  const refs = [];
+  const skipRanges = htmlRawTextRanges(source);
+
+  const styleBlockRe = /<style\b[^<>]*>([\s\S]*?)<\/style\s*>/gi;
+  let block;
+  while ((block = styleBlockRe.exec(source))) {
+    if (isOffsetInRanges(block.index, skipRanges)) continue;
+    refs.push(...extractCssReferences(block[1]));
+  }
+
+  for (const tag of parseHtmlTags(source)) {
+    const attrs = parseHtmlAttributes(tag.attrs);
+    const style = attrs.get('style');
+    if (style) refs.push(...extractCssReferences(style));
+  }
+
+  return refs;
+}
+
+// Rewrite url() / @import references inside a CSS string so that paths
+// resolved relative to `baseDir` survive the entry-HTML being moved to
+// the deploy root. Mirrors `rewriteHtmlReference` for HTML attributes.
+// Uses the same hardened character classes as `extractCssReferences` so
+// extract and rewrite see the same set of references.
+export function rewriteCssReferences(css, baseDir) {
+  return String(css)
+    .replace(CSS_URL_REGEX, (match, quote, value) => {
+      if (!value) return match;
+      const rewritten = rewriteHtmlReference(value, baseDir);
+      return `url(${quote}${rewritten}${quote})`;
+    })
+    .replace(/(@import\s+)(['"])([^'"]*?)\2/gi, (_full, prefix, quote, value) => {
+      const rewritten = rewriteHtmlReference(value, baseDir);
+      return `${prefix}${quote}${rewritten}${quote}`;
+    });
 }
 
 export function resolveReferencedPath(raw, baseDir) {
@@ -256,13 +333,221 @@ export function resolveReferencedPath(raw, baseDir) {
 }
 
 export function rewriteEntryHtmlReferences(html, baseDir) {
-  const rawTextRanges = htmlRawTextRanges(html);
-  return String(html).replace(/<([A-Za-z][A-Za-z0-9:-]*)([^<>]*?)>/g, (tag, rawName, rawAttrs, offset) => {
+  const source = String(html);
+  // Compute raw-text ranges against the input first so the style-block
+  // pre-pass can skip `<style>...</style>` text that lives inside a
+  // `<script>` string literal or an HTML comment. Without this gate, a
+  // template like `const tpl = '<style>...url("foo")...</style>'` would
+  // get mutated, changing runtime JS behavior.
+  const inputRawTextRanges = htmlRawTextRanges(source);
+  const styleRewritten = source.replace(
+    /(<style\b[^<>]*>)([\s\S]*?)(<\/style\s*>)/gi,
+    (full, openTag, content, closeTag, offset) => {
+      if (isOffsetInRanges(offset, inputRawTextRanges)) return full;
+      return `${openTag}${rewriteCssReferences(content, baseDir)}${closeTag}`;
+    },
+  );
+  // Re-derive raw-text ranges against the post-style HTML: rewriting can
+  // shift offsets, and the tag-attribute pass below skips raw-text
+  // regions by absolute offset. Two scans are intentional, deploy is
+  // not a hot path and the cost is linear in document size.
+  const rawTextRanges = htmlRawTextRanges(styleRewritten);
+  return styleRewritten.replace(/<([A-Za-z][A-Za-z0-9:-]*)([^<>]*?)>/g, (tag, rawName, rawAttrs, offset) => {
     if (isOffsetInRanges(offset, rawTextRanges)) return tag;
     const tagName = String(rawName).toLowerCase();
     const attrs = parseHtmlAttributes(rawAttrs);
     return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir)}>`;
   });
+}
+
+// Soft thresholds chosen against Vercel's v13 deployment shape and
+// typical first-paint budgets. Per-asset is a usability hint, not a
+// hard cap; bundle is a margin against Vercel's 100MB request body
+// (each file is base64-encoded which adds ~33%, so 75MiB pre-encoded
+// is the safer ceiling).
+export const DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES = 4 * 1024 * 1024;
+export const DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES = 75 * 1024 * 1024;
+export const DEPLOY_PREFLIGHT_LARGE_HTML_BYTES = 1 * 1024 * 1024;
+
+function isExternalUrl(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) return true;
+  if (trimmed.startsWith('//')) return true;
+  return false;
+}
+
+function pushUnique(list, warning) {
+  const key = `${warning.code}:${warning.path ?? ''}:${warning.url ?? ''}`;
+  if (list.seen.has(key)) return;
+  list.seen.add(key);
+  list.warnings.push(warning);
+}
+
+// Walk the entry HTML once to gather signals that affect deployment
+// quality without touching the network. Returns a structured warning
+// list the UI can render verbatim.
+//
+// `entryPath` is used as the warning `path` for HTML-level findings so
+// the UI can deep-link from a warning into the source file the author
+// is actually editing. `files` carries deploy-relative paths (the entry
+// HTML is always renamed to `index.html`) so per-asset warnings live in
+// the deploy namespace.
+/**
+ * @param {{
+ *   entryPath: string,
+ *   html: string,
+ *   files: any[],
+ *   missing?: any[],
+ *   invalid?: any[]
+ * }} input
+ * @returns {{ warnings: any[], totalBytes: number, totalFiles: number }}
+ */
+export function analyzeDeployPlan(input: {
+  entryPath: string;
+  html: string;
+  files: any[];
+  missing?: any[];
+  invalid?: any[];
+}): { warnings: any[]; totalBytes: number; totalFiles: number } {
+  const { entryPath, html, files } = input;
+  const missing = input.missing ?? [];
+  const invalid = input.invalid ?? [];
+  const acc: { warnings: any[]; seen: Set<string> } = { warnings: [], seen: new Set() };
+
+  for (const ref of missing) {
+    pushUnique(acc, {
+      code: 'broken-reference',
+      path: ref,
+      message: `Referenced file is missing on disk: ${ref}`,
+    });
+  }
+  for (const ref of invalid) {
+    pushUnique(acc, {
+      code: 'invalid-reference',
+      path: ref,
+      message: `Reference is not a valid project path: ${ref}`,
+    });
+  }
+
+  let totalBytes = 0;
+  let entrySize = 0;
+  for (const f of files || []) {
+    const size = f.data?.length ?? 0;
+    totalBytes += size;
+    if (f.file === 'index.html') entrySize = size;
+    if (size > DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES && f.file !== 'index.html') {
+      pushUnique(acc, {
+        code: 'large-asset',
+        path: f.file,
+        size,
+        message: `Asset is ${formatMib(size)}, larger than ${formatMib(DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES)}; consider compressing or hosting on a CDN.`,
+      });
+    }
+  }
+
+  if (entrySize > DEPLOY_PREFLIGHT_LARGE_HTML_BYTES) {
+    pushUnique(acc, {
+      // Report against the source entry path so the UI can deep-link
+      // back to the file the author edits, not the deploy-renamed
+      // `index.html` which does not exist in the project tree.
+      code: 'large-html',
+      path: entryPath,
+      size: entrySize,
+      message: `Entry HTML is ${formatMib(entrySize)}; large HTML inflates time-to-first-paint.`,
+    });
+  }
+  if (totalBytes > DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES) {
+    pushUnique(acc, {
+      code: 'large-bundle',
+      size: totalBytes,
+      message: `Bundle is ${formatMib(totalBytes)}; Vercel rejects deploy bodies above ~100MB after base64 encoding.`,
+    });
+  }
+
+  const source = String(html ?? '');
+  // Anchor to the document prolog so a `<!doctype html>` substring that
+  // happens to live inside a `<script>` template literal or a comment
+  // is not treated as a real declaration. Per HTML5, the prolog may
+  // begin with an optional BOM, then any number of HTML comments and
+  // whitespace, then the doctype. Built via `new RegExp` so the BOM
+  // appears as an explicit U+FEFF escape rather than a literal
+  // zero-width character in the regex source.
+  if (!new RegExp('^\\uFEFF?\\s*(?:<!--[\\s\\S]*?-->\\s*)*<!doctype\\s+html', 'i').test(source)) {
+    pushUnique(acc, {
+      code: 'no-doctype',
+      path: entryPath,
+      message: 'Entry HTML is missing `<!DOCTYPE html>`; browsers may render in quirks mode.',
+    });
+  }
+
+  let hasViewport = false;
+  for (const tag of parseHtmlTags(source)) {
+    const attrs = parseHtmlAttributes(tag.attrs);
+    if (
+      tag.name === 'meta' &&
+      String(attrs.get('name') || '').toLowerCase() === 'viewport'
+    ) {
+      hasViewport = true;
+    }
+    if (tag.name === 'script') {
+      const src = attrs.get('src');
+      if (isExternalUrl(src)) {
+        pushUnique(acc, {
+          code: 'external-script',
+          path: entryPath,
+          url: src,
+          message: `External script will not be vendored into the deploy: ${src}`,
+        });
+      }
+    }
+    if (tag.name === 'link') {
+      const rel = String(attrs.get('rel') || '').toLowerCase();
+      const href = attrs.get('href');
+      if (rel.split(/\s+/).includes('stylesheet') && isExternalUrl(href)) {
+        pushUnique(acc, {
+          code: 'external-stylesheet',
+          path: entryPath,
+          url: href,
+          message: `External stylesheet will not be vendored into the deploy: ${href}`,
+        });
+      }
+    }
+  }
+  if (!hasViewport) {
+    pushUnique(acc, {
+      code: 'no-viewport',
+      path: entryPath,
+      message: 'Entry HTML is missing `<meta name="viewport">`; mobile rendering will be off.',
+    });
+  }
+
+  return { warnings: acc.warnings, totalBytes, totalFiles: (files || []).length };
+}
+
+function formatMib(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+// One-shot orchestrator: build the file plan, run the analyzer, and
+// return the typed preflight payload exposed by the daemon.
+export async function prepareDeployPreflight(projectsRoot, projectId, entryName, options = {}) {
+  const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
+  const { warnings, totalBytes, totalFiles } = analyzeDeployPlan(plan);
+  return {
+    providerId: VERCEL_PROVIDER_ID,
+    entry: plan.entryPath,
+    files: plan.files.map((f) => ({
+      path: f.file,
+      size: f.data?.length ?? 0,
+      mime: f.contentType || 'application/octet-stream',
+      sourcePath: f.sourcePath,
+    })),
+    totalFiles,
+    totalBytes,
+    warnings,
+  };
 }
 
 export function injectDeployHookScript(html, scriptUrl) {
@@ -372,15 +657,22 @@ function rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir) {
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
     (full, rawName, equals, rawValue, doubleQuoted, singleQuoted, unquoted) => {
       const name = String(rawName).toLowerCase();
-      if (name !== 'src' && name !== 'poster' && name !== 'srcset' && name !== 'href') {
+      if (
+        name !== 'src' &&
+        name !== 'poster' &&
+        name !== 'srcset' &&
+        name !== 'href' &&
+        name !== 'style'
+      ) {
         return full;
       }
       if (name === 'href' && !shouldRewriteHref) return full;
 
       const value = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
-      const nextValue = name === 'srcset'
-        ? rewriteSrcset(value, baseDir)
-        : rewriteHtmlReference(value, baseDir);
+      let nextValue;
+      if (name === 'srcset') nextValue = rewriteSrcset(value, baseDir);
+      else if (name === 'style') nextValue = rewriteCssReferences(value, baseDir);
+      else nextValue = rewriteHtmlReference(value, baseDir);
       if (doubleQuoted !== undefined) return `${rawName}${equals}"${nextValue}"`;
       if (singleQuoted !== undefined) return `${rawName}${equals}'${nextValue}'`;
       return `${rawName}${equals}${nextValue}`;

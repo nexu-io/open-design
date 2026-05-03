@@ -105,6 +105,18 @@ pnpm -r --if-present run typecheck
 pnpm -r --if-present run test
 ```
 
+```bash
+pnpm tools-pack mac build --to all
+pnpm tools-pack mac install
+pnpm tools-pack mac cleanup
+pnpm tools-pack win build --to nsis
+pnpm tools-pack win install
+pnpm tools-pack win cleanup
+pnpm tools-pack linux build --to appimage
+pnpm tools-pack linux install
+pnpm tools-pack linux build --containerized
+```
+
 # FAQ
 
 ## Why is there no root `pnpm dev` / `pnpm start`?

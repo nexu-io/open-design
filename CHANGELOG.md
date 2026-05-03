@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-03
+
+A fast follow-up to 0.2.0 focused on richer design workflows, packaged-agent reliability, export/deploy flows, and broader internationalization. 39 merged PRs from 25 contributors.
+
+### Added
+
+#### Web / UI
+- Pet companion with Codex hatch-pet integration. ([#296])
+- Brand design-system cards, thumbnails, and DESIGN.md side-by-side preview. ([#289])
+- Per-tool renderer registry for generative UI. ([#282])
+- Task completion sound and browser notification. ([#359])
+
+#### Agents & daemon
+- Persist code-agent startup state. ([#255])
+- Mistral Vibe CLI agent adapter. ([#354])
+- Devin for Terminal support. ([#301])
+- `OD_BIND_HOST` and `--host` for interface binding. ([#328])
+
+#### Skills & exports
+- Taste-skill-derived web prototype and HTML PPT examples. ([#358])
+- `pptx-html-fidelity-audit` skill wired into export prompts. ([#307])
+- Broader PPTX fidelity script coverage beyond CJK. ([#308])
+- Native desktop Save As dialog for `.pptx` downloads. ([#330])
+- Export as Markdown from the share menu. ([#345])
+
+#### Deployment
+- `/api/projects/:id/deploy/preflight` for pre-upload inspection. ([#320])
+
+#### Internationalization
+- Arabic (`ar`) UI locale with RTL layout. ([#316])
+- French (`fr`) UI locale. ([#376])
+
+### Fixed
+
+#### Agents, packaged runtime & Windows
+- Include `nvm` / `fnm` / `mise` agent CLI bins in packaged PATH. ([#364])
+- Detect Codex and Gemini CLIs from user toolchain paths. ([#346])
+- Upgrade `better-sqlite3` for Node 24 Windows prebuilt support. ([#357])
+- Lead Copilot spawn with `-p -` so prompt-via-stdin is consumed. ([#351])
+- Drop literal `-` argv from Codex spawn so prompts deliver via stdin pipe alone. ([#342])
+- Wrap `cmd.exe` shim invocations to survive `/s /c` quote stripping. ([#339])
+
+#### Web UI & files
+- Download as `.zip` now returns the actual project tree. ([#341])
+- Keep Design Files view active after deleting a file. ([#329])
+- Scroll workspace tabs in place instead of the window. ([#363])
+- Treat inlined script content as literal in FileViewer. ([#343])
+- Use response-order matching for bulk upload aggregation. ([#323])
+- Serve `.jsx` / `.tsx` with JS-family MIME types so browser loaders accept them. ([#340])
+- Fix macOS entry view drag region. ([#373])
+
+#### Daemon & deployment
+- Increase project upload limit from 20MB to 200MB. ([#319])
+- Bundle and rewrite assets referenced from inline `<style>` blocks and `style=""` attributes. ([#314])
+
+#### Internationalization
+- Update locale coverage after main merge. ([#251])
+- Add missing `designFiles.showMore` keys to `ar`, `hu`, `ko`, `pl`, and `tr`. ([#335])
+
+### Documentation
+
+- Japanese documentation update. ([#309])
+- README contributors wall refresh. ([#360])
+- Spelling fixes in CLI comments, spec, and video prompt docs. ([#300])
+
 ## [0.2.0] - 2026-05-02
 
 A feature-heavy follow-up to 0.1.0 — dark mode, xAI Grok Imagine media generation, headless deploy mode, OpenClaude fallback, four new locales, and a much richer skill / design-system / prompt-template catalog. 45 merged PRs from 27 contributors.
@@ -184,7 +249,8 @@ First public release of Open Design — a local-first, open-source alternative t
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])
 
-[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.2.0...HEAD
+[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.3.0...HEAD
+[0.3.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.3.0
 [0.2.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.2.0
 [0.1.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.1.0
 
@@ -318,3 +384,40 @@ First public release of Open Design — a local-first, open-source alternative t
 [#284]: https://github.com/nexu-io/open-design/pull/284
 [#287]: https://github.com/nexu-io/open-design/pull/287
 [#288]: https://github.com/nexu-io/open-design/pull/288
+[#250]: https://github.com/nexu-io/open-design/pull/250
+[#251]: https://github.com/nexu-io/open-design/pull/251
+[#255]: https://github.com/nexu-io/open-design/pull/255
+[#301]: https://github.com/nexu-io/open-design/pull/301
+[#307]: https://github.com/nexu-io/open-design/pull/307
+[#308]: https://github.com/nexu-io/open-design/pull/308
+[#314]: https://github.com/nexu-io/open-design/pull/314
+[#316]: https://github.com/nexu-io/open-design/pull/316
+[#319]: https://github.com/nexu-io/open-design/pull/319
+[#320]: https://github.com/nexu-io/open-design/pull/320
+[#323]: https://github.com/nexu-io/open-design/pull/323
+[#328]: https://github.com/nexu-io/open-design/pull/328
+[#329]: https://github.com/nexu-io/open-design/pull/329
+[#330]: https://github.com/nexu-io/open-design/pull/330
+[#335]: https://github.com/nexu-io/open-design/pull/335
+[#339]: https://github.com/nexu-io/open-design/pull/339
+[#340]: https://github.com/nexu-io/open-design/pull/340
+[#341]: https://github.com/nexu-io/open-design/pull/341
+[#342]: https://github.com/nexu-io/open-design/pull/342
+[#343]: https://github.com/nexu-io/open-design/pull/343
+[#345]: https://github.com/nexu-io/open-design/pull/345
+[#346]: https://github.com/nexu-io/open-design/pull/346
+[#351]: https://github.com/nexu-io/open-design/pull/351
+[#354]: https://github.com/nexu-io/open-design/pull/354
+[#357]: https://github.com/nexu-io/open-design/pull/357
+[#358]: https://github.com/nexu-io/open-design/pull/358
+[#359]: https://github.com/nexu-io/open-design/pull/359
+[#360]: https://github.com/nexu-io/open-design/pull/360
+[#363]: https://github.com/nexu-io/open-design/pull/363
+[#364]: https://github.com/nexu-io/open-design/pull/364
+[#373]: https://github.com/nexu-io/open-design/pull/373
+[#376]: https://github.com/nexu-io/open-design/pull/376
+[#282]: https://github.com/nexu-io/open-design/pull/282
+[#289]: https://github.com/nexu-io/open-design/pull/289
+[#296]: https://github.com/nexu-io/open-design/pull/296
+[#300]: https://github.com/nexu-io/open-design/pull/300
+[#309]: https://github.com/nexu-io/open-design/pull/309

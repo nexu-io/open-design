@@ -31,6 +31,8 @@ const allowedExactPaths = new Set([
   "scripts/import-prompt-templates.mjs",
   "scripts/postinstall.mjs",
   "apps/packaged/esbuild.config.mjs",
+  // Browser service workers must be served as JavaScript files.
+  "apps/web/public/od-notifications-sw.js",
   "scripts/bake-html-ppt-examples.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",

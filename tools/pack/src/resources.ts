@@ -39,3 +39,8 @@ export const macResources = {
 export const winResources = {
   icon: join(resourcesRoot, "win", "icon.ico"),
 } as const;
+
+export const linuxResources = {
+  icon: join(resourcesRoot, "linux", "icon.png"),
+  desktopTemplate: join(resourcesRoot, "linux", "open-design.desktop.template"),
+} as const;

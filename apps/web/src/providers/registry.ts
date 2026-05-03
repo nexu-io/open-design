@@ -558,27 +558,24 @@ export async function uploadProjectFiles(
       const json = (await resp.json()) as {
         files: { name: string; path: string; size?: number; originalName?: string }[];
       };
+      const responseFiles = json.files ?? [];
       uploaded.push(
-        ...(json.files ?? []).map((f) => ({
+        ...responseFiles.map((f) => ({
           path: f.path,
           name: f.originalName ?? f.name,
           kind: looksLikeImage(f.name) ? ('image' as const) : ('file' as const),
           size: f.size,
         })),
       );
-      const uploadedNames = new Map<string, number>();
-      for (const f of json.files ?? []) {
-        const key = f.originalName ?? f.name;
-        uploadedNames.set(key, (uploadedNames.get(key) ?? 0) + 1);
-      }
-      for (const f of batch) {
-        const count = uploadedNames.get(f.name) ?? 0;
-        if (count > 0) {
-          uploadedNames.set(f.name, count - 1);
-          continue;
-        }
+      // Server preserves request order; any dropped files are unmatched at the batch tail.
+      if (responseFiles.length < batch.length) {
         error ??= 'some files could not be stored';
-        failed.push({ name: f.name, error: error });
+        for (const f of batch.slice(responseFiles.length)) {
+          failed.push({
+            name: f.name,
+            error: error ?? 'some files could not be stored',
+          });
+        }
       }
     } catch {
       error = 'upload request failed';

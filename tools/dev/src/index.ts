@@ -302,12 +302,14 @@ async function runLoggedCommand(request: {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   logFd: number;
+  windowsVerbatimArguments?: boolean;
 }): Promise<void> {
   const child = spawn(request.command, request.args, {
     cwd: request.cwd,
     env: request.env,
     stdio: ["ignore", request.logFd, request.logFd],
     windowsHide: process.platform === "win32",
+    windowsVerbatimArguments: request.windowsVerbatimArguments,
   });
 
   await new Promise<void>((resolveRun, rejectRun) => {
@@ -402,15 +404,18 @@ async function spawnSidecarRuntime(request: {
 
 async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
+  const webPort = parsePortOption(options.webPort, "--web-port");
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
+    if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
       config,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
+        ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
       },
       logHandle,
@@ -467,6 +472,7 @@ async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promi
     cwd: config.workspaceRoot,
     env: process.env,
     logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 

@@ -9,29 +9,29 @@ importers:
   .:
     devDependencies:
       '@open-design/tools-dev':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:tools/dev
       '@open-design/tools-pack':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:tools/pack
 
   apps/daemon:
     dependencies:
       '@open-design/contracts':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/contracts
       '@open-design/platform':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar-proto
       better-sqlite3:
-        specifier: ^11.10.0
-        version: 11.10.0
+        specifier: ^12.9.0
+        version: 12.9.0
       express:
         specifier: ^4.19.2
         version: 4.22.1
@@ -64,13 +64,13 @@ importers:
   apps/desktop:
     dependencies:
       '@open-design/platform':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar-proto
     devDependencies:
       '@types/node':
@@ -86,22 +86,22 @@ importers:
   apps/packaged:
     dependencies:
       '@open-design/daemon':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../daemon
       '@open-design/desktop':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../desktop
       '@open-design/platform':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar-proto
       '@open-design/web':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../web
     devDependencies:
       '@types/node':
@@ -123,16 +123,16 @@ importers:
         specifier: ^0.32.1
         version: 0.32.1
       '@open-design/contracts':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/contracts
       '@open-design/platform':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar-proto
       next:
         specifier: ^16.2.4
@@ -244,13 +244,13 @@ importers:
   tools/dev:
     dependencies:
       '@open-design/platform':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar-proto
       cac:
         specifier: 6.7.14
@@ -275,13 +275,13 @@ importers:
         specifier: 3.1.0
         version: 3.1.0
       '@open-design/platform':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/sidecar-proto
       cac:
         specifier: 6.7.14
@@ -302,6 +302,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.0)
 
 packages:
 
@@ -1366,8 +1369,9 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  better-sqlite3@11.10.0:
-    resolution: {integrity: sha512-EwhOpyXiOEL/lKzHz9AW1msWFNzGc/z+LzeB3/jnFJpxu+th2yqvzsSWas1v9jgs9+xiXJcD5A8CJxAG2TaghQ==}
+  better-sqlite3@12.9.0:
+    resolution: {integrity: sha512-wqUv4Gm3toFpHDQmaKD4QhZm3g1DjUBI0yzS4UBl6lElUmXFYdTQmmEDpAFa5o8FiFiymURypEnfVHzILKaxqQ==}
+    engines: {node: 20.x || 22.x || 23.x || 24.x || 25.x}
 
   bidi-js@1.0.3:
     resolution: {integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==}
@@ -3887,7 +3891,7 @@ snapshots:
 
   baseline-browser-mapping@2.10.23: {}
 
-  better-sqlite3@11.10.0:
+  better-sqlite3@12.9.0:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3

@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -94,6 +95,29 @@ function extractPort(url: string): string {
   return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
 }
 
+function existingDirsUnder(root: string, segments: string[] = []): string[] {
+  const dirs: string[] = [];
+  try {
+    const entries = readdirSync(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = join(root, entry.name, ...segments);
+      if (existsSync(full)) dirs.push(full);
+    }
+  } catch {
+    // best-effort: directory may not exist or be unreadable
+  }
+  return dirs;
+}
+
+function collectNvmFnmBins(home: string): string[] {
+  return [
+    ...existingDirsUnder(join(home, ".nvm", "versions", "node"), ["bin"]),
+    ...existingDirsUnder(join(home, ".local", "share", "fnm", "node-versions"), ["installation", "bin"]),
+    ...existingDirsUnder(join(home, ".local", "share", "mise", "installs", "node"), ["bin"]),
+  ];
+}
+
 function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
   const home = homedir();
   const candidates = [
@@ -102,6 +126,8 @@ function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
     join(home, ".opencode", "bin"),
     join(home, ".cargo", "bin"),
     join(home, ".bun", "bin"),
+    join(home, ".volta", "bin"),
+    ...collectNvmFnmBins(home),
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/usr/bin",

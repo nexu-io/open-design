@@ -14,6 +14,7 @@
 // echo secrets back into the DOM.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
 
@@ -84,16 +85,96 @@ function readEnvKey(providerId) {
   return null;
 }
 
+function readNestedString(obj, keys) {
+  let cur = obj;
+  for (const key of keys) {
+    if (!cur || typeof cur !== 'object') return '';
+    cur = cur[key];
+  }
+  return typeof cur === 'string' && cur.trim() ? cur.trim() : '';
+}
+
+async function readJsonIfPresent(file) {
+  try {
+    const raw = await readFile(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    // Auth files are best-effort fallbacks. A malformed local auth cache
+    // should not break the Settings page or hide stored provider config.
+    return null;
+  }
+}
+
+function tokenFromHermesAuth(data) {
+  const providerToken = readNestedString(data, [
+    'providers',
+    'openai-codex',
+    'tokens',
+    'access_token',
+  ]);
+  if (providerToken) return providerToken;
+
+  const pool =
+    data && typeof data === 'object'
+      ? data.credential_pool && data.credential_pool['openai-codex']
+      : null;
+  if (Array.isArray(pool)) {
+    for (const item of pool) {
+      const token = readNestedString(item, ['access_token']);
+      if (token) return token;
+    }
+  }
+  return '';
+}
+
+function tokenFromCodexAuth(data) {
+  const oauthToken = readNestedString(data, ['tokens', 'access_token']);
+  if (oauthToken) return { token: oauthToken, source: 'oauth-codex' };
+
+  const apiKey = readNestedString(data, ['OPENAI_API_KEY']);
+  if (apiKey) return { token: apiKey, source: 'codex-auth' };
+
+  return null;
+}
+
+async function resolveOpenAIOAuthCredential() {
+  const home = homedir();
+  const hermesAuth = await readJsonIfPresent(
+    path.join(home, '.hermes', 'auth.json'),
+  );
+  const hermesToken = tokenFromHermesAuth(hermesAuth);
+  if (hermesToken) {
+    return { apiKey: hermesToken, source: 'oauth-hermes' };
+  }
+
+  const codexAuth = await readJsonIfPresent(
+    path.join(home, '.codex', 'auth.json'),
+  );
+  const codexToken = tokenFromCodexAuth(codexAuth);
+  if (codexToken) {
+    return { apiKey: codexToken.token, source: codexToken.source };
+  }
+
+  return null;
+}
+
 /**
- * Resolve credentials for a provider. Env vars win, then stored config.
+ * Resolve credentials for a provider. Env vars win, then stored config,
+ * then OpenAI/Codex OAuth for the OpenAI media provider.
  * Returns { apiKey, baseUrl } where either may be empty string.
  */
 export async function resolveProviderConfig(projectRoot, providerId) {
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
+  const oauth =
+    providerId === 'openai' && !envKey && !entry.apiKey
+      ? await resolveOpenAIOAuthCredential()
+      : null;
   return {
-    apiKey: envKey || entry.apiKey || '',
+    apiKey: envKey || entry.apiKey || oauth?.apiKey || '',
     baseUrl: entry.baseUrl || '',
   };
 }
@@ -110,12 +191,16 @@ export async function readMaskedConfig(projectRoot) {
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
     const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
+    const oauth =
+      id === 'openai' && !envKey && !hasStoredKey
+        ? await resolveOpenAIOAuthCredential()
+        : null;
     providers[id] = {
-      configured: Boolean(envKey || hasStoredKey),
-      source: envKey ? 'env' : hasStoredKey ? 'stored' : 'unset',
+      configured: Boolean(envKey || hasStoredKey || oauth?.apiKey),
+      source: envKey ? 'env' : hasStoredKey ? 'stored' : oauth?.source || 'unset',
       // Show last 4 chars only when stored locally; never echo env-var
-      // secrets so power users who only export ENV don't accidentally
-      // see them in the DOM.
+      // or OAuth secrets so power users don't accidentally see them in
+      // the DOM.
       apiKeyTail: hasStoredKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
     };
