@@ -1,8 +1,15 @@
 # Critique Theater
 
+## Naming
+
+- **Internal codename (engineering, code, prompts, env vars, modules, SSE event prefix, telemetry):** `Critique Theater`. Used in `apps/daemon/src/critique/`, `apps/web/src/components/Theater/`, `OD_CRITIQUE_*`, `critique.*` SSE events.
+- **User-facing label (UI, settings, docs, README, marketing copy):** `Design Jury`. The string is sourced from a single i18n key `critiqueTheater.userFacingName` so the label can be swapped without touching code.
+
+The split is deliberate. Engineers reason about the system; users hire a jury.
+
 ## Purpose
 
-Critique Theater turns Open Design's single-pass artifact generation into a panel-tempered, scored, replayable process. Every artifact is born through a visible five-person panel (Designer, Critic, Brand, A11y, Copy) running inside one CLI session, with auto-converging rounds bounded by a configurable score threshold. By default, no artifact ships under 8.0/10.
+Critique Theater turns Open Design's single-pass artifact generation into a panel-tempered, scored, replayable process. Every artifact is born through a visible five-person Design Jury (Designer, Critic, Brand, A11y, Copy) running inside one CLI session, with auto-converging rounds bounded by a configurable score threshold. By default, no artifact ships under 8.0/10.
 
 This spec is normative for the v1 implementation and protocol. It is the source of truth that the prompt template, the daemon parser, the SSE event schema, the SQLite columns, the Theater UI components, and the adapter conformance suite all derive from.
 
@@ -289,11 +296,69 @@ The reducer is pure. Every transition is covered by a vitest case backed by gold
 
 ### Visual specification
 
-- Lanes are rendered with `display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))`. At viewport widths under 720 px the lanes stack to one column.
+- Lanes stack vertically inside the right rail with `gap: 12px`. At viewport widths under 720 px the rail itself becomes a full-width drawer.
 - Per-dim scores render as horizontal bars whose width animates from 0 to `(score / scaleMax) * 100%` with `transition: width 600ms cubic-bezier(.2,.8,.2,1)`.
 - Animation respects `prefers-reduced-motion: reduce`; bars snap to final width and the score-ticker stops easing.
 - Lane colors come from CSS custom properties keyed by role. The five role inks are themed against the active design system's OKLch token palette. No hex literals in TSX.
 - Score badge in collapsed mode renders four colored dots labeled `C` `B` `A` `W` (Critic, Brand, A11y, copy/Word) plus the composite number.
+
+### Lane density (compact-by-default, expand-on-demand)
+
+The right rail is dense by nature (5 panelists, multiple dims each, must-fix lists, round dividers). To keep it readable for normal users without losing detail for power users, the panel ships three explicit modes, switchable by a segmented control above the lanes.
+
+| Mode | Default? | Behavior |
+| --- | --- | --- |
+| `Smart` | yes | The active panelist (whichever lane is currently streaming, or, post-ship, the panelist with the lowest score) is expanded. All others are collapsed: head + 1-line summary only. |
+| `Active only` | no | Only the active panelist is rendered; others are head-only with no summary, used for the most compact view (e.g., embedded in a small workspace tile). |
+| `Expand all` | no | Every lane is fully expanded. Power users who want to see every dim and every must-fix at once. Persisted as a per-user preference once chosen explicitly. |
+
+Lane heads are clickable to toggle that single lane's collapsed state, independent of the segmented control. The segmented control is the bulk operation; the lane head is the per-lane override.
+
+The collapsed-lane summary is **derived**, not authored: it is the most prominent must-fix on that panelist, falling back to the highest-impact dim note if there are no must-fixes (panelist already happy). Truncation at one line with ellipsis. Selectors are pure and unit-tested.
+
+### "Why this matters" explainer
+
+Immediately under the composite score card, a single rule line states the ship contract in plain terms:
+
+> Ships when composite score ≥ `scoreThreshold` and open must-fix == 0. Otherwise refine, up to `maxRounds` rounds.
+
+Three rendering variants:
+
+| Phase | Variant |
+| --- | --- |
+| `running` | "Ships when composite score &ge; 8.0 and open must-fix == 0. Otherwise refine, up to 3 rounds." |
+| `shipped` | "Shipped: composite 8.6 &ge; threshold 8.0 with 0 open must-fix. Consensus N of 5 panelists." |
+| `interrupted` | "Did not meet ship rule (8.0 + 0 must-fix), but you stopped early. Best-of-N was kept, transcript stays available." |
+
+Numeric values come from `CritiqueConfig`, never hardcoded. The rule line uses a soft dashed border to read as explanatory chrome, not as actionable UI.
+
+### Label sizing (production, not mockup)
+
+| Element | Production size | Notes |
+| --- | --- | --- |
+| Composite score (big) | 36px / mono / 700 | the headline number |
+| Per-panelist score | 14px / mono / 700 | colored to match lane ink |
+| Dim names | 13px / mono | left column, secondary fg color |
+| Dim numeric scores | 13px / mono / 600 | right column, primary fg color |
+| Dim notes (sentence) | 13px / sans / 1.55 line-height | sentence-level explanation |
+| Must-fix body | 13px / sans / 1.5 line-height | red ink on tinted background |
+| Lane summary (collapsed) | 12px / sans / 1.4 line-height | derived single line, ellipsis at width |
+| Lane name | 14px / sans / 600 | role label inside the head |
+| Role tag | 11px / mono / uppercase | colored badge, fixed-width pill |
+| Round divider | 11px / mono / uppercase / letter-spacing 0.1em | thin separator |
+| Ship rule explainer | 12px / mono / 1.55 line-height | dashed-border explanatory block |
+
+Label sizes ≤ 11px are reserved for tags, badges, and uppercase chrome only. **Body text is never below 12px in production.** This rule is enforced by a CI lint that grep-fails any new `font-size: <= 11px` rule outside the explicit chrome class allowlist (`role-tag`, `dim-dot`, `round-divider`, `meta-pill`).
+
+### Demo-only chrome (must not ship)
+
+The visual companion mockup includes affordances that are **not part of the product**:
+
+- The "demo states" tab strip at the top of the rail.
+- Any footer pill labeled "demo · click tabs to walk every state".
+- The state-walking keyboard shortcut.
+
+These exist purely to let reviewers walk every state in one page. The production Theater renders exactly one phase at a time, driven by the SSE stream. CI fails if any string matching `data-demo` or class `demo-tabs` appears in production bundles. The mockup HTML lives under `.superpowers/brainstorm/` (gitignored) and never ships.
 
 ### Accessibility
 
