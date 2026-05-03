@@ -492,8 +492,71 @@ async function runBuildInContainer(config: ToolPackConfig): Promise<void> {
   });
 }
 
-export async function installPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
-  throw new Error("installPackedLinuxApp: implemented in Task 12");
+export type LinuxInstallResult = {
+  appImagePath: string;
+  desktopFilePath: string;
+  iconPath: string;
+  namespace: string;
+  postInstall: {
+    desktopDatabase: "ok" | "missing" | "failed";
+    iconCache: "ok" | "missing" | "failed";
+  };
+};
+
+async function bestEffortRun(bin: string, args: string[]): Promise<"ok" | "missing" | "failed"> {
+  if (!(await commandExists(bin))) return "missing";
+  try {
+    await execFileAsync(bin, args);
+    return "ok";
+  } catch {
+    return "failed";
+  }
+}
+
+export async function installPackedLinuxApp(config: ToolPackConfig): Promise<LinuxInstallResult> {
+  const paths = resolveLinuxPaths(config);
+  const builtAppImage = await findBuiltAppImage(paths);
+  if (builtAppImage == null) {
+    throw new Error("no AppImage found in builder output; run `tools-pack linux build` first");
+  }
+
+  await mkdir(dirname(paths.installAppImagePath), { recursive: true });
+  await mkdir(dirname(paths.installDesktopFilePath), { recursive: true });
+  await mkdir(dirname(paths.installIconPath), { recursive: true });
+
+  // Copy AppImage with executable bit.
+  await cp(builtAppImage, paths.installAppImagePath);
+  await chmod(paths.installAppImagePath, 0o755);
+
+  // Copy icon.
+  await cp(linuxResources.icon, paths.installIconPath);
+
+  // Render and atomic-write the .desktop file.
+  const template = await readFile(linuxResources.desktopTemplate, "utf8");
+  const rendered = renderDesktopTemplate(template, {
+    namespace: sanitizeNamespace(config.namespace),
+    execPath: paths.installAppImagePath,
+    iconName: `open-design-${sanitizeNamespace(config.namespace)}`,
+  });
+  const tmpDesktopPath = `${paths.installDesktopFilePath}.tmp`;
+  await writeFile(tmpDesktopPath, rendered, "utf8");
+  await rename(tmpDesktopPath, paths.installDesktopFilePath);
+
+  // Best-effort post-install hooks.
+  const desktopDatabase = await bestEffortRun("update-desktop-database", [
+    join(homedir(), ".local", "share", "applications"),
+  ]);
+  const iconCache = await bestEffortRun("gtk-update-icon-cache", [
+    join(homedir(), ".local", "share", "icons", "hicolor"),
+  ]);
+
+  return {
+    appImagePath: paths.installAppImagePath,
+    desktopFilePath: paths.installDesktopFilePath,
+    iconPath: paths.installIconPath,
+    namespace: config.namespace,
+    postInstall: { desktopDatabase, iconCache },
+  };
 }
 
 export async function startPackedLinuxApp(_config: ToolPackConfig): Promise<unknown> {
