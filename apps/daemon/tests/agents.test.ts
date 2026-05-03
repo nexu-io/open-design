@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { afterEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AGENT_DEFS, resolveAgentExecutable } from '../src/agents.js';
@@ -13,6 +13,8 @@ const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
+const originalHome = process.env.HOME;
+const originalAgentHome = process.env.OD_AGENT_HOME;
 
 afterEach(() => {
   if (originalDisablePlugins == null) {
@@ -21,6 +23,16 @@ afterEach(() => {
     process.env.OD_CODEX_DISABLE_PLUGINS = originalDisablePlugins;
   }
   process.env.PATH = originalPath;
+  if (originalHome == null) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
+  if (originalAgentHome == null) {
+    delete process.env.OD_AGENT_HOME;
+  } else {
+    process.env.OD_AGENT_HOME = originalAgentHome;
+  }
 });
 
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
@@ -232,6 +244,7 @@ fsTest('resolveAgentExecutable prefers def.bin over fallbackBins when bin is on 
     writeFileSync(join(dir, 'openclaude'), '');
     chmodSync(join(dir, 'claude'), 0o755);
     chmodSync(join(dir, 'openclaude'), 0o755);
+    process.env.OD_AGENT_HOME = dir;
     process.env.PATH = dir;
 
     const resolved = resolveAgentExecutable({
@@ -250,6 +263,7 @@ fsTest('resolveAgentExecutable falls back through fallbackBins when def.bin is m
     // Only `openclaude` is installed (Claude Code fork-only setup).
     writeFileSync(join(dir, 'openclaude'), '');
     chmodSync(join(dir, 'openclaude'), 0o755);
+    process.env.OD_AGENT_HOME = dir;
     process.env.PATH = dir;
 
     const resolved = resolveAgentExecutable({
@@ -265,6 +279,7 @@ fsTest('resolveAgentExecutable falls back through fallbackBins when def.bin is m
 fsTest('resolveAgentExecutable returns null when neither def.bin nor any fallback is on PATH', () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
   try {
+    process.env.OD_AGENT_HOME = dir;
     process.env.PATH = dir;
 
     const resolved = resolveAgentExecutable({
@@ -274,6 +289,25 @@ fsTest('resolveAgentExecutable returns null when neither def.bin nor any fallbac
     assert.equal(resolved, null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable searches mise node bins when PATH is minimal', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-agents-home-'));
+  try {
+    const dir = join(home, '.local', 'share', 'mise', 'installs', 'node', '24.14.1', 'bin');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'codex'), '');
+    chmodSync(join(dir, 'codex'), 0o755);
+    process.env.OD_AGENT_HOME = home;
+    process.env.PATH = '/usr/bin:/bin';
+
+    const resolved = resolveAgentExecutable({
+      bin: 'codex',
+    });
+    assert.equal(resolved, join(dir, 'codex'));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
   }
 });
 

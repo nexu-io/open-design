@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { detectAcpModels } from './acp.js';
 import { parsePiModels } from './pi-rpc.js';
 
@@ -565,12 +566,62 @@ export const AGENT_DEFS = [
   },
 ];
 
+function existingDirsUnder(root, segments = []) {
+  const dirs = [];
+  let entries = [];
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return dirs;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(root, entry.name, ...segments);
+    if (existsSync(full)) dirs.push(full);
+  }
+  return dirs;
+}
+
+function userToolchainDirs() {
+  const home = process.env.OD_AGENT_HOME || homedir();
+  return [
+    path.join(home, '.local', 'bin'),
+    path.join(home, '.opencode', 'bin'),
+    path.join(home, '.bun', 'bin'),
+    path.join(home, '.volta', 'bin'),
+    path.join(home, '.asdf', 'shims'),
+    path.join(home, 'Library', 'pnpm'),
+    path.join(home, '.cargo', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    ...existingDirsUnder(path.join(home, '.local', 'share', 'mise', 'installs', 'node'), ['bin']),
+    ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
+    ...existingDirsUnder(path.join(home, '.local', 'share', 'fnm', 'node-versions'), ['installation', 'bin']),
+  ];
+}
+
+function resolvePathDirs() {
+  const seen = new Set();
+  const dirs = [
+    ...(process.env.PATH || '').split(delimiter),
+    // macOS GUI apps often launch with a minimal PATH. Include common
+    // user-level CLI install locations so agent detection matches the
+    // user's shell-installed tools, especially Node version managers.
+    ...userToolchainDirs(),
+  ];
+  return dirs.filter((dir) => {
+    if (!dir || seen.has(dir)) return false;
+    seen.add(dir);
+    return true;
+  });
+}
+
 export function resolveOnPath(bin) {
   const exts =
     process.platform === 'win32'
       ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
       : [''];
-  const dirs = (process.env.PATH || '').split(delimiter);
+  const dirs = resolvePathDirs();
   for (const dir of dirs) {
     for (const ext of exts) {
       const full = path.join(dir, bin + ext);
