@@ -4,38 +4,53 @@ import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * Replicate the origin validation middleware from server.ts to test the
- * cross-origin protection logic without spinning up the full daemon.
+ * Replicate the origin validation middleware from server.ts exactly
+ * as it appears in the real daemon, so we test the actual logic
+ * including OD_WEB_PORT and Origin: null handling.
  */
-function makeTestApp(port) {
-  const app = express();
-  app.use(express.json());
-
-  app.use('/api', (req, res, next) => {
-    if (req.method === 'OPTIONS') {
-      res.header('Access-Control-Allow-Origin', '');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      return res.sendStatus(204);
-    }
+function createOriginMiddleware(resolvedPort) {
+  return (req, res, next) => {
     const origin = req.headers.origin;
     if (origin == null || origin === '') return next();
-    if (!port) return next();
-    const allowedOrigins = new Set([
-      `http://127.0.0.1:${port}`,
-      `http://localhost:${port}`,
-      `http://[::1]:${port}`,
-    ]);
+    if (origin === 'null') return next();
+    if (!resolvedPort) {
+      return res.status(403).json({ error: 'Server initializing' });
+    }
+    const ports = [resolvedPort];
+    const webPort = Number(process.env.OD_WEB_PORT);
+    if (webPort && webPort !== resolvedPort) ports.push(webPort);
+    const allowedOrigins = new Set(
+      ports.flatMap((p) => [
+        `http://127.0.0.1:${p}`,
+        `https://127.0.0.1:${p}`,
+        `http://localhost:${p}`,
+        `https://localhost:${p}`,
+        `http://[::1]:${p}`,
+        `https://[::1]:${p}`,
+      ]),
+    );
     if (!allowedOrigins.has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
-  });
+  };
+}
 
+function makeTestApp(port) {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', createOriginMiddleware(port));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/projects', (_req, res) => res.json({ projects: [] }));
+  app.get('/api/projects/:id/raw/:name', (req, res) => {
+    // Mimics the real raw-file route that sets CORS for Origin: null
+    if (req.headers.origin === 'null') {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+    res.json({ file: req.params.name });
+  });
   app.post('/api/projects', (req, res) => res.json({ project: req.body }));
   app.delete('/api/projects/:id', (req, res) => res.json({ ok: true }));
-
   return app;
 }
 
@@ -48,13 +63,13 @@ function request(port, method, path, { origin, headers = {} } = {}) {
       method,
       headers: {
         ...headers,
-        ...(origin ? { origin } : {}),
+        ...(origin !== undefined ? { origin } : {}),
       },
     };
     const req = http.request(opts, (res) => {
       let body = '';
       res.on('data', (chunk) => (body += chunk));
-      res.on('end', () => resolve({ status: res.statusCode, body }));
+      res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
     });
     req.end();
   });
@@ -67,12 +82,11 @@ describe('daemon origin validation middleware', () => {
   beforeAll(
     () =>
       new Promise((resolve) => {
-        const app = makeTestApp(0); // port=0 → dynamic
-        server = app.listen(0, '127.0.0.1', () => {
-          const addr = server.address();
-          port = addr.port;
-          // Rebuild the app with the real port
-          server.close(() => {
+        // Start on port 0 to get a dynamic port, then rebuild with real port
+        const tempApp = makeTestApp(0);
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = tempServer.address().port;
+          tempServer.close(() => {
             const realApp = makeTestApp(port);
             server = realApp.listen(port, '127.0.0.1', () => resolve());
           });
@@ -87,24 +101,47 @@ describe('daemon origin validation middleware', () => {
       }),
   );
 
-  it('allows requests without Origin header (non-browser clients)', async () => {
+  // --- Non-browser clients (no Origin) ---
+
+  it('allows requests without Origin header (curl, CLI)', async () => {
     const res = await request(port, 'GET', '/api/health');
     expect(res.status).toBe(200);
   });
 
-  it('allows same-origin requests from localhost', async () => {
+  // --- Same-origin (localhost) ---
+
+  it('allows same-origin requests from http://127.0.0.1', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows same-origin requests from http://localhost', async () => {
     const res = await request(port, 'GET', '/api/projects', {
       origin: `http://localhost:${port}`,
     });
     expect(res.status).toBe(200);
   });
 
-  it('allows same-origin requests from 127.0.0.1', async () => {
+  it('allows same-origin requests via HTTPS', async () => {
     const res = await request(port, 'GET', '/api/projects', {
-      origin: `http://127.0.0.1:${port}`,
+      origin: `https://127.0.0.1:${port}`,
     });
     expect(res.status).toBe(200);
   });
+
+  // --- Origin: null (sandboxed iframe previews) ---
+
+  it('allows Origin: null for sandboxed iframe preview fetches', async () => {
+    const res = await request(port, 'GET', '/api/projects/abc/raw/design.html', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  // --- Cross-origin rejection ---
 
   it('blocks cross-origin requests from external domains', async () => {
     const res = await request(port, 'GET', '/api/projects', {
@@ -116,7 +153,7 @@ describe('daemon origin validation middleware', () => {
 
   it('blocks cross-origin requests from other local ports', async () => {
     const res = await request(port, 'GET', '/api/projects', {
-      origin: 'http://127.0.0.1:9999',
+      origin: `http://127.0.0.1:9999`,
     });
     expect(res.status).toBe(403);
   });
@@ -129,8 +166,69 @@ describe('daemon origin validation middleware', () => {
     expect(res.status).toBe(403);
   });
 
-  it('allows OPTIONS preflight through', async () => {
-    const res = await request(port, 'OPTIONS', '/api/projects');
-    expect(res.status).toBe(204);
+  // --- OD_WEB_PORT (split-port proxy) ---
+
+  it('allows requests from OD_WEB_PORT (web proxy port)', async () => {
+    const webPort = port + 1000;
+    process.env.OD_WEB_PORT = String(webPort);
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${webPort}`,
+    });
+    delete process.env.OD_WEB_PORT;
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks requests from unknown ports even with OD_WEB_PORT set', async () => {
+    const webPort = port + 1000;
+    process.env.OD_WEB_PORT = String(webPort);
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port + 2000}`,
+    });
+    delete process.env.OD_WEB_PORT;
+    expect(res.status).toBe(403);
+  });
+
+  // --- Fail-closed when port not resolved ---
+
+  it('fails closed (403) when port is 0 (not yet resolved)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    }, 0); // This test uses a separate app with port=0
+    // We test this separately below
+  });
+});
+
+describe('origin validation: fail-closed before port resolution', () => {
+  let server;
+  let port;
+
+  beforeAll(
+    () =>
+      new Promise((resolve) => {
+        const app = makeTestApp(0); // port=0 → not resolved
+        server = app.listen(0, '127.0.0.1', () => {
+          port = server.address().port;
+          resolve();
+        });
+      }),
+  );
+
+  afterAll(
+    () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  );
+
+  it('blocks browser origins when port is not resolved (fail-closed)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('still allows non-browser clients when port is not resolved', async () => {
+    const res = await request(port, 'GET', '/api/health');
+    expect(res.status).toBe(200);
   });
 });

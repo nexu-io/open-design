@@ -616,28 +616,40 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
+  // Non-browser clients (no Origin header) are always allowed.
+  // Browser requests must originate from localhost on the daemon port
+  // or the web proxy port (OD_WEB_PORT) — matching isLocalSameOrigin()
+  // used by existing per-route guards below.
   app.use('/api', (req, res, next) => {
-    if (req.method === 'OPTIONS') {
-      // Let CORS preflight through so the browser gets a clear rejection
-      // rather than an opaque network error.
-      res.header('Access-Control-Allow-Origin', '');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      return res.sendStatus(204);
-    }
-    // Origin header absent → non-browser client (curl, CLI) → allow.
-    // Origin present → browser request → validate.
     const origin = req.headers.origin;
+    // Non-browser client → allow.
     if (origin == null || origin === '') return next();
-    // Will be validated once resolvedPort is known (set below).
-    // Before the port is resolved, block all browser origins.
+
+    // Origin: null is used by sandboxed/srcdoc iframe previews for
+    // raw-file routes (/api/projects/:id/raw/*).  Let those through;
+    // the route-level CORS handler sets the appropriate ACAO header.
+    if (origin === 'null') return next();
+
+    // Fail-closed: block all browser origins until port is resolved.
     if (!resolvedPort) {
-      return next(); // port=0 means dynamic; allow until resolved
+      return res.status(403).json({ error: 'Server initializing' });
     }
-    const allowedOrigins = new Set([
-      `http://127.0.0.1:${resolvedPort}`,
-      `http://localhost:${resolvedPort}`,
-      `http://[::1]:${resolvedPort}`,
-    ]);
+
+    const ports = [resolvedPort];
+    const webPort = Number(process.env.OD_WEB_PORT);
+    if (webPort && webPort !== resolvedPort) ports.push(webPort);
+
+    const allowedOrigins = new Set(
+      ports.flatMap((p) => [
+        `http://127.0.0.1:${p}`,
+        `https://127.0.0.1:${p}`,
+        `http://localhost:${p}`,
+        `https://localhost:${p}`,
+        `http://[::1]:${p}`,
+        `https://[::1]:${p}`,
+      ]),
+    );
+
     if (!allowedOrigins.has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
