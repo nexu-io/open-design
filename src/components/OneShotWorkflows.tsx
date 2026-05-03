@@ -857,6 +857,7 @@ export function OneShotWorkflows({
           qualityReviews: state.qualityReviews,
           pins: state.pins,
           evidenceStudio: state.evidenceStudio,
+          updatedAt: state.updatedAt,
           artifacts,
         },
       },

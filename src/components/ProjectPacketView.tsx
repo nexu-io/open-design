@@ -7,12 +7,17 @@ interface Props {
   onOpenFile: (name: string) => void;
 }
 
-const WEBSITE_PACKET_FILES = [
-  'site_plan.md',
-  'section_library.md',
-  'design_tokens.md',
-  'codex_build_brief.md',
-  'responsive_qa.md',
+const WEBSITE_PACKET_FILES: Array<{ name: string; group: string }> = [
+  { name: 'site_plan.md', group: 'Plan' },
+  { name: 'section_library.md', group: 'Plan' },
+  { name: 'design_tokens.md', group: 'Design' },
+  { name: 'DESIGN.md', group: 'Design' },
+  { name: 'evidence_inventory.md', group: 'Evidence' },
+  { name: 'opportunity_packet.md', group: 'Evidence' },
+  { name: 'codex_build_brief.md', group: 'Build' },
+  { name: 'responsive_qa.md', group: 'QA' },
+  { name: 'adapter_execution.md', group: 'Adapter' },
+  { name: 'packet_review.md', group: 'Review' },
 ];
 
 export function ProjectPacketView({ project, files, onOpenFile }: Props) {
@@ -28,6 +33,10 @@ export function ProjectPacketView({ project, files, onOpenFile }: Props) {
     {} as Record<string, number>,
   );
   const evidence = websiteStudio.evidenceStudio;
+  const readyArtifacts = WEBSITE_PACKET_FILES.filter(({ name }) => filesByName.has(name)).length;
+  const blockedGates = statuses.blocked ?? 0;
+  const needsReviewGates = statuses['needs-review'] ?? 0;
+  const packetUpdatedAt = websiteStudio.updatedAt ?? project.updatedAt;
 
   return (
     <section className="project-packet" aria-label="Project packet">
@@ -38,11 +47,18 @@ export function ProjectPacketView({ project, files, onOpenFile }: Props) {
         </span>
         <strong>{websiteStudio.adapterStatus}</strong>
       </div>
+      <div className="project-packet-summary" aria-label="Project packet readiness summary">
+        <span>artifacts <strong>{readyArtifacts}/{WEBSITE_PACKET_FILES.length}</strong></span>
+        <span>blocked <strong>{blockedGates}</strong></span>
+        <span>review <strong>{needsReviewGates}</strong></span>
+        <span>pins <strong>{websiteStudio.pins.length}</strong></span>
+        <span>evidence <strong>{evidence.files?.length ?? 0}</strong></span>
+      </div>
       <div className="project-packet-grid">
         <article>
           <h3>Artifacts on disk</h3>
           <div className="project-packet-files">
-            {WEBSITE_PACKET_FILES.map((name) => {
+            {WEBSITE_PACKET_FILES.map(({ name, group }) => {
               const file = filesByName.get(name);
               return (
                 <button
@@ -52,7 +68,7 @@ export function ProjectPacketView({ project, files, onOpenFile }: Props) {
                   onClick={() => file && onOpenFile(file.name)}
                 >
                   <span>{name}</span>
-                  <small>{file ? 'ready' : 'pending'}</small>
+                  <small>{file ? group : 'pending'}</small>
                 </button>
               );
             })}
@@ -78,14 +94,90 @@ export function ProjectPacketView({ project, files, onOpenFile }: Props) {
 
         <article>
           <h3>Pins and comments</h3>
+          {websiteStudio.pins.length ? (
+            <ul>
+              {websiteStudio.pins.slice(0, 6).map((pin) => (
+                <li key={pin.id}>
+                  <strong>{pin.target}</strong>
+                  <span>{pin.note}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No comments or pins recorded.</p>
+          )}
+        </article>
+
+        <article>
+          <h3>Codex handoff</h3>
+          <div className="project-packet-files">
+            {['codex_build_brief.md', 'adapter_execution.md', 'packet_review.md'].map((name) => {
+              const file = filesByName.get(name);
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  disabled={!file}
+                  onClick={() => file && onOpenFile(file.name)}
+                >
+                  <span>{name}</span>
+                  <small>{file ? 'open' : 'pending'}</small>
+                </button>
+              );
+            })}
+          </div>
           <ul>
-            {websiteStudio.pins.slice(0, 5).map((pin) => (
-              <li key={pin.id}>
-                <strong>{pin.target}</strong>
-                <span>{pin.note}</span>
-              </li>
-            ))}
+            <li>
+              <strong>typecheck</strong>
+              <span>required</span>
+            </li>
+            <li>
+              <strong>test</strong>
+              <span>required</span>
+            </li>
+            <li>
+              <strong>build</strong>
+              <span>required</span>
+            </li>
           </ul>
+        </article>
+
+        <article>
+          <h3>Packet history</h3>
+          <ul>
+            <li>
+              <strong>Project created</strong>
+              <span>{formatPacketDate(project.createdAt)}</span>
+            </li>
+            <li>
+              <strong>Project updated</strong>
+              <span>{formatPacketDate(project.updatedAt)}</span>
+            </li>
+            <li>
+              <strong>Packet updated</strong>
+              <span>{formatPacketDate(packetUpdatedAt)}</span>
+            </li>
+            <li>
+              <strong>Evidence scan</strong>
+              <span>{evidence.lastScanAt ? formatPacketDate(evidence.lastScanAt) : 'pending'}</span>
+            </li>
+          </ul>
+        </article>
+
+        <article>
+          <h3>Evidence files</h3>
+          {evidence.files?.length ? (
+            <ul>
+              {evidence.files.slice(0, 6).map((file) => (
+                <li key={`${file.role}-${file.path}`}>
+                  <strong>{file.role}</strong>
+                  <span>{file.path}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No scanned evidence files yet.</p>
+          )}
         </article>
 
         <article>
@@ -102,4 +194,9 @@ export function ProjectPacketView({ project, files, onOpenFile }: Props) {
       </div>
     </section>
   );
+}
+
+function formatPacketDate(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 'pending';
+  return new Date(value).toLocaleString();
 }

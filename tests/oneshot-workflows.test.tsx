@@ -71,6 +71,9 @@ describe('OneShotWorkflows', () => {
     expect(screen.getByText('Generated Website Studio artifacts')).toBeInTheDocument();
     expect(screen.getByText('codex_build_brief.md')).toBeInTheDocument();
     expect(screen.getByText('responsive_qa.md')).toBeInTheDocument();
+    expect(screen.getByText('evidence_inventory.md')).toBeInTheDocument();
+    expect(screen.getAllByText('DESIGN.md').length).toBeGreaterThan(0);
+    expect(screen.getByText('opportunity_packet.md')).toBeInTheDocument();
     expect(screen.getByText('Autosaved to project-backed Website Studio state')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start Website Studio packet' })).toBeInTheDocument();
     expect(screen.getByText('Website Builder adapter stub')).toBeInTheDocument();
@@ -155,6 +158,11 @@ describe('OneShotWorkflows', () => {
               'site_plan.md': expect.stringContaining('# Website Studio Site Plan'),
               'codex_build_brief.md': expect.stringContaining('Deploy adapter status: verified-local'),
               'responsive_qa.md': expect.stringContaining('Adapter status: Verified local'),
+              'evidence_inventory.md': expect.stringContaining('# Evidence Inventory'),
+              'DESIGN.md': expect.stringContaining('# DESIGN.md'),
+              'opportunity_packet.md': expect.stringContaining('# Opportunity Packet'),
+              'adapter_execution.md': expect.stringContaining('Status: verified-local'),
+              'packet_review.md': expect.stringContaining('# Packet Review'),
             }),
           }),
         }),
@@ -209,6 +217,9 @@ describe('OneShotWorkflows', () => {
     );
     expect(project.metadata.websiteStudio.artifacts['responsive_qa.md']).toContain(
       'Visual quality: blocked. Hero section needs stronger proof before export.',
+    );
+    expect(project.metadata.websiteStudio.artifacts['packet_review.md']).toContain(
+      'Pin testimonial proof to the conversion section.',
     );
   });
 

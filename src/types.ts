@@ -246,6 +246,7 @@ export interface WebsiteStudioMetadata {
     lastScanAt?: number | null;
     scanError?: string | null;
   };
+  updatedAt?: number;
   artifacts: Record<string, string>;
 }
 

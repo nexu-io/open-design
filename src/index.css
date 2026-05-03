@@ -4596,9 +4596,39 @@ code {
   font-size: 11px;
 }
 
+.project-packet-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.project-packet-summary span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.project-packet-summary strong {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: none;
+}
+
 .project-packet-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
   margin-top: 12px;
 }
@@ -5143,6 +5173,10 @@ code {
   }
 
   .project-packet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-packet-summary {
     grid-template-columns: 1fr;
   }
 

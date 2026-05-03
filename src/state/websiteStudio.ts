@@ -83,7 +83,12 @@ export type WebsiteStudioArtifacts = Record<
   | 'section_library.md'
   | 'design_tokens.md'
   | 'codex_build_brief.md'
-  | 'responsive_qa.md',
+  | 'responsive_qa.md'
+  | 'evidence_inventory.md'
+  | 'DESIGN.md'
+  | 'opportunity_packet.md'
+  | 'adapter_execution.md'
+  | 'packet_review.md',
   string
 >;
 
@@ -219,6 +224,12 @@ export function buildWebsiteStudioArtifacts(
     (gate) => `- ${gate.title}: ${gate.status}. ${gate.note} Evidence: ${gate.evidence}`,
   );
   const pinLines = state.pins.map((pin) => `- ${pin.target}: ${pin.note}`);
+  const evidenceFiles = state.evidenceStudio.files.map(
+    (file) => `- ${file.role}: ${file.path} (${file.size} bytes). ${file.reason}`,
+  );
+  const blockedGates = state.qualityReviews.filter((gate) => gate.status === 'blocked');
+  const reviewGates = state.qualityReviews.filter((gate) => gate.status === 'needs-review');
+  const passGates = state.qualityReviews.filter((gate) => gate.status === 'pass');
 
   return {
     'site_plan.md': [
@@ -275,6 +286,13 @@ export function buildWebsiteStudioArtifacts(
       '- pnpm test -- --reporter=default',
       '- pnpm build',
       '- Playwright desktop and mobile screenshots with no horizontal overflow',
+      '',
+      '## Review Before Build',
+      `- Passing gates: ${passGates.length}`,
+      `- Needs review: ${reviewGates.length}`,
+      `- Blocked: ${blockedGates.length}`,
+      `- Pins/comments: ${state.pins.length}`,
+      `- Evidence files: ${state.evidenceStudio.files.length}`,
     ].join('\n'),
     'responsive_qa.md': [
       '# Responsive QA',
@@ -298,6 +316,116 @@ export function buildWebsiteStudioArtifacts(
       ...(state.evidenceStudio.files.length
         ? state.evidenceStudio.files.map((file) => `- ${file.role}: ${file.path} (${file.reason})`)
         : ['- No evidence files scanned yet.']),
+    ].join('\n'),
+    'evidence_inventory.md': [
+      '# Evidence Inventory',
+      '',
+      `Source path: ${state.evidenceStudio.sourcePath || state.intake.sourcePath}`,
+      `Last scan: ${state.evidenceStudio.lastScanAt ? new Date(state.evidenceStudio.lastScanAt).toISOString() : 'not scanned'}`,
+      `Review gate: ${state.evidenceStudio.reviewGate}`,
+      '',
+      '## Counts',
+      `- Originals: ${state.evidenceStudio.originals}`,
+      `- Thumbnails: ${state.evidenceStudio.thumbnails}`,
+      `- Supporting assets: ${state.evidenceStudio.supportingAssets}`,
+      `- Flagged files: ${state.evidenceStudio.flaggedFiles}`,
+      '',
+      '## Files',
+      ...(evidenceFiles.length ? evidenceFiles : ['- No evidence files scanned yet.']),
+      '',
+      '## Risks',
+      state.evidenceStudio.scanError
+        ? `- Scan error: ${state.evidenceStudio.scanError}`
+        : '- No scan error recorded.',
+    ].join('\n'),
+    'DESIGN.md': [
+      '# DESIGN.md',
+      '',
+      `Project: ${state.intake.business}`,
+      'Style: Operational Atelier, professional design OS, evidence room, command center, and build studio.',
+      '',
+      '## Visual Direction',
+      '- Use a precise studio surface with source visibility, review gates, artifact previews, and build handoff controls.',
+      '- Keep the design calm, dense, professional, and English-only.',
+      '',
+      '## Typography',
+      `- ${state.tokens.Typography ?? 'Display title, compact UI, mono numerals and paths'}`,
+      '',
+      '## Color Tokens',
+      `- ${state.tokens.Color ?? 'Paper, graphite, amber proof, cyan action telemetry'}`,
+      '',
+      '## Component Patterns',
+      '- Source rail, artifact canvas, inspector/review panel, packet history, quality scorecards, and exact-path evidence chips.',
+      '',
+      '## Layout Rules',
+      '- Preserve source/sidebar room while letting the active studio use the available work area.',
+      '- Desktop should show artifact review and packet status together; mobile should stack without horizontal overflow.',
+      '',
+      '## Motion Rules',
+      `- ${state.tokens.Motion ?? 'Only status, review, and source-to-output transitions'}`,
+      '',
+      '## Anti-Patterns',
+      '- No fake deploy URLs, unsupported claims, generic chatbot framing, purple gradients, or hidden source paths.',
+      '',
+      '## First Screen Recommendation',
+      '- Show Website Studio intake, section plan, quality gates, comments/pins, Evidence Studio source state, and Project Packet readiness in one operator workbench.',
+    ].join('\n'),
+    'opportunity_packet.md': [
+      '# Opportunity Packet',
+      '',
+      `Product thesis: ${state.intake.business} should produce a build-ready website packet for ${state.intake.audience}.`,
+      `Offer: ${state.intake.offer}`,
+      `Primary conversion: ${state.intake.conversion}`,
+      '',
+      '## Opportunity Ranking',
+      '| Idea | Evidence links | Speed to launch | Revenue potential | Defensibility | Existing asset fit | Risk |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
+      `| Website Studio v1 | ${state.evidenceStudio.sourcePath || state.intake.sourcePath || 'Needs source path'} | High | Medium | Medium | High | ${blockedGates.length ? 'Blocked gates remain' : 'Review required'} |`,
+      '| Evidence Studio v1 | evidence_inventory.md, DESIGN.md | Medium | Medium | High | High | Local scan coverage must be verified |',
+      '| Codex Build Studio handoff | codex_build_brief.md | High | Medium | Medium | High | Build commands must pass before export |',
+      '',
+      '## Assumptions',
+      '- Assumptions must stay marked until evidence files and review gates support them.',
+      '',
+      '## Review Gates',
+      ...gateLines,
+    ].join('\n'),
+    'adapter_execution.md': [
+      '# Adapter Execution',
+      '',
+      `Status: ${adapterStatus.status}`,
+      `Detail: ${adapterStatus.detail}`,
+      `Target: ${state.deployTarget || 'not provided'}`,
+      `Command evidence: ${state.deployCommandEvidence || 'not provided'}`,
+      '',
+      '## Allowed States',
+      '- prepare-only: packet generated, no live URL claimed.',
+      '- verified-local: local URL verified by HTTP/browser probe.',
+      '- verified-deployed: external URL verified with command output evidence.',
+      '',
+      '## Guardrail',
+      '- Never mark deployed without a real URL and verification evidence.',
+    ].join('\n'),
+    'packet_review.md': [
+      '# Packet Review',
+      '',
+      `Updated: ${new Date(state.updatedAt).toISOString()}`,
+      `Adapter status: ${adapterStatus.status}`,
+      '',
+      '## Quality Summary',
+      `- Pass: ${passGates.length}`,
+      `- Needs review: ${reviewGates.length}`,
+      `- Blocked: ${blockedGates.length}`,
+      '',
+      '## Comments and Pins',
+      ...(pinLines.length ? pinLines : ['- No comments or pins recorded.']),
+      '',
+      '## Review Before Export',
+      '- Open every generated packet file.',
+      '- Resolve blocked gates.',
+      '- Confirm evidence source paths.',
+      '- Verify responsive behavior.',
+      '- Confirm adapter status is honest.',
     ].join('\n'),
   };
 }
