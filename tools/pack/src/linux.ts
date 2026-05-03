@@ -65,3 +65,48 @@ async function commandExists(bin: string): Promise<boolean> {
     return false;
   }
 }
+
+type DockerUserMapping = {
+  uid: number;
+  gid: number;
+};
+
+export function buildDockerArgs(
+  config: ToolPackConfig,
+  user: DockerUserMapping,
+): string[] {
+  const dockerHome = join(config.roots.toolPackRoot, ".docker-home");
+  const electronCache = join(config.roots.toolPackRoot, ".docker-cache", "electron");
+  const electronBuilderCache = join(config.roots.toolPackRoot, ".docker-cache", "electron-builder");
+
+  const innerCommand =
+    "corepack enable && pnpm install --frozen-lockfile && " +
+    `pnpm tools-pack linux build --to ${config.to} --namespace ${config.namespace}`;
+
+  return [
+    "run",
+    "--rm",
+    "--user",
+    `${user.uid}:${user.gid}`,
+    "-v",
+    `${config.workspaceRoot}:/project`,
+    "-v",
+    `${dockerHome}:/home/builder`,
+    "-v",
+    `${electronCache}:/home/builder/.cache/electron`,
+    "-v",
+    `${electronBuilderCache}:/home/builder/.cache/electron-builder`,
+    "-e",
+    "HOME=/home/builder",
+    "-e",
+    "ELECTRON_CACHE=/home/builder/.cache/electron",
+    "-e",
+    "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
+    "-w",
+    "/project",
+    "electronuserland/builder:base",
+    "bash",
+    "-lc",
+    innerCommand,
+  ];
+}
