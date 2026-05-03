@@ -641,6 +641,56 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Projects (DB-backed) -------------------------------------------------
 
+  // Soft "what is the user looking at right now in OD?" channel. The
+  // web UI POSTs the current project + file on every route change;
+  // the MCP surface reads it so a coding agent in another repo can
+  // resolve "the design I have open" without the user typing the
+  // project id. In-memory only — daemon restart clears it.
+  /** @type {{ projectId: string; fileName: string | null; ts: number } | null} */
+  let activeContext = null;
+  const ACTIVE_CONTEXT_TTL_MS = 5 * 60 * 1000;
+
+  app.post('/api/active', (req, res) => {
+    try {
+      const body = req.body || {};
+      if (body.active === false) {
+        activeContext = null;
+        res.json({ active: false });
+        return;
+      }
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      if (!projectId) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
+        return;
+      }
+      const fileName =
+        typeof body.fileName === 'string' && body.fileName.length > 0
+          ? body.fileName
+          : null;
+      activeContext = { projectId, fileName, ts: Date.now() };
+      res.json({ active: true, ...activeContext });
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/active', (_req, res) => {
+    if (!activeContext || Date.now() - activeContext.ts > ACTIVE_CONTEXT_TTL_MS) {
+      activeContext = null;
+      res.json({ active: false });
+      return;
+    }
+    const project = getProject(db, activeContext.projectId);
+    res.json({
+      active: true,
+      projectId: activeContext.projectId,
+      projectName: project?.name ?? null,
+      fileName: activeContext.fileName,
+      ts: activeContext.ts,
+      ageMs: Date.now() - activeContext.ts,
+    });
+  });
+
   app.get('/api/projects', (_req, res) => {
     try {
       const latestRunStatuses = listLatestProjectRunStatuses(db);

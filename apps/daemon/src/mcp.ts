@@ -60,6 +60,13 @@ const TOOL_DEFS = [
     annotations: { ...READ_ANNOTATIONS, title: 'List OD projects' },
   },
   {
+    name: 'get_active_context',
+    description:
+      'Returns the project + file the user has open in OD right now (if any). Use this as the FIRST tool when the user says things like "this file", "the design I have open", "what I\'m looking at" — it answers without forcing the user to type a project id. Returns {active:false} when OD is closed or the user isn\'t on a project page.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
+  },
+  {
     name: 'get_artifact',
     description:
       'PREFER THIS over multiple get_file calls. Pulls a design artifact bundle in one call: the entry file plus every sibling it references (tokens CSS, JSX modules, images, fonts). Default mode (auto) parses the entry HTML/JSX/CSS and follows relative <script src>, <link href>, <img src>, <iframe src>, srcset, JSX import/from/require, dynamic import(), CSS url() and @import — up to depth 3, skipping CDN/data/anchor URLs. include="all" returns every file in the project (binary files arrive as metadata stubs); include="shallow" returns just the entry. Use maxBytes to cap response size.',
@@ -228,6 +235,10 @@ export async function runMcpStdio({ daemonUrl }) {
         'artifact (HTML/JSX/CSS) plus its source files.',
         '',
         'Pulling design context:',
+        '  - get_active_context() FIRST when the user says "this file" /',
+        '    "the design I have open" / "what I\'m looking at" — it returns',
+        '    the project + file the user is currently on in OD, so you',
+        '    don\'t have to ask. Returns {active:false} if OD is closed.',
         '  - list_projects to discover what is available on this daemon.',
         '  - get_artifact(project) to pull the entry file PLUS its referenced',
         '    sibling assets (tokens CSS, component JSX, imported modules) in',
@@ -262,7 +273,14 @@ export async function runMcpStdio({ daemonUrl }) {
       getJson(`${baseUrl}/api/skills`).catch(() => ({ skills: [] })),
       getJson(`${baseUrl}/api/design-systems`).catch(() => ({ designSystems: [] })),
     ]);
-    const resources = [];
+    const resources = [
+      {
+        uri: 'od://focus/active',
+        name: 'Active OD context',
+        description: 'The project/file the user has open in OD right now.',
+        mimeType: 'application/json',
+      },
+    ];
     for (const s of skillsData?.skills || []) {
       resources.push({
         uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
@@ -284,6 +302,18 @@ export async function runMcpStdio({ daemonUrl }) {
 
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params?.uri;
+    if (uri === 'od://focus/active') {
+      const data = await getJson(`${baseUrl}/api/active`);
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    }
     const m = String(uri || '').match(/^od:\/\/(skills|design-systems)\/([^/]+)\/(.+)$/);
     if (!m) {
       throw new Error(`unsupported resource URI: ${uri}`);
@@ -319,6 +349,8 @@ export async function runMcpStdio({ daemonUrl }) {
       switch (name) {
         case 'list_projects':
           return ok(await getJson(`${baseUrl}/api/projects`));
+        case 'get_active_context':
+          return ok(await getJson(`${baseUrl}/api/active`));
         case 'get_project': {
           const id = await resolveProjectId(baseUrl, args.project);
           const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
