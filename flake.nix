@@ -69,10 +69,18 @@
         packages = [
           nodejs
           pnpm_10
-          pkgs.git
         ];
         shellHook = ''
-          echo "open-design dev shell — node $(node --version), pnpm $(pnpm --version)"
+          echo "🎨 Open Design dev shell loaded!"
+          echo ""
+          echo "Language runtimes:"
+          echo "  - 🐢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
+          echo "  - 📦 pnpm:    $(pnpm --version 2>/dev/null || echo 'not found')"
+          echo ""
+          echo "Quick start:"
+          echo "  - 🚀 pnpm install"
+          echo "  - 🚀 pnpm tools-dev    # local lifecycle entry point"
+          echo ""
         '';
       };
 
