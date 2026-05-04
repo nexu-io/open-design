@@ -609,7 +609,7 @@ placeholder objectId の取得元:
 
 `gog slides copy` / `/api/google/slides/copy` は **テンプレート 130 ページ全体** を複製する。populate するのは layoutsUsed に並ぶ 6-10 page だけ。残り 120+ ページはテンプレート状態のまま deck に残り、Step 8 の replaceAllText の bleed もそこに混入する。**ユーザーが受け取る前に必ず削除する**。
 
-#### 8.5.1 削除対象の特定
+#### 8.5.1 削除対象の特定（**keep list は canonical + duplicate 両方**）
 
 ```bash
 # deck の全 slide ID を取得
@@ -617,7 +617,11 @@ curl -s http://localhost:<daemon_port>/api/google/slides/<deckId>
 # response: { slides: [ { slideId, elementCount, elementIds }, ... ] }
 ```
 
-`layoutsUsed[].canonical_slide_id` に含まれる slideId は **残す**。それ以外は全削除。
+**保持する slideId（keep list）= layoutsUsed[].slideId の全部**。
+
+> **Codex review (2026-05-05) finding**: Phase 6 で同 canonical を再利用する場合、Step 8.2 の duplicate-slide で生成した新 ID（`p53_use2`、`p31_use3` 等）も **kept** として保持しなければならない。Phase 5 まで使っていた「canonical_slide_id だけ keep」ロジックは Phase 6 では duplicate を誤って削除する。
+>
+> 実装: agent は `layoutsUsed` 配列に各使用 page の **実際の slideId**（元 canonical_slide_id か duplicate の新 ID）を記録。delete-pages の対象 = 全 deck slide IDs **マイナス** layoutsUsed[].slideId 全部。
 
 #### 8.5.2 一括削除
 
@@ -631,27 +635,28 @@ curl -X POST http://localhost:<daemon_port>/api/google/slides/delete-pages \
 # response: { "deleted": 124 }
 ```
 
-deck は populate された 6-10 page だけになる。
+deck は populate された 6-10 page（layoutsUsed の全 slideId、元 canonical + duplicate 含む）だけになる。
 
 #### 8.5.3 narrative 順に並べ替え（**Phase 6 で追加**、`update-slides-position`）
 
 Phase 5 までは「kept slides は元 template の物理位置順に並ぶ」制約があった（reorder API 未実装のため）。**Phase 6 では `update-slides-position` で narrative 順に自由に並べ替えられる**。
 
+> **Codex review (2026-05-05) finding**: Google API の `UpdateSlidesPositionRequest` は `slideObjectIds` が**現在の presentation 内位置順**であることを要求（in-order without duplicates）。daemon の `update-slides-position` v2 はこの制約を吸収するため、内部で **1 slide ずつ順次移動**する実装に変更（caller は最終 narrative 順だけ渡す）。
+
 ```bash
-# layoutsUsed は narrative 順（outline 章立て順）に並んでいる前提
-# 各 slide を outline 順に index 0, 1, 2... へ移動
+# narrativeOrder は最終 deck 内順序（outline 章立て順）。
+# 各 slide が現在 deck 内のどこにいても OK — daemon が 1 つずつ正しい位置へ移動する。
 
 curl -X POST http://localhost:<daemon_port>/api/google/slides/update-slides-position \
   -H "Content-Type: application/json" \
   -d '{
     "deckId": "<copied_deck_id>",
-    "slideIds": ["<cover_slideId>", "<exec_summary_slideId>", "<top_metrics_slideId>", "...", "<closing_slideId>"],
-    "insertionIndex": 0
+    "narrativeOrder": ["<cover_slideId>", "<exec_summary_slideId>", "<top_metrics_slideId>", "<dx_week_slideId>", "<manazashi_slideId>", "<harmony_slideId>", "<next_month_slideId>", "<closing_slideId>"]
   }'
-# → { "ok": true, "reordered": 8 }
+# → { "ok": true, "reordered": 8, "moves": <0-8、既に正位置の slide はスキップ> }
 ```
 
-`slideIds` は narrative 順、`insertionIndex: 0` で deck 先頭から並ぶ。これで delete-pages 直後の不規則な順序を一発で正しい順に直す。
+旧フィールド名 `slideIds` も後方互換で受理するが、**新規コードでは `narrativeOrder` を使う**（API contract が「順序を伝える」と明示的に読める）。`insertionIndex` パラメータは廃止。
 
 > **重要**: Phase 5 で用いていた「canonical_slide_id の元 deck 内位置順を narrative 順と一致するよう選ぶ」は **不要**。canonical 選択は scenario 適合性のみで行い、順序は最後に `update-slides-position` で決める。
 
@@ -767,9 +772,15 @@ layout-level 問題が出たら → **canonical を別の同 shape entry に変�
 
 1. 段階 1: 短く書き直し → 該当 placeholder を `update-text` で per-objectId 上書き
 2. 段階 1.5: image 隣 title が awkward wrap → text に明示 `\n` 入りで再 `update-text`
-3. 段階 2: 圧縮で収まらない → canonical 変更（既存 page を delete-pages で 1 枚削除、新 canonical を duplicate-slide で挿入、update-text で埋める、update-slides-position で順序復元）
+3. 段階 2: 圧縮で収まらない → canonical 変更。**ただし source canonical slide が既に Step 8.5 で削除されている可能性に注意**:
+   - Step 8.5 の delete-pages では `layoutsUsed[].slideId` 以外を全て削除 → 別 canonical の source slide は deck から消えている
+   - canonical 変更を実行するには **source slide を delete-pages から退避**する必要がある
+   - **推奨フロー**: 視覚 self-check の結果を見て canonical 変更が必要そうなら、**Step 8.5 を一旦巻き戻す**（旧 source slide を再 copy で取り戻すのではなく、最初から新しく deck を作り直す）。コスト高いので 3 round の修正で収まらない時の最終手段。
+   - **代替フロー**: より安全には、**Step 8.5 を遅延**: 視覚 self-check（Step 9.5）が clean になるまで delete-pages を走らせない。これにより canonical 変更は「新 source を duplicate → 元 page を delete → update-text で埋める → 順序更新」で済む。
 4. PDF を re-export
 5. 9.5.2 を再実行（最大 3 round）
+
+> **Codex review (2026-05-05) finding に応じた変更**: 上記の「代替フロー」を v2 で導入予定（Step 8.5 を Step 9.5 完了後に移動）。現状の Step 8.5 → 9.5 順序は backward compat 維持のため保持しているが、canonical 変更が頻発する outline では「代替フロー」を選ぶこと。
 
 **字号 (`update-font-size`) は使わない**。template の typography は agent が触る領域ではない。
 

@@ -350,7 +350,15 @@
         {
           "slide_n": 83,
           "slide_id": "g2d13f919f05_0_51",
-          "when": "body text 1-3 短文 paragraphs (Round 3 verified)"
+          "when": "body text 1-3 短文 paragraphs (Round 3 verified)",
+          "placeholder_object_ids": [
+            "g2d13f919f05_0_52",
+            "g2d13f919f05_0_53",
+            "g2d13f919f05_0_54",
+            "g2d13f919f05_0_55"
+          ],
+          "requires_runtime_inspection": true,
+          "runtime_inspection_note": "placeholder roles/text not pre-cataloged; agent must call GET /api/google/slides/<deckId> after copy and inspect each element via Slides API for role/text classification before update-text. Use only when T+IMG (P31) does not fit the body length needs."
         }
       ]
     },
@@ -1822,8 +1830,7 @@
       "avoid": [
         "ありがとう (5 fullwidth, wraps)",
         "ありがとうございました (12 fullwidth, severely overflows)"
-      ],
-      "fallback_strategy": "If JP closing required, apply font shrink via /api/google/slides/update-font-size after replacement (start at 80% of original size)."
+      ]
     },
     "section_dividers_forbidden_for_content": [
       4,
