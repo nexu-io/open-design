@@ -281,6 +281,8 @@ pnpm tools-dev run web       # starts daemon + web foreground loop
 
 When a reverse proxy sits in front of the daemon, `/api/*` includes SSE streams and must stay unbuffered. The daemon sends `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and also emits SSE comment keepalives, but nginx can still break chunked streams if gzip is enabled. For nginx, set `proxy_buffering off;`, `gzip off;`, and long `proxy_read_timeout` / `proxy_send_timeout` values on the API location. Otherwise browsers can report `net::ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)` on long generations.
 
+If the web UI is served from a reverse-proxy origin that differs from the daemon's loopback origin, set `OD_ALLOWED_ORIGINS` to a comma-separated list of explicit browser origins, for example `OD_ALLOWED_ORIGINS=https://open-design.internal.example.com`. This is an origin-wide trust decision: browser `Origin` headers do not include paths, so values must be bare `http://` or `https://` origins without credentials, paths, query strings, or fragments. Do not include public, shared, or multi-tenant origins unless every script on that origin is trusted to call the local daemon API. `OD_ALLOWED_ORIGINS` does not prove that a request actually passed through a proxy; it only extends the daemon's browser-origin allowlist.
+
 ### Docker
 ```yaml
 # docker-compose.yml

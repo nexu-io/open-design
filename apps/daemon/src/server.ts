@@ -3262,30 +3262,90 @@ export function isLocalSameOrigin(req, port) {
   return allowedOrigins.has(String(origin));
 }
 
-function readAllowedOriginsEnv() {
+let cachedAllowedOriginsRaw = null;
+let cachedAllowedOrigins = [];
+
+export function readAllowedOriginsEnv() {
   const raw = process.env.OD_ALLOWED_ORIGINS || '';
-  return raw
+  if (raw === cachedAllowedOriginsRaw) return cachedAllowedOrigins;
+
+  const origins = new Set();
+  for (const entry of raw
     .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      try {
-        return new URL(entry).origin;
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+    .map((part) => part.trim())
+    .filter(Boolean)) {
+    const parsed = parseAllowedOriginEntry(entry);
+    if (parsed.origin) {
+      origins.add(parsed.origin);
+    } else {
+      console.warn(
+        `OD_ALLOWED_ORIGINS: ignoring invalid entry ${JSON.stringify(parsed.displayEntry)}: ${parsed.reason}`,
+      );
+    }
+  }
+
+  cachedAllowedOriginsRaw = raw;
+  cachedAllowedOrigins = [...origins];
+  return cachedAllowedOrigins;
 }
 
-function readAllowedOriginHostsEnv() {
-  return readAllowedOriginsEnv()
-    .map((origin) => {
-      try {
-        return new URL(origin).host;
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+export function readAllowedOriginHostsEnv() {
+  return [
+    ...new Set(
+      readAllowedOriginsEnv()
+        .map((origin) => {
+          try {
+            return new URL(origin).host;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function parseAllowedOriginEntry(entry) {
+  let url;
+  try {
+    url = new URL(entry);
+  } catch {
+    return {
+      origin: null,
+      displayEntry: entry,
+      reason: 'expected an absolute http:// or https:// origin',
+    };
+  }
+
+  const displayEntry = `${url.protocol}//${url.host}${url.pathname}${url.search}${url.hash}`;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      origin: null,
+      displayEntry,
+      reason: 'scheme must be http or https',
+    };
+  }
+  if (url.username || url.password) {
+    return {
+      origin: null,
+      displayEntry,
+      reason: 'credentials are not allowed',
+    };
+  }
+  if (url.pathname !== '' && url.pathname !== '/') {
+    return {
+      origin: null,
+      displayEntry,
+      reason: 'origins cannot include a path',
+    };
+  }
+  if (url.search || url.hash) {
+    return {
+      origin: null,
+      displayEntry,
+      reason: 'origins cannot include query strings or fragments',
+    };
+  }
+
+  return { origin: url.origin, displayEntry, reason: null };
 }

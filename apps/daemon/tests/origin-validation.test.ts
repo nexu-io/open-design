@@ -1,7 +1,21 @@
 // @ts-nocheck
 import http from 'node:http';
 import express from 'express';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  isLocalSameOrigin,
+  readAllowedOriginHostsEnv,
+  readAllowedOriginsEnv,
+} from '../src/server.js';
 
 /**
  * Replicate the origin validation middleware from server.ts exactly
@@ -33,10 +47,13 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
     const allowedOrigins = new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
+      [
+        ...ports.flatMap((p) => [
+          ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+          ...schemes.map((s) => `${s}://${host}:${p}`),
+        ]),
+        ...readAllowedOriginsEnv(),
+      ],
     );
     if (!allowedOrigins.has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
@@ -237,6 +254,146 @@ describe('daemon origin validation middleware', () => {
 
   // Note: fail-closed coverage when port=0 is tested in the dedicated
   // describe block below ("fail-closed before port resolution").
+});
+
+describe('OD_ALLOWED_ORIGINS parsing', () => {
+  let originalAllowedOrigins;
+  let warnSpy;
+
+  beforeEach(() => {
+    originalAllowedOrigins = process.env.OD_ALLOWED_ORIGINS;
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    if (originalAllowedOrigins === undefined) {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    } else {
+      process.env.OD_ALLOWED_ORIGINS = originalAllowedOrigins;
+    }
+    warnSpy.mockRestore();
+  });
+
+  it('normalizes http and https origins, default ports, whitespace, and duplicates', () => {
+    process.env.OD_ALLOWED_ORIGINS =
+      ' https://proxy.example.com , http://proxy.example.com:80, https://proxy.example.com:443, https://proxy.example.com ';
+
+    expect(readAllowedOriginsEnv()).toEqual([
+      'https://proxy.example.com',
+      'http://proxy.example.com',
+    ]);
+    expect(readAllowedOriginHostsEnv()).toEqual(['proxy.example.com']);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed entries, unsupported schemes, credentials, paths, query strings, and fragments', () => {
+    process.env.OD_ALLOWED_ORIGINS = [
+      'not-a-url',
+      'ftp://proxy.example.com',
+      'https://user:pass@proxy.example.com',
+      'https://proxy.example.com/app',
+      'https://proxy.example.com?debug=1',
+      'https://proxy.example.com#section',
+      'https://ok.example.com/',
+    ].join(',');
+
+    expect(readAllowedOriginsEnv()).toEqual(['https://ok.example.com']);
+    expect(warnSpy).toHaveBeenCalledTimes(6);
+  });
+
+  it('caches parse warnings until the raw env value changes', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://proxy.example.com/app';
+
+    expect(readAllowedOriginsEnv()).toEqual([]);
+    expect(readAllowedOriginsEnv()).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    process.env.OD_ALLOWED_ORIGINS = 'https://proxy.example.com?x=1';
+    expect(readAllowedOriginsEnv()).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('OD_ALLOWED_ORIGINS request validation', () => {
+  let server;
+  let port;
+  let originalAllowedOrigins;
+
+  beforeAll(
+    () =>
+      new Promise((resolve) => {
+        const tempApp = makeTestApp(0);
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = tempServer.address().port;
+          tempServer.close(() => {
+            const realApp = makeTestApp(port);
+            server = realApp.listen(port, '127.0.0.1', () => resolve());
+          });
+        });
+      }),
+  );
+
+  beforeEach(() => {
+    originalAllowedOrigins = process.env.OD_ALLOWED_ORIGINS;
+  });
+
+  afterEach(() => {
+    if (originalAllowedOrigins === undefined) {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    } else {
+      process.env.OD_ALLOWED_ORIGINS = originalAllowedOrigins;
+    }
+  });
+
+  afterAll(
+    () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  );
+
+  it('allows browser requests from explicitly trusted origins', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://proxy.example.com';
+
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: 'https://proxy.example.com',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('includes trusted origin hosts in stricter same-origin checks', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://proxy.example.com';
+
+    expect(
+      isLocalSameOrigin(
+        {
+          headers: {
+            host: 'proxy.example.com',
+            origin: 'https://proxy.example.com',
+          },
+        },
+        port,
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects configured origin hosts when the browser Origin does not match', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://proxy.example.com';
+
+    expect(
+      isLocalSameOrigin(
+        {
+          headers: {
+            host: 'proxy.example.com',
+            origin: 'https://evil.example.com',
+          },
+        },
+        port,
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('origin validation: fail-closed before port resolution', () => {
