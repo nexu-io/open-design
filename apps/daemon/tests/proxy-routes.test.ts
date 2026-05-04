@@ -59,10 +59,13 @@ describe('API proxy routes', () => {
     );
   });
 
-  // Regression: providers whose OpenAI-compat surface lives under a
-  // sub-path (DeepInfra `/v1/openai`, OpenRouter `/api/v1`, etc.) used
-  // to get an extra `/v1` injected by appendVersionedApiPath, producing
-  // a 404 upstream. Now any non-empty path is respected verbatim.
+  // Regression: appendVersionedApiPath needs to thread three shapes:
+  //   * bare host                  → inject /v1 (api.openai.com)
+  //   * sub-path containing /vN    → no inject (api.deepinfra.com/v1/openai)
+  //   * sub-path without /vN       → inject /v1 (api.deepseek.com/anthropic)
+  // The earlier end-of-path check broke the second case; a "non-empty
+  // path → respect verbatim" intermediate fix broke the third. Pin all
+  // three so neither regression returns.
   it.each([
     [
       'https://api.deepinfra.com/v1/openai',
@@ -84,7 +87,7 @@ describe('API proxy routes', () => {
       'https://api.openai.com/',
       'https://api.openai.com/v1/chat/completions',
     ],
-  ])('routes baseUrl %s to %s', async (input, expected) => {
+  ])('routes OpenAI baseUrl %s to %s', async (input, expected) => {
     const fetchMock = vi.fn((req: FetchInput, init?: FetchInit) => {
       const url = String(req);
       if (url.startsWith(baseUrl)) return realFetch(req, init);
@@ -93,6 +96,50 @@ describe('API proxy routes', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: input,
+        apiKey: 'sk-test',
+        model: 'm',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(expected);
+  });
+
+  // The Anthropic proxy goes through the same `appendVersionedApiPath`
+  // helper, but its preset table includes Anthropic-compatible gateways
+  // mounted at non-versioned sub-paths (DeepSeek `/anthropic`, MiniMax
+  // `/anthropic`, MiMo `/anthropic`). Those still need the `/v1`
+  // injection, otherwise upstream returns 404 on `.../anthropic/messages`.
+  it.each([
+    [
+      'https://api.anthropic.com',
+      'https://api.anthropic.com/v1/messages',
+    ],
+    [
+      'https://api.deepseek.com/anthropic',
+      'https://api.deepseek.com/anthropic/v1/messages',
+    ],
+    [
+      'https://api.minimaxi.com/anthropic',
+      'https://api.minimaxi.com/anthropic/v1/messages',
+    ],
+    [
+      'https://token-plan-cn.xiaomimimo.com/anthropic',
+      'https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages',
+    ],
+  ])('routes Anthropic baseUrl %s to %s', async (input, expected) => {
+    const fetchMock = vi.fn((req: FetchInput, init?: FetchInit) => {
+      const url = String(req);
+      if (url.startsWith(baseUrl)) return realFetch(req, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/anthropic/stream`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
