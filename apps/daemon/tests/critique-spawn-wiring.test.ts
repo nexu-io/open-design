@@ -114,6 +114,7 @@ describe('spawn wiring - cfg.enabled=true (orchestrator path)', () => {
       yield '    </ROUND_END>\n';
       yield '  </ROUND>\n';
       yield '  <SHIP round="1" composite="9.0" status="shipped">\n';
+      yield '    <ARTIFACT mime="text/html"><![CDATA[<html></html>]]></ARTIFACT>\n';
       yield '    <SUMMARY>Shipped.</SUMMARY>\n';
       yield '  </SHIP>\n';
       yield '</CRITIQUE_RUN>\n';

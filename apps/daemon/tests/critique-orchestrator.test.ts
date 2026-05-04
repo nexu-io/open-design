@@ -120,6 +120,7 @@ function happyStream3Rounds(): string {
   </ROUND>
 
   <SHIP round="3" composite="9.45" status="shipped">
+    <ARTIFACT mime="text/html"><![CDATA[<html><body>final</body></html>]]></ARTIFACT>
     <SUMMARY>Design converged in 3 rounds.</SUMMARY>
   </SHIP>
 
