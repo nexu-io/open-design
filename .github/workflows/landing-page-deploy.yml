@@ -86,10 +86,13 @@ jobs:
           NODE
 
       - name: Deploy to Cloudflare Pages
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: >
-          pnpm dlx wrangler@3.90.0 pages deploy apps/landing-page/out
-          --project-name=open-design-landing
-          --branch=${{ github.ref_name }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          command: >
+            pages deploy out
+            --project-name=open-design-landing
+            --branch=${{ github.ref_name }}
