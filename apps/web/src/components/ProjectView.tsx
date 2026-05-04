@@ -1430,6 +1430,14 @@ export function ProjectView({
           onAdoptPet={onAdoptPetInline}
           onTogglePet={onTogglePet}
           onOpenPetSettings={onOpenPetSettings}
+          projectMetadata={project.metadata}
+          onProjectMetadataChange={(metadata) => {
+            if (project.metadata !== metadata) {
+              void patchProject(project.id, { metadata }).then((updated: Project | null) => {
+                if (updated) onProjectChange(updated);
+              });
+            }
+          }}
         />
         <FileWorkspace
           projectId={project.id}

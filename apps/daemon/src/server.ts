@@ -1,7 +1,7 @@
 // @ts-nocheck
 import express from 'express';
 import multer from 'multer';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -18,6 +18,7 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { findSkillById, listSkills } from './skills.js';
+import { validateLinkedDirs } from './linked-dirs.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
@@ -408,6 +409,44 @@ function sanitizeArchiveFilename(raw) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
   return cleaned;
+}
+
+function openNativeFolderDialog() {
+  return new Promise((resolve) => {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+      execFile(
+        'osascript',
+        ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
+        { timeout: 120_000 },
+        (err, stdout) => {
+          if (err) return resolve(null);
+          const p = stdout.trim().replace(/\/$/, '');
+          resolve(p || null);
+        },
+      );
+    } else if (platform === 'linux') {
+      execFile(
+        'zenity',
+        ['--file-selection', '--directory', '--title=Select a code folder to link'],
+        { timeout: 120_000 },
+        (err, stdout) => {
+          if (err) return resolve(null);
+          const p = stdout.trim();
+          resolve(p || null);
+        },
+      );
+    } else if (platform === 'win32') {
+      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a code folder to link'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }";
+      execFile('powershell.exe', ['-NoProfile', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
+        if (err) return resolve(null);
+        const p = stdout.trim();
+        resolve(p || null);
+      });
+    } else {
+      resolve(null);
+    }
+  });
 }
 
 /**
@@ -908,6 +947,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
+      if (patch.metadata?.linkedDirs) {
+        const validated = validateLinkedDirs(patch.metadata.linkedDirs);
+        if (validated.error) {
+          return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
+        }
+        patch.metadata.linkedDirs = validated.dirs;
+      }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -2038,6 +2084,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  // Native OS folder picker dialog. Returns { path: string | null }.
+  app.post('/api/dialog/open-folder', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const selected = await openNativeFolderDialog();
+      res.json({ path: selected });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
   app.post('/api/projects/:id/media/generate', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({
@@ -2427,8 +2488,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           .map((f) => `- ${f.name}`)
           .join('\n')}`
       : '\nThis folder is empty. Choose a clear, descriptive filename for whatever you create.';
+    const projectRecord =
+      typeof projectId === 'string' && projectId
+        ? getProject(db, projectId)
+        : null;
+    const linkedDirs = Array.isArray(projectRecord?.metadata?.linkedDirs)
+      ? projectRecord.metadata.linkedDirs.filter((d) => fs.existsSync(d))
+      : [];
     const cwdHint = cwd
       ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}`
+      : '';
+    const linkedDirsHint = linkedDirs.length > 0
+      ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
+          linkedDirs.map((d) => `- \`${d}\``).join('\n')
+        }`
       : '';
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
@@ -2446,10 +2519,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       .join('\n\n---\n\n');
     const composed = [
       instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}\n\n---\n`
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
         : cwdHint
-          ? `# Instructions${cwdHint}\n\n---\n`
-          : '',
+          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          : linkedDirsHint
+            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            : '',
       `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
       safeImages.length
         ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
@@ -2501,9 +2576,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
-    const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
-      fs.existsSync(d),
-    );
+    const extraAllowedDirs = [
+      SKILLS_DIR,
+      DESIGN_SYSTEMS_DIR,
+      ...linkedDirs,
+    ].filter((d) => fs.existsSync(d));
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a

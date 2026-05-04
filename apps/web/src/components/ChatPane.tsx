@@ -3,7 +3,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile } from '../types';
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile, ProjectMetadata } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -88,6 +88,8 @@ interface Props {
   onAdoptPet?: (petId: string) => void;
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
+  projectMetadata?: ProjectMetadata;
+  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -122,6 +124,8 @@ export function ChatPane({
   onAdoptPet,
   onTogglePet,
   onOpenPetSettings,
+  projectMetadata,
+  onProjectMetadataChange,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -438,6 +442,8 @@ export function ChatPane({
             onAdoptPet={onAdoptPet}
             onTogglePet={onTogglePet}
             onOpenPetSettings={onOpenPetSettings}
+            projectMetadata={projectMetadata}
+            onProjectMetadataChange={onProjectMetadataChange}
           />
         </>
       ) : null}
