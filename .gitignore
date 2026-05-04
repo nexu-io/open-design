@@ -38,6 +38,7 @@ tsconfig.tsbuildinfo
 .opencode/
 .claude/
 .codex/
+.deepseek/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/

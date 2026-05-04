@@ -17,6 +17,7 @@ const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
 const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
+const deepseek = AGENT_DEFS.find((agent) => agent.id === 'deepseek');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
@@ -387,6 +388,50 @@ fsTest('resolveAgentExecutable still resolves agents without a fallbackBins fiel
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// DeepSeek TUI's exec subcommand requires the prompt as a positional
+// argument (no `-` stdin sentinel; clap declares `prompt: String` as a
+// required field). `--auto` enables agentic mode with auto-approval —
+// the daemon runs every CLI without a TTY, so the interactive approval
+// prompt would hang the run.
+test('deepseek args use exec --auto and append prompt as positional', () => {
+  const args = deepseek.buildArgs('write hello world', [], [], {});
+
+  assert.deepEqual(args, ['exec', '--auto', 'write hello world']);
+  assert.equal(deepseek.streamFormat, 'plain');
+});
+
+test('deepseek args inject --model when the user picks one', () => {
+  const args = deepseek.buildArgs('hi', [], [], { model: 'deepseek-v4-pro' });
+
+  assert.deepEqual(args, [
+    'exec',
+    '--auto',
+    '--model',
+    'deepseek-v4-pro',
+    'hi',
+  ]);
+});
+
+test('deepseek args omit --model when model is "default"', () => {
+  const args = deepseek.buildArgs('hi', [], [], { model: 'default' });
+
+  assert.equal(args.includes('--model'), false);
+});
+
+test('deepseek entry declares deepseek-tui as a fallback bin', () => {
+  // `deepseek` is the dispatcher binary; `deepseek-tui` is the runtime
+  // companion. `npm i -g deepseek-tui` installs both, but a cargo-only
+  // install of just `deepseek-tui` should still surface the agent.
+  assert.ok(
+    Array.isArray(deepseek.fallbackBins),
+    'deepseek.fallbackBins must be an array',
+  );
+  assert.ok(
+    deepseek.fallbackBins.includes('deepseek-tui'),
+    `deepseek.fallbackBins must include 'deepseek-tui'; got ${JSON.stringify(deepseek.fallbackBins)}`,
+  );
 });
 
 test('vibe args use empty array for acp-json-rpc streaming', () => {

@@ -594,6 +594,43 @@ export const AGENT_DEFS = [
     buildArgs: () => [],
     streamFormat: 'acp-json-rpc',
   },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek TUI',
+    // The `deepseek` dispatcher is the canonical entry point; it delegates
+    // to a sibling `deepseek-tui` runtime binary at exec time. Both are
+    // installed by `npm i -g deepseek-tui` and by the cargo path. We probe
+    // the dispatcher first; if a user installed only the TUI binary (e.g.
+    // standalone cargo install), we still surface the agent.
+    bin: 'deepseek',
+    fallbackBins: ['deepseek-tui'],
+    versionArgs: ['--version'],
+    // No `models` subcommand that prints a clean id-per-line list; the
+    // canonical model ids for DeepSeek V4 are documented in the README,
+    // and the CLI accepts arbitrary provider/model strings via `--model`,
+    // so users can paste anything else through the custom-model input.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+    ],
+    // DeepSeek's exec mode requires the prompt as a positional argument
+    // (no `-` stdin sentinel; `prompt: String` is a required clap field).
+    // `--auto` enables agentic mode with auto-approval — the daemon runs
+    // every CLI without a TTY, so the interactive approval prompt would
+    // hang the run. Streaming is plain text on stdout (tool calls go to
+    // stderr); skipping `--json` keeps deltas streaming live instead of
+    // batched into one trailing summary object at end-of-turn.
+    buildArgs: (prompt, _imagePaths, _extra, options = {}) => {
+      const args = ['exec', '--auto'];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      args.push(prompt);
+      return args;
+    },
+    streamFormat: 'plain',
+  },
 ];
 
 function existingDirsUnder(root, segments = []) {

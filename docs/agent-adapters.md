@@ -94,6 +94,7 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **copilot** | `copilot` | `~/.copilot/` | ❌ | ✅ (`edit` tool) | ✅ (`--output-format json` JSONL) | P2 |
 | **kiro** | `kiro-cli` | `~/.kiro/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
 | **vibe** | `vibe-acp` | `~/.vibe/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
+| **deepseek** | `deepseek` (fallback `deepseek-tui`) | `~/.deepseek/` | `~/.deepseek/skills/` | ❌ (prompt-injected) | ✅ | ✅ (plain text) | P2 |
 
 "P0/P1/P2" correspond to the roadmap phases in [`roadmap.md`](roadmap.md).
 
@@ -193,6 +194,16 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Skill loading: prompt injection only. Github Copilot's tool catalog includes a `skill` tool — native format worth reverse-engineering later.
 - Surgical edits: dedicated `edit` tool.
 - Detection assumes Copilot is already authenticated, via one of: `copilot login` (subcommand, OAuth device flow), the interactive `/login` slash command inside `copilot` with no args.
+
+### 5.9 DeepSeek TUI
+
+- Invocation: `deepseek exec --auto [--model <id>] "<prompt>"`. The `deepseek` dispatcher delegates to a sibling `deepseek-tui` runtime binary at exec time; both ship together via `npm i -g deepseek-tui` or `cargo install deepseek-tui-cli` + `cargo install deepseek-tui`. We probe the dispatcher first and fall back to `deepseek-tui` directly so a cargo-only install of just the TUI binary still surfaces the agent.
+- Streaming: plain text deltas to stdout in non-`--json` mode (tool-call notifications go to stderr). Skipping `--json` is intentional — `deepseek exec --json` batches the entire run into one trailing summary object instead of streaming, which would freeze the chat UI until end-of-turn.
+- Auto-approval: `--auto` enables agentic mode with the YOLO permission posture. The daemon runs every CLI without a TTY, so the interactive approval prompt would otherwise hang the run.
+- Skills: prompt injection only in v1. DeepSeek TUI does walk `.agents/skills`, `skills`, `.opencode/skills`, `.claude/skills`, and `~/.deepseek/skills` first-wins, so a future revision can switch to file-placed skill loading the same way Claude Code does.
+- Prompt delivery: positional argv (no stdin sentinel; clap declares `prompt: String` as a required field). This means very large composed prompts can hit Windows' ~32 KB `CreateProcess` limit; for typical chat prompts this is non-issue. Upstream support for a `-` stdin sentinel would let us flip this to `promptViaStdin: true` like the other adapters.
+- Models: ships `deepseek-v4-pro` and `deepseek-v4-flash` as fallback hints (1M-token context windows, native thinking-mode streaming). Users can paste any other id (e.g. `nvidia-nim/deepseek-v4-pro`, `fireworks/deepseek-v4-flash`) via the Settings dialog's custom-model input.
+- **Gotcha — auth state is not auto-detected.** DeepSeek TUI reads its API key from `~/.deepseek/config.toml` or `DEEPSEEK_API_KEY`. If the user hasn't run `deepseek auth set --provider deepseek` (or set the env var), the first run errors out with a non-actionable message. Detection currently only reports `available: true` based on the binary being on PATH; surface auth state via `deepseek doctor --json` in a follow-up.
 
 ## 6. Capability-driven UI
 

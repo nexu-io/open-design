@@ -140,6 +140,21 @@ const VISUALS: Record<string, Visual> = {
       );
     },
   },
+  // DeepSeek — DeepSeek-blue with abstract whale-tail / wave glyph.
+  deepseek: {
+    bg: 'linear-gradient(135deg, #4d6bfe 0%, #1f3fce 100%)',
+    fg: '#ffffff',
+    glyph: (s) => {
+      const c = s / 2;
+      const r = s * 0.3;
+      return (
+        <g fill="none" stroke="#ffffff" strokeWidth={s * 0.08} strokeLinecap="round" strokeLinejoin="round">
+          <path d={`M ${c - r} ${c + r * 0.3} Q ${c - r * 0.4} ${c - r * 0.6}, ${c} ${c - r * 0.1} T ${c + r} ${c + r * 0.3}`} />
+          <path d={`M ${c - r * 0.6} ${c + r * 0.7} Q ${c} ${c + r * 0.2}, ${c + r * 0.6} ${c + r * 0.7}`} />
+        </g>
+      );
+    },
+  },
   // MiMo — Xiaomi orange with "Mi" stylized mark.
   mimo: {
     bg: 'linear-gradient(135deg, #FF6900 0%, #FF4D00 100%)',
