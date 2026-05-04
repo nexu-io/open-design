@@ -32,6 +32,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@open-design/contracts": "workspace:0.3.0",
     "@open-design/platform": "workspace:0.3.0",
     "@open-design/sidecar": "workspace:0.3.0",

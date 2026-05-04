@@ -302,53 +302,13 @@ describe('app-config origin guard', () => {
     expect(res.status).toBe(403);
   });
 
-  it('allows GET when Origin is the trusted web port (proxy flow)', async () => {
-    const webPort = port + 1;
-    process.env.OD_WEB_PORT = String(webPort);
-    try {
-      const res = await httpRequest(`${baseUrl}/api/app-config`, {
-        headers: {
-          Host: `127.0.0.1:${port}`,
-          Origin: `http://127.0.0.1:${webPort}`,
-        },
-      });
-      expect(res.status).toBe(200);
-    } finally {
-      delete process.env.OD_WEB_PORT;
-    }
-  });
-
-  it('allows PUT when Origin is the trusted web port (proxy flow)', async () => {
-    const webPort = port + 1;
-    process.env.OD_WEB_PORT = String(webPort);
-    try {
-      const res = await httpRequest(`${baseUrl}/api/app-config`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Host: `127.0.0.1:${port}`,
-          Origin: `http://localhost:${webPort}`,
-        },
-        body: JSON.stringify({ onboardingCompleted: true }),
-      });
-      expect(res.status).toBe(200);
-    } finally {
-      delete process.env.OD_WEB_PORT;
-    }
-  });
-
-  it('still rejects cross-origin even when OD_WEB_PORT is set', async () => {
-    process.env.OD_WEB_PORT = String(port + 1);
-    try {
-      const res = await httpRequest(`${baseUrl}/api/app-config`, {
-        headers: {
-          Host: `127.0.0.1:${port}`,
-          Origin: 'https://evil.com',
-        },
-      });
-      expect(res.status).toBe(403);
-    } finally {
-      delete process.env.OD_WEB_PORT;
-    }
+  it('still rejects non-loopback Origin', async () => {
+    const res = await httpRequest(`${baseUrl}/api/app-config`, {
+      headers: {
+        Host: `127.0.0.1:${port}`,
+        Origin: 'https://evil.com',
+      },
+    });
+    expect(res.status).toBe(403);
   });
 });

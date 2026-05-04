@@ -59,6 +59,7 @@ import {
   readProjectFile,
   removeProjectDir,
   sanitizeName,
+  searchProjectFiles,
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
@@ -716,6 +717,133 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   // ---- Projects (DB-backed) -------------------------------------------------
+
+  // Soft "what is the user looking at right now in Open Design?" channel. The
+  // web UI POSTs the current project + file on every route change;
+  // the MCP surface reads it so a coding agent in another repo can
+  // resolve "the design I have open" without the user typing the
+  // project id. In-memory only - daemon restart clears it.
+  /** @type {{ projectId: string; fileName: string | null; ts: number } | null} */
+  let activeContext = null;
+  const ACTIVE_CONTEXT_TTL_MS = 5 * 60 * 1000;
+
+  // Active context is private to the local machine. The daemon binds
+  // 0.0.0.0 by default, so without an origin check a peer on the LAN
+  // could read what the user is currently looking at (GET) or spoof
+  // it to redirect MCP fallbacks (POST). The web proxies same-origin
+  // and the MCP runs in-process via 127.0.0.1, so both legitimate
+  // callers pass the check.
+  app.post('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const body = req.body || {};
+      if (body.active === false) {
+        activeContext = null;
+        res.json({ active: false });
+        return;
+      }
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      if (!projectId) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
+        return;
+      }
+      const fileName =
+        typeof body.fileName === 'string' && body.fileName.length > 0
+          ? body.fileName
+          : null;
+      activeContext = { projectId, fileName, ts: Date.now() };
+      res.json({ active: true, ...activeContext });
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    if (!activeContext || Date.now() - activeContext.ts > ACTIVE_CONTEXT_TTL_MS) {
+      activeContext = null;
+      res.json({ active: false });
+      return;
+    }
+    const project = getProject(db, activeContext.projectId);
+    res.json({
+      active: true,
+      projectId: activeContext.projectId,
+      projectName: project?.name ?? null,
+      fileName: activeContext.fileName,
+      ts: activeContext.ts,
+      ageMs: Date.now() - activeContext.ts,
+    });
+  });
+
+  // Surfaces the absolute paths to `node` + `apps/daemon/dist/cli.js`
+  // so the Settings → MCP server panel can render snippets that work
+  // even when `od` isn't on the user's PATH (the common case for
+  // source clones - and macOS/Linux ship a /usr/bin/od octal-dump
+  // tool that shadows ours anyway). Computed from import.meta.url so
+  // both src/ (tsx dev) and dist/ (built) launches resolve to the
+  // same dist/cli.js path. Cached for 5s because the panel pings on
+  // every open and the path lookup + two existsSync calls are cheap
+  // but not free, and these paths cannot change without a daemon
+  // restart anyway.
+  const INSTALL_INFO_TTL_MS = 5000;
+  let installInfoCache: { t: number; payload: object } | null = null;
+
+  app.get('/api/mcp/install-info', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const now = Date.now();
+    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
+      return res.json(installInfoCache.payload);
+    }
+    let cliPath;
+    try {
+      cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+    } catch (err) {
+      return sendApiError(res, 500, 'CLI_RESOLVE_FAILED', String(err));
+    }
+    const cliExists = fs.existsSync(cliPath);
+    // process.execPath is the absolute path to the node binary that
+    // is running the daemon RIGHT NOW. We prefer it over bare `node`
+    // because IDE-spawned MCP clients inherit a minimal PATH from the
+    // OS launcher (Spotlight, Dock, etc.) that often does not see
+    // user-level node installs (nvm, fnm, asdf). On rare occasions
+    // (uninstall mid-session, exotic embeds) the path may not exist
+    // by the time the user copies the snippet; catch that and warn.
+    const nodeExists = fs.existsSync(process.execPath);
+    const hints: string[] = [];
+    if (!cliExists) {
+      hints.push(
+        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` (or just `pnpm build`) and refresh.',
+      );
+    }
+    if (!nodeExists) {
+      hints.push(
+        `Node binary at ${process.execPath} no longer exists. Reinstall Node and restart the daemon.`,
+      );
+    }
+    const payload = {
+      command: process.execPath,
+      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
+      daemonUrl: `http://127.0.0.1:${resolvedPort}`,
+      // Surface platform so the install panel can localize path hints
+      // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
+      // (Cmd vs Ctrl). One of 'darwin' | 'linux' | 'win32' in
+      // practice; the panel falls back to POSIX wording for anything
+      // else.
+      platform: process.platform,
+      cliExists,
+      nodeExists,
+      buildHint: hints.length ? hints.join(' ') : null,
+    };
+    installInfoCache = { t: now, payload };
+    res.json(payload);
+  });
 
   app.get('/api/projects', (_req, res) => {
     try {
@@ -1738,10 +1866,32 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // project's own folder (see apps/daemon/src/projects.ts).
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
-      const files = await listFiles(PROJECTS_DIR, req.params.id);
+      const since = Number(req.query?.since);
+      const files = await listFiles(PROJECTS_DIR, req.params.id, {
+        since: Number.isFinite(since) ? since : undefined,
+      });
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects/:id/search', async (req, res) => {
+    try {
+      const query = String(req.query.q ?? '');
+      if (!query) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
+        return;
+      }
+      const pattern = req.query.pattern ? String(req.query.pattern) : null;
+      const max = Math.min(Number(req.query.max) || 200, 1000);
+      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
+        pattern,
+        max,
+      });
+      res.json({ query, matches });
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }

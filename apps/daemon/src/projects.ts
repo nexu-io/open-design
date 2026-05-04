@@ -29,12 +29,16 @@ export async function ensureProject(projectsRoot, projectId) {
   return dir;
 }
 
-export async function listFiles(projectsRoot, projectId) {
+export async function listFiles(projectsRoot, projectId, opts = {}) {
   const dir = projectDir(projectsRoot, projectId);
   const out = [];
   await collectFiles(dir, '', out);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
+  const since = Number(opts.since);
+  if (Number.isFinite(since) && since > 0) {
+    return out.filter((f) => Number(f.mtime) > since);
+  }
   return out;
 }
 
@@ -366,6 +370,57 @@ const EXT_MIME = {
 export function mimeFor(name) {
   const ext = path.extname(name).toLowerCase();
   return EXT_MIME[ext] || 'application/octet-stream';
+}
+
+export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
+  const max = Math.min(Number(opts.max) || 200, 1000);
+  const pattern = opts.pattern || null;
+  const items = await listFiles(projectsRoot, projectId);
+  const dir = projectDir(projectsRoot, projectId);
+  const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escaped, 'i');
+  const matches = [];
+  for (const f of items) {
+    if (!isTextualMime(f.mime)) continue;
+    if (pattern && !globMatch(f.name, pattern)) continue;
+    let content;
+    try {
+      content = await readFile(path.join(dir, f.name), 'utf8');
+    } catch {
+      continue;
+    }
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i])) {
+        const snippet = lines[i].length > 220 ? lines[i].slice(0, 220) + '…' : lines[i];
+        matches.push({ file: f.name, line: i + 1, snippet });
+        if (matches.length >= max) return matches;
+      }
+    }
+  }
+  return matches;
+}
+
+function isTextualMime(mime) {
+  if (!mime) return false;
+  return (
+    /^text\//i.test(mime) ||
+    /^application\/(json|javascript|typescript|xml|x-(?:yaml|toml|httpd-php|sh))\b/i.test(mime) ||
+    /\+(?:json|xml)\b/i.test(mime) ||
+    /^image\/svg\+xml/i.test(mime)
+  );
+}
+
+function globMatch(name, glob) {
+  const re = new RegExp(
+    '^' +
+      glob
+        .split('*')
+        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+        .join('.*') +
+      '$',
+  );
+  return re.test(name);
 }
 
 // Coarse kind buckets the frontend uses to pick a viewer.

@@ -83,6 +83,26 @@ export function App() {
     }
   }, [config.theme]);
 
+  // Tell the daemon what the user is currently looking at, so the MCP
+  // server can surface it as `get_active_context` to a coding agent in
+  // another repo. Best-effort fire-and-forget; the daemon holds it in
+  // memory with a short TTL and the MCP layer falls back to
+  // {active:false} if this hasn't run.
+  const activeProjectId = route.kind === 'project' ? route.projectId : null;
+  const activeFileName = route.kind === 'project' ? route.fileName : null;
+  useEffect(() => {
+    const body = activeProjectId
+      ? { projectId: activeProjectId, fileName: activeFileName }
+      : { active: false };
+    fetch('/api/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {
+      // Daemon down or transient network — not worth surfacing.
+    });
+  }, [activeProjectId, activeFileName]);
+
   // Bootstrap — detect daemon, load pickers, seed sensible defaults.
   useEffect(() => {
     let cancelled = false;
