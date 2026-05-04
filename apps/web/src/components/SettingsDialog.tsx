@@ -1528,6 +1528,19 @@ function IntegrationsSection() {
             </li>
           </ul>
         </div>
+
+        <p
+          style={{
+            marginTop: 14,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            lineHeight: 1.5,
+          }}
+        >
+          Open Design must be running for MCP tool calls to succeed. If
+          you started your coding agent before opening Open Design,
+          restart the agent so it can reach the live daemon.
+        </p>
       </div>
     </section>
   );

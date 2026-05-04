@@ -349,9 +349,9 @@ Open Design ships a stdio MCP server. Wire it into Claude Code, Codex, Cursor, V
 
 Open **Settings → MCP server** in the Open Design app for a per-client install flow. The panel bakes the absolute path to your `node` binary and the daemon's built `cli.js` into every snippet, so it works on a fresh source clone where `od` is not on your PATH. Cursor gets a one-click deeplink; the rest get a copy-paste JSON snippet in the schema their config file expects (Claude Code includes a `claude mcp add-json` one-liner so you do not have to hand-edit `~/.claude.json`). Restart or reload your client after install for the server to show up.
 
-If the daemon is not running when the agent calls a tool, it receives a clear `"daemon not reachable"` error rather than a crash. Start the daemon (`pnpm tools-dev`) and retry.
+The daemon must be running locally for MCP tool calls to succeed. If the agent was started before Open Design, restart the agent after Open Design is up so it can reach the live daemon. Tool calls made while the daemon is offline return a clear `"daemon not reachable"` error rather than a crash.
 
-**Security model.** The MCP server is read-only and connects only to `http://127.0.0.1:<port>`. The daemon binds to `127.0.0.1` by default and rejects requests whose `Host` or `Origin` header does not match a known loopback address, so remote machines and browser tabs on other origins cannot reach it.
+**Security model.** The MCP server is read-only; it exposes file reads, file metadata, and search -- nothing that writes to disk or calls an external service. It runs as a child process of the coding agent over stdio, so any MCP client you register inherits read access to your local Open Design projects. Treat it like installing a VS Code extension: only register clients you trust. The daemon binds to `127.0.0.1` by default; LAN-wide exposure requires an explicit `OD_BIND_HOST` opt-in.
 
 ## Repository structure
 
