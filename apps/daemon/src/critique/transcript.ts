@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir, rename, rm, open } from 'node:fs/promises';
 import { createGzip, createGunzip } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
@@ -94,12 +94,30 @@ export async function writeTranscript(
     const gzipped = totalBytes > threshold;
 
     if (gzipped) {
-      // Pipe temp file through gzip into the final .gz file.
-      await pipeline(
-        createReadStream(tempPath),
-        createGzip(),
-        createWriteStream(finalGz),
-      );
+      // Write gzip output to a temp file first, fsync, then atomic-rename.
+      // A crash mid-write leaves the .gz.tmp but never the final .gz, so
+      // partial files can't be mistaken for valid data on the next read.
+      const gzTempPath = join(artifactDir, `transcript.tmp.${process.pid}.${Date.now()}.ndjson.gz.tmp`);
+      try {
+        await pipeline(
+          createReadStream(tempPath),
+          createGzip(),
+          createWriteStream(gzTempPath),
+        );
+        // fsync: flush OS write buffers before rename so crash after rename
+        // cannot leave a zero-length .gz.
+        const fh = await open(gzTempPath, 'r+');
+        try {
+          await fh.sync();
+        } finally {
+          await fh.close();
+        }
+        await rename(gzTempPath, finalGz);
+      } catch (gzErr) {
+        // Unlink the .gz.tmp so no partial file lingers.
+        await rm(gzTempPath, { force: true });
+        throw gzErr;
+      }
       await rm(tempPath, { force: true });
       return { path: 'transcript.ndjson.gz', bytes: totalBytes, gzipped: true };
     } else {

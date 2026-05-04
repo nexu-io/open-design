@@ -203,6 +203,30 @@ describe('writeTranscript + readTranscript', () => {
       ),
     ).rejects.toThrow(RangeError);
   });
+
+  it('gzip crash leaves no final .gz or .gz.tmp on disk (Defect 8)', async () => {
+    const artifactDir = join(tmpDir, 'run-gz-crash');
+    await mkdirIfNeeded(artifactDir);
+
+    // Source that throws mid-stream to simulate a crash during write.
+    async function* failingGzipSource(): AsyncIterable<PanelEvent> {
+      yield makeRunStarted();
+      throw new Error('simulated gzip crash');
+    }
+
+    // Use threshold=1 to force gzip path.
+    await expect(
+      writeTranscript(artifactDir, failingGzipSource(), { gzipThresholdBytes: 1 }),
+    ).rejects.toThrow('simulated gzip crash');
+
+    // The final .gz must not exist.
+    expect(existsSync(join(artifactDir, 'transcript.ndjson.gz'))).toBe(false);
+
+    // No .gz.tmp should remain.
+    const files = existsSync(artifactDir) ? readdirSync(artifactDir) : [];
+    const gzTmpFiles = files.filter((f) => f.endsWith('.gz.tmp'));
+    expect(gzTmpFiles).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

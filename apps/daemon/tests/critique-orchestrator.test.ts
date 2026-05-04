@@ -539,3 +539,239 @@ describe('runOrchestrator - defensive entry', () => {
     expect(getCritiqueRun(db, 'r-invalid2')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Child exit races (Defect 4)
+// ---------------------------------------------------------------------------
+
+describe('runOrchestrator - child exit race (Defect 4)', () => {
+  it('child exits non-zero mid-stream: result is failed with cli_exit_nonzero', async () => {
+    const { bus, events } = makeBus();
+    const artifactDir = join(tmpDir, 'run-child-exit');
+
+    // Stub child that exits with code 1 immediately.
+    let killCalled = false;
+    const stubChild = { kill: (_sig?: number | NodeJS.Signals) => { killCalled = true; return true as boolean; } };
+
+    // childExitPromise resolves with code=1 after a short delay.
+    const childExitPromise = new Promise<{ code: number | null; signal: string | null }>(
+      (resolve) => setTimeout(() => resolve({ code: 1, signal: null }), 20),
+    );
+
+    // Stdout that emits the run header then stalls.
+    // Uses a short delay (longer than childExitPromise's 20ms) so the child
+    // exit race wins before the stall promise resolves, but the generator
+    // itself does eventually resolve so iter.return() cleanup doesn't hang.
+    async function* stallingStdout(): AsyncIterable<string> {
+      yield '<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">\n';
+      yield '  <ROUND n="1">\n';
+      // Stall for longer than the child exit delay (20ms) but eventually resolve
+      // so the generator can be cleaned up by iter.return() in applyTimeouts.
+      await new Promise<void>((resolve) => setTimeout(resolve, 5000));
+    }
+
+    const cfg: CritiqueConfig = {
+      ...defaultCritiqueConfig(),
+      // Long timeouts so only the child exit race wins; we don't want the
+      // per-round or total timer to fire before childExitPromise resolves.
+      perRoundTimeoutMs: 30_000,
+      totalTimeoutMs: 30_000,
+    };
+
+    const result = await runOrchestrator({
+      runId: 'r-child-exit',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir,
+      adapter: 'claude',
+      cfg,
+      db,
+      bus,
+      stdout: stallingStdout(),
+      child: stubChild,
+      childExitPromise,
+    });
+
+    expect(result.status).toBe('failed');
+    const row = getCritiqueRun(db, 'r-child-exit');
+    expect(row?.status).toBe('failed');
+    expect(killCalled).toBe(true);
+
+    const failedEvents = events.filter((e) => e.event === 'critique.failed');
+    expect(failedEvents).toHaveLength(1);
+  }, 10000);
+
+  it('child exits zero before parser completes: parser continues until stream ends', async () => {
+    const { bus } = makeBus();
+    const artifactDir = join(tmpDir, 'run-child-exit-zero');
+
+    // Child exits with code 0 (zero is not an error).
+    const childExitPromise = new Promise<{ code: number | null; signal: string | null }>(
+      (resolve) => setTimeout(() => resolve({ code: 0, signal: null }), 10),
+    );
+
+    // A complete valid 1-round stream that finishes after the child exit.
+    async function* delayedStream(): AsyncIterable<string> {
+      await new Promise<void>((r) => setTimeout(r, 30));
+      yield '<CRITIQUE_RUN version="1" maxRounds="1" threshold="8.0" scale="10">\n';
+      yield '  <ROUND n="1">\n';
+      yield '    <PANELIST role="designer"><NOTES>v1</NOTES><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>\n';
+      yield '    <PANELIST role="critic" score="9.0"><DIM name="h" score="9">ok</DIM></PANELIST>\n';
+      yield '    <PANELIST role="brand" score="9.0"><DIM name="v" score="9">ok</DIM></PANELIST>\n';
+      yield '    <PANELIST role="a11y" score="9.0"><DIM name="c" score="9">ok</DIM></PANELIST>\n';
+      yield '    <PANELIST role="copy" score="9.0"><DIM name="cl" score="9">ok</DIM></PANELIST>\n';
+      yield '    <ROUND_END n="1" composite="9.0" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>\n';
+      yield '  </ROUND>\n';
+      yield '  <SHIP round="1" composite="9.0" status="shipped">\n';
+      yield '    <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>\n';
+      yield '    <SUMMARY>done</SUMMARY>\n';
+      yield '  </SHIP>\n';
+      yield '</CRITIQUE_RUN>\n';
+    }
+
+    const result = await runOrchestrator({
+      runId: 'r-child-exit-zero',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir,
+      adapter: 'claude',
+      cfg: defaultCritiqueConfig(),
+      db,
+      bus,
+      stdout: delayedStream(),
+      childExitPromise,
+    });
+
+    // Zero exit does not disrupt the parser; it should complete as shipped.
+    expect(result.status).toBe('shipped');
+  }, 10000);
+});
+
+// ---------------------------------------------------------------------------
+// Timeout / abort best-so-far fallback (Defect 7)
+// ---------------------------------------------------------------------------
+
+describe('runOrchestrator - fallback on timeout/abort (Defect 7)', () => {
+  it('timeout after 2 completed rounds: status=timed_out, score=max(composite)', async () => {
+    const { bus, events } = makeBus();
+    const artifactDir = join(tmpDir, 'run-timeout-fallback');
+
+    // 2 complete rounds then stall.
+    // Two complete rounds. After emitting both ROUND_END events, stall so the
+    // total-timeout fires and the orchestrator elects a fallback round.
+    const twoRounds = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="9.0" scale="10">
+  <ROUND n="1">
+    <PANELIST role="designer"><NOTES>v1</NOTES><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+    <PANELIST role="critic" score="6.0"><DIM name="h" score="6">ok</DIM></PANELIST>
+    <PANELIST role="brand" score="6.0"><DIM name="v" score="6">ok</DIM></PANELIST>
+    <PANELIST role="a11y" score="6.0"><DIM name="c" score="6">ok</DIM></PANELIST>
+    <PANELIST role="copy" score="6.0"><DIM name="cl" score="6">ok</DIM></PANELIST>
+    <ROUND_END n="1" composite="6.0" must_fix="0" decision="continue"><REASON>continue</REASON></ROUND_END>
+  </ROUND>
+  <ROUND n="2">
+    <PANELIST role="designer"><NOTES>v2</NOTES></PANELIST>
+    <PANELIST role="critic" score="7.5"><DIM name="h" score="7">better</DIM></PANELIST>
+    <PANELIST role="brand" score="7.5"><DIM name="v" score="7">ok</DIM></PANELIST>
+    <PANELIST role="a11y" score="7.5"><DIM name="c" score="7">ok</DIM></PANELIST>
+    <PANELIST role="copy" score="7.5"><DIM name="cl" score="7">ok</DIM></PANELIST>
+    <ROUND_END n="2" composite="7.5" must_fix="0" decision="continue"><REASON>continue</REASON></ROUND_END>
+  </ROUND>`;
+
+    async function* stallingAfterTwoRounds(): AsyncIterable<string> {
+      yield* streamOf(twoRounds, 64);
+      // After both rounds land, stall so the total-timeout fires.
+      await new Promise<void>((resolve) => setTimeout(resolve, 10_000));
+    }
+
+    const cfg: CritiqueConfig = {
+      ...defaultCritiqueConfig(),
+      // Per-round timeout starts when the first panelist_open of a new round
+      // fires. Set it to 200ms so it fires quickly once the stall begins.
+      // Total timeout is long so only the per-round timer fires.
+      // But we yield the stall after ROUND_END so no panelist_open is active.
+      // Use total timeout of 300ms which fires after the stall begins.
+      perRoundTimeoutMs: 60_000,
+      totalTimeoutMs: 300,
+      fallbackPolicy: 'ship_best',
+    };
+
+    const result = await runOrchestrator({
+      runId: 'r-timeout-fallback',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir,
+      adapter: 'claude',
+      cfg,
+      db,
+      bus,
+      stdout: stallingAfterTwoRounds(),
+    });
+
+    expect(result.status).toBe('timed_out');
+    // Best round is 2 with composite 7.5.
+    expect(result.composite).toBeCloseTo(7.5, 1);
+
+    const row = getCritiqueRun(db, 'r-timeout-fallback');
+    expect(row?.status).toBe('timed_out');
+    expect(row?.score).toBeCloseTo(7.5, 1);
+
+    // A synthetic ship event should have been emitted.
+    const shipEvents = events.filter((e) => e.event === 'critique.ship');
+    expect(shipEvents).toHaveLength(1);
+  }, 15000);
+
+  it('abort after 1 completed round: status=interrupted, score matches that round', async () => {
+    const { bus, events } = makeBus();
+    const artifactDir = join(tmpDir, 'run-abort-fallback');
+    const controller = new AbortController();
+
+    const oneRound = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="9.0" scale="10">
+  <ROUND n="1">
+    <PANELIST role="designer"><NOTES>v1</NOTES><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+    <PANELIST role="critic" score="8.0"><DIM name="h" score="8">ok</DIM></PANELIST>
+    <PANELIST role="brand" score="8.0"><DIM name="v" score="8">ok</DIM></PANELIST>
+    <PANELIST role="a11y" score="8.0"><DIM name="c" score="8">ok</DIM></PANELIST>
+    <PANELIST role="copy" score="8.0"><DIM name="cl" score="8">ok</DIM></PANELIST>
+    <ROUND_END n="1" composite="8.0" must_fix="0" decision="continue"><REASON>continue</REASON></ROUND_END>
+  </ROUND>`;
+
+    async function* abortAfterRound(): AsyncIterable<string> {
+      yield* streamOf(oneRound, 64);
+      controller.abort();
+      // One more yield after abort to ensure the abort is caught.
+      yield '  <ROUND n="2">\n';
+    }
+
+    const cfg: CritiqueConfig = {
+      ...defaultCritiqueConfig(),
+      fallbackPolicy: 'ship_best',
+    };
+
+    const result = await runOrchestrator({
+      runId: 'r-abort-fallback',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir,
+      adapter: 'claude',
+      cfg,
+      db,
+      bus,
+      stdout: abortAfterRound(),
+      signal: controller.signal,
+    });
+
+    expect(result.status).toBe('interrupted');
+    expect(result.composite).toBeCloseTo(8.0, 1);
+
+    const row = getCritiqueRun(db, 'r-abort-fallback');
+    expect(row?.status).toBe('interrupted');
+    expect(row?.score).toBeCloseTo(8.0, 1);
+
+    const shipEvents = events.filter((e) => e.event === 'critique.ship');
+    expect(shipEvents).toHaveLength(1);
+  });
+});

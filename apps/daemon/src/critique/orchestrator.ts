@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import type Database from 'better-sqlite3';
 import type { CritiqueConfig, PanelEvent } from '@open-design/contracts/critique';
 import { panelEventToSse } from '@open-design/contracts/critique';
@@ -51,6 +52,18 @@ export interface OrchestratorParams {
    * best-so-far state and emit critique.interrupted before returning.
    */
   signal?: AbortSignal;
+  /**
+   * Optional handle to the spawned child process. When provided the
+   * orchestrator calls child.kill('SIGTERM') on every non-clean termination
+   * path (timeout, abort, parser error, child non-zero exit).
+   */
+  child?: Pick<ChildProcess, 'kill'>;
+  /**
+   * Resolves when the child process exits. Used to race parser completion
+   * against an early child exit so a non-zero exit code is classified as
+   * 'failed' rather than waiting for the parser to time out.
+   */
+  childExitPromise?: Promise<{ code: number | null; signal: string | null }>;
 }
 
 export interface OrchestratorResult {
@@ -73,6 +86,8 @@ export async function runOrchestrator(
 ): Promise<OrchestratorResult> {
   const { runId, projectId, conversationId, artifactDir, adapter, cfg, db, bus, stdout } = params;
   const signal = params.signal;
+  const child = params.child;
+  const childExitPromise = params.childExitPromise;
 
   // Defensive entry: validate every CritiqueConfig numeric field before any side effect.
   if (!Number.isFinite(cfg.maxRounds) || cfg.maxRounds < 1) {
@@ -115,6 +130,22 @@ export async function runOrchestrator(
   // Total deadline.
   const totalDeadline = Date.now() + cfg.totalTimeoutMs;
 
+  // Helper: SIGTERM the child on non-clean termination paths.
+  const killChild = () => { child?.kill('SIGTERM'); };
+
+  // Build a rejection promise for early child exit with non-zero code.
+  // Resolves (not rejects) for exit code 0 so the parser loop continues.
+  // Rejects with ChildExitError for non-zero exit so the race can classify it.
+  const childExitRace: Promise<never> | null = childExitPromise
+    ? childExitPromise.then(({ code }) => {
+        if (code !== 0 && code !== null) {
+          return Promise.reject(new ChildExitError(code));
+        }
+        // Zero exit or signal-terminated: let the parser finish naturally.
+        return new Promise<never>(() => { /* intentionally pending */ });
+      })
+    : null;
+
   try {
     // Per-round timeout tracking.
     let roundDeadline: number | null = null;
@@ -125,12 +156,15 @@ export async function runOrchestrator(
       signal,
       totalDeadline,
       getPerRoundDeadline: () => roundDeadline,
+      childExitRace,
     });
 
     const parserOpts = {
       runId,
       adapter,
       parserMaxBlockBytes: cfg.parserMaxBlockBytes,
+      projectId,
+      artifactId: params.artifactId,
     };
 
     for await (const event of parseCritiqueStream(timedSource, parserOpts)) {
@@ -210,6 +244,7 @@ export async function runOrchestrator(
       artifactPath = `${artifactDir}/${shipEvent.artifactRef.artifactId || 'artifact'}`;
     } else {
       // No SHIP arrived - apply fallback policy.
+      killChild();
       const fallback = selectFallbackRound(completedRounds, cfg.fallbackPolicy);
       if (fallback !== null) {
         finalStatus = 'below_threshold';
@@ -239,23 +274,71 @@ export async function runOrchestrator(
       }
     }
   } catch (err) {
+    // All non-clean termination paths: SIGTERM the child.
+    killChild();
+
     // Classify the error.
     if (err instanceof AbortError) {
       finalStatus = 'interrupted';
+      // Defect 7: ship best-so-far when at least one round completed.
+      const fallback = completedRounds.length > 0
+        ? selectFallbackRound(completedRounds, cfg.fallbackPolicy)
+        : null;
+      if (fallback !== null) {
+        finalComposite = fallback.composite;
+        const syntheticShip: Extract<PanelEvent, { type: 'ship' }> = {
+          type: 'ship',
+          runId,
+          round: fallback.n,
+          composite: fallback.composite,
+          status: 'interrupted',
+          artifactRef: { projectId, artifactId: params.artifactId },
+          summary: `Interrupted after round ${fallback.n}, best composite ${fallback.composite.toFixed(2)}`,
+        };
+        collectedEvents.push(syntheticShip);
+        bus.emit(panelEventToSse(syntheticShip));
+      }
       const interruptedEvent: Extract<PanelEvent, { type: 'interrupted' }> = {
         type: 'interrupted',
         runId,
         bestRound: completedRounds.length > 0 ? (completedRounds[completedRounds.length - 1]?.n ?? 0) : 0,
-        composite: completedRounds.length > 0 ? (completedRounds[completedRounds.length - 1]?.composite ?? 0) : 0,
+        composite: finalComposite ?? 0,
       };
       collectedEvents.push(interruptedEvent);
       bus.emit(panelEventToSse(interruptedEvent));
     } else if (err instanceof TimeoutError) {
       finalStatus = 'timed_out';
+      // Defect 7: ship best-so-far when at least one round completed.
+      const fallback = completedRounds.length > 0
+        ? selectFallbackRound(completedRounds, cfg.fallbackPolicy)
+        : null;
+      if (fallback !== null) {
+        finalComposite = fallback.composite;
+        const syntheticShip: Extract<PanelEvent, { type: 'ship' }> = {
+          type: 'ship',
+          runId,
+          round: fallback.n,
+          composite: fallback.composite,
+          status: 'timed_out',
+          artifactRef: { projectId, artifactId: params.artifactId },
+          summary: `Timed out after round ${fallback.n}, best composite ${fallback.composite.toFixed(2)}`,
+        };
+        collectedEvents.push(syntheticShip);
+        bus.emit(panelEventToSse(syntheticShip));
+      }
       const failedEvent: Extract<PanelEvent, { type: 'failed' }> = {
         type: 'failed',
         runId,
         cause: err.cause,
+      };
+      collectedEvents.push(failedEvent);
+      bus.emit(panelEventToSse(failedEvent));
+    } else if (err instanceof ChildExitError) {
+      finalStatus = 'failed';
+      const failedEvent: Extract<PanelEvent, { type: 'failed' }> = {
+        type: 'failed',
+        runId,
+        cause: 'cli_exit_nonzero',
       };
       collectedEvents.push(failedEvent);
       bus.emit(panelEventToSse(failedEvent));
@@ -347,10 +430,20 @@ class TimeoutError extends Error {
   }
 }
 
+/** Thrown when the child process exits with a non-zero code before the parser finishes. */
+class ChildExitError extends Error {
+  constructor(public readonly code: number) {
+    super(`child exited with code ${code}`);
+    this.name = 'ChildExitError';
+  }
+}
+
 interface TimeoutOptions {
   signal: AbortSignal | undefined;
   totalDeadline: number;
   getPerRoundDeadline: () => number | null;
+  /** When provided, races each iteration against a child-exit rejection. */
+  childExitRace: Promise<never> | null;
 }
 
 /**
@@ -428,6 +521,14 @@ async function* applyTimeouts(
           races.push(abortPromise);
         }
 
+        // Child-exit race: if the child exits non-zero before the parser
+        // finishes, surface ChildExitError so the run is classified as
+        // 'failed' with cause 'cli_exit_nonzero' rather than waiting for
+        // the total timeout.
+        if (opts.childExitRace !== null) {
+          races.push(opts.childExitRace);
+        }
+
         iterResult = await Promise.race(races) as IteratorResult<string>;
       } finally {
         roundTimer?.cancel();
@@ -440,9 +541,14 @@ async function* applyTimeouts(
     }
   } finally {
     totalTimer.cancel();
-    // Give the underlying iterator a chance to clean up.
+    // Give the underlying iterator a chance to clean up. Use a 200ms timeout
+    // so a stalling generator (e.g. one stuck in await new Promise(() => {}))
+    // never blocks the orchestrator teardown path indefinitely.
     if (typeof iter.return === 'function') {
-      await iter.return().catch(() => { /* ignore cleanup errors */ });
+      await Promise.race([
+        iter.return().catch(() => { /* ignore cleanup errors */ }),
+        new Promise<void>((resolve) => setTimeout(resolve, 200)),
+      ]);
     }
   }
 
