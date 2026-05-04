@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -29,12 +29,16 @@ export async function ensureProject(projectsRoot, projectId) {
   return dir;
 }
 
-export async function listFiles(projectsRoot, projectId) {
+export async function listFiles(projectsRoot, projectId, opts = {}) {
   const dir = projectDir(projectsRoot, projectId);
   const out = [];
   await collectFiles(dir, '', out);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
+  const since = Number(opts.since);
+  if (Number.isFinite(since) && since > 0) {
+    return out.filter((f) => Number(f.mtime) > since);
+  }
   return out;
 }
 
@@ -134,6 +138,123 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
     compressionOptions: { level: 6 },
   });
   return { buffer, baseName: archiveBaseName };
+}
+
+export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
+  const projectRoot = projectDir(projectsRoot, projectId);
+  const zip = new JSZip();
+  let packed = 0;
+  const rejected = [];
+
+  for (const name of fileNames) {
+    let filePath;
+    try {
+      filePath = resolveSafe(projectRoot, name);
+    } catch (err) {
+      rejected.push({ name, reason: `invalid path: ${err?.message || err}` });
+      continue;
+    }
+
+    // Mirror the visible-file allowlist from collectFiles/collectArchiveEntries:
+    // reject any hidden segment, .artifact.json sidecars, and symlinks at any
+    // level of the path (not just the final basename).
+    const relSegments = path.relative(projectRoot, filePath).split(path.sep);
+    let hidden = false;
+    for (const seg of relSegments) {
+      if (seg.startsWith('.')) {
+        hidden = true;
+        break;
+      }
+    }
+    if (hidden) {
+      rejected.push({ name, reason: 'hidden segments are not eligible for archive' });
+      continue;
+    }
+    if (path.basename(filePath).endsWith('.artifact.json')) {
+      rejected.push({ name, reason: 'artifact sidecars are not eligible for archive' });
+      continue;
+    }
+
+    // Walk each path segment from projectRoot to the target with lstat,
+    // rejecting intermediate symlinks that could escape the project tree.
+    let walk = projectRoot;
+    let symlinkFound = false;
+    for (const seg of relSegments) {
+      walk = path.join(walk, seg);
+      let segStat;
+      try {
+        segStat = await lstat(walk);
+      } catch (err) {
+        if (err && err.code === 'ENOENT') {
+          rejected.push({ name, reason: `segment not found: ${seg}` });
+          break;
+        }
+        throw err;
+      }
+      if (segStat.isSymbolicLink()) {
+        symlinkFound = true;
+        break;
+      }
+    }
+    if (symlinkFound) {
+      rejected.push({ name, reason: 'symlinks are not eligible for archive' });
+      continue;
+    }
+    if (rejected.length > 0 && rejected[rejected.length - 1].name === name) continue;
+
+    // Final stat on the resolved path (guards against TOCTOU between segment
+    // walk and read, and catches non-regular files).
+    let st;
+    try {
+      st = await lstat(filePath);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') {
+        rejected.push({ name, reason: 'file not found' });
+        continue;
+      }
+      throw err;
+    }
+
+    if (st.isSymbolicLink()) {
+      rejected.push({ name, reason: 'symlinks are not eligible for archive' });
+      continue;
+    }
+    if (!st.isFile()) {
+      rejected.push({ name, reason: 'not a regular file' });
+      continue;
+    }
+
+    const buf = await readFile(filePath);
+    zip.file(name, buf, {
+      date: new Date(st.mtimeMs),
+      binary: true,
+    });
+    packed += 1;
+  }
+
+  // Fail-fast: any rejected entry means the request is invalid — mirror the
+  // strict rejection semantics of the panel and full archive.
+  if (rejected.length > 0) {
+    const err = new Error(
+      `${rejected.length} file(s) ineligible for archive: ${rejected.map((r) => r.name).join(', ')}`,
+    );
+    err.code = 'BAD_REQUEST';
+    err.rejected = rejected;
+    throw err;
+  }
+
+  if (packed === 0) {
+    const err = new Error('no files could be packed');
+    err.code = 'ENOENT';
+    throw err;
+  }
+
+  const buffer = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+  return { buffer, baseName: '' };
 }
 
 async function collectArchiveEntries(dir, relDir, out) {
@@ -366,6 +487,57 @@ const EXT_MIME = {
 export function mimeFor(name) {
   const ext = path.extname(name).toLowerCase();
   return EXT_MIME[ext] || 'application/octet-stream';
+}
+
+export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
+  const max = Math.min(Number(opts.max) || 200, 1000);
+  const pattern = opts.pattern || null;
+  const items = await listFiles(projectsRoot, projectId);
+  const dir = projectDir(projectsRoot, projectId);
+  const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escaped, 'i');
+  const matches = [];
+  for (const f of items) {
+    if (!isTextualMime(f.mime)) continue;
+    if (pattern && !globMatch(f.name, pattern)) continue;
+    let content;
+    try {
+      content = await readFile(path.join(dir, f.name), 'utf8');
+    } catch {
+      continue;
+    }
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i])) {
+        const snippet = lines[i].length > 220 ? lines[i].slice(0, 220) + '…' : lines[i];
+        matches.push({ file: f.name, line: i + 1, snippet });
+        if (matches.length >= max) return matches;
+      }
+    }
+  }
+  return matches;
+}
+
+function isTextualMime(mime) {
+  if (!mime) return false;
+  return (
+    /^text\//i.test(mime) ||
+    /^application\/(json|javascript|typescript|xml|x-(?:yaml|toml|httpd-php|sh))\b/i.test(mime) ||
+    /\+(?:json|xml)\b/i.test(mime) ||
+    /^image\/svg\+xml/i.test(mime)
+  );
+}
+
+function globMatch(name, glob) {
+  const re = new RegExp(
+    '^' +
+      glob
+        .split('*')
+        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+        .join('.*') +
+      '$',
+  );
+  return re.test(name);
 }
 
 // Coarse kind buckets the frontend uses to pick a viewer.

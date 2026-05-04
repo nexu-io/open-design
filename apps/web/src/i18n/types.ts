@@ -493,6 +493,9 @@ export interface Dict {
   'designFiles.rowMenu': string;
   'designFiles.openInTab': string;
   'designFiles.download': string;
+  'designFiles.downloadSelected': string;
+  'designFiles.clearSelection': string;
+  'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
   'designFiles.dropDesc': string;
   'designFiles.upload.title': string;

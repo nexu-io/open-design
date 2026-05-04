@@ -448,6 +448,9 @@ export const fa: Dict = {
   'designFiles.rowMenu': 'منوی ردیف',
   'designFiles.openInTab': 'باز کردن در تب',
   'designFiles.download': 'دانلود',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ فایل‌ها را اینجا رها کنید',
   'designFiles.dropDesc':
     'تصاویر، اسناد، مراجع یا پوشه‌ها — عامل از آن‌ها به عنوان زمینه استفاده خواهد کرد.',

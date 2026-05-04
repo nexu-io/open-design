@@ -341,6 +341,18 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 
 Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md).
 
+## Use Open Design from your coding agent
+
+Open Design ships a stdio MCP server. Wire it into Claude Code, Codex, Cursor, VS Code, Antigravity, Zed, Windsurf, or any MCP-compatible client and the agent in another repo can read files from your local Open Design projects directly. Replaces the export-then-attach loop. When the agent calls `search_files`, `get_file`, or `get_artifact` without a project argument, the MCP defaults to whatever project (and file) you have open in Open Design right now, so prompts like *"build this in my app"* or *"match these styles"* just work.
+
+**Why MCP?** Exporting and re-attaching a zip every design iteration breaks flow. The MCP server exposes your design source directly -- tokens CSS, JSX components, entry HTML -- as a structured API the agent can query by name. The agent always sees the live file, not a stale copy from the last export.
+
+Open **Settings → MCP server** in the Open Design app for a per-client install flow. The panel bakes the absolute path to your `node` binary and the daemon's built `cli.js` into every snippet, so it works on a fresh source clone where `od` is not on your PATH. Cursor gets a one-click deeplink; the rest get a copy-paste JSON snippet in the schema their config file expects (Claude Code includes a `claude mcp add-json` one-liner so you do not have to hand-edit `~/.claude.json`). Restart or reload your client after install for the server to show up.
+
+The daemon must be running locally for MCP tool calls to succeed. If the agent was started before Open Design, restart the agent after Open Design is up so it can reach the live daemon. Tool calls made while the daemon is offline return a clear `"daemon not reachable"` error rather than a crash.
+
+**Security model.** The MCP server is read-only; it exposes file reads, file metadata, and search -- nothing that writes to disk or calls an external service. It runs as a child process of the coding agent over stdio, so any MCP client you register inherits read access to your local Open Design projects. Treat it like installing a VS Code extension: only register clients you trust. The daemon binds to `127.0.0.1` by default; LAN-wide exposure requires an explicit `OD_BIND_HOST` opt-in.
+
 ## Repository structure
 
 ```
@@ -626,7 +638,7 @@ Auto-detected from `PATH` on daemon boot. No config required. Streaming dispatch
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json` (typed events) | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` parser | `codex exec --json --skip-git-repo-check --full-auto [-C cwd] [--model …] [-c model_reasoning_effort=…] -` (prompt on stdin) |
 | Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` parser | `gemini --output-format stream-json --skip-trust --yolo [--model …] -` (prompt on stdin) |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` parser | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]` (prompt on stdin) |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` parser | `opencode run --format json --dangerously-skip-permissions [--model …] -` (prompt on stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` parser | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -` (prompt on stdin) |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain` (raw stdout chunks) | `qwen --yolo [--model …] -` (prompt on stdin) |

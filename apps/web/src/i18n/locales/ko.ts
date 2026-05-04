@@ -448,6 +448,9 @@ export const ko: Dict = {
   'designFiles.rowMenu': '항목 메뉴',
   'designFiles.openInTab': '탭에서 열기',
   'designFiles.download': '다운로드',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ 여기에 파일을 놓으세요',
   'designFiles.dropDesc':
     '이미지, 문서, 참조 자료, 폴더 등을 놓아주세요. 에이전트가 문맥으로 활용합니다.',

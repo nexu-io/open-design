@@ -447,6 +447,9 @@ export const ja: Dict = {
   'designFiles.rowMenu': '行メニュー',
   'designFiles.openInTab': 'タブで開く',
   'designFiles.download': 'ダウンロード',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ ファイルをここにドロップ',
   'designFiles.dropDesc':
     '画像、ドキュメント、参考資料、フォルダー — エージェントがコンテキストとして使用します。',

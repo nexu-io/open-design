@@ -8,6 +8,7 @@ const AGENT_LABELS: Record<string, string> = {
   cursor: 'Cursor',
   qwen: 'Qwen',
   copilot: 'Copilot',
+  deepseek: 'DeepSeek',
   'anthropic-api': 'Anthropic API',
   'openai-api': 'OpenAI API',
   'azure-openai-api': 'Azure OpenAI',
@@ -22,6 +23,8 @@ const AGENT_ALIASES: Record<string, string> = {
   'cursor agent': 'cursor-agent',
   'qwen code': 'qwen',
   'github copilot cli': 'copilot',
+  'deepseek tui': 'deepseek',
+  'deepseek-tui': 'deepseek',
 };
 
 export function agentDisplayName(

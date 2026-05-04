@@ -447,6 +447,9 @@ export const tr: Dict = {
   'designFiles.rowMenu': 'Sıra menüsü',
   'designFiles.openInTab': 'Sekmede aç',
   'designFiles.download': 'İndir',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Dosyaları buraya sürükleyin',
   'designFiles.dropDesc':
     'Görseller, dokümanlar, referanslar, veya klasörler — ajan onları bağlam olarak kullanacak.',

@@ -448,6 +448,9 @@ export const fr: Dict = {
   'designFiles.rowMenu': 'Menu de ligne',
   'designFiles.openInTab': 'Ouvrir dans un onglet',
   'designFiles.download': 'Télécharger',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Déposez les fichiers ici',
   'designFiles.dropDesc':
     'Images, documents, références ou dossiers — l\'agent les utilisera comme contexte.',

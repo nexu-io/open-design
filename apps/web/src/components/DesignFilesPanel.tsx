@@ -81,6 +81,7 @@ export function DesignFilesPanel({
   );
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [isSectionExpansionPending, startSectionExpansion] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const grouped = useMemo(() => {
     const groups: Record<Section, ProjectFile[]> = {
@@ -109,6 +110,23 @@ export function DesignFilesPanel({
     [folderRows],
   );
 
+  // Prune stale selections when the file list or project changes.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const names = new Set(files.map((f) => f.name));
+      const next = new Set(prev);
+      let changed = false;
+      for (const n of next) {
+        if (!names.has(n)) {
+          next.delete(n);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [files, projectId]);
+
   const previewFile = useMemo(
     () => files.find((f) => f.name === preview) ?? null,
     [preview, files],
@@ -135,6 +153,71 @@ export function DesignFilesPanel({
       await onRefreshFiles();
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  function toggleSelect(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }
+
+  function selectAllInSection(sectionFiles: ProjectFile[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const f of sectionFiles) next.add(f.name);
+      return next;
+    });
+  }
+
+  function clearSection(sectionFiles: ProjectFile[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const f of sectionFiles) next.delete(f.name);
+      return next;
+    });
+  }
+
+  async function handleBatchDownload() {
+    const fileList = [...selected];
+    if (fileList.length === 0) return;
+    try {
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: fileList }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.message || `request failed (${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const header = resp.headers.get('content-disposition') || '';
+      const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+      let filename = 'project.zip';
+      if (star && star[1]) {
+        try {
+          filename = decodeURIComponent(star[1]);
+        } catch {
+          filename = star[1];
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      console.warn('[batchDownload] failed:', err);
     }
   }
 
@@ -198,12 +281,33 @@ export function DesignFilesPanel({
         key={row.key}
         type="button"
         data-testid={`design-file-row-${f.name}`}
-        className={`df-row ${row.depth > 0 ? 'nested' : ''} ${active ? 'active' : ''}`}
+        className={`df-row ${row.depth > 0 ? 'nested' : ''} ${active ? 'active' : ''} ${
+          selected.has(f.name) ? 'selected' : ''
+        }`}
         onMouseEnter={() => setHover(f.name)}
         onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
         onClick={() => setPreview(f.name)}
         onDoubleClick={() => onOpenFile(f.name)}
       >
+        <span
+          className="df-row-check"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSelect(f.name);
+          }}
+          role="checkbox"
+          aria-checked={selected.has(f.name)}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSelect(f.name);
+            }
+          }}
+        >
+          {selected.has(f.name) ? '☑' : '☐'}
+        </span>
         <span className="df-row-icon" data-kind={f.kind} aria-hidden>
           {kindGlyph(f.kind)}
         </span>
@@ -262,7 +366,15 @@ export function DesignFilesPanel({
             <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
           </button>
           <span className="crumbs">{t('designFiles.crumbs')}</span>
-          <div className="df-actions">
+          {selected.size > 0 ? (
+            <div className="df-actions">
+              <button type="button" onClick={() => void handleBatchDownload()}>
+                <Icon name="download" size={13} />
+                <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="df-actions">
             <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
               <Icon name="pencil" size={13} />
               <span>{t('designFiles.newSketch')}</span>
@@ -281,6 +393,7 @@ export function DesignFilesPanel({
               <span>{t('designFiles.upload.label')}</span>
             </button>
           </div>
+          )}
         </div>
         <div className="df-body">
           {files.length === 0 ? (
@@ -292,10 +405,14 @@ export function DesignFilesPanel({
                   count={folderCount}
                   label={t('designFiles.sectionFolders')}
                   rows={folderRows}
+                  selectableFiles={files.filter((file) => topLevelFolder(file.name))}
                   section="folders"
                   sectionLimits={sectionLimits}
                   isSectionExpansionPending={isSectionExpansionPending}
                   renderRow={renderRow}
+                  selected={selected}
+                  selectAllInSection={selectAllInSection}
+                  clearSection={clearSection}
                   setSectionLimits={setSectionLimits}
                   startSectionExpansion={startSectionExpansion}
                   t={t}
@@ -313,10 +430,14 @@ export function DesignFilesPanel({
                     depth: 0 as const,
                     mtime: file.mtime,
                   }))}
+                  selectableFiles={grouped[section]}
                   section={section}
                   sectionLimits={sectionLimits}
                   isSectionExpansionPending={isSectionExpansionPending}
                   renderRow={renderRow}
+                  selected={selected}
+                  selectAllInSection={selectAllInSection}
+                  clearSection={clearSection}
                   setSectionLimits={setSectionLimits}
                   startSectionExpansion={startSectionExpansion}
                   t={t}
@@ -417,10 +538,14 @@ function FileSection({
   count,
   label,
   rows,
+  selectableFiles,
   section,
   sectionLimits,
   isSectionExpansionPending,
   renderRow,
+  selected,
+  selectAllInSection,
+  clearSection,
   setSectionLimits,
   startSectionExpansion,
   t,
@@ -428,10 +553,14 @@ function FileSection({
   count: number;
   label: string;
   rows: BrowserRow[];
+  selectableFiles: ProjectFile[];
   section: FileBrowserSection;
   sectionLimits: Partial<Record<FileBrowserSection, number>>;
   isSectionExpansionPending: boolean;
   renderRow: (row: BrowserRow) => ReactNode;
+  selected: Set<string>;
+  selectAllInSection: (sectionFiles: ProjectFile[]) => void;
+  clearSection: (sectionFiles: ProjectFile[]) => void;
   setSectionLimits: Dispatch<SetStateAction<Partial<Record<FileBrowserSection, number>>>>;
   startSectionExpansion: TransitionStartFunction;
   t: TranslateFn;
@@ -445,6 +574,30 @@ function FileSection({
       <div className="df-section-label">
         {label}
         <span className="df-section-count">{count}</span>
+        {selectableFiles.length > 0 ? (
+          <button
+            type="button"
+            className="df-select-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              selectAllInSection(selectableFiles);
+            }}
+          >
+            {t('designFiles.selectAll')}
+          </button>
+        ) : null}
+        {selectableFiles.some((f) => selected.has(f.name)) ? (
+          <button
+            type="button"
+            className="df-select-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              clearSection(selectableFiles);
+            }}
+          >
+            {t('designFiles.clearSelection')}
+          </button>
+        ) : null}
       </div>
       {visibleRows.map(renderRow)}
       {hiddenCount > 0 ? (

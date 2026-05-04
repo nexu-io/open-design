@@ -447,6 +447,9 @@ export const ptBR: Dict = {
   'designFiles.rowMenu': 'Menu da linha',
   'designFiles.openInTab': 'Abrir em aba',
   'designFiles.download': 'Baixar',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Solte arquivos aqui',
   'designFiles.dropDesc':
     'Imagens, docs, referências ou pastas — o agente usará tudo como contexto.',

@@ -448,6 +448,9 @@ export const hu: Dict = {
   'designFiles.rowMenu': 'Sor menü',
   'designFiles.openInTab': 'Megnyitás lapon',
   'designFiles.download': 'Letöltés',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Húzd ide a fájlokat',
   'designFiles.dropDesc':
     'Képek, dokumentumok, hivatkozások vagy mappák — az ügynök kontextusként használja őket.',

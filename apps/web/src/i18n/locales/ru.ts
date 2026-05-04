@@ -447,6 +447,9 @@ export const ru: Dict = {
   'designFiles.rowMenu': 'Меню строки',
   'designFiles.openInTab': 'Открыть во вкладке',
   'designFiles.download': 'Скачать',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Перетащите файлы сюда',
   'designFiles.dropDesc':
     'Изображения, документы, референсы или папки — агент будет использовать их как контекст.',

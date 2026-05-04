@@ -449,6 +449,9 @@ export const uk: Dict = {
   'designFiles.rowMenu': 'Меню рядка',
   'designFiles.openInTab': 'Відкрити на вкладці',
   'designFiles.download': 'Завантажити',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Перенесіть файли сюди',
   'designFiles.dropDesc':
     'Зображення, документи, посилання або папки — агент використовуватиме їх як контекст.',
