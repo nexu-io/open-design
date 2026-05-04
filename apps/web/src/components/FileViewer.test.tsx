@@ -77,6 +77,90 @@ describe('FileViewer SVG artifacts', () => {
     expect(sourceMarkup).not.toContain('<img');
   });
 
+  it('URL-loads a plain HTML preview iframe instead of inlining via srcDoc', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      <FileViewer projectId="project-1" file={file} liveHtml="<html><body>hi</body></html>" />,
+    );
+
+    expect(markup).toContain('data-testid="artifact-preview-frame"');
+    expect(markup).toContain('data-od-render-mode="url-load"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).not.toContain('data-od-render-mode="srcdoc"');
+  });
+
+  it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section></body></html>'}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="artifact-preview-frame"');
+    expect(markup).toContain('data-od-render-mode="srcdoc"');
+    expect(markup).not.toContain('data-od-render-mode="url-load"');
+  });
+
+  it('falls back to srcDoc when the HTML body looks deck-shaped even without an isDeck hint', () => {
+    const file = baseFile({
+      name: 'inferred.html',
+      path: 'inferred.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Inferred',
+        entry: 'inferred.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    expect(markup).toContain('data-od-render-mode="srcdoc"');
+    expect(markup).not.toContain('data-od-render-mode="url-load"');
+  });
+
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
     const file = baseFile({ name: 'unsafe.svg', path: 'unsafe.svg', mime: 'image/svg+xml' });
     const unsafeSource = [

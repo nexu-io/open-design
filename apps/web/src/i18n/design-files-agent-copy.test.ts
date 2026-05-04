@@ -4,6 +4,7 @@ import { de } from './locales/de';
 import { en } from './locales/en';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
+import { fr } from './locales/fr';
 import { ja } from './locales/ja';
 import { ptBR } from './locales/pt-BR';
 import { ru } from './locales/ru';
@@ -15,6 +16,7 @@ const LOCALE_DICTS = {
   en,
   esES,
   fa,
+  fr,
   ja,
   ptBR,
   ru,

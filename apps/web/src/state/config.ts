@@ -4,8 +4,13 @@ import type {
   ApiProtocol,
   AppConfig,
   MediaProviderCredentials,
+  NotificationsConfig,
   PetConfig,
 } from '../types';
+import {
+  DEFAULT_FAILURE_SOUND_ID,
+  DEFAULT_SUCCESS_SOUND_ID,
+} from '../utils/notifications';
 
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 1;
@@ -13,6 +18,16 @@ const CONFIG_MIGRATION_VERSION = 1;
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
 // summon them. Keeps the workspace quiet for first-run users.
+// Both switches default off so first-run users are not greeted by a
+// surprise sound or a permission prompt; they can opt in from Settings →
+// Notifications when they want it.
+export const DEFAULT_NOTIFICATIONS: NotificationsConfig = {
+  soundEnabled: false,
+  successSoundId: DEFAULT_SUCCESS_SOUND_ID,
+  failureSoundId: DEFAULT_FAILURE_SOUND_ID,
+  desktopEnabled: false,
+};
+
 export const DEFAULT_PET: PetConfig = {
   adopted: false,
   enabled: false,
@@ -34,6 +49,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   // saved configs that did not have this field and migrates those from their
   // saved baseUrl/model before applying the current migration version.
   apiProtocol: 'anthropic',
+  apiVersion: '',
   configMigrationVersion: CONFIG_MIGRATION_VERSION,
   apiProviderBaseUrl: 'https://api.anthropic.com',
   agentId: null,
@@ -44,6 +60,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   mediaProviders: {},
   agentModels: {},
   pet: DEFAULT_PET,
+  notifications: DEFAULT_NOTIFICATIONS,
 };
 
 /** Well-known providers with pre-filled base URLs. */
@@ -110,6 +127,20 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
   },
   {
+    label: 'Azure OpenAI',
+    protocol: 'azure',
+    baseUrl: '',
+    model: '',
+    models: [],
+  },
+  {
+    label: 'Google Gemini',
+    protocol: 'google',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    model: 'gemini-2.0-flash',
+    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  },
+  {
     label: 'DeepSeek — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com',
@@ -163,6 +194,12 @@ function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
   };
 }
 
+function normalizeNotifications(
+  input: Partial<NotificationsConfig> | undefined,
+): NotificationsConfig {
+  return { ...DEFAULT_NOTIFICATIONS, ...(input ?? {}) };
+}
+
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
@@ -177,7 +214,13 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
 export function loadConfig(): AppConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG, pet: normalizePet(DEFAULT_PET) };
+    if (!raw) {
+      return {
+        ...DEFAULT_CONFIG,
+        pet: normalizePet(DEFAULT_PET),
+        notifications: normalizeNotifications(DEFAULT_NOTIFICATIONS),
+      };
+    }
     const parsed = JSON.parse(raw) as Partial<AppConfig>;
     const parsedHasApiProtocol = Object.prototype.hasOwnProperty.call(
       parsed,
@@ -189,6 +232,7 @@ export function loadConfig(): AppConfig {
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       pet: normalizePet(parsed.pet),
+      notifications: normalizeNotifications(parsed.notifications),
     };
 
     if (parsed.configMigrationVersion !== CONFIG_MIGRATION_VERSION) {
@@ -212,7 +256,11 @@ export function loadConfig(): AppConfig {
 
     return merged;
   } catch {
-    return { ...DEFAULT_CONFIG, pet: normalizePet(DEFAULT_PET) };
+    return {
+      ...DEFAULT_CONFIG,
+      pet: normalizePet(DEFAULT_PET),
+      notifications: normalizeNotifications(DEFAULT_NOTIFICATIONS),
+    };
   }
 }
 

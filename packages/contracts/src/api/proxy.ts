@@ -14,6 +14,8 @@ export interface ProxyStreamRequest {
   // Caps the upstream completion length. Defaults to 8192 when unset so
   // pre-existing clients keep their old behavior.
   maxTokens?: number;
+  // Azure OpenAI only. Defaults at the daemon when omitted.
+  apiVersion?: string;
 }
 
 export interface ProxyStreamStartPayload {
