@@ -313,53 +313,6 @@ Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optiona
 
 For desktop/background startup, fixed-port restarts, and media generation dispatcher checks (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`), see [`QUICKSTART.md`](QUICKSTART.md).
 
-## Running the Project
-
-Open Design can run as a web app in your browser or as an Electron desktop application. Both modes share the same local daemon + web architecture.
-
-### Web / Localhost (Default)
-
-```bash
-# Foreground mode — logs stream to your terminal (recommended for development)
-pnpm tools-dev run web
-
-# Background mode — daemon + web run as background processes
-pnpm tools-dev start web
-```
-
-By default, `tools-dev` binds to available ephemeral ports and prints the actual URLs on startup. To use fixed ports:
-
-```bash
-pnpm tools-dev run web --daemon-port 17456 --web-port 17573
-```
-
-### Desktop / Electron
-
-```bash
-# Start daemon + web + desktop in the background
-pnpm tools-dev
-
-# Check desktop status
-pnpm tools-dev inspect desktop status
-
-# Take a screenshot of the desktop app
-pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
-```
-
-The desktop app discovers the web URL automatically via sidecar IPC — no port guessing required.
-
-### Other Useful Commands
-
-| Command | What it does |
-|---|---|
-| `pnpm tools-dev status` | Show running sidecar statuses |
-| `pnpm tools-dev logs` | Stream daemon + web logs |
-| `pnpm tools-dev stop` | Stop all running sidecars |
-| `pnpm tools-dev restart` | Stop then restart all sidecars |
-| `pnpm tools-dev check` | Run a health check on the daemon |
-
-For fixed-port restarts, background startup, and full troubleshooting see [`QUICKSTART.md`](QUICKSTART.md).
-
 The first load:
 
 1. Detects which agent CLIs you have on `PATH` and picks one automatically.
@@ -387,6 +340,62 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 | Move it elsewhere | not supported yet — the path is hard-coded relative to the repo |
 
 Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md).
+
+## Running the Project
+
+Open Design can run as a web app in your browser or as an Electron desktop application. Both modes share the same local daemon + web architecture.
+
+### Web / Localhost (Default)
+
+```bash
+# Foreground mode — keeps the lifecycle command in the foreground (logs written to files)
+pnpm tools-dev run web
+
+# View recent logs:
+pnpm tools-dev logs
+
+# Background mode — daemon + web run as background processes
+pnpm tools-dev start web
+```
+
+By default, `tools-dev` binds to available ephemeral ports and prints the actual URLs on startup. To use fixed ports from a stopped state:
+
+```bash
+pnpm tools-dev run web --daemon-port 17456 --web-port 17573
+```
+
+If daemon/web are already running, use `restart` to switch ports in the existing session:
+
+```bash
+pnpm tools-dev restart --daemon-port 17456 --web-port 17573
+```
+
+### Desktop / Electron
+
+```bash
+# Start daemon + web + desktop in the background
+pnpm tools-dev
+
+# Check desktop status
+pnpm tools-dev inspect desktop status
+
+# Take a screenshot of the desktop app
+pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
+```
+
+The desktop app discovers the web URL automatically via sidecar IPC — no port guessing required.
+
+### Other Useful Commands
+
+| Command | What it does |
+|---|---|
+| `pnpm tools-dev status` | Show running sidecar statuses |
+| `pnpm tools-dev logs` | Show daemon/web/desktop log tails |
+| `pnpm tools-dev stop` | Stop all running sidecars |
+| `pnpm tools-dev restart` | Stop then restart all sidecars |
+| `pnpm tools-dev check` | Status + recent logs + common diagnostics |
+
+For fixed-port restarts, background startup, and full troubleshooting see [`QUICKSTART.md`](QUICKSTART.md).
 
 ## Use Open Design from your coding agent
 
