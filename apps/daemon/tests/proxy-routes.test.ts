@@ -59,6 +59,53 @@ describe('API proxy routes', () => {
     );
   });
 
+  // Regression: providers whose OpenAI-compat surface lives under a
+  // sub-path (DeepInfra `/v1/openai`, OpenRouter `/api/v1`, etc.) used
+  // to get an extra `/v1` injected by appendVersionedApiPath, producing
+  // a 404 upstream. Now any non-empty path is respected verbatim.
+  it.each([
+    [
+      'https://api.deepinfra.com/v1/openai',
+      'https://api.deepinfra.com/v1/openai/chat/completions',
+    ],
+    [
+      'https://api.deepinfra.com/v1/openai/',
+      'https://api.deepinfra.com/v1/openai/chat/completions',
+    ],
+    [
+      'https://openrouter.ai/api/v1',
+      'https://openrouter.ai/api/v1/chat/completions',
+    ],
+    [
+      'https://api.openai.com',
+      'https://api.openai.com/v1/chat/completions',
+    ],
+    [
+      'https://api.openai.com/',
+      'https://api.openai.com/v1/chat/completions',
+    ],
+  ])('routes baseUrl %s to %s', async (input, expected) => {
+    const fetchMock = vi.fn((req: FetchInput, init?: FetchInit) => {
+      const url = String(req);
+      if (url.startsWith(baseUrl)) return realFetch(req, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: input,
+        apiKey: 'sk-test',
+        model: 'm',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(expected);
+  });
+
   it('surfaces OpenAI-compatible in-stream error frames', async () => {
     vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);

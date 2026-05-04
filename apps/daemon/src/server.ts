@@ -2661,10 +2661,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   const appendVersionedApiPath = (baseUrl, path) => {
     const url = new URL(baseUrl);
-    url.pathname = url.pathname.replace(/\/+$/, '');
-    url.pathname = /\/v\d+$/.test(url.pathname)
-      ? `${url.pathname}${path}`
-      : `${url.pathname}/v1${path}`;
+    // `URL.pathname` setter normalizes an empty string back to "/", so
+    // we work in a local string to detect the "no path supplied" case.
+    const trimmed = url.pathname.replace(/\/+$/, '');
+    // Auto-inject `/v1` only when the user supplied no path component —
+    // a forgiving UX so `https://api.openai.com` works as-is. Once the
+    // user has any path (e.g. DeepInfra's `https://api.deepinfra.com/v1/openai`,
+    // OpenRouter's `https://openrouter.ai/api/v1`), respect it verbatim
+    // and just append the route. Previously this branched on whether
+    // the path *ended* with `/vN`, which broke any provider whose
+    // OpenAI-compat surface lives under a sub-path.
+    url.pathname = trimmed === '' ? `/v1${path}` : `${trimmed}${path}`;
     return url.toString();
   };
 
