@@ -1,147 +1,246 @@
-import { lstatSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  DESIGN_SYSTEMS_CWD_ALIAS,
-  SKILLS_CWD_ALIAS,
-  ensureCwdAliases,
-} from '../src/cwd-aliases.js';
+import { SKILLS_CWD_ALIAS, stageActiveSkill } from '../src/cwd-aliases.js';
 
 function fresh(): string {
-  return mkdtempSync(path.join(tmpdir(), 'od-cwd-alias-'));
+  return mkdtempSync(path.join(tmpdir(), 'od-skill-stage-'));
 }
 
-describe('ensureCwdAliases', () => {
-  it('exposes documented alias names so the skill preamble stays in sync', () => {
+function writeSampleSkill(root: string, folder: string): string {
+  const dir = path.join(root, folder);
+  mkdirSync(path.join(dir, 'assets'), { recursive: true });
+  mkdirSync(path.join(dir, 'references'), { recursive: true });
+  writeFileSync(path.join(dir, 'SKILL.md'), '# original SKILL\n');
+  writeFileSync(
+    path.join(dir, 'assets', 'template.html'),
+    '<html>original</html>',
+  );
+  writeFileSync(path.join(dir, 'references', 'checklist.md'), '- original');
+  return dir;
+}
+
+describe('stageActiveSkill', () => {
+  it('exposes the documented alias name so the skill preamble stays in sync', () => {
     expect(SKILLS_CWD_ALIAS).toBe('.od-skills');
-    expect(DESIGN_SYSTEMS_CWD_ALIAS).toBe('.od-design-systems');
   });
 
-  it('creates a symlink/junction from cwd to the source root', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
-    const src = path.join(root, 'skills');
+  it('stages a per-project copy under <cwd>/.od-skills/<folder>/', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceRoot = path.join(fs, 'skills');
+    const sourceDir = writeSampleSkill(sourceRoot, 'blog-post');
     mkdirSync(cwd);
-    mkdirSync(src);
-    writeFileSync(path.join(src, 'a.txt'), 'hello');
 
-    await ensureCwdAliases(cwd, [
-      { name: SKILLS_CWD_ALIAS, target: src },
-    ]);
+    const result = await stageActiveSkill(cwd, 'blog-post', sourceDir);
 
-    const linkPath = path.join(cwd, SKILLS_CWD_ALIAS);
-    expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
-    expect(await realpath(linkPath)).toBe(await realpath(src));
+    expect(result.staged).toBe(true);
+    expect(result.stagedPath).toBe(
+      path.join(cwd, SKILLS_CWD_ALIAS, 'blog-post'),
+    );
+    expect(
+      readFileSync(
+        path.join(result.stagedPath!, 'SKILL.md'),
+        'utf8',
+      ),
+    ).toContain('original SKILL');
+    expect(
+      readFileSync(
+        path.join(result.stagedPath!, 'assets', 'template.html'),
+        'utf8',
+      ),
+    ).toContain('original');
   });
 
-  it('is idempotent when the alias already points at the same target', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
-    const src = path.join(root, 'skills');
+  it('produces a real directory entry, not a symlink (write barrier)', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
     mkdirSync(cwd);
-    mkdirSync(src);
 
-    await ensureCwdAliases(cwd, [{ name: SKILLS_CWD_ALIAS, target: src }]);
-    const before = await realpath(path.join(cwd, SKILLS_CWD_ALIAS));
-    await ensureCwdAliases(cwd, [{ name: SKILLS_CWD_ALIAS, target: src }]);
-    const after = await realpath(path.join(cwd, SKILLS_CWD_ALIAS));
+    await stageActiveSkill(cwd, 'blog-post', sourceDir);
 
-    expect(after).toBe(before);
+    const stagedSkill = path.join(cwd, SKILLS_CWD_ALIAS, 'blog-post');
+    expect(lstatSync(stagedSkill).isSymbolicLink()).toBe(false);
+    expect(lstatSync(stagedSkill).isDirectory()).toBe(true);
+
+    const stagedFile = path.join(stagedSkill, 'SKILL.md');
+    expect(lstatSync(stagedFile).isSymbolicLink()).toBe(false);
+    expect(lstatSync(stagedFile).isFile()).toBe(true);
   });
 
-  it('repoints the alias when the target moves', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
-    const src1 = path.join(root, 'skills-old');
-    const src2 = path.join(root, 'skills-new');
-    mkdirSync(cwd);
-    mkdirSync(src1);
-    mkdirSync(src2);
-
-    await ensureCwdAliases(cwd, [{ name: SKILLS_CWD_ALIAS, target: src1 }]);
-    await ensureCwdAliases(cwd, [{ name: SKILLS_CWD_ALIAS, target: src2 }]);
-
-    const real = await realpath(path.join(cwd, SKILLS_CWD_ALIAS));
-    expect(real).toBe(await realpath(src2));
-  });
-
-  it('skips silently when the source does not exist', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
+  it('REGRESSION: writes through the staged copy do not mutate the source', async () => {
+    // This is the P1 vulnerability lefarcen flagged on PR #435 round 1:
+    // when `.od-skills` was a directory junction, an agent could
+    // `Edit`/`Write` through the alias and overwrite the shipped repo
+    // resource. The per-project copy is the structural fix; this test
+    // pins it down so a future "optimisation" that re-introduces a
+    // symlink would fail loud.
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
     mkdirSync(cwd);
 
-    const messages: string[] = [];
-    await ensureCwdAliases(
+    await stageActiveSkill(cwd, 'blog-post', sourceDir);
+
+    const stagedSkillMd = path.join(
       cwd,
-      [{ name: SKILLS_CWD_ALIAS, target: path.join(root, 'absent') }],
-      (msg) => messages.push(msg),
+      SKILLS_CWD_ALIAS,
+      'blog-post',
+      'SKILL.md',
+    );
+    writeFileSync(stagedSkillMd, '# AGENT MUTATED');
+
+    expect(readFileSync(path.join(sourceDir, 'SKILL.md'), 'utf8')).toContain(
+      'original SKILL',
+    );
+    expect(readFileSync(stagedSkillMd, 'utf8')).toContain('AGENT MUTATED');
+  });
+
+  it('replaces a previous stage so removed files are not left behind', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
+    mkdirSync(cwd);
+    await stageActiveSkill(cwd, 'blog-post', sourceDir);
+    const stale = path.join(cwd, SKILLS_CWD_ALIAS, 'blog-post', 'stale.md');
+    writeFileSync(stale, 'should be wiped on next stage');
+
+    await stageActiveSkill(cwd, 'blog-post', sourceDir);
+
+    expect(() => readFileSync(stale)).toThrow();
+  });
+
+  it('follows a symlinked source root via stat() instead of skipping it', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const realRoot = path.join(fs, 'skills-real');
+    const linkedRoot = path.join(fs, 'skills');
+    const realSkill = writeSampleSkill(realRoot, 'blog-post');
+    symlinkSync(realRoot, linkedRoot, 'dir');
+    mkdirSync(cwd);
+
+    const result = await stageActiveSkill(
+      cwd,
+      'blog-post',
+      // simulate the daemon resolving SKILLS_DIR through a symlinked
+      // mount.
+      path.join(linkedRoot, 'blog-post'),
     );
 
-    expect(() => lstatSync(path.join(cwd, SKILLS_CWD_ALIAS))).toThrow();
-    expect(messages).toEqual([]);
+    expect(result.staged).toBe(true);
+    expect(
+      readFileSync(
+        path.join(result.stagedPath!, 'SKILL.md'),
+        'utf8',
+      ),
+    ).toContain('original SKILL');
+    void realSkill;
   });
 
-  it('refuses to clobber a pre-existing real entry under the alias name', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
-    const src = path.join(root, 'skills');
+  it('upgrades a legacy symlink left by an earlier daemon to a real directory', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
     mkdirSync(cwd);
-    mkdirSync(src);
-    // The user happens to have a regular file at the alias name.
+    // Earlier daemon versions staged the alias root as a directory link
+    // that pointed at SKILLS_DIR. Make sure the new staging logic
+    // detects and replaces that without panicking.
+    symlinkSync(path.dirname(sourceDir), path.join(cwd, SKILLS_CWD_ALIAS), 'dir');
+
+    const messages: string[] = [];
+    const result = await stageActiveSkill(
+      cwd,
+      'blog-post',
+      sourceDir,
+      (m) => messages.push(m),
+    );
+
+    expect(result.staged).toBe(true);
+    expect(
+      lstatSync(path.join(cwd, SKILLS_CWD_ALIAS)).isSymbolicLink(),
+    ).toBe(false);
+    expect(messages.some((m) => m.includes('replacing legacy symlink'))).toBe(
+      true,
+    );
+  });
+
+  it('refuses to stage when the alias root is a regular file', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
+    mkdirSync(cwd);
     writeFileSync(path.join(cwd, SKILLS_CWD_ALIAS), 'user-content');
 
     const messages: string[] = [];
-    await ensureCwdAliases(
+    const result = await stageActiveSkill(
       cwd,
-      [{ name: SKILLS_CWD_ALIAS, target: src }],
-      (msg) => messages.push(msg),
+      'blog-post',
+      sourceDir,
+      (m) => messages.push(m),
     );
 
-    expect(lstatSync(path.join(cwd, SKILLS_CWD_ALIAS)).isFile()).toBe(true);
-    expect(messages.some((m) => m.includes('not a symlink'))).toBe(true);
+    expect(result.staged).toBe(false);
+    expect(result.reason).toMatch(/non-directory/);
+    expect(
+      readFileSync(path.join(cwd, SKILLS_CWD_ALIAS), 'utf8'),
+    ).toBe('user-content');
+    expect(messages.some((m) => m.includes('refusing to stage'))).toBe(true);
   });
 
-  it('processes each spec independently when one fails', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
-    const goodSrc = path.join(root, 'design-systems');
+  it('skips silently when the source directory does not exist', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
     mkdirSync(cwd);
-    mkdirSync(goodSrc);
-    // Block the first alias by occupying its name with a regular file.
-    writeFileSync(path.join(cwd, SKILLS_CWD_ALIAS), 'user-content');
 
-    const messages: string[] = [];
-    await ensureCwdAliases(
+    const result = await stageActiveSkill(
       cwd,
-      [
-        { name: SKILLS_CWD_ALIAS, target: path.join(root, 'absent') },
-        { name: DESIGN_SYSTEMS_CWD_ALIAS, target: goodSrc },
-      ],
-      (msg) => messages.push(msg),
+      'blog-post',
+      path.join(fs, 'skills', 'missing'),
     );
 
-    // Second alias still created.
-    const goodLink = path.join(cwd, DESIGN_SYSTEMS_CWD_ALIAS);
-    expect(lstatSync(goodLink).isSymbolicLink()).toBe(true);
-    expect(await realpath(goodLink)).toBe(await realpath(goodSrc));
+    expect(result.staged).toBe(false);
+    expect(result.reason).toMatch(/source missing/);
   });
 
-  it('ignores malformed specs without crashing', async () => {
-    const root = fresh();
-    const cwd = path.join(root, 'project');
-    mkdirSync(cwd);
-
-    await ensureCwdAliases(cwd, [
-      // @ts-expect-error intentionally malformed
+  it('returns false without throwing when cwd is null', async () => {
+    const result = await stageActiveSkill(
       null,
-      // @ts-expect-error intentionally malformed
-      { name: 123, target: '/tmp' },
-      // @ts-expect-error intentionally malformed
-      { name: '.od-skills' },
-    ]);
-
-    expect(() => lstatSync(path.join(cwd, SKILLS_CWD_ALIAS))).toThrow();
+      'blog-post',
+      '/does/not/matter',
+    );
+    expect(result.staged).toBe(false);
+    expect(result.reason).toBe('no project cwd');
   });
+
+  it.each([
+    ['', 'unsafe folder name'],
+    ['.', 'unsafe folder name'],
+    ['..', 'unsafe folder name'],
+    ['../escape', 'unsafe folder name'],
+    ['nested/path', 'unsafe folder name'],
+    ['back\\slash', 'unsafe folder name'],
+    ['/abs/path', 'unsafe folder name'],
+  ])(
+    'rejects unsafe folder name %j to keep the alias root sealed',
+    async (folder, expectedReason) => {
+      const fs = fresh();
+      const cwd = path.join(fs, 'project');
+      mkdirSync(cwd);
+
+      const result = await stageActiveSkill(cwd, folder, '/anywhere');
+
+      expect(result.staged).toBe(false);
+      expect(result.reason).toContain(expectedReason);
+    },
+  );
 });

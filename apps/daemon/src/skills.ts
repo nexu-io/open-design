@@ -72,23 +72,37 @@ export async function listSkills(skillsRoot) {
 // SKILL.md body would otherwise resolve against the agent's CWD, which is the
 // project folder (`.od/projects/<id>/`), not the skill folder.
 //
-// We prepend a short preamble pointing at a CWD-relative alias
-// (`.od-skills/<folder>/`). The chat handler stages a directory link at that
-// alias name before spawning the agent (see `cwd-aliases.ts`), so the path is
-// reachable from inside the agent's working directory on every CLI — not just
-// the ones that honour `--add-dir`. The agent never needs to escape its CWD,
-// so directory-access policies (issue #430) cannot block these reads.
+// We prepend a short preamble that advertises two paths:
+//
+//   1. A CWD-relative alias path (`.od-skills/<folder>/`) — the primary one.
+//      Before spawning the agent the chat handler copies the active skill
+//      into `<cwd>/.od-skills/<folder>/` (see `cwd-aliases.ts`), so this
+//      path is inside the agent's working directory on every CLI and is
+//      not blocked by directory-access policies (issue #430).
+//   2. The absolute repo path — a fallback for the cases the staged copy
+//      cannot exist for: `/api/runs` calls without a project (cwd falls
+//      back to the repo root, where the absolute path *is* an in-cwd
+//      path), or environments where staging fails. Claude/Copilot are
+//      additionally given `--add-dir` for that absolute path, so the
+//      fallback round-trips even under their permission policy.
+//
+// Authoring guidance lives in the preamble itself so an agent can pick
+// the right form on its own without daemon-side feature detection.
 function withSkillRootPreamble(body, dir) {
   const folder = path.basename(dir);
   const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
   const preamble = [
     "> **Skill root (relative to project):** `" + skillRootRel + "/`",
+    "> **Skill root (absolute fallback):** `" + dir + "`",
     ">",
     "> This skill ships side files alongside `SKILL.md`. When the workflow",
     "> below references relative paths such as `assets/template.html` or",
-    "> `references/layouts.md`, resolve them against the skill root above —",
-    "> e.g. open `" + skillRootRel + "/assets/template.html`. Stay inside the",
-    "> project working directory; do not use absolute paths from outside it.",
+    "> `references/layouts.md`, prefer the relative form rooted at the",
+    "> first path above — e.g. open `" + skillRootRel + "/assets/template.html`.",
+    "> If that path is not reachable from your working directory, fall",
+    "> back to the absolute path: `" + dir + "/assets/template.html`.",
+    "> Either form resolves to the same file; the relative form keeps you",
+    "> inside the project working directory, which is preferred.",
     "",
     "",
   ].join("\n");

@@ -34,11 +34,7 @@ import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
-import {
-  ensureCwdAliases,
-  SKILLS_CWD_ALIAS,
-  DESIGN_SYSTEMS_CWD_ALIAS,
-} from './cwd-aliases.js';
+import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -2233,6 +2229,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let skillName;
     let skillMode;
     let skillCraftRequires = [];
+    let activeSkillDir = null;
     if (effectiveSkillId) {
       const skill = (await listSkills(SKILLS_DIR)).find(
         (s) => s.id === effectiveSkillId,
@@ -2241,6 +2238,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillBody = skill.body;
         skillName = skill.name;
         skillMode = skill.mode;
+        activeSkillDir = skill.dir;
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
       }
@@ -2272,7 +2270,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
-    return composeSystemPrompt({
+    const prompt = composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
@@ -2283,6 +2281,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       metadata,
       template,
     });
+    // The chat handler also needs to know where the active skill lives
+    // on disk so it can stage a per-project copy of its side files
+    // before spawning the agent. Returning that here avoids a second
+    // `listSkills()` scan in `startChatRun`.
+    return { prompt, activeSkillDir };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -2396,11 +2399,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const daemonSystemPrompt = await composeDaemonSystemPrompt({
-      projectId,
-      skillId,
-      designSystemId,
-    });
+    const { prompt: daemonSystemPrompt, activeSkillDir } =
+      await composeDaemonSystemPrompt({
+        projectId,
+        skillId,
+        designSystemId,
+      });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -2417,31 +2421,42 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : '',
     ].join('');
 
-    // Skill seeds (`skills/<id>/assets/template.html`) and design-system
-    // specs (`design-systems/<id>/DESIGN.md`) live outside the project cwd.
-    // We expose them through two complementary mechanisms:
+    // Make skill side files reachable through three layers, in order of
+    // preference. The skill preamble emitted by `withSkillRootPreamble()`
+    // advertises both the cwd-relative path (1) and the absolute path
+    // (2/3) so the agent can pick whichever works.
     //
-    //   1. Stage cwd-relative aliases (`.od-skills`, `.od-design-systems`)
-    //      pointing at the resource roots, so any agent CLI — not just
-    //      those that honour `--add-dir` — can reach those files via a
-    //      path inside its own working directory. This is what the skill
-    //      preamble emitted by `withSkillRootPreamble()` references, and
-    //      it is the load-bearing fix for issue #430 (Claude Code blocked
-    //      reads of absolute skill paths despite `--add-dir`, and every
-    //      non-Claude agent had no equivalent flag at all).
-    //   2. Keep `extraAllowedDirs` so Claude/Copilot still get
-    //      `--add-dir` for the absolute paths, as a belt-and-suspenders
-    //      fallback if the alias cannot be created (e.g. the user has a
-    //      pre-existing real entry under one of the reserved alias names).
-    if (cwd) {
-      await ensureCwdAliases(
+    //   1. CWD-relative copy. Stage the *active* skill into
+    //      `<cwd>/.od-skills/<folder>/` so any agent CLI — not just the
+    //      ones that honour `--add-dir` — can reach those files via a
+    //      path inside its working directory. We copy (not symlink) so
+    //      the staged directory is a true write barrier — agents cannot
+    //      mutate the shipped repo resource through their cwd.
+    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
+    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
+    //      path in the preamble is reachable when staging fails (e.g. the
+    //      project has no on-disk cwd, or fs.cp errored).
+    //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
+    //      `cwd: PROJECT_ROOT` — there the absolute path is already an
+    //      in-cwd path, so neither (1) nor (2) is required for it to
+    //      resolve.
+    //
+    // Design systems are *not* staged here. Their bodies are read by the
+    // daemon and folded into the system prompt directly (see
+    // `readDesignSystem`), so an agent never has to open them via the
+    // filesystem.
+    if (cwd && activeSkillDir) {
+      const result = await stageActiveSkill(
         cwd,
-        [
-          { name: SKILLS_CWD_ALIAS, target: SKILLS_DIR },
-          { name: DESIGN_SYSTEMS_CWD_ALIAS, target: DESIGN_SYSTEMS_DIR },
-        ],
+        path.basename(activeSkillDir),
+        activeSkillDir,
         (msg) => console.warn(msg),
       );
+      if (!result.staged) {
+        console.warn(
+          `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+        );
+      }
     }
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
       fs.existsSync(d),

@@ -41,7 +41,7 @@ function writeSkill(
 }
 
 describe('listSkills preamble', () => {
-  it('emits a CWD-relative skill root for skills that ship side files', async () => {
+  it('emits both a cwd-relative skill root and an absolute fallback', async () => {
     const root = fresh();
     writeSkill(root, 'demo-skill', {
       withAttachments: true,
@@ -52,19 +52,23 @@ describe('listSkills preamble', () => {
     expect(skills).toHaveLength(1);
     const [skill] = skills;
 
-    // The preamble must reference the CWD-relative alias, not an absolute
-    // path, so agents stay inside their working directory when reading
-    // skill side files.
+    // The cwd-relative alias path is the primary one — that's what makes
+    // the agent stay inside its working directory when reading skill
+    // side files (issue #430).
     expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/demo-skill/`);
     expect(skill.body).toContain(
       `${SKILLS_CWD_ALIAS}/demo-skill/assets/template.html`,
     );
 
-    // The skill folder absolute path must NOT leak into the body — that's
-    // the regression that triggered issue #430 (Claude Code blocked reads
-    // outside the agent's CWD even with `--add-dir`).
-    expect(skill.body).not.toContain(skill.dir);
-    expect(skill.body).not.toMatch(/Skill root \(absolute\)/);
+    // The absolute fallback is required for two cases the relative path
+    // cannot serve:
+    //   - calls without a project (cwd defaults to PROJECT_ROOT, where
+    //     the absolute path is in fact an in-cwd path);
+    //   - environments where `stageActiveSkill()` failed.
+    // Claude/Copilot are additionally given `--add-dir` for that path.
+    expect(skill.body).toContain(skill.dir);
+    expect(skill.body).toMatch(/Skill root \(absolute fallback\)/);
+    expect(skill.body).toMatch(/Skill root \(relative to project\)/);
   });
 
   it('uses the on-disk folder name in the alias path even when `name` differs', async () => {
