@@ -2099,6 +2099,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     if (err?.code === 'GOOGLE_CREDENTIALS_MISSING') return { status: 412, code: 'GOOGLE_CREDENTIALS_MISSING' };
     if (err?.code === 'GOOGLE_CREDENTIALS_MALFORMED') return { status: 412, code: 'GOOGLE_CREDENTIALS_MALFORMED' };
     if (err?.code === 'GOOGLE_AUTH_REQUIRED') return { status: 401, code: 'GOOGLE_AUTH_REQUIRED' };
+    if (err?.code === 'GOOGLE_API_BAD_REQUEST') return { status: 400, code: 'BAD_REQUEST' };
     if (err?.code === 'GOOGLE_API_ERROR') return { status: 502, code: 'GOOGLE_API_ERROR' };
     return { status: 500, code: 'INTERNAL_ERROR' };
   };
@@ -2353,22 +2354,23 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   });
 
   app.post('/api/google/slides/update-slides-position', async (req, res) => {
-    const { deckId, slideIds, insertionIndex } = req.body || {};
+    const { deckId, narrativeOrder, slideIds } = req.body || {};
+    const order = Array.isArray(narrativeOrder) ? narrativeOrder : slideIds;
     if (typeof deckId !== 'string' || !deckId) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
     }
-    if (!Array.isArray(slideIds)) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'slideIds must be an array');
+    if (!Array.isArray(order)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'narrativeOrder must be an array of slide objectIds (final desired order)');
     }
-    if (slideIds.some((id) => typeof id !== 'string' || !id)) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'slideIds entries must be non-empty strings');
+    if (order.some((id) => typeof id !== 'string' || !id)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'narrativeOrder entries must be non-empty strings');
     }
-    if (typeof insertionIndex !== 'number' || !Number.isFinite(insertionIndex) || insertionIndex < 0) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'insertionIndex must be a non-negative number');
+    if (new Set(order).size !== order.length) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'narrativeOrder contains duplicates');
     }
     try {
       const { updateSlidesPosition } = await import('./google-slides.js');
-      res.json(await updateSlidesPosition(deckId, slideIds, insertionIndex));
+      res.json(await updateSlidesPosition(deckId, order));
     } catch (err) {
       const { status, code } = mapGoogleError(err);
       sendApiError(res, status, code, err.message);

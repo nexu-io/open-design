@@ -267,7 +267,7 @@ export async function updateFontSize(deckId, slideObjectId, fontSizePt) {
   const { slides } = await authedClients();
   if (typeof fontSizePt !== 'number' || !Number.isFinite(fontSizePt) || fontSizePt <= 0 || fontSizePt > 400) {
     const err = new Error(`fontSizePt out of range: ${fontSizePt}`);
-    err.code = 'GOOGLE_API_ERROR';
+    err.code = 'GOOGLE_API_BAD_REQUEST';
     throw err;
   }
   try {
@@ -302,24 +302,31 @@ export async function updateFontSize(deckId, slideObjectId, fontSizePt) {
 //
 // Style preservation (Round 7 finding): a naive [deleteText, insertText]
 // drops the original textRun.style — Closing P110's 200pt "Thank you."
-// hero collapsed to layout default (~18pt). Fix: read the placeholder's
-// existing textRun.style first, then re-apply it to the new text via
-// updateTextStyle. Honors the design principle "templates are the
-// promise, text is the variable" — typography belongs to the template,
-// not to the agent's runtime decisions.
+// hero collapsed to layout default (~18pt).
+//
+// Codex review (2026-05-05) finding: applying first-run style to ALL with
+// fields:'*' collapses mixed-style placeholders (e.g. T+IMG P31's title
+// placeholder which holds "title\nparagraph...\nparagraph..." in one
+// shape with different per-run styles). Fix: capture per-paragraph style
+// from the original, then re-apply each paragraph's style to its
+// corresponding range in the new text.
+//
+// Honors the design principle "templates are the promise, text is the
+// variable" — typography belongs to the template, not to the agent's
+// runtime decisions.
 export async function updateTextByObjectId(deckId, objectId, text) {
   const { slides } = await authedClients();
   if (typeof text !== 'string') {
     const err = new Error('text must be a string');
-    err.code = 'GOOGLE_API_ERROR';
+    err.code = 'GOOGLE_API_BAD_REQUEST';
     throw err;
   }
 
-  // Read the current placeholder's textRun.style (first non-empty run).
-  // If the placeholder is empty or unreadable, we proceed without style
-  // preservation — the new text will inherit layout defaults, which is
-  // the best we can do.
-  let preservedStyle = null;
+  // Read original textElements and group them into per-paragraph style
+  // hints. A "paragraph" is a sequence of textRuns terminated by a \n
+  // (Slides keeps the \n inside textRun.content). For each paragraph we
+  // pick the first non-empty textRun.style as the representative.
+  let paragraphStyles = [];
   let hadPriorText = false;
   try {
     const res = await slides.presentations.get({
@@ -330,14 +337,24 @@ export async function updateTextByObjectId(deckId, objectId, text) {
       for (const el of slide.pageElements || []) {
         if (el.objectId !== objectId) continue;
         const elements = el.shape?.text?.textElements || [];
+        let currentRunStyles = [];
         for (const te of elements) {
-          if (te.textRun?.content && te.textRun.content.trim().length > 0) {
-            preservedStyle = te.textRun.style || null;
+          if (!te.textRun) continue;
+          const content = te.textRun.content || '';
+          if (content.length > 0) {
             hadPriorText = true;
-            break outer;
+            if (content.trim().length > 0 && te.textRun.style) {
+              currentRunStyles.push(te.textRun.style);
+            }
+          }
+          if (content.endsWith('\n')) {
+            paragraphStyles.push(currentRunStyles[0] || null);
+            currentRunStyles = [];
           }
         }
-        // objectId matched but no text content yet
+        if (currentRunStyles.length > 0) {
+          paragraphStyles.push(currentRunStyles[0] || null);
+        }
         break outer;
       }
     }
@@ -345,20 +362,42 @@ export async function updateTextByObjectId(deckId, objectId, text) {
     // proceed without style preservation
   }
 
+  const newParagraphs = text.split('\n');
+
   const requests = [];
   if (hadPriorText) {
     requests.push({ deleteText: { objectId, textRange: { type: 'ALL' } } });
   }
   requests.push({ insertText: { objectId, text, insertionIndex: 0 } });
-  if (preservedStyle && Object.keys(preservedStyle).length > 0) {
-    requests.push({
-      updateTextStyle: {
-        objectId,
-        textRange: { type: 'ALL' },
-        style: preservedStyle,
-        fields: '*',
-      },
-    });
+
+  // Per-paragraph style reapply. For each new paragraph, use the
+  // corresponding original paragraph's style (by index). If the new text
+  // has more paragraphs than the original, extra ones inherit the last
+  // available style (or layout default if none).
+  let charPos = 0;
+  for (let i = 0; i < newParagraphs.length; i++) {
+    const paraText = newParagraphs[i];
+    const startIndex = charPos;
+    const endIndex = charPos + paraText.length;
+    charPos = endIndex + 1; // +1 for the \n separator
+    if (paraText.length === 0) continue;
+    const style =
+      paragraphStyles[i] ||
+      paragraphStyles[paragraphStyles.length - 1] ||
+      null;
+    if (style && Object.keys(style).length > 0) {
+      requests.push({
+        updateTextStyle: {
+          objectId,
+          textRange:
+            newParagraphs.length === 1
+              ? { type: 'ALL' }
+              : { type: 'FIXED_RANGE', startIndex, endIndex },
+          style,
+          fields: '*',
+        },
+      });
+    }
   }
 
   try {
@@ -368,22 +407,22 @@ export async function updateTextByObjectId(deckId, objectId, text) {
     });
     return {
       ok: true,
-      preservedStyle: Boolean(preservedStyle && Object.keys(preservedStyle).length > 0),
+      preservedParagraphStyles: paragraphStyles.length,
+      newParagraphs: newParagraphs.length,
     };
   } catch (err) {
-    // Last-resort: empty placeholder where deleteText is invalid even though
-    // we thought there was prior text. Retry insert-only.
     if (hadPriorText) {
       try {
         const fallbackRequests = [
           { insertText: { objectId, text, insertionIndex: 0 } },
         ];
-        if (preservedStyle && Object.keys(preservedStyle).length > 0) {
+        const firstStyle = paragraphStyles[0];
+        if (firstStyle && Object.keys(firstStyle).length > 0) {
           fallbackRequests.push({
             updateTextStyle: {
               objectId,
               textRange: { type: 'ALL' },
-              style: preservedStyle,
+              style: firstStyle,
               fields: '*',
             },
           });
@@ -410,8 +449,96 @@ export async function updateTextByObjectId(deckId, objectId, text) {
 // duplicated children: { "<oldObjectId>": "<newObjectId>", ... }. If
 // omitted, IDs auto-generate and the caller must re-read the deck to
 // discover the new placeholder objectIds.
+//
+// Codex review (2026-05-05): Google requires (a) idMap source keys to
+// exist on the source slide, (b) destination IDs to be 5-50 chars and
+// match `[A-Za-z0-9_-]+`, (c) destination IDs to be unique within the
+// presentation. Without preflight these become opaque Google 502 errors.
+// We validate destinations locally and existence of source keys against
+// the actual source slide.
+const DUPLICATE_SLIDE_ID_RE = /^[A-Za-z0-9_-]+$/;
 export async function duplicateSlide(deckId, slideObjectId, idMap) {
   const { slides } = await authedClients();
+  if (idMap !== undefined && idMap !== null) {
+    if (typeof idMap !== 'object' || Array.isArray(idMap)) {
+      const err = new Error('idMap must be a plain object');
+      err.code = 'GOOGLE_API_BAD_REQUEST';
+      throw err;
+    }
+    const destSeen = new Set();
+    for (const [src, dest] of Object.entries(idMap)) {
+      if (typeof src !== 'string' || !src) {
+        const err = new Error(`idMap source key invalid: ${src}`);
+        err.code = 'GOOGLE_API_BAD_REQUEST';
+        throw err;
+      }
+      if (typeof dest !== 'string' || dest.length < 5 || dest.length > 50) {
+        const err = new Error(
+          `idMap destination "${dest}" must be 5-50 chars (got ${dest?.length ?? 'non-string'})`,
+        );
+        err.code = 'GOOGLE_API_BAD_REQUEST';
+        throw err;
+      }
+      if (!DUPLICATE_SLIDE_ID_RE.test(dest)) {
+        const err = new Error(
+          `idMap destination "${dest}" must match [A-Za-z0-9_-]+`,
+        );
+        err.code = 'GOOGLE_API_BAD_REQUEST';
+        throw err;
+      }
+      if (destSeen.has(dest)) {
+        const err = new Error(`idMap destination "${dest}" duplicated within idMap`);
+        err.code = 'GOOGLE_API_BAD_REQUEST';
+        throw err;
+      }
+      destSeen.add(dest);
+    }
+    try {
+      const res = await slides.presentations.get({
+        presentationId: deckId,
+        fields: 'slides(objectId,pageElements(objectId))',
+      });
+      const allObjectIds = new Set();
+      let sourceSlide = null;
+      for (const s of res.data.slides || []) {
+        allObjectIds.add(s.objectId);
+        for (const el of s.pageElements || []) {
+          allObjectIds.add(el.objectId);
+        }
+        if (s.objectId === slideObjectId) sourceSlide = s;
+      }
+      if (!sourceSlide) {
+        const err = new Error(`source slide ${slideObjectId} not found in deck`);
+        err.code = 'GOOGLE_API_BAD_REQUEST';
+        throw err;
+      }
+      const sourceIds = new Set([
+        sourceSlide.objectId,
+        ...(sourceSlide.pageElements || []).map((e) => e.objectId),
+      ]);
+      for (const src of Object.keys(idMap)) {
+        if (!sourceIds.has(src)) {
+          const err = new Error(
+            `idMap source "${src}" is not on source slide ${slideObjectId}`,
+          );
+          err.code = 'GOOGLE_API_BAD_REQUEST';
+          throw err;
+        }
+      }
+      for (const dest of destSeen) {
+        if (allObjectIds.has(dest)) {
+          const err = new Error(
+            `idMap destination "${dest}" collides with existing object in deck`,
+          );
+          err.code = 'GOOGLE_API_BAD_REQUEST';
+          throw err;
+        }
+      }
+    } catch (err) {
+      if (err.code === 'GOOGLE_API_BAD_REQUEST') throw err;
+      throw wrapApiError(err);
+    }
+  }
   const request = { duplicateObject: { objectId: slideObjectId } };
   if (idMap && typeof idMap === 'object') {
     request.duplicateObject.objectIds = idMap;
@@ -433,33 +560,68 @@ export async function duplicateSlide(deckId, slideObjectId, idMap) {
 // (because the kept slides naturally line up that way after delete).
 // Decoupling layout selection from narrative order requires this.
 //
-// `slideIds` is the list to move; `insertionIndex` is the 0-based index
-// in the new ordering where the first of `slideIds` should land.
-export async function updateSlidesPosition(deckId, slideIds, insertionIndex) {
-  if (!Array.isArray(slideIds) || slideIds.length === 0) {
-    return { ok: true, reordered: 0 };
+// Codex review (2026-05-05) finding: Google's UpdateSlidesPositionRequest
+// requires `slideObjectIds` to be in existing-presentation order without
+// duplicates. The previous implementation forwarded an arbitrary narrative
+// order directly and relied on undocumented API leniency. Rewritten to
+// take a single `narrativeOrder` argument (the desired final order) and
+// move slides one-at-a-time — single-slide moves never violate the
+// in-order constraint because the array has length 1.
+//
+// `narrativeOrder` is the final desired order of the slides to be
+// reordered (typically the kept narrative slides after delete-pages).
+// Slides not in the list are left in place; their relative order is
+// preserved between any anchored narrative slides.
+export async function updateSlidesPosition(deckId, narrativeOrder) {
+  if (!Array.isArray(narrativeOrder) || narrativeOrder.length === 0) {
+    return { ok: true, reordered: 0, moves: 0 };
   }
-  if (typeof insertionIndex !== 'number' || !Number.isFinite(insertionIndex) || insertionIndex < 0) {
-    const err = new Error(`insertionIndex must be a non-negative number, got ${insertionIndex}`);
-    err.code = 'GOOGLE_API_ERROR';
+  if (narrativeOrder.some((id) => typeof id !== 'string' || !id)) {
+    const err = new Error('narrativeOrder entries must be non-empty strings');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
+    throw err;
+  }
+  if (new Set(narrativeOrder).size !== narrativeOrder.length) {
+    const err = new Error('narrativeOrder contains duplicates');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
     throw err;
   }
   const { slides } = await authedClients();
   try {
-    await slides.presentations.batchUpdate({
+    const res = await slides.presentations.get({
       presentationId: deckId,
-      requestBody: {
-        requests: [
-          {
-            updateSlidesPosition: {
-              slideObjectIds: slideIds,
-              insertionIndex,
-            },
-          },
-        ],
-      },
+      fields: 'slides(objectId)',
     });
-    return { ok: true, reordered: slideIds.length };
+    const currentOrder = (res.data.slides || []).map((s) => s.objectId);
+    const missing = narrativeOrder.filter((id) => !currentOrder.includes(id));
+    if (missing.length > 0) {
+      const err = new Error(`slideIds not found in deck: ${missing.join(', ')}`);
+      err.code = 'GOOGLE_API_BAD_REQUEST';
+      throw err;
+    }
+    let moves = 0;
+    for (let targetIdx = 0; targetIdx < narrativeOrder.length; targetIdx++) {
+      const targetId = narrativeOrder[targetIdx];
+      const currentIdx = currentOrder.indexOf(targetId);
+      if (currentIdx === targetIdx) continue;
+      await slides.presentations.batchUpdate({
+        presentationId: deckId,
+        requestBody: {
+          requests: [
+            {
+              updateSlidesPosition: {
+                slideObjectIds: [targetId],
+                insertionIndex: targetIdx,
+              },
+            },
+          ],
+        },
+      });
+      currentOrder.splice(currentIdx, 1);
+      currentOrder.splice(targetIdx, 0, targetId);
+      moves += 1;
+    }
+    return { ok: true, reordered: narrativeOrder.length, moves };
   } catch (err) {
     throw wrapApiError(err);
   }
