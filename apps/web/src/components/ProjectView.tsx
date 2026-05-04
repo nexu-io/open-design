@@ -123,6 +123,8 @@ export function ProjectView({
     null,
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -565,7 +567,8 @@ export function ProjectView({
     let cancelled = false;
 
     const attachRecoverableRuns = async () => {
-      const activeRuns = messages.some(
+      const currentMessages = messagesRef.current;
+      const activeRuns = currentMessages.some(
         (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus) && !m.runId,
       )
         ? await listActiveChatRuns(project.id, activeConversationId)
@@ -577,7 +580,7 @@ export function ProjectView({
           .map((run) => [run.assistantMessageId!, run]),
       );
 
-      for (const message of messages) {
+      for (const message of currentMessages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
         if (!isActiveRunStatus(message.runStatus)) continue;
@@ -752,7 +755,6 @@ export function ProjectView({
     daemonLive,
     activeConversationId,
     streaming,
-    messages,
     project.id,
     updateMessageById,
     persistMessageById,
