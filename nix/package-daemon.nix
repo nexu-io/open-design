@@ -38,7 +38,7 @@
 # resolves at runtime via pnpm's symlinked node_modules.
 let
   pname = "open-design-daemon";
-  version = "0.1.0";
+  version = (lib.importJSON ../package.json).version;
 
   # Vendored pnpm store. The hash MUST be pinned on first build:
   # `nix build .#daemon` will fail with the expected hash printed; copy

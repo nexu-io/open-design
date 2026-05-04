@@ -24,7 +24,7 @@
 # so the SPA can read it via the runtime config endpoint).
 let
   pname = "open-design-web";
-  version = "0.1.0";
+  version = (lib.importJSON ../package.json).version;
 
   # Vendored pnpm store. The hash MUST be pinned on first build:
   # `nix build .#web` will fail with the expected hash printed; copy
