@@ -402,20 +402,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function handleLinkFolder() {
       setImportOpen(false);
-      if (!projectId || !projectMetadata) return;
+      if (!projectId) return;
       const selected = await openFolderDialog();
       if (!selected) return;
-      const existing = projectMetadata.linkedDirs ?? [];
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const existing = base.linkedDirs ?? [];
       if (existing.includes(selected)) return;
-      const metadata: ProjectMetadata = { ...projectMetadata, linkedDirs: [...existing, selected] };
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [...existing, selected] };
       const result = await patchProject(projectId, { metadata });
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }
 
     async function handleUnlinkFolder(dir: string) {
-      if (!projectId || !projectMetadata) return;
-      const existing = projectMetadata.linkedDirs ?? [];
-      const metadata: ProjectMetadata = { ...projectMetadata, linkedDirs: existing.filter((d) => d !== dir) };
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const existing = base.linkedDirs ?? [];
+      const metadata: ProjectMetadata = { ...base, linkedDirs: existing.filter((d) => d !== dir) };
       const result = await patchProject(projectId, { metadata });
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }

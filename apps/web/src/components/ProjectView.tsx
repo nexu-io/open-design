@@ -1432,11 +1432,7 @@ export function ProjectView({
           onOpenPetSettings={onOpenPetSettings}
           projectMetadata={project.metadata}
           onProjectMetadataChange={(metadata) => {
-            if (project.metadata !== metadata) {
-              void patchProject(project.id, { metadata }).then((updated: Project | null) => {
-                if (updated) onProjectChange(updated);
-              });
-            }
+            onProjectChange({ ...project, metadata });
           }}
         />
         <FileWorkspace

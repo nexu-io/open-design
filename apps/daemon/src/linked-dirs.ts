@@ -6,17 +6,19 @@ const BLOCKED_PATH_PREFIXES =
     ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)']
     : ['/etc', '/proc', '/sys', '/dev', '/boot'];
 
+/** @type {(dirs: unknown) => { dirs: string[], error?: undefined } | { error: string, dirs?: undefined }} */
 export function validateLinkedDirs(dirs) {
   if (!Array.isArray(dirs)) return { error: 'linkedDirs must be an array' };
+  /** @type {string[]} */
   const validated = [];
   for (const d of dirs) {
     if (typeof d !== 'string' || !d.trim()) {
       return { error: 'each linked dir must be a non-empty string' };
     }
-    const resolved = path.resolve(d);
-    if (!path.isAbsolute(resolved)) {
+    if (!path.isAbsolute(d)) {
       return { error: `linked dir must be an absolute path: ${d}` };
     }
+    const resolved = path.resolve(d);
     const blocked = BLOCKED_PATH_PREFIXES.some(
       (p) => resolved === p || resolved.startsWith(p + path.sep),
     );
