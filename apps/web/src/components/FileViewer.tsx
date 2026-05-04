@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -43,6 +43,44 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type SlideState = { active: number; count: number };
 
 const htmlPreviewSlideState = new Map<string, SlideState>();
+const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      return document.execCommand('copy');
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+}
+
+function decorateMarkdownCodeBlocks(html: string, t: TranslateFn, copiedBlockId: string | null): string {
+  let blockIndex = 0;
+  return html.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/g, (_match, attrs: string, content: string) => {
+    const blockId = String(blockIndex++);
+    const copied = copiedBlockId === blockId;
+    const label = copied ? t('fileViewer.copied') : t('fileViewer.copy');
+    const toast = copied
+      ? `<span class="markdown-code-toast" role="status" aria-live="polite">${t('fileViewer.copied')}</span>`
+      : '';
+    return (
+      `<div class="markdown-code-block">` +
+      `<button type="button" class="markdown-code-copy" ${MARKDOWN_COPY_BLOCK_ATTR}="${blockId}" title="${t('fileViewer.copyTitle')}" aria-label="${label}">` +
+      `${label}</button>` +
+      `${toast}<pre${attrs}>${content}</pre></div>`
+    );
+  });
+}
 
 interface Props {
   projectId: string;
@@ -2110,12 +2148,15 @@ function MarkdownViewer({
   const [text, setText] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+  const copyBlockTimerRef = useRef<number | null>(null);
   const status = file.artifactManifest?.status ?? 'complete';
   const isStreaming = status === 'streaming';
   const isError = status === 'error';
 
   useEffect(() => {
     setText(null);
+    setCopiedBlockId(null);
     let cancelled = false;
     void fetchProjectFileText(projectId, file.name).then((next) => {
       if (!cancelled) setText(next ?? '');
@@ -2125,34 +2166,50 @@ function MarkdownViewer({
     };
   }, [projectId, file.name, file.mtime, reloadKey]);
 
+  useEffect(() => {
+    return () => {
+      if (copyBlockTimerRef.current) {
+        window.clearTimeout(copyBlockTimerRef.current);
+      }
+    };
+  }, []);
+
   async function copy() {
     if (text == null) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    const didCopy = await copyTextToClipboard(text);
+    if (didCopy) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand('copy');
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
-      } finally {
-        document.body.removeChild(ta);
-      }
     }
   }
 
   const html = useMemo(() => {
     if (text === null) return null;
     const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
-    return renderPartial(text);
-  }, [text]);
+    return decorateMarkdownCodeBlocks(renderPartial(text), t, copiedBlockId);
+  }, [copiedBlockId, t, text]);
+
+  async function handleMarkdownBodyClick(event: ReactMouseEvent<HTMLElement>) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest<HTMLButtonElement>(`button[${MARKDOWN_COPY_BLOCK_ATTR}]`);
+    if (!button) return;
+    const block = button.closest('.markdown-code-block');
+    const codeText = block?.querySelector('pre')?.textContent ?? '';
+    if (!codeText) return;
+    const didCopy = await copyTextToClipboard(codeText);
+    if (!didCopy) return;
+    const blockId = button.getAttribute(MARKDOWN_COPY_BLOCK_ATTR);
+    if (!blockId) return;
+    setCopiedBlockId(blockId);
+    if (copyBlockTimerRef.current) {
+      window.clearTimeout(copyBlockTimerRef.current);
+    }
+    copyBlockTimerRef.current = window.setTimeout(() => {
+      setCopiedBlockId(null);
+      copyBlockTimerRef.current = null;
+    }, 1800);
+  }
 
   return (
     <div className="viewer text-viewer">
@@ -2192,6 +2249,7 @@ function MarkdownViewer({
             {/* Safe by contract: renderMarkdownToSafeHtml escapes raw HTML and rejects unsafe link protocols. */}
             <article
               className="markdown-rendered"
+              onClick={(event) => void handleMarkdownBodyClick(event)}
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </>

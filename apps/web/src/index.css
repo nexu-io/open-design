@@ -4366,12 +4366,64 @@ code {
   color: var(--text-muted);
   background: var(--bg-panel);
 }
+.markdown-code-block {
+  position: relative;
+}
+.markdown-code-copy {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 1;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-panel) 92%, black 8%);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.markdown-code-block:hover .markdown-code-copy,
+.markdown-code-block:focus-within .markdown-code-copy {
+  opacity: 1;
+  transform: translateY(0);
+}
+.markdown-code-copy:hover,
+.markdown-code-copy:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-elevated, var(--bg));
+}
+.markdown-code-toast {
+  position: absolute;
+  top: 18px;
+  right: 82px;
+  z-index: 1;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 18%, var(--bg-panel));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  box-shadow: 0 10px 26px color-mix(in oklab, var(--accent) 18%, transparent);
+}
 .markdown-rendered pre {
   margin: 12px 0;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  padding: 12px;
+  padding: 40px 12px 12px;
   overflow: auto;
 }
 .markdown-rendered code {

@@ -1,0 +1,79 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { FileViewer } from '../../apps/web/src/components/FileViewer';
+import type { ProjectFile } from '../../apps/web/src/types';
+import { fetchProjectFileText } from '../../apps/web/src/providers/registry';
+
+vi.mock('../../apps/web/src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../apps/web/src/providers/registry')>(
+    '../../apps/web/src/providers/registry',
+  );
+  return {
+    ...actual,
+    fetchProjectFileText: vi.fn(),
+  };
+});
+
+const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
+let writeTextMock: ReturnType<typeof vi.fn>;
+
+function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
+  return {
+    name: 'notes.md',
+    path: 'notes.md',
+    type: 'file',
+    size: 256,
+    mtime: 1710000000,
+    kind: 'text',
+    mime: 'text/markdown',
+    artifactManifest: {
+      version: 1,
+      kind: 'markdown-document',
+      title: 'Notes',
+      entry: 'notes.md',
+      renderer: 'markdown',
+      exports: ['md'],
+    },
+    ...overrides,
+  };
+}
+
+describe('FileViewer markdown code block copy', () => {
+  beforeEach(() => {
+    mockedFetchProjectFileText.mockResolvedValue('```ts\nconsole.log("copied")\n```');
+    writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('copies fenced code blocks from the markdown preview', async () => {
+    const { container } = render(<FileViewer projectId="project-1" file={baseFile()} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.markdown-code-copy')).toBeTruthy();
+    });
+    const copyButton = container.querySelector('.markdown-code-copy') as HTMLButtonElement;
+    expect(copyButton.tagName).toBe('BUTTON');
+
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('console.log("copied")');
+    });
+    await waitFor(() => {
+      const updatedButton = container.querySelector('.markdown-code-copy');
+      expect(updatedButton?.getAttribute('aria-label')).toBe('Copied!');
+    });
+    expect(screen.getByRole('status').textContent).toBe('Copied!');
+  });
+});
