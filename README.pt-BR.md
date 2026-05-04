@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#supported-coding-agents"><img alt="Agents" src="https://img.shields.io/badge/agents-12%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#agentes-de-código-suportados"><img alt="Agents" src="https://img.shields.io/badge/agents-12%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="QUICKSTART.pt-BR.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
@@ -593,7 +593,7 @@ Toda a maquinaria abaixo é o playbook do [`huashu-design`](https://github.com/a
 | Form factor | Web (claude.ai) | Desktop (Electron) | **Web app + daemon local** |
 | Deployável na Vercel | ❌ | ❌ | **✅** |
 | Runtime de agente | Bundled (Opus 4.7) | Bundled ([`pi-ai`][piai]) | **Delegado ao CLI já existente do usuário** |
-| Skills | Proprietárias | 12 módulos TS customizados + `SKILL.md` | **31 bundles `SKILL.md`][skill] em arquivo, drop-in** |
+| Skills | Proprietárias | 12 módulos TS customizados + `SKILL.md` | **31 bundles [`SKILL.md`][skill] em arquivo, drop-in** |
 | Design system | Proprietário | `DESIGN.md` (roadmap v0.2) | **`DESIGN.md` × 129 sistemas entregues** |
 | Flexibilidade de provider | Só Anthropic | 7+ via [`pi-ai`][piai] | **12 adapters de CLI + proxy BYOK OpenAI-compatible** |
 | Form de perguntas inicial | ❌ | ❌ | **✅ Regra dura, turn 1** |
