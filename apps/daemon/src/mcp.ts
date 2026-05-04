@@ -61,7 +61,7 @@ const READ_ANNOTATIONS = {
 // shipped to the model on every session.
 const PROJECT_ARG = {
   type: 'string',
-  description: 'Project id (UUID) or name substring. Optional; defaults to the active project.',
+  description: 'Project id (UUID) or name substring. Optional; defaults to the active project (expires after ~5 minutes of no Open Design activity).',
 } as const;
 
 const TOOL_DEFS = [
@@ -74,7 +74,7 @@ const TOOL_DEFS = [
   {
     name: 'get_active_context',
     description:
-      'Project + file the user has open in Open Design right now. Returns {active:false} if none. Most tools default to this when project is omitted, so you rarely need to call this directly. Response is cached for ~5 minutes; refetch if staleness matters.',
+      'Project + file the user has open in Open Design right now. Returns {active:false, hint:"..."} when no project is active so the agent can ask the user to interact with Open Design (the active context expires ~5 minutes after the last user interaction). Most tools default to this when project is omitted, so you rarely need to call this directly.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
   },
@@ -89,7 +89,7 @@ const TOOL_DEFS = [
         entry: {
           type: 'string',
           description:
-            "Entry file path relative to project root. Defaults to the active file or project's metadata.entryFile.",
+            "Entry file path relative to project root. Defaults to the active file or project's metadata.entryFile. Active-file fallback expires after ~5 minutes of no Open Design activity.",
         },
         include: {
           type: 'string',
@@ -128,7 +128,7 @@ const TOOL_DEFS = [
         path: {
           type: 'string',
           description:
-            'File path relative to project root, forward slashes. Optional; defaults to the active file when project is also omitted.',
+            'File path relative to project root, forward slashes. Optional; defaults to the active file when project is also omitted. Active-file fallback expires after ~5 minutes of no Open Design activity.',
         },
       },
       additionalProperties: false,
@@ -325,8 +325,16 @@ export async function runMcpStdio({ daemonUrl }) {
       switch (name) {
         case 'list_projects':
           return ok(await getJson(`${baseUrl}/api/projects`));
-        case 'get_active_context':
-          return ok(await getJson(`${baseUrl}/api/active`));
+        case 'get_active_context': {
+          const data = await getJson(`${baseUrl}/api/active`);
+          if (!data || data.active === false) {
+            return ok({
+              active: false,
+              hint: 'Open Design has no active project right now. The active context expires about 5 minutes after the last user interaction with Open Design, so the user may need to click into a project (or switch tabs inside one) to wake it up. Alternatively, pass project="<id-or-name>" to other tools to bypass active context entirely.',
+            });
+          }
+          return ok(data);
+        }
         case 'get_project': {
           const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
           const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
@@ -478,7 +486,7 @@ async function resolveProjectArg(baseUrl, arg) {
   }
   if (!active || active.active === false || !active.projectId) {
     throw new Error(
-      'project arg omitted and Open Design has no active project. Open a project in Open Design or pass project="<id-or-name>".',
+      'project arg omitted and Open Design has no active project. The active context expires about 5 minutes after the last user interaction with Open Design - the user may need to click into a project to wake it up. Otherwise pass project="<id-or-name>".',
     );
   }
   return { id: active.projectId, resolved: null, active };
