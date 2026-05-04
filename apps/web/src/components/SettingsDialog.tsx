@@ -119,19 +119,6 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
 };
 
-const API_PROTOCOL_ENDPOINTS: Record<
-  ApiProtocol,
-  { method: string; path: string }
-> = {
-  anthropic: { method: 'POST', path: '/v1/messages' },
-  openai: { method: 'POST', path: '/v1/chat/completions' },
-  azure: {
-    method: 'POST',
-    path: '/openai/deployments/{model}/chat/completions?api-version={apiVersion}',
-  },
-  google: { method: 'POST', path: ':streamGenerateContent' },
-};
-
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   anthropic: 'sk-ant-...',
   openai: 'sk-...',
@@ -769,12 +756,6 @@ export function SettingsDialog({
               <div className="section-head">
                 <div>
                   <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
-                  <p className="endpoint-line">
-                    <span className="method-pill">
-                      {API_PROTOCOL_ENDPOINTS[apiProtocol].method}
-                    </span>
-                    <code>{API_PROTOCOL_ENDPOINTS[apiProtocol].path}</code>
-                  </p>
                 </div>
               </div>
               <label className="field">
