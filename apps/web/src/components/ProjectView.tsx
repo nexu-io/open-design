@@ -66,6 +66,7 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 
 interface Props {
@@ -882,8 +883,14 @@ export function ProjectView({
             if (!ev.isError) {
               // Refresh first so FileWorkspace's file list (and the tab
               // body) sees the new content before we ask it to focus.
-              void refreshProjectFiles().then(() => {
-                requestOpenFile(base);
+              // Only auto-open if the file actually landed in the project's
+              // file list — otherwise an out-of-project Write (e.g. an
+              // upstream repo edit) would spawn a permanent placeholder tab.
+              void refreshProjectFiles().then((nextFiles) => {
+                const decision = decideAutoOpenAfterWrite(base, nextFiles);
+                if (decision.shouldOpen && decision.fileName) {
+                  requestOpenFile(decision.fileName);
+                }
               });
             }
           }
