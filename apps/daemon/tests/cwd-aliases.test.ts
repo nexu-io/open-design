@@ -16,6 +16,14 @@ function fresh(): string {
   return mkdtempSync(path.join(tmpdir(), 'od-skill-stage-'));
 }
 
+// On Windows, `fs.symlink(target, link, 'dir')` requires
+// SeCreateSymbolicLinkPrivilege / Developer Mode and fails on most CI
+// images. `'junction'` is the directory-only equivalent that does not
+// require elevated privileges, so we use it for fixtures so the daemon
+// suite stays green on Windows runners.
+const dirLinkType: 'dir' | 'junction' =
+  process.platform === 'win32' ? 'junction' : 'dir';
+
 function writeSampleSkill(root: string, folder: string): string {
   const dir = path.join(root, folder);
   mkdirSync(path.join(dir, 'assets'), { recursive: true });
@@ -126,7 +134,7 @@ describe('stageActiveSkill', () => {
     const realRoot = path.join(fs, 'skills-real');
     const linkedRoot = path.join(fs, 'skills');
     const realSkill = writeSampleSkill(realRoot, 'blog-post');
-    symlinkSync(realRoot, linkedRoot, 'dir');
+    symlinkSync(realRoot, linkedRoot, dirLinkType);
     mkdirSync(cwd);
 
     const result = await stageActiveSkill(
@@ -155,7 +163,7 @@ describe('stageActiveSkill', () => {
     // Earlier daemon versions staged the alias root as a directory link
     // that pointed at SKILLS_DIR. Make sure the new staging logic
     // detects and replaces that without panicking.
-    symlinkSync(path.dirname(sourceDir), path.join(cwd, SKILLS_CWD_ALIAS), 'dir');
+    symlinkSync(path.dirname(sourceDir), path.join(cwd, SKILLS_CWD_ALIAS), dirLinkType);
 
     const messages: string[] = [];
     const result = await stageActiveSkill(

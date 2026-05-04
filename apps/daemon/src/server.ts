@@ -2458,6 +2458,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         );
       }
     }
+    // Resolve the agent's effective working directory once and use it
+    // everywhere the agent could read it (buildArgs runtimeContext, spawn
+    // cwd, ACP session new). Falling back to PROJECT_ROOT — rather than
+    // letting `spawn` inherit the daemon process cwd — is what makes the
+    // absolute-path fallback in the skill preamble actually in-cwd for
+    // no-project runs (packaged daemons / service launches do not start
+    // their working directory from the workspace root).
+    const effectiveCwd = cwd ?? PROJECT_ROOT;
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
       fs.existsSync(d),
     );
@@ -2503,7 +2511,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd },
+      { cwd: effectiveCwd },
     );
     const send = (event, data) => design.runs.emit(run, event, data);
 
@@ -2551,7 +2559,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
-        cwd: cwd || undefined,
+        cwd: effectiveCwd,
         shell: false,
         // Required when invocation wraps a Windows .cmd/.bat shim through
         // cmd.exe; without this, Node re-escapes the inner command line and
@@ -2608,7 +2616,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
-        cwd: cwd || PROJECT_ROOT,
+        cwd: effectiveCwd,
         model: safeModel,
         send,
       });
@@ -2616,7 +2624,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       acpSession = attachAcpSession({
         child,
         prompt: composed,
-        cwd: cwd || PROJECT_ROOT,
+        cwd: effectiveCwd,
         model: safeModel,
         send,
       });
