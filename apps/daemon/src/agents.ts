@@ -632,6 +632,18 @@ export const AGENT_DEFS = [
       args.push(prompt);
       return args;
     },
+    // Guard against prompts that would blow Windows' ~32 KB CreateProcess
+    // limit (or Linux MAX_ARG_STRLEN on extreme edges) before spawn. Every
+    // other argv-sensitive adapter sets `promptViaStdin: true` to dodge
+    // this; DeepSeek's CLI doesn't accept `-` as a stdin sentinel yet, so
+    // we have to ship the prompt as argv. The /api/chat spawn path checks
+    // this byte budget against the composed prompt and emits an actionable
+    // SSE error ("reduce skills/design-system context, or use an adapter
+    // with stdin support") instead of letting the spawn fail with a
+    // generic ENAMETOOLONG/E2BIG message. 30_000 bytes leaves ~2.7 KB of
+    // argv headroom under the Windows command-line limit for `exec
+    // --auto --model <id>` and any internal quoting.
+    maxPromptArgBytes: 30_000,
     streamFormat: 'plain',
   },
 ];
@@ -812,8 +824,8 @@ function stripFns(def) {
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` are probe-only metadata and shouldn't bleed into the
-  // API response either.
+  // `fallbackBins` / `maxPromptArgBytes` are probe-or-spawn-only metadata
+  // and shouldn't bleed into the API response either.
   const {
     buildArgs,
     listModels,
@@ -822,6 +834,7 @@ function stripFns(def) {
     helpArgs,
     capabilityFlags,
     fallbackBins,
+    maxPromptArgBytes,
     ...rest
   } = def;
   return rest;

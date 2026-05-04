@@ -2513,6 +2513,30 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       agentOptions,
       { cwd: effectiveCwd },
     );
+
+    // Adapters that ship the prompt as a positional argv arg (no stdin
+    // sentinel upstream) declare a conservative byte budget here so the
+    // daemon can fail fast with an actionable message instead of letting
+    // `spawn` surface a generic ENAMETOOLONG / E2BIG (Linux MAX_ARG_STRLEN)
+    // or CreateProcess command-line-too-long (Windows ~32 KB) error.
+    // DeepSeek TUI is the only adapter that needs this today; other
+    // adapters use `promptViaStdin: true` and don't put the prompt on argv.
+    if (
+      typeof def.maxPromptArgBytes === 'number' &&
+      Buffer.byteLength(composed, 'utf8') > def.maxPromptArgBytes
+    ) {
+      design.runs.emit(
+        run,
+        'error',
+        createSseErrorPayload(
+          'AGENT_PROMPT_TOO_LARGE',
+          `${def.name} requires the prompt as a command-line argument and this run's composed prompt exceeds the safe size (${Buffer.byteLength(composed, 'utf8')} > ${def.maxPromptArgBytes} bytes). ` +
+            'Reduce the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+          { retryable: false },
+        ),
+      );
+      return design.runs.finish(run, 'failed', 1, null);
+    }
     const send = (event, data) => design.runs.emit(run, event, data);
 
     const odMediaEnv = {

@@ -420,6 +420,28 @@ test('deepseek args omit --model when model is "default"', () => {
   assert.equal(args.includes('--model'), false);
 });
 
+// DeepSeek's exec mode requires the prompt as a positional argv arg
+// (no `-` stdin sentinel upstream), so a sufficiently large composed
+// prompt — system text + history + skills/design-system content + the
+// user message — could blow Windows' ~32 KB CreateProcess command-line
+// limit (or Linux MAX_ARG_STRLEN on extreme edges) and surface as a
+// generic spawn ENAMETOOLONG / E2BIG instead of a DeepSeek-specific,
+// user-actionable message. The adapter declares `maxPromptArgBytes` so
+// /api/chat can fail fast with guidance ("reduce skills/design context
+// or use an adapter with stdin support") before calling `spawn`. Pin
+// the field so removing it can't silently regress the guard.
+test('deepseek declares a conservative argv-byte budget for the prompt', () => {
+  assert.equal(
+    typeof deepseek.maxPromptArgBytes,
+    'number',
+    'deepseek must set maxPromptArgBytes so the spawn path can pre-flight oversized prompts before hitting CreateProcess / E2BIG',
+  );
+  assert.ok(
+    deepseek.maxPromptArgBytes > 0 && deepseek.maxPromptArgBytes < 32_768,
+    `deepseek.maxPromptArgBytes must stay strictly under the Windows CreateProcess limit (~32 KB); got ${deepseek.maxPromptArgBytes}`,
+  );
+});
+
 test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {
   // `deepseek` is the dispatcher that owns `exec` / `--auto`; `deepseek-tui`
   // is the runtime companion the dispatcher invokes. Upstream installs both
