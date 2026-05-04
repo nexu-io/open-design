@@ -617,7 +617,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   const maxBytes =
     Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? Number(maxBytesArg) : DEFAULT_MAX_BYTES;
 
-  const { id, active } = await resolveProjectArg(baseUrl, projectArg);
+  const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg);
   const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
   const project = data?.project ?? data;
   // Active-file beats project default entry when project also came
@@ -641,7 +641,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     } catch (err) {
       return errorResult(err && err.message ? err.message : String(err));
     }
-    return okBundle({ project, entry, files: [file], truncated: false, active });
+    return okBundle({ project, entry, files: [file], truncated: false, active, resolved });
   }
 
   if (include === 'all') {
@@ -661,7 +661,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
         // Skip files that fail to fetch; keep going.
       }
     }
-    return okBundle({ project, entry, files: fetched, truncated, active });
+    return okBundle({ project, entry, files: fetched, truncated, active, resolved });
   }
 
   // Auto mode: BFS from entry. The entry's own fetch must succeed - 
@@ -708,7 +708,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     }
     frontier = next;
   }
-  return okBundle({ project, entry, files: fetched, truncated, active });
+  return okBundle({ project, entry, files: fetched, truncated, active, resolved });
 }
 
 async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = Infinity) {
@@ -859,7 +859,7 @@ function okBundle(bundle) {
     })),
     manifest: bundle.project?.metadata ?? null,
   };
-  return ok(withActiveEcho(payload, bundle.active));
+  return ok(withActiveEcho(payload, bundle.active, bundle.resolved));
 }
 
 function isTextualMime(mime) {
