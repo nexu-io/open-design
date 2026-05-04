@@ -8,6 +8,7 @@ import {
   AGENT_DEFS,
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
+  checkWindowsDirectExeCommandLineBudget,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
@@ -556,11 +557,13 @@ test('checkWindowsCmdShimCommandLineBudget lets ordinary prompts through .cmd re
 
 test('checkWindowsCmdShimCommandLineBudget is a no-op for non-.cmd resolutions', () => {
   // POSIX hosts (and direct `.exe` resolutions on Windows) don't go
-  // through the cmd.exe wrap, so the would-be command line never gets
-  // the quote-doubling expansion. Even an oversized argv must skip this
-  // check — `checkPromptArgvBudget` is the one responsible for catching
-  // those cases.
-  const args = deepseek.buildArgs('x'.repeat(40_000), [], [], {});
+  // through the cmd.exe wrap, so the cmd-shim guard never fires on
+  // those — `checkPromptArgvBudget` catches POSIX oversize argv, and
+  // `checkWindowsDirectExeCommandLineBudget` catches direct-exe argv
+  // expansion under libuv's quoting rules. Use a non-quote-heavy prompt
+  // so this test stays focused on the `.cmd`/`.bat` path filter rather
+  // than overlapping with the direct-exe guard's contract.
+  const args = deepseek.buildArgs('x'.repeat(20_000), [], [], {});
   assert.equal(
     checkWindowsCmdShimCommandLineBudget(deepseek, '/usr/local/bin/deepseek', args),
     null,
@@ -589,6 +592,144 @@ test('checkWindowsCmdShimCommandLineBudget no-ops when resolvedBin is null or ad
     checkWindowsCmdShimCommandLineBudget(claude, 'C:\\fake\\claude.cmd', []),
     null,
   );
+});
+
+// Companion to the cmd-shim guard for non-shim Windows installs (e.g. a
+// cargo-built `deepseek.exe` rather than the npm `.cmd` shim). The
+// cmd-shim guard early-returns on `.exe` paths because those skip the
+// `cmd.exe /d /s /c` wrap, but Node/libuv still composes a
+// CreateProcess `lpCommandLine` by walking each argv element through
+// `quote_cmd_arg` — every embedded `"` becomes `\"`, backslashes
+// adjacent to a quote get doubled. A quote-heavy prompt that fits under
+// `maxPromptArgBytes` can therefore still expand past the 32_767-char
+// kernel cap on a direct `.exe` spawn. The new guard recomputes the
+// would-be command line using the exact libuv math so those users hit
+// the same actionable `AGENT_PROMPT_TOO_LARGE` instead of a generic
+// `spawn ENAMETOOLONG`.
+test('checkWindowsDirectExeCommandLineBudget flags quote-heavy prompts on a direct .exe resolution', () => {
+  // Prompt is *under* the raw byte budget, but ~entirely `"` chars so
+  // libuv's `\"` escaping roughly doubles its command-line cost.
+  const quoteHeavyPromptLength = deepseek.maxPromptArgBytes - 100;
+  const quoteHeavyPrompt = '"'.repeat(quoteHeavyPromptLength);
+
+  // Sanity: the raw-byte guard must let this through, otherwise the
+  // post-buildArgs check would never fire on a real run.
+  assert.equal(
+    checkPromptArgvBudget(deepseek, quoteHeavyPrompt),
+    null,
+    'quote-heavy prompt under the raw byte budget must pass the pre-buildArgs guard',
+  );
+
+  const args = deepseek.buildArgs(quoteHeavyPrompt, [], [], {});
+  // Realistic non-shim install: a cargo-built `.exe` under Program Files
+  // (path has spaces so the resolved-bin contribution itself gets
+  // wrapped in `"…"`, which mirrors what libuv would do on Windows).
+  const resolvedBin = 'C:\\Program Files\\DeepSeek\\deepseek.exe';
+  const flagged = checkWindowsDirectExeCommandLineBudget(deepseek, resolvedBin, args);
+
+  assert.ok(
+    flagged,
+    'quote-heavy prompt that expands past the CreateProcess cap on a direct .exe spawn must trip the guard',
+  );
+  assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.ok(
+    flagged.commandLineLength > flagged.limit,
+    `commandLineLength (${flagged.commandLineLength}) must exceed limit (${flagged.limit})`,
+  );
+  assert.ok(
+    flagged.limit < 32_768,
+    'guard must keep its safe limit strictly under the documented Windows CreateProcess cap',
+  );
+  assert.match(flagged.message, /DeepSeek/);
+  assert.match(flagged.message, /libuv quote-escaping/);
+  assert.match(flagged.message, /stdin support/);
+});
+
+test('checkWindowsDirectExeCommandLineBudget lets ordinary prompts through .exe resolutions', () => {
+  // Non-shim `.exe` install with a plain prompt — well under every
+  // limit. Guard must return null so the chat happy path proceeds to
+  // spawn.
+  const args = deepseek.buildArgs('write hello world', [], [], {});
+  const resolvedBin = 'C:\\Program Files\\DeepSeek\\deepseek.exe';
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(deepseek, resolvedBin, args),
+    null,
+  );
+});
+
+test('checkWindowsDirectExeCommandLineBudget no-ops on .cmd / .bat resolutions and POSIX paths', () => {
+  // The cmd-shim guard owns `.bat` / `.cmd` — the direct-exe guard must
+  // skip them so an oversized prompt on a `.cmd` install doesn't trip
+  // both guards (and double-emit an SSE error).
+  const args = deepseek.buildArgs('"'.repeat(deepseek.maxPromptArgBytes - 100), [], [], {});
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(
+      deepseek,
+      'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd',
+      args,
+    ),
+    null,
+  );
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(
+      deepseek,
+      'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.bat',
+      args,
+    ),
+    null,
+  );
+  // POSIX hosts never go through Windows' CreateProcess — `execvp`
+  // accepts each argv buffer separately, so there's no command-line
+  // concatenation to bust. The pre-buildArgs `checkPromptArgvBudget` is
+  // the one responsible for catching oversized argv on those hosts.
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(deepseek, '/usr/local/bin/deepseek', args),
+    null,
+  );
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(deepseek, '/home/dev/.cargo/bin/deepseek', args),
+    null,
+  );
+});
+
+test('checkWindowsDirectExeCommandLineBudget no-ops when resolvedBin is null/empty or adapter has no budget', () => {
+  // Bin resolution failed but the run continued long enough to reach
+  // this guard — must be a no-op so the existing AGENT_UNAVAILABLE path
+  // still fires from server.ts.
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(deepseek, null, []),
+    null,
+  );
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(deepseek, '', []),
+    null,
+  );
+  // Stdin-delivered adapters never declare `maxPromptArgBytes` — the
+  // guard must skip them even when handed a Windows `.exe` path.
+  assert.equal(
+    checkWindowsDirectExeCommandLineBudget(claude, 'C:\\fake\\claude.exe', []),
+    null,
+  );
+});
+
+// The two post-buildArgs guards are deliberately exclusive: the
+// cmd-shim guard owns `.cmd` / `.bat` (cmd.exe quote-doubling math),
+// the direct-exe guard owns everything else on Windows (libuv
+// quote-escaping math). For any single resolved bin, at most one
+// should ever fire — otherwise an oversized prompt would emit two
+// SSE error events back to back. Pin both branches with a quote-heavy
+// prompt that's over the kernel cap under either quoting rule.
+test('cmd-shim and direct-exe guards are mutually exclusive on a single resolution', () => {
+  const quoteHeavy = '"'.repeat(deepseek.maxPromptArgBytes - 100);
+  const args = deepseek.buildArgs(quoteHeavy, [], [], {});
+
+  const cmdPath = 'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd';
+  assert.ok(checkWindowsCmdShimCommandLineBudget(deepseek, cmdPath, args));
+  assert.equal(checkWindowsDirectExeCommandLineBudget(deepseek, cmdPath, args), null);
+
+  const exePath = 'C:\\Program Files\\DeepSeek\\deepseek.exe';
+  assert.equal(checkWindowsCmdShimCommandLineBudget(deepseek, exePath, args), null);
+  assert.ok(checkWindowsDirectExeCommandLineBudget(deepseek, exePath, args));
 });
 
 test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {

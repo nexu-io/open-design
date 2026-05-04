@@ -891,6 +891,49 @@ function quoteForWindowsCmdShim(value) {
   return `"${str.replace(/"/g, '""')}"`;
 }
 
+// Mirror of libuv's `quote_cmd_arg` (process-stdio.c), the exact rule
+// Node uses on Windows when it composes a CreateProcess command line for
+// a direct executable spawn (not a `.cmd` / `.bat` shim, which goes
+// through `quoteForWindowsCmdShim` above). Each embedded `"` becomes
+// `\"`, every backslash that ends up adjacent to a quote (or to the
+// closing wrap quote) gets doubled, and an arg with whitespace or a
+// quote is wrapped in outer `"..."`. Kept local so the budget check
+// works on macOS/Linux test hosts against a fake `C:\…\foo.exe` path.
+function quoteForWindowsDirectExe(value) {
+  const str = String(value ?? '');
+  // libuv emits a literal `""` for an empty argv entry so it survives
+  // CommandLineToArgvW round-tripping; mirror that.
+  if (str.length === 0) return '""';
+  // Fast path: no whitespace and no quote — pass through unchanged. This
+  // matches libuv's `wcspbrk(source, L" \t\"")` early return.
+  if (!/[\s"]/.test(str)) return str;
+  // No quote, no backslash: simple wrap, no per-char escaping needed.
+  if (!/[\\"]/.test(str)) return `"${str}"`;
+  // Slow path: walk the string, counting consecutive backslashes so we
+  // can double them whenever they precede a `"` or the closing wrap
+  // quote. Following the documented Windows convention:
+  //   - 2n  backslashes + `"`  →  emit `\\` × 2n  + `\"`
+  //   - 2n+1 backslashes + `"` →  emit `\\` × (2n+1) + `\"`
+  //   - n backslashes not before `"`  →  emit `\\` × n unchanged
+  //   - trailing backslashes (before the closing wrap quote)  →  doubled
+  let result = '"';
+  let backslashes = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '\\') {
+      backslashes++;
+    } else if (ch === '"') {
+      result += '\\'.repeat(2 * backslashes + 1) + '"';
+      backslashes = 0;
+    } else {
+      result += '\\'.repeat(backslashes) + ch;
+      backslashes = 0;
+    }
+  }
+  result += '\\'.repeat(2 * backslashes) + '"';
+  return result;
+}
+
 // Windows' CreateProcess caps `lpCommandLine` at 32_767 chars. Going
 // through a `.cmd` / `.bat` shim adds a `cmd.exe /d /s /c "<inner>"`
 // wrapper, and `quoteForWindowsCmdShim` doubles every embedded `"` plus
@@ -936,6 +979,74 @@ export function checkWindowsCmdShimCommandLineBudget(def, resolvedBin, args) {
     message:
       `${def.name} on Windows runs through a .cmd shim and this run's prompt would expand past the CreateProcess command-line limit ` +
       `after cmd.exe quote-doubling (${commandLineLength} > ${safeLimit} chars). ` +
+      'Reduce quote-heavy content in the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    commandLineLength,
+    limit: safeLimit,
+  };
+}
+
+// Heuristic: does `resolvedBin` look like a Windows path? Used by the
+// direct-exe guard so a test on a POSIX host can drive a fake
+// `C:\…\foo.exe` path through the same math the daemon would run on
+// Windows, while still skipping POSIX-shaped paths (which never go
+// through CreateProcess).
+function looksLikeWindowsPath(p) {
+  if (typeof p !== 'string' || p.length === 0) return false;
+  // Drive-letter (`C:\…`, `C:/…`) or UNC (`\\server\share\…`).
+  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\');
+}
+
+// Companion to `checkWindowsCmdShimCommandLineBudget` for argv-bound
+// adapters whose binary resolves directly to a Windows executable
+// (a cargo-installed `deepseek.exe`, a hand-built release, or any other
+// non-shim install path). `createCommandInvocation` does *not* wrap the
+// call in `cmd.exe /d /s /c "<inner>"` for those — but Node/libuv still
+// composes a CreateProcess `lpCommandLine` by walking each argv entry
+// through `quote_cmd_arg`, which doubles backslashes adjacent to quotes
+// and escapes every embedded `"` as `\"`. A quote-heavy prompt that fits
+// under the raw `maxPromptArgBytes` budget can therefore still expand
+// past the kernel's 32_767-char `lpCommandLine` cap on a direct `.exe`
+// spawn, surfacing as a generic `spawn ENAMETOOLONG` instead of the
+// adapter-named `AGENT_PROMPT_TOO_LARGE` the budget guard exists to
+// emit. Returns the same error shape as the cmd-shim guard so the SSE
+// error path in `/api/chat` doesn't have to special-case it.
+//
+// No-op when:
+//   - the adapter doesn't declare `maxPromptArgBytes` (stdin adapters
+//     never go through this path);
+//   - the resolved binary is a `.cmd` / `.bat` shim — that's handled by
+//     `checkWindowsCmdShimCommandLineBudget` so we don't double-emit;
+//   - the resolved binary is a POSIX path on a POSIX host (no
+//     CreateProcess in play);
+//   - the assembled command line fits under the safe limit.
+//
+// Pure: takes `resolvedBin` and `args` explicitly so a test on macOS can
+// pass a fake `C:\…\deepseek.exe` and exercise the same math the daemon
+// would run on Windows. The libuv quoting math lives in
+// `quoteForWindowsDirectExe` above.
+export function checkWindowsDirectExeCommandLineBudget(def, resolvedBin, args) {
+  if (!def || typeof def.maxPromptArgBytes !== 'number') return null;
+  if (typeof resolvedBin !== 'string' || resolvedBin.length === 0) return null;
+  // The cmd-shim guard owns `.bat` / `.cmd`; skip those here so a single
+  // oversized prompt doesn't trip both guards.
+  if (/\.(bat|cmd)$/i.test(resolvedBin)) return null;
+  // Only fire when the spawn would actually go through Windows'
+  // CreateProcess. On POSIX hosts, `execvp` accepts each argv entry as a
+  // separate buffer — there's no command-line concatenation step that
+  // could expand past a kernel cap, so we have nothing to guard.
+  if (process.platform !== 'win32' && !looksLikeWindowsPath(resolvedBin)) return null;
+  const argList = Array.isArray(args) ? args : [];
+  // `[command, ...args].map(quote).join(' ')` is the exact shape libuv
+  // builds before handing it to CreateProcess.
+  const commandLineLength =
+    [resolvedBin, ...argList].map(quoteForWindowsDirectExe).join(' ').length;
+  const safeLimit = WINDOWS_CREATE_PROCESS_LIMIT - WINDOWS_CREATE_PROCESS_HEADROOM;
+  if (commandLineLength <= safeLimit) return null;
+  return {
+    code: 'AGENT_PROMPT_TOO_LARGE',
+    message:
+      `${def.name} on Windows builds a CreateProcess command line and this run's prompt would expand past the limit ` +
+      `after libuv quote-escaping (${commandLineLength} > ${safeLimit} chars). ` +
       'Reduce quote-heavy content in the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
     commandLineLength,
     limit: safeLimit,

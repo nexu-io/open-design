@@ -12,6 +12,7 @@ import { createCommandInvocation } from '@open-design/platform';
 import {
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
+  checkWindowsDirectExeCommandLineBudget,
   detectAgents,
   getAgentDef,
   isKnownModel,
@@ -2559,6 +2560,33 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         createSseErrorPayload(
           cmdShimBudgetError.code,
           cmdShimBudgetError.message,
+          { retryable: false },
+        ),
+      );
+      return design.runs.finish(run, 'failed', 1, null);
+    }
+
+    // Companion guard for non-shim Windows installs (e.g. a cargo-built
+    // `deepseek.exe` rather than the npm `.cmd` shim). Direct `.exe`
+    // spawns skip the cmd.exe wrap above, but Node/libuv still composes
+    // a CreateProcess `lpCommandLine` by walking each argv element
+    // through `quote_cmd_arg`, which escapes every embedded `"` as `\"`
+    // and doubles backslashes adjacent to quotes. A quote-heavy prompt
+    // under `maxPromptArgBytes` can expand past the 32_767-char kernel
+    // cap there too, so the cmd-shim early-return alone would let those
+    // users hit a generic `spawn ENAMETOOLONG`.
+    const directExeBudgetError = checkWindowsDirectExeCommandLineBudget(
+      def,
+      resolvedBin,
+      args,
+    );
+    if (directExeBudgetError) {
+      design.runs.emit(
+        run,
+        'error',
+        createSseErrorPayload(
+          directExeBudgetError.code,
+          directExeBudgetError.message,
           { retryable: false },
         ),
       );
