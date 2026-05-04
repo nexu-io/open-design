@@ -60,6 +60,7 @@ export function DesignFilesPanel({
   const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
   const [isSectionExpansionPending, startSectionExpansion] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const prevProjectIdRef = useRef(projectId);
 
   const grouped = useMemo(() => {
     const groups: Record<Section, ProjectFile[]> = {
@@ -76,8 +77,16 @@ export function DesignFilesPanel({
     return groups;
   }, [files]);
 
-  // Prune stale selections when the file list or project changes.
+  // Selections are project-scoped: clear them outright on project switch so
+  // common filenames (e.g. index.html in both projects) don't carry over.
+  // For same-project file changes (refresh, delete, replace), intersect with
+  // the current file list to drop stale names.
   useEffect(() => {
+    if (prevProjectIdRef.current !== projectId) {
+      prevProjectIdRef.current = projectId;
+      setSelected((prev) => (prev.size === 0 ? prev : new Set()));
+      return;
+    }
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const names = new Set(files.map((f) => f.name));
