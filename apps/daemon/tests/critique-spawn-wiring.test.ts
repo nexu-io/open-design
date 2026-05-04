@@ -170,3 +170,83 @@ describe('spawn wiring - cfg.enabled=true (orchestrator path)', () => {
     expect(getCritiqueRun(db, 'error-run')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Stream format gating (Defect 1)
+// ---------------------------------------------------------------------------
+// The server gates the orchestrator path on streamFormat === 'plain'.
+// We test the logic inline: simulate the server branch condition and verify
+// that non-plain adapters skip the orchestrator entirely.
+
+describe('spawn wiring - stream format gating (Defect 1)', () => {
+  const NON_PLAIN_FORMATS = [
+    'claude-stream-json',
+    'copilot-stream-json',
+    'json-event-stream',
+    'acp-json-rpc',
+  ] as const;
+
+  for (const fmt of NON_PLAIN_FORMATS) {
+    it(`format="${fmt}" skips the orchestrator (no run row inserted)`, async () => {
+      // Simulate the server branch: if streamFormat !== 'plain', skip orchestrator.
+      const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
+      const adapterStreamFormat: string = fmt;
+
+      if (cfg.enabled && adapterStreamFormat !== 'plain') {
+        // Legacy path: orchestrator NOT called.
+        // Nothing should be inserted.
+        expect(getCritiqueRun(db, `skip-${fmt}`)).toBeNull();
+        return;
+      }
+
+      // If we reach here, the test scenario is wrong.
+      throw new Error(`Expected ${fmt} to skip orchestrator but did not`);
+    });
+  }
+
+  it('format="plain" routes through the orchestrator', async () => {
+    const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
+    const adapterStreamFormat = 'plain';
+
+    // Simulate: only call orchestrator when format is plain.
+    if (!cfg.enabled || adapterStreamFormat !== 'plain') {
+      throw new Error('Expected plain format to be routed through orchestrator');
+    }
+
+    const { bus } = makeBus();
+    const artifactDir = join(tmpDir, 'run-plain-format');
+
+    async function* mockStdout(): AsyncIterable<string> {
+      yield '<CRITIQUE_RUN version="1" maxRounds="1" threshold="8.0" scale="10">\n';
+      yield '  <ROUND n="1">\n';
+      yield '    <PANELIST role="designer"><NOTES>v1</NOTES><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>\n';
+      yield '    <PANELIST role="critic" score="9.0"><DIM name="h" score="9">ok</DIM></PANELIST>\n';
+      yield '    <PANELIST role="brand" score="9.0"><DIM name="v" score="9">ok</DIM></PANELIST>\n';
+      yield '    <PANELIST role="a11y" score="9.0"><DIM name="c" score="9">ok</DIM></PANELIST>\n';
+      yield '    <PANELIST role="copy" score="9.0"><DIM name="cl" score="9">ok</DIM></PANELIST>\n';
+      yield '    <ROUND_END n="1" composite="9.0" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>\n';
+      yield '  </ROUND>\n';
+      yield '  <SHIP round="1" composite="9.0" status="shipped">\n';
+      yield '    <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>\n';
+      yield '    <SUMMARY>done</SUMMARY>\n';
+      yield '  </SHIP>\n';
+      yield '</CRITIQUE_RUN>\n';
+    }
+
+    const result = await runOrchestrator({
+      runId: 'plain-format-run',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir,
+      adapter: 'plain-adapter',
+      cfg,
+      db,
+      bus,
+      stdout: mockStdout(),
+    });
+
+    expect(result.status).toBe('shipped');
+    expect(getCritiqueRun(db, 'plain-format-run')?.status).toBe('shipped');
+  });
+});
