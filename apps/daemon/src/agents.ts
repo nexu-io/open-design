@@ -449,15 +449,11 @@ export const AGENT_DEFS = [
     name: 'GitHub Copilot CLI',
     bin: 'copilot',
     versionArgs: ['--version'],
-    // `-p -` enters Copilot's prompt mode and tells the CLI to read the
-    // prompt body from stdin instead of expecting it as a positional argv
-    // element. Without it the daemon writes the prompt to the child's
-    // stdin pipe (because `promptViaStdin: true` below) but Copilot stays
-    // in interactive mode, never reads stdin, and rejects the run with
-    // `error: too many arguments. Expected 0 arguments but got N` —
-    // the regression filed in #350. PR #258 standardized agents on stdin
-    // delivery and dropped the per-prompt argv path, but missed flipping
-    // Copilot's mode from interactive to `-p -`.
+    // The prompt is passed directly as the value of `-p`: `copilot -p
+    // "<prompt>" --allow-all-tools --output-format json`. Copilot does NOT
+    // treat `-` as a stdin sentinel — it reads it as a literal one-character
+    // prompt string — so the previous `-p -` + stdin pattern produced a
+    // nonsensical single-dash prompt instead of the composed prompt body.
     //
     // `--allow-all-tools` is required for non-interactive runs: without it
     // the CLI blocks waiting for human approval on every tool call. Unlike
@@ -482,10 +478,10 @@ export const AGENT_DEFS = [
       { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
       { id: 'gpt-5.2', label: 'GPT-5.2' },
     ],
-    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [
         '-p',
-        '-',
+        prompt,
         '--allow-all-tools',
         '--output-format',
         'json',
@@ -499,7 +495,7 @@ export const AGENT_DEFS = [
       for (const d of dirs) args.push('--add-dir', d);
       return args;
     },
-    promptViaStdin: true,
+    promptViaStdin: false,
     streamFormat: 'copilot-stream-json',
   },
   {

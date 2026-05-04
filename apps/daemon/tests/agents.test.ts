@@ -113,39 +113,38 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
   ]);
 });
 
-// `-p -` puts Copilot in prompt mode and tells it to read the body from
-// stdin. Without this pair the daemon writes the prompt to the child's
-// stdin pipe (because `promptViaStdin: true`) but Copilot stays
-// interactive, ignores stdin, and rejects the run with
-// `error: too many arguments. Expected 0 arguments but got N`. Pin the
-// pair as the leading argv elements so the regression in #350 can't
-// drift back. Also pin the order — Copilot expects `-p` before any other
+// Copilot does NOT treat `-` as a stdin sentinel — it reads it as a
+// literal one-character prompt. The prompt must be passed directly as the
+// value of `-p`. Pin the argv shape so the regression can't drift back.
+// Also pin the order — Copilot expects `-p <prompt>` before any other
 // flag, including model / add-dir extensions.
-test('copilot args lead with `-p -` so the stdin prompt is actually consumed (regression of #350)', () => {
-  const baseArgs = copilot.buildArgs('', [], [], {});
+test('copilot args pass the prompt directly as the -p value (not via stdin sentinel)', () => {
+  const prompt = 'design a landing page';
+  const baseArgs = copilot.buildArgs(prompt, [], [], {});
   assert.equal(baseArgs[0], '-p');
-  assert.equal(baseArgs[1], '-');
+  assert.equal(baseArgs[1], prompt);
   assert.deepEqual(baseArgs, [
     '-p',
-    '-',
+    prompt,
     '--allow-all-tools',
     '--output-format',
     'json',
   ]);
 });
 
-test('copilot args keep `-p -` at the front when model and extra dirs are added', () => {
+test('copilot args keep `-p <prompt>` at the front when model and extra dirs are added', () => {
+  const prompt = 'design a landing page';
   const args = copilot.buildArgs(
-    '',
+    prompt,
     [],
     ['/tmp/od-skills', '/tmp/od-design-systems'],
     { model: 'claude-sonnet-4.6' },
   );
   assert.equal(args[0], '-p');
-  assert.equal(args[1], '-');
+  assert.equal(args[1], prompt);
   assert.deepEqual(args, [
     '-p',
-    '-',
+    prompt,
     '--allow-all-tools',
     '--output-format',
     'json',
@@ -158,10 +157,11 @@ test('copilot args keep `-p -` at the front when model and extra dirs are added'
   ]);
 });
 
-test('copilot drops empty / non-string entries from extraAllowedDirs without breaking the `-p -` lead', () => {
-  const args = copilot.buildArgs('', [], ['', null, '/tmp/od-skills', undefined], {});
+test('copilot drops empty / non-string entries from extraAllowedDirs without breaking the `-p <prompt>` lead', () => {
+  const prompt = 'design a landing page';
+  const args = copilot.buildArgs(prompt, [], ['', null, '/tmp/od-skills', undefined], {});
   assert.equal(args[0], '-p');
-  assert.equal(args[1], '-');
+  assert.equal(args[1], prompt);
   // Only the one valid path survives.
   const addDirIndex = args.indexOf('--add-dir');
   assert.equal(args[addDirIndex + 1], '/tmp/od-skills');
