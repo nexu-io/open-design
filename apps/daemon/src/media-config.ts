@@ -7,6 +7,28 @@
 // stored values so power users can keep keys out of the workspace
 // folder altogether (`OD_OPENAI_API_KEY=… node daemon/cli.js`).
 //
+// Storage location (precedence high → low):
+//   1. OD_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
+//   2. OD_DATA_DIR=DIR           → <DIR>/media-config.json
+//   3. (default)                 → <projectRoot>/.od/media-config.json
+// The default is unchanged for workspace-local installs. (1) lets a
+// supervisor relocate just the credentials file. (2) means installs
+// that already set OD_DATA_DIR for the rest of the daemon's runtime
+// state (Nix-store / immutable-image installs, the packaged daemon at
+// apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
+// the Home Manager / NixOS modules) get media-config there too without
+// any extra plumbing. Both env values are resolved with the same
+// semantics as OD_DATA_DIR in server.ts:resolveDataDir() — `~/` expands
+// to the user's home, and relative paths anchor to <projectRoot> (NOT
+// process.cwd, which is unrelated to the workspace when systemd or
+// launchd starts the daemon).
+//
+// Migration note: a workspace install that sets a custom OD_DATA_DIR
+// AND has a pre-existing `<projectRoot>/.od/media-config.json` will
+// start reading from `<OD_DATA_DIR>/media-config.json` instead. Move
+// the file once or set OD_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
+// the old location.
+//
 // The file is intentionally simple JSON — no encryption, no schema
 // versioning yet. The daemon listens on 127.0.0.1 only and the workspace
 // is already trusted, so adding a vault here would mostly be theatre.
@@ -51,8 +73,38 @@ const ENV_KEYS = {
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
 };
 
+// Resolve an `OD_*_DIR` env override using the same semantics as
+// `resolveDataDir()` in server.ts: leading `~/` expands to the user's
+// home, and relative paths anchor to <projectRoot> (NOT process.cwd —
+// the daemon is often launched from a directory that has nothing to do
+// with the workspace, e.g. systemd's `/`). The writability check that
+// resolveDataDir does on startup is intentionally NOT replicated here:
+// configFile() is on the read path and a missing/unwritable directory
+// is a normal "no config yet" condition handled by readStored(); the
+// write path's mkdir(recursive) creates the directory on first use.
+function resolveOverrideDir(raw, projectRoot) {
+  const expanded = raw.startsWith('~/')
+    ? path.join(homedir(), raw.slice(2))
+    : raw;
+  return path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(projectRoot, expanded);
+}
+
+function envOverrideDir(envName, projectRoot) {
+  const raw = process.env[envName];
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed ? resolveOverrideDir(trimmed, projectRoot) : null;
+}
+
 function configFile(projectRoot) {
-  return path.join(projectRoot, '.od', 'media-config.json');
+  // Precedence: explicit media-config override > general data dir > default.
+  const dir =
+    envOverrideDir('OD_MEDIA_CONFIG_DIR', projectRoot)
+    ?? envOverrideDir('OD_DATA_DIR', projectRoot)
+    ?? path.join(projectRoot, '.od');
+  return path.join(dir, 'media-config.json');
 }
 
 async function readStored(projectRoot) {

@@ -111,13 +111,40 @@ export function resolveDaemonProxyTarget(
   return new URL(`${parsedRequestUrl.pathname}${parsedRequestUrl.search}`, daemonOrigin);
 }
 
+export function normalizeDaemonProxyOriginHeader(options: {
+  daemonOrigin: string;
+  origin: string | undefined;
+  webPort: number;
+}): string | undefined {
+  if (options.origin == null || options.origin.length === 0) return options.origin;
+
+  const schemes = ["http", "https"];
+  const loopbackHosts = ["127.0.0.1", "localhost", "[::1]", HOST];
+  const allowedWebOrigins = new Set(
+    schemes.flatMap((scheme) => loopbackHosts.map((host) => `${scheme}://${host}:${options.webPort}`)),
+  );
+
+  return allowedWebOrigins.has(options.origin) ? options.daemonOrigin : options.origin;
+}
+
 async function proxyToDaemon(
   target: URL,
   request: IncomingMessage,
   response: ServerResponse,
+  webPort: number,
 ): Promise<void> {
   const proxyRequestFactory = target.protocol === "https:" ? createHttpsRequest : createHttpRequest;
   const headers = { ...request.headers, host: target.host };
+  const origin = normalizeDaemonProxyOriginHeader({
+    daemonOrigin: target.origin,
+    origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+    webPort,
+  });
+  if (origin == null || origin.length === 0) {
+    delete headers.origin;
+  } else {
+    headers.origin = origin;
+  }
 
   await new Promise<void>((resolveProxy) => {
     const proxyRequest = proxyRequestFactory(
@@ -233,10 +260,11 @@ export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStam
 
   const daemonOrigin = resolveDaemonOrigin();
   const handleRequest = app.getRequestHandler();
+  let webPort = 0;
   const httpServer = createHttpServer((request, response) => {
     const daemonProxyTarget = daemonOrigin == null ? null : resolveDaemonProxyTarget(daemonOrigin, request.url);
     if (daemonProxyTarget != null) {
-      void proxyToDaemon(daemonProxyTarget, request, response).catch((error: unknown) => {
+      void proxyToDaemon(daemonProxyTarget, request, response, webPort).catch((error: unknown) => {
         response.statusCode = 502;
         response.end(error instanceof Error ? error.message : String(error));
       });
@@ -249,6 +277,7 @@ export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStam
     });
   });
   const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]));
+  webPort = port;
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",

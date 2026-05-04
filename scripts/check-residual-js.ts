@@ -6,6 +6,7 @@ const residualExtensions = new Set([".js", ".mjs", ".cjs"]);
 
 const skippedDirectories = new Set([
   ".agents",
+  ".astro",
   ".claude",
   ".claude-sessions",
   ".codex",

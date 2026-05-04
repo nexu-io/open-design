@@ -1,0 +1,210 @@
+{
+  "$schema": "./schema.ts",
+  "_doc": "Worked example — Open Design pitch deck. 11 slides covering cover, two sections, four content slides, one stats, one quote, one CTA, one end. Reuses brand identity and assets from the sister editorial-collage skill. Run `npx tsx scripts/compose.ts inputs.example.json example.html` to build.",
+
+  "brand": {
+    "name": "Open Design",
+    "mark": "Ø",
+    "meta": { "title": "Studio Nº 01", "subtitle": "Berlin / Open / Earth" },
+    "filed_under": "Design · Intelligence",
+    "tagline": "Designing intelligence with skills, taste, and your own agent.",
+    "description": "Open Design pitch deck — Vol. 01.",
+    "locale": "en",
+    "edition": "Vol. 01 / Issue Nº 26",
+    "version": "v0.2.0",
+    "license": "Apache-2.0",
+    "primary_url": "https://github.com/nexu-io/open-design",
+    "primary_url_label": "Star · 0K",
+    "contact_email": "https://github.com/nexu-io/open-design/issues",
+    "location": "Berlin / Open / Earth",
+    "coordinates": "52.5200° N · 13.4050° E",
+    "year": "2026",
+    "year_roman": "MMXXVI",
+    "founded": "Est. MMXXVI",
+    "rails": { "right": "", "left": "" },
+    "languages": ["EN"],
+    "status": "Live · v0.2.0"
+  },
+
+  "deck_title": "Open Design · Vol. 01 / Issue Nº 26",
+
+  "slides": [
+    {
+      "kind": "cover",
+      "eyebrow": "Open-source design studio · Nº 01",
+      "title": [
+        { "text": "Designing " },
+        { "text": "intelligence", "em": true },
+        { "text": " with skills, " },
+        { "text": "taste,", "em": true },
+        { "text": " and " },
+        { "text": "code", "em": true },
+        { "text": ".", "dot": true }
+      ],
+      "subtitle": "The open-source alternative to Anthropic's Claude Design.",
+      "lead": "12 coding agents drive 31 composable skills and 72 brand-grade design systems. Local-first, web-deployable, BYOK at every layer.",
+      "image_slot": "hero",
+      "meta": "Berlin · MMXXVI · 52.5200° N · 13.4050° E"
+    },
+
+    {
+      "kind": "section",
+      "roman": "I.",
+      "title": [
+        { "text": "Why " },
+        { "text": "another", "em": true },
+        { "text": " design tool" },
+        { "text": "?", "dot": true }
+      ],
+      "lead": "Because the strongest agents already live on your laptop — and they deserve a real workflow."
+    },
+
+    {
+      "kind": "content",
+      "layout": "right",
+      "eyebrow": "About the studio · Nº 02",
+      "title": [
+        { "text": "We treat " },
+        { "text": "your agent", "em": true },
+        { "text": " as a creative " },
+        { "text": "collaborator", "em": true },
+        { "text": ".", "dot": true }
+      ],
+      "body": "We don't ship one — we wire whichever you trust into a skill-driven design workflow that runs locally with <code>pnpm tools-dev</code>, deploys to Vercel, and stays BYOK at every layer.",
+      "bullets": [
+        "Files, not opaque prompts — every skill is a folder of Markdown.",
+        "Deterministic visual directions, not random generation.",
+        "Sandboxed iframe preview, real cwd, exportable artifacts."
+      ],
+      "image_slot": "about"
+    },
+
+    {
+      "kind": "content",
+      "layout": "left",
+      "eyebrow": "Capabilities · Nº 03",
+      "title": [
+        { "text": "Skills, systems, surfaces — " },
+        { "text": "for creative", "em": true },
+        { "text": " intelligence" },
+        { "text": ".", "dot": true }
+      ],
+      "body": "Four composable surfaces, one feedback loop. Skills supply behavior. Systems supply taste. Adapters bridge agents. BYOK respects your wallet.",
+      "bullets": [
+        "31 file-based SKILL.md bundles — drop in, restart, appears.",
+        "72 portable DESIGN.md systems — Linear, Vercel, Stripe, Apple…",
+        "12 agent adapters — Claude · Codex · Gemini · Cursor · …",
+        "OpenAI-compatible proxy — paste a baseUrl + key, ship."
+      ],
+      "image_slot": "capabilities"
+    },
+
+    {
+      "kind": "stats",
+      "eyebrow": "By the numbers · Nº 04",
+      "title": [
+        { "text": "Composable, " },
+        { "text": "shippable,", "em": true },
+        { "text": " portable" },
+        { "text": ".", "dot": true }
+      ],
+      "stats": [
+        { "value": "31", "label": "Skills",  "sub": "file-based, shippable today" },
+        { "value": "72", "label": "Systems", "sub": "design tokens you already trust" },
+        { "value": "12", "label": "Agents",  "sub": "auto-detected on your $PATH" },
+        { "value": "3",  "label": "Commands","sub": "from clone to first artifact" }
+      ],
+      "caption": "Open Design v0.2.0 · Apache-2.0 · MMXXVI"
+    },
+
+    {
+      "kind": "section",
+      "roman": "II.",
+      "title": [
+        { "text": "How it " },
+        { "text": "feels", "em": true },
+        { "text": " to use it" },
+        { "text": ".", "dot": true }
+      ]
+    },
+
+    {
+      "kind": "content",
+      "layout": "right",
+      "eyebrow": "Method · Nº 05",
+      "title": [
+        { "text": "From " },
+        { "text": "signals", "em": true },
+        { "text": " to systems" },
+        { "text": ".", "dot": true }
+      ],
+      "body": "Every project moves through four iterative stages. The agent picks each stage's tools deterministically; you stay in control.",
+      "bullets": [
+        "01 · Detect — daemon scans $PATH, auto-loads skills + systems.",
+        "02 · Discover — 30s question form locks brand · audience · scale.",
+        "03 · Direct — pick one of 5 visual directions in OKLch + type stack.",
+        "04 · Deliver — write to disk, preview in sandbox, export anywhere."
+      ],
+      "image_slot": "method-1"
+    },
+
+    {
+      "kind": "content",
+      "layout": "left",
+      "eyebrow": "Selected work · Nº 06",
+      "title": [
+        { "text": "Skills that turn briefs into " },
+        { "text": "memorable", "em": true },
+        { "text": " artifacts" },
+        { "text": ".", "dot": true }
+      ],
+      "body": "From editorial decks to consumer dashboards — the same loop, different surface. Every output is a real file you can hand to a client tomorrow.",
+      "image_slot": "work-1"
+    },
+
+    {
+      "kind": "quote",
+      "quote": [
+        { "text": "Open Design helped us turn vague " },
+        { "text": "AI ideas", "em": true },
+        { "text": " into a visual system that felt " },
+        { "text": "sharp, believable,", "em": true },
+        { "text": " and genuinely new." }
+      ],
+      "author": { "initial": "m", "name": "Mina Kovac", "title": "Creative Director · North Form" },
+      "image_slot": "testimonial"
+    },
+
+    {
+      "kind": "cta",
+      "eyebrow": "Start a conversation · Nº 07",
+      "title": [
+        { "text": "Let's build something " },
+        { "text": "open", "em": true },
+        { "text": " and " },
+        { "text": "visually", "em": true },
+        { "text": " unforgettable" },
+        { "text": ".", "dot": true }
+      ],
+      "body": "Star us on GitHub, drop into the issues, or run pnpm tools-dev tonight. Three commands and the loop is yours.",
+      "primary":   { "label": "Star on GitHub",  "href": "https://github.com/nexu-io/open-design" },
+      "secondary": { "label": "Open an issue",   "href": "https://github.com/nexu-io/open-design/issues" }
+    },
+
+    {
+      "kind": "end",
+      "mega": [
+        { "text": "Open " },
+        { "text": "Design", "em": true },
+        { "text": "." }
+      ],
+      "footer": "Apache-2.0 · MMXXVI · Berlin · 52.5200° N · 13.4050° E"
+    }
+  ],
+
+  "imagery": {
+    "strategy": "bring-your-own",
+    "assets_path": "../editorial-collage/assets/",
+    "provider": "fal"
+  }
+}

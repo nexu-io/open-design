@@ -23,6 +23,7 @@ import {
   exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
+  openSandboxedPreviewInNewTab,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
@@ -907,10 +908,11 @@ function HtmlViewer({
 
   function openInNewTab() {
     if (!source) return;
-    const blob = new Blob([source], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openSandboxedPreviewInNewTab(source, exportTitle, {
+      deck: effectiveDeck,
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+    });
   }
 
   // Snapshot this project as a reusable template. The daemon snapshots
