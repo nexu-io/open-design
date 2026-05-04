@@ -68,8 +68,16 @@ export function createProjectEventsConnection(
       try {
         const data = JSON.parse((evt as MessageEvent).data) as ProjectFileChangeEvent;
         onChange(data);
-      } catch {
-        // ignore malformed payloads — we'll get more on the next change
+      } catch (err) {
+        // Ignore malformed payloads — we'll get more on the next change.
+        // Log in dev so payload-shape bugs don't go silent during testing.
+        if (
+          typeof process !== 'undefined' &&
+          process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[project-events] malformed file-changed payload', err);
+        }
       }
     });
     es.addEventListener('error', () => {

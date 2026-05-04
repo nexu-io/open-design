@@ -180,4 +180,84 @@ describe('project-watchers (real chokidar)', () => {
       await rm(root, { recursive: true, force: true });
     }
   }, 8_000);
+
+  it('attaches an error listener and survives an emitted error event', async () => {
+    // Regression for codex P1: chokidar's FSWatcher is an EventEmitter.
+    // Without an 'error' listener, transient FS faults (ENOSPC, EPERM,
+    // EMFILE on saturated inotify watches) would surface as unhandled
+    // exceptions and could crash the daemon — taking down all routes.
+    const { _internalWatcherForTests } = await import('../src/project-watchers.js');
+    const { root, projectId } = await makeProjectsRoot();
+    const events = [];
+    const sub = subscribe(root, projectId, (e) => events.push(e));
+    await sub.ready;
+
+    try {
+      const watcher = _internalWatcherForTests(root, projectId);
+      expect(watcher).toBeDefined();
+      // The listener must be registered — listenerCount > 0 proves it.
+      expect(watcher.listenerCount('error')).toBeGreaterThan(0);
+
+      // Behavioural: emitting an error must not throw or crash the process,
+      // and subsequent file events must still arrive on the same watcher.
+      expect(() => watcher.emit('error', new Error('synthetic ENOSPC'))).not.toThrow();
+      const filePath = path.join(root, projectId, 'after-error.txt');
+      await writeFile(filePath, 'still alive');
+      await waitFor(() => events.some((e) => e.path === 'after-error.txt'));
+    } finally {
+      await sub.unsubscribe();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 8_000);
+});
+
+describe('project-watchers (chokidar options)', () => {
+  it('does not follow symlinks out of the watch root (production factory)', async () => {
+    // Real chokidar test: create a symlink inside the project pointing to a
+    // sibling directory outside the project. Writing to the external sibling
+    // must NOT produce an event scoped to the symlink path, because
+    // followSymlinks is false.
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'od-symlink-'));
+    const { symlink } = await import('node:fs/promises');
+    const projectId = 'proj-' + Math.random().toString(36).slice(2, 10);
+    const projectRoot = path.join(dataRoot, projectId);
+    await mkdir(projectRoot, { recursive: true });
+    const externalDir = path.join(dataRoot, 'external');
+    await mkdir(externalDir, { recursive: true });
+    try {
+      await symlink(externalDir, path.join(projectRoot, 'linked'), 'dir');
+    } catch (err) {
+      // Some filesystems disallow symlinks. Skip without failing the suite.
+      if (
+        err &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err.code === 'EPERM' || err.code === 'ENOTSUP')
+      ) {
+        await rm(dataRoot, { recursive: true, force: true });
+        return;
+      }
+      throw err;
+    }
+
+    const events = [];
+    const sub = subscribe(dataRoot, projectId, (e) => events.push(e));
+    await sub.ready;
+
+    try {
+      // Write to a file via the external path. With followSymlinks: false,
+      // chokidar isn't traversing the symlink, so no event with a "linked/"
+      // prefix should arrive.
+      await writeFile(path.join(externalDir, 'leaked.txt'), 'leak');
+      // Settle: write a real in-project file to give chokidar something to do.
+      await writeFile(path.join(projectRoot, 'real.txt'), 'real');
+      await waitFor(() => events.some((e) => e.path === 'real.txt'));
+
+      const linkedEvents = events.filter((e) => e.path.startsWith('linked/'));
+      expect(linkedEvents).toEqual([]);
+    } finally {
+      await sub.unsubscribe();
+      await rm(dataRoot, { recursive: true, force: true });
+    }
+  }, 8_000);
 });

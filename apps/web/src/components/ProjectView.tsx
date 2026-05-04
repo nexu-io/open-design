@@ -872,13 +872,17 @@ export function ProjectView({
         if (ev.kind === 'tool_use' && (ev.name === 'Write' || ev.name === 'Edit')) {
           const filePath = (ev.input as { file_path?: unknown } | null)?.file_path;
           if (typeof filePath === 'string' && filePath.length > 0) {
-            const base = filePath.split('/').pop() || filePath;
-            pendingWritesRef.current.set(ev.id, base);
+            // Preserve the full path so decideAutoOpenAfterWrite can do a
+            // path-suffix match against the project's relative file paths.
+            // Reducing to a basename here would lose the segment alignment
+            // we need to disambiguate same-basename collisions across the
+            // project tree and outside it.
+            pendingWritesRef.current.set(ev.id, filePath);
           }
         }
         if (ev.kind === 'tool_result') {
-          const base = pendingWritesRef.current.get(ev.toolUseId);
-          if (base) {
+          const filePath = pendingWritesRef.current.get(ev.toolUseId);
+          if (filePath) {
             pendingWritesRef.current.delete(ev.toolUseId);
             if (!ev.isError) {
               // Refresh first so FileWorkspace's file list (and the tab
@@ -887,7 +891,7 @@ export function ProjectView({
               // file list — otherwise an out-of-project Write (e.g. an
               // upstream repo edit) would spawn a permanent placeholder tab.
               void refreshProjectFiles().then((nextFiles) => {
-                const decision = decideAutoOpenAfterWrite(base, nextFiles);
+                const decision = decideAutoOpenAfterWrite(filePath, nextFiles);
                 if (decision.shouldOpen && decision.fileName) {
                   requestOpenFile(decision.fileName);
                 }

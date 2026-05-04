@@ -39,6 +39,21 @@ function makeEntry(dir, opts) {
     ignoreInitial: true,
     awaitWriteFinish: opts.awaitWriteFinish,
     persistent: true,
+    // Don't follow symlinks out of the project root. Even though the relative-
+    // path ignore predicate keeps emitted events project-scoped, an unhandled
+    // symlink would still cost descriptors and surface external FS activity.
+    followSymlinks: false,
+  });
+
+  // chokidar's FSWatcher is an EventEmitter. Without an `error` listener,
+  // transient FS faults (ENOSPC, EPERM, EMFILE on saturated inotify watches)
+  // would surface as unhandled exceptions and could crash the daemon — taking
+  // every other route down with it. Log and keep the watcher alive; refcount
+  // cleanup is unaffected.
+  watcher.on('error', (err) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[project-watchers] chokidar error in', dir, err);
+    }
   });
 
   let resolveReady;
@@ -58,7 +73,15 @@ function makeEntry(dir, opts) {
     if (!rel || rel.startsWith('..')) return;
     const evt = { type: 'file-changed', path: rel.split(path.sep).join('/'), kind };
     for (const cb of entry.subscribers) {
-      try { cb(evt); } catch { /* a buggy subscriber must not poison siblings */ }
+      try {
+        cb(evt);
+      } catch (err) {
+        // A buggy subscriber must not poison siblings. Log in dev so the bug
+        // doesn't go silent during local testing.
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[project-watchers] subscriber threw on', evt.path, err);
+        }
+      }
     }
   };
 
@@ -120,4 +143,10 @@ export async function _resetForTests() {
 /** Test-only: number of active watchers. */
 export function _activeWatcherCount() {
   return registry.size;
+}
+
+/** Test-only: return the chokidar FSWatcher for a given project's directory. */
+export function _internalWatcherForTests(projectsRoot, projectId) {
+  const dir = projectDir(projectsRoot, projectId);
+  return registry.get(dir)?.watcher;
 }
