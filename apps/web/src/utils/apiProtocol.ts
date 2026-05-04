@@ -18,6 +18,15 @@ export function apiProtocolLabel(protocol: ApiProtocol | undefined): string {
   return API_PROTOCOL_LABELS[protocol ?? 'anthropic'];
 }
 
+export function apiProtocolModelLabel(
+  protocol: ApiProtocol | undefined,
+  model: string,
+): string {
+  const label = apiProtocolLabel(protocol);
+  const trimmed = model.trim();
+  return trimmed ? `${label} · ${trimmed}` : label;
+}
+
 export function apiProtocolAgentId(protocol: ApiProtocol | undefined): string {
   return API_PROTOCOL_AGENT_IDS[protocol ?? 'anthropic'];
 }

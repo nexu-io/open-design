@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
-import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
+import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 
 export interface PreviewView {
@@ -10,6 +10,9 @@ export interface PreviewView {
   // Undefined means "not yet requested" — parent should react to onView and
   // begin a fetch. Both states keep the iframe blank.
   html: string | null | undefined;
+  // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
+  // print-all-slides behavior survive the sandboxed export path.
+  deck?: boolean;
 }
 
 export interface PreviewSidebar {
@@ -197,9 +200,10 @@ export function PreviewModal({
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];
   const activeHtml = activeView?.html ?? null;
+  const activeDeck = activeView?.deck ?? false;
   const srcDoc = useMemo(
-    () => (activeHtml ? buildSrcdoc(activeHtml) : ''),
-    [activeHtml],
+    () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck }) : ''),
+    [activeHtml, activeDeck],
   );
   const exportTitle = exportTitleFor(activeView?.id ?? '');
 
@@ -223,10 +227,7 @@ export function PreviewModal({
 
   function openInNewTab() {
     if (!activeHtml) return;
-    const blob = new Blob([activeHtml], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openSandboxedPreviewInNewTab(activeHtml, exportTitle, { deck: activeDeck });
   }
 
   function enterFullscreen() {
@@ -314,7 +315,7 @@ export function PreviewModal({
                     role="menuitem"
                     onClick={() => {
                       setShareOpen(false);
-                      if (activeHtml) exportAsPdf(activeHtml, exportTitle);
+                      if (activeHtml) exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
                     }}
                   >
                     <span className="share-menu-icon">📄</span>
@@ -388,7 +389,7 @@ export function PreviewModal({
                 <iframe
                   key={activeView?.id ?? 'view'}
                   title={`${title} ${activeView?.label ?? ''}`}
-                  sandbox="allow-scripts allow-same-origin"
+                  sandbox="allow-scripts"
                   srcDoc={srcDoc}
                 />
               </div>

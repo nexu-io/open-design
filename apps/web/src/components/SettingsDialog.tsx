@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import { AgentIcon } from './AgentIcon';
@@ -15,7 +15,7 @@ import {
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
-import type { AgentInfo, ApiProtocol, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
+import type { AgentInfo, ApiProtocol, ApiProtocolConfig, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
@@ -49,7 +49,9 @@ interface Props {
   defaultSection?: SettingsSection;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
-  onRefreshAgents: () => void;
+  onRefreshAgents: (
+    options?: { throwOnError?: boolean },
+  ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
 }
 
 const SUGGESTED_MODELS_BY_PROTOCOL = {
@@ -103,12 +105,11 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
 const API_PROTOCOL_TABS: Array<{
   id: ApiProtocol;
   title: string;
-  meta: string;
 }> = [
-  { id: 'anthropic', title: 'Anthropic API', meta: '/v1/messages' },
-  { id: 'openai', title: 'OpenAI API', meta: '/v1/chat/completions' },
-  { id: 'azure', title: 'Azure OpenAI', meta: 'deployments/chat/completions' },
-  { id: 'google', title: 'Google Gemini', meta: ':streamGenerateContent' },
+  { id: 'anthropic', title: 'Anthropic' },
+  { id: 'openai', title: 'OpenAI' },
+  { id: 'azure', title: 'Azure OpenAI' },
+  { id: 'google', title: 'Google Gemini' },
 ];
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -124,6 +125,116 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   azure: 'azure key',
   google: 'AIza...',
 };
+
+type RescanNotice =
+  | { kind: 'success'; count: number }
+  | { kind: 'error' };
+
+function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
+  const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
+  return {
+    apiKey: '',
+    baseUrl: provider?.baseUrl ?? '',
+    model: provider?.model ?? '',
+    apiVersion: '',
+    apiProviderBaseUrl: provider ? provider.baseUrl : null,
+  };
+}
+
+function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
+  return {
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    model: config.model,
+    apiVersion: config.apiVersion ?? '',
+    apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+  };
+}
+
+function applyApiProtocolConfig(
+  config: AppConfig,
+  protocol: ApiProtocol,
+  apiConfig: ApiProtocolConfig,
+): AppConfig {
+  return {
+    ...config,
+    apiProtocol: protocol,
+    apiKey: apiConfig.apiKey,
+    baseUrl: apiConfig.baseUrl,
+    model: apiConfig.model,
+    apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
+    apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
+  };
+}
+
+export function isValidApiBaseUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    const hostname = url.hostname.toLowerCase();
+    const isLoopback =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]';
+    const isPrivateIpv4 =
+      hostname.startsWith('169.254.') ||
+      hostname.startsWith('10.') ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      Boolean(url.hostname) &&
+      (isLoopback || !isPrivateIpv4)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function updateCurrentApiProtocolConfig(
+  config: AppConfig,
+  patch: Partial<ApiProtocolConfig>,
+): AppConfig {
+  const protocol = config.apiProtocol ?? 'anthropic';
+  const nextApiConfig: ApiProtocolConfig = {
+    ...currentApiProtocolConfig(config),
+    ...patch,
+  };
+  return applyApiProtocolConfig(
+    {
+      ...config,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        [protocol]: nextApiConfig,
+      },
+    },
+    protocol,
+    nextApiConfig,
+  );
+}
+
+export function switchApiProtocolConfig(
+  config: AppConfig,
+  protocol: ApiProtocol,
+): AppConfig {
+  const currentProtocol = config.apiProtocol ?? 'anthropic';
+  const apiProtocolConfigs = {
+    ...(config.apiProtocolConfigs ?? {}),
+    [currentProtocol]: currentApiProtocolConfig(config),
+  };
+  const nextApiConfig =
+    apiProtocolConfigs[protocol] ?? defaultApiProtocolConfig(protocol);
+  return applyApiProtocolConfig(
+    {
+      ...config,
+      mode: 'api',
+      apiProtocolConfigs,
+    },
+    protocol,
+    nextApiConfig,
+  );
+}
 
 export function SettingsDialog({
   initial,
@@ -158,6 +269,9 @@ export function SettingsDialog({
     defaultSection ?? 'execution',
   );
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
+  const [agentRescanRunning, setAgentRescanRunning] = useState(false);
+  const [agentRescanNotice, setAgentRescanNotice] =
+    useState<RescanNotice | null>(null);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
   // If the daemon goes offline mid-edit, force API mode so the UI doesn't
@@ -209,35 +323,50 @@ export function SettingsDialog({
   );
 
   const setMode = (mode: ExecMode) => setCfg((c) => ({ ...c, mode }));
-  const setApiProtocol = (protocol: ApiProtocol) => {
-    setCfg((c) => {
-      const currentProvider = c.apiProviderBaseUrl
-        ? KNOWN_PROVIDERS.find((p) => p.baseUrl === c.apiProviderBaseUrl)
-        : undefined;
-      const stillOnSelectedProvider = Boolean(currentProvider && c.baseUrl === currentProvider.baseUrl);
-      const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
-      return {
-        ...c,
-        mode: 'api',
-        apiProtocol: protocol,
-        ...(stillOnSelectedProvider && provider
-          ? { baseUrl: provider.baseUrl, model: provider.model, apiProviderBaseUrl: provider.baseUrl }
-          : { apiProviderBaseUrl: null }),
-      };
-    });
+  const setApiProtocol = (protocol: ApiProtocol) =>
+    setCfg((c) => switchApiProtocolConfig(c, protocol));
+  const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
+    setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
+  const handleRefreshAgents = async () => {
+    if (agentRescanRunning) return;
+    setAgentRescanRunning(true);
+    setAgentRescanNotice(null);
+    try {
+      const refreshed = await onRefreshAgents({ throwOnError: true });
+      const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
+      setAgentRescanNotice({
+        kind: 'success',
+        count: nextAgents.filter((a) => a.available).length,
+      });
+    } catch {
+      setAgentRescanNotice({ kind: 'error' });
+    } finally {
+      setAgentRescanRunning(false);
+    }
   };
 
+  const apiProtocol = cfg.apiProtocol ?? 'anthropic';
+  const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
+  const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const canSave =
     cfg.mode === 'daemon'
       ? Boolean(cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available)
-      : Boolean(cfg.apiKey.trim() && cfg.model.trim() && cfg.baseUrl.trim());
+      : Boolean(
+          cfg.apiKey.trim() &&
+          cfg.model.trim() &&
+          baseUrlValid,
+        );
 
-  const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const protocolProviders = useMemo(
     () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
     [apiProtocol],
   );
-  const selectedProviderIndex = protocolProviders.findIndex((p) => p.baseUrl === cfg.baseUrl);
+  const selectedProviderIndex =
+    cfg.apiProviderBaseUrl == null
+      ? -1
+      : protocolProviders.findIndex(
+          (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
+        );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const apiModelOptions = useMemo(
     () => Array.from(new Set(
@@ -304,7 +433,7 @@ export function SettingsDialog({
               <Icon name="sliders" size={18} />
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
-                <small>{t('settings.codeAgent')}</small>
+                <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
               </span>
             </button>
             <button
@@ -381,7 +510,7 @@ export function SettingsDialog({
                 className="seg-control"
                 role="tablist"
                 aria-label={t('settings.modeAria')}
-                style={{ gridTemplateColumns: `repeat(${API_PROTOCOL_TABS.length + 1}, 1fr)` }}
+                style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
               >
                 <button
                   type="button"
@@ -396,43 +525,87 @@ export function SettingsDialog({
                       : t('settings.modeDaemonOffline')
                   }
                 >
-                  <span className="seg-title">{t('settings.modeDaemon')}</span>
+                  <span className="seg-title">{t('settings.localCli')}</span>
                   <span className="seg-meta">
                     {daemonLive
                       ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
                       : t('settings.modeDaemonOfflineMeta')}
                   </span>
                 </button>
-                {API_PROTOCOL_TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={cfg.mode === 'api' && apiProtocol === tab.id}
-                    className={'seg-btn' + (cfg.mode === 'api' && apiProtocol === tab.id ? ' active' : '')}
-                    onClick={() => setApiProtocol(tab.id)}
-                  >
-                    <span className="seg-title">{tab.title}</span>
-                    <span className="seg-meta">{tab.meta}</span>
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cfg.mode === 'api'}
+                  className={'seg-btn' + (cfg.mode === 'api' ? ' active' : '')}
+                  onClick={() => setMode('api')}
+                >
+                  <span className="seg-title">{t('settings.modeApiMeta')}</span>
+                  <span className="seg-meta">{t('settings.modeApi')}</span>
+                </button>
               </div>
+              {cfg.mode === 'api' ? (
+                <div
+                  className="protocol-chips"
+                  role="tablist"
+                  aria-label={t('settings.protocolAria')}
+                >
+                  {API_PROTOCOL_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={apiProtocol === tab.id}
+                      className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
+                      onClick={() => setApiProtocol(tab.id)}
+                    >
+                      {tab.title}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
           {cfg.mode === 'daemon' ? (
             <section className="settings-section">
               <div className="section-head">
                 <div>
-                  <h3>{t('settings.codeAgent')}</h3>
+                  <h3>{t('settings.localCli')}</h3>
                   <p className="hint">{t('settings.codeAgentHint')}</p>
                 </div>
                 <button
                   type="button"
-                  className="ghost icon-btn"
-                  onClick={onRefreshAgents}
+                  className={
+                    'ghost icon-btn settings-rescan-btn' +
+                    (agentRescanRunning ? ' loading' : '')
+                  }
+                  onClick={() => void handleRefreshAgents()}
+                  disabled={agentRescanRunning}
                   title={t('settings.rescanTitle')}
                 >
-                  {t('settings.rescan')}
+                  {agentRescanRunning ? (
+                    <>
+                      <Icon name="spinner" size={13} className="icon-spin" />
+                      <span>{t('settings.rescanRunning')}</span>
+                    </>
+                  ) : (
+                    t('settings.rescan')
+                  )}
                 </button>
               </div>
+              {agentRescanNotice ? (
+                <p
+                  className={
+                    'settings-rescan-status ' + agentRescanNotice.kind
+                  }
+                  role={
+                    agentRescanNotice.kind === 'error' ? 'alert' : 'status'
+                  }
+                >
+                  {agentRescanNotice.kind === 'success'
+                    ? t('settings.rescanSuccess', {
+                        count: agentRescanNotice.count,
+                      })
+                    : t('settings.rescanFailed')}
+                </p>
+              ) : null}
               {agents.length === 0 ? (
                 <div className="empty-card">
                   {t('settings.noAgentsDetected')}
@@ -592,31 +765,35 @@ export function SettingsDialog({
           ) : (
             <section className="settings-section">
               <div className="section-head">
-                <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                <div>
+                  <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                </div>
               </div>
               <label className="field">
-                <span className="field-label">Quick fill provider</span>
+                <span className="field-label">{t('settings.quickFillProvider')}</span>
                 <select
                   value={selectedProviderIndex >= 0 ? String(selectedProviderIndex) : ''}
                   onChange={(e) => {
                     if (e.target.value === '') {
-                      setCfg((c) => ({ ...c, baseUrl: '', model: '', apiProviderBaseUrl: null }));
+                      updateApiConfig({
+                        baseUrl: '',
+                        model: '',
+                        apiProviderBaseUrl: null,
+                      });
                       return;
                     }
                     const idx = Number(e.target.value);
                     if (!isNaN(idx) && protocolProviders[idx]) {
                       const p = protocolProviders[idx]!;
-                      setCfg((c) => ({
-                        ...c,
-                        apiProtocol: p.protocol,
+                      updateApiConfig({
                         baseUrl: p.baseUrl,
                         model: p.model,
                         apiProviderBaseUrl: p.baseUrl,
-                      }));
+                      });
                     }
                   }}
                 >
-                  <option value="">Custom provider</option>
+                  <option value="">{t('settings.customProvider')}</option>
                   {protocolProviders.map((p, i) => (
                     <option key={p.label} value={i}>{p.label}</option>
                   ))}
@@ -629,7 +806,7 @@ export function SettingsDialog({
                     type={showApiKey ? 'text' : 'password'}
                     placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
                     value={cfg.apiKey}
-                    onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
+                    onChange={(e) => updateApiConfig({ apiKey: e.target.value })}
                     autoFocus
                   />
                   <button
@@ -645,14 +822,18 @@ export function SettingsDialog({
                 </div>
               </label>
               <label className="field">
-                <span className="field-label">{t('settings.model')}</span>
+                <span className="field-label">
+                  {apiProtocol === 'azure'
+                    ? t('settings.azureDeploymentModel')
+                    : t('settings.model')}
+                </span>
                 <select
                   value={apiModelSelectValue}
                   onChange={(e) => {
                     if (e.target.value === CUSTOM_MODEL_SENTINEL) {
-                      setCfg((c) => ({ ...c, model: '' }));
+                      updateApiConfig({ model: '' });
                     } else {
-                      setCfg((c) => ({ ...c, model: e.target.value }));
+                      updateApiConfig({ model: e.target.value });
                     }
                   }}
                 >
@@ -663,7 +844,10 @@ export function SettingsDialog({
                 </select>
               </label>
               {!selectedProvider ? (
-                <p className="hint">These are suggested models for this protocol. Your provider may support different models.</p>
+                <p className="hint">{t('settings.suggestedModelsHint')}</p>
+              ) : null}
+              {apiProtocol === 'azure' ? (
+                <p className="hint">{t('settings.azureDeploymentModelHint')}</p>
               ) : null}
               {apiModelCustom || apiModelSelectValue === CUSTOM_MODEL_SENTINEL ? (
                 <label className="field">
@@ -672,26 +856,40 @@ export function SettingsDialog({
                     type="text"
                     value={cfg.model}
                     placeholder={t('settings.modelCustomPlaceholder')}
-                    onChange={(e) => setCfg({ ...cfg, model: e.target.value.trim() })}
+                    onChange={(e) => updateApiConfig({ model: e.target.value.trim() })}
                   />
                 </label>
               ) : null}
               <label className="field">
                 <span className="field-label">{t('settings.baseUrl')}</span>
                 <input
-                  type="text"
+                  type="url"
+                  inputMode="url"
                   value={cfg.baseUrl}
-                  onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value, apiProviderBaseUrl: null })}
+                  aria-invalid={baseUrlInvalid || undefined}
+                  aria-describedby={
+                    baseUrlInvalid ? 'settings-base-url-error' : undefined
+                  }
+                  onChange={(e) => updateApiConfig({ baseUrl: e.target.value, apiProviderBaseUrl: null })}
                 />
+                {baseUrlInvalid ? (
+                  <span
+                    id="settings-base-url-error"
+                    className="settings-field-error"
+                    role="alert"
+                  >
+                    {t('settings.baseUrlInvalid')}
+                  </span>
+                ) : null}
               </label>
               {apiProtocol === 'azure' ? (
                 <label className="field">
-                  <span className="field-label">API version</span>
+                  <span className="field-label">{t('settings.apiVersion')}</span>
                   <input
                     type="text"
                     value={cfg.apiVersion ?? ''}
                     placeholder="2024-10-21"
-                    onChange={(e) => setCfg({ ...cfg, apiVersion: e.target.value.trim() })}
+                    onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
                   />
                 </label>
               ) : null}
