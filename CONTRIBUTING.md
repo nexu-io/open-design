@@ -4,7 +4,7 @@ Thanks for thinking about contributing. OD is small on purpose — most of the v
 
 This guide tells you exactly where to look for each type of contribution and what bar a PR has to clear before we merge it.
 
-<p align="center"><b>English</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><b>English</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -16,7 +16,7 @@ This guide tells you exactly where to look for each type of contribution and wha
 | Make OD speak a new brand's visual language | a **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | one Markdown file |
 | Hook up a new coding-agent CLI | an **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | ~10 lines in one array |
 | Add a feature, fix a bug, lift a UX pattern from [`open-codesign`][ocod] | code | `apps/web/src/`, `apps/daemon/` | normal PR |
-| Improve docs, port a section to Deutsch / 中文, fix typos | docs | `README.md`, `README.de.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | one PR |
+| Improve docs, port a section to Français / Deutsch / 中文, fix typos | docs | `README.md`, `README.fr.md`, `README.de.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | one PR |
 
 If you're not sure which bucket your idea is in, [open a discussion / issue first](https://github.com/nexu-io/open-design/issues/new) and we'll point you at the right surface.
 
