@@ -643,13 +643,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
     return new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        // When bound to a specific non-loopback address (e.g. Tailscale,
-        // LAN IP, or 0.0.0.0), allow browser requests from that address
-        // too so the documented --host escape hatch remains usable.
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
+      [
+        ...ports.flatMap((p) => [
+          ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+          // When bound to a specific non-loopback address (e.g. Tailscale,
+          // LAN IP, or 0.0.0.0), allow browser requests from that address
+          // too so the documented --host escape hatch remains usable.
+          ...schemes.map((s) => `${s}://${host}:${p}`),
+        ]),
+        ...readAllowedOriginsEnv(),
+      ],
     );
   }
 
@@ -3231,10 +3234,13 @@ export function isLocalSameOrigin(req, port) {
   const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
   const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
   const allowedHosts = new Set(
-    ports.flatMap((p) => [
-      ...loopbackHosts.map((h) => `${h}:${p}`),
-      `${bindHost}:${p}`,
-    ]),
+    [
+      ...ports.flatMap((p) => [
+        ...loopbackHosts.map((h) => `${h}:${p}`),
+        `${bindHost}:${p}`,
+      ]),
+      ...readAllowedOriginHostsEnv(),
+    ],
   );
 
   // Reject unknown Host first (DNS rebinding / Host header attack)
@@ -3245,10 +3251,41 @@ export function isLocalSameOrigin(req, port) {
 
   const schemes = ['http', 'https'];
   const allowedOrigins = new Set(
-    ports.flatMap((p) => [
-      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
-    ]),
+    [
+      ...ports.flatMap((p) => [
+        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+        ...schemes.map((s) => `${s}://${bindHost}:${p}`),
+      ]),
+      ...readAllowedOriginsEnv(),
+    ],
   );
   return allowedOrigins.has(String(origin));
+}
+
+function readAllowedOriginsEnv() {
+  const raw = process.env.OD_ALLOWED_ORIGINS || '';
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      try {
+        return new URL(entry).origin;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function readAllowedOriginHostsEnv() {
+  return readAllowedOriginsEnv()
+    .map((origin) => {
+      try {
+        return new URL(origin).host;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
