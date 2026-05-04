@@ -1153,12 +1153,13 @@ code {
 /* Segmented control */
 .seg-control {
   display: grid;
-  grid-template-columns: repeat(var(--seg-cols, 2), 1fr);
+  grid-template-columns: repeat(var(--seg-cols, 2), minmax(0, 1fr));
   gap: 6px;
   padding: 4px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  min-width: 0;
 }
 .seg-btn {
   display: flex;
@@ -1171,6 +1172,7 @@ code {
   background: transparent;
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
 .seg-btn:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, 0.5); }
 .seg-btn.active {
@@ -1178,11 +1180,82 @@ code {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
 }
-.seg-btn .seg-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.seg-btn .seg-meta { font-size: 11px; color: var(--text-muted); letter-spacing: 0.01em; }
+.seg-btn .seg-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.seg-btn .seg-meta { font-size: 11px; color: var(--text-muted); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* Secondary protocol selector — pill chips, wraps to multiple rows */
+.protocol-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 0;
+  min-width: 0;
+}
+.protocol-chip {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.protocol-chip:hover:not(.active) {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.protocol-chip.active {
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--accent-tint) 100%);
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
+.settings-rescan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  justify-content: center;
+}
+.settings-rescan-btn.loading {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.settings-rescan-status {
+  margin: -4px 0 0;
+  padding: 7px 10px;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.settings-rescan-status.error {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--red);
+}
+.settings-field-error {
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.4;
+}
 
 .settings-about-list {
   margin: 0;
@@ -1288,6 +1361,10 @@ code {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+}
+.section-head > div {
+  max-width: 100%;
+  min-width: 0;
 }
 .section-head h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
 .section-head .hint { margin-top: 2px; }

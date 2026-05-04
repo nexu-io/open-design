@@ -34,6 +34,7 @@ import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
+import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -2228,6 +2229,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let skillName;
     let skillMode;
     let skillCraftRequires = [];
+    let activeSkillDir = null;
     if (effectiveSkillId) {
       const skill = (await listSkills(SKILLS_DIR)).find(
         (s) => s.id === effectiveSkillId,
@@ -2236,6 +2238,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillBody = skill.body;
         skillName = skill.name;
         skillMode = skill.mode;
+        activeSkillDir = skill.dir;
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
       }
@@ -2267,7 +2270,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
-    return composeSystemPrompt({
+    const prompt = composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
@@ -2278,6 +2281,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       metadata,
       template,
     });
+    // The chat handler also needs to know where the active skill lives
+    // on disk so it can stage a per-project copy of its side files
+    // before spawning the agent. Returning that here avoids a second
+    // `listSkills()` scan in `startChatRun`.
+    return { prompt, activeSkillDir };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -2391,11 +2399,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const daemonSystemPrompt = await composeDaemonSystemPrompt({
-      projectId,
-      skillId,
-      designSystemId,
-    });
+    const { prompt: daemonSystemPrompt, activeSkillDir } =
+      await composeDaemonSystemPrompt({
+        projectId,
+        skillId,
+        designSystemId,
+      });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -2412,13 +2421,51 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : '',
     ].join('');
 
-    // Skill seeds (`skills/<id>/assets/template.html`) and design-system
-    // specs (`design-systems/<id>/DESIGN.md`) live outside the project cwd.
-    // The composed system prompt asks the agent to Read them via absolute
-    // paths in the skill-root preamble — without an explicit allowlist,
-    // Claude Code blocks those reads (issue #6: "no permission to read
-    // skills template"). We surface both roots so any agent that honours
-    // `--add-dir` can resolve those side files.
+    // Make skill side files reachable through three layers, in order of
+    // preference. The skill preamble emitted by `withSkillRootPreamble()`
+    // advertises both the cwd-relative path (1) and the absolute path
+    // (2/3) so the agent can pick whichever works.
+    //
+    //   1. CWD-relative copy. Stage the *active* skill into
+    //      `<cwd>/.od-skills/<folder>/` so any agent CLI — not just the
+    //      ones that honour `--add-dir` — can reach those files via a
+    //      path inside its working directory. We copy (not symlink) so
+    //      the staged directory is a true write barrier — agents cannot
+    //      mutate the shipped repo resource through their cwd.
+    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
+    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
+    //      path in the preamble is reachable when staging fails (e.g. the
+    //      project has no on-disk cwd, or fs.cp errored).
+    //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
+    //      `cwd: PROJECT_ROOT` — there the absolute path is already an
+    //      in-cwd path, so neither (1) nor (2) is required for it to
+    //      resolve.
+    //
+    // Design systems are *not* staged here. Their bodies are read by the
+    // daemon and folded into the system prompt directly (see
+    // `readDesignSystem`), so an agent never has to open them via the
+    // filesystem.
+    if (cwd && activeSkillDir) {
+      const result = await stageActiveSkill(
+        cwd,
+        path.basename(activeSkillDir),
+        activeSkillDir,
+        (msg) => console.warn(msg),
+      );
+      if (!result.staged) {
+        console.warn(
+          `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+        );
+      }
+    }
+    // Resolve the agent's effective working directory once and use it
+    // everywhere the agent could read it (buildArgs runtimeContext, spawn
+    // cwd, ACP session new). Falling back to PROJECT_ROOT — rather than
+    // letting `spawn` inherit the daemon process cwd — is what makes the
+    // absolute-path fallback in the skill preamble actually in-cwd for
+    // no-project runs (packaged daemons / service launches do not start
+    // their working directory from the workspace root).
+    const effectiveCwd = cwd ?? PROJECT_ROOT;
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
       fs.existsSync(d),
     );
@@ -2464,7 +2511,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd },
+      { cwd: effectiveCwd },
     );
     const send = (event, data) => design.runs.emit(run, event, data);
 
@@ -2512,7 +2559,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
-        cwd: cwd || undefined,
+        cwd: effectiveCwd,
         shell: false,
         // Required when invocation wraps a Windows .cmd/.bat shim through
         // cmd.exe; without this, Node re-escapes the inner command line and
@@ -2569,7 +2616,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
-        cwd: cwd || PROJECT_ROOT,
+        cwd: effectiveCwd,
         model: safeModel,
         send,
       });
@@ -2577,7 +2624,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       acpSession = attachAcpSession({
         child,
         prompt: composed,
-        cwd: cwd || PROJECT_ROOT,
+        cwd: effectiveCwd,
         model: safeModel,
         send,
       });
@@ -2674,12 +2721,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return { error: 'Only http/https allowed' };
     }
+    const hostname = parsed.hostname.toLowerCase();
+    const isLoopback =
+      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
     if (
-      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
-      parsed.hostname.startsWith('169.254.') ||
-      parsed.hostname.startsWith('10.') ||
-      /^192\.168\./.test(parsed.hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)
+      !isLoopback &&
+      (hostname.startsWith('169.254.') ||
+        hostname.startsWith('10.') ||
+        /^192\.168\./.test(hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
     ) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }
@@ -2708,10 +2758,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   const appendVersionedApiPath = (baseUrl, path) => {
     const url = new URL(baseUrl);
-    url.pathname = url.pathname.replace(/\/+$/, '');
-    url.pathname = /\/v\d+$/.test(url.pathname)
-      ? `${url.pathname}${path}`
-      : `${url.pathname}/v1${path}`;
+    const pathname = url.pathname.replace(/\/+$/, '');
+    url.pathname = /\/v\d+$/.test(pathname)
+      ? `${pathname}${path}`
+      : `${pathname}/v1${path}`;
     return url.toString();
   };
 

@@ -50,6 +50,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   // saved baseUrl/model before applying the current migration version.
   apiProtocol: 'anthropic',
   apiVersion: '',
+  apiProtocolConfigs: {},
   configMigrationVersion: CONFIG_MIGRATION_VERSION,
   apiProviderBaseUrl: 'https://api.anthropic.com',
   agentId: null,
@@ -229,6 +230,7 @@ export function loadConfig(): AppConfig {
     const merged: AppConfig = {
       ...DEFAULT_CONFIG,
       ...parsed,
+      apiProtocolConfigs: { ...(parsed.apiProtocolConfigs ?? {}) },
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       pet: normalizePet(parsed.pet),
@@ -240,7 +242,7 @@ export function loadConfig(): AppConfig {
       // protocol so old OpenAI-compatible endpoints keep routing correctly.
       // This is version-gated instead of only field-gated so a later imported
       // legacy config can be migrated when it is loaded.
-      if (!parsedHasApiProtocol && merged.mode === 'api') {
+      if (!parsedHasApiProtocol) {
         merged.apiProtocol = inferApiProtocol(merged.model, merged.baseUrl);
         // Also set apiProviderBaseUrl so setApiProtocol() can correctly identify
         // whether the user is on a known provider and switch defaults appropriately.

@@ -330,6 +330,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               id: 'preview',
               label: t('examples.previewLabel'),
               html: previews[previewSkill.id],
+              deck: previewSkill.mode === 'deck',
             },
           ]}
           exportTitleFor={() => previewSkill.name}

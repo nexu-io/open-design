@@ -43,6 +43,14 @@ export interface MediaProviderCredentials {
   baseUrl: string;
 }
 
+export interface ApiProtocolConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  apiVersion?: string;
+  apiProviderBaseUrl?: string | null;
+}
+
 // Per-CLI model + reasoning the user picked in the model menu. Each agent
 // keeps its own slot so flipping between Codex and Gemini doesn't reset the
 // other one's choice. Missing entries fall back to the agent's first
@@ -146,6 +154,7 @@ export interface AppConfig {
   model: string;
   apiProtocol?: ApiProtocol;
   apiVersion?: string;
+  apiProtocolConfigs?: Partial<Record<ApiProtocol, ApiProtocolConfig>>;
   /** Internal config schema/migration version for localStorage upgrades. */
   configMigrationVersion?: number;
   /** Base URL of the selected known provider; cleared once the user customizes provider fields. */

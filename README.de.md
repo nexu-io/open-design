@@ -25,7 +25,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <b>Deutsch</b> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a></p>
+<p align="center"><a href="README.md">English</a> · <b>Deutsch</b> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -691,7 +691,7 @@ Issues, PRs, neue Skills und neue Design Systems sind willkommen. Die wirkungsvo
 - **Add a design system** — legen Sie ein `DESIGN.md` in [`design-systems/<brand>/`](design-systems/) nach dem 9-Section Schema ab.
 - **Wire up a new coding-agent CLI** — ein Eintrag in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts).
 
-Vollständiger Walkthrough, Merge-Messlatte, Code Style und was wir nicht annehmen → [`CONTRIBUTING.de.md`](CONTRIBUTING.de.md) ([English](CONTRIBUTING.md), [简体中文](CONTRIBUTING.zh-CN.md)).
+Vollständiger Walkthrough, Merge-Messlatte, Code Style und was wir nicht annehmen → [`CONTRIBUTING.de.md`](CONTRIBUTING.de.md) ([English](CONTRIBUTING.md), [Français](CONTRIBUTING.fr.md), [简体中文](CONTRIBUTING.zh-CN.md)).
 
 ## Mitwirkende
 

@@ -31,17 +31,22 @@ READMEs covers any locale that has a translated README, dict or no dict.
 | `fa`    | فارسی                | `fa.ts`                | —                   | active |
 | `hu`    | Magyar               | `hu.ts`                | —                   | active |
 | `ja`    | 日本語               | `ja.ts`                | `README.ja-JP.md`   | active |
-| `ko`    | 한국어               | —                      | `README.ko.md`      | active (README only) |
+| `ko`    | 한국어               | `ko.ts`                | `README.ko.md`      | active |
+| `pl`    | Polski               | `pl.ts`                | —                   | active |
 | `pt-BR` | Português (Brasil)   | `pt-BR.ts`             | —                   | active |
 | `ru`    | Русский              | `ru.ts`                | `README.ru.md`      | active |
 | `zh-CN` | 简体中文             | `zh-CN.ts`             | `README.zh-CN.md`   | active |
-| `zh-TW` | 繁體中文             | `zh-TW.ts`             | (in flight, [#194](https://github.com/nexu-io/open-design/pull/194)) | active (UI dict) |
+| `zh-TW` | 繁體中文             | `zh-TW.ts`             | `README.zh-TW.md`   | active |
 | `fr`    | Français             | `fr.ts`                | `README.fr.md`      | active |
+| `uk`    | Українська           | `uk.ts`                | `README.uk.md`      | active |
 
 > A locale may ship a UI dict, a README, or both. The two surfaces are
 > independent — adding one without the other is a normal contribution.
 > The English locale is the source of truth; missing UI keys fall back
 > to English at runtime.
+> Locales may also add translated core docs or display-only metadata in
+> `apps/web/src/i18n/content*.ts`; keep those companion surfaces aligned
+> with the locale's active scope.
 
 ## Adding a new locale
 
