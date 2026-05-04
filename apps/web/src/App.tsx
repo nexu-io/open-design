@@ -285,8 +285,9 @@ export function App() {
   );
 
   const refreshAgents = useCallback(async () => {
-    const next = await fetchAgents();
+    const next = await fetchAgents({ throwOnError: true });
     setAgents(next);
+    return next;
   }, []);
 
   const handleCreateProject = useCallback(

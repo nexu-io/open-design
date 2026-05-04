@@ -50,6 +50,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   // saved baseUrl/model before applying the current migration version.
   apiProtocol: 'anthropic',
   apiVersion: '',
+  apiProtocolConfigs: {},
   configMigrationVersion: CONFIG_MIGRATION_VERSION,
   apiProviderBaseUrl: 'https://api.anthropic.com',
   agentId: null,
@@ -229,6 +230,7 @@ export function loadConfig(): AppConfig {
     const merged: AppConfig = {
       ...DEFAULT_CONFIG,
       ...parsed,
+      apiProtocolConfigs: { ...(parsed.apiProtocolConfigs ?? {}) },
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       pet: normalizePet(parsed.pet),
