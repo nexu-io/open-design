@@ -1,0 +1,49 @@
+{
+  "model": "gemini-3.1-flash-tts-preview",
+  "voice": "Charon",
+  "sampleRate": 24000,
+  "clips": [
+    {
+      "id": "voice1",
+      "file": "voice1.wav",
+      "start": 3.0,
+      "duration": 4.88,
+      "text": "钱学森穿过旧金山冷雾。"
+    },
+    {
+      "id": "voice2",
+      "file": "voice2.wav",
+      "start": 10.0,
+      "duration": 6.56,
+      "text": "中国导弹自此重写坐标。"
+    },
+    {
+      "id": "voice3",
+      "file": "voice3.wav",
+      "start": 20.0,
+      "duration": 6.28,
+      "text": "火箭点火，弹体跃出地平。"
+    },
+    {
+      "id": "voice4",
+      "file": "voice4.wav",
+      "start": 29.0,
+      "duration": 5.36,
+      "text": "弹道抬升，越过太平洋弧面。"
+    },
+    {
+      "id": "voice5",
+      "file": "voice5.wav",
+      "start": 40.0,
+      "duration": 5.04,
+      "text": "再入大气，热障沿弹体燃亮。"
+    },
+    {
+      "id": "voice6",
+      "file": "voice6.wav",
+      "start": 49.0,
+      "duration": 4.92,
+      "text": "目标锁定，落点逼近百米。"
+    }
+  ]
+}

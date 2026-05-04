@@ -1,0 +1,17 @@
+{
+  "name": "phantom-motion",
+  "version": "8.0.0",
+  "description": "交互式动态视觉叙事生成器",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "gsap": "^3.12.5",
+    "puppeteer": "^24.4.0",
+    "three": "^0.160.0",
+    "split-type": "^0.3.4"
+  },
+  "author": "紫苏子ACG",
+  "license": "MIT"
+}

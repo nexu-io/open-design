@@ -1,0 +1,172 @@
+<svg id="phantom-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 240" width="100%" height="100%"> 
+    <defs> 
+        <!-- 全息透镜微渐变 (Holographic Iris) --> 
+        <linearGradient id="holographic-iris" x1="0%" y1="0%" x2="100%" y2="100%"> 
+            <stop offset="0%" stop-color="#8A64B7"></stop> 
+            <stop offset="100%" stop-color="#5A4582"></stop> 
+        </linearGradient> 
+
+        <style> 
+            /* Typography &amp; General Colors */ 
+            .bg-rect { fill: transparent; } 
+            .primary-fill { 
+                fill: #5A4582; 
+                stroke: rgba(248, 250, 252, 0.78); 
+                stroke-width: 0.9; 
+                paint-order: stroke fill; 
+            } 
+            
+            /* Keyframes for 3D Layer Extraction */ 
+            @keyframes frontAppear { 
+                from { opacity: 0; transform: translate(20px, -20px) scale(0.9); filter: blur(2px); } 
+                to { opacity: 0.95; transform: translate(20px, -20px) scale(1); filter: blur(0px); } 
+            } 
+            @keyframes slideMid { 
+                from { transform: translate(20px, -20px); opacity: 0; } 
+                to { transform: translate(0px, 0px); opacity: 1; } 
+            } 
+            @keyframes slideBack { 
+                from { transform: translate(20px, -20px); opacity: 0; } 
+                to { transform: translate(-20px, 20px); opacity: 1; } 
+            } 
+
+            /* Keyframes for Wireframe Lines */ 
+            @keyframes drawLines { 
+                0% { stroke-dashoffset: 80; opacity: 0; } 
+                1% { opacity: 0.5; } 
+                100% { stroke-dashoffset: 0; opacity: 0.4; } 
+            } 
+
+            /* Keyframes for Hover Effect */ 
+            @keyframes floatWhole { 
+                0%, 100% { transform: translateY(0); } 
+                50% { transform: translateY(-8px); } 
+            } 
+
+            /* Keyframes for Typography */ 
+            @keyframes textReveal { 
+                0% { transform: translateX(-20px); opacity: 0; filter: blur(4px); } 
+                100% { transform: translateX(0); opacity: 1; filter: blur(0px); } 
+            } 
+
+            /* Class Assignments with Purple/Iris Palette */ 
+            .layer-front { 
+                fill: url(#holographic-iris); 
+                opacity: 0; 
+                animation: frontAppear 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards; 
+            } 
+            .layer-mid { 
+                fill: rgba(138, 100, 183, 0.08); /* #8A64B7 with low opacity */ 
+                stroke: #8A64B7; 
+                stroke-width: 1.5; 
+                opacity: 0; 
+                animation: slideMid 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards; 
+            } 
+            .layer-back { 
+                fill: transparent; 
+                stroke: #5A4582; 
+                stroke-width: 1.5; 
+                stroke-opacity: 0.8; 
+                opacity: 0; 
+                animation: slideBack 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards; 
+            } 
+            .conn-line { 
+                stroke: #8A64B7; 
+                stroke-width: 1.2; 
+                stroke-dasharray: 80; 
+                stroke-dashoffset: 80; 
+                opacity: 0; 
+                animation: drawLines 0.8s ease-out 1.7s forwards; 
+            } 
+
+            .float-group { 
+                animation: floatWhole 6s ease-in-out infinite; 
+                transform-origin: center; 
+            } 
+
+            /* Typography Classes */ 
+            .title-bold { 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+                font-size: 52px; 
+                font-weight: 800; 
+                letter-spacing: -1px; 
+                opacity: 0; 
+                animation: textReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2.0s forwards; 
+            } 
+            .title-light { 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+                font-size: 52px; 
+                font-weight: 300; 
+                letter-spacing: 1px; 
+                opacity: 0; 
+                animation: textReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2.2s forwards; 
+            } 
+            .subtitle-en { 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+                font-size: 13px; 
+                font-weight: 500; 
+                letter-spacing: 5px; 
+                fill: #a1a1aa; /* text-zinc-400 for structural text */ 
+                opacity: 0; 
+                animation: textReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2.5s forwards; 
+            } 
+            .subtitle-cn { 
+                font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; 
+                font-size: 14px; 
+                font-weight: 400; 
+                letter-spacing: 4px; 
+                fill: #8A64B7; /* Matches the soft light of the iris */ 
+                opacity: 0; 
+                animation: textReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2.8s forwards; 
+            } 
+        </style> 
+        
+        <!-- Reusable Core Shape (The Letter P) --> 
+        <path id="p-core" d="M 0 0 H 32 C 49.67 0 64 14.33 64 32 C 64 49.67 49.67 64 32 64 H 20 V 100 H 0 V 0 Z M 20 20 V 44 H 32 C 38.63 44 44 38.63 44 32 C 44 25.37 38.63 20 32 20 H 20 Z"></path> 
+    </defs> 
+
+    <!-- Base Canvas --> 
+    <rect class="bg-rect" width="700" height="240" rx="20"></rect> 
+
+    <!-- 3D Logo Mark Group --> 
+    <g transform="translate(100, 70)"> 
+        <g class="float-group"> 
+            
+            <!-- Layer 3: Back (Deepest rendering layer) --> 
+            <use href="#p-core" class="layer-back"></use> 
+
+            <!-- Wireframe Connection Lines (Drawn procedurally) --> 
+            <g class="conn-lines"> 
+                <!-- Outer Boundary Lines --> 
+                <line class="conn-line" x1="20" y1="-20" x2="-20" y2="20"></line> <!-- Top Left --> 
+                <line class="conn-line" x1="20" y1="80" x2="-20" y2="120"></line> <!-- Bottom Left --> 
+                <line class="conn-line" x1="40" y1="80" x2="0" y2="120"></line>   <!-- Bottom Right (Stem) --> 
+                <line class="conn-line" x1="84" y1="12" x2="44" y2="52"></line>   <!-- Far Right Curve --> 
+                
+                <!-- Inner Hole Lines for enhanced 3D realism --> 
+                <line class="conn-line" x1="40" y1="0" x2="0" y2="40"></line>     <!-- Hole Top Left --> 
+                <line class="conn-line" x1="40" y1="24" x2="0" y2="64"></line>    <!-- Hole Bottom Left --> 
+                <line class="conn-line" x1="52" y1="0" x2="12" y2="40"></line>    <!-- Hole Top Right --> 
+            </g> 
+            
+            <!-- Layer 2: Mid (Wireframe surface layer) --> 
+            <use href="#p-core" class="layer-mid"></use> 
+
+            <!-- Layer 1: Front (Solid output layer) --> 
+            <use href="#p-core" class="layer-front"></use> 
+        </g> 
+    </g> 
+
+    <!-- Typography Group --> 
+    <g transform="translate(224, 110) scale(0.93)"> 
+        <!-- Main Title --> 
+        <text class="primary-fill title-bold" x="0" y="0">PHANTOM</text> 
+        <text class="primary-fill title-light" x="265" y="0">MOTION</text> 
+        
+        <!-- English Descriptor --> 
+        <text class="subtitle-en" x="4" y="32">INTERACTIVE NARRATIVE GENERATOR</text> 
+        
+        <!-- Chinese Slogan --> 
+        <text class="subtitle-cn" x="4" y="60">幻象 ｜ 驭无形之码，导有形之境</text> 
+    </g> 
+</svg>

@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Workspace data (avoid uploading user output)
+phantom-output/
+animation.html
+subtitles.json
+scripts/record.js
+
+
+# System
+.DS_Store
