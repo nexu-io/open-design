@@ -38,6 +38,7 @@
     "@open-design/sidecar-proto": "workspace:0.2.0",
     "better-sqlite3": "^11.10.0",
     "express": "^4.19.2",
+    "googleapis": "^171.4.0",
     "jszip": "^3.10.1",
     "multer": "^1.4.5-lts.1"
   },
@@ -46,6 +47,7 @@
     "@types/express": "^4.17.21",
     "@types/multer": "^1.4.12",
     "@types/node": "^20.17.10",
+    "tsx": "4.21.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   },

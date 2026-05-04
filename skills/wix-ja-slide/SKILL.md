@@ -311,69 +311,130 @@ outline に書かれていない情報は **絶対に生成しない**。
 2. **filename heuristic** — outline section 名と画像ファイル名の前方一致（例: section "<industry-event> Recap" + 画像 `dx-week-booth.jpg` → 一致）
 3. **どちらも該当なし** → ユーザーに「このページの画像を指定してください」と返答（ハルシネーション禁止＝架空画像生成しない）
 
-#### 6.2 画像のアップロードと挿入（Iteration 1 のスコープ）
+#### 6.2 画像のアップロードと挿入
 
-**Iteration 1 では partial サポートのみ**。daemon-side `/api/google/slides/insert-image` 未実装のため、placeholder への挿入は**スキップする**。`curl` を呼んではいけない（404 になる）。
+daemon の `/api/google/slides/upload-image` と `/api/google/slides/insert-image` を使う。**ただし Wix Workspace の DLP ポリシーが Drive ファイルの公開分享を阻止する**ため、画像 source の処理が二段階になる:
 
-代わりに以下の動作を取る:
+##### 6.2.1 source タイプの判定
 
-| layout shape | Iteration 1 の動作 |
-|---|---|
-| `FULL-IMG` (P33 など、全画面画像) | `gog slides replace-slide <slideId> <imagePath>` で全画面置換 ✅ |
-| `T+IMG` (P31 など、framed 画像) | **スキップ**。result.json の `imageSlots` に `{page: N, status: "pending", reason: "Iteration 1: image-into-placeholder API not yet implemented"}` を記録。`missingImages` にも明示。Drive へのアップロードは事前にしておく（gog drive upload）と、後続の手動配置がスムーズ。|
-| `T+IMG×N` (グリッド) | 同上、スキップ + result.json に明示 |
-| `COVER?` (cover hero image) | 同上、スキップ + result.json に明示 |
+| outline marker / 入力 | source type | 動作 |
+|---|---|---|
+| `[image: filename.jpg]` （cwd ローカルファイル） | `local` | Step 6.2.2A |
+| `[image: https://...]` （外部公開 URL） | `public` | Step 6.2.2B |
+| 画像なし | — | placeholder のまま、result.json で報告 |
+
+##### 6.2.2A ローカルファイルの場合（v1 制約あり）
+
+Wix DLP は `permissions.create({type: 'anyone'})` を `publishOutNotPermitted` で拒否する。Slides API server は user の OAuth token で fetch できないため、Drive にあるだけでは Slides に挿入できない。
 
 ```bash
-# 画像 Drive 事前アップロード（後続手動配置用）
-gog drive upload "/path/to/image.jpg" --json
-# → returned id を imageSlots[].source に "drive:<id>" 形式で記録
+# 1. アップロード（Drive に置く、公開分享は best-effort で skip）
+curl -X POST http://localhost:<daemon_port>/api/google/slides/upload-image \
+  -H "Content-Type: application/json" \
+  -d '{"localPath": "/abs/path/to/image.jpg", "mimeType": "image/jpeg"}'
+
+# response: { driveFileId, slidesAccessibleUrl, publiclyShared: false }
 ```
 
-> **重要**: Iteration 1 では agent は画像 placeholder への挿入を**試みない**。スキップして result.json で報告するだけ。Iteration 2 で daemon API 実装後、本 Step を更新。
+その後、**Slides API への直接挿入はスキップする**（"Internal error" を返すため）。代わりに result.json の `imageSlots` に記録:
+
+```json
+{
+  "page": 4,
+  "status": "drive-pending-manual-insert",
+  "source": "drive:1ABC...",
+  "reason": "Wix DLP blocks public Drive sharing; manual drag from Drive panel in Slides UI required (~30 sec/image).",
+  "driveUrl": "https://drive.google.com/file/d/1ABC.../view"
+}
+```
+
+ユーザーは Slides UI で挿入 → メニュー → 画像 → Drive → 該当ファイルをドラッグ。1 画像 30 秒。
+
+##### 6.2.2B 外部公開 URL の場合（完全自動）
+
+公開 URL（imgur, placehold.co, GitHub raw, 自社 CDN など）は Slides API server が直接 fetch できる。**これが Iteration 1 で完全自動挿入できる唯一のパス**。
+
+```bash
+# 直接 insert（upload step 不要）
+curl -X POST http://localhost:<daemon_port>/api/google/slides/insert-image \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "...",
+    "slideId": "...",
+    "placeholderObjectId": "...",
+    "imageUrl": "https://your-cdn.example.com/image.png"
+  }'
+```
+
+result.json の imageSlots に `{status: "filled", source: "public:https://..."}` を記録。
+
+##### 6.2.3 layout 別動作まとめ
+
+| layout shape | local file source | public URL source |
+|---|---|---|
+| `FULL-IMG` | drag-from-drive 指示 | 自動挿入 ✅ |
+| `T+IMG` | drag-from-drive 指示 | 自動挿入 ✅ |
+| `T+IMG×N` | drag-from-drive 指示（各画像） | 自動挿入 ✅ |
+| `COVER?` | drag-from-drive 指示 | 自動挿入 ✅ |
+
+##### 6.2.4 ユーザーへの推奨
+
+skill が Step 1.5 QuestionForm で画像を要求するときに、**「公開 URL を貼ってもらう」** が最も自動化される旨を説明する:
+
+```
+画像について:
+- ローカルファイル名（[image: foo.jpg] マーカー） → Drive 経由、最後に手動配置（30 秒/画像）
+- 公開 URL（imgur など） → 自動挿入完了
+
+Wix Workspace の Drive 公開分享制限のため、ローカルファイルは半自動になります。
+```
 
 ### Step 7: Master / Header 設定（Gap 6 fix）
 
-**Iteration 1 ではスキップ**。daemon-side `/api/google/slides/update-master` 未実装。`curl` を呼んではいけない。
+deck の最初の生成時、master の "Presentation name / YYYY" を実際の deck 情報に書き換える。**daemon の `/api/google/slides/update-master` を使う**。
 
-代わりに以下の動作:
+```bash
+curl -X POST http://localhost:<daemon_port>/api/google/slides/update-master \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "<copied_deck_id>",
+    "find": "Presentation name / 2025",
+    "replace": "Wix Japan 4月 Performance Report / 2026"
+  }'
+# → { "occurrences": 1 }
+```
 
-1. master の "Presentation name / YYYY" は**そのまま残す**（書き換えない）。
-2. result.json の `knownSideEffects` に "master header / footer not customized — please edit manually in Slides under Slide → Edit theme" を記録。
-3. ユーザーは Slides UI で手動で master を編集する（5 分作業）。
-
-Iteration 2 で daemon API 実装後、本 Step を更新して `deck_title` / `deck_year` を自動書き込みに切り替える。
+`deck_title` と `deck_year` は input から取得（指定がなければ outline の最初の `# 大見出し` + 現在年で fallback）。
 
 ### Step 8: Slides API への書き出し
 
-`gog slides create-from-template` と置換マップで実行する。**JP テンプレート ID は Step 0 で読んだ `assets/config.json` の `jp_template_id` から取得する**（ハードコード禁止）。
+daemon の Slides 系エンドポイントを使う。**JP テンプレート ID は Step 0 で読んだ `assets/config.json` の `jp_template_id` から取得する**（ハードコード禁止）。
 
 ```bash
-# Step 0 で読んだ config を使う
-JP_TEMPLATE_ID=$(jq -r '.jp_template_id' assets/config.json)
-
 # 1. JP テンプレートをコピー
-gog slides copy "$JP_TEMPLATE_ID" "<deck_title>"
-# → new presentation_id を取得（後の手順で使う）
+curl -X POST http://localhost:<daemon_port>/api/google/slides/copy \
+  -H "Content-Type: application/json" \
+  -d '{"sourceDeckId": "<jp_template_id>", "title": "<deck_title>"}'
+# → { deckId, deckTitle, deckUrl, embedUrl }
 
-# 2. 置換マップ（前 step で生成した layout-fills を JSON で書き出し）
-cat > /tmp/replacements.json <<EOF
-{
-  "字数上限：48字": "今期 Wix Japan 主要ハイライト",
-  "字数上限：54字": "Japan <industry-event> 出展成功",
-  "字字字字字字...": "<newsletter-project> Vol.001 ローンチ",
-  "Lorem ipsum - Lorem ipsum dolor sit...": "<brand-project> JA 着手",
-  ...
-}
-EOF
-
-# 3. 置換実行
-gog slides create-from-template <copied_id> "<deck_title>" \
-    --exact \
-    --replacements /tmp/replacements.json
+# 2. 置換マップを送る（複数 key を 1 回の batch で実行）
+curl -X POST http://localhost:<daemon_port>/api/google/slides/apply-replacements \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "<copied_deck_id>",
+    "replacements": {
+      "字数上限：48字": "今期 Wix Japan 主要ハイライト",
+      "字数上限：54字": "Japan <industry-event> 出展成功",
+      "字字字字字字...": "<newsletter-project> Vol.001 ローンチ",
+      "Lorem ipsum - Lorem ipsum dolor sit...": "<brand-project> JA 着手"
+    }
+  }'
+# → { "occurrences": { "<find>": <count>, ... } }
 ```
 
 > **重要**: 文字列 key は P53 の例（"字数上限：48字"）のように catalog の元 placeholder text と完全一致しなければならない。`assets/layouts.json` から各 placeholder の `original_text` を引いて key にする。
+>
+> **副作用注意**: replaceAllText は **deck 全体スコープ**。同じ filler 文字列が複数 page に存在する場合（例: Lorem ipsum）、置換も全部に適用される。`occurrences` を確認して想定外の数なら知らせて。
 
 ### Step 9: Self-check（Step 7）
 
@@ -463,10 +524,10 @@ result.json を書く前に：
 
 ### 4.1 機能制限
 
-- 画像 placeholder への挿入は **FULL-IMG 限定**（v2 で T+IMG / T+IMG×N / COVER? 対応予定）
-- Master / Header の deck 名・年号書き換えは**手動**（v2 で daemon-side API 経由）
-- Comment / refine の per-element クリック編集はサポート外（Slides /embed が読み取り専用のため）
-- PPTX 導出時の Madefor JP 自動 swap は未対応（v2、Workspace 字体目录推進と並行）
+- **画像 placeholder への自動挿入は公開 URL のみ**。ローカルファイルは Drive にアップロードした後、ユーザーが Slides UI で手動配置（Wix Workspace DLP が Drive の anyone-with-link 共有を `publishOutNotPermitted` で阻止するため）。詳細は §6.2.2A。回避策は §6.2.2B（公開 URL を渡してもらう）。
+- Master / Header の deck 名・年号書き換えは daemon API 経由で動作（`/api/google/slides/update-master`）。
+- Comment / refine の per-element クリック編集はサポート外（Slides /embed が読み取り専用のため）。
+- PPTX 導出時の Madefor JP 自動 swap は未対応（v2、Workspace 字体目录推進と並行）。
 
 ### 4.2 サポート外 shape（Bug 8 fix）
 

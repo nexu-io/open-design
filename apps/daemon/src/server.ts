@@ -2089,6 +2089,209 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
+  // ---- Google Slides / Drive integration -----------------------------------
+  // Powers the wix-ja-slide skill (and any future google-slides skill).
+  // Auth flow: status → start (returns URL) → callback (redirected here from
+  // Google after consent) → token persisted; subsequent /slides/* calls
+  // reuse the cached token. See apps/daemon/src/google-auth.ts and
+  // apps/daemon/src/google-slides.ts.
+  const mapGoogleError = (err) => {
+    if (err?.code === 'GOOGLE_CREDENTIALS_MISSING') return { status: 412, code: 'GOOGLE_CREDENTIALS_MISSING' };
+    if (err?.code === 'GOOGLE_CREDENTIALS_MALFORMED') return { status: 412, code: 'GOOGLE_CREDENTIALS_MALFORMED' };
+    if (err?.code === 'GOOGLE_AUTH_REQUIRED') return { status: 401, code: 'GOOGLE_AUTH_REQUIRED' };
+    if (err?.code === 'GOOGLE_API_ERROR') return { status: 502, code: 'GOOGLE_API_ERROR' };
+    return { status: 500, code: 'INTERNAL_ERROR' };
+  };
+
+  app.get('/api/google/auth/status', async (_req, res) => {
+    try {
+      const { authStatus } = await import('./google-auth.js');
+      res.json(await authStatus());
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  // Build the OAuth redirect URI from the request's own host so it matches
+  // the daemon's actual listening port (which varies across launches via
+  // tools-dev). Desktop OAuth clients accept any localhost port + any path.
+  const buildRedirectUri = (req) => {
+    const host = req.get('host'); // includes port
+    const proto = req.protocol;
+    return `${proto}://${host}/api/google/auth/callback`;
+  };
+
+  app.post('/api/google/auth/start', async (req, res) => {
+    try {
+      const redirectUri = buildRedirectUri(req);
+      const { generateAuthUrl } = await import('./google-auth.js');
+      const url = await generateAuthUrl(redirectUri);
+      res.json({ authUrl: url, redirectUri });
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.get('/api/google/auth/callback', async (req, res) => {
+    const error = typeof req.query.error === 'string' ? req.query.error : null;
+    const code = typeof req.query.code === 'string' ? req.query.code : null;
+    if (error) {
+      res
+        .status(400)
+        .type('html')
+        .send(`<h1>Google OAuth error</h1><p>${error}</p><p>You can close this tab.</p>`);
+      return;
+    }
+    if (!code) {
+      res.status(400).type('html').send('<h1>Missing code</h1>');
+      return;
+    }
+    try {
+      const redirectUri = buildRedirectUri(req);
+      const { exchangeCode } = await import('./google-auth.js');
+      await exchangeCode(code, redirectUri);
+      res
+        .type('html')
+        .send(
+          '<h1>Connected ✓</h1><p>You can close this tab and return to Open Design.</p>' +
+            '<script>setTimeout(()=>window.close(),1500)</script>',
+        );
+    } catch (err) {
+      res.status(500).type('html').send(`<h1>OAuth exchange failed</h1><pre>${err.message}</pre>`);
+    }
+  });
+
+  app.post('/api/google/auth/clear', async (_req, res) => {
+    try {
+      const { clearToken } = await import('./google-auth.js');
+      await clearToken();
+      res.json({ ok: true });
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/copy', async (req, res) => {
+    const { sourceDeckId, title } = req.body || {};
+    if (typeof sourceDeckId !== 'string' || !sourceDeckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'sourceDeckId required');
+    }
+    if (typeof title !== 'string' || !title) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'title required');
+    }
+    try {
+      const { copyDeck } = await import('./google-slides.js');
+      res.json(await copyDeck(sourceDeckId, title));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/apply-replacements', async (req, res) => {
+    const { deckId, replacements } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (!replacements || typeof replacements !== 'object' || Array.isArray(replacements)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'replacements must be { find: replace } object');
+    }
+    try {
+      const { applyTextReplacements } = await import('./google-slides.js');
+      res.json(await applyTextReplacements(deckId, replacements));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/update-master', async (req, res) => {
+    const { deckId, find, replace } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (typeof find !== 'string' || typeof replace !== 'string') {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'find and replace must be strings');
+    }
+    try {
+      const { updateMasterText } = await import('./google-slides.js');
+      res.json(await updateMasterText(deckId, find, replace));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/upload-image', async (req, res) => {
+    const { localPath, mimeType } = req.body || {};
+    if (typeof localPath !== 'string' || !localPath) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'localPath required');
+    }
+    // Path traversal guard: localPath must be inside the daemon-known
+    // upload / project / artifacts area. Anything outside is rejected.
+    const resolved = path.resolve(localPath);
+    const allowedRoots = [UPLOAD_DIR, PROJECTS_DIR, ARTIFACTS_DIR].filter(Boolean);
+    const inAllowed = allowedRoots.some(
+      (root) => resolved === root || resolved.startsWith(root + path.sep),
+    );
+    if (!inAllowed) {
+      return sendApiError(res, 403, 'FORBIDDEN', 'localPath outside allowed roots');
+    }
+    if (!fs.existsSync(resolved)) {
+      return sendApiError(res, 404, 'NOT_FOUND', 'localPath does not exist');
+    }
+    try {
+      const { uploadImage } = await import('./google-slides.js');
+      res.json(await uploadImage(resolved, typeof mimeType === 'string' ? mimeType : undefined));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/insert-image', async (req, res) => {
+    const { deckId, slideId, placeholderObjectId, imageUrl } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (typeof slideId !== 'string' || !slideId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slideId required');
+    }
+    if (typeof placeholderObjectId !== 'string' || !placeholderObjectId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'placeholderObjectId required');
+    }
+    if (typeof imageUrl !== 'string' || !imageUrl) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'imageUrl required');
+    }
+    if (!/^https:\/\//.test(imageUrl)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'imageUrl must be an https URL');
+    }
+    try {
+      const { insertImageIntoPlaceholder } = await import('./google-slides.js');
+      res.json(await insertImageIntoPlaceholder({ deckId, slideId, placeholderObjectId, imageUrl }));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.get('/api/google/slides/:deckId', async (req, res) => {
+    const { deckId } = req.params;
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    try {
+      const { readPresentation } = await import('./google-slides.js');
+      res.json(await readPresentation(deckId));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
