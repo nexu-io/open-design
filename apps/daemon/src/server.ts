@@ -827,7 +827,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
     const payload = {
       command: process.execPath,
-      args: [cliPath, 'mcp'],
+      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
       // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts

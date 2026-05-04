@@ -40,7 +40,7 @@ function makeInstallInfoApp({ cliPath, port }: InstallInfoOpts) {
     if (!nodeExists) hints.push('node missing');
     const payload = {
       command: process.execPath,
-      args: [cliPath, 'mcp'],
+      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`],
       daemonUrl: `http://127.0.0.1:${port}`,
       platform: process.platform,
       cliExists,
@@ -98,7 +98,7 @@ describe('GET /api/mcp/install-info', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.command).toBe(process.execPath);
-    expect(body.args).toEqual([cliPath, 'mcp']);
+    expect(body.args).toEqual([cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`]);
     expect(body.daemonUrl).toBe(`http://127.0.0.1:${port}`);
     expect(body.platform).toBe(process.platform);
     expect(body.cliExists).toBe(true);
