@@ -52,6 +52,7 @@ import {
   formatLogDiagnostics,
   type LogDiagnostic,
 } from "./diagnostics.js";
+import { ensureSharedPortsResolved } from "./shared-ports.js";
 import {
   inspectDaemonRuntime,
   inspectDesktopRuntime,
@@ -404,6 +405,11 @@ async function spawnSidecarRuntime(request: {
 
 async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
+  // The daemon's CORS allow-list is built once at startup from OD_WEB_PORT.
+  // If the web port is known up-front (user passed --web-port, or our shared-
+  // port resolver pre-allocated one), inject it so browser POSTs from the web
+  // app aren't rejected with 403 the moment the UI tries to create a project.
+  const webPort = parsePortOption(options.webPort, "--web-port");
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
@@ -413,6 +419,7 @@ async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): P
       config,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
+        ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
       },
       logHandle,
@@ -727,8 +734,10 @@ async function status(config: ToolDevConfig, appName: string | undefined) {
 async function restartTargets(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const stopTargets = resolveStopApps(appName);
   const startTargets = resolveStartApps(appName);
+  const stopResult = await runSequential(stopTargets, (target) => stopApp(config, target));
+  await ensureSharedPortsResolved(startTargets, options);
   return {
-    stop: await runSequential(stopTargets, (target) => stopApp(config, target)),
+    stop: stopResult,
     start: await runSequential(startTargets, (target) => startApp(config, target, options)),
   };
 }
@@ -865,9 +874,11 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
   return DEFAULT_STOP_APPS.filter((target) => selected.has(target));
 }
 
+
 async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
+  await ensureSharedPortsResolved(targets, foregroundOptions);
   const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions));
   printRunForegroundResult(started, options);
 
@@ -913,6 +924,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
   async (appName: string | undefined, options: CliOptions) => {
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
+    await ensureSharedPortsResolved(targets, options);
     const result = await runSequential(targets, (target) => startApp(config, target, options));
     printStartResult(result, options);
   },
