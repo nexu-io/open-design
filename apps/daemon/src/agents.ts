@@ -64,6 +64,9 @@ const agentCapabilities = new Map();
 // its non-interactive/auto-approve switch on — otherwise Write/Edit hangs
 // or errors and the model has to hallucinate a permission button the UI
 // never shows.
+//
+// `env` is optional per-agent process environment. Keep it limited to
+// documented, non-secret runtime knobs that belong to the adapter contract.
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
@@ -283,8 +286,12 @@ export const AGENT_DEFS = [
     // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG on
     // Windows (CreateProcess limit ~32 KB) for any non-trivial prompt.
     // `--yolo` skips interactive approval prompts in the no-TTY web UI.
+    // Workspace trust is provided via `GEMINI_CLI_TRUST_WORKSPACE` below
+    // instead of `--skip-trust`; several Gemini CLI builds hide or reject the
+    // flag even though they accept the documented environment variable.
+    env: { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = ['--output-format', 'stream-json', '--skip-trust', '--yolo'];
+      const args = ['--output-format', 'stream-json', '--yolo'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -782,6 +789,7 @@ function stripFns(def) {
     helpArgs,
     capabilityFlags,
     fallbackBins,
+    env,
     ...rest
   } = def;
   return rest;
@@ -811,6 +819,28 @@ export function resolveAgentBin(id) {
   const def = getAgentDef(id);
   if (!def?.bin) return null;
   return resolveAgentExecutable(def);
+}
+
+// Build the env passed to spawn() for a given agent adapter.
+//
+// The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
+// resolution (claude login / Pro/Max plan) wins instead of silently
+// falling back to API-key billing whenever the daemon happened to be
+// launched from a shell that exported the key for SDK or scripting use.
+// See issue #398.
+//
+// Windows env-var names are case-insensitive at the kernel level
+// (`GetEnvironmentVariable`), but spreading `process.env` into a plain
+// object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
+// would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
+// the child. Iterate keys and compare case-insensitively to close that.
+export function spawnEnvForAgent(agentId, baseEnv) {
+  const env = { ...baseEnv };
+  if (agentId !== 'claude') return env;
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
+  }
+  return env;
 }
 
 // Daemon's /api/chat needs to validate the user's model pick against the

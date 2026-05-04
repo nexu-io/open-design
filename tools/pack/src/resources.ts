@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { cp } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,3 +45,26 @@ export const linuxResources = {
   icon: join(resourcesRoot, "linux", "icon.png"),
   desktopTemplate: join(resourcesRoot, "linux", "open-design.desktop.template"),
 } as const;
+
+const BUNDLED_RESOURCE_TREES = [
+  { from: "skills", to: "skills" },
+  { from: "design-systems", to: "design-systems" },
+  { from: "craft", to: "craft" },
+  { from: join("assets", "frames"), to: "frames" },
+  { from: join("assets", "community-pets"), to: "community-pets" },
+  { from: "prompt-templates", to: "prompt-templates" },
+] as const;
+
+export async function copyBundledResourceTrees({
+  workspaceRoot,
+  resourceRoot,
+}: {
+  workspaceRoot: string;
+  resourceRoot: string;
+}): Promise<void> {
+  for (const entry of BUNDLED_RESOURCE_TREES) {
+    await cp(join(workspaceRoot, entry.from), join(resourceRoot, entry.to), {
+      recursive: true,
+    });
+  }
+}

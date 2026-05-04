@@ -30,7 +30,7 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "./config.js";
-import { winResources } from "./resources.js";
+import { copyBundledResourceTrees, winResources } from "./resources.js";
 
 const execFileAsync = promisify(execFile);
 const PRODUCT_NAME = "Open Design";
@@ -627,9 +627,10 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
 async function copyResourceTree(config: ToolPackConfig, paths: WinPaths): Promise<void> {
   await removeTree(paths.resourceRoot);
   await mkdir(paths.resourceRoot, { recursive: true });
-  await cp(join(config.workspaceRoot, "skills"), join(paths.resourceRoot, "skills"), { recursive: true });
-  await cp(join(config.workspaceRoot, "design-systems"), join(paths.resourceRoot, "design-systems"), { recursive: true });
-  await cp(join(config.workspaceRoot, "assets", "frames"), join(paths.resourceRoot, "frames"), { recursive: true });
+  await copyBundledResourceTrees({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
+  });
   await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await cp(process.execPath, join(paths.resourceRoot, "bin", "node.exe"));
   await chmod(join(paths.resourceRoot, "bin", "node.exe"), 0o755).catch(() => undefined);

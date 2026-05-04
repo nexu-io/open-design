@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -18,7 +18,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'ko': '한국어',
   'pl': 'Polski',
   'hu': 'Magyar',
-  'fr': 'Français'
+  'fr': 'Français',
+  'uk': 'Українська'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -76,6 +77,7 @@ export interface Dict {
   'settings.title': string;
   'settings.subtitle': string;
   'settings.modeAria': string;
+  'settings.protocolAria': string;
   'settings.modeDaemon': string;
   'settings.modeDaemonHelp': string;
   'settings.modeDaemonOffline': string;
@@ -87,17 +89,27 @@ export interface Dict {
   'settings.codeAgentHint': string;
   'settings.rescan': string;
   'settings.rescanTitle': string;
+  'settings.rescanRunning': string;
+  'settings.rescanSuccess': string;
+  'settings.rescanFailed': string;
   'settings.noAgentsDetected': string;
   'settings.apiSection': string;
+  'settings.quickFillProvider': string;
+  'settings.customProvider': string;
   'settings.apiKey': string;
   'settings.showKey': string;
   'settings.hideKey': string;
   'settings.show': string;
   'settings.hide': string;
   'settings.model': string;
+  'settings.suggestedModelsHint': string;
   'settings.maxTokens': string;
   'settings.maxTokensHint': string;
   'settings.baseUrl': string;
+  'settings.baseUrlInvalid': string;
+  'settings.azureDeploymentModel': string;
+  'settings.azureDeploymentModelHint': string;
+  'settings.apiVersion': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
   'settings.getStarted': string;
@@ -320,6 +332,8 @@ export interface Dict {
   'examples.scenarioLegal': string;
   'examples.scenarioEducation': string;
   'examples.scenarioPersonal': string;
+  'examples.searchPlaceholder': string;
+  'examples.searchAria': string;
   'examples.emptyNoSkills': string;
   'examples.emptyNoMatch': string;
   'examples.openPreview': string;

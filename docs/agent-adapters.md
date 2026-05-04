@@ -171,7 +171,9 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Invocation: `gemini` with the composed prompt delivered via **stdin** (no `-p` flag).
   Gemini CLI enters headless mode automatically when stdin is a pipe and no `-p` flag is
   supplied — verified with `gemini@0.1.x`.
-- Streaming: yes, plain text to stdout.
+- Trust: `GEMINI_CLI_TRUST_WORKSPACE=true` is set in the spawned process instead of
+  passing `--skip-trust`, which is version-fragile across Gemini CLI releases.
+- Streaming: yes, `--output-format stream-json` to stdout.
 - Skill loading: prompt injection only.
 - Surgical edits: regenerate whole file.
 - **Gotcha — `spawn ENAMETOOLONG` on Windows:** Passing the full composed prompt as a
