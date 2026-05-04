@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseFrontmatter } from '../../../daemon/src/frontmatter';
-import { GERMAN_CONTENT_IDS } from './content';
+import { LOCALIZED_CONTENT_IDS } from './content';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
@@ -84,41 +84,45 @@ async function readPromptTemplateSummaries(): Promise<
   return summaries;
 }
 
-describe('German display content coverage', () => {
-  it('covers every curated skill, design system, and prompt template', async () => {
-    const [skillIds, designSystemIds, promptTemplateSummaries] = await Promise.all([
-      readSkillIds(),
-      readDesignSystemIds(),
-      readPromptTemplateSummaries(),
-    ]);
+describe('Localized display content coverage', () => {
+  for (const [locale, ids] of Object.entries(LOCALIZED_CONTENT_IDS)) {
+    it(`covers every curated skill, design system, and prompt template for ${locale}`, async () => {
+      const [skillIds, designSystemIds, promptTemplateSummaries] = await Promise.all([
+        readSkillIds(),
+        readDesignSystemIds(),
+        readPromptTemplateSummaries(),
+      ]);
 
-    expect(sorted(GERMAN_CONTENT_IDS.skills), 'skills display copy').toEqual(skillIds);
-    expect(sorted(GERMAN_CONTENT_IDS.designSystems), 'design-system summaries').toEqual(
-      designSystemIds,
-    );
-    expect(sorted(GERMAN_CONTENT_IDS.promptTemplates), 'prompt-template metadata').toEqual(
-      sorted(promptTemplateSummaries.map((template) => template.id)),
-    );
-  });
+      expect(sorted(ids.skills), 'skills display copy').toEqual(skillIds);
+      expect(sorted(ids.designSystems), 'design-system summaries').toEqual(
+        designSystemIds,
+      );
+      expect(sorted(ids.promptTemplates), 'prompt-template metadata').toEqual(
+        sorted(promptTemplateSummaries.map((template) => template.id)),
+      );
+    });
 
-  it('covers every curated display category and prompt tag', async () => {
-    const [designSystemCategories, promptTemplateSummaries] = await Promise.all([
-      readDesignSystemCategories(),
-      readPromptTemplateSummaries(),
-    ]);
-    const promptTemplateCategories = new Set(
-      promptTemplateSummaries.map((template) => template.category),
-    );
-    const promptTemplateTags = new Set(promptTemplateSummaries.flatMap((template) => template.tags));
+    it(`covers every curated display category and prompt tag for ${locale}`, async () => {
+      const [designSystemCategories, promptTemplateSummaries] = await Promise.all([
+        readDesignSystemCategories(),
+        readPromptTemplateSummaries(),
+      ]);
+      const promptTemplateCategories = new Set(
+        promptTemplateSummaries.map((template) => template.category),
+      );
+      const promptTemplateTags = new Set(
+        promptTemplateSummaries.flatMap((template) => template.tags),
+      );
 
-    expect(sorted(GERMAN_CONTENT_IDS.designSystemCategories)).toEqual(
-      expect.arrayContaining(designSystemCategories),
-    );
-    expect(sorted(GERMAN_CONTENT_IDS.promptTemplateCategories)).toEqual(
-      expect.arrayContaining(sorted(promptTemplateCategories)),
-    );
-    expect(sorted(GERMAN_CONTENT_IDS.promptTemplateTags)).toEqual(
-      expect.arrayContaining(sorted(promptTemplateTags)),
-    );
-  });
+      expect(sorted(ids.designSystemCategories)).toEqual(
+        expect.arrayContaining(designSystemCategories),
+      );
+      expect(sorted(ids.promptTemplateCategories)).toEqual(
+        expect.arrayContaining(sorted(promptTemplateCategories)),
+      );
+      expect(sorted(ids.promptTemplateTags)).toEqual(
+        expect.arrayContaining(sorted(promptTemplateTags)),
+      );
+    });
+  }
 });

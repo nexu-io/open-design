@@ -275,6 +275,8 @@ export const ko: Dict = {
   'examples.scenarioEducation': '교육',
   'examples.scenarioPersonal': '개인',
   'examples.emptyNoSkills': '사용 가능한 스킬이 없습니다. 데몬이 실행 중인지 확인하세요.',
+  'examples.searchPlaceholder': '예제 검색…',
+  'examples.searchAria': '이름으로 예제 검색',
   'examples.emptyNoMatch': '필터와 일치하는 예제가 없습니다.',
   'examples.openPreview': '⤢ 미리보기 열기',
   'examples.loadingPreview': '미리보기 불러오는 중…',

@@ -131,6 +131,10 @@ export async function runDesktopMain(
     void shutdown().finally(() => process.exit(0));
   });
 
+  app.on("activate", () => {
+    desktop.show();
+  });
+
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       void shutdown().finally(() => process.exit(0));

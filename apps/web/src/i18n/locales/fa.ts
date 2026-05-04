@@ -275,6 +275,8 @@ export const fa: Dict = {
   'examples.scenarioEducation': 'آموزش',
   'examples.scenarioPersonal': 'شخصی',
   'examples.emptyNoSkills': 'هیچ مهارتی موجود نیست. آیا daemon در حال اجرا است؟',
+  'examples.searchPlaceholder': 'جستجوی نمونه‌ها…',
+  'examples.searchAria': 'جستجوی نمونه‌ها بر اساس نام',
   'examples.emptyNoMatch': 'هیچ نمونه‌ای با این فیلترها مطابقت ندارد.',
   'examples.openPreview': '⤢ باز کردن پیش‌نمایش',
   'examples.loadingPreview': 'در حال بارگذاری پیش‌نمایش…',

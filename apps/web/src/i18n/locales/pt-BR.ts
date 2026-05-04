@@ -274,6 +274,8 @@ export const ptBR: Dict = {
   'examples.scenarioEducation': 'Educação',
   'examples.scenarioPersonal': 'Pessoal',
   'examples.emptyNoSkills': 'Nenhuma skill disponível. O daemon está em execução?',
+  'examples.searchPlaceholder': 'Buscar exemplos…',
+  'examples.searchAria': 'Buscar exemplos por nome',
   'examples.emptyNoMatch': 'Nenhum exemplo corresponde a esses filtros.',
   'examples.openPreview': '⤢ Abrir prévia',
   'examples.loadingPreview': 'Carregando prévia…',

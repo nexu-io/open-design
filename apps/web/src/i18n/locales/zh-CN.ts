@@ -270,6 +270,8 @@ export const zhCN: Dict = {
   'examples.scenarioEducation': '教育',
   'examples.scenarioPersonal': '个人',
   'examples.emptyNoSkills': '没有可用的技能，守护进程是否在运行？',
+  'examples.searchPlaceholder': '搜索示例…',
+  'examples.searchAria': '按名称搜索示例',
   'examples.emptyNoMatch': '没有匹配当前筛选的示例。',
   'examples.openPreview': '⤢ 打开预览',
   'examples.loadingPreview': '正在加载预览…',

@@ -275,6 +275,8 @@ export const pl: Dict = {
   'examples.scenarioEducation': 'Edukacja',
   'examples.scenarioPersonal': 'Osobiste',
   'examples.emptyNoSkills': 'Brak dostępnych umiejętności. Czy daemon jest uruchomiony?',
+  'examples.searchPlaceholder': 'Szukaj przykładów…',
+  'examples.searchAria': 'Szukaj przykładów po nazwie',
   'examples.emptyNoMatch': 'Brak przykładów pasujących do filtrów.',
   'examples.openPreview': '⤢ Otwórz podgląd',
   'examples.loadingPreview': 'Ładowanie podglądu…',

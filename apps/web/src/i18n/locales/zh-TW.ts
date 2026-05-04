@@ -270,6 +270,8 @@ export const zhTW: Dict = {
   'examples.scenarioEducation': '教育',
   'examples.scenarioPersonal': '個人',
   'examples.emptyNoSkills': '沒有可用的技能，守護程序是否在執行？',
+  'examples.searchPlaceholder': '搜尋範例…',
+  'examples.searchAria': '依名稱搜尋範例',
   'examples.emptyNoMatch': '沒有符合當前篩選的範例。',
   'examples.openPreview': '⤢ 開啟預覽',
   'examples.loadingPreview': '正在載入預覽…',

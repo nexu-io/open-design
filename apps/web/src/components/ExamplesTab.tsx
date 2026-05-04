@@ -9,6 +9,7 @@ import { fetchSkillExample } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { SkillSummary, Surface } from '../types';
+import { Icon } from './Icon';
 import { PreviewModal } from './PreviewModal';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -108,6 +109,10 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
+  // Free-text search filters by skill name + description + prompt so users
+  // can find a known example by typing any associated word ("airbnb",
+  // "wireframe", "deck") without having to click through filter pills first.
+  const [search, setSearch] = useState('');
   const [previewSkillId, setPreviewSkillId] = useState<string | null>(null);
 
   const loadPreview = useCallback(
@@ -177,10 +182,15 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   }, [scenarioCounts]);
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     const matched = skills.filter((s) => {
       if (!matchesSurface(s, surfaceFilter) || !matchesMode(s, modeFilter)) return false;
-      if (scenarioFilter === 'all') return true;
-      return (s.scenario || 'general') === scenarioFilter;
+      if (scenarioFilter !== 'all' && (s.scenario || 'general') !== scenarioFilter) return false;
+      if (!q) return true;
+      const desc = localizeSkillDescription(locale, s);
+      const prompt = localizeSkillPrompt(locale, s) || '';
+      const haystack = `${s.name} ${desc} ${prompt} ${s.scenario ?? ''}`.toLowerCase();
+      return haystack.includes(q);
     });
     // Featured magazine-style examples float to the top (lower priority
     // number wins). Non-featured skills keep their server-side order so
@@ -194,7 +204,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
         return a.idx - b.idx;
       })
       .map(({ s }) => s);
-  }, [skills, surfaceFilter, modeFilter, scenarioFilter]);
+  }, [skills, surfaceFilter, modeFilter, scenarioFilter, search, locale]);
 
   if (skills.length === 0) {
     return <div className="tab-empty">{t('examples.emptyNoSkills')}</div>;
@@ -203,6 +213,18 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   return (
     <div className="tab-panel examples-panel">
       <div className="examples-toolbar">
+        <div className="examples-search">
+          <span className="search-icon" aria-hidden>
+            <Icon name="search" size={13} />
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('examples.searchPlaceholder')}
+            aria-label={t('examples.searchAria')}
+          />
+        </div>
         <div
           className="examples-filter-row"
           role="tablist"

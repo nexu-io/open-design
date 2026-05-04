@@ -274,6 +274,8 @@ export const ja: Dict = {
   'examples.scenarioEducation': '教育',
   'examples.scenarioPersonal': '個人',
   'examples.emptyNoSkills': 'スキルがありません。デーモンは起動していますか？',
+  'examples.searchPlaceholder': 'サンプルを検索…',
+  'examples.searchAria': '名前でサンプルを検索',
   'examples.emptyNoMatch': 'このフィルターに一致するサンプルがありません。',
   'examples.openPreview': '⤢ プレビューを開く',
   'examples.loadingPreview': 'プレビューを読み込み中…',

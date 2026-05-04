@@ -274,6 +274,8 @@ export const tr: Dict = {
   'examples.scenarioEducation': 'Eğitim',
   'examples.scenarioPersonal': 'Şahsi',
   'examples.emptyNoSkills': 'Yetenekler mevcut değil. Arka plan servisi çalışıyor mu?',
+  'examples.searchPlaceholder': 'Örnek ara…',
+  'examples.searchAria': 'Örnekleri ada göre ara',
   'examples.emptyNoMatch': 'Hiçbir örnek bu filtrelere uymuyor.',
   'examples.openPreview': '⤢ Önizlemeyi aç',
   'examples.loadingPreview': 'Önizleme yükleniyor…',

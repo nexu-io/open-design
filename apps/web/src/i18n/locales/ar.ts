@@ -275,6 +275,8 @@ export const ar: Dict = {
   'examples.scenarioEducation': 'تعليم',
   'examples.scenarioPersonal': 'شخصي',
   'examples.emptyNoSkills': 'لا توجد مهارات متوفرة. هل البرنامج الخفي يعمل؟',
+  'examples.searchPlaceholder': 'بحث في الأمثلة...',
+  'examples.searchAria': 'بحث في الأمثلة بالاسم',
   'examples.emptyNoMatch': 'لا توجد أمثلة تطابق هذه الفلاتر.',
   'examples.openPreview': '⤢ فتح المعاينة',
   'examples.loadingPreview': 'جاري تحميل المعاينة...',

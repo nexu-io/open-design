@@ -293,6 +293,77 @@ jobs:
           name: open-design-stable-win-release-assets
           path: ${{ runner.temp }}/release-assets
 
+  build_linux:
+    name: Build stable linux x64
+    needs: [metadata, verify]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `--containerized` builds the AppImage inside the electronuserland/builder
+      # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
+      # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
+      # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
+      - name: Build stable linux artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack linux build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-stable-linux \
+            --portable \
+            --to appimage \
+            --containerized \
+            --json
+
+      - name: Prepare linux stable assets
+        env:
+          STABLE_VERSION: ${{ needs.metadata.outputs.stable_version }}
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$release_dir"
+
+          source_appimage="$RUNNER_TEMP/tools-pack/out/linux/namespaces/release-stable-linux/builder/Open Design-release-stable-linux.AppImage"
+          if [ ! -f "$source_appimage" ]; then
+            echo "expected AppImage not found at $source_appimage" >&2
+            exit 1
+          fi
+
+          # Linux currently has no signing path in tools-pack; the asset has no
+          # signing-related suffix (matches the windows convention above).
+          versioned_appimage="open-design-${STABLE_VERSION}-linux-x64.AppImage"
+          checksum_file="$versioned_appimage.sha256"
+
+          cp "$source_appimage" "$release_dir/$versioned_appimage"
+          (
+            cd "$release_dir"
+            sha256sum "$versioned_appimage" > "$checksum_file"
+          )
+
+      - name: Upload linux release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-stable-linux-release-assets
+          path: ${{ runner.temp }}/release-assets
+
   publish:
     name: Publish stable release
     needs:
@@ -300,6 +371,7 @@ jobs:
       - verify
       - build_mac
       - build_win
+      - build_linux
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -333,6 +405,12 @@ jobs:
           name: open-design-stable-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
+      - name: Download linux release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-stable-linux-release-assets
+          path: ${{ runner.temp }}/release-assets/linux
+
       - name: Write release notes shell
         id: notes
         run: |
@@ -349,7 +427,7 @@ jobs:
 
           See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${{ needs.metadata.outputs.version_tag }}/CHANGELOG.md) for the full release notes.
 
-          This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, checksums, and updater feed files.
+          This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, Linux x64 AppImage (no auto-update yet), checksums, and updater feed files.
           EOF
           echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
 
@@ -373,6 +451,7 @@ jobs:
           mkdir -p "$all_release_dir"
           cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
           cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
+          cp "$RUNNER_TEMP/release-assets/linux"/* "$all_release_dir/"
           gh release upload "${{ needs.metadata.outputs.version_tag }}" "$all_release_dir"/*
 
       - name: Promote draft to published latest
@@ -402,5 +481,6 @@ jobs:
             echo "- windows signed: false"
             echo "- mac assets: open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
             echo "- win assets: open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe.blockmap"
-            echo "- Feeds: latest-mac.yml, latest.yml"
+            echo "- linux assets: open-design-${{ needs.metadata.outputs.stable_version }}-linux-x64.AppImage"
+            echo "- Feeds: latest-mac.yml, latest.yml (no latest-linux.yml; AppImage updater not yet wired)"
           } >> "$GITHUB_STEP_SUMMARY"

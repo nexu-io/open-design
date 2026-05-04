@@ -275,6 +275,8 @@ export const hu: Dict = {
   'examples.scenarioEducation': 'Oktatás',
   'examples.scenarioPersonal': 'Személyes',
   'examples.emptyNoSkills': 'Nincs elérhető skill. Fut a daemon?',
+  'examples.searchPlaceholder': 'Példák keresése…',
+  'examples.searchAria': 'Példák keresése név alapján',
   'examples.emptyNoMatch': 'Egy példa sem felel meg ezeknek a szűrőknek.',
   'examples.openPreview': '⤢ Előnézet megnyitása',
   'examples.loadingPreview': 'Előnézet betöltése…',

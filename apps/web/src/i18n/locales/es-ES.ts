@@ -276,6 +276,8 @@ export const esES: Dict = {
   'examples.scenarioEducation': 'Educación',
   'examples.scenarioPersonal': 'Personal',
   'examples.emptyNoSkills': 'No hay skills disponibles. ¿Está el daemon en ejecución?',
+  'examples.searchPlaceholder': 'Buscar ejemplos…',
+  'examples.searchAria': 'Buscar ejemplos por nombre',
   'examples.emptyNoMatch': 'Ningún ejemplo coincide con estos filtros.',
   'examples.openPreview': '⤢ Abrir vista previa',
   'examples.loadingPreview': 'Cargando vista previa…',
