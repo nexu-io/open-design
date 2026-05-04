@@ -448,6 +448,9 @@ export const ar: Dict = {
   'designFiles.rowMenu': 'قائمة الصف',
   'designFiles.openInTab': 'فتح في علامة تبويب',
   'designFiles.download': 'تحميل',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ أسقط الملفات هنا',
   'designFiles.dropDesc':
     'الصور، المستندات، المراجع، أو المجلدات - سيستخدمها الوكيل كسياق.',

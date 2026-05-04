@@ -1433,13 +1433,12 @@ code {
   position: fixed;
   z-index: 1000;
   max-width: calc(100vw - 24px);
-  /* 360px = 9 locales × ~40px; --menu-available-h is set by JS to the
-     distance between the trigger and whichever viewport edge the menu
-     opens toward, so the menu never overflows the viewport regardless of
-     placement direction (above or below the trigger). The 60vh cap keeps
-     the menu from feeling cramped on short viewports (mobile landscape,
-     ~400–500px tall). */
-  max-height: min(360px, 60vh, var(--menu-available-h, 360px));
+  /* 7 locales × ~58px + menu chrome (padding, gap, border) ≈ 428px;
+     --menu-available-h is set by JS to the distance between the trigger
+     and whichever viewport edge the menu opens toward, so the menu never
+     overflows the viewport regardless of placement direction. The 60vh
+     cap keeps the menu from feeling cramped on short viewports. */
+  max-height: min(428px, 60vh, var(--menu-available-h, 428px));
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -1457,7 +1456,6 @@ code {
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 40px;
   padding: 10px 12px;
   border: 0;
   border-radius: 9px;
@@ -3403,6 +3401,7 @@ code {
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
   overflow-x: auto;
+  overflow-y: hidden;
   flex-wrap: nowrap;
   height: 44px;
   position: sticky;
@@ -3588,7 +3587,7 @@ code {
 }
 .df-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto auto;
+  grid-template-columns: 28px 36px 1fr auto auto;
   align-items: center;
   gap: 12px;
   padding: 10px 20px;
@@ -3606,6 +3605,38 @@ code {
 .df-row:hover { background: var(--bg-subtle); }
 .df-row.active { background: var(--blue-bg); color: var(--text); }
 .df-row.active .df-row-name { color: var(--text-strong); }
+.df-row.selected { background: var(--blue-bg); }
+
+.df-row-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  user-select: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.df-row-check:hover { background: var(--border); color: var(--text); }
+.df-row-check[aria-checked="true"] { color: var(--accent-strong); }
+
+.df-select-all {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.df-select-all:hover { background: var(--bg-subtle); color: var(--text); }
 .df-row-icon {
   width: 32px;
   height: 32px;
@@ -3965,6 +3996,11 @@ code {
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+.comment-frame-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 .comment-overlay-layer {
   position: absolute;

@@ -81,15 +81,15 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
     examplePrompt:
       'Eine Dokumentationsseite — linke Navigation, scrollbarer Artikelbereich, rechte Inhaltsübersicht.',
   },
-  'editorial-collage': {
+  'open-design-landing': {
     examplePrompt:
-      'Entwerfen Sie eine Editorial-Landingpage im Atelier-Zero- / Monocle-Stil — warme Papierleinwand, surreale Plaster-und-Architektur-Collage, übergroße gemischte Italic-Serif-Display-Type, römische Ziffern als Sektionsmarker und ein einziger Korallenakzent.',
+      'Entwerfen Sie die Open-Design-Marketing-Landingpage im Atelier-Zero- / Monocle-Stil — warme Papierleinwand, surreale Plaster-und-Architektur-Collage, übergroße gemischte Italic-Serif-Display-Type, römische Ziffern als Sektionsmarker und ein einziger Korallenakzent.',
   },
-  'editorial-collage-deck': {
+  'open-design-landing-deck': {
     examplePrompt:
-      'Erstellen Sie ein 11-Slide-Pitch-Deck für „Lumen Field“, ein Studio für Fokus-Soundscapes. Cover mit Hero-Plate, zwei Sektions-Trenner, zwei Produkt-Content-Slides mit Bullets, ein Stats-Slide mit 12 Soundscapes / 4 Presets / 1 Daily Ritual, ein Kundenzitat, ein abschließendes CTA und eine End-Card. Wiederverwenden Sie die Bildbibliothek von editorial-collage.',
+      'Erstellen Sie das Open-Design-Pitch-Deck im Atelier-Zero-Stil — Cover mit Hero-Plate, römische Sektions-Trenner, Stats-Slide (31 Skills · 72 Systeme · 12 CLIs), Kundenzitat, CTA und Mega-Italic-Serif-End-Card. Horizontal-Swipe-Pagination wie eine Print-Magazine.',
     description:
-      'Erstellt ein Single-File-Slide-Deck in der Atelier-Zero-Bildsprache (warmes Papier, italic-serif Akzent-Spans, korallenfarbene Schluss-Dots, surreale Collage-Platten). Das Deck nutzt Scroll-Snap-Pagination, Pfeiltasten- + Leertaste-Navigation, ein Live-HUD mit Slide-Zähler und Fortschrittsbalken und erbt das kanonische Stylesheet sowie die 16-Slot-Bildbibliothek der Schwester-Skill `editorial-collage`.',
+      'Erstellt ein Single-File-Slide-Deck im Atelier-Zero-Stil (warmes Papier, italic-serif Akzent-Spans, korallenfarbene Schluss-Dots, surreale Collage-Platten). Horizontale Magazin-Pagination mit Pfeiltasten- und Leertaste-Navigation, Live-HUD mit Slide-Zähler und Fortschrittsbalken; teilt sich Stylesheet und 16-Slot-Bildbibliothek mit der Schwester-Skill `open-design-landing`.',
   },
   'email-marketing': {
     examplePrompt:
@@ -152,6 +152,18 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   'invoice': {
     examplePrompt:
       'Erstellen Sie eine Rechnung eines freiberuflichen Designstudios an einen Kunden für ein Brand-Identity-Projekt — drei Positionen, 10% Retainer, 9% Umsatzsteuer.',
+  },
+  'kami-deck': {
+    examplePrompt:
+      'Erstellen Sie ein sechsteiliges Konferenz-Deck im kami-Stil (紙) — warmes Pergament, Tintenblau auf dem Cover, eine Serifenschnittstärke, horizontaler Magazin-Swipe.',
+    description:
+      'Erzeugt ein druckreifes Slide-Deck im kami-Designsystem: warmes Pergament (oder Tintenblau auf Cover/Kapitel), Serif nur in einer Schnittstärke, Tintenblau-Akzent ≤5% pro Folie, ohne Kursiv. Horizontale Magazin-Pagination (←/→ · Rad · Wischen · ESC-Übersicht). Eine eigenständige HTML-Datei, nur Google Fonts.',
+  },
+  'kami-landing': {
+    examplePrompt:
+      'Entwerfen Sie eine einseitige Studio-One-Pager im kami-Stil — Pergament-Leinwand, Tintenblau-Akzent, editorial wie ein Whitepaper.',
+    description:
+      'Erzeugt eine druckreife Einseiter im kami-Stil (紙): warmes Pergament, Tintenblau-Akzent, Serif in einer Schnittstärke, kein Kursiv, keine kühlen Grautöne. Liest sich wie Whitepaper oder Studio-One-Pager, nicht wie App-UI. Mehrsprachig (EN · zh-CN · ja). Eine eigenständige HTML-Datei ohne Abhängigkeiten.',
   },
   'kanban-board': {
     examplePrompt:

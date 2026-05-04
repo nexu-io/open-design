@@ -11,12 +11,12 @@
 <style>/*
  * Atelier Zero — canonical landing-page stylesheet.
  *
- * This file is the SINGLE SOURCE OF TRUTH for the editorial-collage
+ * This file is the SINGLE SOURCE OF TRUTH for the open-design-landing
  * skill's visual system. It is consumed by:
  *
  *   1. `scripts/compose.ts` — inlined into the standalone HTML output.
  *   2. `apps/landing-page/app/globals.css` — copied verbatim for the
- *      Next.js deployable counterpart.
+ *      Astro static deployable counterpart.
  *   3. `example.html` — the pre-rendered known-good demo.
  *
  * If you change tokens, layout, motion, or component styles, edit them
@@ -64,19 +64,13 @@ body {
   position: relative;
 }
 
-/*
- * Paper texture overlay across the whole page. Rendered above .shell so
- * the multiply blend applies uniformly to every section — including the
- * opaque .topbar and .nav — instead of only to transparent sections
- * (hero, about, …). Equal z-index to .side-rail; the rails appear later
- * in document order and therefore stay on top of the texture.
- */
+/* paper texture overlay across the whole page */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 3;
+  z-index: 1;
   background-image:
     radial-gradient(circle at 12% 18%, rgba(106, 92, 56, 0.07) 0, transparent 28%),
     radial-gradient(circle at 88% 72%, rgba(106, 92, 56, 0.06) 0, transparent 32%),
@@ -291,6 +285,12 @@ body::before {
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.nav-cta [data-github-stars],
+.nav-cta [data-github-version] {
+  font-variant-numeric: tabular-nums;
 }
 .nav-cta::after {
   content: '★';
@@ -429,9 +429,12 @@ body::before {
   padding: 0;
   min-height: calc(100vh - 140px);
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   border-bottom: 1px solid var(--line);
 }
+.hero > .container { flex: 0 0 auto; }
+.hero > .container.hero-grid { flex: 1 1 auto; }
 .hero::before {
   content: '';
   position: absolute;
@@ -1812,6 +1815,14 @@ footer {
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
+/* nav: between 1080 and 1180 the brand tail + 5 nav links + 2 CTAs + dot
+ * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
+ * so the Star CTA never has to compress. */
+@media (max-width: 1180px) {
+  .nav-inner { gap: 18px; }
+  .brand-meta { display: none; }
+  .nav-links { gap: 28px; }
+}
 @media (max-width: 1080px) {
   .container { padding: 0 32px; }
   .hero h1 { font-size: clamp(36px, 4.6vw, 54px); }
@@ -1884,7 +1895,7 @@ footer {
       <span>Apache-2.0 · Made on Earth</span>
     </span>
     <span class='right'>
-      <a class='topbar-link' href='https://github.com/nexu-io/open-design/releases' target='_blank' rel='noreferrer noopener'><span class='pulse'></span>Live · v0.2.0</a>
+      <a class='topbar-link' href='https://github.com/nexu-io/open-design/releases' target='_blank' rel='noreferrer noopener'><span class='pulse'></span>Live · v0.3.0</a>
       <span><b>EN</b> · DE · 中文 · 日本語</span>
     </span>
   </div>
@@ -2404,6 +2415,15 @@ footer {
     <span>guizang-ppt</span>
     <small>Decks</small>
   </a>
+        <a class='partner' data-reveal href='https://github.com/multica-ai/multica' target='_blank' rel='noreferrer noopener'>
+    <div class='glyph'>
+      <svg viewBox='0 0 80 30' fill='none' stroke='currentColor' stroke-width='2'>
+        <rect x='6' y='6' width='4' height='18'/><rect x='14' y='6' width='4' height='18'/><rect x='22' y='6' width='4' height='18'/><rect x='30' y='6' width='4' height='18'/>
+      </svg>
+    </div>
+    <span>multica-ai</span>
+    <small>Daemon</small>
+  </a>
         <a class='partner' data-reveal href='https://github.com/OpenCoworkAI/open-codesign' target='_blank' rel='noreferrer noopener'>
     <div class='glyph'>
       <svg viewBox='0 0 80 30' fill='none' stroke='currentColor' stroke-width='2'>
@@ -2469,7 +2489,7 @@ footer {
         </div>
         <div class='cta-foot'>
           <span class='stamp'>● Live</span>
-          <span>v0.2.0 / Apache-2.0</span>
+          <span>v0.3.0 / Apache-2.0</span>
           <span style='margin-left:auto;'>52.5200° N · 13.4050° E</span>
         </div>
       </div>
@@ -2491,7 +2511,7 @@ footer {
           <span>Open Design</span>
         </a>
         <p style='margin-top:18px;'>The open-source alternative to Claude Design. Built on the shoulders of <a class='inline-link' href='https://github.com/alchaincyf/huashu-design' target='_blank' rel='noreferrer noopener'>huashu-design</a>, <a class='inline-link' href='https://github.com/op7418/guizang-ppt-skill' target='_blank' rel='noreferrer noopener'>guizang-ppt</a>, <a class='inline-link' href='https://github.com/multica-ai/multica' target='_blank' rel='noreferrer noopener'>multica-ai</a>, and <a class='inline-link' href='https://github.com/OpenCoworkAI/open-codesign' target='_blank' rel='noreferrer noopener'>open-codesign</a>.</p>
-        <a class='foot-cta' href='https://github.com/nexu-io/open-design/releases' target='_blank' rel='noreferrer noopener'>Download desktop<span class='meta'>macOS · v0.2.0</span></a>
+        <a class='foot-cta' href='https://github.com/nexu-io/open-design/releases' target='_blank' rel='noreferrer noopener'>Download desktop<span class='meta'>macOS · v0.3.0</span></a>
       </div>
       <div class='foot-col'>
     <h5>Studio</h5>

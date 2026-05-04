@@ -1,12 +1,14 @@
 ---
-name: editorial-collage-deck
+name: open-design-landing-deck
 description: >
   Produce a single-file slide deck in the Atelier Zero visual language
   (warm-paper background, italic-serif emphasis spans, coral terminating
-  dots, surreal collage plates). The deck uses scroll-snap pagination,
-  arrow-key + space navigation, a live HUD with slide counter and
-  progress bar, and inherits the canonical stylesheet + 16-slot image
-  library from the sister `editorial-collage` skill.
+  dots, surreal collage plates) — Open Design's brand deck recipe.
+  The deck uses **horizontal magazine-style swipe pagination** (←/→,
+  wheel, swipe), a per-slide chrome strip with brand mark and slide
+  counter, an ESC overview grid, a coral progress bar, and inherits
+  the canonical stylesheet + 16-slot image library from the sister
+  `open-design-landing` skill.
 triggers:
   - slide deck
   - 演示文稿
@@ -14,12 +16,20 @@ triggers:
   - keynote
   - editorial slides
   - atelier zero deck
+  - open design deck
+  - open design landing deck
 od:
   category: brand-deck
   surface: web
+  mode: deck
+  scenario: marketing
+  featured: 2
   audience: founders pitching, conference talks, internal reviews
   tone: editorial, restrained, premium
   scale: 6-15 viewport-locked slides
+  preview:
+    type: html
+    entry: index.html
   craft:
     requires:
       - typographic-rhythm
@@ -29,7 +39,7 @@ inputs:
     label: Brand identity (shared across slides)
     schema_path: ./schema.ts#BrandBlock
   - id: deck_title
-    label: Kicker shown in the HUD top bar
+    label: Kicker shown in the per-slide top chrome
     description: e.g. `'Open Design · Vol. 01 / Issue Nº 26'`.
   - id: slides
     label: Ordered list of typed slides
@@ -39,7 +49,7 @@ inputs:
     schema_path: ./schema.ts#Slide
   - id: imagery
     label: Image library (defaults to sister skill's assets)
-    schema_path: ../editorial-collage/schema.ts#ImageryConfig
+    schema_path: ../open-design-landing/schema.ts#ImageryConfig
 parameters:
   slides_recommended_count:
     type: number
@@ -56,34 +66,45 @@ example_prompt: |
   studio. Cover with hero plate, two section dividers, two product
   content slides with bullets, a stats slide showing 12 soundscapes / 4
   presets / 1 daily ritual, a customer quote, a closing CTA, and an end
-  card. Reuse the editorial-collage image library.
+  card. Reuse the open-design-landing image library.
 ---
 
-# editorial-collage-deck
+# open-design-landing-deck
 
-Sister skill to [`editorial-collage`](../editorial-collage/). Same
+Sister skill to [`open-design-landing`](../open-design-landing/). Same
 Atelier Zero visual system (warm paper, Inter Tight + Playfair Display,
-italic-serif emphasis, coral dots), but paginated as a slide deck
-instead of a long landing page.
+italic-serif emphasis, coral dots), but paginated as a **horizontal
+magazine-style swipe deck** instead of a long scrolling page.
+
+The navigation model is intentionally borrowed from the
+[`guizang-ppt`](../guizang-ppt/) skill — `←/→` arrow keys, wheel /
+swipe, ESC for the overview grid — so it feels like a print magazine
+flipping page by page rather than a web slide deck scrolling.
 
 ```text
-inputs.json + ../editorial-collage/styles.css
+inputs.json + ../open-design-landing/styles.css
         │
         └──────────► scripts/compose.ts
                             │
                             ▼
                    <out>/index.html
-                   (one viewport per slide, scroll-snap)
+                   (one viewport per slide, horizontal swipe)
 ```
 
 ## What you get
 
-- A single self-contained HTML file with N viewport-height slides.
-- **Keyboard navigation**: ←/→ · ↑/↓ · PageUp/PageDown · Space · Home/End.
-- **HUD top bar**: brand mark, deck title, key hint, live slide counter.
+- A single self-contained HTML file with N viewport-sized slides laid
+  out horizontally on one transformed flex track.
+- **Keyboard navigation**: `←/→` · `↑/↓` · PageUp/PageDown · Space ·
+  Home/End.
+- **Wheel + touch swipe** (with momentum guard so a single trackpad
+  flick doesn't overshoot).
+- **Per-slide chrome strip**: brand mark, deck title, location,
+  Roman-numeral year, live slide counter (`01 / 11`).
 - **Coral progress bar** at the bottom that fills as you advance.
-- **Scroll-snap pagination** with `scroll-snap-stop: always` so each
-  slide settles cleanly.
+- **Dot indicator** strip near the bottom; click any dot to jump.
+- **ESC overview grid** — scaled thumbnails of every slide, click to
+  jump. Mirrors `guizang-ppt`'s overview UX.
 - Reuses the **same 16-slot image library** as the sister skill — no
   duplicate assets.
 
@@ -122,29 +143,29 @@ A typical 11-slide pitch:
 Start from [`inputs.example.json`](./inputs.example.json) (the Open
 Design pitch deck). The brand block, image strategy, and assets path
 mirror the sister skill — if you already filled out an
-`editorial-collage` brief, copy `brand` and `imagery` over verbatim.
+`open-design-landing` brief, copy `brand` and `imagery` over verbatim.
 
 For each slide, pick a `kind` and fill the typed fields from
-[`schema.ts`](./schema.ts). `MixedText` (sans-serif baseline + italic-serif
-emphasis spans + coral terminating dot) is the same encoding used by
-the sister skill — see its `inputs.example.json` for examples.
+[`schema.ts`](./schema.ts). `MixedText` (sans-serif baseline +
+italic-serif emphasis spans + coral terminating dot) is the same
+encoding used by the sister skill — see its `inputs.example.json`.
 
 ### 2. (Optional) generate or stub imagery
 
 This skill does **not** ship its own image generator or placeholder
-script — it shares the 16-slot library from `editorial-collage`. To
+script — it shares the 16-slot library from `open-design-landing`. To
 regenerate or stub:
 
 ```bash
 # generate via gpt-image-2 (fal.ai)
-FAL_KEY=... npx tsx ../editorial-collage/scripts/imagegen.ts ../editorial-collage/inputs.example.json --out=../editorial-collage/assets/
+FAL_KEY=... npx tsx ../open-design-landing/scripts/imagegen.ts ../open-design-landing/inputs.example.json --out=../open-design-landing/assets/
 
 # or paper-textured SVG placeholders
-npx tsx ../editorial-collage/scripts/placeholder.ts ../editorial-collage/assets/
+npx tsx ../open-design-landing/scripts/placeholder.ts ../open-design-landing/assets/
 ```
 
 Set your deck's `inputs.imagery.assets_path` to wherever those PNGs
-live (default in the example: `../editorial-collage/assets/`).
+live (default in the example: `../open-design-landing/assets/`).
 
 ### 3. Compose the deck
 
@@ -153,40 +174,49 @@ npx tsx scripts/compose.ts inputs.json out/index.html
 ```
 
 The composer reads `inputs.json`, loads the canonical Atelier Zero
-stylesheet from `../editorial-collage/styles.css`, layers deck-specific
-rules (scroll-snap container, slide layout grid, HUD, keyboard nav)
-on top, and writes one self-contained HTML file.
+stylesheet from `../open-design-landing/styles.css`, layers
+deck-specific rules on top (horizontal flex track, slide layouts,
+HUD, dot nav, ESC overview, keyboard / wheel / touch handlers), and
+writes one self-contained HTML file.
 
 ### 4. Self-check
 
 - [ ] Open the HTML in a fresh browser tab; slide 1 (cover) shows
-      with HUD `01 / N` in the corner.
-- [ ] Press `→` (or Space). Smoothly advances to slide 2 with
-      `02 / N` in the counter and the coral progress bar filling.
+      with chrome strip top-right showing `01 / N`.
+- [ ] Press `→` (or Space, or scroll-down). Smoothly slides one
+      viewport to the right; dot nav advances; the coral progress bar
+      ticks forward.
 - [ ] Press `End`. Jumps to the final slide.
 - [ ] Press `Home`. Returns to slide 1.
-- [ ] `prefers-reduced-motion: reduce` (DevTools → Rendering): smooth
-      scroll still works, but page transitions are instant.
-- [ ] Resize to 1080px and 640px. Slides stack appropriately; no
-      horizontal scrollbar; HUD shrinks gracefully.
+- [ ] Press `Esc`. Overview grid appears with scaled thumbnails;
+      click any tile to jump and dismiss the overview.
+- [ ] Resize to 1080px and 640px. Cover / content slides collapse to
+      a single column; dot nav still works; chrome strips shrink.
+- [ ] `prefers-reduced-motion: reduce` (DevTools → Rendering): page
+      transitions stay snappy and don't induce motion sickness.
 - [ ] Lighthouse: contrast AA, font-display swap, no layout shift.
 
 ## Boundaries
 
 - **Reuse the sister skill's stylesheet.** The composer reads
-  `../editorial-collage/styles.css` at compile time. Do not maintain a
-  duplicate copy here; if Atelier Zero tokens evolve, edit them once
-  in the sister skill.
+  `../open-design-landing/styles.css` at compile time. Do not
+  maintain a duplicate copy here; if Atelier Zero tokens evolve, edit
+  them once in the sister skill.
 - **Reuse the sister skill's image library.** No need to re-prompt or
   re-render — the same 16 plates work for both surfaces.
 - **Keep slides single-viewport.** If a slide's content does not fit
-  100vh at 1280×800 it will overflow and feel cramped. Trim copy or
-  split into two slides.
+  100vh × 100vw at 1280×800 it will overflow and feel cramped. Trim
+  copy or split into two slides.
+- **Do not switch to vertical scroll-snap.** The horizontal swipe
+  posture is what makes this skill feel like a magazine spread; a
+  vertical scroller would just be a long landing page.
 - **Do not add a router.** This is a single-file artifact. Multi-page
   decks are out of scope; for a multi-deck experience, render each
   deck separately and link from a parent index.
 
 ## See also
 
-- [`editorial-collage`](../editorial-collage/) — landing page sister skill.
+- [`open-design-landing`](../open-design-landing/) — landing page sister skill.
+- [`guizang-ppt`](../guizang-ppt/) — the magazine-deck navigation
+  pattern this skill borrows.
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — token spec.

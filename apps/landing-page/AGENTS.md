@@ -9,10 +9,10 @@ records module-level boundaries for `apps/landing-page/`.
 the canonical Open Design marketing page in the **Atelier Zero** style.
 It is the deployable counterpart to:
 
-- Skill: `skills/editorial-collage/` — agent workflow + the source-of-truth
+- Skill: `skills/open-design-landing/` — agent workflow + the source-of-truth
   `example.html` known-good rendering.
 - Design system: `design-systems/atelier-zero/DESIGN.md` — token spec.
-- Image assets: `skills/editorial-collage/assets/*.png` are uploaded to
+- Image assets: `skills/open-design-landing/assets/*.png` are uploaded to
   Cloudflare R2 (`open-design-static`) and served through
   `static.open-design.ai` with Image Resizing (`format=auto`). Do not
   commit local mirrored PNGs into `apps/landing-page/public/assets/`.
@@ -52,7 +52,7 @@ It is the deployable counterpart to:
   `app/`. If a component grows beyond ~80 lines, extract it to
   `app/_components/<name>.tsx`.
 - Must not depend on any non-Google web font.
-- When the canonical `skills/editorial-collage/example.html` changes,
+- When the canonical `skills/open-design-landing/example.html` changes,
   the corresponding section JSX in `app/page.tsx` and rules in
   `app/globals.css` must be updated to match. The two files are kept
   in lockstep.

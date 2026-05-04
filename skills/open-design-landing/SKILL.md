@@ -1,12 +1,14 @@
 ---
-name: editorial-collage
+name: open-design-landing
 description: >
   Produce a world-class single-page editorial landing site in the
   Atelier Zero visual language (Monocle / Apartamento / Études editorial
-  collage). The agent fills a typed `inputs.json` from a brand brief,
+  collage) — the same aesthetic Open Design uses for its own marketing
+  surface. The agent fills a typed `inputs.json` from a brand brief,
   optionally generates 16 collage assets via gpt-image-2, then runs a
-  pure-function composer that emits a self-contained HTML file plus a
-  ready-to-deploy Next.js app. Drop-in scroll-reveal motion and a
+  pure-function composer that emits a self-contained HTML file; a
+  separate path can mirror the Astro marketing site in `apps/landing-page/`.
+  Drop-in scroll-reveal motion and a
   Headroom-style sticky nav are wired automatically.
 triggers:
   - landing page
@@ -15,9 +17,12 @@ triggers:
   - magazine layout
   - hero collage
   - atelier zero
+  - open design landing
 od:
   category: brand-page
   surface: web
+  scenario: marketing
+  featured: 1
   audience: founders, design studios, OSS maintainers
   tone: editorial, restrained, premium
   scale: viewport-anchored long-form single page
@@ -71,9 +76,9 @@ parameters:
     default: standalone-html
     description: >
       `standalone-html` writes one self-contained .html (CSS inlined,
-      scripts inline, images relative). `nextjs-app` clones the
-      `apps/landing-page/` scaffold and wires the same content. `both`
-      writes both products into the output dir.
+      scripts inline, images relative). `nextjs-app` is the historical
+      enum label for cloning the Astro-based `apps/landing-page/` tree and
+      wiring the same content. `both` writes both products into the output dir.
   image_strategy:
     type: enum
     values: [generate, placeholder, bring-your-own]
@@ -96,7 +101,7 @@ outputs:
     description: 16 collage assets, generated or placeholder per strategy.
   - path: <out>/nextjs/
     when: output_format in [nextjs-app, both]
-    description: Next.js 16 App Router scaffold mirroring apps/landing-page.
+    description: Astro static tree mirroring apps/landing-page (folder name is historical).
 capabilities_required:
   - file-write
   - http-fetch        # only when image_strategy=generate
@@ -108,14 +113,17 @@ example_prompt: |
   presets / 1 daily ritual. Use the placeholder image strategy.
 ---
 
-# editorial-collage
+# open-design-landing
 
 Build a single-page editorial landing site (or a slide deck — see the
-sibling [`editorial-collage-deck`](../editorial-collage-deck/) skill)
+sibling [`open-design-landing-deck`](../open-design-landing-deck/) skill)
 in the **Atelier Zero** design system: warm-paper background, Inter
 Tight + Playfair Display, italic serif emphasis spans, dotted hairline
 rules, coral terminating dots, scroll-reveal motion, and 16 surreal
 collage plates.
+
+This is the canonical Open Design marketing-page recipe — the example
+output is the very page you see at [open-design](https://github.com/nexu-io/open-design).
 
 The skill is fully **parameterized**. The agent fills one typed
 `inputs.json` from the user's brief; the composer turns that JSON +
@@ -238,17 +246,18 @@ self-contained HTML file. The page includes:
 - Inline Headroom nav script (mirrors `header.tsx`).
 - Inline GitHub star-count fetcher (auto-detects from `brand.primary_url`).
 
-### 4. (Optional) Generate the Next.js scaffold
+### 4. (Optional) Mirror the deployable Astro site
 
-For deployable production output, **fork the `apps/landing-page/`
-module**: copy it to your project root, swap the JSX in `app/page.tsx`
-for content from your `inputs.json`, and copy your `<out>/assets/*.png`
-into `public/assets/`. The Next.js variant supports `next build` →
-static `out/` export ready for any CDN.
+For deployable production output, **fork the `apps/landing-page/`**
+package: copy it into your workspace, align `app/page.tsx` with content
+from your `inputs.json`, and copy your `<out>/assets/*.png` into the
+paths expected by `app/image-assets.ts` / R2 URLs. Build with
+`pnpm --filter @open-design/landing-page build` for a static `out/`
+export ready for any CDN.
 
-> A future iteration will bundle a `scripts/compose-nextjs.ts` that
-> emits the entire `apps/landing-page/` tree from `inputs.json` so this
-> step is one command. Until then, fork-and-edit is the supported path.
+> A future iteration may bundle a composer that emits the full
+> `apps/landing-page/` tree from `inputs.json` in one command. Until
+> then, fork-and-edit is the supported path.
 
 ---
 
@@ -272,7 +281,7 @@ Before marking done, the agent **must** verify:
 ## Files in this skill
 
 ```text
-skills/editorial-collage/
+skills/open-design-landing/
 ├── SKILL.md                 # this contract
 ├── README.md                # quick-start
 ├── schema.ts                # typed inputs (single source of truth)
@@ -301,12 +310,12 @@ skills/editorial-collage/
 - **Do not** wrap the composed HTML in a framework that injects its
   own stylesheet ordering — Atelier Zero relies on stylesheet-order
   cascade for paper texture and z-index of side rails.
-- **Do not** add a separate stylesheet file for the Next.js variant;
-  copy `styles.css` verbatim into `app/globals.css` so visual parity
+- **Do not** add a separate stylesheet file for the Astro landing-page
+  fork; copy `styles.css` verbatim into `app/globals.css` so visual parity
   stays one-to-one.
 
 ## See also
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — token spec.
-- [`apps/landing-page/`](../../apps/landing-page/) — deployable Next.js counterpart.
-- [`skills/editorial-collage-deck/`](../editorial-collage-deck/) — sibling slides skill that reuses this design system.
+- [`apps/landing-page/`](../../apps/landing-page/) — deployable Astro static counterpart.
+- [`skills/open-design-landing-deck/`](../open-design-landing-deck/) — sibling slides skill that reuses this design system.

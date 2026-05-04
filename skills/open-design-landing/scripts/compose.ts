@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx -y tsx
 /**
- * editorial-collage — HTML composer.
+ * open-design-landing — HTML composer.
  *
  * Reads `inputs.json` (matching `../schema.ts`) and writes a single
  * self-contained HTML file with the Atelier Zero stylesheet inlined,

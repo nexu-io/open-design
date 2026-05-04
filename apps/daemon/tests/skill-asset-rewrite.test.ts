@@ -4,8 +4,8 @@ import { rewriteSkillAssetUrls } from '../src/server.js';
 describe('rewriteSkillAssetUrls', () => {
   it('rewrites ./assets/<file> img sources to the daemon route', () => {
     const html = `<img src='./assets/hero.png' alt='' />`;
-    expect(rewriteSkillAssetUrls(html, 'editorial-collage')).toBe(
-      `<img src='/api/skills/editorial-collage/assets/hero.png' alt='' />`,
+    expect(rewriteSkillAssetUrls(html, 'open-design-landing')).toBe(
+      `<img src='/api/skills/open-design-landing/assets/hero.png' alt='' />`,
     );
   });
 
@@ -17,9 +17,9 @@ describe('rewriteSkillAssetUrls', () => {
   });
 
   it('rewrites sibling skill asset references', () => {
-    const html = `<img src='../editorial-collage/assets/hero.png' /><a href="../skill-two/assets/guide.pdf"></a>`;
+    const html = `<img src='../open-design-landing/assets/hero.png' /><a href="../skill-two/assets/guide.pdf"></a>`;
     expect(rewriteSkillAssetUrls(html, 'foo')).toBe(
-      `<img src='/api/skills/editorial-collage/assets/hero.png' /><a href="/api/skills/skill-two/assets/guide.pdf"></a>`,
+      `<img src='/api/skills/open-design-landing/assets/hero.png' /><a href="/api/skills/skill-two/assets/guide.pdf"></a>`,
     );
   });
 

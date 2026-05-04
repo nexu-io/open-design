@@ -449,6 +449,9 @@ export const esES: Dict = {
   'designFiles.rowMenu': 'Menú de la fila',
   'designFiles.openInTab': 'Abrir en pestaña',
   'designFiles.download': 'Descargar',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Suelta archivos aquí',
   'designFiles.dropDesc':
     'Imágenes, documentos, referencias o carpetas: el agente los usará como contexto.',

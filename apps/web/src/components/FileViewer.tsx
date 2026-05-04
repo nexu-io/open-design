@@ -1428,33 +1428,35 @@ function HtmlViewer({
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div className="comment-preview-layer">
-            <div
-              style={{
-                width: `${100 / previewScale}%`,
-                height: `${100 / previewScale}%`,
-                transform: `scale(${previewScale})`,
-                transformOrigin: '0 0',
-              }}
-            >
-              {useUrlLoadPreview ? (
-                <iframe
-                  ref={iframeRef}
-                  data-testid="artifact-preview-frame"
-                  data-od-render-mode="url-load"
-                  title={file.name}
-                  sandbox="allow-scripts"
-                  src={previewSrcUrl}
-                />
-              ) : (
-                <iframe
-                  ref={iframeRef}
-                  data-testid="artifact-preview-frame"
-                  data-od-render-mode="srcdoc"
-                  title={file.name}
-                  sandbox="allow-scripts"
-                  srcDoc={srcDoc}
-                />
-              )}
+            <div className="comment-frame-clip">
+              <div
+                style={{
+                  width: `${100 / previewScale}%`,
+                  height: `${100 / previewScale}%`,
+                  transform: `scale(${previewScale})`,
+                  transformOrigin: '0 0',
+                }}
+              >
+                {useUrlLoadPreview ? (
+                  <iframe
+                    ref={iframeRef}
+                    data-testid="artifact-preview-frame"
+                    data-od-render-mode="url-load"
+                    title={file.name}
+                    sandbox="allow-scripts"
+                    src={previewSrcUrl}
+                  />
+                ) : (
+                  <iframe
+                    ref={iframeRef}
+                    data-testid="artifact-preview-frame"
+                    data-od-render-mode="srcdoc"
+                    title={file.name}
+                    sandbox="allow-scripts"
+                    srcDoc={srcDoc}
+                  />
+                )}
+              </div>
             </div>
             {commentMode ? (
               <CommentPreviewOverlays

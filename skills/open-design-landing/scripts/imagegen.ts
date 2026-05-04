@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx -y tsx
 /**
- * editorial-collage — gpt-image-2 generator (fal.ai backend).
+ * open-design-landing — gpt-image-2 generator (fal.ai backend).
  *
  * Generates the 16 collage assets defined in `assets/image-manifest.json`
  * by composing per-slot prompts (style anchor + brand variables +

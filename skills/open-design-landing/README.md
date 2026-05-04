@@ -1,4 +1,4 @@
-# editorial-collage
+# open-design-landing
 
 Reusable skill that produces a world-class editorial landing page in
 the **Atelier Zero** design language — the warm-paper, italic-serif,
@@ -73,7 +73,7 @@ Every section has scroll-reveal motion (IntersectionObserver, respects
 ## Files
 
 ```text
-skills/editorial-collage/
+skills/open-design-landing/
 ├── SKILL.md                 # ← agent contract (read this first)
 ├── README.md                # ← you are here
 ├── schema.ts                # typed inputs (single source of truth)
@@ -102,8 +102,18 @@ The `example.html` in this folder is the pre-rendered known-good demo —
 useful as a visual reference and for QA against the live composer
 output.
 
+## Migrating from `editorial-collage`
+
+This skill replaces the older `editorial-collage` folder:
+
+- **Path:** `skills/editorial-collage/` → `skills/open-design-landing/`.
+- **Shared assets:** downstream paths such as `../editorial-collage/assets/`
+  (for example from the slide-deck skill) should use
+  [`../open-design-landing/assets/`](./assets/) — see
+  [`open-design-landing-deck`](../open-design-landing-deck/README.md).
+
 ## See also
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — colors, type, motion tokens.
-- [`apps/landing-page/`](../../apps/landing-page/) — Next.js 16 deployable counterpart of this skill.
-- [`skills/editorial-collage-deck/`](../editorial-collage-deck/) — sibling skill that produces a slide deck in the same visual language.
+- [`apps/landing-page/`](../../apps/landing-page/) — Astro static site that mirrors this skill’s markup at deploy time.
+- [`skills/open-design-landing-deck/`](../open-design-landing-deck/) — sibling skill that produces a slide deck in the same visual language.

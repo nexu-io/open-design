@@ -1,6 +1,6 @@
 # Atelier Zero — Image Generation Prompt Pack
 
-This pack is consumed by the `editorial-collage` skill. Every page-level
+This pack is consumed by the `open-design-landing` skill. Every page-level
 image is rendered with `gpt-image-fal` (preferred) or `gpt-image-azure`.
 
 The pack has three layers:

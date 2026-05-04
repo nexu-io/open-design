@@ -1,5 +1,5 @@
 /**
- * editorial-collage — input schema.
+ * open-design-landing — input schema.
  *
  * This is the contract between users and `scripts/compose.ts`. A valid
  * `inputs.json` matching `EditorialCollageInputs` is enough to produce
@@ -367,7 +367,7 @@ export interface FooterBlock {
   /**
    * Optional CTA rendered under the brand description in the footer
    * (e.g. `{ label: 'Download desktop', href: 'https://.../releases',
-   * meta: 'macOS · v0.2.0' }`). When `brand.download_url` is set this is
+   * meta: 'macOS · v0.3.0' }`). When `brand.download_url` is set this is
    * filled in automatically; explicit values take precedence.
    */
   brand_cta?: { label: string; href: string; meta?: string };

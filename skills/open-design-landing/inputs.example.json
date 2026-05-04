@@ -11,7 +11,7 @@
     "description": "Open Design is the open-source alternative to Claude Design. 12 coding-agent CLIs · 31 composable skills · 72 brand-grade design systems. Local-first, web-deployable, BYOK at every layer.",
     "locale": "en",
     "edition": "Vol. 01 / Issue Nº 26",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "license": "Apache-2.0",
     "primary_url": "https://github.com/nexu-io/open-design",
     "primary_url_label": "Star · 0K",
@@ -28,7 +28,7 @@
       "left": "Skills · Systems · Agents · BYOK · Local-first"
     },
     "languages": ["EN", "DE", "中文", "日本語"],
-    "status": "Live · v0.2.0"
+    "status": "Live · v0.3.0"
   },
 
   "nav": [
@@ -322,7 +322,7 @@
     "brand_cta": {
       "label": "Download desktop",
       "href": "https://github.com/nexu-io/open-design/releases",
-      "meta": "macOS · v0.2.0"
+      "meta": "macOS · v0.3.0"
     },
     "columns": [
       { "title": "Studio",  "links": [

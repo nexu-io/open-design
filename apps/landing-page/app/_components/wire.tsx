@@ -44,7 +44,7 @@ type Contributor = {
 
 // SSR-safe initial list. Used until the GitHub fetch resolves AND as
 // the permanent fallback when the network is unavailable. Mirrors the
-// canonical wire row in `skills/editorial-collage/example.html` so
+// canonical wire row in `skills/open-design-landing/example.html` so
 // hydration is byte-stable against the static reference rendering.
 const FALLBACK: ReadonlyArray<Contributor> = [
   { handle: 'tw93', role: 'kami', href: 'https://github.com/tw93' },

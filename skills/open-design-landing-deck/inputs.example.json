@@ -1,6 +1,6 @@
 {
   "$schema": "./schema.ts",
-  "_doc": "Worked example — Open Design pitch deck. 11 slides covering cover, two sections, four content slides, one stats, one quote, one CTA, one end. Reuses brand identity and assets from the sister editorial-collage skill. Run `npx tsx scripts/compose.ts inputs.example.json example.html` to build.",
+  "_doc": "Worked example — Open Design pitch deck. 11 slides covering cover, two sections, four content slides, one stats, one quote, one CTA, one end. Reuses brand identity and assets from the sister open-design-landing skill. Run `npx tsx scripts/compose.ts inputs.example.json example.html` to build.",
 
   "brand": {
     "name": "Open Design",
@@ -11,7 +11,7 @@
     "description": "Open Design pitch deck — Vol. 01.",
     "locale": "en",
     "edition": "Vol. 01 / Issue Nº 26",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "license": "Apache-2.0",
     "primary_url": "https://github.com/nexu-io/open-design",
     "primary_url_label": "Star · 0K",
@@ -23,7 +23,7 @@
     "founded": "Est. MMXXVI",
     "rails": { "right": "", "left": "" },
     "languages": ["EN"],
-    "status": "Live · v0.2.0"
+    "status": "Live · v0.3.0"
   },
 
   "deck_title": "Open Design · Vol. 01 / Issue Nº 26",
@@ -114,7 +114,7 @@
         { "value": "12", "label": "Agents",  "sub": "auto-detected on your $PATH" },
         { "value": "3",  "label": "Commands","sub": "from clone to first artifact" }
       ],
-      "caption": "Open Design v0.2.0 · Apache-2.0 · MMXXVI"
+      "caption": "Open Design v0.3.0 · Apache-2.0 · MMXXVI"
     },
 
     {
@@ -204,7 +204,7 @@
 
   "imagery": {
     "strategy": "bring-your-own",
-    "assets_path": "../editorial-collage/assets/",
+    "assets_path": "../open-design-landing/assets/",
     "provider": "fal"
   }
 }

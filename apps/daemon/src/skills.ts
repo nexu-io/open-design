@@ -8,6 +8,36 @@ import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import { SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 
+// Persisted skill ids on existing projects can outlive a folder rename.
+// listSkills() derives the id from the SKILL.md frontmatter `name`, so once
+// a skill is renamed the old id stops resolving and composeSystemPrompt
+// silently drops the skill body for projects saved against the old id.
+// This map forwards deprecated ids to their current canonical id; callers
+// resolve through findSkillById() before scanning the listing. Leave entries
+// here for at least one stable release after a rename so on-disk projects
+// keep composing with the intended skill prompt.
+export const SKILL_ID_ALIASES = Object.freeze({
+  "editorial-collage": "open-design-landing",
+  "editorial-collage-deck": "open-design-landing-deck",
+});
+
+export function resolveSkillId(id) {
+  if (typeof id !== "string" || id.length === 0) return id;
+  return SKILL_ID_ALIASES[id] ?? id;
+}
+
+// Lookup helper that mirrors `skills.find((s) => s.id === id)` but first
+// rewrites any deprecated id to its current canonical form. Use this at
+// every site that resolves a stored or external skill id; calling
+// `.find()` directly will silently miss aliased ids.
+export function findSkillById(skills, id) {
+  if (!Array.isArray(skills) || typeof id !== "string" || id.length === 0) {
+    return undefined;
+  }
+  const canonical = resolveSkillId(id);
+  return skills.find((s) => s.id === canonical);
+}
+
 export async function listSkills(skillsRoot) {
   const out = [];
   let entries = [];

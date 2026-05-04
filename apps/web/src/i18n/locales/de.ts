@@ -448,6 +448,9 @@ export const de: Dict = {
   'designFiles.rowMenu': 'Zeilenmenü',
   'designFiles.openInTab': 'In Tab öffnen',
   'designFiles.download': 'Herunterladen',
+  'designFiles.downloadSelected': 'Download {n} as ZIP',
+  'designFiles.clearSelection': 'Clear',
+  'designFiles.selectAll': 'Select all',
   'designFiles.dropTitle': '⤓ Dateien hier ablegen',
   'designFiles.dropDesc':
     'Bilder, Docs, Referenzen oder Ordner — der Agent nutzt sie als Kontext.',
