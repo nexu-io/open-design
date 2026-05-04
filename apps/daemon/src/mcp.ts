@@ -99,7 +99,7 @@ const TOOL_DEFS = [
         maxBytes: {
           type: 'number',
           description:
-            'Soft cap on total text bytes (default 1_500_000). Excess files are dropped and truncated:true is set.',
+            'Soft cap on total text bytes (default 1_500_000). Also capped at 200 files. Excess files are dropped and truncated:true is set.',
         },
       },
       additionalProperties: false,
@@ -222,7 +222,10 @@ export async function runMcpStdio({ daemonUrl }) {
         '    explicitly without making any other tool call.',
         '',
         'Project arguments accept either a UUID or a name substring',
-        '(e.g. "recaptr"); the server resolves the latter.',
+        '(e.g. "recaptr"); the server resolves the latter. When a project',
+        'is matched by slug or substring the response carries',
+        'resolvedProject:{id,name} so you can confirm which project was',
+        'resolved. Verify with the user if the match was unexpected.',
         '',
         'Reference material is exposed as MCP resources, not tools - read',
         'od://design-systems/<id>/DESIGN.md when you need the brand spec',
@@ -883,3 +886,6 @@ function formatError(err, daemonUrl) {
   }
   return msg;
 }
+
+// Exported for unit tests only.
+export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact };
