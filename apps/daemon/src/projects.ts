@@ -29,16 +29,12 @@ export async function ensureProject(projectsRoot, projectId) {
   return dir;
 }
 
-export async function listFiles(projectsRoot, projectId, opts = {}) {
+export async function listFiles(projectsRoot, projectId) {
   const dir = projectDir(projectsRoot, projectId);
   const out = [];
   await collectFiles(dir, '', out);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
-  const since = Number(opts.since);
-  if (Number.isFinite(since) && since > 0) {
-    return out.filter((f) => Number(f.mtime) > since);
-  }
   return out;
 }
 
@@ -155,18 +151,8 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
       continue;
     }
 
-    // Mirror the visible-file allowlist from collectFiles/collectArchiveEntries:
-    // reject any hidden segment, .artifact.json sidecars, and symlinks at any
-    // level of the path (not just the final basename).
     const relSegments = path.relative(projectRoot, filePath).split(path.sep);
-    let hidden = false;
-    for (const seg of relSegments) {
-      if (seg.startsWith('.')) {
-        hidden = true;
-        break;
-      }
-    }
-    if (hidden) {
+    if (relSegments.some((seg) => seg.startsWith('.'))) {
       rejected.push({ name, reason: 'hidden segments are not eligible for archive' });
       continue;
     }
@@ -175,10 +161,8 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
       continue;
     }
 
-    // Walk each path segment from projectRoot to the target with lstat,
-    // rejecting intermediate symlinks that could escape the project tree.
     let walk = projectRoot;
-    let symlinkFound = false;
+    let invalid = false;
     for (const seg of relSegments) {
       walk = path.join(walk, seg);
       let segStat;
@@ -187,23 +171,19 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
       } catch (err) {
         if (err && err.code === 'ENOENT') {
           rejected.push({ name, reason: `segment not found: ${seg}` });
+          invalid = true;
           break;
         }
         throw err;
       }
       if (segStat.isSymbolicLink()) {
-        symlinkFound = true;
+        rejected.push({ name, reason: 'symlinks are not eligible for archive' });
+        invalid = true;
         break;
       }
     }
-    if (symlinkFound) {
-      rejected.push({ name, reason: 'symlinks are not eligible for archive' });
-      continue;
-    }
-    if (rejected.length > 0 && rejected[rejected.length - 1].name === name) continue;
+    if (invalid) continue;
 
-    // Final stat on the resolved path (guards against TOCTOU between segment
-    // walk and read, and catches non-regular files).
     let st;
     try {
       st = await lstat(filePath);
@@ -232,11 +212,9 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
     packed += 1;
   }
 
-  // Fail-fast: any rejected entry means the request is invalid — mirror the
-  // strict rejection semantics of the panel and full archive.
   if (rejected.length > 0) {
     const err = new Error(
-      `${rejected.length} file(s) ineligible for archive: ${rejected.map((r) => r.name).join(', ')}`,
+      `${rejected.length} file(s) ineligible for archive: ${rejected.map((item) => item.name).join(', ')}`,
     );
     err.code = 'BAD_REQUEST';
     err.rejected = rejected;
@@ -497,24 +475,28 @@ export async function searchProjectFiles(projectsRoot, projectId, query, opts = 
   const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(escaped, 'i');
   const matches = [];
-  for (const f of items) {
-    if (!isTextualMime(f.mime)) continue;
-    if (pattern && !globMatch(f.name, pattern)) continue;
+
+  for (const file of items) {
+    if (!isTextualMime(file.mime)) continue;
+    if (pattern && !globMatch(file.name, pattern)) continue;
+
     let content;
     try {
-      content = await readFile(path.join(dir, f.name), 'utf8');
+      content = await readFile(path.join(dir, file.name), 'utf8');
     } catch {
       continue;
     }
+
     const lines = content.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      if (re.test(lines[i])) {
-        const snippet = lines[i].length > 220 ? lines[i].slice(0, 220) + '…' : lines[i];
-        matches.push({ file: f.name, line: i + 1, snippet });
-        if (matches.length >= max) return matches;
-      }
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!re.test(lines[index])) continue;
+      const line = lines[index];
+      const snippet = line.length > 220 ? `${line.slice(0, 220)}…` : line;
+      matches.push({ file: file.name, line: index + 1, snippet });
+      if (matches.length >= max) return matches;
     }
   }
+
   return matches;
 }
 
@@ -530,12 +512,10 @@ function isTextualMime(mime) {
 
 function globMatch(name, glob) {
   const re = new RegExp(
-    '^' +
-      glob
-        .split('*')
-        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-        .join('.*') +
-      '$',
+    `^${glob
+      .split('*')
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*')}$`,
   );
   return re.test(name);
 }

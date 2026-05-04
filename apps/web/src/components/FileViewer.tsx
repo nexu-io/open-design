@@ -91,6 +91,8 @@ type TweakToken = {
 const htmlPreviewSlideState = new Map<string, SlideState>();
 const FONT_RECENTS_KEY = 'od.visualEdit.recentFonts';
 const MAX_TWEAK_TOKENS = 64;
+const MAX_LIVE_COMMENT_TARGETS = 240;
+const MAX_VISUAL_EDIT_BATCH_ITEMS = 24;
 const VIRTUAL_TWEAK_PREFIX = '__od-';
 const DEFAULT_FONT_CHOICES = [
   'Arial, sans-serif',
@@ -1038,6 +1040,11 @@ function mergeTweakTokens(tokens: TweakToken[]): TweakToken[] {
   return Array.from(merged.values()).slice(0, MAX_TWEAK_TOKENS);
 }
 
+function limitPreviewTargets(targets: Map<string, PreviewCommentSnapshot>): Map<string, PreviewCommentSnapshot> {
+  if (targets.size <= MAX_LIVE_COMMENT_TARGETS) return targets;
+  return new Map(Array.from(targets.entries()).slice(-MAX_LIVE_COMMENT_TARGETS));
+}
+
 function TweakControl({
   token,
   value,
@@ -1547,6 +1554,13 @@ function HtmlViewer({
   const editBatchRef = useRef<VisualEditBatchItem[]>([]);
 
   useEffect(() => {
+    return () => {
+      activeCommentTargetRef.current = null;
+      editBatchRef.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
     if (liveHtml !== undefined) {
       setSource(liveHtml);
       return;
@@ -1749,7 +1763,7 @@ function HtmlViewer({
           const snapshot = snapshotFromData(item);
           if (snapshot.elementId) next.set(snapshot.elementId, snapshot);
         });
-        setLiveCommentTargets(next);
+        setLiveCommentTargets(limitPreviewTargets(next));
         setActiveCommentTarget((current) => (
           current ? editMode ? current : next.get(current.elementId) ?? null : null
         ));
@@ -1768,7 +1782,7 @@ function HtmlViewer({
         const lockedTarget = activeCommentTargetRef.current;
         if (editMode && lockedTarget && snapshot.elementId !== lockedTarget.elementId) return;
         setHoveredCommentTarget(snapshot);
-        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        setLiveCommentTargets((current) => limitPreviewTargets(new Map(current).set(snapshot.elementId, snapshot)));
         return;
       }
       if (data.type === 'od:comment-target') {
@@ -1780,7 +1794,7 @@ function HtmlViewer({
         const existing = previewComments.find((comment) => comment.elementId === snapshot.elementId);
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
-        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        setLiveCommentTargets((current) => limitPreviewTargets(new Map(current).set(snapshot.elementId, snapshot)));
         if (editMode) setEditDraft(visualEditDraftFromSnapshot(snapshot));
         else setCommentDraft(existing?.note ?? '');
       }

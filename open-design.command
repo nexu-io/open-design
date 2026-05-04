@@ -27,7 +27,14 @@ if [ "$NODE_MAJOR" != "24" ]; then
 fi
 
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-corepack pnpm --version >/dev/null
+if ! corepack pnpm --version >/dev/null 2>&1; then
+  if ! corepack prepare pnpm@10.33.2 --activate >/dev/null 2>&1; then
+    echo "Corepack encontrado, mas o pnpm nao esta preparado."
+    echo "Tente rodar: corepack prepare pnpm@10.33.2 --activate"
+    read -r -p "Pressione Enter para sair."
+    exit 1
+  fi
+fi
 
 if [ ! -d node_modules ]; then
   corepack pnpm install
@@ -41,4 +48,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-read -r -p "Open Design em execucao no app. Pressione Enter para encerrar."
+if [ -t 0 ]; then
+  read -r -p "Open Design em execucao no app. Pressione Enter para encerrar."
+else
+  echo "Open Design em execucao no app. Pressione Ctrl+C para encerrar."
+  while true; do sleep 3600; done
+fi

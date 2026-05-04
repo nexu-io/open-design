@@ -9,6 +9,8 @@ export interface ConversationCompactionResult {
   compactedMessages: number;
 }
 
+type LooseRecord = Record<string, unknown>;
+
 const COMPACTION_TRIGGER_CHARS = 32000;
 const RECENT_MESSAGE_COUNT = 8;
 const MAX_SUMMARY_CHARS = 12000;
@@ -18,26 +20,27 @@ const MAX_EVENT_CONTENT_CHARS = 900;
 const MAX_EVENT_LINES = 16;
 
 export function compactChatHistoryForPrompt(history: ChatMessage[]): ConversationCompactionResult {
-  const originalChars = history.reduce((sum, message) => sum + estimateMessageChars(message), 0);
+  const safeHistory = normalizeChatHistory(history);
+  const originalChars = safeHistory.reduce((sum, message) => sum + estimateMessageChars(message), 0);
 
-  if (originalChars <= COMPACTION_TRIGGER_CHARS || history.length <= RECENT_MESSAGE_COUNT + 2) {
+  if (originalChars <= COMPACTION_TRIGGER_CHARS || safeHistory.length <= RECENT_MESSAGE_COUNT + 2) {
     return {
-      history,
+      history: safeHistory,
       compacted: false,
       originalChars,
       compactedChars: originalChars,
-      originalMessages: history.length,
-      compactedMessages: history.length,
+      originalMessages: safeHistory.length,
+      compactedMessages: safeHistory.length,
     };
   }
 
-  const splitAt = Math.max(1, history.length - RECENT_MESSAGE_COUNT);
-  const older = history.slice(0, splitAt);
-  const recent = history.slice(splitAt).map((message, index, messages) =>
+  const splitAt = Math.max(1, safeHistory.length - RECENT_MESSAGE_COUNT);
+  const older = safeHistory.slice(0, splitAt);
+  const recent = safeHistory.slice(splitAt).map((message, index, messages) =>
     index === messages.length - 1 ? message : trimMessageContent(message, MAX_RECENT_CONTENT_CHARS),
   );
   const summaryMessage: ChatMessage = {
-    id: `open-design-compacted-${older[0]?.id ?? 'history'}-${older.length}`,
+    id: `open-design-compacted-${safeMessageId(older[0]) || 'history'}-${older.length}`,
     role: 'user',
     content: buildCompactedSummary(older),
     createdAt: older[0]?.createdAt,
@@ -50,7 +53,7 @@ export function compactChatHistoryForPrompt(history: ChatMessage[]): Conversatio
     compacted: true,
     originalChars,
     compactedChars,
-    originalMessages: history.length,
+    originalMessages: safeHistory.length,
     compactedMessages: compactedHistory.length,
   };
 }
@@ -58,6 +61,25 @@ export function compactChatHistoryForPrompt(history: ChatMessage[]): Conversatio
 export function formatCompactionStatusDetail(result: ConversationCompactionResult): string {
   const savedChars = Math.max(0, result.originalChars - result.compactedChars);
   return `${result.originalMessages} mensagens viraram ${result.compactedMessages}; ${formatChars(savedChars)} removidos do prompt.`;
+}
+
+function normalizeChatHistory(history: ChatMessage[]): ChatMessage[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .map((message, index) => normalizeChatMessage(message, index))
+    .filter((message): message is ChatMessage => Boolean(message));
+}
+
+function normalizeChatMessage(message: unknown, index: number): ChatMessage | null {
+  if (!isRecord(message)) return null;
+  const role = message.role === 'assistant' ? 'assistant' : 'user';
+  const id = safeString(message.id) || `message-${index + 1}`;
+  return {
+    ...(message as ChatMessage),
+    id,
+    role,
+    content: safeString(message.content),
+  };
 }
 
 function buildCompactedSummary(messages: ChatMessage[]): string {
@@ -70,7 +92,7 @@ function buildCompactedSummary(messages: ChatMessage[]): string {
 
   for (const message of messages) {
     const parts = [`${message.role === 'user' ? 'Usuário' : 'Assistente'}:`];
-    const content = message.content.trim();
+    const content = safeString(message.content).trim();
 
     if (content) {
       parts.push(limitText(content, MAX_OLDER_CONTENT_CHARS));
@@ -98,51 +120,65 @@ function buildCompactedSummary(messages: ChatMessage[]): string {
 }
 
 function trimMessageContent(message: ChatMessage, maxChars: number): ChatMessage {
-  if (message.content.length <= maxChars) return message;
+  const content = safeString(message.content);
+  if (content.length <= maxChars) return message;
   return {
     ...message,
-    content: limitText(message.content, maxChars),
+    content: limitText(content, maxChars),
   };
 }
 
 function summarizeAttachments(message: ChatMessage): string[] {
-  const attachments = message.attachments?.map((attachment) => attachment.name || attachment.path) ?? [];
-  const comments =
-    message.commentAttachments?.map((attachment) =>
-      [attachment.label, attachment.selector, limitText(attachment.comment, 220)].filter(Boolean).join(' em '),
-    ) ?? [];
-  const files =
-    message.producedFiles?.map((file) => {
-      const producedFile = file as { path?: string; name?: string };
-      return producedFile.path || producedFile.name || 'arquivo';
-    }) ?? [];
+  const record = message as unknown as LooseRecord;
+  const attachments = safeArray(record.attachments).map((attachment) => {
+    const item = asRecord(attachment);
+    return safeString(item?.name) || safeString(item?.path);
+  });
+  const comments = safeArray(record.commentAttachments).map((attachment) => {
+    const item = asRecord(attachment);
+    if (!item) return '';
+    return [
+      safeString(item.label),
+      safeString(item.selector),
+      limitText(safeString(item.comment), 220),
+    ].filter(Boolean).join(' em ');
+  });
+  const files = safeArray(record.producedFiles).map((file) => {
+    const item = asRecord(file);
+    return safeString(item?.path) || safeString(item?.name) || 'arquivo';
+  });
 
   return [...attachments, ...comments, ...files].filter(Boolean).slice(0, 12);
 }
 
 function summarizeEvents(message: ChatMessage): string[] {
   const lines: string[] = [];
+  const events = safeArray((message as unknown as LooseRecord).events);
 
-  for (const event of message.events ?? []) {
+  for (const rawEvent of events) {
     if (lines.length >= MAX_EVENT_LINES) break;
+    const event = asRecord(rawEvent);
+    if (!event) continue;
+    const kind = safeString(event.kind);
 
-    if (event.kind === 'status') {
-      lines.push([event.label, event.detail].filter(Boolean).join(': '));
+    if (kind === 'status') {
+      lines.push([safeString(event.label), safeString(event.detail)].filter(Boolean).join(': '));
       continue;
     }
 
-    if (event.kind === 'tool_use') {
-      lines.push(`tool ${event.name}: ${limitText(safeJson(event.input), MAX_EVENT_CONTENT_CHARS)}`);
+    if (kind === 'tool_use') {
+      lines.push(`tool ${safeString(event.name) || 'tool'}: ${limitText(safeJson(event.input), MAX_EVENT_CONTENT_CHARS)}`);
       continue;
     }
 
-    if (event.kind === 'tool_result' && event.isError) {
-      lines.push(`erro de tool: ${limitText(event.content, MAX_EVENT_CONTENT_CHARS)}`);
+    if (kind === 'tool_result' && Boolean(event.isError)) {
+      lines.push(`erro de tool: ${limitText(safeString(event.content) || safeJson(event.content), MAX_EVENT_CONTENT_CHARS)}`);
       continue;
     }
 
-    if (event.kind === 'text' && event.text.trim()) {
-      lines.push(limitText(event.text, MAX_EVENT_CONTENT_CHARS));
+    if (kind === 'text') {
+      const text = safeString(event.text).trim();
+      if (text) lines.push(limitText(text, MAX_EVENT_CONTENT_CHARS));
     }
   }
 
@@ -150,28 +186,54 @@ function summarizeEvents(message: ChatMessage): string[] {
 }
 
 function estimateMessageChars(message: ChatMessage): number {
+  const record = message as unknown as LooseRecord;
   return (
-    message.content.length +
-    (message.attachments?.reduce((sum, attachment) => sum + attachment.name.length + attachment.path.length, 0) ?? 0) +
-    (message.commentAttachments?.reduce(
-      (sum, attachment) =>
-        sum +
-        attachment.label.length +
-        attachment.selector.length +
-        attachment.comment.length +
-        attachment.filePath.length,
-      0,
-    ) ?? 0) +
-    (message.events?.reduce((sum, event) => sum + safeJson(event).length, 0) ?? 0)
+    safeString(record.content).length +
+    safeArray(record.attachments).reduce((sum, attachment) => {
+      const item = asRecord(attachment);
+      return sum + safeString(item?.name).length + safeString(item?.path).length;
+    }, 0) +
+    safeArray(record.commentAttachments).reduce((sum, attachment) => {
+      const item = asRecord(attachment);
+      return sum +
+        safeString(item?.label).length +
+        safeString(item?.selector).length +
+        safeString(item?.comment).length +
+        safeString(item?.filePath).length;
+    }, 0) +
+    safeArray(record.events).reduce((sum, event) => sum + safeJson(event).length, 0)
   );
+}
+
+function safeMessageId(message: ChatMessage | undefined): string {
+  return safeString((message as unknown as LooseRecord | undefined)?.id);
 }
 
 function safeJson(value: unknown): string {
   try {
-    return JSON.stringify(value);
+    const json = JSON.stringify(value);
+    return typeof json === 'string' ? json : '';
   } catch {
-    return String(value);
+    return safeString(value);
   }
+}
+
+function safeArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asRecord(value: unknown): LooseRecord | null {
+  return isRecord(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is LooseRecord {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function safeString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
 }
 
 function formatChars(chars: number): string {
@@ -180,7 +242,7 @@ function formatChars(chars: number): string {
 }
 
 function limitText(text: string, maxChars: number): string {
-  const clean = text.replace(/\s+/g, ' ').trim();
+  const clean = safeString(text).replace(/\s+/g, ' ').trim();
   if (clean.length <= maxChars) return clean;
   return `${clean.slice(0, Math.max(0, maxChars - 1)).trim()}…`;
 }
