@@ -3273,14 +3273,17 @@ function assembleExample(templateHtml, slidesHtml, title) {
 // fetches assets through the matching route below.
 export function rewriteSkillAssetUrls(html: string, skillId: string): string {
   if (typeof html !== 'string' || html.length === 0) return html;
-  const prefix = `/api/skills/${encodeURIComponent(skillId)}/assets/`;
-  // Match src/href attributes whose values start with `./assets/` or
-  // `assets/` (no leading slash). Quote style is preserved so we do not
+  // Match src/href attributes whose values point at the current skill's
+  // assets (`./assets/...` or `assets/...`) or a sibling skill's assets
+  // (`../other-skill/assets/...`). Quote style is preserved so we do not
   // disturb the surrounding markup.
   return html.replace(
-    /(\s(?:src|href)\s*=\s*)(['"])(?:\.\/)?assets\/([^'"#?]+)(['"])/gi,
-    (_match, attr, openQuote, relPath, closeQuote) =>
-      `${attr}${openQuote}${prefix}${relPath}${closeQuote}`,
+    /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
+    (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
+      const resolvedSkillId = siblingSkillId || skillId;
+      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
+      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
+    },
   );
 }
 

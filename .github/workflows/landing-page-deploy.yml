@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/landing-page.yml
+      - .github/workflows/landing-page-deploy.yml
       - .github/workflows/landing-page-ci.yml
       - apps/landing-page/**
       - package.json
