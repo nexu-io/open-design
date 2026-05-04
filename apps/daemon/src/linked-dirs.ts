@@ -6,11 +6,11 @@ const BLOCKED_PATH_PREFIXES =
     ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)']
     : ['/etc', '/proc', '/sys', '/dev', '/boot'];
 
-/** @type {(dirs: unknown) => { dirs: string[], error?: undefined } | { error: string, dirs?: undefined }} */
-export function validateLinkedDirs(dirs) {
+export function validateLinkedDirs(
+  dirs: unknown,
+): { dirs: string[]; error?: undefined } | { error: string; dirs?: undefined } {
   if (!Array.isArray(dirs)) return { error: 'linkedDirs must be an array' };
-  /** @type {string[]} */
-  const validated = [];
+  const validated: string[] = [];
   for (const d of dirs) {
     if (typeof d !== 'string' || !d.trim()) {
       return { error: 'each linked dir must be a non-empty string' };
