@@ -879,6 +879,69 @@ export function checkPromptArgvBudget(def, composed) {
   };
 }
 
+// Mirror of packages/platform's `quoteWindowsCommandArg`, kept local so
+// `checkWindowsCmdShimCommandLineBudget` can run on macOS/Linux against
+// a fake `.cmd` path in tests without forking on `process.platform`.
+// Must stay byte-for-byte identical to the platform copy — the helper's
+// whole point is to compute the exact `cmd.exe /d /s /c "<inner>"` line
+// the spawn path will produce on Windows.
+function quoteForWindowsCmdShim(value) {
+  const str = String(value ?? '');
+  if (!/[\s"&<>|^]/.test(str)) return str;
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+// Windows' CreateProcess caps `lpCommandLine` at 32_767 chars. Going
+// through a `.cmd` / `.bat` shim adds a `cmd.exe /d /s /c "<inner>"`
+// wrapper, and `quoteForWindowsCmdShim` doubles every embedded `"` plus
+// wraps any whitespace/special-char arg in outer quotes — so a prompt
+// well under `maxPromptArgBytes` can still expand past the kernel cap
+// once it's run through the shim. Leave headroom for any per-CLI flag
+// the adapter might tack on at exec time and for cmd.exe's own framing.
+const WINDOWS_CREATE_PROCESS_LIMIT = 32_767;
+const WINDOWS_CREATE_PROCESS_HEADROOM = 256;
+
+// Post-buildArgs guard for argv-bound adapters whose binary resolves to
+// a Windows `.cmd` / `.bat` shim. Computes the exact command line shape
+// `createCommandInvocation` (in packages/platform) hands to `spawn` —
+// `cmd.exe /d /s /c "<quoted command + quoted args>"` — and refuses the
+// run when that line would exceed the CreateProcess limit (less a small
+// headroom). Returns the same `AGENT_PROMPT_TOO_LARGE` shape as
+// `checkPromptArgvBudget` so the SSE error path in `/api/chat` doesn't
+// have to special-case it.
+//
+// No-op when:
+//   - the adapter doesn't declare `maxPromptArgBytes` (stdin adapters
+//     never go through this path);
+//   - the resolved binary isn't a `.cmd` / `.bat` (POSIX hosts and
+//     direct `.exe` resolutions on Windows skip the cmd.exe wrap);
+//   - the assembled line fits comfortably under the kernel cap.
+//
+// Pure: takes `resolvedBin` explicitly so a test on macOS can pass a
+// fake `C:\\…\\deepseek.cmd` path and exercise the same math the daemon
+// would run on Windows.
+export function checkWindowsCmdShimCommandLineBudget(def, resolvedBin, args) {
+  if (!def || typeof def.maxPromptArgBytes !== 'number') return null;
+  if (typeof resolvedBin !== 'string' || !/\.(bat|cmd)$/i.test(resolvedBin)) return null;
+  const argList = Array.isArray(args) ? args : [];
+  const inner = [resolvedBin, ...argList].map(quoteForWindowsCmdShim).join(' ');
+  // `cmd.exe /d /s /c "<inner>"` — same shape as buildCmdShimInvocation
+  // in packages/platform; the leading 'cmd.exe ' + '/d /s /c ' framing
+  // plus the two outer quote chars rounds out the full command line.
+  const commandLineLength = 'cmd.exe /d /s /c '.length + inner.length + 2;
+  const safeLimit = WINDOWS_CREATE_PROCESS_LIMIT - WINDOWS_CREATE_PROCESS_HEADROOM;
+  if (commandLineLength <= safeLimit) return null;
+  return {
+    code: 'AGENT_PROMPT_TOO_LARGE',
+    message:
+      `${def.name} on Windows runs through a .cmd shim and this run's prompt would expand past the CreateProcess command-line limit ` +
+      `after cmd.exe quote-doubling (${commandLineLength} > ${safeLimit} chars). ` +
+      'Reduce quote-heavy content in the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    commandLineLength,
+    limit: safeLimit,
+  };
+}
+
 // Resolve the absolute path of an agent's binary on the current PATH.
 // Used by the chat handler so spawn() gets the same executable that
 // detection reported as available — fixes Windows ENOENT when the bare

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   AGENT_DEFS,
   checkPromptArgvBudget,
+  checkWindowsCmdShimCommandLineBudget,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
@@ -489,6 +490,105 @@ test('checkPromptArgvBudget is a no-op for adapters without maxPromptArgBytes', 
   assert.equal(claude.maxPromptArgBytes, undefined);
   const huge = 'x'.repeat(100_000);
   assert.equal(checkPromptArgvBudget(claude, huge), null);
+});
+
+// On Windows an npm-installed `deepseek` resolves to a `.cmd` shim and
+// the spawn path wraps the call in `cmd.exe /d /s /c "<inner>"`, with
+// every embedded `"` doubled by `quoteWindowsCommandArg`. A prompt that
+// fits under the raw `maxPromptArgBytes` budget but is heavy on quote
+// characters (code blocks, JSON-shaped skill seeds) can therefore still
+// expand past CreateProcess's 32_767-char `lpCommandLine` cap — surfacing
+// as a generic spawn ENAMETOOLONG instead of the actionable DeepSeek-
+// named error the budget guard was meant to provide. The post-buildArgs
+// check `checkWindowsCmdShimCommandLineBudget` computes the would-be
+// command line length using the same quoting math the platform layer
+// uses on Windows, so a quote-heavy prompt under the byte budget still
+// fails with `AGENT_PROMPT_TOO_LARGE` before spawn.
+test('checkWindowsCmdShimCommandLineBudget flags quote-heavy prompts that expand past CreateProcess limit', () => {
+  // Prompt is *under* the raw byte budget, but ~entirely `"` chars so
+  // cmd.exe's quote-doubling roughly doubles its command-line cost.
+  const quoteHeavyPromptLength = deepseek.maxPromptArgBytes - 100;
+  const quoteHeavyPrompt = '"'.repeat(quoteHeavyPromptLength);
+
+  // Sanity: the raw-byte guard must let this through, otherwise the new
+  // post-buildArgs check would never fire on a real run.
+  assert.equal(
+    checkPromptArgvBudget(deepseek, quoteHeavyPrompt),
+    null,
+    'quote-heavy prompt under the raw byte budget must pass the pre-buildArgs guard',
+  );
+
+  const args = deepseek.buildArgs(quoteHeavyPrompt, [], [], {});
+  // Use a realistic npm-style Windows install path so the resolved-bin
+  // contribution mirrors a real user's environment.
+  const resolvedBin = 'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd';
+  const flagged = checkWindowsCmdShimCommandLineBudget(deepseek, resolvedBin, args);
+
+  assert.ok(
+    flagged,
+    'quote-heavy prompt that doubles past the CreateProcess cap must trip the cmd-shim guard',
+  );
+  assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.ok(
+    flagged.commandLineLength > flagged.limit,
+    `commandLineLength (${flagged.commandLineLength}) must exceed limit (${flagged.limit})`,
+  );
+  assert.ok(
+    flagged.limit < 32_768,
+    'guard must keep its safe limit strictly under the documented Windows CreateProcess cap',
+  );
+  assert.match(flagged.message, /DeepSeek/);
+  assert.match(flagged.message, /cmd\.exe quote-doubling/);
+  assert.match(flagged.message, /stdin support/);
+});
+
+test('checkWindowsCmdShimCommandLineBudget lets ordinary prompts through .cmd resolutions', () => {
+  // Same Windows-shim resolution path, but a plain prompt — well under
+  // every limit. The guard must return null so the chat happy path
+  // proceeds to spawn.
+  const args = deepseek.buildArgs('write hello world', [], [], {});
+  const resolvedBin = 'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd';
+  assert.equal(
+    checkWindowsCmdShimCommandLineBudget(deepseek, resolvedBin, args),
+    null,
+  );
+});
+
+test('checkWindowsCmdShimCommandLineBudget is a no-op for non-.cmd resolutions', () => {
+  // POSIX hosts (and direct `.exe` resolutions on Windows) don't go
+  // through the cmd.exe wrap, so the would-be command line never gets
+  // the quote-doubling expansion. Even an oversized argv must skip this
+  // check — `checkPromptArgvBudget` is the one responsible for catching
+  // those cases.
+  const args = deepseek.buildArgs('x'.repeat(40_000), [], [], {});
+  assert.equal(
+    checkWindowsCmdShimCommandLineBudget(deepseek, '/usr/local/bin/deepseek', args),
+    null,
+  );
+  assert.equal(
+    checkWindowsCmdShimCommandLineBudget(
+      deepseek,
+      'C:\\Program Files\\DeepSeek\\deepseek.exe',
+      args,
+    ),
+    null,
+  );
+});
+
+test('checkWindowsCmdShimCommandLineBudget no-ops when resolvedBin is null or adapter has no budget', () => {
+  // Bin resolution failed but the run continued long enough to reach
+  // this guard — must be a no-op so the existing AGENT_UNAVAILABLE path
+  // still fires from server.ts.
+  assert.equal(
+    checkWindowsCmdShimCommandLineBudget(deepseek, null, []),
+    null,
+  );
+  // Stdin-delivered adapters never declare `maxPromptArgBytes` — the
+  // guard must skip them even when handed a `.cmd` path.
+  assert.equal(
+    checkWindowsCmdShimCommandLineBudget(claude, 'C:\\fake\\claude.cmd', []),
+    null,
+  );
 });
 
 test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {

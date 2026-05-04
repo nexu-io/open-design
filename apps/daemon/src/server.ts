@@ -11,6 +11,7 @@ import { composeSystemPrompt } from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   checkPromptArgvBudget,
+  checkWindowsCmdShimCommandLineBudget,
   detectAgents,
   getAgentDef,
   isKnownModel,
@@ -2535,6 +2536,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       agentOptions,
       { cwd: effectiveCwd },
     );
+
+    // Second-pass budget check that knows about the Windows `.cmd` shim
+    // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
+    // raw composed prompt; on Windows an npm-installed adapter resolves
+    // to e.g. `deepseek.cmd`, the spawn path goes through `cmd.exe /d /s
+    // /c "<inner>"`, and `quoteForWindowsCmdShim` doubles every embedded
+    // `"` plus wraps any whitespace/special-char arg in outer quotes —
+    // so a quote-heavy prompt that fit under `maxPromptArgBytes` can
+    // still expand past CreateProcess's 32_767-char cap. Fail fast with
+    // the same `AGENT_PROMPT_TOO_LARGE` shape so the SSE error path
+    // doesn't have to special-case it.
+    const cmdShimBudgetError = checkWindowsCmdShimCommandLineBudget(
+      def,
+      resolvedBin,
+      args,
+    );
+    if (cmdShimBudgetError) {
+      design.runs.emit(
+        run,
+        'error',
+        createSseErrorPayload(
+          cmdShimBudgetError.code,
+          cmdShimBudgetError.message,
+          { retryable: false },
+        ),
+      );
+      return design.runs.finish(run, 'failed', 1, null);
+    }
 
     const send = (event, data) => design.runs.emit(run, event, data);
 
