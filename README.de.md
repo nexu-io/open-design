@@ -622,7 +622,7 @@ Beim daemon Boot automatisch aus `PATH` erkannt. Keine Konfiguration nötig. Str
 | Agent | Bin | Stream-Format | Argv-Form (zusammengesetzter Prompt-Pfad) |
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json` (typed events) | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
-| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` Parser | `codex exec --json --skip-git-repo-check --full-auto [-C cwd] [--model …] [-c model_reasoning_effort=…] -` (Prompt über stdin) |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` Parser | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]` (Prompt über stdin) |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` Parser | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]` (Prompt über stdin) |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` Parser | `opencode run --format json --dangerously-skip-permissions [--model …] -` (Prompt über stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` Parser | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -` (Prompt über stdin) |

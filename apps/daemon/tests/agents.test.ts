@@ -51,15 +51,31 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
 
   const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-  assert.deepEqual(args.slice(0, 8), [
+  assert.deepEqual(args.slice(0, 9), [
     'exec',
     '--json',
     '--skip-git-repo-check',
-    '--full-auto',
+    '--sandbox',
+    'workspace-write',
     '-c',
     'sandbox_workspace_write.network_access=true',
     '--disable',
     'plugins',
+  ]);
+});
+
+test('codex args use workspace-write sandbox instead of deprecated full-auto', () => {
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+
+  assert.equal(args.includes('--full-auto'), false);
+  assert.deepEqual(args.slice(0, 5), [
+    'exec',
+    '--json',
+    '--skip-git-repo-check',
+    '--sandbox',
+    'workspace-write',
   ]);
 });
 

@@ -628,7 +628,7 @@ Auto-détectés depuis `PATH` au boot du daemon. Aucune config nécessaire. Le d
 | Agent | Bin | Format stream | Forme argv (chemin prompt composé) |
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json` | `claude -p --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` (prompt sur stdin) |
-| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + parseur `codex` | `codex exec --json --skip-git-repo-check --full-auto -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]` (prompt sur stdin) |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + parseur `codex` | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]` (prompt sur stdin) |
 | Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + parseur `gemini` | `gemini --output-format stream-json --skip-trust --yolo [--model …]` (prompt sur stdin) |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + parseur `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` |
