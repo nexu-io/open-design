@@ -459,6 +459,7 @@ export const en: Dict = {
   'designFiles.previewClose': 'Close preview',
   'designFiles.modified': 'Modified {time} · {size}',
   'designFiles.weeksAgo': '{n}w ago',
+  'designFiles.sectionFolders': 'Folders',
   'designFiles.sectionPages': 'Pages',
   'designFiles.sectionScripts': 'Scripts',
   'designFiles.sectionImages': 'Images',

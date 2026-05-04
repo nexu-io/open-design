@@ -458,6 +458,7 @@ export const ja: Dict = {
   'designFiles.previewClose': 'プレビューを閉じる',
   'designFiles.modified': '{time} に変更 · {size}',
   'designFiles.weeksAgo': '{n}週間前',
+  'designFiles.sectionFolders': 'フォルダー',
   'designFiles.sectionPages': 'ページ',
   'designFiles.sectionScripts': 'スクリプト',
   'designFiles.sectionImages': '画像',

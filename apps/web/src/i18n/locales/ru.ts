@@ -458,6 +458,7 @@ export const ru: Dict = {
   'designFiles.previewClose': 'Закрыть предпросмотр',
   'designFiles.modified': 'Изменено {time} · {size}',
   'designFiles.weeksAgo': '{n} нед. назад',
+  'designFiles.sectionFolders': 'Папки',
   'designFiles.sectionPages': 'Страницы',
   'designFiles.sectionScripts': 'Скрипты',
   'designFiles.sectionImages': 'Изображения',

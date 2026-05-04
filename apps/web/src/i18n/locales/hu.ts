@@ -459,6 +459,7 @@ export const hu: Dict = {
   'designFiles.previewClose': 'Előnézet bezárása',
   'designFiles.modified': 'Módosítva: {time} · {size}',
   'designFiles.weeksAgo': '{n} hete',
+  'designFiles.sectionFolders': 'Mappák',
   'designFiles.sectionPages': 'Oldalak',
   'designFiles.sectionScripts': 'Szkriptek',
   'designFiles.sectionImages': 'Képek',

@@ -503,6 +503,7 @@ export interface Dict {
   'designFiles.previewClose': string;
   'designFiles.modified': string;
   'designFiles.weeksAgo': string;
+  'designFiles.sectionFolders': string;
   'designFiles.sectionPages': string;
   'designFiles.sectionScripts': string;
   'designFiles.sectionImages': string;

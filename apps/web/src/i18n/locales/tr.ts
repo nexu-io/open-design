@@ -458,6 +458,7 @@ export const tr: Dict = {
   'designFiles.previewClose': 'Önizlemeyi kapat',
   'designFiles.modified': 'Düzenlendi: {time} · {size}',
   'designFiles.weeksAgo': '{n} hafta önce',
+  'designFiles.sectionFolders': 'Klasörler',
   'designFiles.sectionPages': 'Sayfalar',
   'designFiles.sectionScripts': 'Betikler',
   'designFiles.sectionImages': 'Görseller',

@@ -449,6 +449,7 @@ export const zhTW: Dict = {
   'designFiles.previewClose': '關閉預覽',
   'designFiles.modified': '修改於 {time} · {size}',
   'designFiles.weeksAgo': '{n} 週前',
+  'designFiles.sectionFolders': '資料夾',
   'designFiles.sectionPages': '頁面',
   'designFiles.sectionScripts': '腳本',
   'designFiles.sectionImages': '圖片',

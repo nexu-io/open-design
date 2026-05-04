@@ -460,6 +460,7 @@ export const uk: Dict = {
   'designFiles.previewClose': 'Закрити попередній перегляд',
   'designFiles.modified': 'Змінено {time} · {size}',
   'designFiles.weeksAgo': '{n}тижнів назад',
+  'designFiles.sectionFolders': 'Папки',
   'designFiles.sectionPages': 'Сторінки',
   'designFiles.sectionScripts': 'Скрипти',
   'designFiles.sectionImages': 'Зображення',

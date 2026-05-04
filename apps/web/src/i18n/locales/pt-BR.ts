@@ -458,6 +458,7 @@ export const ptBR: Dict = {
   'designFiles.previewClose': 'Fechar prévia',
   'designFiles.modified': 'Modificado {time} · {size}',
   'designFiles.weeksAgo': 'há {n} sem',
+  'designFiles.sectionFolders': 'Pastas',
   'designFiles.sectionPages': 'Páginas',
   'designFiles.sectionScripts': 'Scripts',
   'designFiles.sectionImages': 'Imagens',

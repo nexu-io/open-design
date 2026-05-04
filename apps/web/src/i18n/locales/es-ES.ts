@@ -460,6 +460,7 @@ export const esES: Dict = {
   'designFiles.previewClose': 'Cerrar vista previa',
   'designFiles.modified': 'Modificado {time} · {size}',
   'designFiles.weeksAgo': 'hace {n} sem',
+  'designFiles.sectionFolders': 'Carpetas',
   'designFiles.sectionPages': 'Páginas',
   'designFiles.sectionScripts': 'Scripts',
   'designFiles.sectionImages': 'Imágenes',

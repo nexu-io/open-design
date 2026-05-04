@@ -28,7 +28,7 @@ describe('DesignFilesPanel folder rows', () => {
     onNewSketch: vi.fn(),
   };
 
-  it('groups nested project paths under a collapsed folder row', () => {
+  it('groups nested project paths under a single collapsed folder section', () => {
     const markup = renderToStaticMarkup(
       <DesignFilesPanel
         {...baseProps}
@@ -40,9 +40,11 @@ describe('DesignFilesPanel folder rows', () => {
       />,
     );
 
+    expect(markup).toContain('Folders');
     expect(markup).toContain('data-testid="design-file-row-00-START-HERE.html"');
-    expect(markup).toContain('data-testid="design-folder-row-pages:created-by-codex"');
+    expect(markup).toContain('data-testid="design-folder-row-created-by-codex"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).not.toContain('data-testid="design-file-row-created-by-codex/README.md"');
+    expect(markup).not.toContain('data-testid="design-folder-row-pages:created-by-codex"');
   });
 });

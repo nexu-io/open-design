@@ -459,6 +459,7 @@ export const fa: Dict = {
   'designFiles.previewClose': 'بستن پیش‌نمایش',
   'designFiles.modified': 'ویرایش شده {time} · {size}',
   'designFiles.weeksAgo': '{n} هفته پیش',
+  'designFiles.sectionFolders': 'پوشه‌ها',
   'designFiles.sectionPages': 'صفحات',
   'designFiles.sectionScripts': 'اسکریپت‌ها',
   'designFiles.sectionImages': 'تصاویر',

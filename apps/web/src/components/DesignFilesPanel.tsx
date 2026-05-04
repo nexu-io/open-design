@@ -1,4 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import type {
+  Dispatch,
+  DragEvent,
+  ReactNode,
+  SetStateAction,
+  TransitionStartFunction,
+} from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -20,17 +27,18 @@ interface Props {
 }
 
 type Section = 'pages' | 'scripts' | 'images' | 'sketches' | 'other';
-type SectionRow =
-  | { type: 'file'; key: string; file: ProjectFile; depth: 0 | 1; mtime: number }
-  | {
-      type: 'folder';
-      key: string;
-      label: string;
-      files: ProjectFile[];
-      expanded: boolean;
-      active: boolean;
-      mtime: number;
-    };
+type FileBrowserSection = 'folders' | Section;
+type FileRow = { type: 'file'; key: string; file: ProjectFile; depth: 0 | 1; mtime: number };
+type FolderRow = {
+  type: 'folder';
+  key: string;
+  label: string;
+  files: ProjectFile[];
+  expanded: boolean;
+  active: boolean;
+  mtime: number;
+};
+type BrowserRow = FileRow | FolderRow;
 
 const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
   pages: 'designFiles.sectionPages',
@@ -68,7 +76,9 @@ export function DesignFilesPanel({
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
+  const [sectionLimits, setSectionLimits] = useState<Partial<Record<FileBrowserSection, number>>>(
+    {},
+  );
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [isSectionExpansionPending, startSectionExpansion] = useTransition();
 
@@ -80,12 +90,24 @@ export function DesignFilesPanel({
       images: [],
       other: [],
     };
-    const sorted = [...files].sort((a, b) => b.mtime - a.mtime);
+    const sorted = files
+      .filter((file) => !topLevelFolder(file.name))
+      .sort((a, b) => b.mtime - a.mtime);
     for (const f of sorted) {
       groups[sectionFor(f)].push(f);
     }
     return groups;
   }, [files]);
+
+  const folderRows = useMemo(
+    () => buildFolderRows(files, expandedFolders, preview),
+    [expandedFolders, files, preview],
+  );
+
+  const folderCount = useMemo(
+    () => folderRows.filter((row) => row.type === 'folder').length,
+    [folderRows],
+  );
 
   const previewFile = useMemo(
     () => files.find((f) => f.name === preview) ?? null,
@@ -116,7 +138,7 @@ export function DesignFilesPanel({
     }
   }
 
-  function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
+  function handleDrop(ev: DragEvent<HTMLDivElement>) {
     ev.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
@@ -134,6 +156,86 @@ export function DesignFilesPanel({
       }
       return next;
     });
+  }
+
+  function renderRow(row: BrowserRow) {
+    if (row.type === 'folder') {
+      const fileWord =
+        row.files.length === 1 ? t('newproj.fileSingular') : t('newproj.filePlural');
+      return (
+        <button
+          key={row.key}
+          type="button"
+          data-testid={`design-folder-row-${row.key}`}
+          className={`df-row df-folder-row ${row.expanded ? 'expanded' : ''} ${
+            row.active ? 'active' : ''
+          }`}
+          aria-expanded={row.expanded}
+          onClick={() => toggleFolder(row.key)}
+        >
+          <span className="df-row-chevron" aria-hidden>
+            <Icon name={row.expanded ? 'chevron-down' : 'chevron-right'} size={14} />
+          </span>
+          <span className="df-row-icon" data-kind="folder" aria-hidden>
+            <Icon name="folder" size={15} />
+          </span>
+          <span className="df-row-name-wrap">
+            <span className="df-row-name">{row.label}</span>
+            <span className="df-row-sub">
+              {row.files.length} {fileWord}
+            </span>
+          </span>
+          <span className="df-row-time">{relativeTime(row.mtime, t)}</span>
+        </button>
+      );
+    }
+
+    const f = row.file;
+    const active = preview === f.name;
+    const isHovered = hover === f.name;
+    return (
+      <button
+        key={row.key}
+        type="button"
+        data-testid={`design-file-row-${f.name}`}
+        className={`df-row ${row.depth > 0 ? 'nested' : ''} ${active ? 'active' : ''}`}
+        onMouseEnter={() => setHover(f.name)}
+        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+        onClick={() => setPreview(f.name)}
+        onDoubleClick={() => onOpenFile(f.name)}
+      >
+        <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+          {kindGlyph(f.kind)}
+        </span>
+        <span className="df-row-name-wrap">
+          <span className="df-row-name" title={f.name}>
+            {displayFileName(f.name, row.depth)}
+          </span>
+          <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+        </span>
+        <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
+        <span
+          data-testid={`design-file-menu-${f.name}`}
+          className="df-row-menu"
+          style={isHovered || active ? { opacity: 1 } : undefined}
+          role="button"
+          aria-label={t('designFiles.rowMenu')}
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = (e.target as HTMLElement)
+              .closest('.df-row-menu')
+              ?.getBoundingClientRect();
+            setMenuPos({
+              name: f.name,
+              top: (rect?.bottom ?? 0) + 4,
+              left: (rect?.right ?? 0) - 160,
+            });
+          }}
+        >
+          ⋯
+        </span>
+      </button>
+    );
   }
 
   return (
@@ -184,137 +286,43 @@ export function DesignFilesPanel({
           {files.length === 0 ? (
             <div className="df-empty">{t('designFiles.empty')}</div>
           ) : (
-            SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => {
-              const sectionFiles = grouped[section];
-              const sectionRows = buildSectionRows(
-                section,
-                sectionFiles,
-                expandedFolders,
-                preview,
-              );
-              const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
-              const visibleRows = sectionRows.slice(0, visibleLimit);
-              const hiddenCount = sectionRows.length - visibleRows.length;
-              return (
-                <div className="df-section" key={section}>
-                  <div className="df-section-label">
-                    {t(SECTION_LABEL_KEY[section])}
-                    <span className="df-section-count">{sectionFiles.length}</span>
-                  </div>
-                  {visibleRows.map((row) => {
-                    if (row.type === 'folder') {
-                      const fileWord =
-                        row.files.length === 1
-                          ? t('newproj.fileSingular')
-                          : t('newproj.filePlural');
-                      return (
-                        <button
-                          key={row.key}
-                          type="button"
-                          data-testid={`design-folder-row-${row.key}`}
-                          className={`df-row df-folder-row ${row.expanded ? 'expanded' : ''} ${
-                            row.active ? 'active' : ''
-                          }`}
-                          aria-expanded={row.expanded}
-                          onClick={() => toggleFolder(row.key)}
-                        >
-                          <span className="df-row-chevron" aria-hidden>
-                            <Icon
-                              name={row.expanded ? 'chevron-down' : 'chevron-right'}
-                              size={14}
-                            />
-                          </span>
-                          <span className="df-row-icon" data-kind="folder" aria-hidden>
-                            <Icon name="folder" size={15} />
-                          </span>
-                          <span className="df-row-name-wrap">
-                            <span className="df-row-name">{row.label}</span>
-                            <span className="df-row-sub">
-                              {row.files.length} {fileWord}
-                            </span>
-                          </span>
-                          <span className="df-row-time">{relativeTime(row.mtime, t)}</span>
-                        </button>
-                      );
-                    }
-                    const f = row.file;
-                    const active = preview === f.name;
-                    const isHovered = hover === f.name;
-                    return (
-                      <button
-                        key={row.key}
-                        type="button"
-                        data-testid={`design-file-row-${f.name}`}
-                        className={`df-row ${row.depth > 0 ? 'nested' : ''} ${
-                          active ? 'active' : ''
-                        }`}
-                        onMouseEnter={() => setHover(f.name)}
-                        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                        onClick={() => setPreview(f.name)}
-                        onDoubleClick={() => onOpenFile(f.name)}
-                      >
-                        <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-                          {kindGlyph(f.kind)}
-                        </span>
-                        <span className="df-row-name-wrap">
-                          <span className="df-row-name" title={f.name}>
-                            {displayFileName(f.name, row.depth)}
-                          </span>
-                          <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-                        </span>
-                        <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
-                        <span
-                          data-testid={`design-file-menu-${f.name}`}
-                          className="df-row-menu"
-                          style={isHovered || active ? { opacity: 1 } : undefined}
-                          role="button"
-                          aria-label={t('designFiles.rowMenu')}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const rect = (e.target as HTMLElement)
-                              .closest('.df-row-menu')
-                              ?.getBoundingClientRect();
-                            setMenuPos({
-                              name: f.name,
-                              top: (rect?.bottom ?? 0) + 4,
-                              left: (rect?.right ?? 0) - 160,
-                            });
-                          }}
-                        >
-                          ⋯
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {hiddenCount > 0 ? (
-                    <button
-                      type="button"
-                      className="df-section-more"
-                      disabled={isSectionExpansionPending}
-                      aria-busy={isSectionExpansionPending}
-                      onClick={() =>
-                        startSectionExpansion(() => {
-                          setSectionLimits((curr) => ({
-                            ...curr,
-                            [section]: Math.min(
-                              sectionRows.length,
-                              visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
-                            ),
-                          }));
-                        })
-                      }
-                    >
-                      <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
-                      <span>
-                        {t('designFiles.showMore', {
-                          n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
-                        })}
-                      </span>
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })
+            <>
+              {folderRows.length > 0 ? (
+                <FileSection
+                  count={folderCount}
+                  label={t('designFiles.sectionFolders')}
+                  rows={folderRows}
+                  section="folders"
+                  sectionLimits={sectionLimits}
+                  isSectionExpansionPending={isSectionExpansionPending}
+                  renderRow={renderRow}
+                  setSectionLimits={setSectionLimits}
+                  startSectionExpansion={startSectionExpansion}
+                  t={t}
+                />
+              ) : null}
+              {SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => (
+                <FileSection
+                  key={section}
+                  count={grouped[section].length}
+                  label={t(SECTION_LABEL_KEY[section])}
+                  rows={grouped[section].map((file) => ({
+                    type: 'file' as const,
+                    key: file.name,
+                    file,
+                    depth: 0 as const,
+                    mtime: file.mtime,
+                  }))}
+                  section={section}
+                  sectionLimits={sectionLimits}
+                  isSectionExpansionPending={isSectionExpansionPending}
+                  renderRow={renderRow}
+                  setSectionLimits={setSectionLimits}
+                  startSectionExpansion={startSectionExpansion}
+                  t={t}
+                />
+              ))}
+            </>
           )}
           <div
             className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
@@ -405,6 +413,67 @@ export function DesignFilesPanel({
   );
 }
 
+function FileSection({
+  count,
+  label,
+  rows,
+  section,
+  sectionLimits,
+  isSectionExpansionPending,
+  renderRow,
+  setSectionLimits,
+  startSectionExpansion,
+  t,
+}: {
+  count: number;
+  label: string;
+  rows: BrowserRow[];
+  section: FileBrowserSection;
+  sectionLimits: Partial<Record<FileBrowserSection, number>>;
+  isSectionExpansionPending: boolean;
+  renderRow: (row: BrowserRow) => ReactNode;
+  setSectionLimits: Dispatch<SetStateAction<Partial<Record<FileBrowserSection, number>>>>;
+  startSectionExpansion: TransitionStartFunction;
+  t: TranslateFn;
+}) {
+  const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
+  const visibleRows = rows.slice(0, visibleLimit);
+  const hiddenCount = rows.length - visibleRows.length;
+
+  return (
+    <div className="df-section">
+      <div className="df-section-label">
+        {label}
+        <span className="df-section-count">{count}</span>
+      </div>
+      {visibleRows.map(renderRow)}
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          className="df-section-more"
+          disabled={isSectionExpansionPending}
+          aria-busy={isSectionExpansionPending}
+          onClick={() =>
+            startSectionExpansion(() => {
+              setSectionLimits((curr) => ({
+                ...curr,
+                [section]: Math.min(rows.length, visibleLimit + SECTION_FILE_LIMIT_INCREMENT),
+              }));
+            })
+          }
+        >
+          <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
+          <span>
+            {t('designFiles.showMore', {
+              n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
+            })}
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function DfPreview({
   projectId,
   file,
@@ -486,27 +555,16 @@ function DfPreview({
   );
 }
 
-function buildSectionRows(
-  section: Section,
+function buildFolderRows(
   files: ProjectFile[],
   expandedFolders: ReadonlySet<string>,
   preview: string | null,
-): SectionRow[] {
-  const topLevelEntries: Array<SectionRow> = [];
+): BrowserRow[] {
   const folders = new Map<string, ProjectFile[]>();
 
   for (const file of files) {
     const folder = topLevelFolder(file.name);
-    if (!folder) {
-      topLevelEntries.push({
-        type: 'file',
-        key: file.name,
-        file,
-        depth: 0,
-        mtime: file.mtime,
-      });
-      continue;
-    }
+    if (!folder) continue;
     const bucket = folders.get(folder);
     if (bucket) {
       bucket.push(file);
@@ -515,11 +573,12 @@ function buildSectionRows(
     }
   }
 
+  const topLevelEntries: FolderRow[] = [];
   for (const [folder, folderFiles] of folders) {
     const sortedFiles = [...folderFiles].sort((a, b) => b.mtime - a.mtime);
-    const key = `${section}:${folder}`;
+    const key = folder;
     const expanded = expandedFolders.has(key);
-    const folderRow: SectionRow = {
+    const folderRow: FolderRow = {
       type: 'folder',
       key,
       label: folder,
@@ -533,7 +592,7 @@ function buildSectionRows(
 
   topLevelEntries.sort((a, b) => b.mtime - a.mtime);
 
-  const rows: SectionRow[] = [];
+  const rows: BrowserRow[] = [];
   for (const entry of topLevelEntries) {
     rows.push(entry);
     if (entry.type === 'folder' && entry.expanded) {

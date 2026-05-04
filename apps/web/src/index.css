@@ -3568,17 +3568,20 @@ code {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 0 0;
+  padding: 0;
 }
 .df-section { display: flex; flex-direction: column; gap: 0; }
-.df-section + .df-section { margin-top: 6px; }
+.df-section + .df-section { margin-top: 0; }
 .df-section-label {
   font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 600;
-  padding: 12px 20px 6px;
+  padding: 10px 20px 8px;
+  background: color-mix(in srgb, var(--bg-subtle) 86%, var(--bg));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 .df-section-count {
   margin-left: 8px;

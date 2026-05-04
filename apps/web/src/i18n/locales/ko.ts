@@ -459,6 +459,7 @@ export const ko: Dict = {
   'designFiles.previewClose': '미리보기 닫기',
   'designFiles.modified': '{time} 수정됨 · {size}',
   'designFiles.weeksAgo': '{n}주 전',
+  'designFiles.sectionFolders': '폴더',
   'designFiles.sectionPages': '페이지',
   'designFiles.sectionScripts': '스크립트',
   'designFiles.sectionImages': '이미지',

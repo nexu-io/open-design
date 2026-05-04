@@ -459,6 +459,7 @@ export const ar: Dict = {
   'designFiles.previewClose': 'إغلاق المعاينة',
   'designFiles.modified': 'تم التعديل {time} · {size}',
   'designFiles.weeksAgo': 'منذ {n} أسبوع',
+  'designFiles.sectionFolders': 'المجلدات',
   'designFiles.sectionPages': 'صفحات',
   'designFiles.sectionScripts': 'سكربتات',
   'designFiles.sectionImages': 'صور',

@@ -449,6 +449,7 @@ export const zhCN: Dict = {
   'designFiles.previewClose': '关闭预览',
   'designFiles.modified': '修改于 {time} · {size}',
   'designFiles.weeksAgo': '{n} 周前',
+  'designFiles.sectionFolders': '文件夹',
   'designFiles.sectionPages': '页面',
   'designFiles.sectionScripts': '脚本',
   'designFiles.sectionImages': '图片',

@@ -459,6 +459,7 @@ export const fr: Dict = {
   'designFiles.previewClose': 'Fermer l\'aperçu',
   'designFiles.modified': 'Modifié {time} · {size}',
   'designFiles.weeksAgo': 'il y a {n} sem',
+  'designFiles.sectionFolders': 'Dossiers',
   'designFiles.sectionPages': 'Pages',
   'designFiles.sectionScripts': 'Scripts',
   'designFiles.sectionImages': 'Images',
