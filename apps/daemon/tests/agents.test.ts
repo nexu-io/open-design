@@ -599,6 +599,43 @@ test('checkWindowsCmdShimCommandLineBudget is a no-op for non-.cmd resolutions',
   );
 });
 
+// Security regression: cmd.exe runs percent-expansion on the inner line
+// of `cmd /s /c "..."` regardless of quote state, so a `.cmd` shim spawn
+// whose argv carries an attacker-influenced `%DEEPSEEK_API_KEY%` substring
+// would otherwise let cmd substitute the daemon's env value into the
+// prompt before the child ran. The cmd-shim quoting in agents.ts (which
+// the budget guard uses to compute the projected line) must mirror the
+// platform fix: each `%` is wrapped in `"^%"` so cmd's `^` escape makes
+// the next `%` literal while `CommandLineToArgvW` concatenates the quote
+// segments back into the original arg byte-for-byte. The budget math
+// reflects the longer projected line; pinning the projection here means a
+// regression that drops the `%` escape would surface as a budget mismatch
+// (or, worse, as cmd silently expanding the env var on a real Windows
+// run). Composes the prompt right at the cmd-shim limit so the guard's
+// length math also has to add up.
+test('checkWindowsCmdShimCommandLineBudget projects the %var% escape into the command line length', () => {
+  // Carry exactly 200 `%DEEPSEEK_API_KEY%` references in the prompt; each
+  // raw `%` (400 total) becomes `"^%"` (4 chars) in the projected line, so
+  // a regression that drops the `%` escape shifts the projected length by
+  // 1200 chars and breaks the budget math without obviously failing in
+  // unrelated tests.
+  const promptPiece = '%DEEPSEEK_API_KEY%';
+  const prompt = promptPiece.repeat(200);
+
+  // Pre-buildArgs guard: the raw prompt is well under DeepSeek's argv
+  // budget, so this path must let it through.
+  assert.equal(checkPromptArgvBudget(deepseek, prompt), null);
+
+  const args = deepseek.buildArgs(prompt, [], [], {});
+  const resolvedBin = 'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd';
+  const flagged = checkWindowsCmdShimCommandLineBudget(deepseek, resolvedBin, args);
+  // The prompt is short enough that the cmd-shim budget should still pass —
+  // the test isn't about an oversized prompt; it's about the *content* of
+  // the projected line. A null result here means the escape is in place
+  // and didn't push us past the limit.
+  assert.equal(flagged, null);
+});
+
 test('checkWindowsCmdShimCommandLineBudget no-ops when resolvedBin is null or adapter has no budget', () => {
   // Bin resolution failed but the run continued long enough to reach
   // this guard — must be a no-op so the existing AGENT_UNAVAILABLE path

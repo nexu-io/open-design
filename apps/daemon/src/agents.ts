@@ -892,11 +892,16 @@ export function checkPromptArgvBudget(def, composed) {
 // a fake `.cmd` path in tests without forking on `process.platform`.
 // Must stay byte-for-byte identical to the platform copy — the helper's
 // whole point is to compute the exact `cmd.exe /d /s /c "<inner>"` line
-// the spawn path will produce on Windows.
+// the spawn path will produce on Windows. The `%` → `"^%"` substitution
+// neutralizes cmd.exe's percent-expansion for prompts that ride argv
+// (DeepSeek TUI today): `%name%` pairs would otherwise be expanded from
+// the daemon environment before the child reads them, leaking secrets
+// like `%DEEPSEEK_API_KEY%` whenever the prompt mentions an env-var name.
 function quoteForWindowsCmdShim(value) {
   const str = String(value ?? '');
-  if (!/[\s"&<>|^]/.test(str)) return str;
-  return `"${str.replace(/"/g, '""')}"`;
+  if (!/[\s"&<>|^%]/.test(str)) return str;
+  const escaped = str.replace(/"/g, '""').replace(/%/g, '"^%"');
+  return `"${escaped}"`;
 }
 
 // Mirror of libuv's `quote_cmd_arg` (process-stdio.c), the exact rule
