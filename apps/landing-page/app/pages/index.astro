@@ -5,9 +5,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { heroImage } from '../image-assets';
 
-const title = 'Open Design — Designing intelligence with skills, taste, and code.';
+const title = 'Open Design — Design with the agent already on your laptop.';
 const description =
-  'Open Design is the open-source alternative to Claude Design. 12 coding-agent CLIs · 31 composable skills · 72 brand-grade design systems. Local-first, web-deployable, BYOK at every layer.';
+  'The open-source alternative to Claude Design. Your existing coding agent — Claude · Codex · Cursor · Gemini · OpenCode · Qwen — becomes the design engine, driven by 31 composable skills and 72 brand-grade design systems.';
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const pageHtml = renderToStaticMarkup(createElement(Page));
 ---
@@ -44,6 +44,31 @@ const pageHtml = renderToStaticMarkup(createElement(Page));
           return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
         };
 
+        // Pull a clean 'v0.3.0'-style label from a GitHub release record.
+        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+        // what we hand-author; fall back to tag_name (e.g.
+        // 'open-design-v0.3.0') with the project prefix stripped.
+        //
+        // Expected input shapes (release.name / release.tag_name):
+        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+        //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
+        //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
+        //   { name: null,                 tag_name: null }                  → null (caller skips)
+        const formatVersion = (release) => {
+          const fromTag = (tag) => {
+            if (typeof tag !== 'string') return null;
+            const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+            return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+          };
+          const fromName = (name) => {
+            if (typeof name !== 'string') return null;
+            const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+            return m ? `v${m[1]}` : null;
+          };
+          return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+        };
+
         const enhanceHeader = () => {
           const nav = document.querySelector('[data-nav-headroom]');
           if (nav) {
@@ -65,15 +90,33 @@ const pageHtml = renderToStaticMarkup(createElement(Page));
           }
 
           const stars = document.querySelector('[data-github-stars]');
-          if (!stars) return;
-          fetch('https://api.github.com/repos/nexu-io/open-design', {
+          if (stars) {
+            fetch('https://api.github.com/repos/nexu-io/open-design', {
+              headers: { Accept: 'application/vnd.github+json' },
+            })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+              .then((data) => {
+                if (typeof data?.stargazers_count === 'number') {
+                  stars.textContent = formatStars(data.stargazers_count);
+                }
+              })
+              .catch(() => {});
+          }
+
+          // Latest stable release powers every "v0.x.y" badge on the page
+          // (topbar pulse, hero CTA-foot, footer download). Hits one
+          // unauthenticated API call per page view; the static fallback in
+          // each slot keeps the layout sane if the request fails or 403s.
+          const versionSlots = document.querySelectorAll('[data-github-version]');
+          if (versionSlots.length === 0) return;
+          fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
             headers: { Accept: 'application/vnd.github+json' },
           })
             .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
             .then((data) => {
-              if (typeof data?.stargazers_count === 'number') {
-                stars.textContent = formatStars(data.stargazers_count);
-              }
+              const label = formatVersion(data);
+              if (!label) return;
+              for (const slot of versionSlots) slot.textContent = label;
             })
             .catch(() => {});
         };

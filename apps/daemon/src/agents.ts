@@ -64,6 +64,9 @@ const agentCapabilities = new Map();
 // its non-interactive/auto-approve switch on — otherwise Write/Edit hangs
 // or errors and the model has to hallucinate a permission button the UI
 // never shows.
+//
+// `env` is optional per-agent process environment. Keep it limited to
+// documented, non-secret runtime knobs that belong to the adapter contract.
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
@@ -283,8 +286,12 @@ export const AGENT_DEFS = [
     // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG on
     // Windows (CreateProcess limit ~32 KB) for any non-trivial prompt.
     // `--yolo` skips interactive approval prompts in the no-TTY web UI.
+    // Workspace trust is provided via `GEMINI_CLI_TRUST_WORKSPACE` below
+    // instead of `--skip-trust`; several Gemini CLI builds hide or reject the
+    // flag even though they accept the documented environment variable.
+    env: { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = ['--output-format', 'stream-json', '--skip-trust', '--yolo'];
+      const args = ['--output-format', 'stream-json', '--yolo'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -824,8 +831,8 @@ function stripFns(def) {
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` / `maxPromptArgBytes` are probe-or-spawn-only metadata
-  // and shouldn't bleed into the API response either.
+  // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
+  // metadata and shouldn't bleed into the API response either.
   const {
     buildArgs,
     listModels,
@@ -835,6 +842,7 @@ function stripFns(def) {
     capabilityFlags,
     fallbackBins,
     maxPromptArgBytes,
+    env,
     ...rest
   } = def;
   return rest;

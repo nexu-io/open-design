@@ -1,7 +1,7 @@
 /*
  * Open Design — Atelier Zero landing page.
  *
- * Mirrors `skills/editorial-collage/example.html` 1:1. When the canonical
+ * Mirrors `skills/open-design-landing/example.html` 1:1. When the canonical
  * example.html changes, mirror the diff here and into `app/globals.css`.
  *
  * Static React component rendered by Astro. The Header and Wire components
@@ -28,7 +28,12 @@ const arrowPlus = (
 
 const NBSP = '\u00A0';
 
-// Canonical project URLs. Keep in sync with skills/editorial-collage/example.html.
+// Canonical project URLs. Keep in sync with skills/open-design-landing/example.html.
+//
+// `data-github-version` invariant: every wrapper must contain ONLY the version
+// string (e.g. `v0.3.0`), never any surrounding label or punctuation. The
+// inline enhancement script in `app/pages/index.astro` assigns `textContent`
+// on each slot, so any extra text inside the wrapper would be clobbered.
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
 const REPO_ISSUES = `${REPO}/issues`;
@@ -117,7 +122,7 @@ export default function Page() {
             <span className='right'>
               <a className='topbar-link' href={REPO_RELEASES} {...ext}>
                 <span className='pulse' />
-                Live · v0.2.0
+                Live · <span data-github-version>v0.3.0</span>
               </a>
               <span className='locale-switch'>
                 <b>EN</b>
@@ -155,11 +160,10 @@ export default function Page() {
                 <span className='dot'>.</span>
               </h1>
               <p className='lead' data-reveal>
-                The open-source alternative to Anthropic&rsquo;s Claude Design.
-                12 coding agents — Claude, Codex, Cursor, Gemini and friends —
-                drive 31 composable skills and 72 brand-grade design systems.
-                Generate web pages, slide decks, mobile prototypes, images, even
-                short videos — all running on your own laptop.
+                The open-source alternative to Claude Design. Your existing
+                coding agent — Claude · Codex · Cursor · Gemini · OpenCode ·
+                Qwen — becomes the design engine, driven by 31 composable
+                skills and 72 brand-grade design systems.
               </p>
               <div className='hero-actions' data-reveal>
                 <a className='btn btn-primary' href={REPO} {...ext}>
@@ -1011,7 +1015,9 @@ export default function Page() {
                 </div>
                 <div className='cta-foot'>
                   <span className='stamp'>● Live</span>
-                  <span>v0.2.0 / Apache-2.0</span>
+                  <span>
+                    <span data-github-version>v0.3.0</span> / Apache-2.0
+                  </span>
                   <span style={{ marginLeft: 'auto' }}>
                     52.5200° N · 13.4050° E
                   </span>
@@ -1080,7 +1086,9 @@ export default function Page() {
                   {...ext}
                 >
                   Download desktop
-                  <span className='meta'>macOS · v0.2.0</span>
+                  <span className='meta'>
+                    macOS · <span data-github-version>v0.3.0</span>
+                  </span>
                 </a>
               </div>
               <div className='foot-col'>

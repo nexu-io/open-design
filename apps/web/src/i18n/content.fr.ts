@@ -32,15 +32,15 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Une page de documentation — navigation à gauche, zone article scrollable, table des matières à droite.',
   },
-  'editorial-collage': {
+  'open-design-landing': {
     examplePrompt:
-      'Concevez une landing page éditoriale dans le style Atelier Zero / Monocle — canvas papier chaud, collage surréaliste plâtre + architecture, grande typographie display serif italique mixée, chiffres romains comme marqueurs de sections et un seul accent corail.',
+      'Concevez la landing page marketing Open Design dans le style Atelier Zero / Monocle — canvas papier chaud, collage surréaliste plâtre + architecture, grande typographie display serif italique mixée, chiffres romains comme marqueurs de sections et un seul accent corail.',
   },
-  'editorial-collage-deck': {
+  'open-design-landing-deck': {
     examplePrompt:
-      'Créez un pitch deck de 11 slides pour “Lumen Field”, un studio de soundscapes de concentration. Cover avec hero plate, deux séparateurs de section, deux slides produit avec bullets, une slide stats avec 12 soundscapes / 4 presets / 1 Daily Ritual, une citation client, un CTA final et une end-card. Réutilisez la bibliothèque d’images d’editorial-collage.',
+      'Créez le pitch deck Open Design dans le style Atelier Zero — cover avec hero plate, séparateurs de section en chiffres romains, slide stats (31 Skills · 72 systèmes · 12 CLIs), citation client, CTA et end-card mega italic-serif. Pagination horizontal-swipe comme un magazine imprimé.',
     description:
-      'Crée un slide deck single-file dans le langage visuel Atelier Zero : papier chaud, spans accent en serif italique, points finaux corail et plaques de collage surréalistes. Le deck utilise une pagination scroll-snap, une navigation par flèches et espace, un HUD live avec compteur de slides et progress bar, et hérite du stylesheet canonique ainsi que de la bibliothèque d’images à 16 slots du Skill frère `editorial-collage`.',
+      'Crée un slide deck single-file dans le style Atelier Zero (papier chaud, spans accent en serif italique, points finaux corail, plaques de collage surréalistes). Pagination magazine horizontale avec navigation par flèches et espace, HUD live avec compteur de slides et progress bar ; partage le stylesheet et la bibliothèque d’images à 16 slots avec le Skill frère `open-design-landing`.',
   },
   'email-marketing': {
     examplePrompt:
@@ -103,6 +103,18 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   'invoice': {
     examplePrompt:
       'Créez une facture d’un studio de design freelance pour un client sur un projet d’identité de marque — trois lignes, acompte de 10 %, TVA de 9 %.',
+  },
+  'kami-deck': {
+    examplePrompt:
+      'Créez un deck de conférence en six slides dans le style kami (紙) — parchemin chaud, encre bleue sur la cover, une seule graisse de serif, swipe magazine horizontal.',
+    description:
+      'Génère un slide deck prêt à imprimer dans le design system kami : parchemin chaud (ou encre bleue sur cover et chapitres), serif dans une seule graisse, accent encre bleue ≤5 % par slide, sans italique. Pagination magazine horizontale (←/→ · molette · swipe · ESC pour la vue d’ensemble). Un seul fichier HTML autonome, uniquement Google Fonts.',
+  },
+  'kami-landing': {
+    examplePrompt:
+      'Concevez un one-pager studio dans le style kami — canvas parchemin, accent encre bleue, éditorial comme un whitepaper.',
+    description:
+      'Génère un one-pager prêt à imprimer dans le style kami (紙) : parchemin chaud, accent encre bleue, serif dans une seule graisse, sans italique, sans gris froids. Se lit comme un whitepaper ou un one-pager studio, pas comme une UI d’app. Multilingue (EN · zh-CN · ja). Un seul fichier HTML sans dépendances.',
   },
   'kanban-board': {
     examplePrompt:

@@ -20,7 +20,7 @@ import {
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
-import { listSkills } from './skills.js';
+import { findSkillById, listSkills } from './skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
@@ -29,6 +29,7 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
@@ -933,6 +934,39 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  // SSE stream of file-changed events for a project. Drives preview live-reload.
+  // Receipt of a `file-changed` event triggers a file-list refresh, which
+  // propagates new mtimes through to FileViewer iframes (the URL-load
+  // `?v=${mtime}` cache-bust from PR #384 then reloads the iframe automatically).
+  // Subscribers come and go as users open/close project tabs; the underlying
+  // chokidar watcher is refcounted in project-watchers.ts so we never hold
+  // descriptors for projects no UI is looking at.
+  app.get('/api/projects/:id/events', (req, res) => {
+    if (!getProject(db, req.params.id)) {
+      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    }
+    let sub;
+    try {
+      const sse = createSseResponse(res);
+      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
+        sse.send('file-changed', evt);
+      });
+      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
+      const cleanup = () => {
+        if (sub) {
+          const { unsubscribe } = sub;
+          sub = null;
+          Promise.resolve(unsubscribe()).catch(() => {});
+        }
+      };
+      res.on('close', cleanup);
+      res.on('finish', cleanup);
+    } catch (err) {
+      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
+      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
   // ---- Conversations --------------------------------------------------------
 
   app.get('/api/projects/:id/conversations', (req, res) => {
@@ -1201,7 +1235,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/skills/:id', async (req, res) => {
     try {
       const skills = await listSkills(SKILLS_DIR);
-      const skill = skills.find((s) => s.id === req.params.id);
+      const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
       res.json(serializable);
@@ -1383,7 +1417,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/skills/:id/example', async (req, res) => {
     try {
       const skills = await listSkills(SKILLS_DIR);
-      const skill = skills.find((s) => s.id === req.params.id);
+      const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
@@ -1444,7 +1478,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/skills/:id/assets/*', async (req, res) => {
     try {
       const skills = await listSkills(SKILLS_DIR);
-      const skill = skills.find((s) => s.id === req.params.id);
+      const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
@@ -2234,8 +2268,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let skillCraftRequires = [];
     let activeSkillDir = null;
     if (effectiveSkillId) {
-      const skill = (await listSkills(SKILLS_DIR)).find(
-        (s) => s.id === effectiveSkillId,
+      const skill = findSkillById(
+        await listSkills(SKILLS_DIR),
+        effectiveSkillId,
       );
       if (skill) {
         skillBody = skill.body;
@@ -2630,7 +2665,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = spawnEnvForAgent(def.id, { ...process.env, ...odMediaEnv });
+      const env = spawnEnvForAgent(def.id, {
+        ...process.env,
+        ...(def.env || {}),
+        ...odMediaEnv,
+      });
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,

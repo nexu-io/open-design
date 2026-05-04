@@ -1,7 +1,7 @@
 /*
  * Atelier Zero — landing page styles.
  *
- * Mirrors `skills/editorial-collage/example.html` <style> block 1:1, plus
+ * Mirrors `skills/open-design-landing/example.html` <style> block 1:1, plus
  * a Google Fonts import so we do not need to inject <link rel='preconnect'>
  * tags into the document head from a server component.
  *
@@ -300,6 +300,12 @@ body::before {
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.nav-cta [data-github-stars],
+.nav-cta [data-github-version] {
+  font-variant-numeric: tabular-nums;
 }
 .nav-cta::after {
   content: '★';
@@ -453,9 +459,12 @@ body::before {
   padding: 0;
   min-height: calc(100vh - 140px);
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   border-bottom: 1px solid var(--line);
 }
+.hero > .container { flex: 0 0 auto; }
+.hero > .container.hero-grid { flex: 1 1 auto; }
 .hero::before {
   content: '';
   position: absolute;
@@ -1897,6 +1906,14 @@ footer {
 /* hide topbar mid text early — between 1200 and 1280 it crowds even with nowrap */
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
+}
+/* nav: between 1080 and 1180 the brand tail + 5 nav links + 2 CTAs + dot
+ * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
+ * so the Star CTA never has to compress. */
+@media (max-width: 1180px) {
+  .nav-inner { gap: 18px; }
+  .brand-meta { display: none; }
+  .nav-links { gap: 28px; }
 }
 @media (max-width: 1080px) {
   .container { padding: 0 32px; }

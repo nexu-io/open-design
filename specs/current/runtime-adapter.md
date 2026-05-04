@@ -131,10 +131,10 @@ The daemon currently maps:
 Gemini currently uses:
 
 ```bash
-gemini --output-format stream-json --skip-trust -p <prompt>
+GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo
 ```
 
-The daemon currently maps:
+The daemon delivers the prompt over stdin rather than argv. It currently maps:
 
 - `init` → `status(initializing)`
 - `message(role=assistant)` → `text_delta`
