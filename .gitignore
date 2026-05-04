@@ -43,3 +43,7 @@ tsconfig.tsbuildinfo
 task.md
 specs/change/active
 .ralph/
+
+# Nix and direnv
+.direnv/
+.envrc
