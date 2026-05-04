@@ -49,7 +49,9 @@ interface Props {
   defaultSection?: SettingsSection;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
-  onRefreshAgents: () => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  onRefreshAgents: (
+    options?: { throwOnError?: boolean },
+  ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
 }
 
 const SUGGESTED_MODELS_BY_PROTOCOL = {
@@ -332,7 +334,7 @@ export function SettingsDialog({
     setAgentRescanRunning(true);
     setAgentRescanNotice(null);
     try {
-      const refreshed = await onRefreshAgents();
+      const refreshed = await onRefreshAgents({ throwOnError: true });
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       setAgentRescanNotice({
         kind: 'success',

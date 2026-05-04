@@ -284,11 +284,14 @@ export function App() {
     [config],
   );
 
-  const refreshAgents = useCallback(async () => {
-    const next = await fetchAgents({ throwOnError: true });
-    setAgents(next);
-    return next;
-  }, []);
+  const refreshAgents = useCallback(
+    async (options?: { throwOnError?: boolean }) => {
+      const next = await fetchAgents(options);
+      setAgents(next);
+      return next;
+    },
+    [],
+  );
 
   const handleCreateProject = useCallback(
     async (input: CreateInput & { pendingPrompt?: string }) => {
