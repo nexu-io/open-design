@@ -2292,6 +2292,147 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
+  app.post('/api/google/slides/update-font-size', async (req, res) => {
+    const { deckId, objectId, fontSizePt } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (typeof objectId !== 'string' || !objectId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'objectId required');
+    }
+    if (typeof fontSizePt !== 'number' || !Number.isFinite(fontSizePt) || fontSizePt <= 0) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'fontSizePt must be a positive number');
+    }
+    try {
+      const { updateFontSize } = await import('./google-slides.js');
+      res.json(await updateFontSize(deckId, objectId, fontSizePt));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/update-text', async (req, res) => {
+    const { deckId, objectId, text } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (typeof objectId !== 'string' || !objectId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'objectId required');
+    }
+    if (typeof text !== 'string') {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'text must be a string');
+    }
+    try {
+      const { updateTextByObjectId } = await import('./google-slides.js');
+      res.json(await updateTextByObjectId(deckId, objectId, text));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/duplicate-slide', async (req, res) => {
+    const { deckId, slideObjectId, idMap } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (typeof slideObjectId !== 'string' || !slideObjectId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slideObjectId required');
+    }
+    if (idMap !== undefined && idMap !== null && (typeof idMap !== 'object' || Array.isArray(idMap))) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'idMap must be an object map');
+    }
+    try {
+      const { duplicateSlide } = await import('./google-slides.js');
+      res.json(await duplicateSlide(deckId, slideObjectId, idMap));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/update-slides-position', async (req, res) => {
+    const { deckId, slideIds, insertionIndex } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (!Array.isArray(slideIds)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slideIds must be an array');
+    }
+    if (slideIds.some((id) => typeof id !== 'string' || !id)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slideIds entries must be non-empty strings');
+    }
+    if (typeof insertionIndex !== 'number' || !Number.isFinite(insertionIndex) || insertionIndex < 0) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'insertionIndex must be a non-negative number');
+    }
+    try {
+      const { updateSlidesPosition } = await import('./google-slides.js');
+      res.json(await updateSlidesPosition(deckId, slideIds, insertionIndex));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  app.post('/api/google/slides/delete-pages', async (req, res) => {
+    const { deckId, slideIds } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (!Array.isArray(slideIds)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slideIds must be an array of slide objectIds');
+    }
+    if (slideIds.some((id) => typeof id !== 'string' || !id)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slideIds entries must be non-empty strings');
+    }
+    try {
+      const { deletePages } = await import('./google-slides.js');
+      res.json(await deletePages(deckId, slideIds));
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  // Export the deck to PDF and write it under the project's cwd so the
+  // skill's agent can Read() each page and visually verify rendering.
+  // Output path is daemon-controlled (no path traversal): always
+  // `<projectsDir>/<projectId>/_review/<filename>.pdf`.
+  app.post('/api/google/slides/export-pdf', async (req, res) => {
+    const { deckId, projectId, filename } = req.body || {};
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'deckId required');
+    }
+    if (typeof projectId !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(projectId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'projectId required');
+    }
+    const safeFilename =
+      typeof filename === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(filename)
+        ? filename
+        : `deck-${Date.now()}.pdf`;
+    try {
+      const { exportPdf } = await import('./google-slides.js');
+      const pdf = await exportPdf(deckId);
+      const projectDir = path.join(PROJECTS_DIR, projectId);
+      if (!fs.existsSync(projectDir)) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'project not found');
+      }
+      const reviewDir = path.join(projectDir, '_review');
+      if (!fs.existsSync(reviewDir)) fs.mkdirSync(reviewDir, { recursive: true });
+      const outPath = path.join(reviewDir, safeFilename);
+      fs.writeFileSync(outPath, pdf);
+      res.json({
+        path: outPath,
+        relativePath: path.relative(projectDir, outPath),
+        sizeBytes: pdf.length,
+      });
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
