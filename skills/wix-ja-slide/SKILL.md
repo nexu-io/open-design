@@ -243,7 +243,7 @@ scenario タグから直接 canonical を引けるなら採用:
 | 製品ローンチ | T+IMG (hero) or T+SUB (text 多) |
 | プロセス N ステップ | T+5B（番号付き）|
 | 引用 / Quote | T-LONG (P26)、「」記号付き |
-| クロージング | T-ONLY (P110)。**"Thank you" を default 推奨**（placeholder は元々 "Thank you." 用に設計、JP 全角 5 字 "ありがとう" は同じ font size で 2 行 wrap する。Round 3 ユーザーフィードバック）。"ありがとう" を出すなら段階 2 字号縮小と組み合わせる |
+| クロージング | T-ONLY (P110)。**"Thank you." を default 採用**（placeholder は元々 "Thank you." 用に設計、JP 全角 5 字 "ありがとう" は同じ font size で 2 行 wrap する。Round 3 / Round 7 ユーザーフィードバック）。**字号縮小はしない**（template の typography は触らない、Round 7 の方針）。JP closing が必須なら短い「感謝」など 2 字フレーズで再考。 |
 
 #### 3.2 `skill_guidance.must_avoid_for_unique_content` をブラックリストで尊重
 
@@ -713,20 +713,22 @@ T+IMG / T+IMG×N layout で title が右側 image と縦に並ぶレイアウト
 
 判断基準: PDF 視覚 check で「title が image 隣の placeholder で 2 行 wrap している」を見つけたら、応答テキストを `\n` 入りに書き直して再 apply。意味境界（助詞後 / 単語後）で改行を入れる。
 
-**段階 2: 文字小さくしても収まらない場合 → 字号縮小（font shrink）**
+**段階 2: テキスト圧縮で収まらない → canonical を変更（**字号は触るな**）**
 
-特に「クロージング "ありがとう" が "Thank you." 用 placeholder で 2 行に折る」のような、占位符の固定字号が原因のケース:
+> **設計哲学（Round 7 ユーザーフィードバック）**: 「テンプレートが約束、文字は変数」。template designer が設定した字号 / 字体 / typography は touchable ではない。agent の判断で字号を変えると template の視覚言語が壊れる。
+>
+> **`update-font-size` endpoint は使うな**。圧縮で収まらない場合、字号を縮小せず、**より文字キャパが大きい canonical に変更**する。
 
-```bash
-# 字号 20% 縮小（例: 200pt → 160pt）
-curl -X POST http://localhost:<daemon_port>/api/google/slides/update-font-size \
-  -H "Content-Type: application/json" \
-  -d '{"deckId": "<deckId>", "objectId": "<placeholder_object_id>", "fontSizePt": 160}'
-```
+代替 canonical の選び方:
 
-placeholder object_id は `/api/google/slides/<deckId>` で `slides[].elementIds` から取得。
+| 元 canonical（overflow） | 切り替え先 | 理由 |
+|---|---|---|
+| T+SUB (P28) で paragraph が 3 行超え | T-LONG (P26) — paragraph 占有面積が大きい | text 専用 layout に移行 |
+| T+3B で各 bullet 16 cells 超え | T+5B (P42) — bullet 容量大 / または 2 page に分割 | bullet 1 つあたりの面積が広い |
+| T+IMG で title + body の文字量が image 横の placeholder に入らない | T+SUB (P28) — image 削除して text を主役に / または image を別 page に | レイアウト分離 |
+| T-ONLY (P110) "ありがとう" が 2 行 wrap | "Thank you." を default 採用 | placeholder は元々 "Thank you." 用に設計、JP 全角 5 字は同字号で物理的に入らない |
 
-> **重要**: テキストをこれ以上短くできない（"ありがとう" の 1 字も削れない）場合、**字号縮小で解決する**。文字数だけ見ていたら永遠に修まらない。
+→ canonical 切り替え手順は段階 4 で具体化。
 
 **段階 3: layout-level 評価（Round 2 で漏れた観点）**
 
@@ -763,11 +765,13 @@ layout-level 問題が出たら → **canonical を別の同 shape entry に変�
 
 修正は **deck 全体 regenerate しない**（コスト高）。問題のページだけ:
 
-1. 元 layout の original_text を find
-2. 新しい短いテキストを replace（or 字号縮小、or canonical 変更）
-3. apply-replacements で送信（or update-font-size）
+1. 段階 1: 短く書き直し → 該当 placeholder を `update-text` で per-objectId 上書き
+2. 段階 1.5: image 隣 title が awkward wrap → text に明示 `\n` 入りで再 `update-text`
+3. 段階 2: 圧縮で収まらない → canonical 変更（既存 page を delete-pages で 1 枚削除、新 canonical を duplicate-slide で挿入、update-text で埋める、update-slides-position で順序復元）
 4. PDF を re-export
-5. 9.5.2 を再実行（最大 5 round — テキスト 3 round + 字号 2 round）
+5. 9.5.2 を再実行（最大 3 round）
+
+**字号 (`update-font-size`) は使わない**。template の typography は agent が触る領域ではない。
 
 #### 9.5.4 修正不能な場合
 
