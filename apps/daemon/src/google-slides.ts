@@ -300,9 +300,13 @@ export async function updateFontSize(deckId, slideObjectId, fontSizePt) {
 // and (c) write into placeholders whose original text contains control
 // chars like \x0b that defeat replaceAllText's exact-match.
 //
-// Strategy: deleteText(range: ALL) then insertText(at index 0) in one
-// batchUpdate. If the placeholder is empty (deleteText fails), retry
-// insert-only.
+// Style preservation (Round 7 finding): a naive [deleteText, insertText]
+// drops the original textRun.style — Closing P110's 200pt "Thank you."
+// hero collapsed to layout default (~18pt). Fix: read the placeholder's
+// existing textRun.style first, then re-apply it to the new text via
+// updateTextStyle. Honors the design principle "templates are the
+// promise, text is the variable" — typography belongs to the template,
+// not to the agent's runtime decisions.
 export async function updateTextByObjectId(deckId, objectId, text) {
   const { slides } = await authedClients();
   if (typeof text !== 'string') {
@@ -310,24 +314,90 @@ export async function updateTextByObjectId(deckId, objectId, text) {
     err.code = 'GOOGLE_API_ERROR';
     throw err;
   }
-  const runBatch = (requests) =>
-    slides.presentations.batchUpdate({
+
+  // Read the current placeholder's textRun.style (first non-empty run).
+  // If the placeholder is empty or unreadable, we proceed without style
+  // preservation — the new text will inherit layout defaults, which is
+  // the best we can do.
+  let preservedStyle = null;
+  let hadPriorText = false;
+  try {
+    const res = await slides.presentations.get({
+      presentationId: deckId,
+      fields: 'slides(pageElements(objectId,shape(text(textElements))))',
+    });
+    outer: for (const slide of res.data.slides || []) {
+      for (const el of slide.pageElements || []) {
+        if (el.objectId !== objectId) continue;
+        const elements = el.shape?.text?.textElements || [];
+        for (const te of elements) {
+          if (te.textRun?.content && te.textRun.content.trim().length > 0) {
+            preservedStyle = te.textRun.style || null;
+            hadPriorText = true;
+            break outer;
+          }
+        }
+        // objectId matched but no text content yet
+        break outer;
+      }
+    }
+  } catch (readErr) {
+    // proceed without style preservation
+  }
+
+  const requests = [];
+  if (hadPriorText) {
+    requests.push({ deleteText: { objectId, textRange: { type: 'ALL' } } });
+  }
+  requests.push({ insertText: { objectId, text, insertionIndex: 0 } });
+  if (preservedStyle && Object.keys(preservedStyle).length > 0) {
+    requests.push({
+      updateTextStyle: {
+        objectId,
+        textRange: { type: 'ALL' },
+        style: preservedStyle,
+        fields: '*',
+      },
+    });
+  }
+
+  try {
+    await slides.presentations.batchUpdate({
       presentationId: deckId,
       requestBody: { requests },
     });
-  try {
-    await runBatch([
-      { deleteText: { objectId, textRange: { type: 'ALL' } } },
-      { insertText: { objectId, text, insertionIndex: 0 } },
-    ]);
-    return { ok: true };
-  } catch (firstErr) {
-    try {
-      await runBatch([{ insertText: { objectId, text, insertionIndex: 0 } }]);
-      return { ok: true, fallback: 'insert-only' };
-    } catch (secondErr) {
-      throw wrapApiError(secondErr);
+    return {
+      ok: true,
+      preservedStyle: Boolean(preservedStyle && Object.keys(preservedStyle).length > 0),
+    };
+  } catch (err) {
+    // Last-resort: empty placeholder where deleteText is invalid even though
+    // we thought there was prior text. Retry insert-only.
+    if (hadPriorText) {
+      try {
+        const fallbackRequests = [
+          { insertText: { objectId, text, insertionIndex: 0 } },
+        ];
+        if (preservedStyle && Object.keys(preservedStyle).length > 0) {
+          fallbackRequests.push({
+            updateTextStyle: {
+              objectId,
+              textRange: { type: 'ALL' },
+              style: preservedStyle,
+              fields: '*',
+            },
+          });
+        }
+        await slides.presentations.batchUpdate({
+          presentationId: deckId,
+          requestBody: { requests: fallbackRequests },
+        });
+        return { ok: true, fallback: 'insert-only' };
+      } catch (inner) {
+        throw wrapApiError(inner);
+      }
     }
+    throw wrapApiError(err);
   }
 }
 
