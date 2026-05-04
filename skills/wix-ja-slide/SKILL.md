@@ -180,11 +180,95 @@ N. Closing (T-ONLY)
 
 **この pre-pass を飛ばすと、ページごとに語彙・トーンがブレる。**
 
-### Step 3: Layout 選択（Gap 1 fix: shape マッチング）
+### Step 3: Layout 選択（Gap 1 fix + Round 4 厳格化）
 
-outline の各セクションに対し：
+#### 3.0 厳格 canonical モード（**Round 4 で発見、最優先**）
 
-1. **構造シグネチャを抽出**
+**ルール**: `assets/layouts.json` の `shape_canonicals[X].canonical_slide_id` だけを使う。**all_layouts から代替 P 番号を探すな**。`all_layouts` は参考データ — 元 deck にどんな slide があったかを記録するだけで、layout プールではない。
+
+**理由**: Round 4 で agent が T-ONLY shape の代替として **P59 (05 People divider)** や **P109 (010 Closers divider)** を選んでしまった。これらは section divider 専用で、header / WIX logo が無い page になる。
+
+```
+✅ T-ONLY を使う場合は **P110 (Thank you.)** のみ — shape_canonicals.T-ONLY.canonical_slide_id
+❌ P59 / P109 / P4 / P17 etc. の section divider は使わない
+```
+
+**禁止 P 番号**（all_layouts で `section_divider: true` または `skill_use_policy: "do_not_use_for_content"`）: 4, 17, 21, 25, 37, 59, 61, 69, 79, 93, 109, 111, 112, 121, 124
+
+これらの P を選んだ時点で **layout 選択 NG**。shape_canonicals にある canonical だけ使う。
+
+#### 3.0.1 Canonical の再利用は OK（**Phase 6 で可能になった、最重要更新**）
+
+> Phase 5 までは「8 sections の deck では 8 distinct canonicals 必須」「kept slides は元 template の物理位置順に並ぶ」という制約があった（`replaceAllText` の deck-wide bleed 由来）。**Phase 6 で daemon に per-objectId の `update-text` + `duplicate-slide` + `update-slides-position` を追加**したため、両制約は消えた。
+
+**新方針**:
+- 同じ canonical を deck 内で **複数 page で再利用してよい**（例: T+3B P53 を Exec Summary / <brand-project> / Next Month の 3 page で使う）
+- canonical 選択は **scenario 適合性のみで判断**。distinctness を気にしない
+- 「物理位置序単調増加」も不要 — 後で `update-slides-position` で narrative 順に並べ替える
+
+→ Phase 5 で agent が「distinct を満たすため不適 layout に逃げる」現象（<industry-event> が FULL-IMG に逃げた / Cover が T-LONG quote layout になった）が発生していた。Phase 6 ではこれが起きない。再利用を恐れるな。
+
+#### 3.0.5 画像マーカーの精密ルール（Round 4 + Round 5 で発見）
+
+outline の section に `[image: ...]` マーカーがある場合の layout 選択は **section に body 文字があるかどうか** で分岐する:
+
+| section 構成 | 必須 canonical | 禁止 |
+|---|---|---|
+| `[image:]` + 標題 + body 文字（複数行） | **T+IMG (P31 or P83)** ← 画像 + 文字両方持つ | T-LONG (画像なくなる) / T+SUB (画像なくなる) / **FULL-IMG (文字なくなる、Round 5 regression)** |
+| `[image:]` + 標題のみ（短く 1 行） | **T+IMG (P31)** | FULL-IMG（標題も消える） |
+| `[image:]` のみ（文字無し、視覚的章扉り想定） | FULL-IMG (P33) | — |
+
+**FULL-IMG は body 文字を持てない layout**。outline section に「4/8-10 東京ビッグサイトで出展...」のような body text がある時、FULL-IMG を選ぶと**全文字が消える**。これが Round 5 で起きた <industry-event> / <newsletter-project> の崩壊。
+
+```
+❌ <industry-event> section ([image:] + 4/8-10 body text) → FULL-IMG (P33) → 文字全消失
+❌ <industry-event> section ([image:] + body) → T-LONG (P26) → 画像消失
+✅ <industry-event> section ([image:] + body) → T+IMG (P31 or P83) → 画像 + 文字両方保持
+```
+
+**判定**: outline section の `[image:]` の **後の行が空でない** → body text 有り → T+IMG (P31/P83)。section が `[image:]` 1 行だけ → FULL-IMG OK。
+
+`shape_canonicals.T+IMG.canonical_slide_id` (P31) を default。`shape_canonicals['T+IMG'].alt_canonicals` (P83 など — body 文字長いの場合の variant) は**所定の名前のみ**使う。**all_layouts から自由探索禁止**。
+
+#### 3.1 まず layouts.json の `skill_guidance.preferred_per_scenario` をチェック
+
+scenario タグから直接 canonical を引けるなら採用:
+
+| outline セクションタイプ | canonical |
+|---|---|
+| Cover | **T+SUB or T-ONLY**（COVER? は使うな）|
+| 3 点ハイライト | T+3B (P53) |
+| KPI 集約 | T+3B（各 metric 1 bullet）— **T-LONG は引用用、KPI に使うな** |
+| 画像付きイベント振り返り | T+IMG (P31) |
+| 製品ローンチ | T+IMG (hero) or T+SUB (text 多) |
+| プロセス N ステップ | T+5B（番号付き）|
+| 引用 / Quote | T-LONG (P26)、「」記号付き |
+| クロージング | T-ONLY (P110)。**"Thank you" を default 推奨**（placeholder は元々 "Thank you." 用に設計、JP 全角 5 字 "ありがとう" は同じ font size で 2 行 wrap する。Round 3 ユーザーフィードバック）。"ありがとう" を出すなら段階 2 字号縮小と組み合わせる |
+
+#### 3.2 `skill_guidance.must_avoid_for_unique_content` をブラックリストで尊重
+
+以下 canonical は **unique content の deck で使ってはいけない**:
+
+| 禁止 canonical | 理由 |
+|---|---|
+| **COVER?** | 複数の cover variant が同 placeholder text を共有、replaceAllText が全部 hit、同じ文字が複数所に入る。代替: T+SUB / T-ONLY |
+| **T+IMG×8** | 8 個の round badge の **ALL-CAPS 英文ラベル**（HEY TEAM! 等）は badge 図形内、replaceAllText で改不能。team badge 専用、コンテンツに使うな。代替: T+3B / T+5B |
+
+#### 3.3 N-bullet 厳密マッチ（Round 3 で発見）
+
+bullet 数は **正確に一致する canonical を選ぶ**。N=3 なら T+3B、N=2 なら T+2B、N=5 なら T+5B。**インターサブスティチュート禁止**。
+
+| outline bullet 数 | 必須 canonical | NG（避ける） |
+|---|---|---|
+| 2 | **T+SUB (P28)** ← P54 でなく | T+2B (P54) は 4 箭頭位を持ち 2 個空が残る (Round 4 user feedback) |
+| 3 | T+3B (P53) | T+2B（1 個切られる） / T+5B（空 2 個残る） |
+| 5 | T+5B (P42) | T+3B（2 個切られる） |
+
+**同 canonical を複数 page で使うのは OK**。例えば deck 内に T+3B が 3 page あっても問題ない。canonical 重複を避けるために bullet 数違う canonical に行くな。
+
+#### 3.4 構造シグネチャからの fallback
+
+scenario が明確に該当しない場合の構造マッチング:
    - `1 title + 3 bullets, no image` → `T+3B`
    - `1 title + paragraph + 1 image` → `T+IMG (paragraph variant)`
    - `1 title only` → `T-ONLY`
@@ -193,7 +277,8 @@ outline の各セクションに対し：
 2. **`assets/layouts.json` の同 shape entries から canonical を選ぶ**
    - 各 canonical は `use_for: []` ヒントを持つ
    - outline セクションのテーマと一致度が高い entry を選択
-   
+   - **`unsuitable_for_unique_content: true` の canonical をスキップ**
+
 3. **catalog に該当 shape が無い場合**
    - **発明しない**。代わりに同義の上位 shape にフォールバック（例: T+4B → T+3B + 補足を別ページ）
    - フォールバックも不可なら、ユーザーに「対応する layout が catalog にないため、outline を分割するか別構造にしてほしい」と返す
@@ -299,7 +384,19 @@ outline に書かれていない情報は **絶対に生成しない**。
 
 ユーザーが結果を見て `[要◯◯]` を見つけたら自分で埋める。AI が想像で埋めると Performance Report が誤情報になり信頼が失われる。
 
-### Step 6: 画像処理（Gap 3 fix）
+### Step 6: 画像処理
+
+> **テスト用 placehold.co URL の扱い（Round 3 ユーザーフィードバック）**: outline 内の image marker が `https://placehold.co/...` のようなプレースホルダー画像生成サービスを指している場合、画像は黒底白字テキストオーバーレイになる（"Wix Japan April 2026" のような）。これは**テスト用の挿入確認**で、最終 deck には不向き。result.json の `userActions` に必ず以下を追加する:
+>
+> ```
+> "userActions": [
+>   {
+>     "priority": "high",
+>     "label": "画像差し替え",
+>     "detail": "outline で指定された <N> 個の placehold.co URL は本物の画像ではない。各 image marker を実画像 URL（公司 CDN / GitHub raw / 公開 imgur 等）に書き直して outline を再投入するか、Slides UI で page X / Y / Z の画像を手動差し替え。"
+>   }
+> ]
+> ```（Gap 3 fix）
 
 画像対応 layout（`T+IMG`、`COVER?`、`FULL-IMG`、`T+IMG×N`）に対し：
 
@@ -391,60 +488,308 @@ Wix Workspace の Drive 公開分享制限のため、ローカルファイル�
 
 ### Step 7: Master / Header 設定（Gap 6 fix）
 
-deck の最初の生成時、master の "Presentation name / YYYY" を実際の deck 情報に書き換える。**daemon の `/api/google/slides/update-master` を使う**。
+deck の最初の生成時、master の "Presentation name / YYYY" を実際の deck 情報に書き換える。
+
+> **重要（Phase 5 Round 3 で発見）**: この template の場合 `update-master` は 0 occurrences を返す（"Presentation name / 2025" が **layout 上にあって master 上にない**ため）。代替として `apply-replacements` で deck-wide find/replace を使う:
 
 ```bash
-curl -X POST http://localhost:<daemon_port>/api/google/slides/update-master \
-  -H "Content-Type: application/json" \
-  -d '{
-    "deckId": "<copied_deck_id>",
-    "find": "Presentation name / 2025",
-    "replace": "Wix Japan 4月 Performance Report / 2026"
-  }'
-# → { "occurrences": 1 }
-```
-
-`deck_title` と `deck_year` は input から取得（指定がなければ outline の最初の `# 大見出し` + 現在年で fallback）。
-
-### Step 8: Slides API への書き出し
-
-daemon の Slides 系エンドポイントを使う。**JP テンプレート ID は Step 0 で読んだ `assets/config.json` の `jp_template_id` から取得する**（ハードコード禁止）。
-
-```bash
-# 1. JP テンプレートをコピー
-curl -X POST http://localhost:<daemon_port>/api/google/slides/copy \
-  -H "Content-Type: application/json" \
-  -d '{"sourceDeckId": "<jp_template_id>", "title": "<deck_title>"}'
-# → { deckId, deckTitle, deckUrl, embedUrl }
-
-# 2. 置換マップを送る（複数 key を 1 回の batch で実行）
 curl -X POST http://localhost:<daemon_port>/api/google/slides/apply-replacements \
   -H "Content-Type: application/json" \
   -d '{
     "deckId": "<copied_deck_id>",
     "replacements": {
-      "字数上限：48字": "今期 Wix Japan 主要ハイライト",
-      "字数上限：54字": "Japan <industry-event> 出展成功",
-      "字字字字字字...": "<newsletter-project> Vol.001 ローンチ",
-      "Lorem ipsum - Lorem ipsum dolor sit...": "<brand-project> JA 着手"
+      "Presentation name / 2025": "Wix Japan / 2026"
     }
   }'
-# → { "occurrences": { "<find>": <count>, ... } }
+# → { "occurrences": { "Presentation name / 2025": 3 } }
+# 削除済み slide にも bleed する可能性があるため Step 8.5 の前に実行する
 ```
 
-> **重要**: 文字列 key は P53 の例（"字数上限：48字"）のように catalog の元 placeholder text と完全一致しなければならない。`assets/layouts.json` から各 placeholder の `original_text` を引いて key にする。
+#### 7.1 Header 文字長の制約（Round 3 で発見）
+
+master placeholder の box 幅は短い（"Presentation name / 2025" 7 latin + 1 sp + 4 digit = 約 8 cells）。**replace 値は 12 cells 以下**にする:
+
+| ✅ OK | ❌ NG（wrap する） |
+|---|---|
+| `Wix Japan / 2026` (8 cells) | `Wix Japan 4月 / Performance Report / 2026` (約 26 cells、3 行 wrap) |
+| `Wix Japan 4月` (8 cells) | `Wix Japan April Performance Report` (28 cells) |
+| `WJ Performance / 2026` (12 cells、limit ぎりぎり) | |
+
+deck の正式タイトルは page 1 (Cover) に大きく出すから、header は短い識別子でいい。`deck_title` をそのまま header に渡さない。
+
+`deck_title` と `deck_year` は input から取得（指定がなければ outline の最初の `# 大見出し` + 現在年で fallback）。
+
+### Step 8: Slides API への書き出し（**Phase 6 改訂版、per-objectId 主流**）
+
+daemon の Slides 系エンドポイントを使う。**JP テンプレート ID は Step 0 で読んだ `assets/config.json` の `jp_template_id` から取得する**（ハードコード禁止）。
+
+#### 8.1 テンプレートをコピー
+
+```bash
+curl -X POST http://localhost:<daemon_port>/api/google/slides/copy \
+  -H "Content-Type: application/json" \
+  -d '{"sourceDeckId": "<jp_template_id>", "title": "<deck_title>"}'
+# → { deckId, deckTitle, deckUrl, embedUrl }
+```
+
+コピー直後は 130 page（template 全体）が deck に存在する。各 page の objectId と各 placeholder の objectId は **layouts.json の値と一致**（Drive copy は ID を保持する）。
+
+#### 8.2 Canonical 再利用が必要なら duplicate-slide で複製
+
+ある canonical を deck 内で N 回使う場合、**最初の使用は元 page のまま、2 回目以降は duplicate**。
+
+```bash
+# 例: T+3B (P53, slideId g3dbbd34042a_0_0) を Exec Summary + <brand-project> + Next Month の 3 page で再利用したい
+# → 1 回目は元の slide、2-3 回目は duplicate を作る
+
+curl -X POST http://localhost:<daemon_port>/api/google/slides/duplicate-slide \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "<copied_deck_id>",
+    "slideObjectId": "g3dbbd34042a_0_0",
+    "idMap": {
+      "g3dbbd34042a_0_0": "p53_use2",
+      "<title_objectId>": "p53_use2_title",
+      "<bullet_1_objectId>": "p53_use2_bullet_1",
+      "<bullet_2_objectId>": "p53_use2_bullet_2",
+      "<bullet_3_objectId>": "p53_use2_bullet_3"
+    }
+  }'
+# → { "newSlideId": "p53_use2" }
+```
+
+`idMap` は **任意だが推奨**。指定すると新 page と全 child element に決定論的 ID が付くため、後続の `update-text` 呼び出しが書きやすい。命名規則: `<canonical_lower>_use<N>_<placeholder_role>`（例: `p53_use2_title`、`tplus_img_use2_paragraph`）。
+
+`idMap` を省略した場合、新 ID は auto-generate される。新 placeholder ID を知るには `readPresentation` を呼ぶ必要があり 1 round-trip 余分にかかる。
+
+#### 8.3 各 placeholder を per-objectId で埋める（**新主流**）
+
+deck 内の各使用 page について、placeholder ごとに `update-text` を 1 回呼ぶ。
+
+```bash
+curl -X POST http://localhost:<daemon_port>/api/google/slides/update-text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "<copied_deck_id>",
+    "objectId": "<placeholder_objectId>",
+    "text": "今期 主要ハイライト"
+  }'
+# → { "ok": true }（既存 text を全削除して新 text を挿入）
+```
+
+Phase 5 までの `apply-replacements`（deck-wide find/replace）は使わない。理由:
+- ✅ deck-wide bleed 解消 → 同じ canonical を複数 page で再利用しても干渉しない
+- ✅ canonical 内部 dup placeholder（T+5B の "Lorem ipsum dolor sit amet" × 3 等）を独立に書ける
+- ✅ `\x0b` (vertical tab) など特殊文字を含む placeholder も objectId 直指定で書ける（exact-match 不要）
+
+placeholder objectId の取得元:
+1. `layouts.json` の `shape_canonicals[X].placeholders[].objectId`（元 deck 内 ID）
+2. duplicate した page は `idMap` で指定した新 ID
+3. 不明な場合は `readPresentation` で deck 全体から拾う
+
+#### 8.4 apply-replacements の残存用途（master / bulk のみ）
+
+`apply-replacements` は **master / layout に住む共有テキストの一括置換** にだけ使う（Step 7 を参照）。具体的には:
+- "Presentation name / 2025" → "Wix Japan / 2026"
+- 用語辞典（"完了" → "完成" 等）の deck-wide 統一
+
+通常 page の placeholder 埋めには使わない。Phase 5 の P5 <newsletter-project> 崩壊（T+5B 内部 dup の 3 unique × repeat）と P7 Next Month 崩壊（\x0b 残存で title 置換失敗）の根因。
+
+#### 8.5 旧 apply-replacements 流れ（**deprecated、参考のみ**）
+
+> Phase 5 まで使っていた deck-wide find/replace 流れ。Phase 6 では Step 8.3 の per-objectId に置き換え。後方互換のため endpoint は残るが、新規 deck で使うな。
 >
-> **副作用注意**: replaceAllText は **deck 全体スコープ**。同じ filler 文字列が複数 page に存在する場合（例: Lorem ipsum）、置換も全部に適用される。`occurrences` を確認して想定外の数なら知らせて。
+> ```bash
+> # OLD（deprecated）
+> curl -X POST .../api/google/slides/apply-replacements \
+>   -d '{"deckId": "...", "replacements": {"字数上限：48字": "今期..."}}'
+> ```
 
-### Step 9: Self-check（Step 7）
+### Step 8.5: 不要ページの削除（**必須**、Phase 5 第 1 轮で発見した P0 issue）
 
-result.json を書く前に：
+`gog slides copy` / `/api/google/slides/copy` は **テンプレート 130 ページ全体** を複製する。populate するのは layoutsUsed に並ぶ 6-10 page だけ。残り 120+ ページはテンプレート状態のまま deck に残り、Step 8 の replaceAllText の bleed もそこに混入する。**ユーザーが受け取る前に必ず削除する**。
+
+#### 8.5.1 削除対象の特定
+
+```bash
+# deck の全 slide ID を取得
+curl -s http://localhost:<daemon_port>/api/google/slides/<deckId>
+# response: { slides: [ { slideId, elementCount, elementIds }, ... ] }
+```
+
+`layoutsUsed[].canonical_slide_id` に含まれる slideId は **残す**。それ以外は全削除。
+
+#### 8.5.2 一括削除
+
+```bash
+curl -X POST http://localhost:<daemon_port>/api/google/slides/delete-pages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "<copied_deck_id>",
+    "slideIds": ["<unused_id_1>", "<unused_id_2>", ...]
+  }'
+# response: { "deleted": 124 }
+```
+
+deck は populate された 6-10 page だけになる。
+
+#### 8.5.3 narrative 順に並べ替え（**Phase 6 で追加**、`update-slides-position`）
+
+Phase 5 までは「kept slides は元 template の物理位置順に並ぶ」制約があった（reorder API 未実装のため）。**Phase 6 では `update-slides-position` で narrative 順に自由に並べ替えられる**。
+
+```bash
+# layoutsUsed は narrative 順（outline 章立て順）に並んでいる前提
+# 各 slide を outline 順に index 0, 1, 2... へ移動
+
+curl -X POST http://localhost:<daemon_port>/api/google/slides/update-slides-position \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deckId": "<copied_deck_id>",
+    "slideIds": ["<cover_slideId>", "<exec_summary_slideId>", "<top_metrics_slideId>", "...", "<closing_slideId>"],
+    "insertionIndex": 0
+  }'
+# → { "ok": true, "reordered": 8 }
+```
+
+`slideIds` は narrative 順、`insertionIndex: 0` で deck 先頭から並ぶ。これで delete-pages 直後の不規則な順序を一発で正しい順に直す。
+
+> **重要**: Phase 5 で用いていた「canonical_slide_id の元 deck 内位置順を narrative 順と一致するよう選ぶ」は **不要**。canonical 選択は scenario 適合性のみで行い、順序は最後に `update-slides-position` で決める。
+
+### Step 9.0: Text Self-check
+
+result.json を書く前に、テキストレベルで:
 
 ```
-[ ] 全 page で字数 limit を満たしている
+[ ] 全 page で字数 cell limit (verified 値 or fallback 仮値) を満たしている
 [ ] [要◯◯] プレースホルダの数を deck-plan.md に記録
 [ ] 画像 placeholder で source 不明のものをユーザーに報告
 [ ] 行頭・行末禁則を全 bullet で検証
+```
+
+### Step 9.5: 視覚 Self-check（**必須**、Phase 5 第 1 轮で発見した: estimated_max_cells_per_line は信用できない）
+
+字数 cell 計算は仮値ベースで、**実際 placeholder のフォントサイズ・幅と必ずしも一致しない**。verified=true の P53 (T+3B) 以外は overflow / 切れ / 折り返し位置不自然が発生する。**PDF を export して Read で各 page を見て、自分の目で確認する**。
+
+#### 9.5.1 PDF を export
+
+```bash
+curl -X POST http://localhost:<daemon_port>/api/google/slides/export-pdf \
+  -H "Content-Type: application/json" \
+  -d '{"deckId": "<copied_deck_id>", "projectId": "<projectId>", "filename": "review-v1.pdf"}'
+# response: { "path": "/.../projects/<projectId>/_review/review-v1.pdf", ... }
+```
+
+#### 9.5.2 各 populate page を Read で視覚確認
+
+Read tool に PDF パスと `pages: "<page_number>"` を渡して各 populate page を取得する。Claude は PDF page を画像として認識できる。
+
+各 page で確認する観点:
+
+| 観点 | 検出方法 | NG 例 |
+|---|---|---|
+| **テキスト box overflow** | 文字が placeholder 矩形の外に出ている / 切れている | "<industry-event> 来場者 8,000 名" の "0 名" が右に切れる |
+| **不自然な折り返し** | 助詞・複合語の途中で改行 | "8,0\n00 名" / "<newsletter-project> V\nol.001" |
+| **font size 過大** | 1 行の文字が overflow 起因で sub-1pt まで縮む / 2 行に gap | "Strategy Framework 完成"が 14pt → 5pt に縮小 |
+| **layout 崩壊** | bullet 数 mismatch / 並び崩れ | T+3B に 4 bullet 入って 4th が消失 |
+| **placeholder filler 残存** | "Lorem ipsum" / "Click here to" / "Headline first slide" 等が残る | bleed 副作用の見落とし |
+
+#### 9.5.3 NG 検出時の対応（**2 段階修正戦略、Phase 5 Round 2 で発見**）
+
+**段階 1: テキストを短く書き直す（compression）**
+- overflow → そのページの該当 placeholder の text を **20% 短く書き直す**（compression rule §5.3 適用）
+- 不自然な折り返し → 助詞の後 / 句読点の後で切るよう書き直す
+- placeholder filler 残存 → catalog の `original_text` 値を確認して再 replace
+
+**段階 1.5: 画像と隣接する title が awkward に wrap する場合 → 明示 \\n 挿入（Round 3 で発見）**
+
+T+IMG / T+IMG×N layout で title が右側 image と縦に並ぶレイアウトの場合、title placeholder の幅が狭く wrap が発生する。Slides は自動 wrap で**意味境界を考慮しない** — "Japan <industry-event> 出展レポート" が "Japan <industry-event> 出展" / "レポート" のように複合語境界で割れて、しかも "出展" が image と重なる。
+
+→ 修法: agent が text 内に**明示の改行 `\n` を入れる**。
+
+```
+❌ "Japan <industry-event> 出展レポート"  → Slides 自動 wrap → "Japan <industry-event> 出展" / "レポート" (出展 が image に重なる)
+✅ "Japan <industry-event>\n出展レポート" → 明示 wrap → "Japan <industry-event>" / "出展レポート" (image と重ならない)
+```
+
+判断基準: PDF 視覚 check で「title が image 隣の placeholder で 2 行 wrap している」を見つけたら、応答テキストを `\n` 入りに書き直して再 apply。意味境界（助詞後 / 単語後）で改行を入れる。
+
+**段階 2: 文字小さくしても収まらない場合 → 字号縮小（font shrink）**
+
+特に「クロージング "ありがとう" が "Thank you." 用 placeholder で 2 行に折る」のような、占位符の固定字号が原因のケース:
+
+```bash
+# 字号 20% 縮小（例: 200pt → 160pt）
+curl -X POST http://localhost:<daemon_port>/api/google/slides/update-font-size \
+  -H "Content-Type: application/json" \
+  -d '{"deckId": "<deckId>", "objectId": "<placeholder_object_id>", "fontSizePt": 160}'
+```
+
+placeholder object_id は `/api/google/slides/<deckId>` で `slides[].elementIds` から取得。
+
+> **重要**: テキストをこれ以上短くできない（"ありがとう" の 1 字も削れない）場合、**字号縮小で解決する**。文字数だけ見ていたら永遠に修まらない。
+
+**段階 3: layout-level 評価（Round 2 で漏れた観点）**
+
+字数 / 折り返しだけでなく、**layout 全体が outline section の意図と合っているか**も評価する:
+
+```
+レビュー観点（各 page で自問）:
+[ ] このページの layout は section の意図を表現できているか？
+    - ✗ "今期主要 KPI" を T-LONG (quote layout) で表示 → 意図不一致
+    - ✗ "ハイライト" を T+IMG×8 (badges layout) で表示 → ALL-CAPS 英文 badge と JP caption の混在
+    - ✓ KPI は T+3B、ハイライトも T+3B、quote は T-LONG だけ
+[ ] template の placeholder filler 文字が完全に消えているか？
+    - "Lorem ipsum" / "Click here" / "Headline first slide" / "TEXT HERE" の残存
+    - ALL-CAPS 英文 badge label（"HEY TEAM!" 等）の残存
+[ ] 同じ placeholder marker が複数箇所に bleed していないか？
+    - replaceAllText の occurrences > 1 が想定外
+    - 各 page を目視で「同じ文字が 2 箇所以上に出ている」を検出
+[ ] image placeholder が空白（cropped image / placeholder text overlay）になっていないか？
+```
+
+layout-level 問題が出たら → **canonical を別の同 shape entry に変更** または **それでもダメなら user に通告**:
+
+```
+# 発見した layout-level 問題:
+- page 2 (T+IMG×8): badge 内 ALL-CAPS 英文ラベルが残存
+- page 3 (T-LONG): KPI を quote 風に表示してしまっている
+
+# 提案修正:
+- page 2 → T+3B に変更（badge 不要、3 highlights を bullet で並列）
+- page 3 → T+3B に変更（KPI summary なら quote brackets 不要）
+
+# user 確認後、deck を作り直すか、page 単位で再生成するか選ぶ。
+```
+
+修正は **deck 全体 regenerate しない**（コスト高）。問題のページだけ:
+
+1. 元 layout の original_text を find
+2. 新しい短いテキストを replace（or 字号縮小、or canonical 変更）
+3. apply-replacements で送信（or update-font-size）
+4. PDF を re-export
+5. 9.5.2 を再実行（最大 5 round — テキスト 3 round + 字号 2 round）
+
+#### 9.5.4 修正不能な場合
+
+3 round 試しても収まらない / 同じ overflow が再発する場合:
+- result.json の `visualReviewIssues` に詳細記録（page / placeholder / 問題タイプ / 試した text variants）
+- userActions に "page X の bullet Y は手動調整が必要" と明記
+- ユーザーが Slides UI で直接調整する
+
+#### 9.5.5 視覚チェックの記録
+
+result.json に以下を追加:
+
+```json
+"visualReview": {
+  "pdfPath": "_review/review-v1.pdf",
+  "rounds": 2,
+  "issuesFound": [
+    {"page": 3, "placeholder": "title", "issue": "overflow_clipped", "fix_applied": "title shortened from 22 cells to 16"},
+    {"page": 4, "placeholder": "body_paragraph", "issue": "auto_shrink_below_readable", "fix_applied": "split into 2 bullets"}
+  ],
+  "remainingIssues": []
+}
 ```
 
 ### Step 10: result.json 出力 + artifact manifest sidecar 必須（Bug 1 fix）
@@ -462,14 +807,18 @@ result.json を書く前に：
   "missingFields": ["[要数値] (page 3, bullet 2)", "[要日付] (page 5)"],
   "missingImages": ["page 1: cover image — please upload manually"],
   "imageSlots": [
-    {"page": 4, "status": "pending", "reason": "Iteration 1: image insert API pending", "source": "drive:1XXX"},
-    {"page": 5, "status": "pending", "reason": "Iteration 1: image insert API pending", "source": "drive:1YYY"}
+    {"page": 4, "status": "filled", "method": "replaceImage CENTER_CROP", "source": "public:https://placehold.co/..."},
+    {"page": 5, "status": "drive-pending-manual-insert", "source": "drive:1XXX", "reason": "Wix DLP blocks public sharing"}
   ],
   "layoutsUsed": ["P7", "P53", "P53", "P83", "P31", "P53", "P53", "P110"],
-  "knownSideEffects": [
-    "Lorem ipsum 文字列が他 12 ページにも置換適用された。最終配布前に手動 cleanup 必要。",
-    "Master header / footer not customized — please edit manually in Slides under Slide → Edit theme"
-  ],
+  "deletedPages": 124,
+  "knownSideEffects": [],
+  "visualReview": {
+    "pdfPath": "_review/review-v1.pdf",
+    "rounds": 2,
+    "issuesFound": [],
+    "remainingIssues": []
+  },
   "unverifiedLimits": false
 }
 ```

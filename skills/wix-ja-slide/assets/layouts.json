@@ -344,7 +344,15 @@
       ],
       "decorative_elements": [],
       "has_image": true,
-      "n_image_slots": 1
+      "n_image_slots": 1,
+      "text_capable": true,
+      "alt_canonicals": [
+        {
+          "slide_n": 83,
+          "slide_id": "g2d13f919f05_0_51",
+          "when": "body text 1-3 短文 paragraphs (Round 3 verified)"
+        }
+      ]
     },
     "COVER?": {
       "canonical_slide_n": 7,
@@ -374,7 +382,10 @@
       ],
       "decorative_elements": [],
       "has_image": true,
-      "n_image_slots": 1
+      "n_image_slots": 1,
+      "unsuitable_for_unique_content": true,
+      "reason": "Multiple cover-style slides share the same Headline/TEXT HERE placeholder strings; replaceAllText is deck-wide and hits all duplicates. Even after delete-pages keeps only one slide, the canonical itself has multiple title-shaped placeholders that all collide. Use T+SUB or T-ONLY for cover instead.",
+      "fallback_canonical": "T+SUB"
     },
     "T+IMG×3": {
       "canonical_slide_n": 85,
@@ -458,7 +469,8 @@
         }
       ],
       "has_image": true,
-      "n_image_slots": 3
+      "n_image_slots": 3,
+      "text_capable": true
     },
     "T+IMG×8": {
       "canonical_slide_n": 11,
@@ -545,7 +557,11 @@
       ],
       "decorative_elements": [],
       "has_image": true,
-      "n_image_slots": 8
+      "n_image_slots": 8,
+      "unsuitable_for_unique_content": true,
+      "reason": "The 8 round badges have ALL-CAPS English labels (HEY TEAM!, WELCOME EVERYONE, DATA DIVE, NUMBERS IN ACTION, WEEKLY, BI-WEEKLY, MONTHLY, BRIEF) baked into the badge graphics — they are NOT in layouts.json placeholder list and CANNOT be replaced via replaceAllText. Adding JP captions below produces a confused layout. Reserve for actual team-badge use.",
+      "fallback_canonical": "T+3B (for highlights) or T+5B (for longer enumeration)",
+      "text_capable": true
     },
     "FULL-IMG": {
       "canonical_slide_n": 33,
@@ -558,7 +574,9 @@
       "placeholders": [],
       "decorative_elements": [],
       "has_image": true,
-      "n_image_slots": 1
+      "n_image_slots": 1,
+      "text_capable": false,
+      "use_only_when": "section has [image:] marker AND no body text — pure visual break / chapter image"
     }
   },
   "all_layouts": [
@@ -596,7 +614,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "01 Openers + Badges"
+      "snippet_first": "01 Openers + Badges",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 5,
@@ -713,7 +733,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "02.A Dividers"
+      "snippet_first": "02.A Dividers",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 18,
@@ -749,7 +771,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "02.B Dividers"
+      "snippet_first": "02.B Dividers",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 22,
@@ -785,7 +809,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "03 Paragraphs"
+      "snippet_first": "03 Paragraphs",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 26,
@@ -893,7 +919,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "04 Lists / Info"
+      "snippet_first": "04 Lists / Info",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 38,
@@ -1091,7 +1119,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "05 People"
+      "snippet_first": "05 People",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 60,
@@ -1109,7 +1139,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "06 Text Highlight"
+      "snippet_first": "06 Text Highlight",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 62,
@@ -1181,7 +1213,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "07 Infographics & Data"
+      "snippet_first": "07 Infographics & Data",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 70,
@@ -1271,7 +1305,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "08 Images & Text"
+      "snippet_first": "08 Images & Text",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 80,
@@ -1397,7 +1433,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "09 Grid boxes"
+      "snippet_first": "09 Grid boxes",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 94,
@@ -1541,7 +1579,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "010 Closers"
+      "snippet_first": "010 Closers",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 110,
@@ -1559,7 +1599,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "011 PPT Badges"
+      "snippet_first": "011 PPT Badges",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 112,
@@ -1568,7 +1610,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "011.A Badges colors"
+      "snippet_first": "011.A Badges colors",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 113,
@@ -1649,7 +1693,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "011.B Badges animation"
+      "snippet_first": "011.B Badges animation",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 122,
@@ -1676,7 +1722,9 @@
       "n_content_text": 1,
       "n_decorative": 0,
       "n_image": 0,
-      "snippet_first": "011.C The badges"
+      "snippet_first": "011.C The badges",
+      "section_divider": true,
+      "skill_use_policy": "do_not_use_for_content"
     },
     {
       "n": 125,
@@ -1746,5 +1794,74 @@
     "Only T+3B (P53) has VERIFIED max_cells_per_line. Other canonicals are estimates pending POC validation.",
     "Image-into-placeholder operations require daemon-side Slides API (Iteration 2). FULL-IMG works via gog slides replace-slide.",
     "Master/header text (Presentation name / YYYY) not editable via gog. Iteration 2 daemon API needed."
-  ]
+  ],
+  "skill_guidance": {
+    "must_avoid_for_unique_content": [
+      "COVER?",
+      "T+IMG×8"
+    ],
+    "preferred_per_scenario": {
+      "cover": "T+SUB or T-ONLY (avoid COVER?, multiple placeholders bleed)",
+      "highlights_3": "T+3B (P53 verified)",
+      "highlights_5": "T+5B",
+      "kpi_summary": "T+3B with each metric as a bullet (avoid T-LONG, that is for quotes)",
+      "event_recap_with_image": "T+IMG (P31)",
+      "product_launch_announcement": "T+IMG (hero) or T+SUB (text-heavy)",
+      "process_steps": "T+5B (numbered)",
+      "quote": "T-LONG (P26) — keep brackets",
+      "closing": "T-ONLY (P110, kept short to fit oversized placeholder font)",
+      "two_paragraph_notes": "T+SUB (P28) — reuse same canonical as KPI summary if needed; do NOT use T+2B (P54) which has 4 arrow positions and shows 2 empty arrows when only 2 are filled. Round 4 user feedback."
+    },
+    "closing_text_recommendation": {
+      "prefer_default": "Thank you",
+      "rationale": "Placeholder is designed for English Thank you. — JP full-width 5 chars don't fit at the same font size and wrap to 2 lines (Round 3 user feedback).",
+      "jp_options": [
+        "了(2 chars, fits)",
+        "感謝 (2 chars, fits)"
+      ],
+      "avoid": [
+        "ありがとう (5 fullwidth, wraps)",
+        "ありがとうございました (12 fullwidth, severely overflows)"
+      ],
+      "fallback_strategy": "If JP closing required, apply font shrink via /api/google/slides/update-font-size after replacement (start at 80% of original size)."
+    },
+    "section_dividers_forbidden_for_content": [
+      4,
+      17,
+      21,
+      25,
+      37,
+      59,
+      61,
+      69,
+      79,
+      93,
+      109,
+      111,
+      112,
+      121,
+      124
+    ],
+    "canonical_strict_mode": {
+      "rule": "Use ONLY shape_canonicals[X].canonical_slide_id for shape X. NEVER browse all_layouts for alternative P-numbers with the same shape signature. all_layouts is REFERENCE DATA only — for understanding what slides exist in the source deck, NOT a layout pool.",
+      "rationale": "Round 4 regression: agent picked P59 (05 People divider) and P109 (010 Closers divider) for content sections (<brand-project> / Next Month). Those P-numbers have T-ONLY shape but are section dividers without header/WIX logo. Strict canonical-only avoids this entire class of mistake.",
+      "allowed_canonicals_for_content": [
+        "T+3B",
+        "T+2B",
+        "T+5B",
+        "T-ONLY",
+        "T-LONG",
+        "T+SUB",
+        "T+IMG",
+        "T+IMG×3",
+        "FULL-IMG"
+      ]
+    },
+    "image_marker_layout_constraint": {
+      "rule_v2": "If outline section has [image: ...] marker: (a) section has body text after the marker → use T+IMG (P31 or P83 alt) ONLY. (b) section has only the [image:] marker with no body text → FULL-IMG (P33) is OK. Never use FULL-IMG when body text exists; never use T-LONG/T+SUB when image exists.",
+      "rationale": "Round 5 regression: agent picked FULL-IMG for <industry-event> (had body text \"4/8-10 ビッグサイト出展...\") — body text disappeared. Round 4 regression: T-LONG for same section — image disappeared.",
+      "preferred_canonical_for_image_with_body": "T+IMG (P31 default; P83 alt for paragraph-style body)",
+      "preferred_canonical_for_image_only": "FULL-IMG (P33)"
+    }
+  }
 }
