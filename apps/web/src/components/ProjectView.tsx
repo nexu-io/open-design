@@ -19,7 +19,6 @@ import {
   upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
-import { useProjectFileEvents } from '../providers/project-events';
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
@@ -69,7 +68,6 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
-import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 
 interface Props {
@@ -363,15 +361,6 @@ export function ProjectView({
     if (!daemonLive) return;
     void refreshProjectFiles();
   }, [daemonLive, refreshProjectFiles, filesRefresh]);
-
-  // Live-reload: when the daemon's chokidar watcher reports a file change,
-  // bump filesRefresh so the file list refetches with new mtimes — which
-  // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
-  // cache-bust, triggering an automatic preview reload without a click.
-  const handleProjectFileChange = useCallback(() => {
-    setFilesRefresh((n) => n + 1);
-  }, []);
-  useProjectFileEvents(project.id, daemonLive, handleProjectFileChange);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
@@ -784,6 +773,13 @@ export function ProjectView({
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
+      const activeFilePath = activeProjectFilePath(openTabsState.active, projectFileNames);
+      const artifactTargetFileName = artifactTargetForTurn(
+        prompt,
+        commentAttachments,
+        activeFilePath,
+        projectFileNames,
+      );
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'user',
@@ -883,29 +879,19 @@ export function ProjectView({
         if (ev.kind === 'tool_use' && (ev.name === 'Write' || ev.name === 'Edit')) {
           const filePath = (ev.input as { file_path?: unknown } | null)?.file_path;
           if (typeof filePath === 'string' && filePath.length > 0) {
-            // Preserve the full path so decideAutoOpenAfterWrite can do a
-            // path-suffix match against the project's relative file paths.
-            // Reducing to a basename here would lose the segment alignment
-            // we need to disambiguate same-basename collisions across the
-            // project tree and outside it.
-            pendingWritesRef.current.set(ev.id, filePath);
+            const base = filePath.split('/').pop() || filePath;
+            pendingWritesRef.current.set(ev.id, base);
           }
         }
         if (ev.kind === 'tool_result') {
-          const filePath = pendingWritesRef.current.get(ev.toolUseId);
-          if (filePath) {
+          const base = pendingWritesRef.current.get(ev.toolUseId);
+          if (base) {
             pendingWritesRef.current.delete(ev.toolUseId);
             if (!ev.isError) {
               // Refresh first so FileWorkspace's file list (and the tab
               // body) sees the new content before we ask it to focus.
-              // Only auto-open if the file actually landed in the project's
-              // file list — otherwise an out-of-project Write (e.g. an
-              // upstream repo edit) would spawn a permanent placeholder tab.
-              void refreshProjectFiles().then((nextFiles) => {
-                const decision = decideAutoOpenAfterWrite(filePath, nextFiles);
-                if (decision.shouldOpen && decision.fileName) {
-                  requestOpenFile(decision.fileName);
-                }
+              void refreshProjectFiles().then(() => {
+                requestOpenFile(base);
               });
             }
           }
@@ -980,7 +966,7 @@ export function ProjectView({
           // up as a real tab (not just the synthetic "live" stream).
           setArtifact((prev) => {
             if (!prev || !prev.html) return prev;
-            void persistArtifact(prev);
+            void persistArtifact(prev, artifactTargetFileName);
             return prev;
           });
           // Refetch the file list directly (rather than just bumping the
@@ -1051,6 +1037,7 @@ export function ProjectView({
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
+          activeFilePath,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {
@@ -1096,6 +1083,8 @@ export function ProjectView({
       onTouchProject,
       project.id,
       projectFiles,
+      projectFileNames,
+      openTabsState.active,
       refreshProjectFiles,
       persistMessage,
       persistMessageById,
@@ -1106,20 +1095,25 @@ export function ProjectView({
   );
 
   const persistArtifact = useCallback(
-    async (art: Artifact) => {
+    async (art: Artifact, targetFileName?: string | null) => {
       const baseName = (art.identifier || art.title || 'artifact')
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 60) || 'artifact';
       const ext = artifactExtensionFor(art);
-      // Pick a name that doesn't collide with an existing project file.
-      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
-      // so prior artifacts aren't silently overwritten.
       const existing = new Set(projectFiles.map((f) => f.name));
-      let fileName = `${baseName}${ext}`;
+      const referencedFile = artifactReferenceFileName(art.html, existing);
+      if (referencedFile) {
+        requestOpenFile(referencedFile);
+        return;
+      }
+      const overwriteFileName =
+        existingArtifactTargetFileName(targetFileName, ext, existing) ??
+        existingArtifactNameFor(art, baseName, ext, existing);
+      let fileName = overwriteFileName ?? `${baseName}${ext}`;
       let n = 2;
-      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
+      while (existing.has(fileName) && savedArtifactRef.current !== fileName && overwriteFileName !== fileName) {
         fileName = `${baseName}-${n}${ext}`;
         n += 1;
       }
@@ -1446,6 +1440,10 @@ export function ProjectView({
           previewComments={previewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
+          onSendPreviewComment={(comment) => {
+            if (streaming) return;
+            void handleSend('', [], commentsToAttachments([comment]));
+          }}
         />
       </div>
     </div>
@@ -1460,6 +1458,96 @@ function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
     return '.jsx';
   }
   return '.html';
+}
+
+function activeProjectFilePath(active: string | null | undefined, projectFileNames: Set<string>): string | null {
+  return active && projectFileNames.has(active) ? active : null;
+}
+
+function artifactTargetForTurn(
+  prompt: string,
+  commentAttachments: ChatCommentAttachment[],
+  activeFilePath: string | null,
+  projectFileNames: Set<string>,
+): string | null {
+  const commentTargets = [
+    ...new Set(
+      commentAttachments
+        .map((attachment) => attachment.filePath)
+        .filter((filePath) => projectFileNames.has(filePath)),
+    ),
+  ];
+
+  if (commentTargets.length === 1) return commentTargets[0] ?? null;
+  if (!activeFilePath) return null;
+  if (!isLikelyRevisionPrompt(prompt)) return null;
+  return activeFilePath;
+}
+
+function isLikelyRevisionPrompt(prompt: string): boolean {
+  const text = prompt.toLowerCase();
+  if (/\b(novo arquivo|nova p[áa]gina|new file|new page|separate file|arquivo separado|outro html|outra tela|from scratch|do zero)\b/.test(text)) {
+    return false;
+  }
+  return /\b(edit|editar|edite|alterar|altere|mudar|mude|trocar|troque|change|fix|corrigir|corrija|arrumar|arrume|ajustar|ajuste|update|atualizar|atualize|melhorar|melhore|improve|adicionar|adicione|add|remover|remova|remove|colocar|coloque|deixar|deixe|aumentar|aumente|diminuir|diminua|centralizar|centralize)\b/.test(text);
+}
+
+function artifactReferenceFileName(content: string, projectFileNames: Set<string>): string | null {
+  const ref = normalizeArtifactReference(content);
+  return ref && projectFileNames.has(ref) ? ref : null;
+}
+
+function normalizeArtifactReference(content: string): string | null {
+  let text = content.trim();
+  if (!text || text.length > 260) return null;
+  text = text.replace(/^```[a-z0-9_-]*\s*/i, '').replace(/```$/i, '').trim();
+  text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
+  if (/[\n\r<{]/.test(text)) return null;
+  if (!/^[a-z0-9][a-z0-9_./ @-]*\.(html?|jsx|tsx|svg|md|txt)$/i.test(text)) return null;
+  return text;
+}
+
+function existingArtifactTargetFileName(
+  targetFileName: string | null | undefined,
+  ext: '.html' | '.jsx' | '.tsx',
+  projectFileNames: Set<string>,
+): string | null {
+  if (!targetFileName || !projectFileNames.has(targetFileName)) return null;
+  if (artifactFileExtensionMatches(targetFileName, ext)) return targetFileName;
+  return null;
+}
+
+function existingArtifactNameFor(
+  art: Artifact,
+  baseName: string,
+  ext: '.html' | '.jsx' | '.tsx',
+  projectFileNames: Set<string>,
+): string | null {
+  const candidates = [
+    ...artifactNameCandidates(art.identifier, ext),
+    ...artifactNameCandidates(art.title, ext),
+    `${baseName}${ext}`,
+  ];
+
+  return candidates.find((name) => projectFileNames.has(name)) ?? null;
+}
+
+function artifactNameCandidates(value: string | undefined, ext: '.html' | '.jsx' | '.tsx'): string[] {
+  const raw = (value ?? '').trim().replace(/^@/, '');
+  if (!raw) return [];
+  const slug = raw
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  const names = [raw, artifactFileExtensionMatches(raw, ext) ? raw : `${raw}${ext}`, slug ? `${slug}${ext}` : ''];
+  return [...new Set(names.filter(Boolean))];
+}
+
+function artifactFileExtensionMatches(fileName: string, ext: '.html' | '.jsx' | '.tsx'): boolean {
+  if (ext === '.html') return /\.html?$/i.test(fileName);
+  return fileName.toLowerCase().endsWith(ext);
 }
 
 function assistantAgentDisplayName(

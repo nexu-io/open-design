@@ -1,4 +1,5 @@
 import { effectiveMaxTokens } from '../state/maxTokens';
+import { compactChatHistoryForPrompt } from '../conversation-compaction';
 import type { AppConfig, ChatMessage } from '../types';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
@@ -17,6 +18,7 @@ export async function streamProxyEndpoint(
   }
 
   let acc = '';
+  const compactedHistory = compactChatHistoryForPrompt(history).history;
 
   try {
     const resp = await fetch(endpoint, {
@@ -27,7 +29,7 @@ export async function streamProxyEndpoint(
         apiKey: cfg.apiKey,
         model: cfg.model,
         systemPrompt: system,
-        messages: history.map((m) => ({ role: m.role, content: m.content })),
+        messages: compactedHistory.map((m) => ({ role: m.role, content: m.content })),
         maxTokens: effectiveMaxTokens(cfg),
         apiVersion: cfg.apiVersion,
       }),

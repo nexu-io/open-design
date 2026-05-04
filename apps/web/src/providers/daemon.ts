@@ -9,6 +9,7 @@
  *   - 'stderr'  : incidental stderr. Shown only when the process exits
  *                 non-zero (tail appended to the error message).
  */
+import { compactChatHistoryForPrompt, formatCompactionStatusDetail } from '../conversation-compaction';
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type {
   ChatRunCreateResponse,
@@ -52,6 +53,7 @@ export interface DaemonStreamOptions {
   // exist, and stitches them into the user message as `@<path>` hints.
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];
+  activeFilePath?: string | null;
   // Per-CLI model + reasoning the user picked in the model menu. Both are
   // optional; the daemon validates them against the agent's declared
   // options and falls back to the CLI default when missing.
@@ -87,6 +89,7 @@ export async function streamViaDaemon({
   designSystemId,
   attachments,
   commentAttachments,
+  activeFilePath,
   model,
   reasoning,
   initialLastEventId,
@@ -94,10 +97,17 @@ export async function streamViaDaemon({
   onRunStatus,
   onRunEventId,
 }: DaemonStreamOptions): Promise<void> {
-  // Local CLIs are single-turn print-mode programs, so we collapse the whole
-  // chat into one string. If this becomes too noisy for long histories, the
-  // fix is to only include the final user turn.
-  const transcript = history
+  const compactedHistory = compactChatHistoryForPrompt(history);
+
+  if (compactedHistory.compacted) {
+    handlers.onAgentEvent({
+      kind: 'status',
+      label: 'compactando contexto',
+      detail: formatCompactionStatusDetail(compactedHistory),
+    });
+  }
+
+  const transcript = compactedHistory.history
     .map((m) => `## ${m.role}\n${m.content.trim()}`)
     .join('\n\n');
   const request: ChatRequest = {
@@ -111,6 +121,7 @@ export async function streamViaDaemon({
     designSystemId: designSystemId ?? null,
     attachments: attachments ?? [],
     commentAttachments: commentAttachments ?? [],
+    activeFilePath: activeFilePath ?? null,
     model: model ?? null,
     reasoning: reasoning ?? null,
   };

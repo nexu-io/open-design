@@ -13,6 +13,7 @@ import {
   projectFileUrl,
   projectRawUrl,
   updateDeployConfig,
+  writeProjectTextFile,
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
@@ -31,6 +32,7 @@ import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render
 import { saveTemplate } from '../state/projects';
 import type { DeployConfigResponse, DeployProjectFileResponse, ProjectFile } from '../types';
 import { Icon } from './Icon';
+import { PreviewDrawOverlay, type DrawPreviewSubmit } from './PreviewDrawOverlay';
 import {
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
@@ -41,8 +43,102 @@ import type { PreviewComment, PreviewCommentTarget } from '../types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
+type VisualEditDraft = {
+  text: string;
+  fontFamily: string;
+  fontSize: string;
+  fontWeight: string;
+  lineHeight: string;
+  letterSpacing: string;
+  color: string;
+  backgroundColor: string;
+  width: string;
+  height: string;
+  moveX: number;
+  moveY: number;
+  animationName: string;
+  animationDuration: string;
+  animationDelay: string;
+  animationTimingFunction: string;
+  animationIterationCount: string;
+  animationDirection: string;
+  animationFillMode: string;
+  custom: string;
+};
+type VisualEditBatchItem = {
+  id: string;
+  snapshot: PreviewCommentSnapshot;
+  draft: VisualEditDraft;
+};
+type VisualEditPanelPosition = { x: number; y: number } | null;
+type TweakGroup = 'Cores' | 'Tipografia' | 'Espaçamento' | 'Bordas' | 'Motion' | 'Outros';
+type TweakControlKind = 'color' | 'number' | 'select' | 'text';
+type TweakPreset = 'compact' | 'comfortable' | 'soft' | 'sharp' | 'motionless';
+type TweakValueMap = Record<string, string>;
+type TweakToken = {
+  name: string;
+  label: string;
+  value: string;
+  group: TweakGroup;
+  kind: TweakControlKind;
+  virtual?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: string[];
+};
 
 const htmlPreviewSlideState = new Map<string, SlideState>();
+const FONT_RECENTS_KEY = 'od.visualEdit.recentFonts';
+const MAX_TWEAK_TOKENS = 64;
+const VIRTUAL_TWEAK_PREFIX = '__od-';
+const DEFAULT_FONT_CHOICES = [
+  'Arial, sans-serif',
+  'Helvetica, sans-serif',
+  'Georgia, serif',
+  '"Times New Roman", serif',
+  '"Courier New", monospace',
+  'Verdana, sans-serif',
+  'Tahoma, sans-serif',
+  'Trebuchet MS, sans-serif',
+  'Impact, sans-serif',
+  'system-ui, sans-serif',
+];
+const EMPTY_VISUAL_EDIT_DRAFT: VisualEditDraft = {
+  text: '',
+  fontFamily: '',
+  fontSize: '',
+  fontWeight: '',
+  lineHeight: '',
+  letterSpacing: '',
+  color: '',
+  backgroundColor: '',
+  width: '',
+  height: '',
+  moveX: 0,
+  moveY: 0,
+  animationName: '',
+  animationDuration: '',
+  animationDelay: '',
+  animationTimingFunction: '',
+  animationIterationCount: '',
+  animationDirection: '',
+  animationFillMode: '',
+  custom: '',
+};
+const FALLBACK_TWEAK_TOKENS: TweakToken[] = [
+  { name: '__od-accent', label: 'Accent', value: '#e8754f', group: 'Cores', kind: 'color', virtual: true },
+  { name: '__od-page', label: 'Fundo da página', value: '#ffffff', group: 'Cores', kind: 'color', virtual: true },
+  { name: '__od-text', label: 'Texto principal', value: '#14110f', group: 'Cores', kind: 'color', virtual: true },
+  { name: '__od-radius', label: 'Arredondamento global', value: '16px', group: 'Bordas', kind: 'number', virtual: true, min: 0, max: 48, step: 1 },
+  { name: '__od-motion', label: 'Movimento', value: 'normal', group: 'Motion', kind: 'select', virtual: true, options: ['normal', 'none'] },
+];
+const VIRTUAL_DENSITY_TWEAK = `${VIRTUAL_TWEAK_PREFIX}preset-density`;
+const VIRTUAL_MOTION_TWEAK = `${VIRTUAL_TWEAK_PREFIX}preset-motion`;
+const PRESET_TWEAK_TOKENS: TweakToken[] = [
+  { name: VIRTUAL_DENSITY_TWEAK, label: 'Densidade global', value: 'normal', group: 'Espaçamento', kind: 'select', virtual: true, options: ['compact', 'normal', 'comfortable'] },
+  { name: VIRTUAL_MOTION_TWEAK, label: 'Motion global', value: 'normal', group: 'Motion', kind: 'select', virtual: true, options: ['normal', 'none'] },
+];
 
 interface Props {
   projectId: string;
@@ -54,6 +150,7 @@ interface Props {
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
+  onSendPreviewComment?: (comment: PreviewComment) => void | Promise<void>;
 }
 
 export function FileViewer({
@@ -66,6 +163,7 @@ export function FileViewer({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
+  onSendPreviewComment,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -84,6 +182,7 @@ export function FileViewer({
         previewComments={previewComments}
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
+        onSendPreviewComment={onSendPreviewComment}
       />
     );
   }
@@ -97,7 +196,15 @@ export function FileViewer({
     return <SvgViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'image') {
-    return <ImageViewer projectId={projectId} file={file} />;
+    return (
+      <ImageViewer
+        projectId={projectId}
+        file={file}
+        streaming={Boolean(streaming)}
+        onSavePreviewComment={onSavePreviewComment}
+        onSendPreviewComment={onSendPreviewComment}
+      />
+    );
   }
   if (file.kind === 'video') {
     return <VideoViewer projectId={projectId} file={file} />;
@@ -106,7 +213,15 @@ export function FileViewer({
     return <AudioViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'sketch') {
-    return <ImageViewer projectId={projectId} file={file} />;
+    return (
+      <ImageViewer
+        projectId={projectId}
+        file={file}
+        streaming={Boolean(streaming)}
+        onSavePreviewComment={onSavePreviewComment}
+        onSendPreviewComment={onSendPreviewComment}
+      />
+    );
   }
   if (file.kind === 'text' || file.kind === 'code') {
     return <TextViewer projectId={projectId} file={file} />;
@@ -159,6 +274,8 @@ function CommentPopover({
   onClose,
   onSave,
   onRemove,
+  disabled,
+  scale,
   t,
 }: {
   target: PreviewCommentSnapshot;
@@ -168,10 +285,20 @@ function CommentPopover({
   onClose: () => void;
   onSave: (attach: boolean) => void | Promise<void>;
   onRemove: (commentId: string) => void | Promise<void>;
+  disabled?: boolean;
+  scale: number;
   t: TranslateFn;
 }) {
+  const bounds = overlayBoundsFromSnapshot(target, scale);
   return (
-    <div className="comment-popover" data-testid="comment-popover">
+    <div
+      className="comment-popover"
+      data-testid="comment-popover"
+      style={{
+        left: `clamp(14px, ${Math.round(bounds.left)}px, calc(100% - 334px))`,
+        top: `clamp(14px, ${Math.round(bounds.top + bounds.height + 12)}px, calc(100% - 180px))`,
+      }}
+    >
       <div className="comment-popover-head">
         <div>
           <strong>{target.elementId}</strong>
@@ -197,12 +324,776 @@ function CommentPopover({
           type="button"
           className="primary"
           data-testid="comment-add-send"
-          disabled={!draft.trim()}
+          disabled={disabled || !draft.trim()}
           onClick={() => void onSave(true)}
         >
           {existing ? t('chat.comments.updateSend') : t('chat.comments.addSend')}
         </button>
       </div>
+    </div>
+  );
+}
+
+function extractTweakTokens(source: string): TweakToken[] {
+  const found = new Map<string, TweakToken>();
+  const re = /(--[a-zA-Z0-9_-]+)\s*:\s*([^;{}]+);/g;
+  let match: RegExpExecArray | null = re.exec(source);
+  while (match !== null) {
+    const name = match[1] ?? '';
+    const value = cleanCssValue(match[2] ?? '');
+    if (name && value && !found.has(name)) {
+      found.set(name, {
+        name,
+        label: labelForTweak(name),
+        value,
+        group: groupForTweak(name, value),
+        kind: kindForTweak(name, value),
+      });
+    }
+    match = re.exec(source);
+  }
+  const tokens = Array.from(found.values())
+    .sort((a, b) => tweakGroupOrder(a.group) - tweakGroupOrder(b.group) || a.label.localeCompare(b.label))
+    .slice(0, MAX_TWEAK_TOKENS);
+  return tokens.length >= 3 ? tokens : [...tokens, ...FALLBACK_TWEAK_TOKENS];
+}
+
+function changedTweakValues(tokens: TweakToken[], values: TweakValueMap): TweakValueMap {
+  const next: TweakValueMap = {};
+  for (const token of tokens) {
+    const raw = values[token.name];
+    if (raw === undefined) continue;
+    const value = cleanCssValue(raw);
+    if (!value || value === token.value.trim()) continue;
+    next[token.name] = value;
+  }
+  return next;
+}
+
+function tweakPreviewStyle(values: TweakValueMap): string {
+  const rootOverrides: string[] = [];
+  for (const [name, rawValue] of Object.entries(values)) {
+    const value = safeTweakValue(rawValue);
+    if (!value || name.startsWith(VIRTUAL_TWEAK_PREFIX)) continue;
+    rootOverrides.push(`${name}: ${value};`);
+  }
+  const rootStyle = rootOverrides.length ? `:root { ${rootOverrides.join(' ')} }` : '';
+  return [rootStyle, virtualTweakStyle(values), presetGlobalTweakStyle(values)].filter(Boolean).join('\n');
+}
+
+function applyTweakValuesToHtmlSource(source: string, values: TweakValueMap): string {
+  let next = source;
+  const rootOverrides: string[] = [];
+  const virtual = [virtualTweakStyle(values), presetGlobalTweakStyle(values)].filter(Boolean).join('\n');
+
+  for (const [name, rawValue] of Object.entries(values)) {
+    const value = safeTweakValue(rawValue);
+    if (!value) continue;
+    if (name.startsWith(VIRTUAL_TWEAK_PREFIX)) continue;
+    const re = new RegExp(`(${escapeRegExp(name)}\\s*:\\s*)([^;{}]+)(;)`, 'g');
+    let replaced = false;
+    next = next.replace(re, (_full, prefix: string, _old: string, suffix: string) => {
+      replaced = true;
+      return `${prefix}${value}${suffix}`;
+    });
+    if (!replaced) rootOverrides.push(`${name}: ${value};`);
+  }
+
+  const rootStyle = rootOverrides.length ? `:root { ${rootOverrides.join(' ')} }` : '';
+  return upsertTweakStyleBlock(next, [rootStyle, virtual].filter(Boolean).join('\n'));
+}
+
+function presetGlobalTweakStyle(values: TweakValueMap): string {
+  const density = safeTweakValue(values[VIRTUAL_DENSITY_TWEAK]);
+  const motion = safeTweakValue(values[VIRTUAL_MOTION_TWEAK]);
+  const styles: string[] = [];
+  if (density === 'compact' || density === 'comfortable') {
+    const scale = density === 'compact' ? '0.94' : '1.06';
+    const width = density === 'compact' ? '106.38298%' : '94.33962%';
+    styles.push(`html body { transform: scale(${scale}) !important; transform-origin: top left !important; width: ${width} !important; }`);
+  }
+  if (motion === 'none') {
+    styles.push('html *, html *::before, html *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }');
+  }
+  return styles.join('\n');
+}
+
+function presetTweakValues(tokens: TweakToken[], preset: TweakPreset, current: TweakValueMap): TweakValueMap {
+  const next = { ...current };
+  for (const token of tokens) {
+    const value = token.value;
+    let changed: string | null = null;
+    if (preset === 'compact' && token.group === 'Espaçamento') changed = scaleCssValue(value, 0.84);
+    if (preset === 'comfortable' && token.group === 'Espaçamento') changed = scaleCssValue(value, 1.18);
+    if (preset === 'soft' && token.group === 'Bordas') changed = scaleCssValue(value, 1.45) ?? '22px';
+    if (preset === 'sharp' && token.group === 'Bordas') changed = '0px';
+    if (preset === 'motionless' && token.group === 'Motion') changed = motionlessValue(token, value);
+    if (!changed) continue;
+    if (changed.trim() === token.value.trim()) delete next[token.name];
+    else next[token.name] = changed;
+  }
+  if (preset === 'compact') next[VIRTUAL_DENSITY_TWEAK] = 'compact';
+  if (preset === 'comfortable') next[VIRTUAL_DENSITY_TWEAK] = 'comfortable';
+  if (preset === 'motionless') next[VIRTUAL_MOTION_TWEAK] = 'none';
+  return next;
+}
+
+function groupTweakTokens(tokens: TweakToken[]): Array<[TweakGroup, TweakToken[]]> {
+  const groups = new Map<TweakGroup, TweakToken[]>();
+  for (const token of tokens) {
+    const items = groups.get(token.group) ?? [];
+    items.push(token);
+    groups.set(token.group, items);
+  }
+  return Array.from(groups.entries()).sort((a, b) => tweakGroupOrder(a[0]) - tweakGroupOrder(b[0]));
+}
+
+function labelForTweak(name: string): string {
+  return name
+    .replace(/^--/, '')
+    .replace(/^od-tweak-/, '')
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function groupForTweak(name: string, value: string): TweakGroup {
+  const haystack = `${name} ${value}`.toLowerCase();
+  if (isColorValue(value) || /(color|colour|accent|brand|surface|background|bg|ink|text|border|shadow)/.test(haystack)) return 'Cores';
+  if (/(font|type|weight|line-height|letter|tracking|heading|body)/.test(haystack)) return 'Tipografia';
+  if (/(space|spacing|gap|padding|margin|inset|offset|grid|gutter|size|width|height)/.test(haystack)) return 'Espaçamento';
+  if (/(radius|rounded|corner|border-radius)/.test(haystack)) return 'Bordas';
+  if (/(motion|duration|delay|animation|transition|ease|easing)/.test(haystack)) return 'Motion';
+  return 'Outros';
+}
+
+function kindForTweak(name: string, value: string): TweakControlKind {
+  if (name.startsWith(VIRTUAL_TWEAK_PREFIX) && name.endsWith('motion')) return 'select';
+  if (isColorValue(value)) return 'color';
+  if (parseNumericCssValue(value)) return 'number';
+  return 'text';
+}
+
+function tweakGroupOrder(group: TweakGroup): number {
+  return ['Cores', 'Tipografia', 'Espaçamento', 'Bordas', 'Motion', 'Outros'].indexOf(group);
+}
+
+function parseNumericCssValue(value: string): { number: number; unit: string } | null {
+  const match = /^(-?\d+(?:\.\d+)?)(px|rem|em|vh|vw|%|ms|s)?$/i.exec(value.trim());
+  if (!match) return null;
+  return { number: Number(match[1]), unit: match[2] ?? '' };
+}
+
+function tweakRange(token: TweakToken, current: number): { min: number; max: number; step: number } {
+  if (token.min !== undefined && token.max !== undefined && token.step !== undefined) {
+    return { min: token.min, max: token.max, step: token.step };
+  }
+  if (token.group === 'Bordas') return { min: 0, max: 64, step: 1 };
+  if (token.group === 'Espaçamento') return { min: 0, max: Math.max(96, Math.ceil(current * 2)), step: 1 };
+  if (token.group === 'Tipografia') return { min: 0, max: Math.max(96, Math.ceil(current * 2)), step: 1 };
+  if (token.group === 'Motion') return { min: 0, max: 5000, step: 50 };
+  return { min: Math.min(0, current), max: Math.max(100, Math.ceil(current * 2)), step: 1 };
+}
+
+function scaleCssValue(value: string, factor: number): string | null {
+  const parsed = parseNumericCssValue(value);
+  if (!parsed) return null;
+  const next = Math.max(0, parsed.number * factor);
+  const rounded = Math.round(next * 100) / 100;
+  return `${rounded}${parsed.unit}`;
+}
+
+function motionlessValue(token: TweakToken, value: string): string {
+  if (token.kind === 'select') return 'none';
+  const parsed = parseNumericCssValue(value);
+  if (parsed && (parsed.unit === 'ms' || parsed.unit === 's')) return '0ms';
+  if (/name|animation/i.test(token.name)) return 'none';
+  return '0ms';
+}
+
+function isColorValue(value: string): boolean {
+  const clean = value.trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(clean) ||
+    /^(rgb|rgba|hsl|hsla)\(/i.test(clean) ||
+    /^(transparent|currentColor)$/i.test(clean);
+}
+
+function colorInputValue(value: string): string {
+  const clean = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(clean)) return clean;
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(clean);
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/i.exec(clean);
+  if (rgb) {
+    const toHex = (part: string) => Math.max(0, Math.min(255, Number(part))).toString(16).padStart(2, '0');
+    return `#${toHex(rgb[1] ?? '0')}${toHex(rgb[2] ?? '0')}${toHex(rgb[3] ?? '0')}`;
+  }
+  return '#000000';
+}
+
+function cleanCssValue(value: string): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function safeTweakValue(value: string): string {
+  const clean = cleanCssValue(value).replace(/[;{}<>]/g, '');
+  if (!clean || /(javascript:|expression\s*\(|@import|<\/?style)/i.test(clean)) return '';
+  return clean;
+}
+
+function virtualTweakStyle(values: TweakValueMap): string {
+  const accent = safeTweakValue(values['__od-accent'] ?? '');
+  const page = safeTweakValue(values['__od-page'] ?? '');
+  const text = safeTweakValue(values['__od-text'] ?? '');
+  const radius = safeTweakValue(values['__od-radius'] ?? '');
+  const motion = safeTweakValue(values['__od-motion'] ?? '');
+  const lines: string[] = [];
+  if (page) lines.push(`html, body { background: ${page} !important; }`);
+  if (text) lines.push(`body { color: ${text} !important; }`);
+  if (accent) {
+    lines.push(`:where(a, button, [role="button"], input[type="button"], input[type="submit"], .btn, .button, [class*="button"], [class*="cta"]) { border-color: ${accent} !important; }`);
+    lines.push(`:where(button, [role="button"], input[type="button"], input[type="submit"], .btn, .button, [class*="button"], [class*="cta"]) { background-color: ${accent} !important; }`);
+  }
+  if (radius) lines.push(`:where(button, input, textarea, select, .card, .panel, .modal, .btn, .button, [class*="card"], [class*="panel"], [class*="button"]) { border-radius: ${radius} !important; }`);
+  if (motion === 'none') lines.push('*, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }');
+  return lines.join('\n');
+}
+
+function upsertTweakStyleBlock(source: string, style: string): string {
+  const block = style.trim() ? `<style data-od-tweaks>\n${style.trim()}\n</style>` : '';
+  const re = /<style\b[^>]*data-od-tweaks[^>]*>[\s\S]*?<\/style>/i;
+  if (re.test(source)) return source.replace(re, block);
+  if (!block) return source;
+  if (/<\/head>/i.test(source)) return source.replace(/<\/head>/i, `${block}\n</head>`);
+  return `${block}\n${source}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function VisualEditPanel({
+  target,
+  draft,
+  fontChoices,
+  queuedCount,
+  panelPosition,
+  onDraft,
+  onPanelPosition,
+  onClose,
+  onQueue,
+  onSendQueue,
+  onClearQueue,
+  onDirectSave,
+  onApply,
+  disabled,
+  scale,
+}: {
+  target: PreviewCommentSnapshot;
+  draft: VisualEditDraft;
+  fontChoices: string[];
+  queuedCount: number;
+  panelPosition: VisualEditPanelPosition;
+  onDraft: (draft: VisualEditDraft) => void;
+  onPanelPosition: (position: VisualEditPanelPosition) => void;
+  onClose: () => void;
+  onQueue: () => void;
+  onSendQueue: () => void | Promise<void>;
+  onClearQueue: () => void;
+  onDirectSave: () => void | Promise<void>;
+  onApply: () => void | Promise<void>;
+  disabled?: boolean;
+  scale: number;
+}) {
+  const bounds = overlayBoundsFromSnapshot(target, scale);
+  const [dragPoint, setDragPoint] = useState<{ x: number; y: number } | null>(null);
+  const [panelDragPoint, setPanelDragPoint] = useState<{ x: number; y: number } | null>(null);
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  const setField = (key: keyof VisualEditDraft, value: string | number) => {
+    onDraft({ ...draft, [key]: value });
+  };
+  const moveBy = (dx: number, dy: number) => {
+    onDraft({
+      ...draft,
+      moveX: Math.round(draft.moveX + dx),
+      moveY: Math.round(draft.moveY + dy),
+    });
+  };
+  const selectedFont = draft.fontFamily.trim();
+  const recentFonts = recentFontChoices();
+  const defaultPanelPosition = {
+    x: Math.round(bounds.left + bounds.width + 14),
+    y: Math.round(bounds.top),
+  };
+  const activePanelPosition = panelPosition ?? defaultPanelPosition;
+  return (
+    <>
+      <div
+        className="visual-edit-drag-target"
+        style={{
+          left: bounds.left + draft.moveX * scale,
+          top: bounds.top + draft.moveY * scale,
+          width: bounds.width,
+          height: bounds.height,
+        }}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setDragPoint({ x: event.clientX, y: event.clientY });
+        }}
+        onPointerMove={(event) => {
+          if (!dragPoint) return;
+          event.preventDefault();
+          const dx = (event.clientX - dragPoint.x) / Math.max(scale, 0.01);
+          const dy = (event.clientY - dragPoint.y) / Math.max(scale, 0.01);
+          setDragPoint({ x: event.clientX, y: event.clientY });
+          moveBy(dx, dy);
+        }}
+        onPointerUp={() => setDragPoint(null)}
+        onPointerCancel={() => setDragPoint(null)}
+      >
+        <span>Arraste para mover</span>
+      </div>
+      {!dragPoint ? (
+        <div
+          className="visual-edit-panel"
+          data-testid="visual-edit-panel"
+          style={{
+            left: `clamp(14px, ${activePanelPosition.x}px, calc(100% - 394px))`,
+            top: `clamp(14px, ${activePanelPosition.y}px, calc(100% - 640px))`,
+          }}
+        >
+          <div className="visual-edit-head">
+            <div
+              className="visual-edit-panel-handle"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setPanelDragPoint({ x: event.clientX, y: event.clientY });
+                onPanelPosition(activePanelPosition);
+              }}
+              onPointerMove={(event) => {
+                if (!panelDragPoint) return;
+                event.preventDefault();
+                const dx = event.clientX - panelDragPoint.x;
+                const dy = event.clientY - panelDragPoint.y;
+                setPanelDragPoint({ x: event.clientX, y: event.clientY });
+                onPanelPosition({
+                  x: Math.max(14, activePanelPosition.x + dx),
+                  y: Math.max(14, activePanelPosition.y + dy),
+                });
+              }}
+              onPointerUp={() => setPanelDragPoint(null)}
+              onPointerCancel={() => setPanelDragPoint(null)}
+            >
+              <strong>Editar elemento</strong>
+              <span>{target.label || target.elementId}</span>
+            </div>
+            <button type="button" className="ghost" onClick={onClose}>
+              Fechar
+            </button>
+          </div>
+          {queuedCount > 0 ? (
+            <div className="visual-edit-queue">
+              <span>{queuedCount} alteração{queuedCount === 1 ? '' : 'es'} na fila</span>
+              <button type="button" onClick={onClearQueue}>Limpar</button>
+              <button type="button" className="primary" disabled={disabled} onClick={() => void onSendQueue()}>
+                Enviar fila
+              </button>
+            </div>
+          ) : null}
+        {isTextEditableSnapshot(target) ? (
+          <label className="visual-edit-field visual-edit-full">
+            <span>Texto</span>
+            <textarea
+              name="visual-edit-text"
+              value={draft.text}
+              placeholder="Texto visível do elemento…"
+              onChange={(event) => setField('text', event.target.value)}
+            />
+          </label>
+        ) : (
+          <div className="visual-edit-safe-note">
+            Container selecionado. Texto direto desativado para não remover filhos como logo, menu e botões.
+          </div>
+        )}
+        <div className="visual-edit-section">
+          <div className="visual-edit-section-title">Fonte</div>
+          <div className="visual-edit-font-picker">
+            <button
+              type="button"
+              className="visual-edit-font-trigger"
+              aria-haspopup="listbox"
+              aria-expanded={fontMenuOpen}
+              onClick={() => setFontMenuOpen((value) => !value)}
+            >
+              <span style={{ fontFamily: selectedFont || undefined }}>
+                {fontDisplayName(selectedFont || fontChoices[0] || 'Escolha uma fonte')}
+              </span>
+              <span aria-hidden>⌄</span>
+            </button>
+            {fontMenuOpen ? (
+              <div className="visual-edit-font-menu" role="listbox" aria-label="Fontes">
+                {fontChoices.map((font, index) => (
+                  <button
+                    key={font}
+                    type="button"
+                    role="option"
+                    aria-selected={font === selectedFont}
+                    className={font === selectedFont ? 'active' : ''}
+                    style={{ fontFamily: font }}
+                    onMouseEnter={() => setField('fontFamily', font)}
+                    onFocus={() => setField('fontFamily', font)}
+                    onClick={() => {
+                      rememberFontChoice(font);
+                      setField('fontFamily', font);
+                      setFontMenuOpen(false);
+                    }}
+                  >
+                    <span>{fontDisplayName(font)}</span>
+                    {index === 0 ? <em>Atual</em> : recentFonts.includes(normalizeFontChoice(font)) ? <em>Recente</em> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="visual-edit-section">
+          <div className="visual-edit-section-title">Tipografia e cor</div>
+          <div className="visual-edit-grid">
+          <label className="visual-edit-field">
+            <span>Tamanho</span>
+            <input
+              name="visual-edit-font-size"
+              value={draft.fontSize}
+              placeholder="32px, 4vw…"
+              onChange={(event) => setField('fontSize', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Peso</span>
+            <input
+              name="visual-edit-font-weight"
+              value={draft.fontWeight}
+              placeholder="400, 700…"
+              onChange={(event) => setField('fontWeight', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Altura linha</span>
+            <input
+              name="visual-edit-line-height"
+              value={draft.lineHeight}
+              placeholder="1.1, 48px…"
+              onChange={(event) => setField('lineHeight', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Tracking</span>
+            <input
+              name="visual-edit-letter-spacing"
+              value={draft.letterSpacing}
+              placeholder="-0.02em, 1px…"
+              onChange={(event) => setField('letterSpacing', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Cor texto</span>
+            <input
+              name="visual-edit-color"
+              value={draft.color}
+              placeholder="#111, rgb(0 0 0)…"
+              onChange={(event) => setField('color', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Fundo</span>
+            <input
+              name="visual-edit-background"
+              value={draft.backgroundColor}
+              placeholder="transparent, #fff…"
+              onChange={(event) => setField('backgroundColor', event.target.value)}
+            />
+          </label>
+          </div>
+        </div>
+        <div className="visual-edit-section">
+          <div className="visual-edit-section-title">Tamanho e posição</div>
+          <div className="visual-edit-grid">
+          <label className="visual-edit-field">
+            <span>Largura</span>
+            <input
+              name="visual-edit-width"
+              value={draft.width}
+              placeholder="auto, 320px, 80%…"
+              onChange={(event) => setField('width', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Altura</span>
+            <input
+              name="visual-edit-height"
+              value={draft.height}
+              placeholder="auto, 96px…"
+              onChange={(event) => setField('height', event.target.value)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Mover X</span>
+            <input
+              name="visual-edit-move-x"
+              type="number"
+              inputMode="numeric"
+              value={draft.moveX}
+              onChange={(event) => setField('moveX', Number(event.target.value) || 0)}
+            />
+          </label>
+          <label className="visual-edit-field">
+            <span>Mover Y</span>
+            <input
+              name="visual-edit-move-y"
+              type="number"
+              inputMode="numeric"
+              value={draft.moveY}
+              onChange={(event) => setField('moveY', Number(event.target.value) || 0)}
+            />
+          </label>
+          </div>
+        </div>
+        <details className="visual-edit-details" open>
+          <summary>Animação</summary>
+          <div className="visual-edit-grid">
+            <label className="visual-edit-field">
+              <span>Nome</span>
+              <input
+                name="visual-edit-animation-name"
+                value={draft.animationName}
+                placeholder="pulse, fadeIn, none…"
+                onChange={(event) => setField('animationName', event.target.value)}
+              />
+            </label>
+            <label className="visual-edit-field">
+              <span>Duração</span>
+              <input
+                name="visual-edit-animation-duration"
+                value={draft.animationDuration}
+                placeholder="300ms, 1.8s…"
+                onChange={(event) => setField('animationDuration', event.target.value)}
+              />
+            </label>
+            <label className="visual-edit-field">
+              <span>Delay</span>
+              <input
+                name="visual-edit-animation-delay"
+                value={draft.animationDelay}
+                placeholder="0ms, -0.2s…"
+                onChange={(event) => setField('animationDelay', event.target.value)}
+              />
+            </label>
+            <label className="visual-edit-field">
+              <span>Easing</span>
+              <input
+                name="visual-edit-animation-timing"
+                value={draft.animationTimingFunction}
+                placeholder="ease-out, cubic-bezier(…)…"
+                onChange={(event) => setField('animationTimingFunction', event.target.value)}
+              />
+            </label>
+            <label className="visual-edit-field">
+              <span>Repetição</span>
+              <input
+                name="visual-edit-animation-iteration"
+                value={draft.animationIterationCount}
+                placeholder="1, infinite…"
+                onChange={(event) => setField('animationIterationCount', event.target.value)}
+              />
+            </label>
+            <label className="visual-edit-field">
+              <span>Direção</span>
+              <input
+                name="visual-edit-animation-direction"
+                value={draft.animationDirection}
+                placeholder="normal, alternate…"
+                onChange={(event) => setField('animationDirection', event.target.value)}
+              />
+            </label>
+            <label className="visual-edit-field">
+              <span>Fill mode</span>
+              <input
+                name="visual-edit-animation-fill"
+                value={draft.animationFillMode}
+                placeholder="none, both, forwards…"
+                onChange={(event) => setField('animationFillMode', event.target.value)}
+              />
+            </label>
+          </div>
+        </details>
+        <label className="visual-edit-field visual-edit-full">
+          <span>Qualquer outro detalhe</span>
+          <textarea
+            name="visual-edit-custom"
+            value={draft.custom}
+            placeholder="Ex.: alinhar com o card da direita, trocar hover, ajustar breakpoint mobile…"
+            onChange={(event) => setField('custom', event.target.value)}
+          />
+        </label>
+        <div className="visual-edit-actions">
+          <span>{target.position.width} × {target.position.height}</span>
+          <div>
+            <button type="button" disabled={disabled} onClick={() => void onDirectSave()}>
+              Salvar direto
+            </button>
+            <button type="button" disabled={disabled} onClick={onQueue}>
+              Adicionar à fila
+            </button>
+            <button type="button" className="primary" disabled={disabled} onClick={() => void onApply()}>
+              Aplicar com IA
+            </button>
+          </div>
+        </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function TweaksPanel({
+  tokens,
+  values,
+  changedCount,
+  disabled,
+  onChange,
+  onReset,
+  onPreset,
+  onSave,
+  onClose,
+}: {
+  tokens: TweakToken[];
+  values: TweakValueMap;
+  changedCount: number;
+  disabled?: boolean;
+  onChange: (name: string, value: string) => void;
+  onReset: () => void;
+  onPreset: (preset: TweakPreset) => void;
+  onSave: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const grouped = useMemo(() => groupTweakTokens(tokens), [tokens]);
+  return (
+    <div className="tweaks-panel" data-testid="tweaks-panel">
+      <div className="tweaks-head">
+        <div>
+          <strong>Tweaks</strong>
+          <span>{tokens.length} controle{tokens.length === 1 ? '' : 's'} disponível{tokens.length === 1 ? '' : 'is'}</span>
+        </div>
+        <button type="button" className="ghost" onClick={onClose}>
+          Fechar
+        </button>
+      </div>
+      <div className="tweaks-summary">
+        <span>{changedCount} alteração{changedCount === 1 ? '' : 'es'} em preview</span>
+        <small>Ajustes simples são aplicados direto no HTML, sem IA.</small>
+      </div>
+      <div className="tweaks-presets" aria-label="Presets rápidos">
+        <button type="button" onClick={() => onPreset('compact')}>Compacto</button>
+        <button type="button" onClick={() => onPreset('comfortable')}>Confortável</button>
+        <button type="button" onClick={() => onPreset('soft')}>Mais redondo</button>
+        <button type="button" onClick={() => onPreset('sharp')}>Mais reto</button>
+        <button type="button" onClick={() => onPreset('motionless')}>Sem motion</button>
+      </div>
+      <div className="tweaks-groups">
+        {grouped.map(([group, items]) => (
+          <section className="tweaks-group" key={group}>
+            <h3>{group}</h3>
+            {items.map((token) => (
+              <TweakControl
+                key={token.name}
+                token={token}
+                value={values[token.name] ?? token.value}
+                changed={Boolean(values[token.name] !== undefined && values[token.name].trim() !== token.value.trim())}
+                onChange={(value) => onChange(token.name, value)}
+              />
+            ))}
+          </section>
+        ))}
+      </div>
+      <div className="tweaks-actions">
+        <button type="button" onClick={onReset} disabled={changedCount === 0}>
+          Resetar
+        </button>
+        <button type="button" className="primary" disabled={disabled || changedCount === 0} onClick={() => void onSave()}>
+          Aplicar no HTML
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function mergeTweakTokens(tokens: TweakToken[]): TweakToken[] {
+  const merged = new Map<string, TweakToken>();
+  for (const token of [...PRESET_TWEAK_TOKENS, ...FALLBACK_TWEAK_TOKENS, ...tokens]) {
+    if (!merged.has(token.name)) merged.set(token.name, token);
+  }
+  return Array.from(merged.values()).slice(0, MAX_TWEAK_TOKENS);
+}
+
+function TweakControl({
+  token,
+  value,
+  changed,
+  onChange,
+}: {
+  token: TweakToken;
+  value: string;
+  changed: boolean;
+  onChange: (value: string) => void;
+}) {
+  const parsed = parseNumericCssValue(value);
+  const range = parsed ? tweakRange(token, parsed.number) : null;
+  return (
+    <div className={`tweak-control${changed ? ' changed' : ''}`}>
+      <div className="tweak-control-meta">
+        <strong>{token.label}</strong>
+        <code>{token.virtual ? 'global' : token.name}</code>
+      </div>
+      <div className="tweak-control-inputs">
+        {token.kind === 'color' ? (
+          <input
+            className="tweak-color-input"
+            type="color"
+            value={colorInputValue(value)}
+            onChange={(event) => onChange(event.target.value)}
+            aria-label={token.label}
+          />
+        ) : null}
+        {token.kind === 'select' ? (
+          <select value={value} onChange={(event) => onChange(event.target.value)} aria-label={token.label}>
+            {(token.options ?? []).map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            aria-label={token.label}
+            spellCheck={false}
+          />
+        )}
+      </div>
+      {token.kind === 'number' && parsed && range ? (
+        <input
+          className="tweak-range"
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          value={parsed.number}
+          onChange={(event) => onChange(`${event.target.value}${parsed.unit}`)}
+          aria-label={`${token.label} slider`}
+        />
+      ) : null}
     </div>
   );
 }
@@ -585,6 +1476,7 @@ function HtmlViewer({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
+  onSendPreviewComment,
 }: {
   projectId: string;
   file: ProjectFile;
@@ -595,6 +1487,7 @@ function HtmlViewer({
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
+  onSendPreviewComment?: (comment: PreviewComment) => void | Promise<void>;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -621,7 +1514,11 @@ function HtmlViewer({
   const [teamSlug, setTeamSlug] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [tweaksMode, setTweaksMode] = useState(false);
+  const [tweakDraft, setTweakDraft] = useState<TweakValueMap>({});
   const [commentMode, setCommentMode] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [drawMode, setDrawMode] = useState(false);
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -633,6 +1530,9 @@ function HtmlViewer({
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const [commentDraft, setCommentDraft] = useState('');
+  const [editDraft, setEditDraft] = useState<VisualEditDraft>(EMPTY_VISUAL_EDIT_DRAFT);
+  const [editBatch, setEditBatch] = useState<VisualEditBatchItem[]>([]);
+  const [editPanelPosition, setEditPanelPosition] = useState<VisualEditPanelPosition>(null);
   const previewStateKey = `${projectId}:${file.name}`;
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
@@ -643,6 +1543,8 @@ function HtmlViewer({
   const previewBodyRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const activeCommentTargetRef = useRef<PreviewCommentSnapshot | null>(null);
+  const editBatchRef = useRef<VisualEditBatchItem[]>([]);
 
   useEffect(() => {
     if (liveHtml !== undefined) {
@@ -687,14 +1589,21 @@ function HtmlViewer({
     return /class\s*=\s*['"][^'"]*\bslide\b/i.test(source);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
+  const tweakTokens = useMemo(() => (source ? mergeTweakTokens(extractTweakTokens(source)) : FALLBACK_TWEAK_TOKENS), [source]);
+  const changedTweaks = useMemo(() => changedTweakValues(tweakTokens, tweakDraft), [tweakTokens, tweakDraft]);
+  const changedTweaksCount = Object.keys(changedTweaks).length;
   const previewSource = inlinedSource ?? source;
+  const liveTweakCss = useMemo(
+    () => (tweaksMode && changedTweaksCount > 0 ? tweakPreviewStyle(changedTweaks) : ''),
+    [tweaksMode, changedTweaks, changedTweaksCount],
+  );
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
-    commentMode,
+    commentMode: commentMode || editMode || drawMode || tweaksMode,
     forceInline,
   });
   const previewSrcUrl = useMemo(
@@ -720,9 +1629,10 @@ function HtmlViewer({
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-      commentBridge: commentMode,
+      commentBridge: commentMode || editMode || drawMode,
+      tweakBridge: tweaksMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, commentMode],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, commentMode, editMode, drawMode, tweaksMode],
   );
 
   useEffect(() => {
@@ -749,18 +1659,63 @@ function HtmlViewer({
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    win.postMessage({ type: 'od:comment-mode', enabled: commentMode }, '*');
-  }, [commentMode, srcDoc]);
+    win.postMessage({ type: 'od:comment-mode', enabled: commentMode || editMode || drawMode }, '*');
+  }, [commentMode, editMode, drawMode, srcDoc]);
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:tweaks-preview', css: liveTweakCss }, '*');
+  }, [liveTweakCss, srcDoc]);
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    if (!editMode) {
+      win.postMessage({ type: 'od:visual-edit-preview', clear: true }, '*');
+      return;
+    }
+    const edits = editBatchRef.current.map((item) => ({
+      selector: item.snapshot.selector,
+      draft: item.draft,
+    }));
+    if (activeCommentTarget) {
+      edits.push({
+        selector: activeCommentTarget.selector,
+        draft: editDraft,
+      });
+    }
+    if (edits.length === 0) {
+      win.postMessage({ type: 'od:visual-edit-preview', clear: true }, '*');
+      return;
+    }
+    win.postMessage({
+      type: 'od:visual-edit-preview',
+      edits,
+    }, '*');
+  }, [editMode, activeCommentTarget, editDraft, srcDoc]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
     setCommentDraft('');
+    setEditDraft(EMPTY_VISUAL_EDIT_DRAFT);
+    setEditBatch([]);
+    editBatchRef.current = [];
+    setEditPanelPosition(null);
+    setTweaksMode(false);
+    setTweakDraft({});
+    setEditMode(false);
+    setDrawMode(false);
   }, [file.name]);
 
   useEffect(() => {
-    if (!commentMode) {
+    activeCommentTargetRef.current = activeCommentTarget;
+  }, [activeCommentTarget]);
+
+  useEffect(() => {
+    if (!commentMode && !editMode && !drawMode) {
       setActiveCommentTarget(null);
       setHoveredCommentTarget(null);
       setLiveCommentTargets(new Map());
@@ -779,6 +1734,7 @@ function HtmlViewer({
         height: Number(data.position?.height) || 0,
       },
       htmlHint: String(data.htmlHint || ''),
+      styles: stylesFromSnapshotData(data.styles),
     });
     function onMessage(ev: MessageEvent) {
       if (ev.source !== iframeRef.current?.contentWindow) return;
@@ -795,7 +1751,7 @@ function HtmlViewer({
         });
         setLiveCommentTargets(next);
         setActiveCommentTarget((current) => (
-          current ? next.get(current.elementId) ?? null : null
+          current ? editMode ? current : next.get(current.elementId) ?? null : null
         ));
         setHoveredCommentTarget((current) => (
           current ? next.get(current.elementId) ?? null : null
@@ -809,23 +1765,29 @@ function HtmlViewer({
       if (data.type === 'od:comment-hover') {
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId) return;
+        const lockedTarget = activeCommentTargetRef.current;
+        if (editMode && lockedTarget && snapshot.elementId !== lockedTarget.elementId) return;
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
         return;
       }
       if (data.type === 'od:comment-target') {
+        if (!commentMode && !editMode) return;
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId) return;
+        const lockedTarget = activeCommentTargetRef.current;
+        if (editMode && lockedTarget && snapshot.elementId !== lockedTarget.elementId) return;
         const existing = previewComments.find((comment) => comment.elementId === snapshot.elementId);
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
-        setCommentDraft(existing?.note ?? '');
+        if (editMode) setEditDraft(visualEditDraftFromSnapshot(snapshot));
+        else setCommentDraft(existing?.note ?? '');
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [commentMode, file.name, previewComments]);
+  }, [commentMode, editMode, drawMode, file.name, previewComments]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
@@ -1087,6 +2049,38 @@ function HtmlViewer({
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
   }
 
+  function toggleCommentMode() {
+    setMode('preview');
+    setTweaksMode(false);
+    setDrawMode(false);
+    setEditMode(false);
+    setCommentMode((v) => !v);
+  }
+
+  function toggleEditMode() {
+    setMode('preview');
+    setTweaksMode(false);
+    setDrawMode(false);
+    setCommentMode(false);
+    setEditMode((value) => !value);
+  }
+
+  function toggleDrawMode() {
+    setMode('preview');
+    setTweaksMode(false);
+    setCommentMode(false);
+    setEditMode(false);
+    setDrawMode((value) => !value);
+  }
+
+  function toggleTweaksMode() {
+    setMode('preview');
+    setCommentMode(false);
+    setEditMode(false);
+    setDrawMode(false);
+    setTweaksMode((value) => !value);
+  }
+
   const showPresent = effectiveDeck && source !== null;
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
@@ -1101,6 +2095,75 @@ function HtmlViewer({
   const copyDeployLabel = copiedDeployLink
     ? t('fileViewer.copied')
     : t('fileViewer.copyDeployLink');
+  const editFontChoices = availableFontChoices(source ?? '', activeCommentTarget);
+
+  function setTweakValue(name: string, value: string) {
+    setTweakDraft((current) => ({ ...current, [name]: value }));
+  }
+
+  function applyTweakPreset(preset: TweakPreset) {
+    setTweakDraft((current) => presetTweakValues(tweakTokens, preset, current));
+  }
+
+  async function saveTweaksDirectly() {
+    if (!source || streaming || changedTweaksCount === 0) return;
+    const nextSource = applyTweakValuesToHtmlSource(source, changedTweaks);
+    if (nextSource === source) return;
+    const saved = await writeProjectTextFile(projectId, file.name, nextSource);
+    if (!saved) return;
+    setSource(nextSource);
+    setInlinedSource(null);
+    setTweakDraft({});
+    setReloadKey((value) => value + 1);
+  }
+
+  function clearVisualEditBatch() {
+    editBatchRef.current = [];
+    setEditBatch([]);
+    const win = iframeRef.current?.contentWindow;
+    const active = activeCommentTargetRef.current;
+    if (!win) return;
+    if (editMode && active) {
+      win.postMessage({
+        type: 'od:visual-edit-preview',
+        edits: [{ selector: active.selector, draft: editDraft }],
+      }, '*');
+      return;
+    }
+    win.postMessage({ type: 'od:visual-edit-preview', clear: true }, '*');
+  }
+
+  function queueCurrentVisualEdit() {
+    if (!activeCommentTarget) return;
+    const item = makeVisualEditBatchItem(activeCommentTarget, editDraft);
+    const next = upsertVisualEditBatch(editBatchRef.current, item);
+    editBatchRef.current = next;
+    setEditBatch(next);
+    setActiveCommentTarget(null);
+    setHoveredCommentTarget(null);
+    setEditDraft(EMPTY_VISUAL_EDIT_DRAFT);
+  }
+
+  async function sendVisualEditBatch() {
+    const currentItems = activeCommentTarget
+      ? upsertVisualEditBatch(editBatchRef.current, makeVisualEditBatchItem(activeCommentTarget, editDraft))
+      : editBatchRef.current;
+    if (!currentItems.length || !onSavePreviewComment || !onSendPreviewComment || streaming) return;
+    const saved = await onSavePreviewComment(
+      targetFromSnapshot(currentItems[0].snapshot),
+      composeVisualEditBatchNote(currentItems),
+      false,
+    );
+    if (!saved) return;
+    currentItems.forEach((item) => rememberFontChoice(item.draft.fontFamily));
+    await onSendPreviewComment(saved);
+    editBatchRef.current = [];
+    setEditBatch([]);
+    setActiveCommentTarget(null);
+    setHoveredCommentTarget(null);
+    setEditDraft(EMPTY_VISUAL_EDIT_DRAFT);
+    setEditMode(false);
+  }
 
   return (
     <div className="viewer html-viewer">
@@ -1153,12 +2216,11 @@ function HtmlViewer({
           ) : null}
           <button
             type="button"
-            className="viewer-toggle"
-            disabled
-            data-coming-soon="true"
+            className={`viewer-toggle${tweaksMode ? ' on' : ''}`}
+            disabled={source === null || streaming}
             title={t('fileViewer.tweaks')}
-            aria-pressed={false}
-            onClick={(e) => e.preventDefault()}
+            aria-pressed={tweaksMode}
+            onClick={toggleTweaksMode}
           >
             <Icon name="tweaks" size={13} />
             <span>{t('fileViewer.tweaks')}</span>
@@ -1186,27 +2248,32 @@ function HtmlViewer({
             type="button"
             data-testid="comment-mode-toggle"
             title={t('fileViewer.comment')}
-            onClick={() => setCommentMode((v) => !v)}
+            aria-pressed={commentMode}
+            disabled={!onSavePreviewComment || streaming}
+            onClick={toggleCommentMode}
           >
             <Icon name="comment" size={13} />
             <span>{t('fileViewer.comment')}</span>
           </button>
           <button
-            className="viewer-action"
+            className={`viewer-action${editMode ? ' active' : ''}`}
             type="button"
-            disabled
-            data-coming-soon="true"
+            data-testid="edit-mode-toggle"
             title={t('fileViewer.edit')}
+            aria-pressed={editMode}
+            disabled={!onSavePreviewComment || !onSendPreviewComment || streaming}
+            onClick={toggleEditMode}
           >
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
           </button>
           <button
-            className="viewer-action"
+            className={`viewer-action${drawMode ? ' active' : ''}`}
             type="button"
-            disabled
-            data-coming-soon="true"
+            disabled={!onSavePreviewComment || !onSendPreviewComment || streaming}
             title={t('fileViewer.draw')}
+            aria-pressed={drawMode}
+            onClick={toggleDrawMode}
           >
             <Icon name="draw" size={13} />
             <span>{t('fileViewer.draw')}</span>
@@ -1428,39 +2495,52 @@ function HtmlViewer({
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div className="comment-preview-layer">
-            <div className="comment-frame-clip">
-              <div
-                style={{
-                  width: `${100 / previewScale}%`,
-                  height: `${100 / previewScale}%`,
-                  transform: `scale(${previewScale})`,
-                  transformOrigin: '0 0',
-                }}
-              >
-                {useUrlLoadPreview ? (
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="artifact-preview-frame"
-                    data-od-render-mode="url-load"
-                    title={file.name}
-                    sandbox="allow-scripts"
-                    src={previewSrcUrl}
-                  />
-                ) : (
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="artifact-preview-frame"
-                    data-od-render-mode="srcdoc"
-                    title={file.name}
-                    sandbox="allow-scripts"
-                    srcDoc={srcDoc}
-                  />
-                )}
-              </div>
+            <div
+              style={{
+                width: `${100 / previewScale}%`,
+                height: `${100 / previewScale}%`,
+                transform: `scale(${previewScale})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              {useUrlLoadPreview ? (
+                <iframe
+                  ref={iframeRef}
+                  data-testid="artifact-preview-frame"
+                  data-od-render-mode="url-load"
+                  title={file.name}
+                  sandbox="allow-scripts"
+                  src={previewSrcUrl}
+                  onLoad={() => iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweaks-preview', css: liveTweakCss }, '*')}
+                />
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  data-testid="artifact-preview-frame"
+                  data-od-render-mode="srcdoc"
+                  title={file.name}
+                  sandbox="allow-scripts"
+                  srcDoc={srcDoc}
+                  onLoad={() => iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweaks-preview', css: liveTweakCss }, '*')}
+                />
+              )}
             </div>
-            {commentMode ? (
+            {tweaksMode ? (
+              <TweaksPanel
+                tokens={tweakTokens}
+                values={tweakDraft}
+                changedCount={changedTweaksCount}
+                disabled={streaming || source === null}
+                onChange={setTweakValue}
+                onReset={() => setTweakDraft({})}
+                onPreset={applyTweakPreset}
+                onSave={saveTweaksDirectly}
+                onClose={() => setTweaksMode(false)}
+              />
+            ) : null}
+            {commentMode || editMode ? (
               <CommentPreviewOverlays
-                comments={previewComments}
+                comments={editMode ? [] : previewComments}
                 liveTargets={liveCommentTargets}
                 hoveredTarget={hoveredCommentTarget}
                 activeTarget={activeCommentTarget}
@@ -1468,7 +2548,8 @@ function HtmlViewer({
                 onOpenComment={(comment, snapshot) => {
                   setActiveCommentTarget(snapshot);
                   setHoveredCommentTarget(snapshot);
-                  setCommentDraft(comment.note);
+                  if (editMode) setEditDraft(visualEditDraftFromSnapshot(snapshot));
+                  else setCommentDraft(comment.note);
                 }}
               />
             ) : null}
@@ -1481,15 +2562,89 @@ function HtmlViewer({
                 onClose={() => setActiveCommentTarget(null)}
                 onSave={async (attach) => {
                   if (!commentDraft.trim() || !onSavePreviewComment) return;
-                  const saved = await onSavePreviewComment(targetFromSnapshot(activeCommentTarget), commentDraft.trim(), attach);
-                  if (saved) setActiveCommentTarget(null);
+                  if (streaming && attach) return;
+                  const shouldSend = attach && Boolean(onSendPreviewComment);
+                  const saved = await onSavePreviewComment(targetFromSnapshot(activeCommentTarget), commentDraft.trim(), attach && !shouldSend);
+                  if (!saved) return;
+                  if (shouldSend) {
+                    await onSendPreviewComment?.(saved);
+                    setCommentMode(false);
+                  }
+                  setActiveCommentTarget(null);
                 }}
                 onRemove={async (commentId) => {
                   if (!onRemovePreviewComment) return;
                   await onRemovePreviewComment(commentId);
                   setActiveCommentTarget(null);
                 }}
+                disabled={streaming}
+                scale={previewScale}
                 t={t}
+              />
+            ) : null}
+            {editMode && activeCommentTarget ? (
+              <VisualEditPanel
+                target={activeCommentTarget}
+                draft={editDraft}
+                fontChoices={editFontChoices}
+                queuedCount={editBatch.length}
+                panelPosition={editPanelPosition}
+                onDraft={setEditDraft}
+                onPanelPosition={setEditPanelPosition}
+                onClose={() => {
+                  setActiveCommentTarget(null);
+                  setHoveredCommentTarget(null);
+                  setEditDraft(EMPTY_VISUAL_EDIT_DRAFT);
+                }}
+                onQueue={queueCurrentVisualEdit}
+                onSendQueue={sendVisualEditBatch}
+                onClearQueue={clearVisualEditBatch}
+                onDirectSave={async () => {
+                  if (!source || streaming) return;
+                  const nextSource = applyVisualEditToHtmlSource(source, activeCommentTarget, editDraft);
+                  if (!nextSource) return;
+                  const saved = await writeProjectTextFile(projectId, file.name, nextSource);
+                  if (!saved) return;
+                  rememberFontChoice(editDraft.fontFamily);
+                  setSource(nextSource);
+                  setInlinedSource(null);
+                  setReloadKey((value) => value + 1);
+                  setActiveCommentTarget(null);
+                  setEditMode(false);
+                }}
+                onApply={async () => {
+                  await sendVisualEditBatch();
+                }}
+                disabled={streaming}
+                scale={previewScale}
+              />
+            ) : null}
+            {editMode && !activeCommentTarget && editBatch.length > 0 ? (
+              <div className="visual-edit-batch-dock">
+                <span>{editBatch.length} alteração{editBatch.length === 1 ? '' : 'es'} pronta{editBatch.length === 1 ? '' : 's'}</span>
+                <small>Selecione outro elemento ou envie tudo para a IA.</small>
+                <div>
+                  <button type="button" onClick={clearVisualEditBatch}>Limpar</button>
+                  <button type="button" className="primary" disabled={streaming} onClick={() => void sendVisualEditBatch()}>
+                    Enviar tudo
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {drawMode ? (
+              <PreviewDrawOverlay
+                fileName={file.name}
+                scale={previewScale}
+                liveTargets={liveCommentTargets}
+                disabled={streaming}
+                onClose={() => setDrawMode(false)}
+                onSubmit={async ({ target, note }) => {
+                  if (!onSavePreviewComment || !onSendPreviewComment || streaming) return;
+                  const saved = await onSavePreviewComment(target, note, false);
+                  if (!saved) return;
+                  await onSendPreviewComment(saved);
+                  setDrawMode(false);
+                }}
               />
             ) : null}
           </div>
@@ -1780,6 +2935,278 @@ function readHtmlAttr(tag: string, name: string): string | null {
   return match?.[2] ?? null;
 }
 
+function stylesFromSnapshotData(value: unknown): PreviewCommentSnapshot['styles'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  return {
+    display: String(raw.display || ''),
+    position: String(raw.position || ''),
+    color: String(raw.color || ''),
+    backgroundColor: String(raw.backgroundColor || ''),
+    fontFamily: String(raw.fontFamily || ''),
+    fontSize: String(raw.fontSize || ''),
+    fontWeight: String(raw.fontWeight || ''),
+    lineHeight: String(raw.lineHeight || ''),
+    letterSpacing: String(raw.letterSpacing || ''),
+    width: String(raw.width || ''),
+    height: String(raw.height || ''),
+    transform: String(raw.transform || ''),
+    animationName: String(raw.animationName || ''),
+    animationDuration: String(raw.animationDuration || ''),
+    animationDelay: String(raw.animationDelay || ''),
+    animationTimingFunction: String(raw.animationTimingFunction || ''),
+    animationIterationCount: String(raw.animationIterationCount || ''),
+    animationDirection: String(raw.animationDirection || ''),
+    animationFillMode: String(raw.animationFillMode || ''),
+  };
+}
+
+function visualEditDraftFromSnapshot(snapshot: PreviewCommentSnapshot): VisualEditDraft {
+  const styles = snapshot.styles;
+  return {
+    ...EMPTY_VISUAL_EDIT_DRAFT,
+    text: snapshot.text || '',
+    fontFamily: styles?.fontFamily || '',
+    fontSize: styles?.fontSize || '',
+    fontWeight: styles?.fontWeight || '',
+    lineHeight: styles?.lineHeight || '',
+    letterSpacing: styles?.letterSpacing || '',
+    color: styles?.color || '',
+    backgroundColor: transparentToEmpty(styles?.backgroundColor || ''),
+    width: styles?.width || (snapshot.position.width ? `${snapshot.position.width}px` : ''),
+    height: styles?.height || (snapshot.position.height ? `${snapshot.position.height}px` : ''),
+    animationName: styles?.animationName === 'none' ? '' : styles?.animationName || '',
+    animationDuration: styles?.animationDuration || '',
+    animationDelay: styles?.animationDelay || '',
+    animationTimingFunction: styles?.animationTimingFunction || '',
+    animationIterationCount: styles?.animationIterationCount || '',
+    animationDirection: styles?.animationDirection || '',
+    animationFillMode: styles?.animationFillMode || '',
+  };
+}
+
+function composeVisualEditNote(snapshot: PreviewCommentSnapshot, draft: VisualEditDraft): string {
+  const payload = visualEditPayload(snapshot, draft);
+  return [
+    'Apply this visual edit exactly to the selected element.',
+    `Target file: ${snapshot.filePath}. Edit only this file for this change.`,
+    'Do not create a new sibling HTML file, duplicate artifact, or blank handoff file.',
+    'Blank fields mean keep the current value.',
+    'For movement, choose the safest implementation for this layout: transform, margin, flex/grid alignment, absolute positioning, or responsive CSS as appropriate.',
+    'Preserve unrelated elements and keep desktop/mobile behavior clean.',
+    JSON.stringify(payload, null, 2),
+  ].join('\n');
+}
+
+function composeVisualEditBatchNote(items: VisualEditBatchItem[]): string {
+  const targetFiles = [...new Set(items.map((item) => item.snapshot.filePath).filter(Boolean))];
+  return [
+    'Apply these visual edits exactly. Each edit targets one element; do not merge targets unless required for responsive layout.',
+    `Target file${targetFiles.length === 1 ? '' : 's'}: ${targetFiles.join(', ')}.`,
+    'Do not create new sibling HTML files, duplicate artifacts, or blank handoff files.',
+    'Blank fields mean keep the current value.',
+    'Preserve unrelated elements and keep desktop/mobile behavior clean.',
+    JSON.stringify({
+      edits: items.map((item, index) => ({
+        order: index + 1,
+        ...visualEditPayload(item.snapshot, item.draft),
+      })),
+    }, null, 2),
+  ].join('\n');
+}
+
+function visualEditPayload(snapshot: PreviewCommentSnapshot, draft: VisualEditDraft) {
+  return {
+    target: {
+      elementId: snapshot.elementId,
+      selector: snapshot.selector,
+      label: snapshot.label,
+      filePath: snapshot.filePath,
+    },
+    requestedChanges: {
+      text: draft.text.trim(),
+      typography: {
+        fontFamily: draft.fontFamily.trim(),
+        fontSize: draft.fontSize.trim(),
+        fontWeight: draft.fontWeight.trim(),
+        lineHeight: draft.lineHeight.trim(),
+        letterSpacing: draft.letterSpacing.trim(),
+        color: draft.color.trim(),
+        backgroundColor: draft.backgroundColor.trim(),
+      },
+      layout: {
+        width: draft.width.trim(),
+        height: draft.height.trim(),
+        moveX: draft.moveX,
+        moveY: draft.moveY,
+      },
+      animation: {
+        animationName: draft.animationName.trim(),
+        animationDuration: draft.animationDuration.trim(),
+        animationDelay: draft.animationDelay.trim(),
+        animationTimingFunction: draft.animationTimingFunction.trim(),
+        animationIterationCount: draft.animationIterationCount.trim(),
+        animationDirection: draft.animationDirection.trim(),
+        animationFillMode: draft.animationFillMode.trim(),
+      },
+      custom: draft.custom.trim(),
+    },
+    currentSnapshot: {
+      text: snapshot.text,
+      position: snapshot.position,
+      styles: snapshot.styles ?? null,
+      htmlHint: snapshot.htmlHint,
+    },
+  };
+}
+
+function makeVisualEditBatchItem(snapshot: PreviewCommentSnapshot, draft: VisualEditDraft): VisualEditBatchItem {
+  return {
+    id: `${snapshot.filePath}:${snapshot.elementId}:${snapshot.selector}`,
+    snapshot,
+    draft: { ...draft },
+  };
+}
+
+function upsertVisualEditBatch(current: VisualEditBatchItem[], item: VisualEditBatchItem): VisualEditBatchItem[] {
+  const next = current.filter((entry) => entry.id !== item.id);
+  next.push(item);
+  return next;
+}
+
+function transparentToEmpty(value: string): string {
+  return value === 'rgba(0, 0, 0, 0)' ? '' : value;
+}
+
+function availableFontChoices(source: string, target: PreviewCommentSnapshot | null): string[] {
+  const fonts = new Set<string>();
+  const add = (value: string | undefined) => {
+    const clean = String(value || '').trim();
+    if (!clean || clean === 'inherit' || clean === 'initial' || clean === 'unset') return;
+    fonts.add(clean);
+  };
+  const current = normalizeFontChoice(target?.styles?.fontFamily || '');
+  add(current);
+  const fontFaceRe = /font-family\s*:\s*([^;{}]+)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fontFaceRe.exec(source))) add(match[1]);
+  DEFAULT_FONT_CHOICES.forEach(add);
+  const recent = recentFontChoices().filter((font) => fonts.has(font) && font !== current);
+  const sorted = Array.from(fonts)
+    .filter((font) => font !== current && !recent.includes(font))
+    .sort((a, b) => fontDisplayName(a).localeCompare(fontDisplayName(b), undefined, { sensitivity: 'base' }));
+  return [current, ...recent, ...sorted].filter(Boolean).slice(0, 36);
+}
+
+function recentFontChoices(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FONT_RECENTS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.map((font) => normalizeFontChoice(String(font))).filter(Boolean).slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberFontChoice(font: string): void {
+  const normalized = normalizeFontChoice(font);
+  if (!normalized || typeof window === 'undefined') return;
+  const next = [normalized, ...recentFontChoices().filter((item) => item !== normalized)].slice(0, 6);
+  try {
+    window.localStorage.setItem(FONT_RECENTS_KEY, JSON.stringify(next));
+  } catch {}
+}
+
+function normalizeFontChoice(font: string): string {
+  return font.replace(/\s+/g, ' ').trim();
+}
+
+function fontDisplayName(font: string): string {
+  return normalizeFontChoice(font).replaceAll('"', '').split(',')[0] || font;
+}
+
+function applyVisualEditToHtmlSource(
+  source: string,
+  snapshot: PreviewCommentSnapshot,
+  draft: VisualEditDraft,
+): string | null {
+  const parser = new DOMParser();
+  const isFullDocument = /^\s*(?:<!doctype|<html[\s>])/i.test(source);
+  const hadDoctype = /^\s*<!doctype/i.test(source);
+  const doc = parser.parseFromString(isFullDocument ? source : `<body>${source}</body>`, 'text/html');
+  const target = findEditableElement(doc, snapshot);
+  if (!target) return null;
+
+  if (isTextEditableSnapshot(snapshot)) target.textContent = draft.text;
+  setInlineStyle(target, 'fontFamily', draft.fontFamily);
+  setInlineStyle(target, 'fontSize', draft.fontSize);
+  setInlineStyle(target, 'fontWeight', draft.fontWeight);
+  setInlineStyle(target, 'lineHeight', draft.lineHeight);
+  setInlineStyle(target, 'letterSpacing', draft.letterSpacing);
+  setInlineStyle(target, 'color', draft.color);
+  setInlineStyle(target, 'backgroundColor', draft.backgroundColor);
+  setInlineStyle(target, 'width', draft.width);
+  setInlineStyle(target, 'height', draft.height);
+  setInlineStyle(target, 'animationName', draft.animationName);
+  setInlineStyle(target, 'animationDuration', draft.animationDuration);
+  setInlineStyle(target, 'animationDelay', draft.animationDelay);
+  setInlineStyle(target, 'animationTimingFunction', draft.animationTimingFunction);
+  setInlineStyle(target, 'animationIterationCount', draft.animationIterationCount);
+  setInlineStyle(target, 'animationDirection', draft.animationDirection);
+  setInlineStyle(target, 'animationFillMode', draft.animationFillMode);
+
+  if (draft.moveX || draft.moveY) {
+    const existing = target.style.transform.trim();
+    const withoutOldTranslate = existing.replace(/translate(?:3d|X|Y)?\([^)]*\)\s*/gi, '').trim();
+    target.style.transform = `translate(${Math.round(draft.moveX)}px, ${Math.round(draft.moveY)}px)${withoutOldTranslate ? ` ${withoutOldTranslate}` : ''}`;
+  }
+
+  if (!isFullDocument) return doc.body.innerHTML;
+  const html = doc.documentElement.outerHTML;
+  return hadDoctype ? `<!doctype html>\n${html}` : html;
+}
+
+function findEditableElement(doc: Document, snapshot: PreviewCommentSnapshot): HTMLElement | null {
+  const bySelector = safeQuery(doc, snapshot.selector);
+  if (bySelector) return bySelector;
+  const id = snapshot.elementId;
+  const byOdId = safeQuery(doc, `[data-od-id="${cssAttrValue(id)}"]`);
+  if (byOdId) return byOdId;
+  const byScreen = safeQuery(doc, `[data-screen-label="${cssAttrValue(id)}"]`);
+  if (byScreen) return byScreen;
+  return doc.getElementById(id);
+}
+
+function isTextEditableSnapshot(snapshot: PreviewCommentSnapshot): boolean {
+  const label = snapshot.label.toLowerCase();
+  const selector = snapshot.selector.toLowerCase();
+  const elementId = snapshot.elementId.toLowerCase();
+  if (/^(body|html|main|section|header|footer|nav|aside|article|div)\b/.test(label)) return false;
+  if (/^(body|html|main|section|header|footer|nav|aside|article|div)\b/.test(selector)) return false;
+  if (/(background|hero|page|wrapper|container|layout|shell|stage|screen)/i.test(elementId)) return false;
+  return /^(h1|h2|h3|h4|h5|h6|p|span|a|button|label|strong|em|small|li|figcaption|blockquote|cite|time|input|textarea)\b/.test(label)
+    || /^(h1|h2|h3|h4|h5|h6|p|span|a|button|label|strong|em|small|li|figcaption|blockquote|cite|time|input|textarea)\b/.test(selector);
+}
+
+function safeQuery(doc: Document, selector: string): HTMLElement | null {
+  try {
+    const element = doc.querySelector(selector);
+    return element instanceof HTMLElement ? element : null;
+  } catch {
+    return null;
+  }
+}
+
+function setInlineStyle(element: HTMLElement, key: keyof CSSStyleDeclaration, value: string): void {
+  const clean = value.trim();
+  if (!clean) return;
+  element.style[key as any] = clean;
+}
+
+function cssAttrValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 function escapeHtmlAttr(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -1791,12 +3218,32 @@ function escapeHtmlAttr(value: string): string {
 function ImageViewer({
   projectId,
   file,
+  streaming,
+  onSavePreviewComment,
+  onSendPreviewComment,
 }: {
   projectId: string;
   file: ProjectFile;
+  streaming: boolean;
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
+  onSendPreviewComment?: (comment: PreviewComment) => void | Promise<void>;
 }) {
   const t = useT();
+  const [drawMode, setDrawMode] = useState(false);
   const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  async function sendDraw({ target, note }: DrawPreviewSubmit) {
+    if (!onSavePreviewComment || !onSendPreviewComment || streaming) return;
+    const saved = await onSavePreviewComment({
+      ...target,
+      selector: 'img',
+      label: `Drawing over ${file.name}`,
+      text: file.name,
+      htmlHint: `${target.htmlHint} sourceFile: ${file.name}`,
+    }, note, false);
+    if (!saved) return;
+    await onSendPreviewComment(saved);
+    setDrawMode(false);
+  }
   return (
     <div className="viewer image-viewer">
       <div className="viewer-toolbar">
@@ -1823,10 +3270,33 @@ function ImageViewer({
           >
             {t('fileViewer.open')}
           </a>
+          <button
+            type="button"
+            className={`viewer-action${drawMode ? ' active' : ''}`}
+            disabled={!onSavePreviewComment || !onSendPreviewComment || streaming}
+            title={t('fileViewer.draw')}
+            aria-pressed={drawMode}
+            onClick={() => setDrawMode((value) => !value)}
+          >
+            <Icon name="draw" size={13} />
+            <span>{t('fileViewer.draw')}</span>
+          </button>
         </div>
       </div>
       <div className="viewer-body image-body">
-        <img alt={file.name} src={url} />
+        <div className="image-draw-wrap">
+          <img alt={file.name} src={url} />
+          {drawMode ? (
+            <PreviewDrawOverlay
+              fileName={file.name}
+              scale={1}
+              liveTargets={new Map()}
+              disabled={streaming}
+              onClose={() => setDrawMode(false)}
+              onSubmit={sendDraw}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );

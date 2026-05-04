@@ -15,6 +15,7 @@ export interface ChatRequest {
   designSystemId?: string | null;
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];
+  activeFilePath?: string | null;
   model?: string | null;
   reasoning?: string | null;
 }

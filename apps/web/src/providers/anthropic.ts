@@ -8,6 +8,7 @@
  * your own backend.
  */
 import Anthropic from '@anthropic-ai/sdk';
+import { compactChatHistoryForPrompt } from '../conversation-compaction';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import { streamMessageAnthropicProxy } from './anthropic-compatible';
@@ -62,6 +63,7 @@ export async function streamMessage(
 
   const client = makeClient(cfg);
   let acc = '';
+  const compactedHistory = compactChatHistoryForPrompt(history).history;
 
   try {
     const stream = client.messages.stream(
@@ -69,7 +71,7 @@ export async function streamMessage(
         model: cfg.model,
         max_tokens: effectiveMaxTokens(cfg),
         system,
-        messages: history.map((m) => ({ role: m.role, content: m.content })),
+        messages: compactedHistory.map((m) => ({ role: m.role, content: m.content })),
       },
       { signal },
     );

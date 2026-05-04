@@ -10,9 +10,6 @@ import os from 'node:os';
 import { composeSystemPrompt } from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
-  checkPromptArgvBudget,
-  checkWindowsCmdShimCommandLineBudget,
-  checkWindowsDirectExeCommandLineBudget,
   detectAgents,
   getAgentDef,
   isKnownModel,
@@ -29,7 +26,6 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
-import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
@@ -40,6 +36,7 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
+import { inspectProjectPreview } from './visual-inspector.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -53,7 +50,6 @@ import { readMaskedConfig, writeConfig } from './media-config.js';
 import { readAppConfig, writeAppConfig } from './app-config.js';
 import {
   buildProjectArchive,
-  buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
   ensureProject,
@@ -63,7 +59,6 @@ import {
   readProjectFile,
   removeProjectDir,
   sanitizeName,
-  searchProjectFiles,
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
@@ -154,7 +149,7 @@ export function normalizeCommentAttachments(input) {
         comment,
         currentText: compactString(raw.currentText, 160),
         pagePosition: normalizeAttachmentPosition(raw.pagePosition),
-        htmlHint: compactString(raw.htmlHint, 180),
+        htmlHint: compactString(raw.htmlHint, 4000),
       };
     })
     .filter(Boolean)
@@ -166,23 +161,22 @@ export function renderCommentAttachmentHint(commentAttachments) {
   const lines = [
     '',
     '',
-    '<attached-preview-comments>',
-    'Scope: edit the target element by default. Use the smallest necessary parent wrapper only if the target cannot satisfy the comment. Preserve stable ids and unrelated siblings.',
+    'Selected preview elements:',
+    'Default scope: edit the selected rendered element in its listed file. Use the smallest necessary parent wrapper only if the target cannot satisfy the request. Preserve stable ids and unrelated siblings. Do not create a separate sibling HTML artifact for selected-element edits.',
   ];
   for (const item of commentAttachments) {
     lines.push(
       '',
-      `${item.order}. ${item.elementId}`,
+      `Element ${item.order}: ${item.elementId}`,
       `file: ${item.filePath}`,
       `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
       `position: ${formatAttachmentPosition(item.pagePosition)}`,
       `currentText: ${item.currentText || '(empty)'}`,
       `htmlHint: ${item.htmlHint || '(none)'}`,
-      `comment: ${item.comment}`,
+      `userRequest: ${item.comment}`,
     );
   }
-  lines.push('</attached-preview-comments>');
   return lines.join('\n');
 }
 
@@ -697,6 +691,41 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
 
+  app.post('/api/projects/:id/preview/inspect', async (req, res) => {
+    try {
+      const filePath = typeof req.body?.file === 'string' && req.body.file.trim()
+        ? req.body.file.trim()
+        : 'index.html';
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, filePath);
+      const inspectable = file.mime === 'text/html'
+        || file.mime === 'image/svg+xml'
+        || /\.(html?|svg)$/i.test(filePath);
+      if (!inspectable) {
+        return res.status(400).json({ error: 'preview inspect supports HTML and SVG files only' });
+      }
+
+      const rawPath = filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+      const url = `http://127.0.0.1:${resolvedPort}/api/projects/${encodeURIComponent(req.params.id)}/raw/${rawPath}`;
+      const root = projectDir(PROJECTS_DIR, req.params.id);
+      const report = await inspectProjectPreview({
+        projectId: req.params.id,
+        projectRoot: root,
+        outputRoot: root,
+        filePath,
+        url,
+        frames: req.body?.frames,
+        intervalMs: req.body?.intervalMs ?? req.body?.interval,
+        width: req.body?.width,
+        height: req.body?.height,
+        fullPage: req.body?.fullPage === true,
+      });
+      res.json(report);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
     console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
   }
@@ -721,133 +750,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   // ---- Projects (DB-backed) -------------------------------------------------
-
-  // Soft "what is the user looking at right now in Open Design?" channel. The
-  // web UI POSTs the current project + file on every route change;
-  // the MCP surface reads it so a coding agent in another repo can
-  // resolve "the design I have open" without the user typing the
-  // project id. In-memory only - daemon restart clears it.
-  /** @type {{ projectId: string; fileName: string | null; ts: number } | null} */
-  let activeContext = null;
-  const ACTIVE_CONTEXT_TTL_MS = 5 * 60 * 1000;
-
-  // Active context is private to the local machine. The daemon binds
-  // 0.0.0.0 by default, so without an origin check a peer on the LAN
-  // could read what the user is currently looking at (GET) or spoof
-  // it to redirect MCP fallbacks (POST). The web proxies same-origin
-  // and the MCP runs in-process via 127.0.0.1, so both legitimate
-  // callers pass the check.
-  app.post('/api/active', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const body = req.body || {};
-      if (body.active === false) {
-        activeContext = null;
-        res.json({ active: false });
-        return;
-      }
-      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
-      if (!projectId) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
-        return;
-      }
-      const fileName =
-        typeof body.fileName === 'string' && body.fileName.length > 0
-          ? body.fileName
-          : null;
-      activeContext = { projectId, fileName, ts: Date.now() };
-      res.json({ active: true, ...activeContext });
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  app.get('/api/active', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    if (!activeContext || Date.now() - activeContext.ts > ACTIVE_CONTEXT_TTL_MS) {
-      activeContext = null;
-      res.json({ active: false });
-      return;
-    }
-    const project = getProject(db, activeContext.projectId);
-    res.json({
-      active: true,
-      projectId: activeContext.projectId,
-      projectName: project?.name ?? null,
-      fileName: activeContext.fileName,
-      ts: activeContext.ts,
-      ageMs: Date.now() - activeContext.ts,
-    });
-  });
-
-  // Surfaces the absolute paths to `node` + `apps/daemon/dist/cli.js`
-  // so the Settings → MCP server panel can render snippets that work
-  // even when `od` isn't on the user's PATH (the common case for
-  // source clones - and macOS/Linux ship a /usr/bin/od octal-dump
-  // tool that shadows ours anyway). Computed from import.meta.url so
-  // both src/ (tsx dev) and dist/ (built) launches resolve to the
-  // same dist/cli.js path. Cached for 5s because the panel pings on
-  // every open and the path lookup + two existsSync calls are cheap
-  // but not free, and these paths cannot change without a daemon
-  // restart anyway.
-  const INSTALL_INFO_TTL_MS = 5000;
-  let installInfoCache: { t: number; payload: object } | null = null;
-
-  app.get('/api/mcp/install-info', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const now = Date.now();
-    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
-      return res.json(installInfoCache.payload);
-    }
-    let cliPath;
-    try {
-      cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-    } catch (err) {
-      return sendApiError(res, 500, 'CLI_RESOLVE_FAILED', String(err));
-    }
-    const cliExists = fs.existsSync(cliPath);
-    // process.execPath is the absolute path to the node binary that
-    // is running the daemon RIGHT NOW. We prefer it over bare `node`
-    // because IDE-spawned MCP clients inherit a minimal PATH from the
-    // OS launcher (Spotlight, Dock, etc.) that often does not see
-    // user-level node installs (nvm, fnm, asdf). On rare occasions
-    // (uninstall mid-session, exotic embeds) the path may not exist
-    // by the time the user copies the snippet; catch that and warn.
-    const nodeExists = fs.existsSync(process.execPath);
-    const hints: string[] = [];
-    if (!cliExists) {
-      hints.push(
-        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` (or just `pnpm build`) and refresh.',
-      );
-    }
-    if (!nodeExists) {
-      hints.push(
-        `Node binary at ${process.execPath} no longer exists. Reinstall Node and restart the daemon.`,
-      );
-    }
-    const payload = {
-      command: process.execPath,
-      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
-      daemonUrl: `http://127.0.0.1:${resolvedPort}`,
-      // Surface platform so the install panel can localize path hints
-      // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
-      // (Cmd vs Ctrl). One of 'darwin' | 'linux' | 'win32' in
-      // practice; the panel falls back to POSIX wording for anything
-      // else.
-      platform: process.platform,
-      cliExists,
-      nodeExists,
-      buildHint: hints.length ? hints.join(' ') : null,
-    };
-    installInfoCache = { t: now, payload };
-    res.json(payload);
-  });
 
   app.get('/api/projects', (_req, res) => {
     try {
@@ -1060,39 +962,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // SSE stream of file-changed events for a project. Drives preview live-reload.
-  // Receipt of a `file-changed` event triggers a file-list refresh, which
-  // propagates new mtimes through to FileViewer iframes (the URL-load
-  // `?v=${mtime}` cache-bust from PR #384 then reloads the iframe automatically).
-  // Subscribers come and go as users open/close project tabs; the underlying
-  // chokidar watcher is refcounted in project-watchers.ts so we never hold
-  // descriptors for projects no UI is looking at.
-  app.get('/api/projects/:id/events', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    }
-    let sub;
-    try {
-      const sse = createSseResponse(res);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
-        sse.send('file-changed', evt);
-      });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
-      const cleanup = () => {
-        if (sub) {
-          const { unsubscribe } = sub;
-          sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
-        }
-      };
-      res.on('close', cleanup);
-      res.on('finish', cleanup);
-    } catch (err) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
-      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
@@ -1870,32 +1739,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // project's own folder (see apps/daemon/src/projects.ts).
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
-      const since = Number(req.query?.since);
-      const files = await listFiles(PROJECTS_DIR, req.params.id, {
-        since: Number.isFinite(since) ? since : undefined,
-      });
+      const files = await listFiles(PROJECTS_DIR, req.params.id);
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  app.get('/api/projects/:id/search', async (req, res) => {
-    try {
-      const query = String(req.query.q ?? '');
-      if (!query) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
-        return;
-      }
-      const pattern = req.query.pattern ? String(req.query.pattern) : null;
-      const max = Math.min(Number(req.query.max) || 200, 1000);
-      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
-        pattern,
-        max,
-      });
-      res.json({ query, matches });
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
@@ -1932,43 +1779,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } catch (err) {
       const code = err && err.code;
       const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
-  // Batch archive: accepts a list of file names and returns a ZIP of just
-  // those files. Used by the Design Files panel multi-select download.
-  app.post('/api/projects/:id/archive/batch', async (req, res) => {
-    try {
-      const { files } = req.body || {};
-      if (!Array.isArray(files) || files.length === 0) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
-        return;
-      }
-      const { buffer } = await buildBatchArchive(
-        PROJECTS_DIR,
-        req.params.id,
-        files,
-      );
-      const project = getProject(db, req.params.id);
-      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
-      const filename = `${fileSlug}.zip`;
-      const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
-      res.send(buffer);
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' ? 404 : 400;
       sendApiError(
         res,
         status,
@@ -2530,6 +2340,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       designSystemId,
       attachments = [],
       commentAttachments = [],
+      activeFilePath = null,
       model,
       reasoning,
     } = chatBody;
@@ -2604,6 +2415,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             }
           })
       : [];
+    const safeActiveFilePath =
+      cwd && typeof activeFilePath === 'string' && activeFilePath.length > 0
+        ? (() => {
+            try {
+              const abs = path.resolve(cwd, activeFilePath);
+              return (abs === cwd || abs.startsWith(cwd + path.sep)) && fs.existsSync(abs)
+                ? activeFilePath
+                : null;
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+    const selectedEditFiles = [
+      ...new Set(
+        safeCommentAttachments
+          .map((item) => item.filePath)
+          .filter((filePath) => typeof filePath === 'string' && filePath.length > 0),
+      ),
+    ];
 
     // Local code agents don't accept a separate "system" channel the way the
     // Messages API does — we fold the skill + design-system prompt into the
@@ -2618,8 +2449,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           .map((f) => `- ${f.name}`)
           .join('\n')}`
       : '\nThis folder is empty. Choose a clear, descriptive filename for whatever you create.';
+    const activeFileHint = safeActiveFilePath
+      ? `\n\nActive preview file: \`${safeActiveFilePath}\`. For edits, revisions, visual tweaks, selected-element changes, or requests that refer to the current design/page, modify this file in place. Do not create sibling copies like \`name-2.html\`, \`name-5.html\`, or blank handoff files. Create a new file only when the user explicitly asks for a separate new artifact.`
+      : '';
+    const selectedEditFileHint = selectedEditFiles.length
+      ? `\n\nSelected edit target file${selectedEditFiles.length === 1 ? '' : 's'}: ${selectedEditFiles
+          .map((filePath) => `\`${filePath}\``)
+          .join(', ')}. Apply selected-element edits only inside these files unless the user explicitly asks for cross-file changes.`
+      : '';
     const cwdHint = cwd
-      ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}`
+      ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}${activeFileHint}${selectedEditFileHint}`
       : '';
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
@@ -2712,27 +2551,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
 
-    // Pre-flight the composed prompt against any argv-byte budget the
-    // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
-    // a `-` stdin sentinel, so the prompt has to ride argv). Doing this
-    // before bin resolution means the test harness pins the guard
-    // independently of whether the adapter binary happens to be on PATH
-    // in the CI environment, and the user gets the actionable
-    // adapter-named error even if /api/agents hadn't refreshed yet.
-    const promptBudgetError = checkPromptArgvBudget(def, composed);
-    if (promptBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          promptBudgetError.code,
-          promptBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
-
     const resolvedBin = resolveAgentBin(agentId);
 
     // If detection can't find the binary, surface a friendly SSE error
@@ -2760,62 +2578,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       agentOptions,
       { cwd: effectiveCwd },
     );
-
-    // Second-pass budget check that knows about the Windows `.cmd` shim
-    // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
-    // raw composed prompt; on Windows an npm-installed adapter resolves
-    // to e.g. `deepseek.cmd`, the spawn path goes through `cmd.exe /d /s
-    // /c "<inner>"`, and `quoteForWindowsCmdShim` doubles every embedded
-    // `"` plus wraps any whitespace/special-char arg in outer quotes —
-    // so a quote-heavy prompt that fit under `maxPromptArgBytes` can
-    // still expand past CreateProcess's 32_767-char cap. Fail fast with
-    // the same `AGENT_PROMPT_TOO_LARGE` shape so the SSE error path
-    // doesn't have to special-case it.
-    const cmdShimBudgetError = checkWindowsCmdShimCommandLineBudget(
-      def,
-      resolvedBin,
-      args,
-    );
-    if (cmdShimBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          cmdShimBudgetError.code,
-          cmdShimBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
-
-    // Companion guard for non-shim Windows installs (e.g. a cargo-built
-    // `deepseek.exe` rather than the npm `.cmd` shim). Direct `.exe`
-    // spawns skip the cmd.exe wrap above, but Node/libuv still composes
-    // a CreateProcess `lpCommandLine` by walking each argv element
-    // through `quote_cmd_arg`, which escapes every embedded `"` as `\"`
-    // and doubles backslashes adjacent to quotes. A quote-heavy prompt
-    // under `maxPromptArgBytes` can expand past the 32_767-char kernel
-    // cap there too, so the cmd-shim early-return alone would let those
-    // users hit a generic `spawn ENAMETOOLONG`.
-    const directExeBudgetError = checkWindowsDirectExeCommandLineBudget(
-      def,
-      resolvedBin,
-      args,
-    );
-    if (directExeBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          directExeBudgetError.code,
-          directExeBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
-
     const send = (event, data) => design.runs.emit(run, event, data);
 
     const odMediaEnv = {
@@ -2853,11 +2615,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = spawnEnvForAgent(def.id, {
-        ...process.env,
-        ...(def.env || {}),
-        ...odMediaEnv,
-      });
+      const env = spawnEnvForAgent(def.id, { ...process.env, ...odMediaEnv });
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,
