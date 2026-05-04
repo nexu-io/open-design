@@ -597,13 +597,16 @@ export const AGENT_DEFS = [
   {
     id: 'deepseek',
     name: 'DeepSeek TUI',
-    // The `deepseek` dispatcher is the canonical entry point; it delegates
-    // to a sibling `deepseek-tui` runtime binary at exec time. Both are
-    // installed by `npm i -g deepseek-tui` and by the cargo path. We probe
-    // the dispatcher first; if a user installed only the TUI binary (e.g.
-    // standalone cargo install), we still surface the agent.
+    // The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and
+    // delegates to a sibling `deepseek-tui` runtime binary at exec time.
+    // Upstream documents both binaries as required (npm and cargo paths
+    // install them together), so a host with only `deepseek-tui` on PATH
+    // isn't a supported install — and `deepseek-tui` itself doesn't accept
+    // the argv shape `buildArgs` produces (`exec --auto <prompt>`). We only
+    // probe the dispatcher; advertising availability via a `deepseek-tui`
+    // fallback would surface the agent as runnable but make `/api/chat`
+    // exit immediately on the first prompt.
     bin: 'deepseek',
-    fallbackBins: ['deepseek-tui'],
     versionArgs: ['--version'],
     // No `models` subcommand that prints a clean id-per-line list; the
     // canonical model ids for DeepSeek V4 are documented in the README,

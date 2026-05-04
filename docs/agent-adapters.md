@@ -94,7 +94,7 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **copilot** | `copilot` | `~/.copilot/` | ❌ | ✅ (`edit` tool) | ✅ (`--output-format json` JSONL) | P2 |
 | **kiro** | `kiro-cli` | `~/.kiro/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
 | **vibe** | `vibe-acp` | `~/.vibe/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
-| **deepseek** | `deepseek` (fallback `deepseek-tui`) | `~/.deepseek/` | `~/.deepseek/skills/` | ❌ (prompt-injected) | ✅ | ✅ (plain text) | P2 |
+| **deepseek** | `deepseek` | `~/.deepseek/` | `~/.deepseek/skills/` | ❌ (prompt-injected) | ✅ | ✅ (plain text) | P2 |
 
 "P0/P1/P2" correspond to the roadmap phases in [`roadmap.md`](roadmap.md).
 
@@ -197,7 +197,7 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 ### 5.9 DeepSeek TUI
 
-- Invocation: `deepseek exec --auto [--model <id>] "<prompt>"`. The `deepseek` dispatcher delegates to a sibling `deepseek-tui` runtime binary at exec time; both ship together via `npm i -g deepseek-tui` or `cargo install deepseek-tui-cli` + `cargo install deepseek-tui`. We probe the dispatcher first and fall back to `deepseek-tui` directly so a cargo-only install of just the TUI binary still surfaces the agent.
+- Invocation: `deepseek exec --auto [--model <id>] "<prompt>"`. The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and delegates to a sibling `deepseek-tui` runtime binary at exec time; upstream documents both binaries as required (the npm and cargo paths install them together). We only probe the dispatcher — `deepseek-tui` on its own doesn't accept this argv shape, so advertising it as a fallback would surface the agent as available but fail on the first chat run. A future revision could teach resolution + buildArgs which binary was selected and emit a verified `deepseek-tui` invocation, with a regression test exercising that path.
 - Streaming: plain text deltas to stdout in non-`--json` mode (tool-call notifications go to stderr). Skipping `--json` is intentional — `deepseek exec --json` batches the entire run into one trailing summary object instead of streaming, which would freeze the chat UI until end-of-turn.
 - Auto-approval: `--auto` enables agentic mode with the YOLO permission posture. The daemon runs every CLI without a TTY, so the interactive approval prompt would otherwise hang the run.
 - Skills: prompt injection only in v1. DeepSeek TUI does walk `.agents/skills`, `skills`, `.opencode/skills`, `.claude/skills`, and `~/.deepseek/skills` first-wins, so a future revision can switch to file-placed skill loading the same way Claude Code does.

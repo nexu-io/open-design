@@ -420,17 +420,18 @@ test('deepseek args omit --model when model is "default"', () => {
   assert.equal(args.includes('--model'), false);
 });
 
-test('deepseek entry declares deepseek-tui as a fallback bin', () => {
-  // `deepseek` is the dispatcher binary; `deepseek-tui` is the runtime
-  // companion. `npm i -g deepseek-tui` installs both, but a cargo-only
-  // install of just `deepseek-tui` should still surface the agent.
-  assert.ok(
-    Array.isArray(deepseek.fallbackBins),
-    'deepseek.fallbackBins must be an array',
-  );
-  assert.ok(
-    deepseek.fallbackBins.includes('deepseek-tui'),
-    `deepseek.fallbackBins must include 'deepseek-tui'; got ${JSON.stringify(deepseek.fallbackBins)}`,
+test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {
+  // `deepseek` is the dispatcher that owns `exec` / `--auto`; `deepseek-tui`
+  // is the runtime companion the dispatcher invokes. Upstream installs both
+  // together (npm and cargo). A `deepseek-tui`-only host is not a supported
+  // install, and `deepseek-tui` itself doesn't accept `exec --auto <prompt>`
+  // — surfacing it via fallbackBins would advertise availability but make
+  // the first /api/chat run fail. Pin the absence so the fallback can't
+  // drift back without an accompanying buildArgs branch + test.
+  assert.equal(
+    Array.isArray(deepseek.fallbackBins) && deepseek.fallbackBins.length > 0,
+    false,
+    `deepseek must not declare fallbackBins until the deepseek-tui-only invocation is implemented and tested; got ${JSON.stringify(deepseek.fallbackBins)}`,
   );
 });
 
