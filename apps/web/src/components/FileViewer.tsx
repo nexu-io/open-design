@@ -53,6 +53,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
+    const priorFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -65,6 +66,13 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
       return false;
     } finally {
       document.body.removeChild(ta);
+      if (priorFocus?.isConnected) {
+        try {
+          priorFocus.focus({ preventScroll: true });
+        } catch {
+          priorFocus.focus();
+        }
+      }
     }
   }
 }

@@ -100,4 +100,28 @@ describe('FileViewer markdown code block copy', () => {
       expect(writeTextMock).toHaveBeenCalledWith('');
     });
   });
+
+  it('restores focus when the Clipboard API fails and the execCommand fallback succeeds', async () => {
+    writeTextMock.mockRejectedValueOnce(new Error('clipboard unavailable'));
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn().mockReturnValue(true),
+    });
+    const execCommandSpy = vi.mocked(document.execCommand);
+    const { container } = render(<FileViewer projectId="project-1" file={baseFile()} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.markdown-code-copy')).toBeTruthy();
+    });
+    const copyButton = container.querySelector('.markdown-code-copy') as HTMLButtonElement;
+    copyButton.focus();
+    expect(copyButton).toBe(document.activeElement);
+
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(execCommandSpy).toHaveBeenCalledWith('copy');
+    });
+    expect(copyButton).toBe(document.activeElement);
+  });
 });
