@@ -512,6 +512,43 @@ describe('streamMessageOpenAI', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledWith('hi');
   });
+
+  it('routes through the OpenAI-specific proxy endpoint and handles CRLF frames', async () => {
+    const handlers = createStreamHandlers();
+    const fetchMock = vi.fn(async () =>
+      sseResponse(
+        [
+          'event: delta',
+          'data: {"delta":"hi"}',
+          '',
+          'event: end',
+          'data: {}',
+          '',
+        ].join('\r\n'),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamMessageOpenAI(
+      {
+        mode: 'api',
+        apiKey: 'test-key',
+        baseUrl: 'https://example.test',
+        model: 'gpt-test',
+        agentId: null,
+        skillId: null,
+        designSystemId: null,
+      },
+      '',
+      [{ id: '1', role: 'user', content: 'hello' }],
+      new AbortController().signal,
+      handlers,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/proxy/openai/stream', expect.any(Object));
+    expect(handlers.onDelta).toHaveBeenCalledWith('hi');
+    expect(handlers.onDone).toHaveBeenCalledWith('hi');
+  });
 });
 
 function createStreamHandlers() {

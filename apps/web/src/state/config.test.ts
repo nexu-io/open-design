@@ -60,7 +60,7 @@ describe('loadConfig', () => {
     expect(config.apiProtocol).toBe('anthropic');
   });
 
-  it('does not migrate daemon-mode configs', () => {
+  it('infers protocol for legacy daemon-mode API fields without changing mode', () => {
     const daemonConfig: Partial<AppConfig> = {
       mode: 'daemon',
       apiKey: 'sk-test',
@@ -75,7 +75,7 @@ describe('loadConfig', () => {
     const config = loadConfig();
 
     expect(config.mode).toBe('daemon');
-    expect(config.apiProtocol).toBe('anthropic');
+    expect(config.apiProtocol).toBe('openai');
     expect(config.configMigrationVersion).toBe(1);
   });
 

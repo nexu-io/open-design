@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— **10 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI、Hermes、Kimi、Pi）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。一个都没装？还有 OpenAI 兼容的 BYOK 代理 `/api/proxy/stream` 兜底，同一条 loop，少一次 spawn 而已。
+> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— **10 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI、Hermes、Kimi、Pi）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。一个都没装？还有多 provider BYOK 代理 `/api/proxy/{anthropic,openai,azure,google}/stream` 兜底，同一条 loop，少一次 spawn 而已。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design 封面：与本地 AI 智能体共同设计" width="100%" />
@@ -25,7 +25,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية</p>
+<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -51,7 +51,7 @@ OD 站在四个开源项目的肩膀上：
 | | 你拿到的 |
 |---|---|
 | **Coding-agent CLI（10 套）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）—— 在 `PATH` 上自动检测，picker 一键切换 |
-| **BYOK 兜底** | OpenAI 兼容代理 `/api/proxy/stream` —— 填 `baseUrl` + `apiKey` + `model`，任意 vendor（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、自托管 vLLM，或任何 OpenAI 兼容的 provider）都能直接当引擎用。daemon 边界拒绝 loopback / link-local / RFC1918 防 SSRF。 |
+| **BYOK 兜底** | 协议分流代理 `/api/proxy/{anthropic,openai,azure,google}/stream` —— 填 `baseUrl` + `apiKey` + `model`，选择 Anthropic / OpenAI / Azure OpenAI / Google Gemini，daemon 会把各家 SSE 统一成同一条 chat stream。daemon 边界拒绝 loopback / link-local / RFC1918 防 SSRF。 |
 | **内置 design system** | **72 套** —— 2 套手写起手 + 70 套从 [`awesome-design-md`][acd2] 导入的产品系统（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小红书…） |
 | **内置 skill** | **31 个** —— 27 个 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 个 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分组：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **媒体生成** | 图像 · 视频 · 音频三类 surface 与设计循环并行可用。**gpt-image-2**（Azure / OpenAI）做海报、头像、信息图、城市插画地图 · **Seedance 2.0**（字节跳动）做 15 秒电影感 t2v + i2v · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）做 HTML→MP4 动态图形（产品揭示、动力学排版、数据图表、社媒卡片、Logo 收尾）。**93 条**可一键复刻的 prompt gallery —— 43 条 gpt-image-2 + 39 条 Seedance + 11 条 HyperFrames，统一放在 [`prompt-templates/`](prompt-templates/) 下，附预览图与来源署名。Chat 入口和写代码同一处；输出真实的 `.mp4` / `.png` 落到项目工作区里。 |
@@ -217,7 +217,7 @@ OD 站在四个开源项目的肩膀上：
 
 ### 1 · 我们不带 agent，你的就够好
 
-Daemon 启动时扫 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/mariozechner/pi-ai)。能找到的都成为候选设计引擎 —— 走 stdio，每个 CLI 一个 adapter，model picker 一键切换。灵感来自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一个 CLI 都没装？`POST /api/proxy/stream` 就是同一条管线减去 spawn —— 填任意 OpenAI 兼容 `baseUrl` + `apiKey`，daemon 把 SSE 转发回浏览器，loopback / link-local / RFC1918 在边界直接拒绝。
+Daemon 启动时扫 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/mariozechner/pi-ai)。能找到的都成为候选设计引擎 —— 走 stdio，每个 CLI 一个 adapter，model picker 一键切换。灵感来自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一个 CLI 都没装？API mode 就是同一条管线减去 spawn —— 选择 Anthropic、OpenAI 兼容、Azure OpenAI 或 Google Gemini，daemon 把归一化后的 SSE 转发回浏览器，loopback / link-local / RFC1918 在边界直接拒绝。
 
 ### 2 · Skill 是文件，不是插件
 
@@ -261,12 +261,12 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 └──────────────┬─────────────────────────────────┬───────────────┘
                │ /api/*（dev 走 rewrites）        │
                ▼                                  ▼
-   ┌─────────────────────────────────┐  /api/proxy/stream (SSE)
+   ┌─────────────────────────────────┐  /api/proxy/{provider}/stream (SSE)
    │  本地 daemon（Express + SQLite）│  ─→ 任意 OpenAI 兼容
    │                                 │      端点（BYOK）
    │  /api/agents         /api/skills│      含 SSRF 防御
    │  /api/design-systems /api/projects/…
-   │  /api/chat (SSE)     /api/proxy/stream (SSE)
+   │  /api/chat (SSE)     /api/proxy/{provider}/stream (SSE)
    │  /api/templates      /api/import/claude-design
    │  /api/artifacts/save /api/artifacts/lint
    │  /api/upload         /api/projects/:id/files…
@@ -289,7 +289,7 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
 | 前端 | Next.js 16 App Router + React 18 + TypeScript，可部署到 Vercel |
 | Daemon | Node 24 · Express · SSE 流 · `better-sqlite3`；表：`projects` · `conversations` · `messages` · `tabs` · `templates` |
 | Agent 传输层 | `child_process.spawn`，Claude Code 走 `claude-stream-json`、Copilot 走 `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent 走 `json-event-stream`（每个 CLI 一个 parser）、Hermes / Kimi 走 `acp-json-rpc`（Agent Client Protocol）、Pi 走 `pi-rpc`（stdio JSON-RPC）、Qwen Code 走 `plain` |
-| BYOK 代理 | `POST /api/proxy/stream` → OpenAI 兼容 `/v1/chat/completions` 透传 SSE；daemon 边界拒绝 loopback / link-local / RFC1918 |
+| BYOK 代理 | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → 各 provider 上游 API，统一输出 `delta/end/error` SSE；daemon 边界拒绝 loopback / link-local / RFC1918 |
 | 存储 | 纯文件 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 启动自建）。`OD_DATA_DIR` 可改根目录用于测试隔离 |
 | 预览 | 沙盒 iframe（`srcdoc`）+ 每个 skill 的 `<artifact>` parser（[`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)） |
 | 导出 | HTML（内联资源）· PDF（浏览器打印，deck-aware）· PPTX（agent 驱动经由 skill）· ZIP（archiver）· Markdown |
@@ -559,7 +559,7 @@ OD 不止于代码。同一套生成 `<artifact>` HTML 的 chat 入口，也驱�
 Chat / artifact 循环最显眼，但这套仓库里还有几个能力被埋得有点深，对照其它产品做选型之前值得先扫一遍：
 
 - **Claude Design ZIP 导入。** 把 claude.ai 导出的 ZIP 拖到欢迎弹窗，`POST /api/import/claude-design` 把它解压成真实 `.od/projects/<id>/`，把入口文件作为 tab 打开，并预置一句「接着 Anthropic 停下的地方继续编辑」给本地 agent。不用再让模型重述上下文，也不用「让模型重新画一遍」。([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
-- **OpenAI 兼容 BYOK 代理。** `POST /api/proxy/stream` 接收 `{ baseUrl, apiKey, model, messages }`，自动归一化路径（`…/v1/chat/completions`），把 SSE chunk 转发回浏览器；同时拒绝 loopback / link-local / RFC1918 防 SSRF。任何说 OpenAI chat schema 的 vendor 都能直接用 —— Anthropic-via-OpenAI shim、DeepSeek、Groq、MiMo、OpenRouter、自托管 vLLM 都行。MiMo 会自动加 `tool_choice: 'none'`，因为它的 tool schema 和 free-form 生成不太合得来。
+- **多 provider BYOK 代理。** `POST /api/proxy/{anthropic,openai,azure,google}/stream` 接收 `{ baseUrl, apiKey, model, messages }`，构造各 provider 的上游请求，把 SSE chunk 统一成 `delta/end/error`，同时拒绝 loopback / link-local / RFC1918 防 SSRF。OpenAI 兼容路径覆盖 OpenAI、Azure AI Foundry `/openai/v1`、DeepSeek、Groq、MiMo、OpenRouter、自托管 vLLM；Azure OpenAI 路径补上 deployment URL + `api-version`；Google 路径走 Gemini `:streamGenerateContent`。
 - **用户自存 templates。** 喜欢某次渲染？`POST /api/templates` 把 HTML + 元数据快照进 SQLite `templates` 表。下个项目的 picker 里多一行「你的模板」 —— 跟内置 31 套同一个挑选面，但是你的。
 - **Tab 持久化。** 每个项目记得自己打开的文件和当前 tab，存在 `tabs` 表里。明天再打开，工作区还是你昨天离开时的样子。
 - **Artifact lint API。** `POST /api/artifacts/lint` 对生成的 artifact 跑结构性检查（`<artifact>` 框架是否破损、必需的副文件是否缺失、palette token 是否过期），返回 agent 下一回合可以读回去的 findings。五维自评审就是用它把分数落到证据上而不是 vibe。
@@ -627,7 +627,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc --no-session [--model …] [--thinking …]`（prompt 走 RPC `prompt` 命令） |
-| **OpenAI 兼容 BYOK** | n/a | SSE 透传 | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；拒绝 loopback / link-local / RFC1918 |
+| **多 provider BYOK** | n/a | SSE 归一化 | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI 兼容 / Azure OpenAI / Gemini；拒绝 loopback / link-local / RFC1918 |
 
 加一个新 CLI = 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一项。流式格式从 `claude-stream-json` / `copilot-stream-json` / `json-event-stream`（搭配每 CLI 的 `eventParser`）/ `acp-json-rpc` / `pi-rpc` / `plain` 中选一个。
 
@@ -654,7 +654,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 - [x] Web 应用 + 对话 + question form + 5 套方向选择器 + todo progress + 沙盒预览
 - [x] 31 个 skill + 72 套 design system + 5 套视觉方向 + 5 个设备外壳
 - [x] SQLite 后端的 projects · conversations · messages · tabs · templates
-- [x] OpenAI 兼容 BYOK 代理（`/api/proxy/stream`）含 SSRF 防御
+- [x] 多 provider BYOK 代理（`/api/proxy/{anthropic,openai,azure,google}/stream`）含 SSRF 防御
 - [x] Claude Design ZIP 导入（`/api/import/claude-design`）
 - [x] Sidecar 协议 + Electron 桌面端 + IPC 自动化（STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN）
 - [x] Artifact lint API + 五维自评审 emit-前 gate
@@ -687,14 +687,14 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 - **加一套 design system** —— 往 [`design-systems/<brand>/`](design-systems/) 丢一份 `DESIGN.md`，用 9 段式 schema。
 - **接入一个新的 coding-agent CLI** —— 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一项。
 
-完整流程、合并硬线、代码风格、我们不接收的 PR 类型 → [`CONTRIBUTING.zh-CN.md`](CONTRIBUTING.zh-CN.md)（[English](CONTRIBUTING.md)，[Deutsch](CONTRIBUTING.de.md)）。
+完整流程、合并硬线、代码风格、我们不接收的 PR 类型 → [`CONTRIBUTING.zh-CN.md`](CONTRIBUTING.zh-CN.md)（[English](CONTRIBUTING.md)，[Deutsch](CONTRIBUTING.de.md)，[Français](CONTRIBUTING.fr.md)）。
 
 ## 贡献者墙
 
 感谢每一位让 Open Design 变得更好的朋友 —— 无论是写代码、修文档、提 issue、加 skill 还是加 design system，每一次真实贡献都会被记住。下面这面墙是最直观的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-03" alt="Open Design 贡献者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-04" alt="Open Design 贡献者" />
 </a>
 
 第一次提 PR？欢迎从 [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) 标签起步。
@@ -711,9 +711,9 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-03" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-03" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-03" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
   </picture>
 </a>
 

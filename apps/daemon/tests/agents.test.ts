@@ -4,7 +4,11 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_DEFS, resolveAgentExecutable } from '../src/agents.js';
+import {
+  AGENT_DEFS,
+  resolveAgentExecutable,
+  spawnEnvForAgent,
+} from '../src/agents.js';
 
 const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
 const copilot = AGENT_DEFS.find((agent) => agent.id === 'copilot');
@@ -400,4 +404,59 @@ test('vibe fetchModels falls back to fallbackModels when detection fails', async
   assert.equal(result, null);
   assert.ok(Array.isArray(vibe.fallbackModels));
   assert.equal(vibe.fallbackModels[0].id, 'default');
+});
+
+// Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
+// credentials, silently billing API usage. Strip it for the claude
+// adapter so the user's subscription wins.
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY for the claude adapter', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-leak',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+});
+
+// Windows env-var names are case-insensitive at the kernel level, but
+// spreading process.env into a plain object loses Node's case-insensitive
+// accessor — a `Anthropic_Api_Key` key would survive a literal
+// `delete env.ANTHROPIC_API_KEY` and still reach Claude Code on Windows.
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY case-insensitively for the claude adapter', () => {
+  const env = spawnEnvForAgent('claude', {
+    Anthropic_Api_Key: 'sk-mixed-case',
+    anthropic_api_key: 'sk-lower-case',
+    PATH: '/usr/bin',
+  });
+
+  const remaining = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY',
+  );
+  assert.deepEqual(remaining, []);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () => {
+  for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
+    const env = spawnEnvForAgent(agentId, {
+      ANTHROPIC_API_KEY: 'sk-keep',
+      PATH: '/usr/bin',
+    });
+    assert.equal(
+      env.ANTHROPIC_API_KEY,
+      'sk-keep',
+      `expected ${agentId} to preserve ANTHROPIC_API_KEY`,
+    );
+  }
+});
+
+test('spawnEnvForAgent does not mutate the input env', () => {
+  const original = { ANTHROPIC_API_KEY: 'sk-leak', PATH: '/usr/bin' };
+  const env = spawnEnvForAgent('claude', original);
+
+  assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
+  assert.notEqual(env, original);
 });

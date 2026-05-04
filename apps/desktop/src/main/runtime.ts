@@ -59,6 +59,7 @@ export type DesktopRuntime = {
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
+  show(): void;
   status(): DesktopStatusSnapshot;
 };
 
@@ -243,6 +244,15 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
 
+  if (process.platform === "darwin") {
+    window.on("close", (event) => {
+      if (!stopped) {
+        event.preventDefault();
+        window.hide();
+      }
+    });
+  }
+
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
     consoleEntries.push({
@@ -326,6 +336,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, image.toPNG());
       return { path: outputPath };
+    },
+    show() {
+      if (!window.isDestroyed()) {
+        window.show();
+        window.focus();
+      }
     },
     status() {
       return {

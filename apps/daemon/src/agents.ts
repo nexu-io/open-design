@@ -813,6 +813,28 @@ export function resolveAgentBin(id) {
   return resolveAgentExecutable(def);
 }
 
+// Build the env passed to spawn() for a given agent adapter.
+//
+// The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
+// resolution (claude login / Pro/Max plan) wins instead of silently
+// falling back to API-key billing whenever the daemon happened to be
+// launched from a shell that exported the key for SDK or scripting use.
+// See issue #398.
+//
+// Windows env-var names are case-insensitive at the kernel level
+// (`GetEnvironmentVariable`), but spreading `process.env` into a plain
+// object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
+// would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
+// the child. Iterate keys and compare case-insensitively to close that.
+export function spawnEnvForAgent(agentId, baseEnv) {
+  const env = { ...baseEnv };
+  if (agentId !== 'claude') return env;
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
+  }
+  return env;
+}
+
 // Daemon's /api/chat needs to validate the user's model pick against the
 // list we last surfaced to the UI. We keep a per-agent cache of the most
 // recent live list (refreshed every detectAgents() call) and additionally

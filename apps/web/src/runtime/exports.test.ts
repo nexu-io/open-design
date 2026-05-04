@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { archiveFilenameFrom, archiveRootFromFilePath, exportAsMd } from './exports';
+import {
+  archiveFilenameFrom,
+  archiveRootFromFilePath,
+  buildSandboxedPreviewDocument,
+  exportAsMd,
+  exportAsPdf,
+  openSandboxedPreviewInNewTab,
+} from './exports';
 
 function mockResponse(headers: Record<string, string>): Response {
   return { headers: new Headers(headers) } as Response;
@@ -132,5 +139,106 @@ describe('exportAsMd', () => {
     exportAsMd(source, 'mixed');
 
     expect(await capturedBlob!.text()).toBe(source);
+  });
+});
+
+describe('sandboxed preview Blob exports', () => {
+  let capturedBlob: Blob | undefined;
+  let openedFeatures: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    openedFeatures = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('window', {
+      open: (_url: string, _target: string, features?: string) => {
+        openedFeatures = features;
+        return null;
+      },
+      addEventListener: () => {},
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('wraps generated HTML in an opaque-origin sandbox for new-tab previews', async () => {
+    openSandboxedPreviewInNewTab('<script>window.parent.localStorage.clear()</script>', 'Unsafe preview');
+
+    expect(openedFeatures).toBe('noopener,noreferrer');
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('sandbox="allow-scripts"');
+    expect(wrapper).not.toContain('allow-same-origin');
+    expect(wrapper).toContain('&lt;script&gt;window.parent.localStorage.clear()&lt;/script&gt;');
+    expect(wrapper).not.toContain('<script>window.parent.localStorage.clear()</script>');
+  });
+
+  it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {
+    openSandboxedPreviewInNewTab('<section class="slide">One</section>', 'Deck preview', {
+      deck: true,
+      baseHref: '/artifacts/project/assets/',
+      initialSlideIndex: 2,
+    });
+
+    expect(openedFeatures).toBe('noopener,noreferrer');
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('sandbox="allow-scripts"');
+    expect(wrapper).not.toContain('allow-same-origin');
+    expect(wrapper).toContain('&lt;base href=&quot;/artifacts/project/assets/&quot;&gt;');
+    expect(wrapper).toContain('od:slide');
+  });
+
+  it('can build a print wrapper without granting same-origin access', () => {
+    const wrapper = buildSandboxedPreviewDocument('<!doctype html><title>x</title>', 'Print', {
+      allowModals: true,
+    });
+
+    expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
+    expect(wrapper).not.toContain('allow-same-origin');
+  });
+
+  it('uses a sandboxed noopener Blob wrapper by default for PDF exports', async () => {
+    exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
+
+    expect(openedFeatures).toBe('noopener,noreferrer');
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
+    expect(wrapper).not.toContain('allow-same-origin');
+    expect(wrapper).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(wrapper).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
+  });
+
+  it('preserves deck print handling inside sandboxed PDF exports', async () => {
+    exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
+
+    expect(openedFeatures).toBe('noopener,noreferrer');
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
+    expect(wrapper).not.toContain('allow-same-origin');
+    expect(wrapper).toContain('data-deck-print=&quot;injected&quot;');
+    expect(wrapper).toContain('page-break-after: always;');
+  });
+
+  it('allows explicit trusted PDF opt-out without changing the secure default', async () => {
+    exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
+      sandboxedPreview: false,
+    });
+
+    expect(openedFeatures).toBeUndefined();
+    expect(capturedBlob).toBeDefined();
+    const doc = await capturedBlob!.text();
+    expect(doc).not.toContain('sandbox="allow-scripts allow-modals"');
+    expect(doc).toContain('<main>Trusted local document</main>');
   });
 });

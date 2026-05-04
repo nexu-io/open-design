@@ -49,6 +49,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   // saved configs that did not have this field and migrates those from their
   // saved baseUrl/model before applying the current migration version.
   apiProtocol: 'anthropic',
+  apiVersion: '',
+  apiProtocolConfigs: {},
   configMigrationVersion: CONFIG_MIGRATION_VERSION,
   apiProviderBaseUrl: 'https://api.anthropic.com',
   agentId: null,
@@ -124,6 +126,20 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o',
     models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+  },
+  {
+    label: 'Azure OpenAI',
+    protocol: 'azure',
+    baseUrl: '',
+    model: '',
+    models: [],
+  },
+  {
+    label: 'Google Gemini',
+    protocol: 'google',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    model: 'gemini-2.0-flash',
+    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   },
   {
     label: 'DeepSeek — OpenAI',
@@ -214,6 +230,7 @@ export function loadConfig(): AppConfig {
     const merged: AppConfig = {
       ...DEFAULT_CONFIG,
       ...parsed,
+      apiProtocolConfigs: { ...(parsed.apiProtocolConfigs ?? {}) },
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       pet: normalizePet(parsed.pet),
@@ -225,7 +242,7 @@ export function loadConfig(): AppConfig {
       // protocol so old OpenAI-compatible endpoints keep routing correctly.
       // This is version-gated instead of only field-gated so a later imported
       // legacy config can be migrated when it is loaded.
-      if (!parsedHasApiProtocol && merged.mode === 'api') {
+      if (!parsedHasApiProtocol) {
         merged.apiProtocol = inferApiProtocol(merged.model, merged.baseUrl);
         // Also set apiProviderBaseUrl so setApiProtocol() can correctly identify
         // whether the user is on a known provider and switch defaults appropriately.
