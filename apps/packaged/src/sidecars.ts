@@ -30,6 +30,16 @@ import type { PackagedNamespacePaths } from "./paths.js";
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = ["HOME", "LANG", "LC_ALL", "LOGNAME", "TMPDIR", "USER"] as const;
 
+function shouldForwardPackagedChildEnv(key: string): boolean {
+  return (
+    PACKAGED_CHILD_ENV_ALLOWLIST.includes(
+      key as (typeof PACKAGED_CHILD_ENV_ALLOWLIST)[number],
+    ) ||
+    key.endsWith("_API_KEY") ||
+    key.endsWith("_TOKEN")
+  );
+}
+
 export type PackagedSidecarHandle = {
   close(): Promise<void>;
   daemon: DaemonStatusSnapshot;
@@ -140,9 +150,10 @@ function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
 
 function resolvePackagedChildBaseEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const baseEnv: NodeJS.ProcessEnv = {};
-  for (const key of PACKAGED_CHILD_ENV_ALLOWLIST) {
-    const value = env[key];
-    if (value != null && value.length > 0) baseEnv[key] = value;
+  for (const [key, value] of Object.entries(env)) {
+    if (value != null && value.length > 0 && shouldForwardPackagedChildEnv(key)) {
+      baseEnv[key] = value;
+    }
   }
   return baseEnv;
 }
