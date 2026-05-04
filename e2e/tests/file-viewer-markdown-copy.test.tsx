@@ -17,6 +17,7 @@ vi.mock('../../apps/web/src/providers/registry', async () => {
 
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 let writeTextMock: ReturnType<typeof vi.fn>;
+let originalClipboard: PropertyDescriptor | undefined;
 
 function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
   return {
@@ -41,6 +42,7 @@ function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
 
 describe('FileViewer markdown code block copy', () => {
   beforeEach(() => {
+    originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     mockedFetchProjectFileText.mockResolvedValue('```ts\nconsole.log("copied")\n```');
     writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
@@ -52,6 +54,11 @@ describe('FileViewer markdown code block copy', () => {
   });
 
   afterEach(() => {
+    if (originalClipboard) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    } else {
+      delete (navigator as { clipboard?: Clipboard }).clipboard;
+    }
     cleanup();
     vi.clearAllMocks();
   });
@@ -65,15 +72,32 @@ describe('FileViewer markdown code block copy', () => {
     const copyButton = container.querySelector('.markdown-code-copy') as HTMLButtonElement;
     expect(copyButton.tagName).toBe('BUTTON');
 
+    copyButton.focus();
+    expect(copyButton).toBe(document.activeElement);
     fireEvent.click(copyButton);
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith('console.log("copied")');
     });
+    expect(copyButton).toBe(document.activeElement);
     await waitFor(() => {
-      const updatedButton = container.querySelector('.markdown-code-copy');
-      expect(updatedButton?.getAttribute('aria-label')).toBe('Copied!');
+      expect(copyButton.getAttribute('aria-label')).toBe('Copied!');
     });
     expect(screen.getByRole('status').textContent).toBe('Copied!');
+  });
+
+  it('copies empty fenced code blocks instead of treating the button as broken', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('```ts\n```');
+    const { container } = render(<FileViewer projectId="project-1" file={baseFile()} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.markdown-code-copy')).toBeTruthy();
+    });
+    const copyButton = container.querySelector('.markdown-code-copy') as HTMLButtonElement;
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('');
+    });
   });
 });

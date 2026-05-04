@@ -4398,6 +4398,12 @@ code {
   opacity: 1;
   transform: translateY(0);
 }
+@media (hover: none) {
+  .markdown-code-copy {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .markdown-code-copy:hover,
 .markdown-code-copy:focus-visible {
   color: var(--text);

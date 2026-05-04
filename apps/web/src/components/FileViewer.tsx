@@ -43,7 +43,10 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type SlideState = { active: number; count: number };
 
 const htmlPreviewSlideState = new Map<string, SlideState>();
+const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
+const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
+const MARKDOWN_COPY_TOAST_CLASS = 'markdown-code-toast';
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
@@ -58,28 +61,61 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
     ta.select();
     try {
       return document.execCommand('copy');
+    } catch {
+      return false;
     } finally {
       document.body.removeChild(ta);
     }
   }
 }
 
-function decorateMarkdownCodeBlocks(html: string, t: TranslateFn, copiedBlockId: string | null): string {
+function decorateMarkdownCodeBlocks(html: string): string {
   let blockIndex = 0;
   return html.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/g, (_match, attrs: string, content: string) => {
     const blockId = String(blockIndex++);
-    const copied = copiedBlockId === blockId;
-    const label = copied ? t('fileViewer.copied') : t('fileViewer.copy');
-    const toast = copied
-      ? `<span class="markdown-code-toast" role="status" aria-live="polite">${t('fileViewer.copied')}</span>`
-      : '';
-    return (
-      `<div class="markdown-code-block">` +
-      `<button type="button" class="markdown-code-copy" ${MARKDOWN_COPY_BLOCK_ATTR}="${blockId}" title="${t('fileViewer.copyTitle')}" aria-label="${label}">` +
-      `${label}</button>` +
-      `${toast}<pre${attrs}>${content}</pre></div>`
-    );
+    return `<div class="markdown-code-block" ${MARKDOWN_CODE_BLOCK_ATTR}="${blockId}"><pre${attrs}>${content}</pre></div>`;
   });
+}
+
+function setMarkdownCodeBlockCopiedState(block: HTMLElement, copied: boolean, t: TranslateFn) {
+  const button = block.querySelector<HTMLButtonElement>(`.${MARKDOWN_COPY_BUTTON_CLASS}`);
+  if (!button) return;
+  const label = copied ? t('fileViewer.copied') : t('fileViewer.copy');
+  button.textContent = label;
+  button.setAttribute('aria-label', label);
+  button.title = t('fileViewer.copyTitle');
+
+  const existingToast = block.querySelector(`.${MARKDOWN_COPY_TOAST_CLASS}`);
+  if (copied) {
+    if (existingToast instanceof HTMLElement) {
+      existingToast.textContent = t('fileViewer.copied');
+      return;
+    }
+    const toast = document.createElement('span');
+    toast.className = MARKDOWN_COPY_TOAST_CLASS;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.textContent = t('fileViewer.copied');
+    button.insertAdjacentElement('afterend', toast);
+    return;
+  }
+
+  existingToast?.remove();
+}
+
+function ensureMarkdownCodeBlockControls(root: HTMLElement, t: TranslateFn) {
+  for (const block of root.querySelectorAll<HTMLElement>(`[${MARKDOWN_CODE_BLOCK_ATTR}]`)) {
+    let button = block.querySelector<HTMLButtonElement>(`.${MARKDOWN_COPY_BUTTON_CLASS}`);
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = MARKDOWN_COPY_BUTTON_CLASS;
+      const blockId = block.getAttribute(MARKDOWN_CODE_BLOCK_ATTR) ?? '';
+      button.setAttribute(MARKDOWN_COPY_BLOCK_ATTR, blockId);
+      block.prepend(button);
+    }
+    setMarkdownCodeBlockCopiedState(block, false, t);
+  }
 }
 
 interface Props {
@@ -2148,15 +2184,20 @@ function MarkdownViewer({
   const [text, setText] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+  const markdownArticleRef = useRef<HTMLElement | null>(null);
   const copyBlockTimerRef = useRef<number | null>(null);
+  const copiedMarkdownBlockRef = useRef<HTMLElement | null>(null);
   const status = file.artifactManifest?.status ?? 'complete';
   const isStreaming = status === 'streaming';
   const isError = status === 'error';
 
   useEffect(() => {
     setText(null);
-    setCopiedBlockId(null);
+    copiedMarkdownBlockRef.current = null;
+    if (copyBlockTimerRef.current) {
+      window.clearTimeout(copyBlockTimerRef.current);
+      copyBlockTimerRef.current = null;
+    }
     let cancelled = false;
     void fetchProjectFileText(projectId, file.name).then((next) => {
       if (!cancelled) setText(next ?? '');
@@ -2168,6 +2209,7 @@ function MarkdownViewer({
 
   useEffect(() => {
     return () => {
+      copiedMarkdownBlockRef.current = null;
       if (copyBlockTimerRef.current) {
         window.clearTimeout(copyBlockTimerRef.current);
       }
@@ -2186,8 +2228,17 @@ function MarkdownViewer({
   const html = useMemo(() => {
     if (text === null) return null;
     const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
-    return decorateMarkdownCodeBlocks(renderPartial(text), t, copiedBlockId);
-  }, [copiedBlockId, t, text]);
+    return decorateMarkdownCodeBlocks(renderPartial(text));
+  }, [text]);
+
+  useEffect(() => {
+    const article = markdownArticleRef.current;
+    if (!article) return;
+    ensureMarkdownCodeBlockControls(article, t);
+    if (copiedMarkdownBlockRef.current?.isConnected) {
+      setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, true, t);
+    }
+  }, [html, t]);
 
   async function handleMarkdownBodyClick(event: ReactMouseEvent<HTMLElement>) {
     const target = event.target;
@@ -2195,18 +2246,24 @@ function MarkdownViewer({
     const button = target.closest<HTMLButtonElement>(`button[${MARKDOWN_COPY_BLOCK_ATTR}]`);
     if (!button) return;
     const block = button.closest('.markdown-code-block');
-    const codeText = block?.querySelector('pre')?.textContent ?? '';
-    if (!codeText) return;
-    const didCopy = await copyTextToClipboard(codeText);
+    if (!(block instanceof HTMLElement)) return;
+    const pre = block.querySelector('pre');
+    if (!pre) return;
+    const didCopy = await copyTextToClipboard(pre.textContent ?? '');
     if (!didCopy) return;
-    const blockId = button.getAttribute(MARKDOWN_COPY_BLOCK_ATTR);
-    if (!blockId) return;
-    setCopiedBlockId(blockId);
+    if (copiedMarkdownBlockRef.current && copiedMarkdownBlockRef.current !== block) {
+      setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, false, t);
+    }
+    copiedMarkdownBlockRef.current = block;
+    setMarkdownCodeBlockCopiedState(block, true, t);
     if (copyBlockTimerRef.current) {
       window.clearTimeout(copyBlockTimerRef.current);
     }
     copyBlockTimerRef.current = window.setTimeout(() => {
-      setCopiedBlockId(null);
+      if (copiedMarkdownBlockRef.current) {
+        setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, false, t);
+      }
+      copiedMarkdownBlockRef.current = null;
       copyBlockTimerRef.current = null;
     }, 1800);
   }
@@ -2248,6 +2305,7 @@ function MarkdownViewer({
             {isError ? <div className="markdown-status markdown-status-error">{t('fileViewer.markdownErrorStatus')}</div> : null}
             {/* Safe by contract: renderMarkdownToSafeHtml escapes raw HTML and rejects unsafe link protocols. */}
             <article
+              ref={markdownArticleRef}
               className="markdown-rendered"
               onClick={(event) => void handleMarkdownBodyClick(event)}
               dangerouslySetInnerHTML={{ __html: html }}
