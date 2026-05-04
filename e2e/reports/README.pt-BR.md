@@ -26,8 +26,8 @@ Assim, por padrão, os relatórios e dados de teste refletem apenas a última ex
 
 Para responder rapidamente "o que foi testado e passou?", comece por:
 
-- [latest.md](/Users/mac/open-design/open-design/e2e/reports/latest.md)
-- [ui-test-report.html](/Users/mac/open-design/open-design/e2e/reports/ui-test-report.html)
+- [latest.md](latest.md)
+- [ui-test-report.html](ui-test-report.html)
 
 Eles incluem:
 

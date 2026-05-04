@@ -14,13 +14,13 @@ Assim, os specs do Playwright não viram aos poucos um amontoado de prompts hard
 
 ## Estrutura atual do diretório
 
-- [index.ts](/Users/mac/open-design/open-design/e2e/cases/index.ts): definições dos casos
-- [types.ts](/Users/mac/open-design/open-design/e2e/cases/types.ts): schema dos casos
-- [modules/project-and-generation.md](/Users/mac/open-design/open-design/e2e/cases/modules/project-and-generation.md): casos de criação de projeto e fluxo de geração
-- [modules/conversations.md](/Users/mac/open-design/open-design/e2e/cases/modules/conversations.md): casos de ciclo de vida de conversas
-- [modules/files.md](/Users/mac/open-design/open-design/e2e/cases/modules/files.md): casos de upload de arquivos, mention e restauração de preview
-- [../reports/README.pt-BR.md](/Users/mac/open-design/open-design/e2e/reports/README.pt-BR.md): documentação dos resultados e relatórios de teste
-- [../specs/app.spec.ts](/Users/mac/open-design/open-design/e2e/specs/app.spec.ts): entrypoint Playwright que executa os casos já automatizados
+- [index.ts](index.ts): definições dos casos
+- [types.ts](types.ts): schema dos casos
+- [modules/project-and-generation.md](modules/project-and-generation.md): casos de criação de projeto e fluxo de geração
+- [modules/conversations.md](modules/conversations.md): casos de ciclo de vida de conversas
+- [modules/files.md](modules/files.md): casos de upload de arquivos, mention e restauração de preview
+- [../reports/README.pt-BR.md](../reports/README.pt-BR.md): documentação dos resultados e relatórios de teste
+- [../specs/app.spec.ts](../specs/app.spec.ts): entrypoint Playwright que executa os casos já automatizados
 
 ## Sobre o schema
 
@@ -56,11 +56,11 @@ Cada caso é um `UICase`.
 
 ## Como adicionar um caso
 
-1. Acrescente um `UICase` em [index.ts](/Users/mac/open-design/open-design/e2e/cases/index.ts).
+1. Acrescente um `UICase` em [index.ts](index.ts).
 2. Descreva o cenário no documento do módulo correspondente; se ainda for só design, mantenha `automated: false`.
 3. Reutilize um `flow` existente sempre que possível.
-4. Só adicione um novo tipo em [types.ts](/Users/mac/open-design/open-design/e2e/cases/types.ts) se realmente precisar de um novo caminho de automação.
-5. Implemente o fluxo em [app.spec.ts](/Users/mac/open-design/open-design/e2e/specs/app.spec.ts).
+4. Só adicione um novo tipo em [types.ts](types.ts) se realmente precisar de um novo caminho de automação.
+5. Implemente o fluxo em [app.spec.ts](../specs/app.spec.ts).
 6. Quando o caso estiver estável, troque `automated` para `true`.
 
 ## Workflow recomendado
