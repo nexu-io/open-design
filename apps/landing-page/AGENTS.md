@@ -18,9 +18,9 @@ It is the deployable counterpart to:
 ## What it is
 
 - Astro static output. The route lives at `app/pages/index.astro` and
-  server-renders the existing React page component in `app/page.tsx`
-  without hydration, so the generated page is CDN-ready HTML/CSS plus
-  the small reveal script.
+  uses React only at build time (`renderToStaticMarkup`) for the existing
+  `app/page.tsx` component. The generated page is CDN-ready HTML/CSS plus
+  a small inline enhancement script; no React runtime ships to browsers.
 - `astro.config.ts` always uses `output: 'static'` and emits to `out/`
   so it can be served by any CDN (Vercel, Cloudflare Pages, the daemon's
   static fallback) without a Node runtime.

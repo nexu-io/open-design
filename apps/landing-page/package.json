@@ -10,7 +10,6 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "@astrojs/react": "^4.4.2",
     "@astrojs/sitemap": "^3.6.0",
     "astro": "^5.15.4",
     "react": "^18.3.1",
