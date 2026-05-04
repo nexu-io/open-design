@@ -8,6 +8,10 @@ const AGENT_LABELS: Record<string, string> = {
   cursor: 'Cursor',
   qwen: 'Qwen',
   copilot: 'Copilot',
+  'anthropic-api': 'Anthropic API',
+  'openai-api': 'OpenAI API',
+  'azure-openai-api': 'Azure OpenAI',
+  'google-gemini-api': 'Google Gemini',
 };
 
 const AGENT_ALIASES: Record<string, string> = {
@@ -35,6 +39,24 @@ export function agentDisplayName(
   return null;
 }
 
+export function exactAgentDisplayName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const key = normalizeKey(raw);
+  const alias = AGENT_ALIASES[key] ?? key;
+  return AGENT_LABELS[alias] ?? null;
+}
+
+export function agentModelDisplayName(
+  agentId?: string | null,
+  fallbackName?: string | null,
+  model?: string | null,
+): string | undefined {
+  const label = agentDisplayName(agentId, fallbackName) ?? undefined;
+  const modelId = displayableModelId(model);
+  if (!modelId) return label;
+  return label ? `${label} · ${modelId}` : modelId;
+}
+
 function knownAgentLabel(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const key = normalizeKey(raw);
@@ -53,6 +75,12 @@ function safeFallbackLabel(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed || trimmed.includes('/') || trimmed.includes('\\')) return null;
+  return trimmed;
+}
+
+function displayableModelId(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed || trimmed === 'default') return null;
   return trimmed;
 }
 

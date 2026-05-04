@@ -21,8 +21,11 @@ import {
 } from '../providers/registry';
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
-import { agentDisplayName } from '../utils/agentLabels';
-import { apiProtocolAgentId, apiProtocolLabel } from '../utils/apiProtocol';
+import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
+import {
+  apiProtocolAgentId,
+  apiProtocolModelLabel,
+} from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
@@ -782,14 +785,22 @@ export function ProjectView({
         config.mode === 'daemon' && config.agentId
           ? agentsById.get(config.agentId)
           : null;
+      const selectedAgentChoice =
+        config.mode === 'daemon' && config.agentId
+          ? config.agentModels?.[config.agentId]
+          : undefined;
       const assistantAgentId =
         config.mode === 'daemon'
           ? config.agentId ?? undefined
           : apiProtocolAgentId(config.apiProtocol);
       const assistantAgentName =
         config.mode === 'daemon'
-          ? assistantAgentDisplayName(config.agentId, selectedAgent?.name)
-          : apiProtocolLabel(config.apiProtocol);
+          ? agentModelDisplayName(
+              config.agentId,
+              selectedAgent?.name,
+              selectedAgentChoice?.model,
+            )
+          : apiProtocolModelLabel(config.apiProtocol, config.model);
       const assistantId = crypto.randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
@@ -1004,7 +1015,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
-        const choice = config.agentModels?.[config.agentId];
+        const choice = selectedAgentChoice;
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,

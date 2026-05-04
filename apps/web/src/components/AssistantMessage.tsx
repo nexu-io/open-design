@@ -8,7 +8,7 @@ import { Icon } from './Icon';
 import { useT } from '../i18n';
 import { unfinishedTodosFromEvents, type TodoItem } from '../runtime/todos';
 import type { Dict } from '../i18n/types';
-import { agentDisplayName } from '../utils/agentLabels';
+import { agentDisplayName, exactAgentDisplayName } from '../utils/agentLabels';
 import { exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import type { AgentEvent, ChatMessage, ProjectFile } from '../types';
 
@@ -150,13 +150,30 @@ function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn
   );
 }
 
-function assistantRoleLabel(message: ChatMessage, t: TranslateFn): string {
-  const fromMetadata = agentDisplayName(message.agentId, message.agentName);
-  if (fromMetadata) return fromMetadata;
+export function assistantRoleLabel(message: ChatMessage, t: TranslateFn): string {
+  const model = assistantModelDetail(message);
+  const fromName = message.agentName?.trim();
+  if (fromName) return appendRoleModel(exactAgentDisplayName(fromName) ?? fromName, model);
+  const fromId = agentDisplayName(message.agentId);
+  if (fromId) return appendRoleModel(fromId, model);
   const starting = message.events?.find(
     (e) => e.kind === 'status' && e.label === 'starting' && e.detail,
   ) as Extract<AgentEvent, { kind: 'status' }> | undefined;
-  return agentDisplayName(starting?.detail) ?? t('assistant.role');
+  return appendRoleModel(agentDisplayName(starting?.detail) ?? t('assistant.role'), model);
+}
+
+function assistantModelDetail(message: ChatMessage): string | null {
+  const initializing = message.events?.find(
+    (e) => e.kind === 'status' && e.label === 'initializing' && e.detail,
+  ) as Extract<AgentEvent, { kind: 'status' }> | undefined;
+  const detail = initializing?.detail?.trim();
+  if (!detail || detail === 'default') return null;
+  return detail;
+}
+
+function appendRoleModel(label: string, model: string | null): string {
+  if (!model || label.includes(' · ')) return label;
+  return `${label} · ${model}`;
 }
 
 function AssistantFooter({

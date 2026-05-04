@@ -25,7 +25,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -687,14 +687,14 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 - **加一套 design system** —— 往 [`design-systems/<brand>/`](design-systems/) 丢一份 `DESIGN.md`，用 9 段式 schema。
 - **接入一个新的 coding-agent CLI** —— 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一项。
 
-完整流程、合并硬线、代码风格、我们不接收的 PR 类型 → [`CONTRIBUTING.zh-CN.md`](CONTRIBUTING.zh-CN.md)（[English](CONTRIBUTING.md)，[Deutsch](CONTRIBUTING.de.md)）。
+完整流程、合并硬线、代码风格、我们不接收的 PR 类型 → [`CONTRIBUTING.zh-CN.md`](CONTRIBUTING.zh-CN.md)（[English](CONTRIBUTING.md)，[Deutsch](CONTRIBUTING.de.md)，[Français](CONTRIBUTING.fr.md)）。
 
 ## 贡献者墙
 
 感谢每一位让 Open Design 变得更好的朋友 —— 无论是写代码、修文档、提 issue、加 skill 还是加 design system，每一次真实贡献都会被记住。下面这面墙是最直观的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-03" alt="Open Design 贡献者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-04" alt="Open Design 贡献者" />
 </a>
 
 第一次提 PR？欢迎从 [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) 标签起步。
@@ -711,9 +711,9 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-03" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-03" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-03" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
   </picture>
 </a>
 
