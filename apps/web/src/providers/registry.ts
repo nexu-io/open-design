@@ -24,13 +24,17 @@ import type {
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
 
-export async function fetchAgents(): Promise<AgentInfo[]> {
+export async function fetchAgents(options?: { throwOnError?: boolean }): Promise<AgentInfo[]> {
   try {
     const resp = await fetch('/api/agents');
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      if (options?.throwOnError) throw new Error(`agents ${resp.status}`);
+      return [];
+    }
     const json = (await resp.json()) as { agents: AgentInfo[] };
     return json.agents ?? [];
-  } catch {
+  } catch (err) {
+    if (options?.throwOnError) throw err;
     return [];
   }
 }

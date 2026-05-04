@@ -1,19 +1,27 @@
 // @ts-nocheck
 import { afterEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_DEFS, resolveAgentExecutable } from '../src/agents.js';
+import {
+  AGENT_DEFS,
+  resolveAgentExecutable,
+  spawnEnvForAgent,
+} from '../src/agents.js';
 
 const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
+const copilot = AGENT_DEFS.find((agent) => agent.id === 'copilot');
 const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
+const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
 const gemini = AGENT_DEFS.find((agent) => agent.id === 'gemini');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
+const originalHome = process.env.HOME;
+const originalAgentHome = process.env.OD_AGENT_HOME;
 
 afterEach(() => {
   if (originalDisablePlugins == null) {
@@ -22,6 +30,16 @@ afterEach(() => {
     process.env.OD_CODEX_DISABLE_PLUGINS = originalDisablePlugins;
   }
   process.env.PATH = originalPath;
+  if (originalHome == null) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
+  if (originalAgentHome == null) {
+    delete process.env.OD_AGENT_HOME;
+  } else {
+    process.env.OD_AGENT_HOME = originalAgentHome;
+  }
 });
 
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
@@ -93,6 +111,61 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
     '--workspace',
     '/tmp/od-project',
   ]);
+});
+
+// `-p -` puts Copilot in prompt mode and tells it to read the body from
+// stdin. Without this pair the daemon writes the prompt to the child's
+// stdin pipe (because `promptViaStdin: true`) but Copilot stays
+// interactive, ignores stdin, and rejects the run with
+// `error: too many arguments. Expected 0 arguments but got N`. Pin the
+// pair as the leading argv elements so the regression in #350 can't
+// drift back. Also pin the order — Copilot expects `-p` before any other
+// flag, including model / add-dir extensions.
+test('copilot args lead with `-p -` so the stdin prompt is actually consumed (regression of #350)', () => {
+  const baseArgs = copilot.buildArgs('', [], [], {});
+  assert.equal(baseArgs[0], '-p');
+  assert.equal(baseArgs[1], '-');
+  assert.deepEqual(baseArgs, [
+    '-p',
+    '-',
+    '--allow-all-tools',
+    '--output-format',
+    'json',
+  ]);
+});
+
+test('copilot args keep `-p -` at the front when model and extra dirs are added', () => {
+  const args = copilot.buildArgs(
+    '',
+    [],
+    ['/tmp/od-skills', '/tmp/od-design-systems'],
+    { model: 'claude-sonnet-4.6' },
+  );
+  assert.equal(args[0], '-p');
+  assert.equal(args[1], '-');
+  assert.deepEqual(args, [
+    '-p',
+    '-',
+    '--allow-all-tools',
+    '--output-format',
+    'json',
+    '--model',
+    'claude-sonnet-4.6',
+    '--add-dir',
+    '/tmp/od-skills',
+    '--add-dir',
+    '/tmp/od-design-systems',
+  ]);
+});
+
+test('copilot drops empty / non-string entries from extraAllowedDirs without breaking the `-p -` lead', () => {
+  const args = copilot.buildArgs('', [], ['', null, '/tmp/od-skills', undefined], {});
+  assert.equal(args[0], '-p');
+  assert.equal(args[1], '-');
+  // Only the one valid path survives.
+  const addDirIndex = args.indexOf('--add-dir');
+  assert.equal(args[addDirIndex + 1], '/tmp/od-skills');
+  assert.equal(args.filter((a) => a === '--add-dir').length, 1);
 });
 
 test('kiro args use acp subcommand for json-rpc streaming', () => {
@@ -253,6 +326,7 @@ fsTest('resolveAgentExecutable prefers def.bin over fallbackBins when bin is on 
     writeFileSync(join(dir, 'openclaude'), '');
     chmodSync(join(dir, 'claude'), 0o755);
     chmodSync(join(dir, 'openclaude'), 0o755);
+    process.env.OD_AGENT_HOME = dir;
     process.env.PATH = dir;
 
     const resolved = resolveAgentExecutable({
@@ -271,6 +345,7 @@ fsTest('resolveAgentExecutable falls back through fallbackBins when def.bin is m
     // Only `openclaude` is installed (Claude Code fork-only setup).
     writeFileSync(join(dir, 'openclaude'), '');
     chmodSync(join(dir, 'openclaude'), 0o755);
+    process.env.OD_AGENT_HOME = dir;
     process.env.PATH = dir;
 
     const resolved = resolveAgentExecutable({
@@ -286,6 +361,7 @@ fsTest('resolveAgentExecutable falls back through fallbackBins when def.bin is m
 fsTest('resolveAgentExecutable returns null when neither def.bin nor any fallback is on PATH', () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
   try {
+    process.env.OD_AGENT_HOME = dir;
     process.env.PATH = dir;
 
     const resolved = resolveAgentExecutable({
@@ -295,6 +371,25 @@ fsTest('resolveAgentExecutable returns null when neither def.bin nor any fallbac
     assert.equal(resolved, null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable searches mise node bins when PATH is minimal', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-agents-home-'));
+  try {
+    const dir = join(home, '.local', 'share', 'mise', 'installs', 'node', '24.14.1', 'bin');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'codex'), '');
+    chmodSync(join(dir, 'codex'), 0o755);
+    process.env.OD_AGENT_HOME = home;
+    process.env.PATH = '/usr/bin:/bin';
+
+    const resolved = resolveAgentExecutable({
+      bin: 'codex',
+    });
+    assert.equal(resolved, join(dir, 'codex'));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
@@ -313,4 +408,76 @@ fsTest('resolveAgentExecutable still resolves agents without a fallbackBins fiel
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('vibe args use empty array for acp-json-rpc streaming', () => {
+  const args = vibe.buildArgs('', [], [], {});
+
+  assert.deepEqual(args, []);
+  assert.equal(vibe.streamFormat, 'acp-json-rpc');
+});
+
+test('vibe fetchModels falls back to fallbackModels when detection fails', async () => {
+  // fetchModels rejects when the binary doesn't exist; the daemon's
+  // probe() catches this and uses fallbackModels instead.
+  const result = await vibe.fetchModels('/nonexistent/vibe-acp').catch(() => null);
+
+  assert.equal(result, null);
+  assert.ok(Array.isArray(vibe.fallbackModels));
+  assert.equal(vibe.fallbackModels[0].id, 'default');
+});
+
+// Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
+// credentials, silently billing API usage. Strip it for the claude
+// adapter so the user's subscription wins.
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY for the claude adapter', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-leak',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+});
+
+// Windows env-var names are case-insensitive at the kernel level, but
+// spreading process.env into a plain object loses Node's case-insensitive
+// accessor — a `Anthropic_Api_Key` key would survive a literal
+// `delete env.ANTHROPIC_API_KEY` and still reach Claude Code on Windows.
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY case-insensitively for the claude adapter', () => {
+  const env = spawnEnvForAgent('claude', {
+    Anthropic_Api_Key: 'sk-mixed-case',
+    anthropic_api_key: 'sk-lower-case',
+    PATH: '/usr/bin',
+  });
+
+  const remaining = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY',
+  );
+  assert.deepEqual(remaining, []);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () => {
+  for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
+    const env = spawnEnvForAgent(agentId, {
+      ANTHROPIC_API_KEY: 'sk-keep',
+      PATH: '/usr/bin',
+    });
+    assert.equal(
+      env.ANTHROPIC_API_KEY,
+      'sk-keep',
+      `expected ${agentId} to preserve ANTHROPIC_API_KEY`,
+    );
+  }
+});
+
+test('spawnEnvForAgent does not mutate the input env', () => {
+  const original = { ANTHROPIC_API_KEY: 'sk-leak', PATH: '/usr/bin' };
+  const env = spawnEnvForAgent('claude', original);
+
+  assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
+  assert.notEqual(env, original);
 });

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -29,10 +29,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "@open-design/contracts": "workspace:0.2.0",
-    "@open-design/platform": "workspace:0.2.0",
-    "@open-design/sidecar": "workspace:0.2.0",
-    "@open-design/sidecar-proto": "workspace:0.2.0",
+    "@open-design/contracts": "workspace:0.3.0",
+    "@open-design/platform": "workspace:0.3.0",
+    "@open-design/sidecar": "workspace:0.3.0",
+    "@open-design/sidecar-proto": "workspace:0.3.0",
     "next": "^16.2.4",
     "openai": "^6.35.0",
     "react": "^18.3.1",

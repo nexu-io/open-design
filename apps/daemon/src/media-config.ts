@@ -7,6 +7,28 @@
 // stored values so power users can keep keys out of the workspace
 // folder altogether (`OD_OPENAI_API_KEY=… node daemon/cli.js`).
 //
+// Storage location (precedence high → low):
+//   1. OD_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
+//   2. OD_DATA_DIR=DIR           → <DIR>/media-config.json
+//   3. (default)                 → <projectRoot>/.od/media-config.json
+// The default is unchanged for workspace-local installs. (1) lets a
+// supervisor relocate just the credentials file. (2) means installs
+// that already set OD_DATA_DIR for the rest of the daemon's runtime
+// state (Nix-store / immutable-image installs, the packaged daemon at
+// apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
+// the Home Manager / NixOS modules) get media-config there too without
+// any extra plumbing. Both env values are resolved with the same
+// semantics as OD_DATA_DIR in server.ts:resolveDataDir() — `~/` expands
+// to the user's home, and relative paths anchor to <projectRoot> (NOT
+// process.cwd, which is unrelated to the workspace when systemd or
+// launchd starts the daemon).
+//
+// Migration note: a workspace install that sets a custom OD_DATA_DIR
+// AND has a pre-existing `<projectRoot>/.od/media-config.json` will
+// start reading from `<OD_DATA_DIR>/media-config.json` instead. Move
+// the file once or set OD_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
+// the old location.
+//
 // The file is intentionally simple JSON — no encryption, no schema
 // versioning yet. The daemon listens on 127.0.0.1 only and the workspace
 // is already trusted, so adding a vault here would mostly be theatre.
@@ -14,6 +36,7 @@
 // echo secrets back into the DOM.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
 
@@ -50,8 +73,38 @@ const ENV_KEYS = {
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
 };
 
+// Resolve an `OD_*_DIR` env override using the same semantics as
+// `resolveDataDir()` in server.ts: leading `~/` expands to the user's
+// home, and relative paths anchor to <projectRoot> (NOT process.cwd —
+// the daemon is often launched from a directory that has nothing to do
+// with the workspace, e.g. systemd's `/`). The writability check that
+// resolveDataDir does on startup is intentionally NOT replicated here:
+// configFile() is on the read path and a missing/unwritable directory
+// is a normal "no config yet" condition handled by readStored(); the
+// write path's mkdir(recursive) creates the directory on first use.
+function resolveOverrideDir(raw, projectRoot) {
+  const expanded = raw.startsWith('~/')
+    ? path.join(homedir(), raw.slice(2))
+    : raw;
+  return path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(projectRoot, expanded);
+}
+
+function envOverrideDir(envName, projectRoot) {
+  const raw = process.env[envName];
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed ? resolveOverrideDir(trimmed, projectRoot) : null;
+}
+
 function configFile(projectRoot) {
-  return path.join(projectRoot, '.od', 'media-config.json');
+  // Precedence: explicit media-config override > general data dir > default.
+  const dir =
+    envOverrideDir('OD_MEDIA_CONFIG_DIR', projectRoot)
+    ?? envOverrideDir('OD_DATA_DIR', projectRoot)
+    ?? path.join(projectRoot, '.od');
+  return path.join(dir, 'media-config.json');
 }
 
 async function readStored(projectRoot) {
@@ -84,16 +137,96 @@ function readEnvKey(providerId) {
   return null;
 }
 
+function readNestedString(obj, keys) {
+  let cur = obj;
+  for (const key of keys) {
+    if (!cur || typeof cur !== 'object') return '';
+    cur = cur[key];
+  }
+  return typeof cur === 'string' && cur.trim() ? cur.trim() : '';
+}
+
+async function readJsonIfPresent(file) {
+  try {
+    const raw = await readFile(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    // Auth files are best-effort fallbacks. A malformed local auth cache
+    // should not break the Settings page or hide stored provider config.
+    return null;
+  }
+}
+
+function tokenFromHermesAuth(data) {
+  const providerToken = readNestedString(data, [
+    'providers',
+    'openai-codex',
+    'tokens',
+    'access_token',
+  ]);
+  if (providerToken) return providerToken;
+
+  const pool =
+    data && typeof data === 'object'
+      ? data.credential_pool && data.credential_pool['openai-codex']
+      : null;
+  if (Array.isArray(pool)) {
+    for (const item of pool) {
+      const token = readNestedString(item, ['access_token']);
+      if (token) return token;
+    }
+  }
+  return '';
+}
+
+function tokenFromCodexAuth(data) {
+  const oauthToken = readNestedString(data, ['tokens', 'access_token']);
+  if (oauthToken) return { token: oauthToken, source: 'oauth-codex' };
+
+  const apiKey = readNestedString(data, ['OPENAI_API_KEY']);
+  if (apiKey) return { token: apiKey, source: 'codex-auth' };
+
+  return null;
+}
+
+async function resolveOpenAIOAuthCredential() {
+  const home = homedir();
+  const hermesAuth = await readJsonIfPresent(
+    path.join(home, '.hermes', 'auth.json'),
+  );
+  const hermesToken = tokenFromHermesAuth(hermesAuth);
+  if (hermesToken) {
+    return { apiKey: hermesToken, source: 'oauth-hermes' };
+  }
+
+  const codexAuth = await readJsonIfPresent(
+    path.join(home, '.codex', 'auth.json'),
+  );
+  const codexToken = tokenFromCodexAuth(codexAuth);
+  if (codexToken) {
+    return { apiKey: codexToken.token, source: codexToken.source };
+  }
+
+  return null;
+}
+
 /**
- * Resolve credentials for a provider. Env vars win, then stored config.
+ * Resolve credentials for a provider. Env vars win, then stored config,
+ * then OpenAI/Codex OAuth for the OpenAI media provider.
  * Returns { apiKey, baseUrl } where either may be empty string.
  */
 export async function resolveProviderConfig(projectRoot, providerId) {
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
+  const oauth =
+    providerId === 'openai' && !envKey && !entry.apiKey
+      ? await resolveOpenAIOAuthCredential()
+      : null;
   return {
-    apiKey: envKey || entry.apiKey || '',
+    apiKey: envKey || entry.apiKey || oauth?.apiKey || '',
     baseUrl: entry.baseUrl || '',
   };
 }
@@ -110,12 +243,16 @@ export async function readMaskedConfig(projectRoot) {
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
     const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
+    const oauth =
+      id === 'openai' && !envKey && !hasStoredKey
+        ? await resolveOpenAIOAuthCredential()
+        : null;
     providers[id] = {
-      configured: Boolean(envKey || hasStoredKey),
-      source: envKey ? 'env' : hasStoredKey ? 'stored' : 'unset',
+      configured: Boolean(envKey || hasStoredKey || oauth?.apiKey),
+      source: envKey ? 'env' : hasStoredKey ? 'stored' : oauth?.source || 'unset',
       // Show last 4 chars only when stored locally; never echo env-var
-      // secrets so power users who only export ENV don't accidentally
-      // see them in the DOM.
+      // or OAuth secrets so power users don't accidentally see them in
+      // the DOM.
       apiKeyTail: hasStoredKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
     };

@@ -15,6 +15,7 @@ import {
   isKnownModel,
   resolveAgentBin,
   sanitizeCustomModel,
+  spawnEnvForAgent,
 } from './agents.js';
 import { listSkills } from './skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
@@ -33,6 +34,7 @@ import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
+import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -51,6 +53,7 @@ import {
   deleteProjectFile,
   ensureProject,
   listFiles,
+  mimeFor,
   projectDir,
   readProjectFile,
   removeProjectDir,
@@ -312,9 +315,26 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
   'prompt-templates',
   path.join(PROJECT_ROOT, 'prompt-templates'),
 );
-const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
-  ? path.resolve(PROJECT_ROOT, process.env.OD_DATA_DIR)
-  : path.join(PROJECT_ROOT, '.od');
+export function resolveDataDir(raw, projectRoot) {
+  if (!raw) return path.join(projectRoot, '.od');
+  const expanded = raw.startsWith('~/')
+    ? path.join(os.homedir(), raw.slice(2))
+    : raw;
+  const resolved = path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(projectRoot, expanded);
+  try {
+    fs.mkdirSync(resolved, { recursive: true });
+    fs.accessSync(resolved, fs.constants.W_OK);
+  } catch (err) {
+    const e = err;
+    throw new Error(
+      `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+    );
+  }
+  return resolved;
+}
+const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
@@ -609,10 +629,66 @@ export function createSseResponse(
   };
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '0.0.0.0', returnServer = false } = {}) {
+export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
   let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
+
+  // Build the set of allowed browser origins for the current bind config.
+  // Shared by the global origin middleware and isLocalSameOrigin() so
+  // both use the same policy (loopback + explicit bind host, HTTP + HTTPS,
+  // OD_WEB_PORT support).
+  function buildAllowedOrigins() {
+    const ports = [resolvedPort];
+    const webPort = Number(process.env.OD_WEB_PORT);
+    if (webPort && webPort !== resolvedPort) ports.push(webPort);
+    const schemes = ['http', 'https'];
+    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
+    return new Set(
+      ports.flatMap((p) => [
+        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+        // When bound to a specific non-loopback address (e.g. Tailscale,
+        // LAN IP, or 0.0.0.0), allow browser requests from that address
+        // too so the documented --host escape hatch remains usable.
+        ...schemes.map((s) => `${s}://${host}:${p}`),
+      ]),
+    );
+  }
+
+  // Routes that serve content to sandboxed iframes (Origin: null) for
+  // read-only purposes.  All other /api routes reject Origin: null.
+  const _NULL_ORIGIN_SAFE_GET_RE =
+    /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+
+  // Reject cross-origin requests to API endpoints.
+  // Health/version remain open for monitoring probes.
+  // Non-browser clients (no Origin header) are always allowed.
+  app.use('/api', (req, res, next) => {
+    const origin = req.headers.origin;
+    // Non-browser client → allow.
+    if (origin == null || origin === '') return next();
+
+    // Origin: null (sandboxed iframes).  Only allowed for safe, read-only
+    // routes that set their own CORS headers for canvas drawing.
+    if (origin === 'null') {
+      const isSafeReadOnly =
+        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
+      if (!isSafeReadOnly) {
+        return res.status(403).json({ error: 'Origin: null not allowed for this route' });
+      }
+      return next();
+    }
+
+    // Fail-closed: block all browser origins until port is resolved.
+    if (!resolvedPort) {
+      return res.status(403).json({ error: 'Server initializing' });
+    }
+
+    if (!buildAllowedOrigins().has(String(origin))) {
+      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+    }
+    next();
+  });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
@@ -1311,7 +1387,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
       const baked = path.join(skill.dir, 'example.html');
       if (fs.existsSync(baked)) {
-        return res.type('text/html').sendFile(baked);
+        const html = await fs.promises.readFile(baked, 'utf8');
+        return res
+          .type('text/html')
+          .send(rewriteSkillAssetUrls(html, skill.id));
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -1321,17 +1400,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           const tplHtml = await fs.promises.readFile(tpl, 'utf8');
           const slidesHtml = await fs.promises.readFile(slides, 'utf8');
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
-          return res.type('text/html').send(assembled);
+          return res
+            .type('text/html')
+            .send(rewriteSkillAssetUrls(assembled, skill.id));
         } catch {
           // Fall through to raw template on read failure.
         }
       }
       if (fs.existsSync(tpl)) {
-        return res.type('text/html').sendFile(tpl);
+        const html = await fs.promises.readFile(tpl, 'utf8');
+        return res
+          .type('text/html')
+          .send(rewriteSkillAssetUrls(html, skill.id));
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
-        return res.type('text/html').sendFile(idx);
+        const html = await fs.promises.readFile(idx, 'utf8');
+        return res
+          .type('text/html')
+          .send(rewriteSkillAssetUrls(html, skill.id));
       }
       res
         .status(404)
@@ -1339,6 +1426,41 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         .send(
           'no example.html, assets/template.html, or assets/index.html for this skill',
         );
+    } catch (err) {
+      res.status(500).type('text/plain').send(String(err));
+    }
+  });
+
+  // Static assets shipped beside a skill's example/template HTML. Lets the
+  // example HTML reference `./assets/foo.png`-style paths that resolve
+  // correctly when the response is loaded into a sandboxed `srcdoc` iframe
+  // (where relative URLs would otherwise resolve against `about:srcdoc`).
+  // The example response above rewrites `./assets/<file>` into a request
+  // against this route; we still keep the on-disk paths human-friendly so
+  // contributors can preview `example.html` straight from disk.
+  app.get('/api/skills/:id/assets/*', async (req, res) => {
+    try {
+      const skills = await listSkills(SKILLS_DIR);
+      const skill = skills.find((s) => s.id === req.params.id);
+      if (!skill) {
+        return res.status(404).type('text/plain').send('skill not found');
+      }
+      const relPath = String(req.params[0] || '');
+      const assetsRoot = path.resolve(skill.dir, 'assets');
+      const target = path.resolve(assetsRoot, relPath);
+      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
+        return res.status(400).type('text/plain').send('invalid asset path');
+      }
+      if (!fs.existsSync(target)) {
+        return res.status(404).type('text/plain').send('asset not found');
+      }
+      // The example HTML is rendered inside a sandboxed iframe (Origin: null).
+      // Mirror the project /raw route's allowance so the iframe can fetch the
+      // image bytes; same-origin web callers do not need this header.
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+      res.type(mimeFor(target)).sendFile(target);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -1708,12 +1830,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/projects/:id/files/:name', async (req, res) => {
+  app.get('/api/projects/:id/files/*', async (req, res) => {
     try {
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
-        req.params.name,
+        req.params[0],
       );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
@@ -2107,6 +2229,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let skillName;
     let skillMode;
     let skillCraftRequires = [];
+    let activeSkillDir = null;
     if (effectiveSkillId) {
       const skill = (await listSkills(SKILLS_DIR)).find(
         (s) => s.id === effectiveSkillId,
@@ -2115,6 +2238,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillBody = skill.body;
         skillName = skill.name;
         skillMode = skill.mode;
+        activeSkillDir = skill.dir;
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
       }
@@ -2146,7 +2270,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
-    return composeSystemPrompt({
+    const prompt = composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
@@ -2157,6 +2281,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       metadata,
       template,
     });
+    // The chat handler also needs to know where the active skill lives
+    // on disk so it can stage a per-project copy of its side files
+    // before spawning the agent. Returning that here avoids a second
+    // `listSkills()` scan in `startChatRun`.
+    return { prompt, activeSkillDir };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -2270,11 +2399,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const daemonSystemPrompt = await composeDaemonSystemPrompt({
-      projectId,
-      skillId,
-      designSystemId,
-    });
+    const { prompt: daemonSystemPrompt, activeSkillDir } =
+      await composeDaemonSystemPrompt({
+        projectId,
+        skillId,
+        designSystemId,
+      });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -2291,13 +2421,51 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : '',
     ].join('');
 
-    // Skill seeds (`skills/<id>/assets/template.html`) and design-system
-    // specs (`design-systems/<id>/DESIGN.md`) live outside the project cwd.
-    // The composed system prompt asks the agent to Read them via absolute
-    // paths in the skill-root preamble — without an explicit allowlist,
-    // Claude Code blocks those reads (issue #6: "no permission to read
-    // skills template"). We surface both roots so any agent that honours
-    // `--add-dir` can resolve those side files.
+    // Make skill side files reachable through three layers, in order of
+    // preference. The skill preamble emitted by `withSkillRootPreamble()`
+    // advertises both the cwd-relative path (1) and the absolute path
+    // (2/3) so the agent can pick whichever works.
+    //
+    //   1. CWD-relative copy. Stage the *active* skill into
+    //      `<cwd>/.od-skills/<folder>/` so any agent CLI — not just the
+    //      ones that honour `--add-dir` — can reach those files via a
+    //      path inside its working directory. We copy (not symlink) so
+    //      the staged directory is a true write barrier — agents cannot
+    //      mutate the shipped repo resource through their cwd.
+    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
+    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
+    //      path in the preamble is reachable when staging fails (e.g. the
+    //      project has no on-disk cwd, or fs.cp errored).
+    //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
+    //      `cwd: PROJECT_ROOT` — there the absolute path is already an
+    //      in-cwd path, so neither (1) nor (2) is required for it to
+    //      resolve.
+    //
+    // Design systems are *not* staged here. Their bodies are read by the
+    // daemon and folded into the system prompt directly (see
+    // `readDesignSystem`), so an agent never has to open them via the
+    // filesystem.
+    if (cwd && activeSkillDir) {
+      const result = await stageActiveSkill(
+        cwd,
+        path.basename(activeSkillDir),
+        activeSkillDir,
+        (msg) => console.warn(msg),
+      );
+      if (!result.staged) {
+        console.warn(
+          `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+        );
+      }
+    }
+    // Resolve the agent's effective working directory once and use it
+    // everywhere the agent could read it (buildArgs runtimeContext, spawn
+    // cwd, ACP session new). Falling back to PROJECT_ROOT — rather than
+    // letting `spawn` inherit the daemon process cwd — is what makes the
+    // absolute-path fallback in the skill preamble actually in-cwd for
+    // no-project runs (packaged daemons / service launches do not start
+    // their working directory from the workspace root).
+    const effectiveCwd = cwd ?? PROJECT_ROOT;
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
       fs.existsSync(d),
     );
@@ -2343,7 +2511,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd },
+      { cwd: effectiveCwd },
     );
     const send = (event, data) => design.runs.emit(run, event, data);
 
@@ -2391,7 +2559,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
-        cwd: cwd || undefined,
+        cwd: effectiveCwd,
         shell: false,
         // Required when invocation wraps a Windows .cmd/.bat shim through
         // cmd.exe; without this, Node re-escapes the inner command line and
@@ -2448,7 +2616,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
-        cwd: cwd || PROJECT_ROOT,
+        cwd: effectiveCwd,
         model: safeModel,
         send,
       });
@@ -2456,7 +2624,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       acpSession = attachAcpSession({
         child,
         prompt: composed,
-        cwd: cwd || PROJECT_ROOT,
+        cwd: effectiveCwd,
         model: safeModel,
         send,
       });
@@ -2553,16 +2721,146 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return { error: 'Only http/https allowed' };
     }
+    const hostname = parsed.hostname.toLowerCase();
+    const isLoopback =
+      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
     if (
-      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
-      parsed.hostname.startsWith('169.254.') ||
-      parsed.hostname.startsWith('10.') ||
-      /^192\.168\./.test(parsed.hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)
+      !isLoopback &&
+      (hostname.startsWith('169.254.') ||
+        hostname.startsWith('10.') ||
+        /^192\.168\./.test(hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
     ) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }
     return { parsed };
+  };
+
+  const proxyErrorCode = (status) => {
+    if (status === 401) return 'UNAUTHORIZED';
+    if (status === 403) return 'FORBIDDEN';
+    if (status === 404) return 'NOT_FOUND';
+    if (status === 429) return 'RATE_LIMITED';
+    return 'UPSTREAM_UNAVAILABLE';
+  };
+
+  const sendProxyError = (sse, message, init = {}) => {
+    sse.send('error', {
+      message,
+      error: {
+        code: init.code || 'UPSTREAM_UNAVAILABLE',
+        message,
+        ...(init.details === undefined ? {} : { details: init.details }),
+        ...(init.retryable === undefined ? {} : { retryable: init.retryable }),
+      },
+    });
+  };
+
+  const appendVersionedApiPath = (baseUrl, path) => {
+    const url = new URL(baseUrl);
+    const pathname = url.pathname.replace(/\/+$/, '');
+    url.pathname = /\/v\d+$/.test(pathname)
+      ? `${pathname}${path}`
+      : `${pathname}/v1${path}`;
+    return url.toString();
+  };
+
+  const collectSseFrame = (frame) => {
+    const lines = frame.replace(/\r/g, '').split('\n');
+    const dataLines = [];
+    let event = 'message';
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        event = line.slice(6).trim();
+        continue;
+      }
+      if (!line.startsWith('data:')) continue;
+      let value = line.slice(5);
+      if (value.startsWith(' ')) value = value.slice(1);
+      dataLines.push(value);
+    }
+    const payload = dataLines.join('\n');
+    if (!payload) return { event, payload: '', data: null };
+    if (payload === '[DONE]') return { event, payload, data: null };
+    try {
+      return { event, payload, data: JSON.parse(payload) };
+    } catch {
+      return { event, payload, data: null };
+    }
+  };
+
+  const streamUpstreamSse = async (response, onFrame) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      while (true) {
+        const match = buffer.match(/\r?\n\r?\n/);
+        if (!match || match.index === undefined) break;
+        const frame = buffer.slice(0, match.index);
+        buffer = buffer.slice(match.index + match[0].length);
+        if (await onFrame(collectSseFrame(frame))) return;
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) await onFrame(collectSseFrame(tail));
+  };
+
+  const extractOpenAIText = (data) => {
+    const choices = data?.choices;
+    if (!Array.isArray(choices) || choices.length === 0) return '';
+    const first = choices[0];
+    if (typeof first?.delta?.content === 'string') return first.delta.content;
+    if (typeof first?.text === 'string') return first.text;
+    return '';
+  };
+
+  const extractStreamErrorMessage = (data) => {
+    const err = data?.error;
+    if (!err) return '';
+    if (typeof err === 'string') return err;
+    if (typeof err?.message === 'string') return err.message;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return 'unspecified provider error';
+    }
+  };
+
+  const extractGeminiText = (data) => {
+    const candidates = data?.candidates;
+    if (!Array.isArray(candidates) || candidates.length === 0) return '';
+    const parts = candidates[0]?.content?.parts;
+    if (!Array.isArray(parts)) return '';
+    return parts.map((part) => part?.text).filter((text) => typeof text === 'string').join('');
+  };
+
+  const benignGeminiFinishReasons = new Set(['', 'STOP', 'MAX_TOKENS', 'FINISH_REASON_UNSPECIFIED']);
+  const extractGeminiBlockMessage = (data) => {
+    const feedback = data?.promptFeedback;
+    if (typeof feedback?.blockReason === 'string' && feedback.blockReason) {
+      const tail = typeof feedback.blockReasonMessage === 'string' && feedback.blockReasonMessage
+        ? ` — ${feedback.blockReasonMessage}`
+        : '';
+      return `Gemini blocked the prompt (${feedback.blockReason})${tail}.`;
+    }
+    const candidates = data?.candidates;
+    if (!Array.isArray(candidates)) return '';
+    for (const candidate of candidates) {
+      const reason = candidate?.finishReason;
+      if (typeof reason !== 'string' || benignGeminiFinishReasons.has(reason)) continue;
+      const tail = typeof candidate?.finishMessage === 'string' && candidate.finishMessage
+        ? ` — ${candidate.finishMessage}`
+        : '';
+      return `Gemini stopped the response (${reason})${tail}.`;
+    }
+    return '';
   };
 
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
@@ -2589,10 +2887,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
     }
 
-    const clean = baseUrl.replace(/\/+$/, '');
-    const url = /\/v\d+$/.test(clean)
-      ? `${clean}/messages`
-      : `${clean}/v1/messages`;
+    const url = appendVersionedApiPath(baseUrl, '/messages');
     console.log(
       `[proxy:anthropic] ${req.method} ${validated.parsed.hostname} model=${model}`,
     );
@@ -2609,6 +2904,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const sse = createSseResponse(res);
+    sse.send('start', { model });
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -2625,43 +2921,38 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         console.error(
           `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
         );
-        sse.send('error', {
-          message: `Upstream error: ${response.status}`,
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
           details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
         });
         return sse.end();
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            const event = line.slice(7).trim();
-            const dataLine = lines[lines.indexOf(line) + 1];
-            if (dataLine && dataLine.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(dataLine.slice(6));
-                sse.send(event, data);
-              } catch (e) {
-                // ignore parse errors for partial chunks
-              }
-            }
-          }
+      let ended = false;
+      await streamUpstreamSse(response, ({ event, data }) => {
+        if (!data) return false;
+        if (event === 'error' || data.type === 'error') {
+          const message = data.error?.message || data.message || 'Anthropic upstream error';
+          sendProxyError(sse, message, { details: data });
+          ended = true;
+          return true;
         }
-      }
+        if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
+          sse.send('delta', { delta: data.delta.text });
+        }
+        if (event === 'message_stop') {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
       sse.end();
     } catch (err) {
       console.error(`[proxy:anthropic] internal error: ${err.message}`);
-      sse.send('error', { message: err.message });
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
     }
   });
@@ -2690,10 +2981,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
     }
 
-    const clean = baseUrl.replace(/\/+$/, '');
-    const url = /\/v\d+$/.test(clean)
-      ? `${clean}/chat/completions`
-      : `${clean}/v1/chat/completions`;
+    const url = appendVersionedApiPath(baseUrl, '/chat/completions');
     console.log(
       `[proxy:openai] ${req.method} ${validated.parsed.hostname} model=${model}`,
     );
@@ -2712,6 +3000,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
 
     const sse = createSseResponse(res);
+    sse.send('start', { model });
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -2727,41 +3016,234 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         console.error(
           `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
         );
-        sse.send('error', {
-          message: `Upstream error: ${response.status}`,
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
           details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
         });
         return sse.end();
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr === '[DONE]') break;
-            try {
-              const data = JSON.parse(dataStr);
-              sse.send('message', data);
-            } catch (e) {
-              // ignore parse errors for partial chunks
-            }
-          }
+      let ended = false;
+      await streamUpstreamSse(response, ({ payload, data }) => {
+        if (payload === '[DONE]') {
+          sse.send('end', {});
+          ended = true;
+          return true;
         }
-      }
+        if (!data) return false;
+        const streamError = extractStreamErrorMessage(data);
+        if (streamError) {
+          sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
+          ended = true;
+          return true;
+        }
+        const delta = extractOpenAIText(data);
+        if (delta) sse.send('delta', { delta });
+        return false;
+      });
+      if (!ended) sse.send('end', {});
       sse.end();
     } catch (err) {
       console.error(`[proxy:openai] internal error: ${err.message}`);
-      sse.send('error', { message: err.message });
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
+  app.post('/api/proxy/azure/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, apiVersion } =
+      proxyBody;
+    if (!baseUrl || !apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'baseUrl, apiKey, and model are required',
+      );
+    }
+
+    const validated = validateExternalApiBaseUrl(baseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const version =
+      typeof apiVersion === 'string' && apiVersion.trim()
+        ? apiVersion.trim()
+        : '2024-10-21';
+    const url = new URL(baseUrl);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+    url.searchParams.set('api-version', version);
+    console.log(
+      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version}`,
+    );
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const payload = {
+      messages: payloadMessages,
+      max_tokens:
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      stream: true,
+    };
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamSse(response, ({ payload: ssePayload, data }) => {
+        if (ssePayload === '[DONE]') {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        if (!data) return false;
+        const streamError = extractStreamErrorMessage(data);
+        if (streamError) {
+          sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
+          ended = true;
+          return true;
+        }
+        const delta = extractOpenAIText(data);
+        if (delta) sse.send('delta', { delta });
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:azure] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
+  app.post('/api/proxy/google/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://generativelanguage.googleapis.com';
+    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '');
+    const url = `${clean}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+    console.log(
+      `[proxy:google] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
+
+    const contents = (Array.isArray(messages) ? messages : []).map((message) => ({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: message.content }],
+    }));
+    const payload = {
+      contents,
+      generationConfig: {
+        maxOutputTokens:
+          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      },
+    };
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+    }
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:google] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamSse(response, ({ data }) => {
+        if (!data) return false;
+        const streamError = extractStreamErrorMessage(data);
+        if (streamError) {
+          sendProxyError(sse, `Gemini error: ${streamError}`, { details: data });
+          ended = true;
+          return true;
+        }
+        const delta = extractGeminiText(data);
+        if (delta) sse.send('delta', { delta });
+        const blockMessage = extractGeminiBlockMessage(data);
+        if (blockMessage) {
+          sendProxyError(sse, blockMessage, { details: data });
+          ended = true;
+          return true;
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:google] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
     }
   });
@@ -2831,24 +3313,63 @@ function assembleExample(templateHtml, slidesHtml, title) {
     );
 }
 
+// Skill example HTML often references shipped images via relative paths
+// like `./assets/hero.png`. Those resolve correctly when the file is
+// opened from disk, but the web app loads the example into a sandboxed
+// iframe via `srcdoc`, where the document URL is `about:srcdoc` and
+// relative URLs cannot find the assets. Rewriting them to an absolute
+// `/api/skills/<id>/assets/...` URL lets the same HTML render in both
+// places — the disk preview keeps working, and the in-app preview now
+// fetches assets through the matching route below.
+export function rewriteSkillAssetUrls(html: string, skillId: string): string {
+  if (typeof html !== 'string' || html.length === 0) return html;
+  // Match src/href attributes whose values point at the current skill's
+  // assets (`./assets/...` or `assets/...`) or a sibling skill's assets
+  // (`../other-skill/assets/...`). Quote style is preserved so we do not
+  // disturb the surrounding markup.
+  return html.replace(
+    /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
+    (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
+      const resolvedSkillId = siblingSkillId || skillId;
+      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
+      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
+    },
+  );
+}
+
 export function isLocalSameOrigin(req, port) {
+  // Accepts http + https, loopback hosts, OD_WEB_PORT, and the explicit
+  // bind host — matching the global origin middleware policy exactly.
+  const host = String(req.headers.host || '');
+  const origin = req.headers.origin;
+
+  // Build allowed set inline (same logic as buildAllowedOrigins in
+  // startServer, but self-contained so the exported helper works
+  // without closing over server-scoped variables).
   const ports = [port];
   const webPort = Number(process.env.OD_WEB_PORT);
   if (webPort && webPort !== port) ports.push(webPort);
-
+  const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
+  const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
   const allowedHosts = new Set(
-    ports.flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`, `[::1]:${p}`]),
-  );
-  const allowedOrigins = new Set(
     ports.flatMap((p) => [
-      `http://127.0.0.1:${p}`,
-      `http://localhost:${p}`,
-      `http://[::1]:${p}`,
+      ...loopbackHosts.map((h) => `${h}:${p}`),
+      `${bindHost}:${p}`,
     ]),
   );
-  const host = String(req.headers.host || '');
+
+  // Reject unknown Host first (DNS rebinding / Host header attack)
   if (!allowedHosts.has(host)) return false;
-  const origin = req.headers.origin;
+
+  // Non-browser client with valid Host → allow
   if (origin == null || origin === '') return true;
+
+  const schemes = ['http', 'https'];
+  const allowedOrigins = new Set(
+    ports.flatMap((p) => [
+      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
+      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
+    ]),
+  );
   return allowedOrigins.has(String(origin));
 }

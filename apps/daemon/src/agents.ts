@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { detectAcpModels } from './acp.js';
 import { parsePiModels } from './pi-rpc.js';
 
@@ -448,6 +449,16 @@ export const AGENT_DEFS = [
     name: 'GitHub Copilot CLI',
     bin: 'copilot',
     versionArgs: ['--version'],
+    // `-p -` enters Copilot's prompt mode and tells the CLI to read the
+    // prompt body from stdin instead of expecting it as a positional argv
+    // element. Without it the daemon writes the prompt to the child's
+    // stdin pipe (because `promptViaStdin: true` below) but Copilot stays
+    // in interactive mode, never reads stdin, and rejects the run with
+    // `error: too many arguments. Expected 0 arguments but got N` —
+    // the regression filed in #350. PR #258 standardized agents on stdin
+    // delivery and dropped the per-prompt argv path, but missed flipping
+    // Copilot's mode from interactive to `-p -`.
+    //
     // `--allow-all-tools` is required for non-interactive runs: without it
     // the CLI blocks waiting for human approval on every tool call. Unlike
     // Codex (where `exec` is a dedicated headless subcommand with
@@ -473,6 +484,8 @@ export const AGENT_DEFS = [
     ],
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [
+        '-p',
+        '-',
         '--allow-all-tools',
         '--output-format',
         'json',
@@ -570,14 +583,99 @@ export const AGENT_DEFS = [
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
   },
+  {
+    id: 'vibe',
+    name: 'Mistral Vibe CLI',
+    bin: 'vibe-acp',
+    versionArgs: ['--version'],
+    fetchModels: async (resolvedBin) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: [],
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+    ],
+    buildArgs: () => [],
+    streamFormat: 'acp-json-rpc',
+  },
 ];
+
+function existingDirsUnder(root, segments = []) {
+  const dirs = [];
+  let entries = [];
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return dirs;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(root, entry.name, ...segments);
+    if (existsSync(full)) dirs.push(full);
+  }
+  return dirs;
+}
+
+const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
+let cachedToolchainHome = null;
+let cachedToolchainDirs = null;
+let cachedToolchainDirsAt = 0;
+
+function userToolchainDirs() {
+  const homeOverride = process.env.OD_AGENT_HOME;
+  const home = homeOverride || homedir();
+  const now = Date.now();
+  if (
+    cachedToolchainHome === home &&
+    cachedToolchainDirs &&
+    now - cachedToolchainDirsAt < TOOLCHAIN_DIR_CACHE_TTL_MS
+  ) {
+    return cachedToolchainDirs;
+  }
+  cachedToolchainHome = home;
+  cachedToolchainDirsAt = now;
+  cachedToolchainDirs = [
+    path.join(home, '.local', 'bin'),
+    path.join(home, '.opencode', 'bin'),
+    path.join(home, '.bun', 'bin'),
+    path.join(home, '.volta', 'bin'),
+    path.join(home, '.asdf', 'shims'),
+    path.join(home, 'Library', 'pnpm'),
+    path.join(home, '.cargo', 'bin'),
+    ...(process.platform !== 'win32' && !homeOverride ? ['/opt/homebrew/bin', '/usr/local/bin'] : []),
+    ...existingDirsUnder(path.join(home, '.local', 'share', 'mise', 'installs', 'node'), ['bin']),
+    ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
+    ...existingDirsUnder(path.join(home, '.local', 'share', 'fnm', 'node-versions'), ['installation', 'bin']),
+  ];
+  return cachedToolchainDirs;
+}
+
+function resolvePathDirs() {
+  const seen = new Set();
+  const dirs = [
+    ...(process.env.PATH || '').split(delimiter),
+    // GUI launchers (macOS .app bundles, Linux .desktop files) often start
+    // with a minimal PATH. Include common user-level CLI install locations
+    // so agent detection matches the user's shell-installed tools,
+    // especially Node version managers.
+    ...userToolchainDirs(),
+  ];
+  return dirs.filter((dir) => {
+    if (!dir || seen.has(dir)) return false;
+    seen.add(dir);
+    return true;
+  });
+}
 
 export function resolveOnPath(bin) {
   const exts =
     process.platform === 'win32'
       ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
       : [''];
-  const dirs = (process.env.PATH || '').split(delimiter);
+  const dirs = resolvePathDirs();
   for (const dir of dirs) {
     for (const ext of exts) {
       const full = path.join(dir, bin + ext);
@@ -721,6 +819,28 @@ export function resolveAgentBin(id) {
   const def = getAgentDef(id);
   if (!def?.bin) return null;
   return resolveAgentExecutable(def);
+}
+
+// Build the env passed to spawn() for a given agent adapter.
+//
+// The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
+// resolution (claude login / Pro/Max plan) wins instead of silently
+// falling back to API-key billing whenever the daemon happened to be
+// launched from a shell that exported the key for SDK or scripting use.
+// See issue #398.
+//
+// Windows env-var names are case-insensitive at the kernel level
+// (`GetEnvironmentVariable`), but spreading `process.env` into a plain
+// object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
+// would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
+// the child. Iterate keys and compare case-insensitively to close that.
+export function spawnEnvForAgent(agentId, baseEnv) {
+  const env = { ...baseEnv };
+  if (agentId !== 'claude') return env;
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
+  }
+  return env;
 }
 
 // Daemon's /api/chat needs to validate the user's model pick against the

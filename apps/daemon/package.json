@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -32,11 +32,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/contracts": "workspace:0.2.0",
-    "@open-design/platform": "workspace:0.2.0",
-    "@open-design/sidecar": "workspace:0.2.0",
-    "@open-design/sidecar-proto": "workspace:0.2.0",
-    "better-sqlite3": "^11.10.0",
+    "@open-design/contracts": "workspace:0.3.0",
+    "@open-design/platform": "workspace:0.3.0",
+    "@open-design/sidecar": "workspace:0.3.0",
+    "@open-design/sidecar-proto": "workspace:0.3.0",
+    "better-sqlite3": "^12.9.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
     "multer": "^1.4.5-lts.1"

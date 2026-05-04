@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-dev",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -13,9 +13,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@open-design/platform": "workspace:0.2.0",
-    "@open-design/sidecar": "workspace:0.2.0",
-    "@open-design/sidecar-proto": "workspace:0.2.0",
+    "@open-design/platform": "workspace:0.3.0",
+    "@open-design/sidecar": "workspace:0.3.0",
+    "@open-design/sidecar-proto": "workspace:0.3.0",
     "cac": "6.7.14"
   },
   "devDependencies": {
