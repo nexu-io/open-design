@@ -343,9 +343,15 @@ Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md)
 
 ## Use Open Design from your coding agent
 
-Open Design ships a stdio MCP server. Wire it into Claude Code, Codex, Cursor, VS Code, Antigravity, Zed, Windsurf, or any MCP-compatible client and the agent in another repo can read files from your local Open Design projects directly. No zip export, no copy-paste. When the agent calls `search_files`, `get_file`, or `get_artifact` without a project argument, the MCP defaults to whatever project (and file) you have open in Open Design right now, so prompts like *"build this in my app"* or *"match these styles"* just work.
+Open Design ships a stdio MCP server. Wire it into Claude Code, Codex, Cursor, VS Code, Antigravity, Zed, Windsurf, or any MCP-compatible client and the agent in another repo can read files from your local Open Design projects directly. Replaces the export-then-attach loop. When the agent calls `search_files`, `get_file`, or `get_artifact` without a project argument, the MCP defaults to whatever project (and file) you have open in Open Design right now, so prompts like *"build this in my app"* or *"match these styles"* just work.
 
-Open **Settings → MCP server** in the Open Design app for a per-client install flow. The panel bakes the absolute path to your `node` binary and the daemon's built `cli.js` into every snippet, so it works on a fresh source clone where `od` is not on your PATH. Cursor gets a one-click deeplink; the rest get a copy-paste JSON snippet in the schema their config file expects (Claude Code includes a `claude mcp add-json` one-liner so you do not have to hand-edit `~/.claude.json`). Restart or reload your client after install for the server to show up. Read-only by design; the daemon must be running locally.
+**Why MCP?** Exporting and re-attaching a zip every design iteration breaks flow. The MCP server exposes your design source directly -- tokens CSS, JSX components, entry HTML -- as a structured API the agent can query by name. The agent always sees the live file, not a stale copy from the last export.
+
+Open **Settings → MCP server** in the Open Design app for a per-client install flow. The panel bakes the absolute path to your `node` binary and the daemon's built `cli.js` into every snippet, so it works on a fresh source clone where `od` is not on your PATH. Cursor gets a one-click deeplink; the rest get a copy-paste JSON snippet in the schema their config file expects (Claude Code includes a `claude mcp add-json` one-liner so you do not have to hand-edit `~/.claude.json`). Restart or reload your client after install for the server to show up.
+
+If the daemon is not running when the agent calls a tool, it receives a clear `"daemon not reachable"` error rather than a crash. Start the daemon (`pnpm tools-dev`) and retry.
+
+**Security model.** The MCP server is read-only and connects only to `http://127.0.0.1:<port>`. The daemon binds to `127.0.0.1` by default and rejects requests whose `Host` or `Origin` header does not match a known loopback address, so remote machines and browser tabs on other origins cannot reach it.
 
 ## Repository structure
 
