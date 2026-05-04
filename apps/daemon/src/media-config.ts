@@ -7,6 +7,16 @@
 // stored values so power users can keep keys out of the workspace
 // folder altogether (`OD_OPENAI_API_KEY=… node daemon/cli.js`).
 //
+// Storage location:
+//   default:                  <projectRoot>/.od/media-config.json
+//   OD_MEDIA_CONFIG_DIR=DIR:  <DIR>/media-config.json
+// The override exists for installs where <projectRoot> is read-only
+// (Nix store, immutable images) and the daemon's runtime data
+// genuinely needs to live elsewhere — typically pointed at the same
+// directory as OD_DATA_DIR (e.g. `~/.od` or `$XDG_CONFIG_HOME/open-design`).
+// Keep the default unchanged so existing workspace-local installs
+// continue to read/write the same path they always did.
+//
 // The file is intentionally simple JSON — no encryption, no schema
 // versioning yet. The daemon listens on 127.0.0.1 only and the workspace
 // is already trusted, so adding a vault here would mostly be theatre.
@@ -52,7 +62,11 @@ const ENV_KEYS = {
 };
 
 function configFile(projectRoot) {
-  return path.join(projectRoot, '.od', 'media-config.json');
+  const override = process.env.OD_MEDIA_CONFIG_DIR;
+  const dir = override && override.trim()
+    ? override.trim()
+    : path.join(projectRoot, '.od');
+  return path.join(dir, 'media-config.json');
 }
 
 async function readStored(projectRoot) {

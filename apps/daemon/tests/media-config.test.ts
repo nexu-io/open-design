@@ -129,4 +129,37 @@ describe('media-config OpenAI OAuth fallback', () => {
       baseUrl: 'https://example.test/v1',
     });
   });
+
+  it('reads media-config.json from OD_MEDIA_CONFIG_DIR when set', async () => {
+    const overrideDir = await mkdtemp(path.join(tmpdir(), 'od-media-override-'));
+    const originalOverride = process.env.OD_MEDIA_CONFIG_DIR;
+    process.env.OD_MEDIA_CONFIG_DIR = overrideDir;
+    try {
+      await writeFile(
+        path.join(overrideDir, 'media-config.json'),
+        JSON.stringify({
+          providers: {
+            openai: {
+              apiKey: 'override-key',
+              baseUrl: 'https://override.test/v1',
+            },
+          },
+        }),
+        'utf8',
+      );
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'override-key',
+        baseUrl: 'https://override.test/v1',
+      });
+    } finally {
+      if (originalOverride == null) {
+        delete process.env.OD_MEDIA_CONFIG_DIR;
+      } else {
+        process.env.OD_MEDIA_CONFIG_DIR = originalOverride;
+      }
+      await rm(overrideDir, { recursive: true, force: true });
+    }
+  });
 });
