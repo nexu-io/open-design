@@ -48,16 +48,15 @@ export const fa: Dict = {
     'نحوه اجرای تولیدات را انتخاب کنید. می‌توانید هر زمان از دکمه تنظیمات در نوار بالا این را تغییر دهید.',
   'settings.kicker': 'تنظیمات',
   'settings.title': 'اجرا و مدل',
-  'settings.subtitle':
-    'بین CLI عامل کد و ارائه‌دهنده API (BYOK) انتخاب کنید. کلید API شما فقط در این مرورگر ذخیره می‌شود.',
+  'settings.subtitle': 'بین CLI محلی و BYOK انتخاب کنید. کلید API فقط در همین مرورگر ذخیره می‌شود.',
   'settings.modeAria': 'حالت اجرا',
   'settings.protocolAria': 'پروتکل API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'CLI محلی',
   'settings.modeDaemonHelp': 'اجرا از طریق CLI عامل کد روی دستگاه شما',
   'settings.modeDaemonOffline': 'Daemon در حال اجرا نیست',
   'settings.modeDaemonOfflineMeta': 'daemon آفلاین',
   'settings.modeDaemonInstalledMeta': '{count} نصب شده',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'ارائه‌دهنده API',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'عامل کد',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const fa: Dict = {
   'settings.suggestedModelsHint':
     'این‌ها مدل‌های پیشنهادی برای این پروتکل هستند. ارائه‌دهنده شما ممکن است مدل‌های دیگری را پشتیبانی کند.',
   'settings.baseUrl': 'آدرس پایه',
-  'settings.baseUrlInvalid': 'یک URL معتبر با http:// یا https:// وارد کنید.',
+  'settings.baseUrlInvalid': 'یک URL عمومی معتبر با http:// یا https:// وارد کنید. localhost مجاز است؛ IPهای شبکه خصوصی مسدود می‌شوند.',
   'settings.azureDeploymentModel': 'نام استقرار',
   'settings.azureDeploymentModelHint':
     'در Azure OpenAI، این فیلد به عنوان نام استقرار در /openai/deployments/<model> استفاده می‌شود. نام استقراری را که در Azure ساخته‌اید وارد کنید.',
@@ -89,8 +88,7 @@ export const fa: Dict = {
   'settings.maxTokens': 'حداکثر توکن (اختیاری)',
   'settings.maxTokensHint':
     'سقف طول پاسخ. هر مدل مقدار پیش‌فرض تنظیم‌شدهٔ خود را دارد (در placeholder نمایش داده می‌شود)؛ برای استفاده از آن خالی بگذارید، یا برای جایگزینی، عددی وارد کنید.',
-  'settings.apiHint':
-    'فراخوانی‌ها مستقیماً از این مرورگر به آدرس پایه‌ای که تعیین کرده‌اید ارسال می‌شوند. بدون پراکسی. کلید هرگز localStorage را ترک نمی‌کند.',
+  'settings.apiHint': 'درخواست‌ها از طریق پراکسی daemon محلی به Base URL تنظیم‌شده ارسال می‌شوند. کلید فقط در همین مرورگر ذخیره می‌شود و همراه درخواست‌های ارائه‌دهنده فرستاده می‌شود.',
   'settings.skipForNow': 'فعلاً رد کنید',
   'settings.getStarted': 'شروع کنید',
   'settings.envConfigure': 'پیکربندی حالت اجرا',

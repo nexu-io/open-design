@@ -48,16 +48,15 @@ export const zhCN: Dict = {
     '选择你希望使用的执行方式。后续可以随时从顶部「设置」按钮中修改。',
   'settings.kicker': '设置',
   'settings.title': '执行模式与模型',
-  'settings.subtitle':
-    '在代码代理 CLI 与 API 提供方（自带 Key）之间切换。API Key 只保存在当前浏览器中。',
+  'settings.subtitle': '在本机 CLI 与自带 Key（BYOK）之间选择。API Key 只保存在当前浏览器中。',
   'settings.modeAria': '执行模式',
   'settings.protocolAria': 'API 协议',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': '本机 CLI',
   'settings.modeDaemonHelp': '通过本机的代码代理 CLI 执行',
   'settings.modeDaemonOffline': '后台守护进程未运行',
   'settings.modeDaemonOfflineMeta': '守护进程未运行',
   'settings.modeDaemonInstalledMeta': '已安装 {count} 个',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API 提供方',
   'settings.modeApiMeta': '自带 Key',
   'settings.codeAgent': '代码代理',
   'settings.codeAgentHint': '通过扫描 PATH 自动检测，选择你希望使用的 CLI。',
@@ -80,7 +79,7 @@ export const zhCN: Dict = {
   'settings.suggestedModelsHint':
     '这些是此协议的建议模型。你的提供方可能支持不同的模型。',
   'settings.baseUrl': 'Base URL',
-  'settings.baseUrlInvalid': '请输入有效的 http:// 或 https:// URL。',
+  'settings.baseUrlInvalid': '请输入有效的公网 http:// 或 https:// URL。允许 localhost；会阻止私有网络 IP。',
   'settings.azureDeploymentModel': '部署名称',
   'settings.azureDeploymentModelHint':
     '对于 Azure OpenAI，此字段会作为 /openai/deployments/<model> 中的部署名称使用。请填写你在 Azure 中创建的部署名称。',
@@ -88,8 +87,7 @@ export const zhCN: Dict = {
   'settings.maxTokens': '最大 tokens（可选）',
   'settings.maxTokensHint':
     '响应长度上限。每个 model 有调优过的默认值（在 placeholder 里显示），留空即使用，输入数字则覆盖。',
-  'settings.apiHint':
-    '请求会从当前浏览器直连你设置的 Base URL，无中转代理。Key 只存放在 localStorage。',
+  'settings.apiHint': '请求会通过本机 daemon 代理发送到你设置的 Base URL。Key 只保存在当前浏览器中，并随提供方请求发送。',
   'settings.skipForNow': '暂时跳过',
   'settings.getStarted': '开始使用',
   'settings.envConfigure': '配置执行模式',

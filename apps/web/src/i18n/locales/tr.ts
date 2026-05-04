@@ -48,16 +48,15 @@ export const tr: Dict = {
     "Oluşturmaları nasıl çalıştıracağınızı seçin. Bunu her zaman üst çubuktaki Ayarlar sekmesinden değiştirebilirsiniz.",
   'settings.kicker': 'Ayarlar',
   'settings.title': 'Çalıştırma & model',
-  'settings.subtitle':
-    'Kod ajanı CLI veya API sağlayıcısı (BYOK) arasında seçim yapın. API anahtarınız yalnızca bu tarayıcıda saklanır.',
+  'settings.subtitle': 'Yerel CLI ile BYOK arasında seçim yapın. API anahtarınız yalnızca bu tarayıcıda saklanır.',
   'settings.modeAria': 'Çalıştırma modu',
   'settings.protocolAria': 'API protokolü',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Yerel CLI',
   'settings.modeDaemonHelp': 'Yerel kod ajanı CLI ile çalıştır',
   'settings.modeDaemonOffline': 'Arka plan servisi çalışmıyor',
   'settings.modeDaemonOfflineMeta': 'Arka plan servisi devre dışı',
   'settings.modeDaemonInstalledMeta': '{count} kuruldu',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API sağlayıcısı',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Kod ajanı',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const tr: Dict = {
   'settings.suggestedModelsHint':
     'Bunlar bu protokol için önerilen modellerdir. Sağlayıcınız farklı modelleri destekleyebilir.',
   'settings.baseUrl': 'Temel URL',
-  'settings.baseUrlInvalid': 'Gecerli bir http:// veya https:// URL girin.',
+  'settings.baseUrlInvalid': 'Geçerli bir genel http:// veya https:// URL girin. Localhost izinlidir; özel ağ IPleri engellenir.',
   'settings.azureDeploymentModel': 'Dağıtım adı',
   'settings.azureDeploymentModelHint':
     'Azure OpenAI icin bu alan /openai/deployments/<model> icindeki dagitim adi olarak kullanilir. Azureda olusturdugunuz dagitim adini girin.',
@@ -89,8 +88,7 @@ export const tr: Dict = {
   'settings.maxTokens': 'Maks. token (isteğe bağlı)',
   'settings.maxTokensHint':
     'Yanıt uzunluğu sınırı. Her modelin ayarlanmış bir varsayılanı vardır (yer tutucuda görünür); kullanmak için boş bırakın, üzerine yazmak için bir sayı girin.',
-  'settings.apiHint':
-    'Çağrılar, bu tarayıcıdan doğrudan belirlediğiniz temel URL’ye yönlendirilir. Vekil sunucu kullanılmaz. Anahtar hiçbir zaman localStorage’dan ayrılmaz.',
+  'settings.apiHint': 'İstekler yerel daemon proxy üzerinden ayarladığınız Base URLye gönderilir. Anahtar yalnızca bu tarayıcıda saklanır ve sağlayıcı istekleriyle birlikte gönderilir.',
   'settings.skipForNow': 'Şimdilik atla',
   'settings.getStarted': 'Başla',
   'settings.envConfigure': 'Yürütme modunu ayarlayın',

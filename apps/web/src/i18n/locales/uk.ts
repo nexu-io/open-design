@@ -48,16 +48,15 @@ export const uk: Dict = {
     'Виберіть, як ви хочете запускати генерацію. Ви можете змінити це в будь-який час за допомогою кнопки Налаштування в верхній панелі.',
   'settings.kicker': 'Налаштування',
   'settings.title': 'Виконання та модель',
-  'settings.subtitle':
-    'Виберіть між CLI кодового агента та API-провайдером (BYOK). Ваш API-ключ зберігається лише в цьому браузері.',
+  'settings.subtitle': 'Виберіть локальний CLI або BYOK. Ваш API-ключ зберігається лише в цьому браузері.',
   'settings.modeAria': 'Режим виконання',
   'settings.protocolAria': 'Протокол API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Локальний CLI',
   'settings.modeDaemonHelp': 'Запуск через CLI кодового агента на вашому комп\'ютері',
   'settings.modeDaemonOffline': 'Фоновий процес не запущений',
   'settings.modeDaemonOfflineMeta': 'Фоновий процес офлайн',
   'settings.modeDaemonInstalledMeta': '{count} встановлено',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API-провайдер',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Кодовий агент',
   'settings.codeAgentHint':
@@ -82,7 +81,7 @@ export const uk: Dict = {
   'settings.suggestedModelsHint':
     'Це рекомендовані моделі для цього протоколу. Ваш провайдер може підтримувати інші моделі.',
   'settings.baseUrl': 'Базовий URL',
-  'settings.baseUrlInvalid': 'Введіть дійсний URL з http:// або https://.',
+  'settings.baseUrlInvalid': 'Введіть дійсний публічний URL з http:// або https://. Localhost дозволено; IP приватних мереж блокуються.',
   'settings.azureDeploymentModel': 'Назва розгортання',
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI це поле використовується як назва розгортання в /openai/deployments/<model>. Введіть назву розгортання, створену в Azure.',
@@ -90,8 +89,7 @@ export const uk: Dict = {
   'settings.maxTokens': 'Макс. токенів (необов\'язково)',
   'settings.maxTokensHint':
     'Обмеження на довжину відповіді. Кожна модель має налаштовану за замовчуванням (показано в заповнювачі); залиште поле порожнім, щоб використовувати її, або введіть число, щоб переопрацювати.',
-  'settings.apiHint':
-    'Виклики йдуть безпосередньо з цього браузера на установлений вами базовий URL. Без проксі. Ключ ніколи не залишає localStorage.',
+  'settings.apiHint': 'Запити надсилаються через локальний проксі daemon до вказаного Base URL. Ключ зберігається лише в цьому браузері й надсилається із запитами до провайдера.',
   'settings.skipForNow': 'Пропустити зараз',
   'settings.getStarted': 'Почати',
   'settings.envConfigure': 'Налаштування режиму виконання',

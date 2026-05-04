@@ -48,16 +48,15 @@ export const ja: Dict = {
     '生成の実行方法を選んでください。この設定はいつでもトップバーの設定ボタンから変更できます。',
   'settings.kicker': '設定',
   'settings.title': '実行モデル',
-  'settings.subtitle':
-    'コードエージェント CLI と API プロバイダー (BYOK) から選択してください。APIキーはこのブラウザにのみ保存されます。',
+  'settings.subtitle': 'ローカル CLI と BYOK のどちらを使うか選択します。API キーはこのブラウザ内にのみ保存されます。',
   'settings.modeAria': '実行モード',
   'settings.protocolAria': 'API プロトコル',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'ローカル CLI',
   'settings.modeDaemonHelp': 'マシン上のコードエージェント CLI 経由で実行',
   'settings.modeDaemonOffline': 'デーモンが起動していません',
   'settings.modeDaemonOfflineMeta': 'デーモンオフライン',
   'settings.modeDaemonInstalledMeta': '{count} インストール済み',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API プロバイダー',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'コードエージェント',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const ja: Dict = {
   'settings.suggestedModelsHint':
     'これはこのプロトコル向けの推奨モデルです。プロバイダーによっては別のモデルをサポートしている場合があります。',
   'settings.baseUrl': 'ベース URL',
-  'settings.baseUrlInvalid': '有効な http:// または https:// URL を入力してください。',
+  'settings.baseUrlInvalid': '有効な公開 http:// または https:// URL を入力してください。localhost は許可され、プライベートネットワーク IP はブロックされます。',
   'settings.azureDeploymentModel': 'デプロイ名',
   'settings.azureDeploymentModelHint':
     'Azure OpenAI では、このフィールドが /openai/deployments/<model> のデプロイ名として使われます。Azure で作成したデプロイ名を入力してください。',
@@ -89,8 +88,7 @@ export const ja: Dict = {
   'settings.maxTokens': '最大トークン（任意）',
   'settings.maxTokensHint':
     '応答長の上限。各モデルにチューニング済みのデフォルト値があります（プレースホルダーに表示）。空のままにすればそれを使用し、数値を入力すれば上書きされます。',
-  'settings.apiHint':
-    'リクエストはこのブラウザから設定したベース URL に直接送信されます。プロキシなし。キーは localStorage から外に出ません。',
+  'settings.apiHint': 'リクエストはローカル daemon プロキシ経由で設定した Base URL に送信されます。キーはこのブラウザ内にのみ保存され、プロバイダーへのリクエスト時に送信されます。',
   'settings.skipForNow': '今はスキップ',
   'settings.getStarted': '始める',
   'settings.envConfigure': '実行モードを設定',

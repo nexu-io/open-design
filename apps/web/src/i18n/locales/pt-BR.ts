@@ -48,16 +48,15 @@ export const ptBR: Dict = {
     'Escolha como você quer executar as gerações. Você pode mudar isso a qualquer momento no botão Configurações da barra superior.',
   'settings.kicker': 'Configurações',
   'settings.title': 'Execução e modelo',
-  'settings.subtitle':
-    'Escolha entre uma CLI de agente de código e um provedor de API (BYOK). Sua chave de API fica salva apenas neste navegador.',
+  'settings.subtitle': 'Escolha entre CLI local e BYOK. Sua chave de API fica armazenada apenas neste navegador.',
   'settings.modeAria': 'Modo de execução',
   'settings.protocolAria': 'Protocolo de API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'CLI local',
   'settings.modeDaemonHelp': 'Execute por uma CLI de agente de código na sua máquina',
   'settings.modeDaemonOffline': 'Daemon não está em execução',
   'settings.modeDaemonOfflineMeta': 'daemon offline',
   'settings.modeDaemonInstalledMeta': '{count} instalados',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'Provedor de API',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Agente de código',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const ptBR: Dict = {
   'settings.suggestedModelsHint':
     'Estes são modelos sugeridos para este protocolo. Seu provedor pode oferecer suporte a modelos diferentes.',
   'settings.baseUrl': 'URL base',
-  'settings.baseUrlInvalid': 'Informe uma URL http:// ou https:// válida.',
+  'settings.baseUrlInvalid': 'Informe uma URL pública http:// ou https:// válida. Localhost é permitido; IPs de rede privada são bloqueados.',
   'settings.azureDeploymentModel': 'Nome do deployment',
   'settings.azureDeploymentModelHint':
     'No Azure OpenAI, este campo e usado como nome do deployment em /openai/deployments/<model>. Informe o nome do deployment criado no Azure.',
@@ -89,8 +88,7 @@ export const ptBR: Dict = {
   'settings.maxTokens': 'Tokens máx. (opcional)',
   'settings.maxTokensHint':
     'Limite para o comprimento da resposta. Cada modelo tem um valor padrão ajustado (visível no placeholder); deixe em branco para usá-lo ou insira um número para substituí-lo.',
-  'settings.apiHint':
-    'As chamadas vão direto deste navegador para a URL base definida. Sem proxy. A chave nunca sai do localStorage.',
+  'settings.apiHint': 'As chamadas passam pelo proxy do daemon local até a Base URL definida. A chave fica armazenada apenas neste navegador e é enviada com as requisições ao provedor.',
   'settings.skipForNow': 'Pular por enquanto',
   'settings.getStarted': 'Começar',
   'settings.envConfigure': 'Configurar modo de execução',

@@ -48,16 +48,15 @@ export const en: Dict = {
     "Pick how you'd like to run generations. You can change this any time from the Settings button in the top bar.",
   'settings.kicker': 'Settings',
   'settings.title': 'Execution & model',
-  'settings.subtitle':
-    'Choose between a code-agent CLI and an API provider (BYOK). Your API key is stored only in this browser.',
+  'settings.subtitle': 'Choose between Local CLI and BYOK. Your API key is stored only in this browser.',
   'settings.modeAria': 'Execution mode',
   'settings.protocolAria': 'API protocol',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Local CLI',
   'settings.modeDaemonHelp': 'Run via a code-agent CLI on your machine',
   'settings.modeDaemonOffline': 'Daemon is not running',
   'settings.modeDaemonOfflineMeta': 'daemon offline',
   'settings.modeDaemonInstalledMeta': '{count} installed',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API provider',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Code agent',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const en: Dict = {
   'settings.suggestedModelsHint':
     'These are suggested models for this protocol. Your provider may support different models.',
   'settings.baseUrl': 'Base URL',
-  'settings.baseUrlInvalid': 'Enter a valid http:// or https:// URL.',
+  'settings.baseUrlInvalid': 'Enter a valid public http:// or https:// URL. Localhost is allowed; private network IPs are blocked.',
   'settings.azureDeploymentModel': 'Deployment name',
   'settings.azureDeploymentModelHint':
     'For Azure OpenAI, this field is used as the deployment name in /openai/deployments/<model>. Enter the deployment name you created in Azure.',
@@ -89,8 +88,7 @@ export const en: Dict = {
   'settings.maxTokens': 'Max tokens (optional)',
   'settings.maxTokensHint':
     'Cap on the response length. Each model has a tuned default (shown as a placeholder); leave blank to use it, or enter a number to override.',
-  'settings.apiHint':
-    'Calls go directly from this browser to the base URL you set. No proxy. The key never leaves localStorage.',
+  'settings.apiHint': 'Calls are sent through the local daemon proxy to the base URL you set. The key is stored only in this browser and sent with provider requests.',
   'settings.skipForNow': 'Skip for now',
   'settings.getStarted': 'Get started',
   'settings.envConfigure': 'Configure execution mode',

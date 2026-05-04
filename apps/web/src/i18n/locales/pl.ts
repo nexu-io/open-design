@@ -48,16 +48,15 @@ export const pl: Dict = {
       "Wybierz sposób generowania projektów. Możesz to zmienić w dowolnym momencie w Ustawieniach na górnym pasku.",
   'settings.kicker': 'Ustawienia',
   'settings.title': 'Wykonanie i model',
-  'settings.subtitle':
-      'Wybierz między agentem CLI a dostawcą API (własny klucz). Twój klucz API jest przechowywany tylko w tej przeglądarce.',
+  'settings.subtitle': 'Wybierz lokalne CLI albo BYOK. Klucz API jest przechowywany tylko w tej przeglądarce.',
   'settings.modeAria': 'Tryb wykonywania',
   'settings.protocolAria': 'Protokół API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Lokalne CLI',
   'settings.modeDaemonHelp': 'Uruchamiaj przez agenta CLI na swoim komputerze',
   'settings.modeDaemonOffline': 'Daemon nie jest uruchomiony',
   'settings.modeDaemonOfflineMeta': 'daemon offline',
   'settings.modeDaemonInstalledMeta': '{count} zainstalowano',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'Dostawca API',
   'settings.modeApiMeta': 'Własny klucz',
   'settings.codeAgent': 'Agent kodu',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const pl: Dict = {
   'settings.suggestedModelsHint':
       'To sugerowane modele dla tego protokołu. Twój dostawca może obsługiwać inne modele.',
   'settings.baseUrl': 'Bazowy URL',
-  'settings.baseUrlInvalid': 'Wpisz poprawny URL http:// lub https://.',
+  'settings.baseUrlInvalid': 'Wpisz poprawny publiczny URL http:// lub https://. Localhost jest dozwolony; prywatne adresy IP są blokowane.',
   'settings.azureDeploymentModel': 'Nazwa wdrożenia',
   'settings.azureDeploymentModelHint':
       'Dla Azure OpenAI to pole jest używane jako nazwa wdrożenia w /openai/deployments/<model>. Wpisz nazwę wdrożenia utworzonego w Azure.',
@@ -89,8 +88,7 @@ export const pl: Dict = {
   'settings.maxTokens': 'Maks. liczba tokenów (opcjonalnie)',
   'settings.maxTokensHint':
       'Limit długości odpowiedzi. Każdy model ma dostrojony domyślny limit (widoczny jako placeholder); pozostaw puste, aby go użyć, lub wpisz liczbę.',
-  'settings.apiHint':
-      'Zapytania idą bezpośrednio z przeglądarki do ustawionego adresu URL. Bez proxy. Klucz nigdy nie opuszcza localStorage.',
+  'settings.apiHint': 'Wywołania są wysyłane przez lokalny proxy daemon do ustawionego Base URL. Klucz jest przechowywany tylko w tej przeglądarce i wysyłany z żądaniami do dostawcy.',
   'settings.skipForNow': 'Pomiń na razie',
   'settings.getStarted': 'Rozpocznij',
   'settings.envConfigure': 'Skonfiguruj tryb wykonywania',

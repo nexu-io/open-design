@@ -48,16 +48,15 @@ export const ar: Dict = {
     "اختر كيف تريد تشغيل الأجيال. يمكنك تغيير هذا في أي وقت من زر الإعدادات في الشريط العلوي.",
   'settings.kicker': 'الإعدادات',
   'settings.title': 'التنفيذ والنموذج',
-  'settings.subtitle':
-    'اختر بين واجهة CLI لوكيل الكود ومزوّد API (BYOK). مفتاح API الخاص بك مخزن فقط في هذا المتصفح.',
+  'settings.subtitle': 'اختر بين CLI المحلي و BYOK. يتم حفظ مفتاح API في هذا المتصفح فقط.',
   'settings.modeAria': 'وضع التنفيذ',
   'settings.protocolAria': 'بروتوكول API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'CLI محلي',
   'settings.modeDaemonHelp': 'التشغيل عبر واجهة CLI على جهازك',
   'settings.modeDaemonOffline': 'البرنامج الخفي لا يعمل',
   'settings.modeDaemonOfflineMeta': 'غير متصل',
   'settings.modeDaemonInstalledMeta': '{count} مثبت',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'مزود API',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'وكيل الكود',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const ar: Dict = {
   'settings.suggestedModelsHint':
     'هذه نماذج مقترحة لهذا البروتوكول. قد يدعم مزوّدك نماذج مختلفة.',
   'settings.baseUrl': 'رابط القاعدة',
-  'settings.baseUrlInvalid': 'أدخل رابط http:// أو https:// صالحًا.',
+  'settings.baseUrlInvalid': 'أدخل رابط http:// أو https:// عام وصالح. يُسمح بـ localhost؛ ويتم حظر عناوين IP للشبكات الخاصة.',
   'settings.azureDeploymentModel': 'اسم النشر',
   'settings.azureDeploymentModelHint':
     'في Azure OpenAI، يُستخدم هذا الحقل كاسم النشر في /openai/deployments/<model>. أدخل اسم النشر الذي أنشأته في Azure.',
@@ -89,8 +88,7 @@ export const ar: Dict = {
   'settings.maxTokens': 'أقصى عدد من الرموز (اختياري)',
   'settings.maxTokensHint':
     'الحد الأقصى لطول الاستجابة. لكل نموذج قيمة افتراضية؛ اتركها فارغة لاستخدامها، أو أدخل رقماً للتجاوز.',
-  'settings.apiHint':
-    'المكالمات تذهب مباشرة من هذا المتصفح إلى رابط القاعدة الذي حددته. لا يوجد بروكسي. المفتاح لا يغادر localStorage.',
+  'settings.apiHint': 'تُرسل الطلبات عبر وكيل daemon المحلي إلى Base URL الذي تحدده. يُحفظ المفتاح في هذا المتصفح فقط ويُرسل مع طلبات المزود.',
   'settings.skipForNow': 'تخطي الآن',
   'settings.getStarted': 'ابدأ الآن',
   'settings.envConfigure': 'تكوين وضع التنفيذ',

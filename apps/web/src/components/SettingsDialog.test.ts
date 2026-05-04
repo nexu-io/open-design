@@ -126,9 +126,11 @@ describe('SettingsDialog API protocol switching', () => {
 });
 
 describe('SettingsDialog API Base URL validation', () => {
-  it('accepts only valid http and https URLs', () => {
+  it('accepts public http/https URLs and loopback local providers', () => {
     expect(isValidApiBaseUrl('https://api.openai.com/v1')).toBe(true);
     expect(isValidApiBaseUrl('http://localhost:11434/v1')).toBe(true);
+    expect(isValidApiBaseUrl('http://127.0.0.1:11434/v1')).toBe(true);
+    expect(isValidApiBaseUrl('http://[::1]:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('  https://resource.openai.azure.com  ')).toBe(true);
 
     expect(isValidApiBaseUrl('ddddd')).toBe(false);
@@ -136,5 +138,9 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('ftp://api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('http:api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('https://')).toBe(false);
+    expect(isValidApiBaseUrl('http://10.0.0.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
   });
 });

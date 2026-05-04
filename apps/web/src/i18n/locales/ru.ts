@@ -48,16 +48,15 @@ export const ru: Dict = {
     'Выберите, как запускать генерации. Вы можете изменить это в любое время через кнопку Настройки в верхней панели.',
   'settings.kicker': 'Настройки',
   'settings.title': 'Выполнение и модель',
-  'settings.subtitle':
-    'Выберите CLI код-агента или API-провайдера (BYOK). API-ключ хранится только в этом браузере.',
+  'settings.subtitle': 'Выберите локальный CLI или BYOK. Ваш API-ключ хранится только в этом браузере.',
   'settings.modeAria': 'Режим выполнения',
   'settings.protocolAria': 'Протокол API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Локальный CLI',
   'settings.modeDaemonHelp': 'Запуск через CLI код-агента на вашем компьютере',
   'settings.modeDaemonOffline': 'Демон не запущен',
   'settings.modeDaemonOfflineMeta': 'демон офлайн',
   'settings.modeDaemonInstalledMeta': '{count} установлено',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API-провайдер',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Код-агент',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const ru: Dict = {
   'settings.suggestedModelsHint':
     'Это рекомендуемые модели для этого протокола. Ваш провайдер может поддерживать другие модели.',
   'settings.baseUrl': 'Базовый URL',
-  'settings.baseUrlInvalid': 'Введите корректный URL с http:// или https://.',
+  'settings.baseUrlInvalid': 'Введите корректный публичный URL с http:// или https://. Localhost разрешен; IP частных сетей блокируются.',
   'settings.azureDeploymentModel': 'Имя развертывания',
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI это поле используется как имя развертывания в /openai/deployments/<model>. Укажите имя развертывания, созданного в Azure.',
@@ -89,8 +88,7 @@ export const ru: Dict = {
   'settings.maxTokens': 'Макс. токенов (опционально)',
   'settings.maxTokensHint':
     'Ограничение длины ответа. У каждой модели свой настроенный дефолт (виден в плейсхолдере); оставьте поле пустым, чтобы использовать его, или введите число, чтобы переопределить.',
-  'settings.apiHint':
-    'Вызовы идут напрямую из этого браузера на указанный вами базовый URL. Без прокси. Ключ никогда не покидает localStorage.',
+  'settings.apiHint': 'Запросы отправляются через локальный прокси daemon на указанную Base URL. Ключ хранится только в этом браузере и отправляется в запросах к провайдеру.',
   'settings.skipForNow': 'Пропустить сейчас',
   'settings.getStarted': 'Начать',
   'settings.envConfigure': 'Настроить режим выполнения',

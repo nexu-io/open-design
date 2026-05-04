@@ -48,16 +48,15 @@ export const fr: Dict = {
     'Choisissez comment vous souhaitez exécuter les générations. Vous pouvez changer cela à tout moment depuis le bouton Paramètres dans la barre supérieure.',
   'settings.kicker': 'Paramètres',
   'settings.title': 'Exécution et modèle',
-  'settings.subtitle':
-    'Choisissez entre un agent CLI et un fournisseur d\'API (BYOK). Votre clé API est stockée uniquement dans ce navigateur.',
+  'settings.subtitle': 'Choisissez entre CLI local et BYOK. Votre clé API est stockée uniquement dans ce navigateur.',
   'settings.modeAria': 'Mode d\'exécution',
   'settings.protocolAria': 'Protocole d\'API',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'CLI local',
   'settings.modeDaemonHelp': 'Exécuter via un agent CLI sur votre machine',
   'settings.modeDaemonOffline': 'Le daemon n\'est pas en cours d\'exécution',
   'settings.modeDaemonOfflineMeta': 'daemon hors ligne',
   'settings.modeDaemonInstalledMeta': '{count} installé(s)',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'Fournisseur API',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Agent de code',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const fr: Dict = {
   'settings.suggestedModelsHint':
     'Ce sont des modèles suggérés pour ce protocole. Votre fournisseur peut prendre en charge d\'autres modèles.',
   'settings.baseUrl': 'URL de base',
-  'settings.baseUrlInvalid': 'Saisissez une URL http:// ou https:// valide.',
+  'settings.baseUrlInvalid': 'Saisissez une URL publique http:// ou https:// valide. Localhost est autorisé ; les IP de réseau privé sont bloquées.',
   'settings.azureDeploymentModel': 'Nom du déploiement',
   'settings.azureDeploymentModelHint':
     'Pour Azure OpenAI, ce champ est utilisé comme nom du déploiement dans /openai/deployments/<model>. Saisissez le nom du déploiement créé dans Azure.',
@@ -89,8 +88,7 @@ export const fr: Dict = {
   'settings.maxTokens': 'Tokens max (optionnel)',
   'settings.maxTokensHint':
     'Limite de la longueur de réponse. Chaque modèle a une valeur par défaut (affichée en placeholder) ; laissez vide pour l\'utiliser, ou entrez un nombre pour la remplacer.',
-  'settings.apiHint':
-    'Les appels vont directement de ce navigateur vers l\'URL de base que vous définissez. Pas de proxy. La clé ne quitte jamais localStorage.',
+  'settings.apiHint': 'Les appels passent par le proxy du daemon local vers la Base URL définie. La clé est stockée uniquement dans ce navigateur et envoyée avec les requêtes au fournisseur.',
   'settings.skipForNow': 'Passer pour l\'instant',
   'settings.getStarted': 'Commencer',
   'settings.envConfigure': 'Configurer le mode d\'exécution',

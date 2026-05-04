@@ -48,16 +48,15 @@ export const hu: Dict = {
     'Válaszd ki, hogyan szeretnéd futtatni a generálásokat. Ezt bármikor módosíthatod a felső sáv Beállítások gombjával.',
   'settings.kicker': 'Beállítások',
   'settings.title': 'Végrehajtás és modell',
-  'settings.subtitle':
-    'Válassz a code-agent CLI és egy API-szolgáltató (BYOK) között. Az API-kulcs csak ebben a böngészőben tárolódik.',
+  'settings.subtitle': 'Válassz helyi CLI és BYOK között. Az API-kulcs csak ebben a böngészőben tárolódik.',
   'settings.modeAria': 'Végrehajtási mód',
   'settings.protocolAria': 'API protokoll',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Helyi CLI',
   'settings.modeDaemonHelp': 'Futtatás a gépeden lévő code-agent CLI-n keresztül',
   'settings.modeDaemonOffline': 'A daemon nem fut',
   'settings.modeDaemonOfflineMeta': 'a daemon offline',
   'settings.modeDaemonInstalledMeta': '{count} telepítve',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API-szolgáltató',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Code agent',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const hu: Dict = {
   'settings.suggestedModelsHint':
     'Ezek a protokollhoz javasolt modellek. A szolgáltatód más modelleket is támogathat.',
   'settings.baseUrl': 'Base URL',
-  'settings.baseUrlInvalid': 'Adj meg egy ervenyes http:// vagy https:// URL-t.',
+  'settings.baseUrlInvalid': 'Adj meg egy érvényes nyilvános http:// vagy https:// URL-t. A localhost engedélyezett; a privát hálózati IP-k blokkolva vannak.',
   'settings.azureDeploymentModel': 'Deployment név',
   'settings.azureDeploymentModelHint':
     'Azure OpenAI esetén ez a mező a /openai/deployments/<model> deployment neveként szerepel. Add meg az Azure-ban létrehozott deployment nevét.',
@@ -89,8 +88,7 @@ export const hu: Dict = {
   'settings.maxTokens': 'Max tokenek (opcionális)',
   'settings.maxTokensHint':
     'A válasz hosszának felső határa. Minden modellnek van hangolt alapértelmezése (placeholderként látható); hagyd üresen az alkalmazásához, vagy adj meg számot a felülíráshoz.',
-  'settings.apiHint':
-    'A hívások közvetlenül ebből a böngészőből mennek a megadott bázis URL-re. Nincs proxy. A kulcs sosem hagyja el a localStorage-t.',
+  'settings.apiHint': 'A hívások a helyi daemon proxyn keresztül mennek a beállított Base URL-re. A kulcs csak ebben a böngészőben tárolódik, és a szolgáltatói kérésekkel együtt kerül elküldésre.',
   'settings.skipForNow': 'Most kihagyom',
   'settings.getStarted': 'Kezdjük',
   'settings.envConfigure': 'Végrehajtási mód beállítása',

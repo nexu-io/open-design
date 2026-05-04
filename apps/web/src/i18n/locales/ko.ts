@@ -48,16 +48,15 @@ export const ko: Dict = {
     "생성을 실행할 방법을 선택하세요. 상단 바의 Settings 버튼을 통해 언제든지 변경할 수 있습니다.",
   'settings.kicker': '설정',
   'settings.title': '실행 및 모델',
-  'settings.subtitle':
-    '코드 에이전트 CLI와 API 제공자 (BYOK) 중 하나를 선택하세요. API 키는 브라우저에만 저장됩니다.',
+  'settings.subtitle': '로컬 CLI와 BYOK 중에서 선택하세요. API 키는 이 브라우저에만 저장됩니다.',
   'settings.modeAria': '실행 모드',
   'settings.protocolAria': 'API 프로토콜',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': '로컬 CLI',
   'settings.modeDaemonHelp': '사용자 기기의 코드 에이전트 CLI를 통해 실행합니다',
   'settings.modeDaemonOffline': '데몬이 실행 중이 아닙니다',
   'settings.modeDaemonOfflineMeta': '데몬 오프라인',
   'settings.modeDaemonInstalledMeta': '{count}개 설치됨',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API 제공자',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': '코드 에이전트',
   'settings.codeAgentHint':
@@ -84,13 +83,12 @@ export const ko: Dict = {
   'settings.maxTokensHint':
     '응답 길이 상한입니다. 각 모델에는 기본값이 미리 조정되어 있으며(placeholder로 표시됨), 비워 두면 그 값을 사용하고 숫자를 입력하면 덮어씁니다.',
   'settings.baseUrl': 'Base URL',
-  'settings.baseUrlInvalid': '올바른 http:// 또는 https:// URL을 입력하세요.',
+  'settings.baseUrlInvalid': '유효한 공개 http:// 또는 https:// URL을 입력하세요. localhost는 허용되며 사설 네트워크 IP는 차단됩니다.',
   'settings.azureDeploymentModel': '배포 이름',
   'settings.azureDeploymentModelHint':
     'Azure OpenAI에서는 이 필드가 /openai/deployments/<model>의 배포 이름으로 사용됩니다. Azure에서 만든 배포 이름을 입력하세요.',
   'settings.apiVersion': 'API 버전',
-  'settings.apiHint':
-    '이 브라우저에서 설정한 Base URL로 직접 호출됩니다. 프록시는 사용되지 않으며, 키는 localStorage에만 보관됩니다.',
+  'settings.apiHint': '요청은 로컬 daemon 프록시를 통해 설정한 Base URL로 전송됩니다. 키는 이 브라우저에만 저장되며 제공자 요청과 함께 전송됩니다.',
   'settings.skipForNow': '지금은 건너뛰기',
   'settings.getStarted': '시작하기',
   'settings.envConfigure': '실행 모드 구성',

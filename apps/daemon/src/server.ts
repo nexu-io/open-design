@@ -2627,12 +2627,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return { error: 'Only http/https allowed' };
     }
+    const hostname = parsed.hostname.toLowerCase();
+    const isLoopback =
+      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
     if (
-      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
-      parsed.hostname.startsWith('169.254.') ||
-      parsed.hostname.startsWith('10.') ||
-      /^192\.168\./.test(parsed.hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)
+      !isLoopback &&
+      (hostname.startsWith('169.254.') ||
+        hostname.startsWith('10.') ||
+        /^192\.168\./.test(hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
     ) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }

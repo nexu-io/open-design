@@ -172,9 +172,20 @@ export function isValidApiBaseUrl(value: string): boolean {
   if (!/^https?:\/\//i.test(trimmed)) return false;
   try {
     const url = new URL(trimmed);
+    const hostname = url.hostname.toLowerCase();
+    const isLoopback =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]';
+    const isPrivateIpv4 =
+      hostname.startsWith('169.254.') ||
+      hostname.startsWith('10.') ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
     return (
       (url.protocol === 'http:' || url.protocol === 'https:') &&
-      Boolean(url.hostname)
+      Boolean(url.hostname) &&
+      (isLoopback || !isPrivateIpv4)
     );
   } catch {
     return false;
@@ -422,7 +433,7 @@ export function SettingsDialog({
               <Icon name="sliders" size={18} />
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
-                <small>{t('settings.codeAgent')}</small>
+                <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
               </span>
             </button>
             <button
@@ -514,7 +525,7 @@ export function SettingsDialog({
                       : t('settings.modeDaemonOffline')
                   }
                 >
-                  <span className="seg-title">{t('settings.modeDaemon')}</span>
+                  <span className="seg-title">{t('settings.localCli')}</span>
                   <span className="seg-meta">
                     {daemonLive
                       ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
@@ -528,8 +539,8 @@ export function SettingsDialog({
                   className={'seg-btn' + (cfg.mode === 'api' ? ' active' : '')}
                   onClick={() => setMode('api')}
                 >
-                  <span className="seg-title">{t('settings.modeApi')}</span>
-                  <span className="seg-meta">{t('settings.modeApiMeta')}</span>
+                  <span className="seg-title">{t('settings.modeApiMeta')}</span>
+                  <span className="seg-meta">{t('settings.modeApi')}</span>
                 </button>
               </div>
               {cfg.mode === 'api' ? (
@@ -556,7 +567,7 @@ export function SettingsDialog({
             <section className="settings-section">
               <div className="section-head">
                 <div>
-                  <h3>{t('settings.codeAgent')}</h3>
+                  <h3>{t('settings.localCli')}</h3>
                   <p className="hint">{t('settings.codeAgentHint')}</p>
                 </div>
                 <button

@@ -48,16 +48,15 @@ export const de: Dict = {
     'Wählen Sie aus, wie Generierungen ausgeführt werden sollen. Sie können dies jederzeit über die Schaltfläche „Einstellungen“ in der oberen Leiste ändern.',
   'settings.kicker': 'Einstellungen',
   'settings.title': 'Ausführung & Modell',
-  'settings.subtitle':
-    'Wählen Sie zwischen einer Code-Agent-CLI und einem API-Anbieter (BYOK). Ihr API-Key wird nur in diesem Browser gespeichert.',
+  'settings.subtitle': 'Wählen Sie zwischen lokaler CLI und BYOK. Ihr API-Schlüssel wird nur in diesem Browser gespeichert.',
   'settings.modeAria': 'Ausführungsmodus',
   'settings.protocolAria': 'API-Protokoll',
-  'settings.modeDaemon': 'Agent',
+  'settings.modeDaemon': 'Lokale CLI',
   'settings.modeDaemonHelp': 'Über eine Code-Agent-CLI auf Ihrem Rechner ausführen',
   'settings.modeDaemonOffline': 'Daemon läuft nicht',
   'settings.modeDaemonOfflineMeta': 'Daemon offline',
   'settings.modeDaemonInstalledMeta': '{count} installiert',
-  'settings.modeApi': 'API',
+  'settings.modeApi': 'API-Anbieter',
   'settings.modeApiMeta': 'BYOK',
   'settings.codeAgent': 'Code-Agent',
   'settings.codeAgentHint':
@@ -81,7 +80,7 @@ export const de: Dict = {
   'settings.suggestedModelsHint':
     'Dies sind vorgeschlagene Modelle für dieses Protokoll. Ihr Anbieter kann andere Modelle unterstützen.',
   'settings.baseUrl': 'Base URL',
-  'settings.baseUrlInvalid': 'Geben Sie eine gueltige http://- oder https://-URL ein.',
+  'settings.baseUrlInvalid': 'Geben Sie eine gültige öffentliche http://- oder https://-URL ein. Localhost ist erlaubt; private Netzwerk-IPs werden blockiert.',
   'settings.azureDeploymentModel': 'Deployment-Name',
   'settings.azureDeploymentModelHint':
     'Fuer Azure OpenAI wird dieses Feld als Deployment-Name in /openai/deployments/<model> verwendet. Geben Sie den in Azure angelegten Deployment-Namen ein.',
@@ -89,8 +88,7 @@ export const de: Dict = {
   'settings.maxTokens': 'Max. Tokens (optional)',
   'settings.maxTokensHint':
     'Obergrenze für die Antwortlänge. Jedes Modell hat einen abgestimmten Standardwert (im Platzhalter sichtbar); leer lassen, um ihn zu verwenden, oder eine Zahl eingeben, um ihn zu überschreiben.',
-  'settings.apiHint':
-    'Aufrufe gehen direkt von diesem Browser an die festgelegte Base URL. Kein Proxy. Der Key verlässt localStorage nie.',
+  'settings.apiHint': 'Anfragen werden über den lokalen Daemon-Proxy an die festgelegte Base URL gesendet. Der Schlüssel wird nur in diesem Browser gespeichert und mit Provider-Anfragen gesendet.',
   'settings.skipForNow': 'Vorerst überspringen',
   'settings.getStarted': 'Loslegen',
   'settings.envConfigure': 'Ausführungsmodus konfigurieren',

@@ -59,6 +59,55 @@ describe('API proxy routes', () => {
     );
   });
 
+  it('allows loopback API base URLs for local OpenAI-compatible providers', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'http://localhost:11434/v1',
+        apiKey: 'sk-local',
+        model: 'llama-local',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.text()).resolves.toContain('event: end');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:11434/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer sk-local' }),
+      }),
+    );
+  });
+
+  it('blocks private network API base URLs before proxying', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'http://192.168.1.50:11434/v1',
+        apiKey: 'sk-private',
+        model: 'private-model',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    await expect(res.text()).resolves.toContain('Internal IPs blocked');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('surfaces OpenAI-compatible in-stream error frames', async () => {
     vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
