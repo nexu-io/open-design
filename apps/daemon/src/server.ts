@@ -819,7 +819,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId: skillId ?? null,
         designSystemId: designSystemId ?? null,
         pendingPrompt: pendingPrompt || null,
-        metadata: metadata && typeof metadata === 'object' ? metadata : null,
+        metadata:
+          metadata && typeof metadata === 'object'
+            ? {
+                ...metadata,
+                ...(Array.isArray(metadata.linkedDirs)
+                  ? (() => {
+                      const v = validateLinkedDirs(metadata.linkedDirs);
+                      return v.error ? {} : { linkedDirs: v.dirs };
+                    })()
+                  : {}),
+              }
+            : null,
         createdAt: now,
         updatedAt: now,
       });
@@ -2492,9 +2503,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
-    const linkedDirs = Array.isArray(projectRecord?.metadata?.linkedDirs)
-      ? projectRecord.metadata.linkedDirs.filter((d) => fs.existsSync(d))
-      : [];
+    const linkedDirs = (() => {
+      if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
+      const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
+      return v.dirs ?? [];
+    })();
     const cwdHint = cwd
       ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}`
       : '';
