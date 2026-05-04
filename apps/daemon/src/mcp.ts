@@ -695,7 +695,8 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
       try {
         const remaining = maxBytes - totalTextBytes(fetched);
         fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining));
-      } catch {
+      } catch (err) {
+        if (err instanceof BudgetExceededError) truncated = true;
         // Skip files that fail to fetch; keep going.
       }
     }
@@ -734,7 +735,8 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
       try {
         const remaining = maxBytes - totalTextBytes(fetched);
         file = await fetchProjectFile(baseUrl, id, refPath, remaining);
-      } catch {
+      } catch (err) {
+        if (err instanceof BudgetExceededError) truncated = true;
         continue;
       }
       fetched.push(file);
@@ -748,6 +750,12 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   }
   return okBundle({ project, entry, files: fetched, truncated, active, resolved });
 }
+
+// Thrown by fetchProjectFile when the server-advertised content-length exceeds
+// the remaining byte budget. Distinguished from generic fetch errors (404,
+// network) so callers can set truncated: true without treating it as a hard
+// failure of the whole bundle.
+class BudgetExceededError extends Error {}
 
 async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = Infinity) {
   const segments = String(relPath)
@@ -771,7 +779,7 @@ async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = In
   // If the server advertises a size that already exceeds our remaining
   // budget, skip reading the body to avoid a large allocation.
   if (size !== null && size > remainingBytes) {
-    throw new Error(`file ${relPath} (${size} bytes) exceeds remaining budget`);
+    throw new BudgetExceededError(`file ${relPath} (${size} bytes) exceeds remaining budget`);
   }
   const content = await resp.text();
   return { name: relPath, mime, size: size ?? content.length, content, binary: false };

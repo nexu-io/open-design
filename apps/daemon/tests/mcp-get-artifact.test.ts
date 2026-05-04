@@ -116,3 +116,32 @@ describe('fetchProjectFile per-file size pre-check', () => {
     expect(file.content.length).toBe(10_000);
   });
 });
+
+describe('getArtifact truncated: true when per-file content-length pre-check fires (include=all)', () => {
+  let server;
+  let baseUrl;
+
+  // 5 files, each 250 bytes with explicit content-length.
+  // maxBytes=400: file0 (remaining=400, size=250) fetches fine.
+  // file1+ (remaining=150, size=250 > 150) hit the BudgetExceededError path.
+  // totalTextBytes never reaches maxBytes, so only the pre-check path sets truncated.
+  const fileList = Array.from({ length: 5 }, (_, i) => ({ name: `file${i}.css` }));
+  const fileContent = 'a'.repeat(250);
+
+  beforeAll(async () => {
+    const r = await startServer(
+      makeDaemonApp({ files: fileList, fileContent, contentType: 'text/css', contentLength: 250 }),
+    );
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('sets truncated: true even when totalTextBytes never reaches maxBytes', async () => {
+    const result = await getArtifact(baseUrl, PROJECT_ID, 'index.html', 'all', 400);
+    const body = JSON.parse(result.content[0].text);
+    expect(body.truncated).toBe(true);
+    expect(body.files.length).toBe(1);
+  });
+});
