@@ -1,29 +1,16 @@
-// @ts-nocheck
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { isLocalSameOrigin } from '../src/server.js';
 
 // The install-info endpoint is a self-contained handler that resolves
 // absolute paths to node + cli.js so the Settings → MCP server panel
 // can render snippets that work regardless of PATH. We re-build a
 // minimal Express app with the same handler shape rather than booting
 // the full daemon (which needs SQLite, sidecar, fs scaffolding).
-
-// Mirrors the loopback-prefix guard in src/server.ts; the install
-// panel must reject non-loopback origins regardless of port.
-const LOOPBACK_HOST_RE = /^(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/;
-const LOOPBACK_ORIGIN_RE = /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/;
-
-function isLocalSameOrigin(req, _port) {
-  const host = String(req.headers.host || '');
-  if (!LOOPBACK_HOST_RE.test(host)) return false;
-  const origin = req.headers.origin;
-  if (origin == null || origin === '') return true;
-  return LOOPBACK_ORIGIN_RE.test(String(origin));
-}
 
 interface InstallInfoOpts {
   cliPath: string;

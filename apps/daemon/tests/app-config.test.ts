@@ -302,31 +302,6 @@ describe('app-config origin guard', () => {
     expect(res.status).toBe(403);
   });
 
-  it('allows GET when Origin is any loopback port (proxy flow)', async () => {
-    const webPort = port + 1;
-    const res = await httpRequest(`${baseUrl}/api/app-config`, {
-      headers: {
-        Host: `127.0.0.1:${port}`,
-        Origin: `http://127.0.0.1:${webPort}`,
-      },
-    });
-    expect(res.status).toBe(200);
-  });
-
-  it('allows PUT when Origin is any loopback port (proxy flow)', async () => {
-    const webPort = port + 1;
-    const res = await httpRequest(`${baseUrl}/api/app-config`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Host: `127.0.0.1:${port}`,
-        Origin: `http://localhost:${webPort}`,
-      },
-      body: JSON.stringify({ onboardingCompleted: true }),
-    });
-    expect(res.status).toBe(200);
-  });
-
   it('still rejects non-loopback Origin', async () => {
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       headers: {
