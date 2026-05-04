@@ -1,4 +1,5 @@
 {
+  "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "target": "ES2022",
     "lib": [
@@ -19,11 +20,6 @@
     "allowImportingTsExtensions": false,
     "incremental": true,
     "noEmit": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "paths": {
       "@/*": [
         "./*"
@@ -32,16 +28,13 @@
     "allowJs": true
   },
   "include": [
-    "next-env.d.ts",
-    "next.config.ts",
+    ".astro/types.d.ts",
+    "astro.config.ts",
     "app/**/*",
-    ".next/types/**/*.ts",
-    "out/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    "out/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "out",
-    ".next"
+    "out"
   ]
 }

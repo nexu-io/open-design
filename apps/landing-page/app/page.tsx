@@ -4,10 +4,9 @@
  * Mirrors `skills/editorial-collage/example.html` 1:1. When the canonical
  * example.html changes, mirror the diff here and into `app/globals.css`.
  *
- * Server component — no client-side state, no hooks. The only client
- * island is the <Header />, which owns the headroom-style scroll
- * behavior and the live GitHub star count fetch. Promote other sections
- * to client islands only when behavior is needed.
+ * Static React component rendered by Astro. The Header and Wire components
+ * own the small client-side behaviors; promote other sections to Astro
+ * islands only when behavior is needed.
  */
 
 import { Header } from './_components/header';
@@ -213,7 +212,6 @@ export default function Page() {
                 Composed in{NBSP}
                 <span style={{ color: 'var(--coral)' }}>Open Design</span>
               </span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src='/assets/hero.png' alt='' />
               <div className='index'>
                 <span>
@@ -290,7 +288,6 @@ export default function Page() {
                 </div>
               </div>
               <div className='about-art' data-reveal='right'>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src='/assets/about.png' alt='' />
                 <div className='about-side-note'>
                   <b />
@@ -333,7 +330,6 @@ export default function Page() {
               <div className='capabilities-art' data-reveal='left'>
                 <span className='corner tl' />
                 <span className='corner br' />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src='/assets/capabilities.png' alt='' />
                 <div className='ribbon'>
                   <b>OPEN DESIGN</b>
@@ -602,7 +598,6 @@ export default function Page() {
                 <div className='lab' key={lab.num} data-reveal>
                   <div className='lab-img'>
                     <span className='badge'>{lab.badge}</span>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={lab.src} alt='' />
                   </div>
                   <div className='num-row'>
@@ -711,7 +706,6 @@ export default function Page() {
                   </h4>
                   <p>{step.body}</p>
                   <div className='img'>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={step.src} alt='' />
                   </div>
                 </div>
@@ -772,7 +766,6 @@ export default function Page() {
                   Bundled verbatim, original LICENSE preserved.
                 </p>
                 <div className='img'>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src='/assets/work-1.png' alt='' />
                 </div>
                 <div className='meta-row'>
@@ -797,7 +790,6 @@ export default function Page() {
                   zh-CN · ja).
                 </p>
                 <div className='img'>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src='/assets/work-2.png' alt='' />
                 </div>
                 <div className='meta-row'>
@@ -974,7 +966,6 @@ export default function Page() {
                 </a>
               </div>
               <div className='testimonial-art' data-reveal='right'>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src='/assets/testimonial.png' alt='' />
               </div>
             </div>
@@ -1026,7 +1017,6 @@ export default function Page() {
                 </div>
               </div>
               <div className='cta-art' data-reveal='right'>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src='/assets/cta.png' alt='' />
                 <div className='index'>Nº 08</div>
                 <div className='ribbon'>

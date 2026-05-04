@@ -5,7 +5,7 @@ records module-level boundaries for `apps/landing-page/`.
 
 ## Purpose
 
-`apps/landing-page` is a stand-alone static Next.js 16 site that renders
+`apps/landing-page` is a stand-alone static Astro site that renders
 the canonical Open Design marketing page in the **Atelier Zero** style.
 It is the deployable counterpart to:
 
@@ -17,12 +17,13 @@ It is the deployable counterpart to:
 
 ## What it is
 
-- App Router + React 18 server components only. Default to a single
-  RSC `app/page.tsx`; no client hooks unless a section actually needs
-  one (the page is static).
-- `next.config.ts` defaults to `output: 'export'` in production so the
-  build emits to `out/` and can be served by any CDN or by the daemon's
-  static fallback. Set `OD_LANDING_OUTPUT_MODE=server` to opt into SSR.
+- Astro static output. The route lives at `app/pages/index.astro` and
+  server-renders the existing React page component in `app/page.tsx`
+  without hydration, so the generated page is CDN-ready HTML/CSS plus
+  the small reveal script.
+- `astro.config.ts` always uses `output: 'static'` and emits to `out/`
+  so it can be served by any CDN (Vercel, Cloudflare Pages, the daemon's
+  static fallback) without a Node runtime.
 - All styles live in `app/globals.css`. Class names match the Atelier
   Zero CSS in the canonical example so visual parity is one-to-one.
 - All imagery lives under `public/assets/` and is referenced as
@@ -37,11 +38,11 @@ It is the deployable counterpart to:
   no `/frames` — no proxy to set up.
 - Not multi-page. There is exactly one route (`/`) that renders the
   full landing page. If you need a second page, add it as a sibling
-  RSC route.
+  Astro page route.
 
 ## Boundary constraints
 
-- Must remain a static export when `OD_LANDING_OUTPUT_MODE` is unset.
+- Must remain a static Astro output.
 - Must not import from `@open-design/web`, `@open-design/daemon`,
   `@open-design/desktop`, `@open-design/sidecar*`, or
   `@open-design/contracts`. Those are product runtime concerns.
