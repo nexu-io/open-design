@@ -856,6 +856,29 @@ export function getAgentDef(id) {
   return AGENT_DEFS.find((a) => a.id === id) || null;
 }
 
+// Adapters that ship the prompt as a positional argv arg (no stdin
+// sentinel upstream) declare a `maxPromptArgBytes` budget so the daemon
+// can fail fast with an actionable, adapter-named error before `spawn`
+// surfaces a generic ENAMETOOLONG / E2BIG (Linux MAX_ARG_STRLEN) or
+// CreateProcess command-line-too-long (Windows ~32 KB) failure. Returns
+// null when the prompt fits (or the adapter has no budget — i.e. uses
+// stdin), and a structured error payload otherwise. Pure so it's
+// directly unit-testable for both the oversized and short-prompt paths
+// without spinning up the HTTP server or a real spawn.
+export function checkPromptArgvBudget(def, composed) {
+  if (!def || typeof def.maxPromptArgBytes !== 'number') return null;
+  const bytes = Buffer.byteLength(typeof composed === 'string' ? composed : '', 'utf8');
+  if (bytes <= def.maxPromptArgBytes) return null;
+  return {
+    code: 'AGENT_PROMPT_TOO_LARGE',
+    message:
+      `${def.name} requires the prompt as a command-line argument and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
+      'Reduce the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    bytes,
+    limit: def.maxPromptArgBytes,
+  };
+}
+
 // Resolve the absolute path of an agent's binary on the current PATH.
 // Used by the chat handler so spawn() gets the same executable that
 // detection reported as available — fixes Windows ENOENT when the bare

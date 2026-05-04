@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   AGENT_DEFS,
+  checkPromptArgvBudget,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
@@ -440,6 +441,54 @@ test('deepseek declares a conservative argv-byte budget for the prompt', () => {
     deepseek.maxPromptArgBytes > 0 && deepseek.maxPromptArgBytes < 32_768,
     `deepseek.maxPromptArgBytes must stay strictly under the Windows CreateProcess limit (~32 KB); got ${deepseek.maxPromptArgBytes}`,
   );
+});
+
+// Regression: composed prompts larger than the deepseek argv budget
+// (chosen as a conservative under-Windows-CreateProcess size) must
+// trip `checkPromptArgvBudget` with the DeepSeek-named, actionable
+// `AGENT_PROMPT_TOO_LARGE` payload the chat handler emits over SSE,
+// while normal-sized prompts must pass through cleanly so the chat
+// happy path keeps working. This exercises the same pure helper the
+// `/api/chat` spawn path uses, so removing the guard or letting the
+// budget drift over the Windows limit fails this test before any
+// real spawn would surface a generic ENAMETOOLONG / E2BIG.
+test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prompts through', () => {
+  const oversized = 'x'.repeat(deepseek.maxPromptArgBytes + 1);
+  const flagged = checkPromptArgvBudget(deepseek, oversized);
+  assert.ok(flagged, 'oversized prompts must trip the argv-byte guard');
+  assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.equal(flagged.limit, deepseek.maxPromptArgBytes);
+  assert.equal(flagged.bytes, deepseek.maxPromptArgBytes + 1);
+  assert.match(flagged.message, /DeepSeek/);
+  assert.match(flagged.message, /command-line argument/);
+  assert.match(flagged.message, /stdin support/);
+
+  // Normal-sized prompts must not trip the guard; the chat happy path
+  // depends on this returning null so it can proceed to spawn.
+  assert.equal(checkPromptArgvBudget(deepseek, 'hello'), null);
+
+  // The exact-budget edge: a prompt right at the limit must pass; the
+  // guard fires only when the byte count strictly exceeds the budget.
+  const atLimit = 'x'.repeat(deepseek.maxPromptArgBytes);
+  assert.equal(checkPromptArgvBudget(deepseek, atLimit), null);
+
+  // A multi-byte UTF-8 prompt (e.g. CJK characters) is measured in
+  // bytes, not code points — pin that so a 3-byte-per-char prompt
+  // can't sneak past a code-point-based regression of the helper.
+  const cjkOversized = '汉'.repeat(Math.ceil(deepseek.maxPromptArgBytes / 3) + 1);
+  const cjkFlagged = checkPromptArgvBudget(deepseek, cjkOversized);
+  assert.ok(cjkFlagged, 'byte-counted UTF-8 prompts must also trip the guard');
+  assert.equal(cjkFlagged.code, 'AGENT_PROMPT_TOO_LARGE');
+});
+
+// Adapters that ship the prompt over stdin (every other code agent
+// today) don't declare `maxPromptArgBytes` and must skip the guard
+// entirely — applying it to them would refuse perfectly valid huge
+// prompts those CLIs handle just fine via stdin.
+test('checkPromptArgvBudget is a no-op for adapters without maxPromptArgBytes', () => {
+  assert.equal(claude.maxPromptArgBytes, undefined);
+  const huge = 'x'.repeat(100_000);
+  assert.equal(checkPromptArgvBudget(claude, huge), null);
 });
 
 test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {
