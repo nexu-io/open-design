@@ -192,17 +192,28 @@ in {
     })
 
     # ----- macOS: launchd agents -------------------------------------
-    (lib.mkIf (pkgs.stdenv.isDarwin && cfg.autoStart) {
+    (lib.mkIf (pkgs.stdenv.isDarwin && cfg.autoStart) (let
+      # launchd has no EnvironmentFile equivalent. When the user supplies
+      # one, wrap the daemon exec in a tiny shell that sources the file
+      # at runtime — keeps secrets out of the world-readable Nix store
+      # while still honoring the documented `environmentFile` option on
+      # Darwin (parity with the Linux systemd path above).
+      daemonLaunchScript = pkgs.writeShellScript "open-design-daemon-launch" ''
+        set -a
+        . ${lib.escapeShellArg (toString cfg.environmentFile)}
+        set +a
+        exec ${lib.escapeShellArg daemonExe} --port ${toString cfg.port} --no-open
+      '';
+      programArguments =
+        if cfg.environmentFile != null
+        then [(toString daemonLaunchScript)]
+        else [daemonExe "--port" (toString cfg.port) "--no-open"];
+    in {
       launchd.agents.open-design = {
         enable = true;
         config = {
           Label = "io.nexu.open-design";
-          ProgramArguments = [
-            daemonExe
-            "--port"
-            (toString cfg.port)
-            "--no-open"
-          ];
+          ProgramArguments = programArguments;
           RunAtLoad = true;
           KeepAlive = true;
           EnvironmentVariables = daemonEnv;
@@ -210,7 +221,7 @@ in {
           StandardErrorPath = "${cfg.dataDir}/open-design.err.log";
         };
       };
-    })
+    }))
 
     (lib.mkIf (pkgs.stdenv.isDarwin && cfg.webFrontend.enable) {
       launchd.agents.open-design-web = {
