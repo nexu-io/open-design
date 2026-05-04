@@ -1,4 +1,10 @@
 // @ts-nocheck
+// TypeScript is suppressed because @modelcontextprotocol/sdk@1.x expects
+// Zod schemas for tool definitions, but we pass plain JSON Schema objects.
+// The runtime contract is identical; there is no type-safety regression -
+// the nocheck just avoids a blanket of incorrect Zod-vs-object type errors
+// that would obscure real mistakes. Remove once the SDK adds a JSON Schema
+// overload or we migrate to a Zod-based schema builder.
 //
 // `od mcp` - stdio MCP server that proxies read-only tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
@@ -68,7 +74,7 @@ const TOOL_DEFS = [
   {
     name: 'get_active_context',
     description:
-      'Project + file the user has open in Open Design right now. Returns {active:false} if none. Most tools default to this when project is omitted, so you rarely need to call this directly.',
+      'Project + file the user has open in Open Design right now. Returns {active:false} if none. Most tools default to this when project is omitted, so you rarely need to call this directly. Response is cached for ~5 minutes; refetch if staleness matters.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
   },
@@ -319,7 +325,7 @@ export async function runMcpStdio({ daemonUrl }) {
         case 'get_active_context':
           return ok(await getJson(`${baseUrl}/api/active`));
         case 'get_project': {
-          const { id, active } = await resolveProjectArg(baseUrl, args.project);
+          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
           const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
           const project = data?.project ?? data;
           return ok(
@@ -330,19 +336,20 @@ export async function runMcpStdio({ daemonUrl }) {
                 kind: project?.metadata?.kind ?? null,
               },
               active,
+              resolved,
             ),
           );
         }
         case 'list_files': {
-          const { id, active } = await resolveProjectArg(baseUrl, args.project);
+          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
           const params = new URLSearchParams();
           if (Number.isFinite(args.since)) params.set('since', String(args.since));
           const qs = params.toString();
           const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
-          return ok(withActiveEcho(await getJson(url), active));
+          return ok(withActiveEcho(await getJson(url), active, resolved));
         }
         case 'get_file': {
-          const { id, active } = await resolveProjectArg(baseUrl, args.project);
+          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
           let path = typeof args.path === 'string' ? args.path : '';
           // When both project and path are omitted, fall back to the
           // active file. The agent saying "read this file" without
@@ -351,7 +358,7 @@ export async function runMcpStdio({ daemonUrl }) {
             path = active.fileName;
           }
           requireString(path, 'path');
-          return await getFile(baseUrl, id, path, active);
+          return await getFile(baseUrl, id, path, active, resolved);
         }
         case 'get_artifact':
           return await getArtifact(
@@ -362,7 +369,7 @@ export async function runMcpStdio({ daemonUrl }) {
             args.maxBytes,
           );
         case 'search_files': {
-          const { id, active } = await resolveProjectArg(baseUrl, args.project);
+          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
           requireString(args.query, 'query');
           const params = new URLSearchParams({ q: String(args.query) });
           if (args.pattern) params.set('pattern', String(args.pattern));
@@ -373,6 +380,7 @@ export async function runMcpStdio({ daemonUrl }) {
                 `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
               ),
               active,
+              resolved,
             ),
           );
         }
@@ -454,7 +462,8 @@ async function fetchProjectList(baseUrl) {
 // rather than guessing.
 async function resolveProjectArg(baseUrl, arg) {
   if (typeof arg === 'string' && arg.length > 0) {
-    return { id: await resolveProjectId(baseUrl, arg), active: null };
+    const resolved = await resolveProjectId(baseUrl, arg);
+    return { id: resolved.id, resolved, active: null };
   }
   let active;
   try {
@@ -469,14 +478,14 @@ async function resolveProjectArg(baseUrl, arg) {
       'project arg omitted and Open Design has no active project. Open a project in Open Design or pass project="<id-or-name>".',
     );
   }
-  return { id: active.projectId, active };
+  return { id: active.projectId, resolved: null, active };
 }
 
 async function resolveProjectId(baseUrl, arg) {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
   }
-  if (UUID_RE.test(arg)) return arg;
+  if (UUID_RE.test(arg)) return { id: arg, name: arg, source: 'uuid' as const };
 
   const list = await fetchProjectList(baseUrl);
   if (list.length === 0) {
@@ -492,15 +501,15 @@ async function resolveProjectId(baseUrl, arg) {
   const target = norm(arg);
 
   const exact = list.filter((p) => String(p.name || '').toLowerCase() === lower);
-  if (exact.length === 1) return exact[0].id;
+  if (exact.length === 1) return { id: exact[0].id, name: exact[0].name, source: 'exact' as const };
 
   const slugged = list.filter((p) => norm(p.name) === target);
-  if (slugged.length === 1) return slugged[0].id;
+  if (slugged.length === 1) return { id: slugged[0].id, name: slugged[0].name, source: 'slug' as const };
 
   const subs = list.filter((p) =>
     String(p.name || '').toLowerCase().includes(lower),
   );
-  if (subs.length === 1) return subs[0].id;
+  if (subs.length === 1) return { id: subs[0].id, name: subs[0].name, source: 'substring' as const };
   if (subs.length > 1) {
     const opts = subs.map((p) => `${p.name} (${p.id})`).join(', ');
     throw new Error(
@@ -519,7 +528,7 @@ async function getJson(url) {
   return await resp.json();
 }
 
-async function getFile(baseUrl, project, relPath, active) {
+async function getFile(baseUrl, project, relPath, active, resolved?) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -541,27 +550,29 @@ async function getFile(baseUrl, project, relPath, active) {
     );
   }
   const text = await resp.text();
-  // When active context resolved the project (or path), surface
-  // that as a separate content block so the agent can see what
-  // we chose without polluting the file text itself.
-  if (active) {
-    return {
-      content: [
-        { type: 'text', text: formatActiveEchoLine(active, relPath) },
-        { type: 'text', text },
-      ],
-    };
+  const extra: string[] = [];
+  if (active) extra.push(formatActiveEchoLine(active, relPath));
+  if (resolved && (resolved.source === 'slug' || resolved.source === 'substring')) {
+    extra.push(`[od:resolved-project id="${resolved.id}" name="${resolved.name}" via="${resolved.source}"]`);
   }
-  return { content: [{ type: 'text', text }] };
+  return {
+    content: [
+      ...extra.map((t) => ({ type: 'text', text: t })),
+      { type: 'text', text },
+    ],
+  };
 }
 
 // Stamp `usedActiveContext` onto JSON tool responses when the
 // project came from /api/active. Plain pass-through when the caller
 // supplied project explicitly - keeps token overhead at zero for the
 // explicit path.
-function withActiveEcho(payload, active) {
-  if (!active) return payload;
-  return { ...payload, usedActiveContext: activeEchoPayload(active) };
+function withActiveEcho(payload, active, resolved?) {
+  const result = active ? { ...payload, usedActiveContext: activeEchoPayload(active) } : payload;
+  if (resolved && (resolved.source === 'slug' || resolved.source === 'substring')) {
+    return { ...result, resolvedProject: { id: resolved.id, name: resolved.name } };
+  }
+  return result;
 }
 
 function activeEchoPayload(active) {
@@ -583,6 +594,7 @@ function formatActiveEchoLine(active, resolvedPath) {
 
 const VALID_INCLUDE_MODES = new Set(['auto', 'all', 'shallow']);
 const DEFAULT_MAX_BYTES = 1_500_000;
+const MAX_FILES = 200;
 
 // Tracks total textual content bytes accumulated; binary stubs don't
 // count (their content is null). Once we cross the cap the caller
@@ -638,12 +650,13 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     const fetched = [];
     let truncated = false;
     for (const f of allFiles) {
-      if (totalTextBytes(fetched) >= maxBytes) {
+      if (fetched.length >= MAX_FILES || totalTextBytes(fetched) >= maxBytes) {
         truncated = true;
         break;
       }
       try {
-        fetched.push(await fetchProjectFile(baseUrl, id, f.name));
+        const remaining = maxBytes - totalTextBytes(fetched);
+        fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining));
       } catch {
         // Skip files that fail to fetch; keep going.
       }
@@ -675,13 +688,14 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     for (const refPath of frontier) {
       if (visited.has(refPath)) continue;
       visited.add(refPath);
-      if (totalTextBytes(fetched) >= maxBytes) {
+      if (fetched.length >= MAX_FILES || totalTextBytes(fetched) >= maxBytes) {
         truncated = true;
         break outer;
       }
       let file;
       try {
-        file = await fetchProjectFile(baseUrl, id, refPath);
+        const remaining = maxBytes - totalTextBytes(fetched);
+        file = await fetchProjectFile(baseUrl, id, refPath, remaining);
       } catch {
         continue;
       }
@@ -697,7 +711,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   return okBundle({ project, entry, files: fetched, truncated, active });
 }
 
-async function fetchProjectFile(baseUrl, projectId, relPath) {
+async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = Infinity) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -715,6 +729,11 @@ async function fetchProjectFile(baseUrl, projectId, relPath) {
   const size = Number.isFinite(headerSize) && headerSize >= 0 ? headerSize : null;
   if (!isTextualMime(mime)) {
     return { name: relPath, mime, size, content: null, binary: true };
+  }
+  // If the server advertises a size that already exceeds our remaining
+  // budget, skip reading the body to avoid a large allocation.
+  if (size !== null && size > remainingBytes) {
+    throw new Error(`file ${relPath} (${size} bytes) exceeds remaining budget`);
   }
   const content = await resp.text();
   return { name: relPath, mime, size: size ?? content.length, content, binary: false };
@@ -806,9 +825,21 @@ function extractRelativeRefs(text, fromPath, fromMime) {
       ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1)
       : '';
     const resolved = raw.startsWith('/') ? raw.slice(1) : dir + raw;
-    const clean = resolved.replace(/[?#].*$/, '').replace(/^\.\//, '');
-    if (!clean || clean.includes('..')) continue;
-    refs.add(clean);
+    const stripped = resolved.replace(/[?#].*$/, '');
+    const segs = stripped.split('/').filter(Boolean);
+    const out: string[] = [];
+    let escaped = false;
+    for (const s of segs) {
+      if (s === '.') continue;
+      if (s === '..') {
+        if (out.length === 0) { escaped = true; break; }
+        out.pop();
+        continue;
+      }
+      out.push(s);
+    }
+    if (escaped || out.length === 0) continue;
+    refs.add(out.join('/'));
   }
   return [...refs];
 }
