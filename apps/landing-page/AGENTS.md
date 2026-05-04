@@ -12,8 +12,10 @@ It is the deployable counterpart to:
 - Skill: `skills/editorial-collage/` — agent workflow + the source-of-truth
   `example.html` known-good rendering.
 - Design system: `design-systems/atelier-zero/DESIGN.md` — token spec.
-- Image assets: `skills/editorial-collage/assets/*.png` (mirrored into
-  `apps/landing-page/public/assets/` so the static export is self-contained).
+- Image assets: `skills/editorial-collage/assets/*.png` are uploaded to
+  Cloudflare R2 (`open-design-static`) and served through
+  `static.open-design.ai` with Image Resizing (`format=auto`). Do not
+  commit local mirrored PNGs into `apps/landing-page/public/assets/`.
 
 ## What it is
 
@@ -26,8 +28,8 @@ It is the deployable counterpart to:
   static fallback) without a Node runtime.
 - All styles live in `app/globals.css`. Class names match the Atelier
   Zero CSS in the canonical example so visual parity is one-to-one.
-- All imagery lives under `public/assets/` and is referenced as
-  `/assets/<name>.png`.
+- All page imagery is referenced through `app/image-assets.ts`, which builds
+  Cloudflare Image Resizing URLs for the R2 originals.
 
 ## What it is NOT
 

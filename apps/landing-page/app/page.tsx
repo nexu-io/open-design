@@ -11,6 +11,7 @@
 
 import { Header } from './_components/header';
 import { Wire } from './_components/wire';
+import { heroImage, imageAsset } from './image-assets';
 
 const arrowOut = (
   <svg viewBox='0 0 24 24'>
@@ -212,7 +213,7 @@ export default function Page() {
                 Composed in{NBSP}
                 <span style={{ color: 'var(--coral)' }}>Open Design</span>
               </span>
-              <img src='/assets/hero.png' alt='' />
+              <img src={heroImage} alt='' />
               <div className='index'>
                 <span>
                   <span className='n'>01</span>Detect
@@ -288,7 +289,7 @@ export default function Page() {
                 </div>
               </div>
               <div className='about-art' data-reveal='right'>
-                <img src='/assets/about.png' alt='' />
+                <img src={imageAsset('about.png', { width: 1024, quality: 82 })} alt='' />
                 <div className='about-side-note'>
                   <b />
                   From model behavior
@@ -330,7 +331,7 @@ export default function Page() {
               <div className='capabilities-art' data-reveal='left'>
                 <span className='corner tl' />
                 <span className='corner br' />
-                <img src='/assets/capabilities.png' alt='' />
+                <img src={imageAsset('capabilities.png', { width: 1024, quality: 82 })} alt='' />
                 <div className='ribbon'>
                   <b>OPEN DESIGN</b>
                   {NBSP}·{NBSP}CAPABILITIES MATRIX{NBSP}·{NBSP}OD/26
@@ -559,7 +560,7 @@ export default function Page() {
                       . Magazine layout, WebGL hero.
                     </>
                   ),
-                  src: '/assets/lab-1.png',
+                  src: imageAsset('lab-1.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/guizang-ppt`,
                 },
                 {
@@ -567,7 +568,7 @@ export default function Page() {
                   num: 'Nº 02',
                   title: 'Synthetic Matter',
                   body: 'Gpt-image-2 + Seedance + HyperFrames. Image, video, audio — same chat surface as code.',
-                  src: '/assets/lab-2.png',
+                  src: imageAsset('lab-2.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/hyperframes`,
                 },
                 {
@@ -575,7 +576,7 @@ export default function Page() {
                   num: 'Nº 03',
                   title: 'Prompt Choreography',
                   body: 'The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.',
-                  src: '/assets/lab-3.png',
+                  src: imageAsset('lab-3.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/design-brief`,
                 },
                 {
@@ -583,7 +584,7 @@ export default function Page() {
                   num: 'Nº 04',
                   title: 'Visual Reasoning',
                   body: '5-dim self-critique gates every artifact: philosophy · hierarchy · execution · specificity · restraint.',
-                  src: '/assets/lab-4.png',
+                  src: imageAsset('lab-4.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/critique`,
                 },
                 {
@@ -591,7 +592,7 @@ export default function Page() {
                   num: 'Nº 05',
                   title: 'Soft Systems',
                   body: 'Sandboxed iframe preview. Streaming todos. Real-cwd filesystem. Adaptive loops between human and machine.',
-                  src: '/assets/lab-5.png',
+                  src: imageAsset('lab-5.png', { width: 768, quality: 82 }),
                   href: REPO_DAEMON,
                 },
               ].map((lab) => (
@@ -678,25 +679,25 @@ export default function Page() {
                   num: '01',
                   title: 'Detect',
                   body: 'The daemon scans your $PATH for 12 coding agents and auto-loads 31 skills + 72 systems on boot.',
-                  src: '/assets/method-1.png',
+                  src: imageAsset('method-1.png', { width: 816, quality: 82 }),
                 },
                 {
                   num: '02',
                   title: 'Discover',
                   body: 'Turn 1 is a question form — surface, audience, tone, scale, brand context. Locked in 30 seconds.',
-                  src: '/assets/method-2.png',
+                  src: imageAsset('method-2.png', { width: 816, quality: 82 }),
                 },
                 {
                   num: '03',
                   title: 'Direct',
                   body: 'Pick one of 5 deterministic visual directions. Palette in OKLch, font stack, layout posture cues.',
-                  src: '/assets/method-3.png',
+                  src: imageAsset('method-3.png', { width: 816, quality: 82 }),
                 },
                 {
                   num: '04',
                   title: 'Deliver',
                   body: 'The agent writes to disk, you preview in a sandboxed iframe, export HTML / PDF / PPTX / ZIP / Markdown.',
-                  src: '/assets/method-4.png',
+                  src: imageAsset('method-4.png', { width: 816, quality: 82 }),
                 },
               ].map((step) => (
                 <div className='method-step' key={step.num} data-reveal>
@@ -766,7 +767,7 @@ export default function Page() {
                   Bundled verbatim, original LICENSE preserved.
                 </p>
                 <div className='img'>
-                  <img src='/assets/work-1.png' alt='' />
+                  <img src={imageAsset('work-1.png', { width: 768, quality: 82 })} alt='' />
                 </div>
                 <div className='meta-row'>
                   <span className='year'>2026 · DECK</span>
@@ -790,7 +791,7 @@ export default function Page() {
                   zh-CN · ja).
                 </p>
                 <div className='img'>
-                  <img src='/assets/work-2.png' alt='' />
+                  <img src={imageAsset('work-2.png', { width: 768, quality: 82 })} alt='' />
                 </div>
                 <div className='meta-row'>
                   <span className='year'>2026 · PAPER</span>
@@ -966,7 +967,7 @@ export default function Page() {
                 </a>
               </div>
               <div className='testimonial-art' data-reveal='right'>
-                <img src='/assets/testimonial.png' alt='' />
+                <img src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} alt='' />
               </div>
             </div>
           </div>
@@ -1017,7 +1018,7 @@ export default function Page() {
                 </div>
               </div>
               <div className='cta-art' data-reveal='right'>
-                <img src='/assets/cta.png' alt='' />
+                <img src={imageAsset('cta.png', { width: 1024, quality: 82 })} alt='' />
                 <div className='index'>Nº 08</div>
                 <div className='ribbon'>
                   OPEN DESIGN{NBSP}·{NBSP}FIN.
