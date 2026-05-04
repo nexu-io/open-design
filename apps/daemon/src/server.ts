@@ -2664,10 +2664,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   const appendVersionedApiPath = (baseUrl, path) => {
     const url = new URL(baseUrl);
-    url.pathname = url.pathname.replace(/\/+$/, '');
-    url.pathname = /\/v\d+$/.test(url.pathname)
-      ? `${url.pathname}${path}`
-      : `${url.pathname}/v1${path}`;
+    const pathname = url.pathname.replace(/\/+$/, '');
+    url.pathname = /\/v\d+$/.test(pathname)
+      ? `${pathname}${path}`
+      : `${pathname}/v1${path}`;
     return url.toString();
   };
 
