@@ -17,6 +17,7 @@ const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
 const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
+const gemini = AGENT_DEFS.find((agent) => agent.id === 'gemini');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
@@ -185,6 +186,26 @@ test('devin args use acp subcommand for json-rpc streaming', () => {
     'acp',
   ]);
   assert.equal(devin.streamFormat, 'acp-json-rpc');
+});
+
+test('gemini args avoid version-fragile trust flags', () => {
+  const args = gemini.buildArgs('', [], [], {});
+
+  assert.deepEqual(args, ['--output-format', 'stream-json', '--yolo']);
+  assert.equal(args.includes('--skip-trust'), false);
+  assert.deepEqual(gemini.env, { GEMINI_CLI_TRUST_WORKSPACE: 'true' });
+});
+
+test('gemini args preserve custom model selection', () => {
+  const args = gemini.buildArgs('', [], [], { model: 'gemini-2.5-pro' });
+
+  assert.deepEqual(args, [
+    '--output-format',
+    'stream-json',
+    '--yolo',
+    '--model',
+    'gemini-2.5-pro',
+  ]);
 });
 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {

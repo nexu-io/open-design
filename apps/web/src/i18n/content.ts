@@ -5,6 +5,17 @@ import type {
 } from '../types';
 import type { Locale } from './types';
 import {
+  FR_DESIGN_SYSTEM_CATEGORIES,
+  FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
+  FR_DESIGN_SYSTEM_SUMMARIES,
+  FR_PROMPT_TEMPLATE_CATEGORIES,
+  FR_PROMPT_TEMPLATE_COPY,
+  FR_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
+  FR_PROMPT_TEMPLATE_TAGS,
+  FR_SKILL_COPY,
+  FR_SKILL_IDS_WITH_EN_FALLBACK,
+} from './content.fr';
+import {
   RU_DESIGN_SYSTEM_CATEGORIES,
   RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
   RU_DESIGN_SYSTEM_SUMMARIES,
@@ -70,6 +81,16 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
     examplePrompt:
       'Eine Dokumentationsseite — linke Navigation, scrollbarer Artikelbereich, rechte Inhaltsübersicht.',
   },
+  'open-design-landing': {
+    examplePrompt:
+      'Entwerfen Sie die Open-Design-Marketing-Landingpage im Atelier-Zero- / Monocle-Stil — warme Papierleinwand, surreale Plaster-und-Architektur-Collage, übergroße gemischte Italic-Serif-Display-Type, römische Ziffern als Sektionsmarker und ein einziger Korallenakzent.',
+  },
+  'open-design-landing-deck': {
+    examplePrompt:
+      'Erstellen Sie das Open-Design-Pitch-Deck im Atelier-Zero-Stil — Cover mit Hero-Plate, römische Sektions-Trenner, Stats-Slide (31 Skills · 72 Systeme · 12 CLIs), Kundenzitat, CTA und Mega-Italic-Serif-End-Card. Horizontal-Swipe-Pagination wie eine Print-Magazine.',
+    description:
+      'Erstellt ein Single-File-Slide-Deck im Atelier-Zero-Stil (warmes Papier, italic-serif Akzent-Spans, korallenfarbene Schluss-Dots, surreale Collage-Platten). Horizontale Magazin-Pagination mit Pfeiltasten- und Leertaste-Navigation, Live-HUD mit Slide-Zähler und Fortschrittsbalken; teilt sich Stylesheet und 16-Slot-Bildbibliothek mit der Schwester-Skill `open-design-landing`.',
+  },
   'email-marketing': {
     examplePrompt:
       'Entwerfen Sie eine Launch-E-Mail für eine sportliche Laufschuhmarke — Masthead, Hero, großes Headline-Lockup, Specs Grid, CTA.',
@@ -131,6 +152,18 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   'invoice': {
     examplePrompt:
       'Erstellen Sie eine Rechnung eines freiberuflichen Designstudios an einen Kunden für ein Brand-Identity-Projekt — drei Positionen, 10% Retainer, 9% Umsatzsteuer.',
+  },
+  'kami-deck': {
+    examplePrompt:
+      'Erstellen Sie ein sechsteiliges Konferenz-Deck im kami-Stil (紙) — warmes Pergament, Tintenblau auf dem Cover, eine Serifenschnittstärke, horizontaler Magazin-Swipe.',
+    description:
+      'Erzeugt ein druckreifes Slide-Deck im kami-Designsystem: warmes Pergament (oder Tintenblau auf Cover/Kapitel), Serif nur in einer Schnittstärke, Tintenblau-Akzent ≤5% pro Folie, ohne Kursiv. Horizontale Magazin-Pagination (←/→ · Rad · Wischen · ESC-Übersicht). Eine eigenständige HTML-Datei, nur Google Fonts.',
+  },
+  'kami-landing': {
+    examplePrompt:
+      'Entwerfen Sie eine einseitige Studio-One-Pager im kami-Stil — Pergament-Leinwand, Tintenblau-Akzent, editorial wie ein Whitepaper.',
+    description:
+      'Erzeugt eine druckreife Einseiter im kami-Stil (紙): warmes Pergament, Tintenblau-Akzent, Serif in einer Schnittstärke, kein Kursiv, keine kühlen Grautöne. Liest sich wie Whitepaper oder Studio-One-Pager, nicht wie App-UI. Mehrsprachig (EN · zh-CN · ja). Eine eigenständige HTML-Datei ohne Abhängigkeiten.',
   },
   'kanban-board': {
     examplePrompt:
@@ -220,6 +253,8 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   airbnb: 'Reisemarktplatz. Warmer Korallenakzent, fotogetrieben, abgerundete UI.',
   airtable: 'Spreadsheet-Datenbank-Hybrid. Farbenfroh, freundlich, strukturierte Datenästhetik.',
   apple: 'Unterhaltungselektronik. Premium-Weißraum, SF Pro, filmische Bildsprache.',
+  'atelier-zero':
+    'Editoriales Studio-System. Warme Papierleinwand, surreale Plaster-und-Architektur-Collage, gemischte Italic-Serif-Display-Type, römische Ziffern als Sektionsmarker und ein einziger Korallenakzent — gemacht für Magazin-Landingpages, Studio-Sites und Manifestseiten.',
   binance: 'Krypto-Börse. Kräftiger gelber Akzent auf Monochrom, Trading-Floor-Dringlichkeit.',
   bmw: 'Luxusautomobil. Dunkle Premium-Flächen, präzise deutsche Engineering-Ästhetik.',
   bugatti: 'Hypercar-Marke. Kinodunkle Leinwand, monochrome Strenge, monumentale Display-Type.',
@@ -316,6 +351,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Media & Consumer': 'Medien & Consumer',
   Automotive: 'Automotive',
   'Editorial & Print': 'Editorial & Print',
+  'Editorial · Studio': 'Editorial · Studio',
   'Retro & Nostalgic': 'Retro & Nostalgisch',
   'Themed & Unique': 'Thematisch & Einzigartig',
   Uncategorized: 'Nicht kategorisiert',
@@ -985,6 +1021,17 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
     promptTemplateTags: RU_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: RU_PROMPT_TEMPLATE_COPY,
   },
+  fr: {
+    skillCopy: FR_SKILL_COPY,
+    skillIdsWithEnFallback: FR_SKILL_IDS_WITH_EN_FALLBACK,
+    designSystemSummaries: FR_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: FR_DESIGN_SYSTEM_CATEGORIES,
+    designSystemIdsWithEnFallback: FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
+    promptTemplateCategories: FR_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateIdsWithEnFallback: FR_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
+    promptTemplateTags: FR_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: FR_PROMPT_TEMPLATE_COPY,
+  },
 };
 
 function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedContentIds {
@@ -1010,10 +1057,12 @@ function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedCon
 export const LOCALIZED_CONTENT_IDS = {
   de: buildLocalizedContentIds(LOCALIZED_CONTENT.de!),
   ru: buildLocalizedContentIds(LOCALIZED_CONTENT.ru!),
-} satisfies Record<'de' | 'ru', LocalizedContentIds>;
+  fr: buildLocalizedContentIds(LOCALIZED_CONTENT.fr!),
+} satisfies Record<'de' | 'ru' | 'fr', LocalizedContentIds>;
 
 export const GERMAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.de;
 export const RUSSIAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.ru;
+export const FRENCH_CONTENT_IDS = LOCALIZED_CONTENT_IDS.fr;
 
 function getLocalizedContent(locale: Locale): LocalizedContentBundle | undefined {
   return LOCALIZED_CONTENT[locale];

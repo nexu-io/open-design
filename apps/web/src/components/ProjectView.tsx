@@ -19,10 +19,14 @@ import {
   upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
+import { useProjectFileEvents } from '../providers/project-events';
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
-import { agentDisplayName } from '../utils/agentLabels';
-import { apiProtocolAgentId, apiProtocolLabel } from '../utils/apiProtocol';
+import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
+import {
+  apiProtocolAgentId,
+  apiProtocolModelLabel,
+} from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
@@ -65,6 +69,7 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 
 interface Props {
@@ -358,6 +363,15 @@ export function ProjectView({
     if (!daemonLive) return;
     void refreshProjectFiles();
   }, [daemonLive, refreshProjectFiles, filesRefresh]);
+
+  // Live-reload: when the daemon's chokidar watcher reports a file change,
+  // bump filesRefresh so the file list refetches with new mtimes — which
+  // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
+  // cache-bust, triggering an automatic preview reload without a click.
+  const handleProjectFileChange = useCallback(() => {
+    setFilesRefresh((n) => n + 1);
+  }, []);
+  useProjectFileEvents(project.id, daemonLive, handleProjectFileChange);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
@@ -782,14 +796,22 @@ export function ProjectView({
         config.mode === 'daemon' && config.agentId
           ? agentsById.get(config.agentId)
           : null;
+      const selectedAgentChoice =
+        config.mode === 'daemon' && config.agentId
+          ? config.agentModels?.[config.agentId]
+          : undefined;
       const assistantAgentId =
         config.mode === 'daemon'
           ? config.agentId ?? undefined
           : apiProtocolAgentId(config.apiProtocol);
       const assistantAgentName =
         config.mode === 'daemon'
-          ? assistantAgentDisplayName(config.agentId, selectedAgent?.name)
-          : apiProtocolLabel(config.apiProtocol);
+          ? agentModelDisplayName(
+              config.agentId,
+              selectedAgent?.name,
+              selectedAgentChoice?.model,
+            )
+          : apiProtocolModelLabel(config.apiProtocol, config.model);
       const assistantId = crypto.randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
@@ -861,19 +883,29 @@ export function ProjectView({
         if (ev.kind === 'tool_use' && (ev.name === 'Write' || ev.name === 'Edit')) {
           const filePath = (ev.input as { file_path?: unknown } | null)?.file_path;
           if (typeof filePath === 'string' && filePath.length > 0) {
-            const base = filePath.split('/').pop() || filePath;
-            pendingWritesRef.current.set(ev.id, base);
+            // Preserve the full path so decideAutoOpenAfterWrite can do a
+            // path-suffix match against the project's relative file paths.
+            // Reducing to a basename here would lose the segment alignment
+            // we need to disambiguate same-basename collisions across the
+            // project tree and outside it.
+            pendingWritesRef.current.set(ev.id, filePath);
           }
         }
         if (ev.kind === 'tool_result') {
-          const base = pendingWritesRef.current.get(ev.toolUseId);
-          if (base) {
+          const filePath = pendingWritesRef.current.get(ev.toolUseId);
+          if (filePath) {
             pendingWritesRef.current.delete(ev.toolUseId);
             if (!ev.isError) {
               // Refresh first so FileWorkspace's file list (and the tab
               // body) sees the new content before we ask it to focus.
-              void refreshProjectFiles().then(() => {
-                requestOpenFile(base);
+              // Only auto-open if the file actually landed in the project's
+              // file list — otherwise an out-of-project Write (e.g. an
+              // upstream repo edit) would spawn a permanent placeholder tab.
+              void refreshProjectFiles().then((nextFiles) => {
+                const decision = decideAutoOpenAfterWrite(filePath, nextFiles);
+                if (decision.shouldOpen && decision.fileName) {
+                  requestOpenFile(decision.fileName);
+                }
               });
             }
           }
@@ -1004,7 +1036,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
-        const choice = config.agentModels?.[config.agentId];
+        const choice = selectedAgentChoice;
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,

@@ -16,7 +16,7 @@ od:
   mode: prototype
   platform: mobile
   scenario: design
-  featured: 5
+  featured: 13
   preview:
     type: html
     entry: index.html

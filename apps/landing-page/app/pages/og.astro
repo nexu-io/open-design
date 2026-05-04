@@ -1,0 +1,424 @@
+---
+/*
+ * Open Design — OG image (1200×630).
+ *
+ * Stand-alone Astro route at `/og/` used purely as a screenshotable
+ * surface to produce the canonical og:image. Render with a real
+ * browser at viewport 1200×630, capture a full-page screenshot, then
+ * upload the resulting PNG to R2 and reference it from `index.astro`'s
+ * og:image meta.
+ *
+ * Visual reference: the dark "Manifesto / 2026 Edition" cover plate
+ * (chocolate background, big serif headline, four-up stats footer,
+ * device collage on the right). Self-contained — does not import
+ * globals.css so the marketing page styles never leak in.
+ */
+import { heroImage } from '../image-assets';
+
+const title = 'Open Design — Design with the agent already on your laptop.';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{title}</title>
+    <meta name="viewport" content="width=1200, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;0,700;1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      :root {
+        --ink: #14110b;
+        --ink-2: #1c1810;
+        --ink-3: #2a241a;
+        --paper: #efe7d2;
+        --paper-warm: #d8cfb6;
+        --paper-mute: #8d8472;
+        --paper-faint: #5b5648;
+        --coral: #ed6f5c;
+        --coral-soft: #f08e7c;
+        --mustard: #e9b94a;
+        --line: rgba(239, 231, 210, 0.14);
+        --line-soft: rgba(239, 231, 210, 0.07);
+        --serif: 'Playfair Display', 'Times New Roman', serif;
+        --sans: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        --body: 'Inter', -apple-system, system-ui, sans-serif;
+        --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: var(--ink);
+        color: var(--paper);
+        font-family: var(--body);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      .og {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 88% 22%, rgba(237, 111, 92, 0.10) 0, transparent 38%),
+          radial-gradient(circle at 12% 90%, rgba(233, 185, 74, 0.06) 0, transparent 42%),
+          linear-gradient(180deg, #14110b 0%, #1a1610 60%, #14110b 100%);
+      }
+
+      /* paper-grain overlay, identical mood to the live site */
+      .og::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95  0 0 0 0 0.90  0 0 0 0 0.78  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+        background-size: 240px 240px;
+        mix-blend-mode: screen;
+        opacity: 0.55;
+      }
+
+      /* ===== top metadata strip ===== */
+      .topbar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 38px;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        padding: 0 36px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--paper-mute);
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .topbar .center {
+        font-family: var(--serif);
+        font-style: italic;
+        font-size: 14px;
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--paper);
+      }
+
+      .topbar .center::before {
+        content: '·';
+        color: var(--coral);
+        margin-right: 6px;
+      }
+
+      .topbar .right {
+        text-align: right;
+      }
+
+      /* ===== body grid ===== */
+      .grid {
+        position: absolute;
+        inset: 38px 0 0 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 36px 56px 28px;
+        gap: 48px;
+      }
+
+      .copy {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      /* tag chips */
+      .tags {
+        display: inline-flex;
+        gap: 10px;
+        margin-bottom: 28px;
+      }
+
+      .tag {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--paper-warm);
+        padding: 5px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(239, 231, 210, 0.04);
+      }
+
+      .tag.coral {
+        color: var(--coral);
+        border-color: rgba(237, 111, 92, 0.35);
+        background: rgba(237, 111, 92, 0.08);
+      }
+
+      /* big serif headline */
+      .headline {
+        font-family: var(--serif);
+        font-weight: 600;
+        font-size: 64px;
+        line-height: 1.04;
+        letter-spacing: -0.02em;
+        color: var(--paper);
+      }
+
+      .headline em {
+        font-style: italic;
+        font-weight: 600;
+        color: var(--coral);
+      }
+
+      .headline u {
+        text-decoration: none;
+        position: relative;
+        display: inline-block;
+      }
+
+      .headline u::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 6px;
+        height: 2px;
+        background: var(--coral);
+        opacity: 0.85;
+      }
+
+      .headline .dot {
+        color: var(--coral);
+      }
+
+      /* lead copy */
+      .lead {
+        margin-top: 22px;
+        max-width: 480px;
+        font-family: var(--body);
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--paper-warm);
+      }
+
+      .lead b {
+        color: var(--paper);
+        font-weight: 600;
+      }
+
+      /* ===== device art ===== */
+      .art {
+        position: relative;
+        align-self: stretch;
+      }
+
+      .art-frame {
+        position: absolute;
+        inset: -8px -56px 56px 0;
+        border-radius: 14px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.05) 0, transparent 55%),
+          linear-gradient(180deg, #1f1b13, #15110a);
+        box-shadow:
+          0 30px 80px -20px rgba(0, 0, 0, 0.6),
+          inset 0 0 1px rgba(239, 231, 210, 0.06);
+      }
+
+      .art-frame img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        opacity: 0.92;
+        mix-blend-mode: lighten;
+        filter: contrast(1.05) saturate(0.92) brightness(0.96);
+      }
+
+      .art-frame::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 25% 12%, rgba(237, 111, 92, 0.10) 0, transparent 45%),
+          linear-gradient(180deg, transparent 30%, rgba(20, 17, 11, 0.55) 100%);
+        pointer-events: none;
+      }
+
+      /* annotations on art */
+      .annot {
+        position: absolute;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--paper-mute);
+        z-index: 2;
+      }
+
+      .annot.tl {
+        top: 14px;
+        left: 18px;
+      }
+
+      .annot.tr {
+        top: 14px;
+        right: 14px;
+        color: var(--paper-warm);
+      }
+
+      .annot.br {
+        bottom: 64px;
+        right: 14px;
+        color: var(--coral);
+      }
+
+      /* OS coral coin */
+      .coin {
+        position: absolute;
+        top: 78px;
+        right: 36px;
+        width: 78px;
+        height: 78px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 30% 28%, #f5876f 0%, #ed6f5c 55%, #c54a3a 100%);
+        box-shadow:
+          0 0 0 1px rgba(237, 111, 92, 0.35),
+          0 0 32px rgba(237, 111, 92, 0.55),
+          0 18px 40px -10px rgba(237, 111, 92, 0.45);
+        display: grid;
+        place-items: center;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #14110b;
+        text-align: center;
+        line-height: 1.1;
+        font-weight: 600;
+        z-index: 4;
+      }
+
+      /* ===== bottom stats strip ===== */
+      .stats {
+        position: absolute;
+        left: 56px;
+        right: 56px;
+        bottom: 38px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+        max-width: 540px;
+      }
+
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .stat .num {
+        font-family: var(--serif);
+        font-size: 38px;
+        line-height: 1;
+        font-weight: 600;
+        color: var(--paper);
+      }
+
+      .stat.zero .num {
+        font-style: italic;
+        color: var(--coral);
+      }
+
+      .stat .lbl {
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--paper-mute);
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="og">
+      <div class="topbar">
+        <span>Open Design · Manifesto · 2026 Edition</span>
+        <span class="center">open.design</span>
+        <span class="right">Cover · 01 / 08 · OSS Alternative</span>
+      </div>
+
+      <div class="grid">
+        <div class="copy">
+          <div class="tags">
+            <span class="tag coral">Apache 2.0</span>
+            <span class="tag">Local-first</span>
+            <span class="tag">BYOK</span>
+          </div>
+
+          <h1 class="headline">
+            Design with the<br />
+            <em>agent</em> already<br />
+            on your <u>laptop</u><span class="dot">.</span>
+          </h1>
+
+          <p class="lead">
+            Open Design is the open-source alternative to Claude Design.
+            Your existing coding agent — <b>Claude · Codex · Cursor · Gemini · OpenCode · Qwen</b>
+            — becomes the design engine, driven by 31 composable skills and
+            72 brand-grade design systems.
+          </p>
+        </div>
+
+        <div class="art">
+          <span class="annot tl">Fig. 01 / OD-26</span>
+          <span class="annot tr">Plate Nº 08</span>
+          <div class="art-frame">
+            <img src={heroImage} alt="" />
+          </div>
+          <span class="annot br">Composed in Open Design</span>
+        </div>
+      </div>
+
+      <span class="coin">Open<br />Source</span>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="num">72</span>
+          <span class="lbl">Design<br />Systems</span>
+        </div>
+        <div class="stat">
+          <span class="num">31</span>
+          <span class="lbl">Composable<br />Skills</span>
+        </div>
+        <div class="stat">
+          <span class="num">12</span>
+          <span class="lbl">Coding<br />Agents</span>
+        </div>
+        <div class="stat zero">
+          <span class="num">0</span>
+          <span class="lbl">Lock-in /<br />Vendor Cloud</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -230,8 +230,10 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     drag.moved = true;
     // Convert pointer movement into right/bottom offsets so the sprite
     // tracks the cursor while staying anchored to the corner system.
-    const nextRight = Math.max(8, Math.min(window.innerWidth - 80, drag.startRight - dx));
-    const nextBottom = Math.max(8, Math.min(window.innerHeight - 80, drag.startBottom - dy));
+    // The clamp budget (~120px) keeps the 96px sprite plus its drop
+    // shadow on-screen even when dragged toward the opposite edge.
+    const nextRight = Math.max(8, Math.min(window.innerWidth - 120, drag.startRight - dx));
+    const nextBottom = Math.max(8, Math.min(window.innerHeight - 120, drag.startBottom - dy));
     setPosition({ right: nextRight, bottom: nextBottom });
 
     // Classify the gesture direction once it clears the jitter floor

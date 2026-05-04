@@ -8,6 +8,13 @@ will read it as part of its system prompt.
 
 - **`default/`** — Neutral Modern. Hand-authored starter for the OD spec.
 - **`warm-editorial/`** — Warm Editorial. Hand-authored serif starter.
+- **`atelier-zero/`** — Atelier Zero. Hand-authored magazine-grade
+  collage system: warm paper canvas, plaster-and-architecture imagery,
+  oversized italic-mixed display type, Roman-numeral section markers,
+  side rails of rotated micro-text, coordinate annotations, single
+  coral accent. Pairs with [`skills/open-design-landing/`](../skills/open-design-landing/)
+  and [`skills/open-design-landing-deck/`](../skills/open-design-landing-deck/)
+  for the canonical landing-page and slide-deck renderings.
 - **`kami/`** — 紙 / 纸. Editorial paper system distilled from
   [`tw93/kami`](https://github.com/tw93/kami) (MIT). Warm parchment canvas,
   ink-blue accent, serif at one weight, no italic, no cool grays. Pairs with

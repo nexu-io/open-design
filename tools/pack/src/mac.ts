@@ -27,7 +27,7 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackBuildOutput, ToolPackConfig } from "./config.js";
-import { macResources } from "./resources.js";
+import { copyBundledResourceTrees, macResources } from "./resources.js";
 
 const execFileAsync = promisify(execFile);
 const PRODUCT_NAME = "Open Design";
@@ -263,17 +263,9 @@ async function copyResourceTree(config: ToolPackConfig, paths: MacPaths): Promis
   await rm(paths.resourceRoot, { force: true, recursive: true });
   await mkdir(paths.resourceRoot, { recursive: true });
 
-  await cp(join(config.workspaceRoot, "skills"), join(paths.resourceRoot, "skills"), {
-    recursive: true,
-  });
-  await cp(join(config.workspaceRoot, "design-systems"), join(paths.resourceRoot, "design-systems"), {
-    recursive: true,
-  });
-  await cp(join(config.workspaceRoot, "craft"), join(paths.resourceRoot, "craft"), {
-    recursive: true,
-  });
-  await cp(join(config.workspaceRoot, "assets", "frames"), join(paths.resourceRoot, "frames"), {
-    recursive: true,
+  await copyBundledResourceTrees({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
   });
   await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await cp(process.execPath, join(paths.resourceRoot, "bin", "node"));
