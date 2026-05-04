@@ -120,7 +120,7 @@ const TOOL_DEFS = [
   {
     name: 'get_file',
     description:
-      'Read one project file. Text mimes only (HTML, JSX, CSS, JSON, SVG, Markdown). Binary files return an error; use list_files for metadata. For multi-file designs prefer get_artifact.',
+      'Read one project file. Text mimes only (HTML, JSX, CSS, JSON, SVG, Markdown). Binary files return an error; use list_files for metadata. Returns up to `limit` lines starting at `offset` (defaults: offset=0, limit=2000), mirroring Claude Code\'s Read tool. For files longer than the slice, the response carries an `[od:file-window ...]` marker with totalLines so you can page by re-calling with the next offset. For multi-file designs prefer get_artifact.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -129,6 +129,14 @@ const TOOL_DEFS = [
           type: 'string',
           description:
             'File path relative to project root, forward slashes. Optional; defaults to the active file when project is also omitted. Active-file fallback expires after ~5 minutes of no Open Design activity.',
+        },
+        offset: {
+          type: 'number',
+          description: '0-indexed starting line of the slice to return. Defaults to 0.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of lines to return. Defaults to 2000.',
         },
       },
       additionalProperties: false,
@@ -213,7 +221,10 @@ export async function runMcpStdio({ daemonUrl }) {
         '    (tokens CSS, JSX modules, imported assets) in one call.',
         '    PREFER THIS over multiple get_file calls when the user',
         '    wants to understand or extend a design.',
-        ' - get_file(path) for a single known file.',
+        ' - get_file(path) for a single known file. Returns up to 2000',
+        '    lines starting at offset (default 0) and stamps a',
+        '    [od:file-window ...] marker when the file is longer; page',
+        '    by re-calling with the next offset.',
         ' - search_files(query) to find a class/component/copy string',
         '    without fetching every file.',
         ' - list_files for metadata only.',
@@ -369,7 +380,9 @@ export async function runMcpStdio({ daemonUrl }) {
             path = active.fileName;
           }
           requireString(path, 'path');
-          return await getFile(baseUrl, id, path, active, resolved);
+          const offset = Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
+          const limit = Number.isFinite(args.limit) ? Math.max(1, Math.floor(args.limit)) : 2000;
+          return await getFile(baseUrl, id, path, active, resolved, offset, limit);
         }
         case 'get_artifact':
           return await getArtifact(
@@ -539,7 +552,7 @@ async function getJson(url) {
   return await resp.json();
 }
 
-async function getFile(baseUrl, project, relPath, active, resolved?) {
+async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0, limit = 2000) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -561,15 +574,29 @@ async function getFile(baseUrl, project, relPath, active, resolved?) {
     );
   }
   const text = await resp.text();
+  const allLines = text.split('\n');
+  const totalLines = allLines.length;
+  const start = Math.min(offset, totalLines);
+  const slice = allLines.slice(start, start + limit);
+  const returnedLines = slice.length;
+  const truncated = start + returnedLines < totalLines;
+
   const extra: string[] = [];
   if (active) extra.push(formatActiveEchoLine(active, relPath));
   if (resolved && (resolved.source === 'slug' || resolved.source === 'substring')) {
     extra.push(`[od:resolved-project id="${resolved.id}" name="${resolved.name}" via="${resolved.source}"]`);
   }
+  if (truncated || start > 0) {
+    const nextOffset = start + returnedLines;
+    const next = truncated ? `; call get_file again with offset=${nextOffset} to read more` : '';
+    extra.push(
+      `[od:file-window offset=${start} returnedLines=${returnedLines} totalLines=${totalLines}${next}]`,
+    );
+  }
   return {
     content: [
       ...extra.map((t) => ({ type: 'text', text: t })),
-      { type: 'text', text },
+      { type: 'text', text: slice.join('\n') },
     ],
   };
 }
@@ -896,4 +923,4 @@ function formatError(err, daemonUrl) {
 }
 
 // Exported for unit tests only.
-export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact };
+export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile };
