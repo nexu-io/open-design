@@ -20,6 +20,17 @@ interface Props {
 }
 
 type Section = 'pages' | 'scripts' | 'images' | 'sketches' | 'other';
+type SectionRow =
+  | { type: 'file'; key: string; file: ProjectFile; depth: 0 | 1; mtime: number }
+  | {
+      type: 'folder';
+      key: string;
+      label: string;
+      files: ProjectFile[];
+      expanded: boolean;
+      active: boolean;
+      mtime: number;
+    };
 
 const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
   pages: 'designFiles.sectionPages',
@@ -58,6 +69,7 @@ export function DesignFilesPanel({
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
+  const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [isSectionExpansionPending, startSectionExpansion] = useTransition();
 
   const grouped = useMemo(() => {
@@ -112,6 +124,18 @@ export function DesignFilesPanel({
     if (dropped.length > 0) onUploadFiles(dropped);
   }
 
+  function toggleFolder(key: string) {
+    setExpandedFolders((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   return (
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
@@ -162,87 +186,133 @@ export function DesignFilesPanel({
           ) : (
             SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => {
               const sectionFiles = grouped[section];
+              const sectionRows = buildSectionRows(
+                section,
+                sectionFiles,
+                expandedFolders,
+                preview,
+              );
               const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
-              const visibleFiles = sectionFiles.slice(0, visibleLimit);
-              const hiddenCount = sectionFiles.length - visibleFiles.length;
+              const visibleRows = sectionRows.slice(0, visibleLimit);
+              const hiddenCount = sectionRows.length - visibleRows.length;
               return (
-              <div className="df-section" key={section}>
-                <div className="df-section-label">
-                  {t(SECTION_LABEL_KEY[section])}
-                  <span className="df-section-count">{sectionFiles.length}</span>
-                </div>
-                {visibleFiles.map((f) => {
-                  const active = preview === f.name;
-                  const isHovered = hover === f.name;
-                  return (
-                    <button
-                      key={f.name}
-                      type="button"
-                      data-testid={`design-file-row-${f.name}`}
-                      className={`df-row ${active ? 'active' : ''}`}
-                      onMouseEnter={() => setHover(f.name)}
-                      onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                      onClick={() => setPreview(f.name)}
-                      onDoubleClick={() => onOpenFile(f.name)}
-                    >
-                      <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-                        {kindGlyph(f.kind)}
-                      </span>
-                      <span className="df-row-name-wrap">
-                        <span className="df-row-name">{f.name}</span>
-                        <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-                      </span>
-                      <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
-                      <span
-                        data-testid={`design-file-menu-${f.name}`}
-                        className="df-row-menu"
-                        style={isHovered || active ? { opacity: 1 } : undefined}
-                        role="button"
-                        aria-label={t('designFiles.rowMenu')}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = (e.target as HTMLElement)
-                            .closest('.df-row-menu')
-                            ?.getBoundingClientRect();
-                          setMenuPos({
-                            name: f.name,
-                            top: (rect?.bottom ?? 0) + 4,
-                            left: (rect?.right ?? 0) - 160,
-                          });
-                        }}
+                <div className="df-section" key={section}>
+                  <div className="df-section-label">
+                    {t(SECTION_LABEL_KEY[section])}
+                    <span className="df-section-count">{sectionFiles.length}</span>
+                  </div>
+                  {visibleRows.map((row) => {
+                    if (row.type === 'folder') {
+                      const fileWord =
+                        row.files.length === 1
+                          ? t('newproj.fileSingular')
+                          : t('newproj.filePlural');
+                      return (
+                        <button
+                          key={row.key}
+                          type="button"
+                          data-testid={`design-folder-row-${row.key}`}
+                          className={`df-row df-folder-row ${row.expanded ? 'expanded' : ''} ${
+                            row.active ? 'active' : ''
+                          }`}
+                          aria-expanded={row.expanded}
+                          onClick={() => toggleFolder(row.key)}
+                        >
+                          <span className="df-row-chevron" aria-hidden>
+                            <Icon
+                              name={row.expanded ? 'chevron-down' : 'chevron-right'}
+                              size={14}
+                            />
+                          </span>
+                          <span className="df-row-icon" data-kind="folder" aria-hidden>
+                            <Icon name="folder" size={15} />
+                          </span>
+                          <span className="df-row-name-wrap">
+                            <span className="df-row-name">{row.label}</span>
+                            <span className="df-row-sub">
+                              {row.files.length} {fileWord}
+                            </span>
+                          </span>
+                          <span className="df-row-time">{relativeTime(row.mtime, t)}</span>
+                        </button>
+                      );
+                    }
+                    const f = row.file;
+                    const active = preview === f.name;
+                    const isHovered = hover === f.name;
+                    return (
+                      <button
+                        key={row.key}
+                        type="button"
+                        data-testid={`design-file-row-${f.name}`}
+                        className={`df-row ${row.depth > 0 ? 'nested' : ''} ${
+                          active ? 'active' : ''
+                        }`}
+                        onMouseEnter={() => setHover(f.name)}
+                        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+                        onClick={() => setPreview(f.name)}
+                        onDoubleClick={() => onOpenFile(f.name)}
                       >
-                        ⋯
+                        <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+                          {kindGlyph(f.kind)}
+                        </span>
+                        <span className="df-row-name-wrap">
+                          <span className="df-row-name" title={f.name}>
+                            {displayFileName(f.name, row.depth)}
+                          </span>
+                          <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+                        </span>
+                        <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
+                        <span
+                          data-testid={`design-file-menu-${f.name}`}
+                          className="df-row-menu"
+                          style={isHovered || active ? { opacity: 1 } : undefined}
+                          role="button"
+                          aria-label={t('designFiles.rowMenu')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = (e.target as HTMLElement)
+                              .closest('.df-row-menu')
+                              ?.getBoundingClientRect();
+                            setMenuPos({
+                              name: f.name,
+                              top: (rect?.bottom ?? 0) + 4,
+                              left: (rect?.right ?? 0) - 160,
+                            });
+                          }}
+                        >
+                          ⋯
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {hiddenCount > 0 ? (
+                    <button
+                      type="button"
+                      className="df-section-more"
+                      disabled={isSectionExpansionPending}
+                      aria-busy={isSectionExpansionPending}
+                      onClick={() =>
+                        startSectionExpansion(() => {
+                          setSectionLimits((curr) => ({
+                            ...curr,
+                            [section]: Math.min(
+                              sectionRows.length,
+                              visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
+                            ),
+                          }));
+                        })
+                      }
+                    >
+                      <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
+                      <span>
+                        {t('designFiles.showMore', {
+                          n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
+                        })}
                       </span>
                     </button>
-                  );
-                })}
-                {hiddenCount > 0 ? (
-                  <button
-                    type="button"
-                    className="df-section-more"
-                    disabled={isSectionExpansionPending}
-                    aria-busy={isSectionExpansionPending}
-                    onClick={() =>
-                      startSectionExpansion(() => {
-                        setSectionLimits((curr) => ({
-                          ...curr,
-                          [section]: Math.min(
-                            sectionFiles.length,
-                            visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
-                          ),
-                        }));
-                      })
-                    }
-                  >
-                    <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
-                    <span>
-                      {t('designFiles.showMore', {
-                        n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
-                      })}
-                    </span>
-                  </button>
-                ) : null}
-              </div>
+                  ) : null}
+                </div>
               );
             })
           )}
@@ -414,6 +484,85 @@ function DfPreview({
       </div>
     </aside>
   );
+}
+
+function buildSectionRows(
+  section: Section,
+  files: ProjectFile[],
+  expandedFolders: ReadonlySet<string>,
+  preview: string | null,
+): SectionRow[] {
+  const topLevelEntries: Array<SectionRow> = [];
+  const folders = new Map<string, ProjectFile[]>();
+
+  for (const file of files) {
+    const folder = topLevelFolder(file.name);
+    if (!folder) {
+      topLevelEntries.push({
+        type: 'file',
+        key: file.name,
+        file,
+        depth: 0,
+        mtime: file.mtime,
+      });
+      continue;
+    }
+    const bucket = folders.get(folder);
+    if (bucket) {
+      bucket.push(file);
+    } else {
+      folders.set(folder, [file]);
+    }
+  }
+
+  for (const [folder, folderFiles] of folders) {
+    const sortedFiles = [...folderFiles].sort((a, b) => b.mtime - a.mtime);
+    const key = `${section}:${folder}`;
+    const expanded = expandedFolders.has(key);
+    const folderRow: SectionRow = {
+      type: 'folder',
+      key,
+      label: folder,
+      files: sortedFiles,
+      expanded,
+      active: sortedFiles.some((file) => file.name === preview),
+      mtime: sortedFiles[0]?.mtime ?? 0,
+    };
+    topLevelEntries.push(folderRow);
+  }
+
+  topLevelEntries.sort((a, b) => b.mtime - a.mtime);
+
+  const rows: SectionRow[] = [];
+  for (const entry of topLevelEntries) {
+    rows.push(entry);
+    if (entry.type === 'folder' && entry.expanded) {
+      rows.push(
+        ...entry.files.map((file) => ({
+          type: 'file' as const,
+          key: `${entry.key}/${file.name}`,
+          file,
+          depth: 1 as const,
+          mtime: file.mtime,
+        })),
+      );
+    }
+  }
+  return rows;
+}
+
+function topLevelFolder(name: string): string | null {
+  const normalized = name.replace(/^\/+/, '');
+  const separator = normalized.indexOf('/');
+  if (separator <= 0) return null;
+  return normalized.slice(0, separator);
+}
+
+function displayFileName(name: string, depth: 0 | 1): string {
+  if (depth === 0) return name;
+  const firstSeparator = name.indexOf('/');
+  if (firstSeparator < 0) return name;
+  return name.slice(firstSeparator + 1) || name;
 }
 
 function sectionFor(file: ProjectFile): Section {

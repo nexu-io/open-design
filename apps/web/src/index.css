@@ -3606,6 +3606,30 @@ code {
 .df-row:hover { background: var(--bg-subtle); }
 .df-row.active { background: var(--blue-bg); color: var(--text); }
 .df-row.active .df-row-name { color: var(--text-strong); }
+.df-row.nested {
+  padding-left: 52px;
+}
+.df-folder-row {
+  grid-template-columns: 18px 32px minmax(0, 1fr) auto;
+  font-weight: 500;
+}
+.df-folder-row.expanded,
+.df-folder-row.active {
+  background: var(--bg-subtle);
+}
+.df-row-chevron {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  transition: color 120ms ease;
+}
+.df-folder-row:hover .df-row-chevron,
+.df-folder-row.active .df-row-chevron {
+  color: var(--text-muted);
+}
 .df-row-icon {
   width: 32px;
   height: 32px;
