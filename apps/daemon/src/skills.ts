@@ -6,6 +6,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
+import { SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 
 export async function listSkills(skillsRoot) {
   const out = [];
@@ -68,17 +69,26 @@ export async function listSkills(skillsRoot) {
 
 // Skills that ship side files (e.g. `assets/template.html`, `references/*.md`)
 // need the agent to know where the skill lives on disk — relative paths in the
-// SKILL.md body resolve against the agent's CWD, which is the daemon root, not
-// the skill folder. We prepend a short preamble so any capable code agent can
-// open those files via absolute paths.
+// SKILL.md body would otherwise resolve against the agent's CWD, which is the
+// project folder (`.od/projects/<id>/`), not the skill folder.
+//
+// We prepend a short preamble pointing at a CWD-relative alias
+// (`.od-skills/<folder>/`). The chat handler stages a directory link at that
+// alias name before spawning the agent (see `cwd-aliases.ts`), so the path is
+// reachable from inside the agent's working directory on every CLI — not just
+// the ones that honour `--add-dir`. The agent never needs to escape its CWD,
+// so directory-access policies (issue #430) cannot block these reads.
 function withSkillRootPreamble(body, dir) {
+  const folder = path.basename(dir);
+  const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
   const preamble = [
-    "> **Skill root (absolute):** `" + dir + "`",
+    "> **Skill root (relative to project):** `" + skillRootRel + "/`",
     ">",
     "> This skill ships side files alongside `SKILL.md`. When the workflow",
     "> below references relative paths such as `assets/template.html` or",
-    "> `references/layouts.md`, resolve them against the skill root above and",
-    "> open them via their full absolute path.",
+    "> `references/layouts.md`, resolve them against the skill root above —",
+    "> e.g. open `" + skillRootRel + "/assets/template.html`. Stay inside the",
+    "> project working directory; do not use absolute paths from outside it.",
     "",
     "",
   ].join("\n");

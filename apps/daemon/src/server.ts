@@ -34,6 +34,11 @@ import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
+import {
+  ensureCwdAliases,
+  SKILLS_CWD_ALIAS,
+  DESIGN_SYSTEMS_CWD_ALIAS,
+} from './cwd-aliases.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -2414,11 +2419,30 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     // Skill seeds (`skills/<id>/assets/template.html`) and design-system
     // specs (`design-systems/<id>/DESIGN.md`) live outside the project cwd.
-    // The composed system prompt asks the agent to Read them via absolute
-    // paths in the skill-root preamble — without an explicit allowlist,
-    // Claude Code blocks those reads (issue #6: "no permission to read
-    // skills template"). We surface both roots so any agent that honours
-    // `--add-dir` can resolve those side files.
+    // We expose them through two complementary mechanisms:
+    //
+    //   1. Stage cwd-relative aliases (`.od-skills`, `.od-design-systems`)
+    //      pointing at the resource roots, so any agent CLI — not just
+    //      those that honour `--add-dir` — can reach those files via a
+    //      path inside its own working directory. This is what the skill
+    //      preamble emitted by `withSkillRootPreamble()` references, and
+    //      it is the load-bearing fix for issue #430 (Claude Code blocked
+    //      reads of absolute skill paths despite `--add-dir`, and every
+    //      non-Claude agent had no equivalent flag at all).
+    //   2. Keep `extraAllowedDirs` so Claude/Copilot still get
+    //      `--add-dir` for the absolute paths, as a belt-and-suspenders
+    //      fallback if the alias cannot be created (e.g. the user has a
+    //      pre-existing real entry under one of the reserved alias names).
+    if (cwd) {
+      await ensureCwdAliases(
+        cwd,
+        [
+          { name: SKILLS_CWD_ALIAS, target: SKILLS_DIR },
+          { name: DESIGN_SYSTEMS_CWD_ALIAS, target: DESIGN_SYSTEMS_DIR },
+        ],
+        (msg) => console.warn(msg),
+      );
+    }
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
       fs.existsSync(d),
     );
