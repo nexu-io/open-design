@@ -18,6 +18,7 @@ vi.mock('../../apps/web/src/providers/registry', async () => {
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 let writeTextMock: ReturnType<typeof vi.fn>;
 let originalClipboard: PropertyDescriptor | undefined;
+let originalExecCommand: PropertyDescriptor | undefined;
 
 function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
   return {
@@ -43,6 +44,7 @@ function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
 describe('FileViewer markdown code block copy', () => {
   beforeEach(() => {
     originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand');
     mockedFetchProjectFileText.mockResolvedValue('```ts\nconsole.log("copied")\n```');
     writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
@@ -58,6 +60,11 @@ describe('FileViewer markdown code block copy', () => {
       Object.defineProperty(navigator, 'clipboard', originalClipboard);
     } else {
       delete (navigator as { clipboard?: Clipboard }).clipboard;
+    }
+    if (originalExecCommand) {
+      Object.defineProperty(document, 'execCommand', originalExecCommand);
+    } else {
+      delete (document as Document & { execCommand?: typeof document.execCommand }).execCommand;
     }
     cleanup();
     vi.clearAllMocks();
