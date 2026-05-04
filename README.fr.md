@@ -22,7 +22,7 @@
   <a href="#coding-agents-pris-en-charge"><img alt="Agents" src="https://img.shields.io/badge/agents-12%20CLI%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
-  <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
+  <a href="QUICKSTART.fr.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
 <p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <b>Français</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a></p>
@@ -311,7 +311,7 @@ pnpm tools-dev run web
 
 Prérequis : Node `~24` et pnpm `10.33.x`. `nvm` / `fnm` ne sont que des aides facultatives ; si vous en utilisez un, lancez `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` avant `pnpm install`.
 
-Pour le démarrage desktop/background, les redémarrages sur ports fixes et les checks du dispatcher de génération média (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`), voir [`QUICKSTART.md`](QUICKSTART.md).
+Pour le démarrage desktop/background, les redémarrages sur ports fixes et les checks du dispatcher de génération média (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`), voir [`QUICKSTART.fr.md`](QUICKSTART.fr.md).
 
 Au premier chargement :
 
@@ -339,7 +339,7 @@ Le daemon possède un dossier caché à la racine du repo. Tout son contenu est 
 | Repartir de zéro | `pnpm tools-dev stop`, `rm -rf .od`, relancer `pnpm tools-dev run web` |
 | Le déplacer ailleurs | pas encore supporté, le chemin est hard-codé relativement au repo |
 
-Carte complète des fichiers, scripts et dépannage → [`QUICKSTART.md`](QUICKSTART.md).
+Carte complète des fichiers, scripts et dépannage → [`QUICKSTART.fr.md`](QUICKSTART.fr.md).
 
 ## Structure du dépôt
 
@@ -352,7 +352,7 @@ open-design/
 ├── README.ko.md                   ← 한국어
 ├── README.ja-JP.md                ← 日本語
 ├── README.fr.md                   ← ce fichier
-├── QUICKSTART.md                  ← guide run / build / deploy
+├── QUICKSTART.fr.md               ← guide run / build / deploy
 ├── package.json                   ← workspace pnpm, bin unique : od
 │
 ├── apps/
@@ -706,7 +706,7 @@ Guide complet, critères de merge, style de code et refus fréquents → [`CONTR
 Merci à toutes les personnes qui font avancer Open Design : code, docs, retours, nouveaux Skills, nouveaux Design Systems ou issues bien ciblées. Chaque vraie contribution compte.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-04-30" alt="Contributeurs Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-04" alt="Contributeurs Open Design" />
 </a>
 
 Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) est le point d’entrée.
@@ -723,9 +723,9 @@ Le SVG ci-dessus est régénéré chaque jour par [`.github/workflows/metrics.ym
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-04-30" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-04-30" />
-    <img alt="Historique des stars Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-04-30" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
+    <img alt="Historique des stars Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
   </picture>
 </a>
 

@@ -15,6 +15,7 @@ import {
   isKnownModel,
   resolveAgentBin,
   sanitizeCustomModel,
+  spawnEnvForAgent,
 } from './agents.js';
 import { listSkills } from './skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
@@ -1781,12 +1782,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/projects/:id/files/:name', async (req, res) => {
+  app.get('/api/projects/:id/files/*', async (req, res) => {
     try {
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
-        req.params.name,
+        req.params[0],
       );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
@@ -2455,7 +2456,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = { ...process.env, ...odMediaEnv };
+      const env = spawnEnvForAgent(def.id, { ...process.env, ...odMediaEnv });
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,
