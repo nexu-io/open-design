@@ -230,7 +230,22 @@ outline の section に `[image: ...]` マーカーがある場合の layout 選
 
 `shape_canonicals.T+IMG.canonical_slide_id` (P31) を default。`shape_canonicals['T+IMG'].alt_canonicals` (P83 など — body 文字長いの場合の variant) は**所定の名前のみ**使う。**all_layouts から自由探索禁止**。
 
-#### 3.1 まず layouts.json の `skill_guidance.preferred_per_scenario` をチェック
+#### 3.0.6 ルール優先順（**Round 10 で発見**: image-marker > scenario hint）
+
+> Round 10 P3 (Top Metrics) で問題発生: outline は KPI scenario + `[image:]` marker の両方を持っていた。3.1 の `preferred_per_scenario` は KPI = T+3B、3.0.5 は `[image:]` + body → T+IMG。agent が scenario を優先し T+3B を選択 → image が drop された（T+3B には image slot が無い）。
+>
+> **規則**: outline に `[image:]` marker が存在する section では、**3.0.5 の image-marker rule が 3.1 の scenario hint を上書きする**。理由: ユーザーが明示的に画像を指定した = 画像を出したいという意図。skip すると silently 情報が消える。
+>
+> | outline 状況 | 選択 |
+> |---|---|
+> | KPI scenario + `[image:]` 有 + body 有 | **T+IMG** (image-marker 勝つ) |
+> | KPI scenario + `[image:]` 無 | T+3B (scenario hint 採用) |
+> | 引用 scenario + `[image:]` 有 + body 有 | T+IMG (image-marker 勝つ、quote brackets は省略) |
+> | プロセス scenario + `[image:]` 有 | T+IMG（process visual を image で表現）|
+>
+> 例外なく image-marker が勝つ。section に画像 slot が必要だと判断したら scenario が何であっても T+IMG family に行く。
+
+#### 3.1 `[image:]` marker が無い section: layouts.json の `skill_guidance.preferred_per_scenario` をチェック
 
 scenario タグから直接 canonical を引けるなら採用:
 
@@ -282,6 +297,61 @@ scenario が明確に該当しない場合の構造マッチング:
 3. **catalog に該当 shape が無い場合**
    - **発明しない**。代わりに同義の上位 shape にフォールバック（例: T+4B → T+3B + 補足を別ページ）
    - フォールバックも不可なら、ユーザーに「対応する layout が catalog にないため、outline を分割するか別構造にしてほしい」と返す
+
+### Step 3.7: Pre-flight 文字 fit 事前評価（**Round 11 で追加**、v4-#4）
+
+> Round 9-10 で page 2/3/4 の body 文字が template 原字号で 1-2 回 wrap した。原因は outline の文字量が placeholder 容量を超えていたこと。Round 11 で「字号は触らない」方針確定後、wrap は許容できない代わりに **outline 段階で fit を予測**して push back する流れに切り替え。
+
+#### 3.7.1 各 (section, canonical) ペアで容量 vs 文字量を概算
+
+Step 3 で選んだ layout に対し、各 placeholder の容量と outline body の文字量を比較:
+
+| 項目 | 取得元 |
+|---|---|
+| 容量 | `layouts.json.shape_canonicals[X].placeholders[].estimated_max_cells_per_line × estimated_max_lines` |
+| 文字量 | outline body を cell 単位で数える: ASCII = 1 cell、JP 全角 = 2 cells、半角数字 / 記号 = 1 cell |
+
+**verified: false** の canonical は `default_max_cells` から保守的推定（Step 5.1 の表参照）。
+
+#### 3.7.2 オーバー予測の判断
+
+| 文字量 vs 容量 | 判断 | アクション |
+|---|---|---|
+| ≤ 100% | OK | そのまま進む |
+| 100-115% | 軽微オーバー | 1 cell 削れば収まる範囲。Step 5.3 圧縮ルールで自然に修まる予測 → 進む（**強制 push back しない**）|
+| 115-140% | 明確オーバー | 2 行 wrap がほぼ確定。**ユーザーに通告**: 「page X の bullet Y は容量 N cells に対し M cells、wrap する見込み。短縮するか別 canonical に変更するか?」|
+| > 140% | 大幅オーバー | wrap が複数発生 / 字数 cap に当たる予測。**強制 push back**: 「page X は容量超え過ぎ。outline を split するか別 canonical を選ぶ必要あり」|
+
+#### 3.7.3 push back の出し方
+
+`AskUserQuestion` で QuestionForm として返す。例:
+
+```
+title: outline 文字量が一部 page で容量超え見込み
+
+description: PDF self-check で wrap が発生する前に事前確認を取りたい。
+
+questions:
+  - id: page3-overflow
+    text: |
+      Page 3 (Top Metrics, T+IMG) の body bullet:
+      "<newsletter-project>: 開封率 28%（業界平均 +12pt）" は 32 cells、
+      placeholder 容量は推定 24 cells / 行 × 1 行 = 24 cells。
+      
+      A) 文字を縮める（"<newsletter-project>: 開封率 28%" など）
+      B) bullet を 2 つに分割（KPI 分割）
+      C) このまま進めて wrap も許容
+      D) 別 canonical（T+3B 等 image なし、各 bullet 容量大）に変更
+    options: [A, B, C, D]
+```
+
+ユーザー応答を反映してから Step 4 以降に進む。
+
+#### 3.7.4 例外: image_marker_layout_constraint（3.0.6）優先
+
+3.0.6 で「[image:] marker 存在時は image-marker > scenario hint」を確定済。3.7 で「容量超えで canonical 変更」を提案する場合も image-marker rule に従う:
+- `[image:]` 有 + 容量超え → **canonical 変更先も T+IMG family を維持**（T+IMG (P31) → T+IMG (P83 longer body variant) など）
+- `[image:]` 有 + どの T+IMG でも入らない → image を別 page に分離する案を提示
 
 ### Step 4: Section divider 自動挿入（Gap 7 fix）
 
@@ -811,6 +881,38 @@ result.json に以下を追加:
 
 最終の output を **2 つのファイルに分けて** cwd に書く。両方必須——manifest sidecar が無いと open-design の renderer が起動せず、UI 上で deck が表示されない。
 
+#### 10.0 result.json を書く前の必須 checklist（Round 11 で強化）
+
+result.json を書く前に **`userActions` 配列を構築**する。以下の検出は **すべて自動**:
+
+1. **placehold.co / placeholder.com / via.placeholder.com 検出**: outline の `[image:]` URL を全部 scan。これら placeholder image 生成サービスを指している URL が 1 つでもあれば、`userActions` に **必ず high priority entry 追加**:
+   ```json
+   {
+     "priority": "high",
+     "label": "画像差し替え",
+     "detail": "<N> 個の placeholder image (placehold.co 等) が deck に挿入された。これらは黒底白字のテキストオーバーレイで、最終 deck には不向き。Page <X, Y, Z> の image marker を実画像 URL（公司 CDN / GitHub raw / 公開 imgur 等）に書き直して outline を再投入するか、Slides UI で直接差し替え。"
+   }
+   ```
+   N と page 番号は実検出値で埋める。**「placehold.co URL が無いから skip」は OK だが、「あるのに userActions に書かない」は NG**。
+
+2. **`[要○○]` placeholder 残存**: outline で agent が「ハルシネーション禁止」のため `[要数値]` 等で残した未確定値が `result.json.missingFields` に積まれているはず。これを `userActions` にも entry 化:
+   ```json
+   {
+     "priority": "high",
+     "label": "未確定値の確認",
+     "detail": "outline に <N> 件の `[要○○]` placeholder。実値を確認してから outline 再投入。"
+   }
+   ```
+   `missingFields` が空なら skip。
+
+3. **canonical 内 dup placeholder の重複表示**: T+5B 等 canonical 内 placeholder が同じ original_text を共有している場合、agent が複数 page でそれを書き換えると視覚上重複が出る。発生時に entry 追加（**Phase 5 P5 <newsletter-project> の例**）。Phase 6 では per-objectId update-text なので通常は出ないが、レアケースで該当したら記録。
+
+4. **layout-level の自己評価**: 9.5.3 の段階 3 で発見した layout 不適合があれば entry 化。
+
+5. **canonical-change 不能 case**: 9.5.4 で 3 round 試しても収まらなかった place があれば entry 化。
+
+`userActions` 配列が**空**になることは滅多にない（少なくとも placehold.co 警告は各 e2e test で必ず 1 件は出る）。空のまま result.json を書くな。
+
 #### 10.1 `result.json` (deck の primary 出力)
 
 ```json
@@ -828,6 +930,13 @@ result.json に以下を追加:
   "layoutsUsed": ["P7", "P53", "P53", "P83", "P31", "P53", "P53", "P110"],
   "deletedPages": 124,
   "knownSideEffects": [],
+  "userActions": [
+    {
+      "priority": "high",
+      "label": "画像差し替え",
+      "detail": "2 個の placeholder image (placehold.co) が page 3, 4 に挿入された。最終 deck には実画像に差し替え必要。"
+    }
+  ],
   "visualReview": {
     "pdfPath": "_review/review-v1.pdf",
     "rounds": 2,
