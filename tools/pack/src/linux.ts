@@ -359,6 +359,7 @@ async function writeAssembledApp(
     paths.packagedConfigPath,
     `${JSON.stringify(
       {
+        appVersion: version,
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
