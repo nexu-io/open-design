@@ -2790,6 +2790,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
+
+      // ?pagesize=WxH (mm) — inject a corrected @page rule so Chrome's print
+      // dialog picks up the right physical dimensions instead of defaulting to A4.
+      const pagesizeParam = req.query.pagesize;
+      if (pagesizeParam && file.mime === 'text/html') {
+        const parts = String(pagesizeParam).split('x').map(Number);
+        const pw = parts[0]; const ph = parts[1];
+        if (pw > 0 && ph > 0) {
+          const styleTag = `<style>@page{size:${pw}mm ${ph}mm;margin:0}` +
+            `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}</style>`;
+          let html = file.buffer.toString('utf-8');
+          // Inject as the last element before </body> so it wins the cascade.
+          html = html.includes('</body>')
+            ? html.replace('</body>', styleTag + '</body>')
+            : html + styleTag;
+          return res.type('text/html').send(html);
+        }
+      }
+
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

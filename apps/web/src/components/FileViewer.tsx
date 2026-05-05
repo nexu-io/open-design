@@ -2866,10 +2866,16 @@ function HtmlViewer({
                       // src="...jsx"> sources) don't apply. Then auto-trigger
                       // the print dialog after a generous delay so React /
                       // Babel / fonts / images all settle first.
-                      const win = window.open(
-                        projectRawUrl(projectId, file.name),
-                        '_blank',
-                      );
+                      //
+                      // Append ?pagesize=WxH so the daemon injects a corrected
+                      // @page rule using mm units — Chrome then pre-selects the
+                      // right paper size instead of defaulting to A4.
+                      const pagesizeParam = extractPrintPageSize(source ?? '');
+                      const rawUrl = projectRawUrl(projectId, file.name);
+                      const exportUrl = pagesizeParam
+                        ? `${rawUrl}?pagesize=${pagesizeParam}`
+                        : rawUrl;
+                      const win = window.open(exportUrl, '_blank');
                       if (!win) return;
                       const trigger = () => {
                         try {
@@ -3298,6 +3304,18 @@ function hasRelativeAssetRefs(html: string): boolean {
     return true;
   }
   return false;
+}
+
+// Parse @page { size: Wpx Hpx } from a design's HTML source and return a
+// "WxH" string for use as the ?pagesize= query parameter. The daemon then
+// injects a corrected @page rule with mm units so Chrome's print dialog
+// pre-selects the right paper size. Returns null when no @page size is found.
+function extractPrintPageSize(html: string): string | null {
+  const m = html.match(/@page\s*\{[^}]*\bsize\s*:\s*([\d.]+)px\s+([\d.]+)px/i);
+  if (!m) return null;
+  const w = Math.round(parseFloat(m[1]));
+  const h = Math.round(parseFloat(m[2]));
+  return w > 0 && h > 0 ? `${w}x${h}` : null;
 }
 
 async function inlineRelativeAssets(
