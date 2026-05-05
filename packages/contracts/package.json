@@ -20,7 +20,7 @@
     }
   },
   "scripts": {
-    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build": "node --experimental-strip-types ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
     "prepack": "pnpm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
