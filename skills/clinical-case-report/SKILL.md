@@ -180,6 +180,7 @@ Requirements for the HTML output:
 <section data-od-id="investigations">...</section>
 <section data-od-id="assessment">...</section>
 <section data-od-id="plan">...</section>
+```
 
 ### Step 7 — Self-check against `references/checklist.md`
 
