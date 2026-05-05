@@ -854,6 +854,7 @@ function attachAgentStreamHandlers(
       prompt,
       cwd,
       model: model ?? null,
+      mcpServers: [],
       send,
     });
   } else if (def.streamFormat === 'json-event-stream') {
