@@ -353,6 +353,8 @@ export async function syncConfigToDaemon(config: AppConfig): Promise<void> {
     agentModels: config.agentModels,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
+    disabledSkills: config.disabledSkills,
+    disabledDesignSystems: config.disabledDesignSystems,
   };
   try {
     await fetch('/api/app-config', {

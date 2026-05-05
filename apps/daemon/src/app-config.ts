@@ -22,6 +22,8 @@ export interface AppConfigPrefs {
   agentModels?: Record<string, AgentModelPrefs>;
   skillId?: string | null;
   designSystemId?: string | null;
+  disabledSkills?: string[];
+  disabledDesignSystems?: string[];
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -30,6 +32,8 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'agentModels',
   'skillId',
   'designSystemId',
+  'disabledSkills',
+  'disabledDesignSystems',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -82,6 +86,11 @@ function applyConfigValue(
       target[key] = validated;
     } else {
       delete target[key];
+    }
+  }
+  if (key === 'disabledSkills' || key === 'disabledDesignSystems') {
+    if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+      target[key] = value;
     }
   }
 }

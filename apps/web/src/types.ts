@@ -269,6 +269,9 @@ export interface AppConfig {
   // configs that pre-date the feature land at `undefined`, which the loader
   // normalizes to a safe default (everything off).
   notifications?: NotificationsConfig;
+  // IDs of skills/design-systems the user has explicitly disabled.
+  disabledSkills?: string[];
+  disabledDesignSystems?: string[];
 }
 
 export interface ComposioSettings {

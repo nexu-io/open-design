@@ -529,8 +529,8 @@ export function App() {
           routeFileName={route.kind === 'project' ? route.fileName : null}
           config={config}
           agents={agents}
-          skills={skills}
-          designSystems={designSystems}
+          skills={skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id))}
+          designSystems={designSystems.filter((d) => !(config.disabledDesignSystems ?? []).includes(d.id))}
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
           onAgentChange={handleAgentChange}
@@ -548,8 +548,8 @@ export function App() {
         />
       ) : (
         <EntryView
-          skills={skills}
-          designSystems={designSystems}
+          skills={skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id))}
+          designSystems={designSystems.filter((d) => !(config.disabledDesignSystems ?? []).includes(d.id))}
           projects={projects}
           templates={templates}
           promptTemplates={promptTemplates}

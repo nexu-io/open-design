@@ -19,6 +19,7 @@ import type { AgentInfo, ApiProtocol, ApiProtocolConfig, AppConfig, AppTheme, Ap
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
+import { LibrarySection } from './LibrarySection';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import {
   FAILURE_SOUNDS,
@@ -38,6 +39,7 @@ export type SettingsSection =
   | 'appearance'
   | 'notifications'
   | 'pet'
+  | 'library'
   | 'about';
 
 interface Props {
@@ -505,6 +507,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('pet.navTitle')}</strong>
                 <small>{t('pet.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'library' ? ' active' : ''}`}
+              onClick={() => setActiveSection('library')}
+            >
+              <Icon name="grid" size={18} />
+              <span>
+                <strong>{t('settings.library')}</strong>
+                <small>{t('settings.libraryHint')}</small>
               </span>
             </button>
             <button
@@ -1009,6 +1022,10 @@ export function SettingsDialog({
 
           {activeSection === 'pet' ? (
             <PetSettings cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'library' ? (
+            <LibrarySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
           {activeSection === 'about' ? (
