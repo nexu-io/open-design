@@ -9,7 +9,9 @@
 - [ ] Vital signs are internally consistent (shocked patient has low SBP AND high HR AND raised lactate)
 - [ ] Assessment contains a clearly stated primary diagnosis
 - [ ] Plan is present and directly addresses the primary diagnosis
-- [ ] No real patient names or identifying information included
+- [ ] No real patient identifiers (direct or indirect): no names, MRNs, exact dates, locations, images, rare condition combos, occupation details, or verbatim stories from real cases
+- [ ] All data is synthetic, de-identified, or clearly fictional
+- [ ] If based on a real case, apply formal de-identification before use
 - [ ] HTML renders without errors in a browser
 - [ ] All major sections tagged with `data-od-id`
 

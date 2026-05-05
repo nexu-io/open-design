@@ -82,21 +82,29 @@ The HPI must be chronological. Include timeline markers
 If the user has not provided specific values, generate values that are
 internally consistent with the diagnosis:
 
-**Consistency rules (must follow):**
+**Consistency checks (typical patterns):**
 
-- A patient in shock must have: HR > 100, SBP < 90, raised lactate,
-  impaired capillary refill
-- A patient with pneumonia must have: raised WBC, raised CRP,
-  temperature > 38°C, and appropriate CXR findings
-- A STEMI must have: ST elevation in contiguous leads, raised troponin,
-  raised CK-MB
-- A septic patient must have: raised WBC or low WBC, raised lactate > 2,
-  raised CRP, temperature abnormality
+- A patient in shock **typically** has: HR >100, SBP <90, raised lactate,
+  impaired capillary refill — but medications (beta-blockers), age, or
+  shock type (neurogenic, spinal) can alter this pattern
+- Pneumonia **typically** presents with raised WBC, raised CRP,
+  temperature >38°C — but afebrile pneumonia exists, especially in
+  the elderly or immunocompromised
+- A STEMI **typically** shows ST elevation in contiguous leads and raised
+  high-sensitivity troponin — but early presentations may have initially
+  normal troponin; CK-MB is not universally required
+- Sepsis **typically** shows raised or low WBC, raised lactate >2,
+  temperature abnormality — but compensated early sepsis may present
+  with normal vitals
 - Lab units must match convention: creatinine in µmol/L or mg/dL
   (state which), glucose in mmol/L, haemoglobin in g/dL
 
-Never generate a value that contradicts the stated diagnosis.
-Never contradict values the user has provided.
+**Critical rule — preserve user-provided data:**
+- Never overwrite a value the user has explicitly stated
+- If a user-provided value is atypical for the diagnosis, keep it and
+  note the atypical presentation in the assessment rather than
+  forcing canonical numbers
+- Never generate a value that contradicts the stated diagnosis
 
 ### Step 4 — Write the assessment
 
@@ -127,6 +135,20 @@ The plan must be:
 If you are uncertain about a specific dose, write
 "[drug name] — dose per local formulary/protocol" rather than
 inventing a dose.
+
+### Important — Prescribing Safety
+
+Generated plans must:
+- Be marked as educational/simulated, not a substitute for clinician judgment
+- Use "per local formulary/protocol" language when required patient variables
+  (weight, renal function, allergies) are missing from the brief
+- List key contraindications and unknowns before medication recommendations
+  when relevant patient data has not been provided
+- Never claim a plan is "definitive" or "standard of care" without full
+  patient context (allergy status, renal/hepatic function, pregnancy
+  status, weight, anticoagulation/bleeding risk)
+- Include a disclaimer footer in the HTML output stating the case is for
+  educational and documentation purposes only
 
 ### Step 6 — Write `index.html`
 

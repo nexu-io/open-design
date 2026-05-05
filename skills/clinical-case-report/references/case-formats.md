@@ -87,9 +87,8 @@ The reader knows the patient. They need the delta.
 
 | User says | Use format |
 |---|---|
-| "case presentation", "rounds", "clinic" | SOAP |
-| "conference", "grand rounds", "teaching case" | Conference |
-| "daily review", "ward round", "handover", "ICU" | Brief Rounds |
-| "interesting case", "rare case" | Conference |
-| "discharge summary" | SOAP (narrative variant) |
+| "case presentation", "formal rounds", "clinic" | SOAP |
+| "conference", "grand rounds", "teaching case", "interesting case", "rare case" | Conference |
+| "daily review", "ward round", "handover", "ICU", "post-call" | Brief Rounds |
+| "discharge summary", "clinic letter" | SOAP (narrative variant) |
 | No format specified | SOAP |
