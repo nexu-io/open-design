@@ -34,6 +34,7 @@ const residualSkippedDirectories = new Set([
 ]);
 
 const residualAllowedExactPaths = new Set([
+  "packages/contracts/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/sidecar/esbuild.config.mjs",
   "packages/sidecar-proto/esbuild.config.mjs",
