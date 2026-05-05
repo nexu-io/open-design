@@ -322,9 +322,50 @@ scenario が明確に該当しない場合の構造マッチング:
    - **発明しない**。代わりに同義の上位 shape にフォールバック（例: T+4B → T+3B + 補足を別ページ）
    - フォールバックも不可なら、ユーザーに「対応する layout が catalog にないため、outline を分割するか別構造にしてほしい」と返す
 
-### Step 3.7: Pre-flight 文字 fit 事前評価（**Round 11 で追加**、v4-#4）
+### Step 3.7: Pre-flight 文字 fit 事前評価（**Round 11 で追加**、v4-#4 / Round 12 で title 検査追加）
 
-> Round 9-10 で page 2/3/4 の body 文字が template 原字号で 1-2 回 wrap した。原因は outline の文字量が placeholder 容量を超えていたこと。Round 11 で「字号は触らない」方針確定後、wrap は許容できない代わりに **outline 段階で fit を予測**して push back する流れに切り替え。
+> Round 9-10 で page 2/3/4 の body 文字が template 原字号で 1-2 回 wrap した。Round 12 ユーザーフィードバック: **title 字数が placeholder にミスマッチ**して 2 つの逆症状が発生:
+> 1. **title 長すぎ → wrap して見栄え崩壊**
+> 2. **title 短すぎ → placeholder の余白が大きすぎて page が空っぽ感**
+>
+> 両症状を防ぐため Step 3.7 を **title fit 検査**にも拡張。layouts.json の各 canonical に `title_fit: { min, ideal, max, lines }` を追加（cells 単位、JP 全角 = 2 cells / 半角 = 1 cell）。skill は outline section の H1 字数を測り、`title_fit.ideal` に最も近い canonical を選ぶ。`min` 未満 → page sparse、`max` 超え → wrap、どちらも不可。
+
+#### 3.7.0 Title fit 区間（**最優先、layout 候補絞り込み**）
+
+各 outline section について:
+
+1. **section H1 の cells 数を計算**:
+   ```
+   cells(text) = sum over each char:
+     if 全角 JP / 全角句読点 → +2
+     elif 半角 latin / 数字 / 記号 → +1
+   ```
+
+2. **layouts.json の `shape_canonicals[X].title_fit` 区間で候補を絞る**:
+   - `cells < min` → ❌ skip（page 太空）
+   - `cells > max` → ❌ skip（title wrap）
+   - `min ≤ cells ≤ max` → ✅ 候補
+
+3. **複数候補が残ったら `|cells - ideal|` 最小の canonical を選ぶ**
+
+4. **候補無し（全 canonical の min/max を超えた）→ ユーザーに通告**:
+   ```
+   「Section "<title>" の標題 ${cells} cells、現有 layouts のどれにもフィットしない。
+    短くする / 長くする / 標題を分けるかを決めてほしい」
+   ```
+
+#### 3.7.0.1 例: 「<newsletter-project> Vol.001 Launch」(31 cells)
+
+| canonical | title_fit | match? |
+|---|---|---|
+| T+3B (P53) | min 8, ideal 14, max 48 | ✅ within range, |31-14|=17 |
+| T+SUB (P28) | min 10, ideal 24, max 50 | ✅ within range, |31-24|=7 ← **best** |
+| T+IMG (P31) | min 8, ideal 20, max 40 | ✅ within range, |31-20|=11 |
+| T-ONLY (P110) | min 5, ideal 10, max 16 | ❌ 31 > 16 |
+| T+IMG×3 (P85) | min 6, ideal 16, max 24 | ❌ 31 > 24 |
+
+→ T+SUB が選ばれる（image-marker rule 3.0.6 の制約があれば override）。
+
 
 #### 3.7.1 各 (section, canonical) ペアで容量 vs 文字量を概算
 
@@ -788,9 +829,13 @@ Read tool に PDF パスと `pages: "<page_number>"` を渡して各 populate pa
 |---|---|---|
 | **テキスト box overflow** | 文字が placeholder 矩形の外に出ている / 切れている | "<industry-event> 来場者 8,000 名" の "0 名" が右に切れる |
 | **不自然な折り返し** | 助詞・複合語の途中で改行 | "8,0\n00 名" / "<newsletter-project> V\nol.001" |
+| **title wrap (Round 12 追加)** | title placeholder の text が 2 行以上に折り返している | "<brand-project> JA — Phase 1" が "<brand-project> JA — \nPhase 1" になる |
+| **title under-fill (Round 12 追加)** | placeholder が想定 N 行のところ title が 1 行で残り N-1 行が白く余る | T+SUB の 3 行 placeholder に「KPI」だけ入って残り 2 行空白 |
 | **font size 過大** | 1 行の文字が overflow 起因で sub-1pt まで縮む / 2 行に gap | "Strategy Framework 完成"が 14pt → 5pt に縮小 |
 | **layout 崩壊** | bullet 数 mismatch / 並び崩れ | T+3B に 4 bullet 入って 4th が消失 |
 | **placeholder filler 残存** | "Lorem ipsum" / "Click here to" / "Headline first slide" 等が残る | bleed 副作用の見落とし |
+
+**title wrap / under-fill の両症状は、Step 3.7.0 の title fit 区間チェックを Step 3 で行えば 90% は事前回避できる**。視覚 self-check は最後の安全網。検出時は段階 2 で canonical を変更する（字号は触らない）。
 
 #### 9.5.3 NG 検出時の対応（**2 段階修正戦略、Phase 5 Round 2 で発見**）
 

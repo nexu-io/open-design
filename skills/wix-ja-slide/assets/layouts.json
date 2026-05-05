@@ -104,7 +104,14 @@
         }
       ],
       "has_image": false,
-      "n_image_slots": 0
+      "n_image_slots": 0,
+      "title_fit": {
+        "min": 8,
+        "ideal": 14,
+        "max": 48,
+        "lines": 1,
+        "note": "48 cells × 1 line verified"
+      }
     },
     "T+2B": {
       "canonical_slide_n": 54,
@@ -160,7 +167,14 @@
         }
       ],
       "has_image": false,
-      "n_image_slots": 0
+      "n_image_slots": 0,
+      "title_fit": {
+        "min": 30,
+        "ideal": 60,
+        "max": 120,
+        "lines": 3,
+        "note": "paragraph-as-title, multi-line"
+      }
     },
     "T+5B": {
       "canonical_slide_n": 42,
@@ -244,7 +258,14 @@
         }
       ],
       "has_image": false,
-      "n_image_slots": 0
+      "n_image_slots": 0,
+      "title_fit": {
+        "min": 6,
+        "ideal": 14,
+        "max": 30,
+        "lines": 2,
+        "note": "short heading"
+      }
     },
     "T-ONLY": {
       "canonical_slide_n": 110,
@@ -267,7 +288,14 @@
       ],
       "decorative_elements": [],
       "has_image": false,
-      "n_image_slots": 0
+      "n_image_slots": 0,
+      "title_fit": {
+        "min": 5,
+        "ideal": 10,
+        "max": 16,
+        "lines": 1,
+        "note": "closer hero, \"Thank you.\" size"
+      }
     },
     "T-LONG": {
       "canonical_slide_n": 26,
@@ -290,7 +318,14 @@
       ],
       "decorative_elements": [],
       "has_image": false,
-      "n_image_slots": 0
+      "n_image_slots": 0,
+      "title_fit": {
+        "min": 40,
+        "ideal": 90,
+        "max": 180,
+        "lines": 5,
+        "note": "quote / paragraph, large area"
+      }
     },
     "T+SUB": {
       "canonical_slide_n": 28,
@@ -321,7 +356,14 @@
       ],
       "decorative_elements": [],
       "has_image": false,
-      "n_image_slots": 0
+      "n_image_slots": 0,
+      "title_fit": {
+        "min": 10,
+        "ideal": 24,
+        "max": 50,
+        "lines": 3,
+        "note": "big title + subtitle"
+      }
     },
     "T+IMG": {
       "canonical_slide_n": 31,
@@ -360,7 +402,14 @@
           "requires_runtime_inspection": true,
           "runtime_inspection_note": "placeholder roles/text not pre-cataloged; agent must call GET /api/google/slides/<deckId> after copy and inspect each element via Slides API for role/text classification before update-text. Use only when T+IMG (P31) does not fit the body length needs."
         }
-      ]
+      ],
+      "title_fit": {
+        "min": 8,
+        "ideal": 20,
+        "max": 40,
+        "lines": 2,
+        "note": "title segment of title+paragraph block"
+      }
     },
     "COVER?": {
       "canonical_slide_n": 7,
@@ -393,7 +442,14 @@
       "n_image_slots": 1,
       "unsuitable_for_unique_content": true,
       "reason": "Multiple cover-style slides share the same Headline/TEXT HERE placeholder strings; replaceAllText is deck-wide and hits all duplicates. Even after delete-pages keeps only one slide, the canonical itself has multiple title-shaped placeholders that all collide. Use T+SUB or T-ONLY for cover instead.",
-      "fallback_canonical": "T+SUB"
+      "fallback_canonical": "T+SUB",
+      "title_fit": {
+        "min": 8,
+        "ideal": 16,
+        "max": 30,
+        "lines": 2,
+        "note": "BLACKLISTED — do not use"
+      }
     },
     "T+IMG×3": {
       "canonical_slide_n": 85,
@@ -478,7 +534,14 @@
       ],
       "has_image": true,
       "n_image_slots": 3,
-      "text_capable": true
+      "text_capable": true,
+      "title_fit": {
+        "min": 6,
+        "ideal": 16,
+        "max": 24,
+        "lines": 1,
+        "note": "short section title above 3 images"
+      }
     },
     "T+IMG×8": {
       "canonical_slide_n": 11,
@@ -569,7 +632,14 @@
       "unsuitable_for_unique_content": true,
       "reason": "The 8 round badges have ALL-CAPS English labels (HEY TEAM!, WELCOME EVERYONE, DATA DIVE, NUMBERS IN ACTION, WEEKLY, BI-WEEKLY, MONTHLY, BRIEF) baked into the badge graphics — they are NOT in layouts.json placeholder list and CANNOT be replaced via replaceAllText. Adding JP captions below produces a confused layout. Reserve for actual team-badge use.",
       "fallback_canonical": "T+3B (for highlights) or T+5B (for longer enumeration)",
-      "text_capable": true
+      "text_capable": true,
+      "title_fit": {
+        "min": 6,
+        "ideal": 12,
+        "max": 20,
+        "lines": 1,
+        "note": "team / badge title"
+      }
     },
     "FULL-IMG": {
       "canonical_slide_n": 33,
@@ -1869,6 +1939,7 @@
       "rationale": "Round 5 regression: agent picked FULL-IMG for <industry-event> (had body text \"4/8-10 ビッグサイト出展...\") — body text disappeared. Round 4 regression: T-LONG for same section — image disappeared.",
       "preferred_canonical_for_image_with_body": "T+IMG (P31 default; P83 alt for paragraph-style body)",
       "preferred_canonical_for_image_only": "FULL-IMG (P33)"
-    }
+    },
+    "title_fit_rule": "Match outline section title length (in cells: fullwidth JP=2, latin=1) to the canonical's title_fit.ideal. Reject canonicals where title length < title_fit.min (page looks empty) or > title_fit.max (title wraps). When multiple canonicals fit, prefer the one whose ideal is closest to actual."
   }
 }
