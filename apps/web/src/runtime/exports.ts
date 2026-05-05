@@ -215,6 +215,14 @@ export function openSandboxedPreviewInNewTab(
 // The injected script also sets the document title so "Save as PDF" picks
 // a sensible default filename.
 //
+// IMPORTANT: the artifact blob URL must be opened directly — NOT wrapped in
+// a sandboxed-preview iframe. When `window.print()` is called from inside a
+// sandboxed iframe, browsers always print the top-level document (the outer
+// wrapper), not the iframe. The outer wrapper only contains an <iframe> with
+// `height:100%` (viewport-relative, collapses to zero in print context) and
+// `overflow:hidden`, so the printed page comes out completely blank.
+// Opening the artifact directly avoids this entirely.
+//
 // `deck: true` injects an extra print stylesheet that lays every `.slide`
 // section out one-per-page top-to-bottom. The deck framework already ships
 // equivalent print rules; this is a safety net for older / partially
@@ -223,24 +231,14 @@ export function openSandboxedPreviewInNewTab(
 export function exportAsPdf(
   html: string,
   title: string,
-  opts?: SrcdocOptions & { sandboxedPreview?: boolean },
+  opts?: SrcdocOptions,
 ): void {
-  const sandboxedPreview = opts?.sandboxedPreview ?? true;
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintScript(doc, title);
-  if (sandboxedPreview) {
-    // `allow-modals` is needed so the child can show the browser print dialog;
-    // it still does not grant same-origin access to the generated document.
-    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-  }
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank', sandboxedPreview ? 'noopener,noreferrer' : undefined);
-  if (!win) {
-    // Popup blocked — at least the tab navigation may have happened above.
-    // Nothing else we can do without a fresh user gesture.
-  }
+  window.open(url, '_blank');
   // Revoke later — the loaded document keeps a reference until the tab
   // closes; revoking the URL string only removes the lookup name.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -248,13 +246,17 @@ export function exportAsPdf(
 
 function injectPrintScript(doc: string, title: string): string {
   const safeTitle = JSON.stringify(title || 'artifact');
-  // setTimeout gives stylesheets and images one tick to settle before the
-  // print dialog measures the page; without it some print previews come
-  // out blank in Chrome.
-  const script = `<script>try{document.title=${safeTitle}}catch(e){}window.addEventListener('load',function(){setTimeout(function(){try{window.focus();window.print()}catch(e){}},300)})</script>`;
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
-  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
-  return doc + script;
+  // 800 ms gives fonts, images, and CSS animations time to settle before the
+  // print dialog measures the page. 300 ms was too short for heavier designs
+  // in Chrome — the print preview came out blank even though the tab rendered
+  // correctly. The colour-adjust rule tells the browser not to strip
+  // background colours and images when printing.
+  const colorAdjust = `<style>@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}</style>`;
+  const script = `<script>try{document.title=${safeTitle}}catch(e){}window.addEventListener('load',function(){setTimeout(function(){try{window.focus();window.print()}catch(e){}},800)})</script>`;
+  const inject = colorAdjust + script;
+  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${inject}</head>`);
+  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${inject}</body>`);
+  return doc + inject;
 }
 
 // Stitches every .slide into a vertical multi-page PDF: 1920×1080 per page,
