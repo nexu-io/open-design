@@ -105,60 +105,116 @@ Pre-launch pages are your first handshake with future users. This skill builds a
 
 ## Workflow
 
-1. **Load the brand identity** — Read `DESIGN.md` for the color system, font pairing, and spatial rules. This is your foundation. A waitlist page lives or dies by consistency with the brand it represents. If `DESIGN.md` is missing, ask the user to provide one before you proceed.
-2. **Split the viewport into zones**: Upper (hero: 50–65%), Lower (decoration: 35–50%). The upper zone is working real estate—logo, headline, form. The lower zone is visual cushion—color, pattern, subtle animation. Both matter; neither dominates.
-3. **Anchor the logo**. Position it absolute, top-left, 20–24px from edges. Enclose it in a circle or badge using the brand's accent color. Add the product name beside it with a separator dot. This becomes the user's visual anchor—a guarantee this is a real brand, not a placeholder.
-4. **Write the headline** as a simple sentence: `product_name` + short phrase. Examples: "Meridian is coming soon", "Figma for music is almost here", "Cal is launching". Use the display typeface. Aim for one line on desktop, two on mobile. Readability beats cleverness.
-5. **Add one supporting line**. The tagline input—short, specific. No corporate buzzwords. Example: "A design tool that learns your style." If you have room, add 1–2 clarifying sentences. Keep it to 3 lines total.
-6. **Build the form**. Two fields: First Name (optional, no `required` attribute), Work Email (required). A "Join Waitlist" button. Do not add `novalidate`; rely on native browser validation plus a JavaScript guard (`if (!form.checkValidity()) { form.reportValidity(); return; }`) before showing the success state. On successful submission, hide the form and show a thank-you message (`role="status"` or `aria-live="polite"`) so screen readers announce it: "You're on the list. We'll be in touch." Use the body typeface. Make the button the only dark/emphasized element—it's the whole point.
-7. **Decorate below the fold** (optional but recommended):
-   - Coil or wavy line to separate zones (suggests movement, transition)
-   - Thin accent stripe of a secondary brand color
-   - Simple geometric pattern: perspective grid, radiating lines, or subtle lattice (suggests depth, forward momentum)
-   - Animated ticker at the bottom—repeating text like "COMING SOON" + markers (✦). Subtle, behind-the-scenes energy.
-   - All colors from DESIGN.md; no invented hex values.
-   - **Token mapping rules** — Color tokens in the template are full CSS expressions (not simple hex values):
-     - `--bg`, `--fg`, `--accent`, `--deco`, `--deco-stripe` / `{{*_HEX}}`: simple six-digit hex colors from DESIGN.md (e.g., `#{{BG_HEX}}` becomes `#FDE8DF`).
-     - `--input-border` / `{{BORDER_EXPRESSION}}`: full CSS expression for input border color, typically `rgba(...)` or `color-mix(...)` with opacity to soften the foreground (e.g., `rgba(196, 169, 154, 0.38)` or `color-mix(in srgb, var(--fg) 38%, transparent)`). Must be valid CSS; no `#` prefix.
-     - `--success` / `{{SUCCESS_HEX}}`: an explicit semantic success token from DESIGN.md if present; otherwise `#2D6A4F` is the allowed fallback (only hardcoded hex exception).
-     - `--btn-label` / `{{BTN_LABEL_EXPRESSION}}`: full CSS expression for button text color (e.g., `#1A1410` or `rgba(255,255,255,1)`). Validate WCAG AA contrast against button background.
-     - `--ticker-bg` / `{{TICKER_BG_EXPRESSION}}`: full CSS expression for ticker background (e.g., `rgba(0, 0, 0, 0.9)`). Must be valid CSS.
-     - `--ticker-fg` / `{{TICKER_FG_EXPRESSION}}`: full CSS expression for ticker text (e.g., `rgba(255, 255, 255, 0.9)`). Validate WCAG AA contrast.
-     - `--deco-stroke` / `{{DECO_STROKE_EXPRESSION}}`: full CSS expression for SVG decoration strokes (e.g., `rgba(0, 0, 0, 0.12)`). Typically muted foreground or neutral with opacity 12–15%.
-     - `--logo-shadow` / `{{LOGO_SHADOW_EXPRESSION}}`: full CSS expression for logo container shadow (e.g., `rgba(0, 0, 0, 0.08)`). Typically a subtle foreground shade with low opacity for depth.
-     - Never ask the user for hex values when derivation is possible.
-8. **Responsive scaling**. Test at 375px, 768px, 1440px. Mobile: form stacks to single column, logo shrinks to 40px, decoration compresses. No horizontal scrolling. All text remains readable. Desktop: centered layout, comfortable whitespace.
-9. **Emit clean HTML**. Single file, CSS inlined, SVG for graphics. Use semantic tags. Mark interactive elements with `data-od-id` (headline, form, logo, ticker, grid, etc.) so agents can customize without parsing.
-   - **Token escaping rules** — apply before inserting any user-supplied value:
-     - Text tokens (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before inserting into HTML text nodes or attribute values.
-     - Hex color tokens (`{{*_HEX}}`): validate each matches `/^[0-9A-Fa-f]{6}$/`; reject and ask the user if they don't match.
-     - CSS expression tokens (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`, `{{LOGO_SHADOW_EXPRESSION}}`): validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or extra quotes.
-     - Font name tokens (`{{DISPLAY_FONT_CSS}}`, `{{BODY_FONT_CSS}}`): these should be CSS font-family values, already quoted if they contain spaces (e.g., `'DM Sans'`, `Syne`). Do NOT add extra quotes in the template—they are inserted as-is into the `font-family` declaration.
-     - Font URL tokens (`{{DISPLAY_FONT_URL}}`, `{{BODY_FONT_URL}}`): spaces must be encoded as `+` for the Google Fonts URL (e.g., `DM+Sans`); validate the URL is well-formed before insertion.
-     - Never reflect raw user input into `<script>` blocks or event-handler attributes.
+### Preflight: Load hardened template and brand foundation
+
+0. **Load the brand identity** — Read `DESIGN.md` for the color system, font pairing, and spatial rules. This is your foundation. A waitlist page lives or dies by consistency with the brand it represents. If `DESIGN.md` is missing, ask the user to provide one before you proceed.
+1. **Read and copy the reusable template** — Read `assets/template.html`. This template is the hardened seed for all outputs. Copy it to `index.html` as your base. Do not write HTML from scratch or deviate from this structure. The template has all required layout, form structure, decorations, focus styles, and accessibility scaffolding baked in.
+
+### Steps: Token replacement with validation and escaping
+
+2. **Map tokens from inputs** — For each placeholder in the template (e.g., `{{PRODUCT_NAME}}`, `{{BG_HEX}}`, `{{BORDER_EXPRESSION}}`), follow the replacement rules below:
+   - **Text tokens** (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before insertion into HTML text nodes or attribute values.
+   - **Hex color tokens** (`{{BG_HEX}}`, `{{FG_HEX}}`, `{{ACCENT_HEX}}`, `{{DECO_HEX}}`, `{{STRIPE_HEX}}`, `{{SUCCESS_HEX}}`): Validate each matches `/^[0-9A-Fa-f]{6}$/`. Read them from DESIGN.md or ask the user. Derive `--success` from DESIGN.md if present; otherwise use the allowed fallback `#2D6A4F` only.
+   - **CSS expression tokens** (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`, `{{LOGO_SHADOW_EXPRESSION}}`): Validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or add extra quotes. Examples: `rgba(196, 169, 154, 0.38)`, `color-mix(in srgb, var(--fg) 38%, transparent)`. Insert as-is into `:root` CSS variables.
+   - **Font name tokens** (`{{DISPLAY_FONT_CSS}}`, `{{BODY_FONT_CSS}}`): These are CSS font-family values, already quoted if they contain spaces (e.g., `'DM Sans'`, `Syne`). Insert as-is into `--font-display` and `--font-body` declarations; do NOT add extra quotes.
+   - **Font URL tokens** (`{{DISPLAY_FONT_URL}}`, `{{BODY_FONT_URL}}`): Spaces must be encoded as `+` for the Google Fonts URL (e.g., `DM+Sans`, `IBM+Plex+Serif`). Validate the URL is well-formed before insertion.
+3. **Verify token mapping rules** — All color tokens are now in CSS variables:
+   - `--bg` = `#{{BG_HEX}}` (e.g., `#FDE8DF`)
+   - `--fg` = `#{{FG_HEX}}` (e.g., `#1A1410`)
+   - `--accent` = `#{{ACCENT_HEX}}` (brand badge)
+   - `--deco` = `#{{DECO_HEX}}` (decoration primary)
+   - `--deco-stripe` = `#{{STRIPE_HEX}}` (accent stripe)
+   - `--input-border` = `{{BORDER_EXPRESSION}}` (full CSS expression with opacity)
+   - `--success` = `#{{SUCCESS_HEX}}` or `#2D6A4F` fallback
+   - `--btn-label` = `{{BTN_LABEL_EXPRESSION}}` (button text color for contrast)
+   - `--ticker-bg` = `{{TICKER_BG_EXPRESSION}}` (animated ticker background)
+   - `--ticker-fg` = `{{TICKER_FG_EXPRESSION}}` (animated ticker text)
+   - `--deco-stroke` = `{{DECO_STROKE_EXPRESSION}}` (SVG strokes, typically muted with 12–15% opacity)
+   - `--logo-shadow` = `{{LOGO_SHADOW_EXPRESSION}}` (logo container shadow, subtle foreground shade)
+4. **Responsive layout** — The template includes mobile-first scaling:
+   - 375px: form stacks to single column, logo shrinks to 40px, decoration compresses, no horizontal scroll.
+   - 768px: comfortable two-column breathing room.
+   - 1440px+: centered layout with generous whitespace.
+   - Verify all text remains readable and the email input + button are fully visible (no clipping) at 375×667 and 390×844.
+
+### Validation: Run hardened quality gates before emitting
+
+5. **Run the quality checklist** — Read `references/checklist.md`. Validate every **P0 gate** before emitting:
+   - Exactly one CTA (email form)
+   - No countdown timer, no fake social proof, no emoji
+   - No horizontal scroll at 375px
+   - Email input has `type="email"` and `required`; first name has no `required`
+   - Form does NOT use `novalidate`; JS uses `checkValidity()` guard
+   - Success message has `role="status"` or `aria-live="polite"`
+   - All colors from DESIGN.md or allowed fallback; **no invented hex values**
+   - All user text is HTML-escaped; hex tokens match regex; fonts are URL-encoded
+   - **Pass P0 or do not emit.** If any P0 gate fails, ask the user or fix the token mappings and try again.
+6. **Verify P1 gates** for quality submission (recommended):
+   - Hover and active states on submit button
+   - Form validation with clear feedback
+   - Ticker animation respects `prefers-reduced-motion: reduce`
+   - All interactive elements have visible focus styles (input:focus includes `outline`)
+   - Tab/Enter keyboard support
+   - WCAG AA contrast for body text (≥4.5:1) and button label (≥4.5:1)
+   - Logo alt/aria-label present; ticker has `aria-hidden="true"`
+   - `<html lang="">` is set
+
+### Output
+
+7. **Emit clean HTML** — Single file, CSS inlined, SVG for graphics. Mark interactive elements with `data-od-id` (headline, form, logo, ticker, grid, etc.) so agents can customize without parsing.
 
 ## Quality gates
 
-- **Single CTA**: Email form is the only interactive element. No nav, no secondary buttons, no social links.
-- **Logo placement**: Fixed top-left, matches DESIGN.md accent color, scales down on mobile (50px → 40px).
-- **Color consistency**: Every color from DESIGN.md palette. No custom hex values invented.
-- **Content integrity**: Headline and copy tie directly to `product_name` and `tagline` inputs—no filler copy.
-- **Mobile fit**: No horizontal scroll at 375px. The email input and submit button are fully visible (no clipping) at 375×667 and 390×844. Any vertical overflow is scrollable, not hidden. Do not set `overflow: hidden` on `body` if it clips the form on short screens.
-- **No anti-patterns**: No emoji, no countdown timer, no fake social proof, no lorem ipsum.
-- **Typographic discipline**: Display + body fonts only (2-font rule). Consistent sizing across sections.
-- **Decoration restraint**: Lower zone enhances without distraction. Opacity, subtle strokes, muted animation.
+This skill enforces a hardened, template-based workflow to ensure compliance. **You must follow this execution path; deviating from the template disqualifies the output.**
+
+**Mandatory template-based execution:**
+- Read `assets/template.html` as your base; do not write HTML from scratch.
+- Copy it to `index.html` and replace only the `{{PLACEHOLDER}}` tokens with validated/escaped values.
+- Run every P0 gate in `references/checklist.md` before emitting; if any fail, fix and re-validate.
+
+**P0 gates (must pass):**
+- Single CTA: Email form is the only interactive element. No nav, no secondary buttons, no social links.
+- Logo placement: Fixed top-left, matches DESIGN.md accent color, scales down on mobile (50px → 40px).
+- Color consistency: Every color from DESIGN.md palette. Only allowed hardcoded exception: `#2D6A4F` for `--success`.
+- No anti-patterns: No countdown timer, no fake social proof, no emoji icons, no lorem ipsum.
+- Content integrity: Headline and copy tie directly to `product_name` and `tagline` inputs—no filler copy.
+- Mobile fit: No horizontal scroll at 375px. Email input and submit button are fully visible (no clipping) at 375×667 and 390×844. Vertical overflow is scrollable, not hidden.
+- Typographic discipline: Display + body fonts only (2-font rule). Consistent sizing across sections.
+- Form structure: Two fields (first name optional, email required), `checkValidity()` guard, success message with `role="status"`.
+- Token escaping: All user-supplied text HTML-escaped; hex tokens match `/^[0-9A-Fa-f]{6}$/`; CSS expressions are valid; font names are URL-encoded.
+
+**P1 gates (should pass for quality submission):**
+- Hero section visually distinct and above-the-fold.
+- Email submit button has hover and active states.
+- Form validation provides clear feedback.
+- Page scrollable (not clipped) at all mobile viewports; CTA visible without scroll.
+- Ticker animation paused/removed under `prefers-reduced-motion: reduce`.
+- All interactive elements have visible focus styles (outline, not just outline:none).
+- Keyboard: Tab reaches each form field; Enter submits.
+- WCAG AA contrast: Body text ≥4.5:1, button label ≥4.5:1.
+- Logo alt/aria-label present; ticker has `aria-hidden="true"`.
+- `<html lang="">` set to correct language code.
+
+**Decoration restraint:**
+- Lower zone enhances without distraction. Opacity, subtle strokes, muted animation.
+- No gradient that spans more than 20% of viewport height.
+- Coil, stripe, grid, or ticker all use colors from DESIGN.md only.
 
 ## Output
+
+**Only emit after all P0 gates in `references/checklist.md` pass.**
 
 Emit the artifact between tags:
 
 ```
 <artifact identifier="waitlist-id" type="text/html" title="Coming Soon — {{PRODUCT_NAME}}">
 <!doctype html>
-<html>
+<html lang="en">
 ...
 </html>
 </artifact>
 ```
 
 One line of description above the artifact; nothing below.
+
+**Post-emission:** If the user asks for changes, update the index.html in-place and re-run the P0 checklist gates before emitting the next version. Do not skip validation on iterations.
