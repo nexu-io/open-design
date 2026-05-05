@@ -52,6 +52,15 @@ A single-page HTML case report (`index.html`) containing:
 
 ## Step-by-step workflow
 
+### Step 0 — Load reference files
+
+Before starting, read both reference files:
+
+1. `references/case-formats.md` — use this to choose the correct output
+   format (SOAP, Conference, or Brief Rounds) based on the user's context
+2. `references/checklist.md` — keep P0 gates in mind throughout; you
+   must pass all P0 items before emitting the final artifact
+
 ### Step 1 — Parse the brief
 
 Read the user's prompt and extract:
@@ -171,3 +180,8 @@ Requirements for the HTML output:
 <section data-od-id="investigations">...</section>
 <section data-od-id="assessment">...</section>
 <section data-od-id="plan">...</section>
+
+### Step 7 — Self-check against `references/checklist.md`
+
+Before emitting `<artifact>`, run every P0 item in `references/checklist.md`.
+All P0 items must pass. Fix any failures before emitting.
