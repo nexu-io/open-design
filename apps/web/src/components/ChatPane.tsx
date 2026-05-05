@@ -60,6 +60,9 @@ interface Props {
   onDeleteComment?: (commentId: string) => void;
   onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[]) => void;
   onStop: () => void;
+  // Retry a failed assistant turn. Reuses the preceding user message
+  // verbatim — does NOT append a duplicate to history. See issue #475.
+  onRetry?: (failedAssistantId: string) => void;
   // Click-to-open chain: passes a basename up to ProjectView, which sets
   // FileWorkspace's openRequest. Tool cards, attachment chips, and
   // produced-file chips all call this.
@@ -109,6 +112,7 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onStop,
+  onRetry,
   onRequestOpenFile,
   initialDraft,
   onSubmitForm,
@@ -412,7 +416,29 @@ export function ChatPane({
                   </Fragment>
                 );
               })}
-              {error ? <div className="msg error">{error}</div> : null}
+              {error ? (
+                <div className="msg error">
+                  <span>{error}</span>
+                  {onRetry && lastAssistantId
+                    ? (() => {
+                        const last = messages[messages.length - 1];
+                        if (!last || last.id !== lastAssistantId) return null;
+                        if (last.runStatus !== 'failed') return null;
+                        return (
+                          <button
+                            type="button"
+                            className="ghost chat-error-retry"
+                            data-testid="chat-error-retry"
+                            onClick={() => onRetry(lastAssistantId)}
+                            disabled={streaming}
+                          >
+                            {t('promptTemplates.retry')}
+                          </button>
+                        );
+                      })()
+                    : null}
+                </div>
+              ) : null}
             </div>
             {scrolledFromBottom ? (
               <button

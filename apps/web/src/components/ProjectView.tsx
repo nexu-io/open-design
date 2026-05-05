@@ -779,19 +779,33 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
+      // When set, this call replays a previously-sent user turn after its
+      // assistant turn failed. We reuse the existing user message verbatim
+      // instead of appending a duplicate to history. See issue #475.
+      options: { retryOfAssistantId?: string } = {},
     ) => {
       if (!activeConversationId) return;
-      if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
-      setError(null);
       const startedAt = Date.now();
-      const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: prompt,
-        createdAt: startedAt,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
-      };
+      let userMsg: ChatMessage;
+      let priorMessages: ChatMessage[];
+      if (options.retryOfAssistantId) {
+        const target = resolveRetryTarget(messages, options.retryOfAssistantId);
+        if (!target) return;
+        userMsg = target.userMsg;
+        priorMessages = target.priorMessages;
+      } else {
+        if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
+        userMsg = {
+          id: crypto.randomUUID(),
+          role: 'user',
+          content: prompt,
+          createdAt: startedAt,
+          attachments: attachments.length > 0 ? attachments : undefined,
+          commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
+        };
+        priorMessages = messages;
+      }
+      setError(null);
       const selectedAgent =
         config.mode === 'daemon' && config.agentId
           ? agentsById.get(config.agentId)
@@ -824,22 +838,29 @@ export function ProjectView({
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
       };
-      const nextHistory = [...messages, userMsg];
+      const nextHistory = [...priorMessages, userMsg];
       setMessages([...nextHistory, assistantMsg]);
       setStreaming(true);
       setArtifact(null);
       savedArtifactRef.current = null;
       onTouchProject();
-      persistMessage(userMsg);
+      // On retry, the user message is already on disk; only the new
+      // assistant placeholder needs persisting. Skipping persistMessage(userMsg)
+      // also keeps the original timestamp/id stable.
+      if (!options.retryOfAssistantId) persistMessage(userMsg);
       persistMessage(assistantMsg);
-      if (commentAttachments.length > 0) {
+      const effectiveCommentAttachments = options.retryOfAssistantId
+        ? userMsg.commentAttachments ?? []
+        : commentAttachments;
+      if (!options.retryOfAssistantId && commentAttachments.length > 0) {
         void patchAttachedStatuses(commentAttachments, 'applying');
         setAttachedComments([]);
       }
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
-      // round-trip through the agent.
-      if (messages.length === 0) {
+      // round-trip through the agent. Skip on retry (title already set, and
+      // priorMessages excludes the user turn so length===0 would mis-fire).
+      if (!options.retryOfAssistantId && messages.length === 0) {
         const title = prompt.slice(0, 60).trim();
         if (title) {
           setConversations((curr) =>
@@ -970,8 +991,8 @@ export function ProjectView({
             endedAt: Date.now(),
             runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
           }));
-          if (commentAttachments.length > 0) {
-            void patchAttachedStatuses(commentAttachments, 'needs_review');
+          if (effectiveCommentAttachments.length > 0) {
+            void patchAttachedStatuses(effectiveCommentAttachments, 'needs_review');
           }
           setStreaming(false);
           abortRef.current = null;
@@ -1016,8 +1037,8 @@ export function ProjectView({
               ? 'failed'
               : prev.runStatus,
           }));
-          if (commentAttachments.length > 0) {
-            void patchAttachedStatuses(commentAttachments, 'failed');
+          if (effectiveCommentAttachments.length > 0) {
+            void patchAttachedStatuses(effectiveCommentAttachments, 'failed');
           }
           setStreaming(false);
           abortRef.current = null;
@@ -1049,8 +1070,11 @@ export function ProjectView({
           clientRequestId: crypto.randomUUID(),
           skillId: project.skillId ?? null,
           designSystemId: project.designSystemId ?? null,
-          attachments: attachments.map((a) => a.path),
-          commentAttachments,
+          attachments: (options.retryOfAssistantId
+            ? userMsg.attachments ?? []
+            : attachments
+          ).map((a) => a.path),
+          commentAttachments: effectiveCommentAttachments,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {
@@ -1103,6 +1127,18 @@ export function ProjectView({
       updateMessageById,
       onProjectsRefresh,
     ],
+  );
+
+  // Retry a failed assistant turn without appending a duplicate user
+  // message. The previous user turn is reused verbatim; the failed
+  // assistant turn (and anything after it) is dropped from history
+  // before re-streaming. See issue #475.
+  const handleRetry = useCallback(
+    (failedAssistantId: string) => {
+      if (streaming) return;
+      void handleSend('', [], [], { retryOfAssistantId: failedAssistantId });
+    },
+    [streaming, handleSend],
   );
 
   const persistArtifact = useCallback(
@@ -1412,6 +1448,7 @@ export function ProjectView({
           onDeleteComment={(commentId) => void removePreviewComment(commentId)}
           onSend={handleSend}
           onStop={handleStop}
+          onRetry={handleRetry}
           onRequestOpenFile={requestOpenFile}
           initialDraft={initialDraft}
           onSubmitForm={(text) => {
@@ -1475,6 +1512,27 @@ function assistantAgentDisplayName(
 
 function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'canceled';
+}
+
+/**
+ * Locate the user turn that should be re-sent when retrying a failed
+ * assistant turn. Returns the original user message verbatim plus the
+ * conversation history that precedes it. Callers must NOT append a new
+ * user message — that would duplicate the prompt in the LLM context
+ * (issue #475).
+ *
+ * Returns null when the failed assistant id is not found, is the first
+ * message, or is not preceded by a user message.
+ */
+export function resolveRetryTarget(
+  messages: ChatMessage[],
+  failedAssistantId: string,
+): { userMsg: ChatMessage; priorMessages: ChatMessage[] } | null {
+  const failedIdx = messages.findIndex((m) => m.id === failedAssistantId);
+  if (failedIdx <= 0) return null;
+  const prior = messages[failedIdx - 1];
+  if (!prior || prior.role !== 'user') return null;
+  return { userMsg: prior, priorMessages: messages.slice(0, failedIdx - 1) };
 }
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
