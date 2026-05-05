@@ -1642,7 +1642,7 @@ code {
   }
   /* Smaller card floor for narrow mains so 3 cols still fit. */
   .design-grid .design-card {
-    flex: 1 1 200px;
+    flex-basis: 200px;
   }
   .design-grid {
     gap: 12px;
@@ -2808,18 +2808,20 @@ code {
    thumbnail; with this cap they stay around 360-440 and the row
    leaves a moderate but harmless gap on the right. */
 .design-grid .design-card {
-  flex: 1 1 220px;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 220px;
   max-width: 360px;
 }
 @media (min-width: 1600px) {
   .design-grid .design-card {
-    flex: 1 1 260px;
+    flex-basis: 260px;
     max-width: 400px;
   }
 }
 @media (min-width: 2000px) {
   .design-grid .design-card {
-    flex: 1 1 300px;
+    flex-basis: 300px;
     max-width: 440px;
   }
 }
@@ -3422,7 +3424,7 @@ code {
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
   .design-grid .design-card {
-    flex: 1 1 160px;
+    flex-basis: 160px;
   }
   .design-grid {
     gap: 10px;
@@ -3432,7 +3434,7 @@ code {
 /* Phones: tightest layout. */
 @media (max-width: 600px) {
   .design-grid .design-card {
-    flex: 1 1 100%;
+    flex-basis: 100%;
   }
   .design-grid {
     gap: 12px;
