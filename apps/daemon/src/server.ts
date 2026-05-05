@@ -3511,6 +3511,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     projectId,
     skillId,
     designSystemId,
+    streamFormat,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -3584,11 +3585,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
       ? { id: effectiveSkillId }
       : undefined;
-    // Match the composer's panel-eligibility check so the orchestrator gate
-    // downstream can route ONLY runs whose prompt actually carries the
-    // <CRITIQUE_RUN> instructions. Otherwise a media-surface run, or a run
-    // missing brand/skill data, would still be parsed as Critique Theater
-    // protocol while the model was never told to emit those tags.
+    // Single-source-of-truth eligibility check. The composer downstream
+    // appends <CRITIQUE_RUN> instructions only when this check passes, and
+    // the spawn path routes runs through runOrchestrator(...) only when the
+    // SAME flag is true, so prompt and orchestrator stay in lockstep.
+    //
+    // Non-plain adapters (claude-stream-json, copilot-stream-json,
+    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
+    // protocol; the v1 critique parser only understands plain stdout. The
+    // spawn path falls through to legacy generation for those, so the
+    // panel addendum has to be suppressed here too: otherwise the model
+    // is instructed to emit Critique Theater tags that no orchestrator
+    // consumes.
     const isMediaSurface =
       skillMode === 'image' ||
       skillMode === 'video' ||
@@ -3596,10 +3604,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       metadata?.kind === 'image' ||
       metadata?.kind === 'video' ||
       metadata?.kind === 'audio';
+    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
     const critiqueShouldRun = critiqueCfg.enabled
       && critiqueBrand !== undefined
       && critiqueSkill !== undefined
-      && !isMediaSurface;
+      && !isMediaSurface
+      && isPlainAdapter;
+    // Only thread the critique fields when the run is actually eligible;
+    // otherwise the composer's own internal eligibility check (cfg.enabled
+    // && brand && skill && !isMediaSurface) might still fire on
+    // non-plain adapters and we'd emit the panel for a run the orchestrator
+    // skips. Gating the threading itself keeps composer + orchestrator in
+    // exact lockstep regardless of which side enforces eligibility.
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
@@ -3612,9 +3628,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       craftSections,
       metadata,
       template,
-      critique: critiqueCfg,
-      critiqueBrand,
-      critiqueSkill,
+      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
+      critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -3772,6 +3788,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         projectId,
         skillId,
         designSystemId,
+        streamFormat: def?.streamFormat ?? 'plain',
       });
 
     // Make skill side files reachable through three layers, in order of

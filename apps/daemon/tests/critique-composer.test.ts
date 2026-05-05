@@ -97,4 +97,28 @@ describe('composeSystemPrompt critique wiring', () => {
     });
     expect(out).toContain('<CRITIQUE_RUN');
   });
+
+  // Round 3 review feedback on PR #524.
+  // The composer takes its eligibility decision from the caller. The
+  // server-side gate in startChatRun is responsible for suppressing the
+  // critique inputs when the adapter is non-plain (see the
+  // critiqueShouldRun computation that AND's adapterStreamFormat==='plain'
+  // into the eligibility flag, then conditionally threads the critique
+  // fields). When the caller does the right thing and passes undefined for
+  // critique/critiqueBrand/critiqueSkill on a non-plain adapter, the panel
+  // addendum is correctly suppressed:
+  it('produces no panel addendum when caller suppresses critique inputs (non-plain adapter case)', () => {
+    const out = composeSystemPrompt({
+      skillBody: undefined,
+      skillName: undefined,
+      skillMode: undefined,
+      designSystemBody: 'tokens',
+      designSystemTitle: 'acme',
+      // server gate sets these to undefined when adapter is non-plain
+      critique: undefined,
+      critiqueBrand: undefined,
+      critiqueSkill: undefined,
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
 });
