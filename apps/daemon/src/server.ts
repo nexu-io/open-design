@@ -2842,10 +2842,23 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
         if (pageSize) {
           const [pw, ph] = pageSize;
+          // The design's content is laid out in CSS px (where the designer
+          // typically treats 1px == 1mm of physical print). When we set
+          // @page in mm, the page becomes physically large but the content
+          // stays at CSS-px size — leaving most of the page blank. So we
+          // also force body to be exactly pw x ph CSS px and rescale it
+          // via transform so its visual size fills the physical page:
+          //   pw mm = pw * 3.7795 CSS px  →  scale factor = 96/25.4
+          // Anything positioned absolutely inside body comes along for free.
+          const scale = (96 / 25.4).toFixed(6); // 3.779528
           const styleTag =
-            `<style>@page{size:${pw}mm ${ph}mm!important;margin:0!important}` +
-            `html,body{margin:0!important;padding:0!important}` +
-            `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}</style>`;
+            `<style>` +
+            `@page{size:${pw}mm ${ph}mm!important;margin:0!important}` +
+            `html{margin:0!important;padding:0!important;width:${pw}mm!important;height:${ph}mm!important;overflow:hidden!important}` +
+            `body{margin:0!important;padding:0!important;width:${pw}px!important;height:${ph}px!important;` +
+            `transform:scale(${scale})!important;transform-origin:top left!important}` +
+            `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}` +
+            `</style>`;
           html = html.includes('</body>')
             ? html.replace('</body>', styleTag + '</body>')
             : html + styleTag;
