@@ -26,7 +26,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><b>English</b> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -663,7 +663,7 @@ The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf
 | Agent runtime | Bundled (Opus 4.7) | Bundled ([`pi-ai`][piai]) | **Delegated to user's existing CLI** |
 | Skills | Proprietary | 12 custom TS modules + `SKILL.md` | **31 file-based [`SKILL.md`][skill] bundles, droppable** |
 | Design system | Proprietary | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 129 systems shipped** |
-| Provider flexibility | Anthropic only | 7+ via [`pi-ai`][piai] | **12 CLI adapters + OpenAI-compatible BYOK proxy** |
+| Provider flexibility | Anthropic only | 7+ via [`pi-ai`][piai] | **15 CLI adapters + OpenAI-compatible BYOK proxy** |
 | Init question form | ❌ | ❌ | **✅ Hard rule, turn 1** |
 | Direction picker | ❌ | ❌ | **✅ 5 deterministic directions** |
 | Live todo progress + tool stream | ❌ | ✅ | **✅** (UX pattern from open-codesign) |
@@ -731,7 +731,7 @@ Long-form provenance write-up — what we take from each, what we deliberately d
 
 ## Roadmap
 
-- [x] Daemon + agent detection (12 CLI adapters) + skill registry + design-system catalog
+- [x] Daemon + agent detection (15 CLI adapters) + skill registry + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
 - [x] 31 skills + 72 design systems + 5 visual directions + 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
