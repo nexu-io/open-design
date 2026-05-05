@@ -1879,16 +1879,17 @@
       "T+IMG×8"
     ],
     "preferred_per_scenario": {
+      "_priority_note": "RULE PRECEDENCE (Round 10/12): image_marker_layout_constraint > preferred_per_scenario. If outline section contains an [image:] marker AND has body text, the canonical MUST be T+IMG family — overriding any scenario-based preference below. The scenario hint applies ONLY when there is no [image:] marker. See SKILL.md §3.0.6.",
       "cover": "T+SUB or T-ONLY (avoid COVER?, multiple placeholders bleed)",
-      "highlights_3": "T+3B (P53 verified)",
-      "highlights_5": "T+5B",
-      "kpi_summary": "T+3B with each metric as a bullet (avoid T-LONG, that is for quotes)",
+      "highlights_3": "T+3B (P53 verified) — UNLESS [image:] marker present, then T+IMG (P31)",
+      "highlights_5": "T+5B — UNLESS [image:] marker present, then T+IMG (P31) and split bullets across pages if needed",
+      "kpi_summary": "T+3B with each metric as a bullet (avoid T-LONG, that is for quotes) — UNLESS [image:] marker present in the same section, then T+IMG (P31). Image-marker rule wins; never silently drop the image. Round 10 regression: agent picked T+3B for a KPI section that also had [image:], image disappeared.",
       "event_recap_with_image": "T+IMG (P31)",
-      "product_launch_announcement": "T+IMG (hero) or T+SUB (text-heavy)",
-      "process_steps": "T+5B (numbered)",
-      "quote": "T-LONG (P26) — keep brackets",
+      "product_launch_announcement": "T+IMG (hero) or T+SUB (text-heavy). If [image:] marker present, force T+IMG.",
+      "process_steps": "T+5B (numbered) — UNLESS [image:] marker present, then T+IMG (process visual as image)",
+      "quote": "T-LONG (P26) — keep brackets. UNLESS [image:] marker present, then T+IMG (omit quote brackets, image as the visual anchor).",
       "closing": "T-ONLY (P110, kept short to fit oversized placeholder font)",
-      "two_paragraph_notes": "T+SUB (P28) — reuse same canonical as KPI summary if needed; do NOT use T+2B (P54) which has 4 arrow positions and shows 2 empty arrows when only 2 are filled. Round 4 user feedback."
+      "two_paragraph_notes": "T+SUB (P28) — reuse same canonical as KPI summary if needed; do NOT use T+2B (P54) which has 4 arrow positions and shows 2 empty arrows when only 2 are filled. Round 4 user feedback. UNLESS [image:] marker present, then T+IMG (P31)."
     },
     "closing_text_recommendation": {
       "prefer_default": "Thank you",

@@ -271,17 +271,21 @@ outline の section に `[image: ...]` マーカーがある場合の layout 選
 
 #### 3.1 `[image:]` marker が無い section: layouts.json の `skill_guidance.preferred_per_scenario` をチェック
 
+> ⚠️ **3.0.6 を先に通過していること**。outline section に `[image:]` marker が**有る**場合、この §3.1 の表は**読まない**。3.0.5 / 3.0.6 で T+IMG を選び §3.7 へ進む。
+>
+> §3.1 の対象は **`[image:]` marker が無い section のみ**。表の右列に「UNLESS [image:]…」の保険文言が入っているのは、§3.0.6 を飛ばして §3.1 に来てしまった場合の最終ガード。
+
 scenario タグから直接 canonical を引けるなら採用:
 
-| outline セクションタイプ | canonical |
+| outline セクションタイプ | canonical（[image:] 無し前提） |
 |---|---|
 | Cover | **T+SUB or T-ONLY**（COVER? は使うな）|
-| 3 点ハイライト | T+3B (P53) |
-| KPI 集約 | T+3B（各 metric 1 bullet）— **T-LONG は引用用、KPI に使うな** |
+| 3 点ハイライト | T+3B (P53)。`[image:]` 有 → T+IMG (P31) |
+| KPI 集約 | T+3B（各 metric 1 bullet）— **T-LONG は引用用、KPI に使うな**。`[image:]` 有 → **T+IMG (P31) を強制**（Round 10 で T+3B を選んで image が drop された regression。image-marker > scenario hint） |
 | 画像付きイベント振り返り | T+IMG (P31) |
-| 製品ローンチ | T+IMG (hero) or T+SUB (text 多) |
-| プロセス N ステップ | T+5B（番号付き）|
-| 引用 / Quote | T-LONG (P26)、「」記号付き |
+| 製品ローンチ | T+IMG (hero) or T+SUB (text 多)。`[image:]` 有 → T+IMG 強制 |
+| プロセス N ステップ | T+5B（番号付き）。`[image:]` 有 → T+IMG（process visual を image で表現）|
+| 引用 / Quote | T-LONG (P26)、「」記号付き。`[image:]` 有 → T+IMG（quote brackets は省略、image が視覚 anchor）|
 | クロージング | T-ONLY (P110)。**"Thank you." を default 採用**（placeholder は元々 "Thank you." 用に設計、JP 全角 5 字 "ありがとう" は同じ font size で 2 行 wrap する。Round 3 / Round 7 ユーザーフィードバック）。**字号縮小はしない**（template の typography は触らない、Round 7 の方針）。JP closing が必須なら短い「感謝」など 2 字フレーズで再考。 |
 
 #### 3.2 `skill_guidance.must_avoid_for_unique_content` をブラックリストで尊重
