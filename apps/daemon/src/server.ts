@@ -179,10 +179,11 @@ export function normalizeCommentAttachments(input) {
       const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
       const memberCount =
         selectionKind === 'pod'
-          ? Math.max(
-              podMembers.length,
-              Number.isFinite(raw.memberCount) ? Math.max(0, Math.round(raw.memberCount)) : 0,
-            )
+          ? (podMembers.length > 0
+              ? podMembers.length
+              : Number.isFinite(raw.memberCount)
+                ? Math.max(0, Math.round(raw.memberCount))
+                : 0)
           : 0;
       return {
         id: cleanString(raw.id) || `comment-${index + 1}`,

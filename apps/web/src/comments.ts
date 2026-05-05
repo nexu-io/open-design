@@ -40,10 +40,11 @@ export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCom
     selectionKind: snapshot.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount:
       snapshot.selectionKind === 'pod'
-        ? Math.max(
-            podMembers.length,
-            Number.isFinite(snapshot.memberCount) ? Math.round(snapshot.memberCount as number) : 0,
-          )
+        ? (podMembers.length > 0
+            ? podMembers.length
+            : Number.isFinite(snapshot.memberCount)
+              ? Math.round(snapshot.memberCount as number)
+              : 0)
         : undefined,
     podMembers: podMembers.length > 0 ? podMembers : undefined,
   };
@@ -91,10 +92,11 @@ export function commentToAttachment(
     selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount:
       comment.selectionKind === 'pod'
-        ? Math.max(
-            podMembers.length,
-            typeof comment.memberCount === 'number' ? Math.round(comment.memberCount) : 0,
-          )
+        ? (podMembers.length > 0
+            ? podMembers.length
+            : typeof comment.memberCount === 'number'
+              ? Math.round(comment.memberCount)
+              : 0)
         : undefined,
     podMembers: podMembers.length > 0 ? podMembers : undefined,
     source: 'saved-comment',
@@ -113,12 +115,11 @@ export function buildBoardCommentAttachments(input: {
   const selectionKind = input.target.selectionKind === 'pod' ? 'pod' : 'element';
   const memberCount =
     selectionKind === 'pod'
-      ? Math.max(
-          podMembers.length,
-          typeof input.target.memberCount === 'number'
+      ? (podMembers.length > 0
+          ? podMembers.length
+          : typeof input.target.memberCount === 'number'
             ? Math.round(input.target.memberCount)
-            : 0,
-        )
+            : 0)
       : undefined;
   return input.notes
     .map((note) => note.trim())

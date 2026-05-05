@@ -111,6 +111,8 @@ function injectCommentBridge(doc: string): string {
   var selectableCache = null;
   var drawing = false;
   var stroke = [];
+  var postTargetsTimer = null;
+  var MAX_TARGETS = 400;
   function esc(value){ try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); } catch (_) { return String(value); } }
   function isSelectableElement(el){
     if (!el || !el.tagName) return false;
@@ -141,7 +143,12 @@ function injectCommentBridge(doc: string): string {
     while (node && node.nodeType === 1 && node !== document.body && parts.length < 6) {
       var part = node.tagName.toLowerCase();
       var cls = typeof node.className === 'string' && node.className.trim()
-        ? node.className.trim().split(/\\s+/).slice(0, 2).join('.')
+        ? node.className
+            .trim()
+            .split(/\\s+/)
+            .slice(0, 2)
+            .map(function(token){ return esc(token); })
+            .join('.')
         : '';
       if (cls) part += '.' + cls;
       var index = 1;
@@ -195,6 +202,7 @@ function injectCommentBridge(doc: string): string {
     for (var i = 0; i < nodes.length; i++) {
       var item = targetFrom(nodes[i]);
       if (item) items.push(item);
+      if (items.length >= MAX_TARGETS) break;
     }
     selectableCache = items;
     return selectableCache;
@@ -208,10 +216,14 @@ function injectCommentBridge(doc: string): string {
   function schedulePostTargets(){
     if (!enabled || postTargetsPending) return;
     postTargetsPending = true;
-    window.requestAnimationFrame(function(){
-      postTargetsPending = false;
-      postTargets();
-    });
+    if (postTargetsTimer) window.clearTimeout(postTargetsTimer);
+    postTargetsTimer = window.setTimeout(function(){
+      window.requestAnimationFrame(function(){
+        postTargetsPending = false;
+        postTargetsTimer = null;
+        postTargets();
+      });
+    }, 120);
   }
   function closestTarget(event){
     var el = event.target && event.target.nodeType === 3 ? event.target.parentElement : event.target;

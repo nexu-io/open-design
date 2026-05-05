@@ -65,6 +65,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
+const MAX_BRIDGE_COORDINATE = 1_000_000;
 
 const MAX_CACHED_SLIDE_STATES = 64;
 const htmlPreviewSlideState = new Map<string, SlideState>();
@@ -1204,10 +1205,22 @@ function BoardComposerPopover({
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
   const podMembers = target.podMembers ?? [];
   return (
-    <div className="comment-popover" data-testid="comment-popover">
+    <div
+      className="comment-popover"
+      data-testid="comment-popover"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={`board-composer-title-${target.elementId}`}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+    >
       <div className="comment-popover-head">
         <div>
-          <strong>{target.elementId}</strong>
+          <strong id={`board-composer-title-${target.elementId}`}>{target.elementId}</strong>
           <span>{target.label}</span>
           <span>{selectionKindLabel(target.selectionKind, target.memberCount)}</span>
         </div>
@@ -1242,6 +1255,8 @@ function BoardComposerPopover({
       <textarea
         data-testid="comment-popover-input"
         value={draft}
+        autoFocus
+        aria-label={t('chat.comments.placeholder')}
         placeholder={t('chat.comments.placeholder')}
         onChange={(event) => onDraft(event.target.value)}
       />
@@ -1358,7 +1373,7 @@ function CommentPreviewOverlays({
       {boardTool === 'pod' && strokePoints.length > 1 ? (
         <svg className="board-pod-stroke">
           <polyline
-            points={strokePoints.map((point) => `${point.x},${point.y}`).join(' ')}
+            points={strokePoints.map((point) => `${point.x * scale},${point.y * scale}`).join(' ')}
           />
         </svg>
       ) : null}
@@ -1485,7 +1500,6 @@ function roundOverlayOpacity(value: number): number {
 
 function buildPodSnapshot(input: {
   filePath: string;
-  scale: number;
   strokePoints: StrokePoint[];
   liveTargets: Map<string, PreviewCommentSnapshot>;
 }): PreviewCommentSnapshot | null {
@@ -1495,7 +1509,6 @@ function buildPodSnapshot(input: {
     selectionHitsSnapshot({
       points: input.strokePoints,
       snapshot,
-      scale: input.scale,
       closedLoop,
     }),
   );
@@ -1607,10 +1620,14 @@ function summarizeSnapshot(snapshot: PreviewCommentSnapshot): string {
 function selectionHitsSnapshot(input: {
   points: StrokePoint[];
   snapshot: PreviewCommentSnapshot;
-  scale: number;
   closedLoop: boolean;
 }): boolean {
-  const bounds = overlayBoundsFromSnapshot(input.snapshot, input.scale);
+  const bounds = {
+    left: input.snapshot.position.x,
+    top: input.snapshot.position.y,
+    width: input.snapshot.position.width,
+    height: input.snapshot.position.height,
+  };
   if (pathIntersectsRect(input.points, bounds)) return true;
   if (!input.closedLoop) return false;
   const center = {
@@ -1697,6 +1714,17 @@ function lineIntersectsLine(a1: StrokePoint, a2: StrokePoint, b1: StrokePoint, b
   const ub =
     ((a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x)) / denominator;
   return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+}
+
+function finiteBridgeInteger(value: unknown): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  return clampBridgeCoordinate(value);
+}
+
+function clampBridgeCoordinate(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
 function ReactComponentViewer({
@@ -2184,14 +2212,14 @@ function HtmlViewer({
       label: String(data.label || ''),
       text: String(data.text || ''),
       position: {
-        x: Number(data.position?.x) || 0,
-        y: Number(data.position?.y) || 0,
-        width: Number(data.position?.width) || 0,
-        height: Number(data.position?.height) || 0,
+        x: clampBridgeCoordinate(data.position?.x),
+        y: clampBridgeCoordinate(data.position?.y),
+        width: clampBridgeCoordinate(data.position?.width),
+        height: clampBridgeCoordinate(data.position?.height),
       },
       htmlHint: String(data.htmlHint || ''),
       selectionKind: data.selectionKind === 'pod' ? 'pod' : 'element',
-      memberCount: typeof data.memberCount === 'number' ? data.memberCount : undefined,
+      memberCount: finiteBridgeInteger(data.memberCount),
       podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
     });
     function onMessage(ev: MessageEvent) {
@@ -2254,21 +2282,20 @@ function HtmlViewer({
       if (data.type === 'od:pod-stroke' && Array.isArray(data.points)) {
         setStrokePoints(
           data.points.map((point) => ({
-            x: Number(point.x) || 0,
-            y: Number(point.y) || 0,
+            x: clampBridgeCoordinate(point.x),
+            y: clampBridgeCoordinate(point.y),
           })),
         );
         return;
       }
       if (data.type === 'od:pod-select' && Array.isArray(data.points)) {
         const points = data.points.map((point) => ({
-          x: Number(point.x) || 0,
-          y: Number(point.y) || 0,
+          x: clampBridgeCoordinate(point.x),
+          y: clampBridgeCoordinate(point.y),
         }));
         setStrokePoints(points);
         const nextTarget = buildPodSnapshot({
           filePath: file.name,
-          scale: previewScale,
           strokePoints: points,
           liveTargets: liveCommentTargetsRef.current,
         });
@@ -2285,7 +2312,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [boardMode, file.name, previewComments, previewScale]);
+  }, [boardMode, file.name, previewComments]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
@@ -2709,6 +2736,8 @@ function HtmlViewer({
                 data-testid="comment-mode-toggle"
                 disabled={!boardAvailable}
                 title="Pick one element"
+                aria-label="Picker"
+                aria-pressed={boardTool === 'inspect'}
                 onClick={() => activateBoard('inspect')}
               >
                 <Icon name="edit" size={13} />
@@ -2719,6 +2748,8 @@ function HtmlViewer({
                 type="button"
                 disabled={!boardAvailable}
                 title="Draw a pod selection"
+                aria-label="Pods"
+                aria-pressed={boardTool === 'pod'}
                 onClick={() => activateBoard('pod')}
               >
                 <Icon name="draw" size={13} />

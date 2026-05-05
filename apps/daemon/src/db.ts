@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { migrateCritique } from './critique/persistence.js';
 
 let dbInstance = null;
 let dbFile = null;
@@ -191,6 +192,7 @@ function migrate(db) {
   if (!deploymentCols.some((c) => c.name === 'reachable_at')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN reachable_at INTEGER`);
   }
+  migrateCritique(db);
 }
 
 // ---------- deployments ----------
@@ -772,7 +774,11 @@ export function upsertPreviewComment(db, projectId, conversationId, input) {
   const selectionKind = target.selectionKind === 'pod' ? 'pod' : 'element';
   const podMembers = selectionKind === 'pod' ? normalizePodMembers(target.podMembers) : [];
   const memberCount = selectionKind === 'pod'
-    ? Math.max(podMembers.length, Number.isFinite(target.memberCount) ? Math.round(target.memberCount) : 0)
+    ? (podMembers.length > 0
+        ? podMembers.length
+        : Number.isFinite(target.memberCount)
+          ? Math.max(0, Math.round(target.memberCount))
+          : 0)
     : 0;
   const now = Date.now();
   const existing = db
@@ -863,6 +869,7 @@ function getPreviewComment(db, projectId, conversationId, id) {
 
 function normalizePreviewComment(row) {
   const podMembers = parseJsonOrUndef(row.podMembersJson);
+  const normalizedPodMembers = Array.isArray(podMembers) ? podMembers : undefined;
   return {
     id: row.id,
     projectId: row.projectId,
@@ -875,8 +882,13 @@ function normalizePreviewComment(row) {
     position: parseJsonOrUndef(row.positionJson) ?? { x: 0, y: 0, width: 0, height: 0 },
     htmlHint: row.htmlHint,
     selectionKind: row.selectionKind === 'pod' ? 'pod' : 'element',
-    memberCount: Number.isFinite(row.memberCount) ? row.memberCount : undefined,
-    podMembers: Array.isArray(podMembers) ? podMembers : undefined,
+    memberCount:
+      normalizedPodMembers && normalizedPodMembers.length > 0
+        ? normalizedPodMembers.length
+        : Number.isFinite(row.memberCount)
+          ? row.memberCount
+          : undefined,
+    podMembers: normalizedPodMembers,
     note: row.note,
     status: row.status,
     createdAt: row.createdAt,
