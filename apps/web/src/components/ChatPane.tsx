@@ -12,6 +12,20 @@ import { Icon } from './Icon';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
+// Retry is only offered when the most recent message is the failed
+// assistant turn the error banner refers to. If the user has sent
+// further messages since, or the run is no longer marked failed,
+// retrying would target stale state.
+export function shouldShowRetryButton(
+  messages: ChatMessage[],
+  lastAssistantId: string | null,
+): boolean {
+  if (!lastAssistantId) return false;
+  const last = messages[messages.length - 1];
+  if (!last || last.id !== lastAssistantId) return false;
+  return last.runStatus === 'failed';
+}
+
 // Featured starter prompts shown on the empty chat. Clicking one fills
 // the composer (does not auto-send) so users can tweak before sending.
 // Each prompt is intentionally dense — it should showcase ambitious
@@ -419,24 +433,17 @@ export function ChatPane({
               {error ? (
                 <div className="msg error">
                   <span>{error}</span>
-                  {onRetry && lastAssistantId
-                    ? (() => {
-                        const last = messages[messages.length - 1];
-                        if (!last || last.id !== lastAssistantId) return null;
-                        if (last.runStatus !== 'failed') return null;
-                        return (
-                          <button
-                            type="button"
-                            className="ghost chat-error-retry"
-                            data-testid="chat-error-retry"
-                            onClick={() => onRetry(lastAssistantId)}
-                            disabled={streaming}
-                          >
-                            {t('promptTemplates.retry')}
-                          </button>
-                        );
-                      })()
-                    : null}
+                  {onRetry && lastAssistantId && shouldShowRetryButton(messages, lastAssistantId) ? (
+                    <button
+                      type="button"
+                      className="ghost chat-error-retry"
+                      data-testid="chat-error-retry"
+                      onClick={() => onRetry(lastAssistantId)}
+                      disabled={streaming}
+                    >
+                      {t('promptTemplates.retry')}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
