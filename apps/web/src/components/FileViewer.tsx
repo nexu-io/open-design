@@ -2409,6 +2409,23 @@ function HtmlViewer({
     });
   }
 
+  // Returns source with all relative <link href> and <script src> assets
+  // fetched from the daemon and inlined. Used by export actions so the
+  // downloaded file is self-contained even when the preview was using the
+  // URL-load path (where inlineRelativeAssets never ran automatically).
+  async function getExportSource(): Promise<string> {
+    const raw = source ?? '';
+    if (inlinedSource) return inlinedSource;
+    if (hasRelativeAssetRefs(raw)) {
+      try {
+        return await inlineRelativeAssets(raw, projectId, file.name);
+      } catch {
+        return raw;
+      }
+    }
+    return raw;
+  }
+
   // Snapshot this project as a reusable template. The daemon snapshots
   // EVERY html/text/code file in the project (not just the file open in
   // the viewer), so the template captures the whole design, not a single
@@ -2842,7 +2859,9 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck });
+                      void getExportSource().then((html) =>
+                        exportAsPdf(html, exportTitle, { deck: effectiveDeck }),
+                      );
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
@@ -2882,7 +2901,7 @@ function HtmlViewer({
                       void exportProjectAsZip({
                         projectId,
                         filePath: file.name,
-                        fallbackHtml: source ?? '',
+                        fallbackHtml: inlinedSource ?? source ?? '',
                         fallbackTitle: exportTitle,
                       });
                     }}
@@ -2896,7 +2915,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsHtml(source ?? '', exportTitle);
+                      void getExportSource().then((html) => exportAsHtml(html, exportTitle));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file-code" size={14} /></span>
@@ -3263,13 +3282,17 @@ async function inlineRelativeAssets(
   projectId: string,
   fileName: string,
 ): Promise<string> {
-  const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
-  const links = html.match(/<link\b[^>]*>/gi) ?? [];
-  for (const tag of links) {
+  const isAbsolute = (ref: string) =>
+    /^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(ref);
+
+  const tagReplacements: Array<Promise<{ from: string; to: string } | null>> = [];
+
+  // <link rel="stylesheet">
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
     const rel = readHtmlAttr(tag, 'rel');
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    replacements.push(
+    tagReplacements.push(
       fetchProjectRelativeText(projectId, fileName, href).then((css) =>
         css == null
           ? null
@@ -3283,11 +3306,11 @@ async function inlineRelativeAssets(
     );
   }
 
-  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
-  for (const tag of scripts) {
+  // <script src>
+  for (const tag of html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? []) {
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
-    replacements.push(
+    tagReplacements.push(
       fetchProjectRelativeText(projectId, fileName, src).then((js) => {
         if (js == null) return null;
         const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
@@ -3303,10 +3326,57 @@ async function inlineRelativeAssets(
     );
   }
 
-  const resolved = (await Promise.all(replacements)).filter(
+  // <img src> — fetch image and embed as data URL
+  for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+    const src = readHtmlAttr(tag, 'src');
+    if (!src || isAbsolute(src)) continue;
+    tagReplacements.push(
+      fetchProjectRelativeAsDataUrl(projectId, fileName, src).then((dataUrl) => {
+        if (dataUrl == null) return null;
+        const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const newTag = tag.replace(
+          new RegExp(`(\\bsrc\\s*=\\s*['"])${escapedSrc}(['"])`, 'i'),
+          (_, q1, q2) => `${q1}${dataUrl}${q2}`,
+        );
+        return newTag === tag ? null : { from: tag, to: newTag };
+      }),
+    );
+  }
+
+  // Apply all tag-level replacements
+  const tagResolved = (await Promise.all(tagReplacements)).filter(
     (item): item is { from: string; to: string } => item !== null,
   );
-  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+  let result = tagResolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+
+  // CSS url() — collect unique relative refs from <style> blocks and inline style= attributes
+  const cssUrlRefs = new Set<string>();
+  const collectCssUrls = (text: string) => {
+    const re = /url\(\s*['"]?([^'")]+)['"]?\s*\)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const ref = m[1].trim();
+      if (ref && !isAbsolute(ref)) cssUrlRefs.add(ref);
+    }
+  };
+  for (const block of result.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi) ?? []) collectCssUrls(block);
+  for (const attr of result.match(/style\s*=\s*"[^"]*"/gi) ?? []) collectCssUrls(attr);
+  for (const attr of result.match(/style\s*=\s*'[^']*'/gi) ?? []) collectCssUrls(attr);
+
+  // Fetch and replace all CSS url() refs globally
+  const cssResults = await Promise.all(
+    [...cssUrlRefs].map(async (ref) => {
+      const dataUrl = await fetchProjectRelativeAsDataUrl(projectId, fileName, ref);
+      return dataUrl ? { ref, dataUrl } : null;
+    }),
+  );
+  for (const item of cssResults.filter((x): x is { ref: string; dataUrl: string } => x !== null)) {
+    const escapedRef = item.ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`url\\(\\s*(['"]?)${escapedRef}\\1\\s*\\)`, 'gi');
+    result = result.replace(re, () => `url("${item.dataUrl}")`);
+  }
+
+  return result;
 }
 
 async function fetchProjectRelativeText(
@@ -3320,6 +3390,43 @@ async function fetchProjectRelativeText(
     const resp = await fetch(projectRawUrl(projectId, filePath));
     if (!resp.ok) return null;
     return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
+function mimeFromExt(ref: string): string {
+  const ext = ref.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    avif: 'image/avif',
+    svg: 'image/svg+xml',
+    ico: 'image/x-icon',
+    woff: 'font/woff',
+    woff2: 'font/woff2',
+  };
+  return map[ext] ?? 'application/octet-stream';
+}
+
+async function fetchProjectRelativeAsDataUrl(
+  projectId: string,
+  ownerFileName: string,
+  assetRef: string,
+): Promise<string | null> {
+  const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
+  if (!filePath) return null;
+  try {
+    const resp = await fetch(projectRawUrl(projectId, filePath));
+    if (!resp.ok) return null;
+    const buffer = await resp.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return `data:${mimeFromExt(assetRef)};base64,${btoa(binary)}`;
   } catch {
     return null;
   }
