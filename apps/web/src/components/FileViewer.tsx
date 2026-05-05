@@ -2257,7 +2257,17 @@ function GoogleSlidesViewer({
           <iframe
             data-testid="google-slides-embed-frame"
             title={file.name}
-            src={result?.embedUrl}
+            // Append rm=minimal so Google's embed drops its bottom
+            // navigation chrome (page counter, arrows, Google Slides
+            // wordmark). The slide then occupies the full iframe
+            // exactly at 16:9, eliminating the letterbox bands the
+            // chrome was forcing. Falls back gracefully when embedUrl
+            // already has query params.
+            src={(() => {
+              const base = result?.embedUrl;
+              if (!base) return undefined;
+              return base.includes('?') ? `${base}&rm=minimal` : `${base}?rm=minimal`;
+            })()}
             allow="autoplay; fullscreen"
             referrerPolicy="strict-origin-when-cross-origin"
           />

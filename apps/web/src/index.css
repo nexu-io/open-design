@@ -7069,17 +7069,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-subtle, #f5f5f5);
   overflow: hidden;
 }
-/* Aspect ratio empirically tuned for Google Slides embed: a 16:9
-   slide + Google's own ~32px bottom navigation chrome wants the
-   iframe slightly taller than 16:9 so the slide actually fills the
-   width with no horizontal letterbox. 17:10 (= 1.70) is the closest
-   round number that nails it without leaving a visible top/bottom
-   gap for typical pane widths. */
+/* With rm=minimal on the embed URL Google drops its own bottom
+   chrome, so the iframe is pure slide content at 16:9. No letterbox
+   on either axis. */
 .google-slides-viewer .viewer-body iframe {
   border: 0;
   width: 100%;
   max-width: 100%;
-  aspect-ratio: 17 / 10;
+  aspect-ratio: 16 / 9;
   height: auto;
   background: var(--bg-subtle, #f5f5f5);
   border-radius: 6px;
