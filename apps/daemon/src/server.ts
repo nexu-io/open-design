@@ -749,6 +749,29 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     res.json(body);
   });
 
+  // Wix Japan Slide Generator: thumbnail for cards. Reads the project's
+  // metadata.deckId (set by the wix-ja-slide skill at result.json time)
+  // and asks Google Slides for the first-page thumbnail. Returns the
+  // expiring HTTPS contentUrl wrapped in JSON so the UI can <img> it.
+  // Cached for 25 minutes inside the daemon to avoid hammering Google
+  // when the Designs grid re-renders.
+  app.get('/api/projects/:id/thumbnail', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    const deckId = project.metadata?.deckId;
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 404, 'NO_DECK', 'project has no deckId metadata');
+    }
+    try {
+      const { getDeckThumbnailUrl } = await import('./google-slides.js');
+      const result = await getDeckThumbnailUrl(deckId, 'MEDIUM');
+      res.json(result);
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};

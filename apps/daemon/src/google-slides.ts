@@ -721,6 +721,60 @@ export async function exportPdf(deckId) {
   }
 }
 
+// Fetch a thumbnail PNG URL for the first page of a deck. Used by the
+// web UI to render real preview images on Designs cards instead of a
+// generic folder icon. Slides API returns a 30-minute expiring HTTPS
+// URL (`contentUrl`); we surface it directly and let the browser cache.
+//
+// `size` controls the requested thumbnail dimensions; valid values are
+// 'SMALL' | 'MEDIUM' | 'LARGE' (Google's preset enum). Defaults to MEDIUM.
+const THUMBNAIL_CACHE = new Map(); // deckId -> { url, expiresAt }
+const THUMBNAIL_TTL_MS = 25 * 60 * 1000; // 25 minutes (Google URL valid 30)
+export async function getDeckThumbnailUrl(deckId, size = 'MEDIUM') {
+  if (typeof deckId !== 'string' || !deckId) {
+    const err = new Error('deckId required');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
+    throw err;
+  }
+  const cached = THUMBNAIL_CACHE.get(deckId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { url: cached.url, cached: true };
+  }
+  const { slides } = await authedClients();
+  try {
+    const meta = await slides.presentations.get({
+      presentationId: deckId,
+      fields: 'slides(objectId)',
+    });
+    const firstSlide = meta.data.slides?.[0];
+    if (!firstSlide?.objectId) {
+      const err = new Error(`deck ${deckId} has no slides`);
+      err.code = 'GOOGLE_API_BAD_REQUEST';
+      throw err;
+    }
+    const thumb = await slides.presentations.pages.getThumbnail({
+      presentationId: deckId,
+      pageObjectId: firstSlide.objectId,
+      'thumbnailProperties.thumbnailSize': size,
+      'thumbnailProperties.mimeType': 'PNG',
+    });
+    const url = thumb.data.contentUrl;
+    if (!url) {
+      const err = new Error('Slides API returned empty thumbnail contentUrl');
+      err.code = 'GOOGLE_API_ERROR';
+      throw err;
+    }
+    THUMBNAIL_CACHE.set(deckId, {
+      url,
+      expiresAt: Date.now() + THUMBNAIL_TTL_MS,
+    });
+    return { url, cached: false };
+  } catch (err) {
+    if (err.code === 'GOOGLE_API_BAD_REQUEST') throw err;
+    throw wrapApiError(err);
+  }
+}
+
 // Read the deck's high-level structure (slide count, slide IDs, page
 // element summary). Used by the skill to verify a copy succeeded and to
 // look up real placeholder object IDs after copy (object IDs are stable
