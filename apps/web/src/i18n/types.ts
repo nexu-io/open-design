@@ -425,6 +425,7 @@ export interface Dict {
 
   // Workspace / file viewer / design files panel
   'workspace.designFiles': string;
+  'workspace.deckPreview': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;
   'workspace.openFromDesignFiles': string;

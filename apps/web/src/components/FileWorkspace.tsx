@@ -349,10 +349,14 @@ export function FileWorkspace({
           const isPending = sketchEntry && !sketchEntry.persisted;
           const onDisk = files.find((f) => f.name === name);
           const kind = onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+          // Wix Japan rebrand: result.json is the deck preview entry
+          // for the wix-ja-slide skill; show it labelled as
+          // "プレビュー" rather than the technical filename.
+          const friendlyLabel = name === 'result.json' ? t('workspace.deckPreview') : name;
           return (
             <Tab
               key={name}
-              label={`${name}${dirtyMark}`}
+              label={`${friendlyLabel}${dirtyMark}`}
               active={activeTab === name}
               onActivate={() =>
                 isPending ? activatePending(name) : setPersistedActive(name)

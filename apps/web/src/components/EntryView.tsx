@@ -261,14 +261,12 @@ export function EntryView({
         />
       </aside>
       <main className="entry-main">
-        <div className="entry-header">
-          <div className="entry-tabs" role="tablist">
-            <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
-            {/* Wix Japan rebrand: hide non-slide tabs (Examples / Design systems / Image / Video templates).
-                Keep the components mounted as conditional renderers below for forward-compat. */}
-          </div>
+        <div className="entry-header entry-header-flush">
+          {/* Wix Japan rebrand: removed the "Designs" tab (only tab,
+              no hierarchy meaning) and pushed the avatar to the
+              right. Header is now a single thin row instead of a
+              tab strip. */}
           <div className="entry-header-right">
-            {/* Avatar settings live next to tabs to mirror the project view. */}
             <button
               type="button"
               className="avatar-btn"

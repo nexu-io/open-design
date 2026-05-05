@@ -115,19 +115,16 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
             role="group"
             aria-label={t('designs.filterAria')}
           >
+            {/* Wix Japan rebrand: removed the "あなたのデザイン"
+                sub-tab — every project belongs to the user, so the
+                two filters always returned the same list. The
+                "最近" pill stays as the implicit default sort. */}
             <button
               aria-pressed={sub === 'recent'}
               className={sub === 'recent' ? 'active' : ''}
               onClick={() => setSub('recent')}
             >
               {t('designs.subRecent')}
-            </button>
-            <button
-              aria-pressed={sub === 'yours'}
-              className={sub === 'yours' ? 'active' : ''}
-              onClick={() => setSub('yours')}
-            >
-              {t('designs.subYours')}
             </button>
           </div>
         </div>
@@ -209,19 +206,26 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
                 </button>
                 <DesignCardThumb projectId={p.id} />
                 <div className="design-card-meta-block">
-                  <div className="design-card-name" title={p.name}>{p.name}</div>
+                  <div className="design-card-name" title={p.name}>
+                    {humanizeName(p.name)}
+                  </div>
                   <div className="design-card-meta">
+                    {/* Wix Japan rebrand: card meta is intentionally
+                        minimal — designers don't care about skill IDs
+                        or status enums. Show design system + last
+                        update timestamp; status is omitted because
+                        the daemon doesn't currently sync it for
+                        externally-spawned projects. */}
                     {ds ? (
                       <span className="ds">{ds}</span>
                     ) : (
                       <span>{t('designs.cardFreeform')}</span>
                     )}
-                    {skill ? ` · ${skill}` : ''}
-                    {' · '}
-                    <span className={`design-card-status design-card-status-${status}`}>
-                      {statusLabel(status, t)}
-                    </span>
-                    {p.status?.updatedAt ? ` · ${relativeTime(p.status.updatedAt, t)}` : ''}
+                    {p.status?.updatedAt
+                      ? ` · ${relativeTime(p.status.updatedAt, t)}`
+                      : p.updatedAt
+                      ? ` · ${relativeTime(p.updatedAt, t)}`
+                      : ''}
                   </div>
                 </div>
               </div>
@@ -296,6 +300,15 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
 
 function statusLabel(status: ProjectDisplayStatus, t: ReturnType<typeof useT>): string {
   return t(STATUS_LABEL_KEYS[status]);
+}
+
+// Strip ISO datestamp suffixes ("Wix JA E2E Round 6 2026-05-04T12:30")
+// from project names so cards read as "Wix JA E2E Round 6". Future
+// project names entered through the form won't have this suffix; this
+// helper is mainly for round-trip-friendly display of legacy entries.
+function humanizeName(name: string): string {
+  if (!name) return name;
+  return name.replace(/\s+\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?$/, '').trim() || name;
 }
 
 function relativeTime(ts: number, t: ReturnType<typeof useT>): string {

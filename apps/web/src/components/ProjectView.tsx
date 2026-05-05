@@ -1165,10 +1165,25 @@ export function ProjectView({
   );
 
   const projectMeta = useMemo(() => {
-    const skill = skills.find((s) => s.id === project.skillId)?.name;
+    // Wix Japan rebrand: only show the design system label (e.g.
+    // "Wix Japan"). The skill id is internal jargon designers don't
+    // need; the design system communicates "this is a Wix deck"
+    // already.
     const ds = designSystems.find((d) => d.id === project.designSystemId)?.title;
-    return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
-  }, [skills, designSystems, project.skillId, project.designSystemId, t]);
+    return ds || t('project.metaFreeform');
+  }, [designSystems, project.designSystemId, t]);
+
+  // Strip ISO datestamp suffix from auto-named legacy projects so the
+  // header shows "Wix JA E2E Round 6" instead of the full "...
+  // 2026-05-04T12:30". Future names from the form won't have this
+  // suffix but legacy backfills do.
+  const displayName = useMemo(() => {
+    const name = project.name ?? '';
+    const stripped = name
+      .replace(/\s+\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?$/, '')
+      .trim();
+    return stripped || name;
+  }, [project.name]);
 
   const isDeck = useMemo(
     () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
@@ -1230,7 +1245,7 @@ export function ProjectView({
                 }
               }}
             >
-              {project.name}
+              {displayName}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
         </div>

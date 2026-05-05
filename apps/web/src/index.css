@@ -583,33 +583,19 @@ code {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 
-/* Chat pane keeps the Claude rust accent locally — feedback was that
-   the Wix Japan black version felt heavier than the original. The
-   home view (Designs grid, sidebar, Create button) stays on the
-   black accent; this scoped override only re-tints the chat surface
-   (starter card icon chips, tag pills, send button hover, etc). */
-.chat-pane {
-  --accent: #c96442;
-  --accent-strong: #b45a3b;
-  --accent-soft: #f5d8cb;
-  --accent-tint: #fbeee5;
-  --accent-hover: #b45a3b;
-}
-[data-theme="dark"] .chat-pane {
-  --accent: #d97a56;
-  --accent-strong: #e8896a;
-  --accent-soft: #3d2318;
-  --accent-tint: #2e1a12;
-  --accent-hover: #e8896a;
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .chat-pane {
-    --accent: #d97a56;
-    --accent-strong: #e8896a;
-    --accent-soft: #3d2318;
-    --accent-tint: #2e1a12;
-    --accent-hover: #e8896a;
-  }
+/* Wix Japan rebrand: chat pane now uses the global black accent so
+   the entire UI shares one palette. Earlier we kept Claude rust
+   inside the chat pane only — that two-tone split read as
+   inconsistent in design critique. */
+
+/* Wix Japan rebrand: hide the "Design Files" tab in the project
+   workspace tabs bar. Designers don't need to see the raw
+   file-list view; the deck preview tab (renamed "プレビュー") is
+   auto-opened when entering a project. The tab itself stays in the
+   DOM so the workspace's keyboard shortcuts and routing still work
+   if a user navigates back to it via the URL. */
+.ws-tabs-bar .design-files-tab {
+  display: none !important;
 }
 
 /* -------- Split / panes -------------------------------------------- */
@@ -1691,11 +1677,14 @@ code {
   gap: 8px;
 }
 .entry-brand-title {
-  font-family: var(--serif);
+  /* Wix Japan rebrand: dropped the editorial serif (Source Serif Pro)
+     in favor of a system sans that visually rhymes with Wix Madefor
+     until we ship the licensed font. */
+  font-family: var(--sans);
   font-weight: 600;
-  font-size: 22px;
-  letter-spacing: -0.015em;
-  line-height: 1.15;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   color: var(--text-strong);
 }
 /* Responsive: pull the title smaller on narrow sidebars so the
@@ -2656,6 +2645,13 @@ code {
   border-bottom: 1px solid var(--border);
   min-width: 0;
   min-height: 52px;
+}
+/* Wix Japan rebrand: header without tabs becomes a thin top strip
+   that just hosts the avatar on the right. */
+.entry-header.entry-header-flush {
+  justify-content: flex-end;
+  min-height: 44px;
+  border-bottom-color: transparent;
 }
 .entry-header-tabs-row {
   display: flex;

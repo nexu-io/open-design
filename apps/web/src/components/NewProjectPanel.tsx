@@ -128,16 +128,12 @@ export function NewProjectPanel({
   const [videoPromptTemplate, setVideoPromptTemplate] =
     useState<PromptTemplatePick | null>(null);
 
-  // Design system is meaningful only for the structured/visual surfaces
-  // (prototype, deck, template, and the freeform "other" canvas). The
-  // media surfaces use prompt templates instead — design tokens don't map
-  // onto image/video/audio generations, and the picker just adds noise
-  // there. Keep this list explicit so future tabs declare their intent.
-  const showDesignSystemPicker =
-    tab === 'prototype' ||
-    tab === 'deck' ||
-    tab === 'template' ||
-    tab === 'other';
+  // Wix Japan rebrand: design system is always wix-japan for this
+  // single-purpose tool. Hide the picker entirely so designers don't
+  // see the freeform fallback or the menu of unrelated systems. We
+  // still pin the wix-japan id below in the create handler so the
+  // skill writes against the right tokens.
+  const showDesignSystemPicker = false;
 
   // When entering the template tab, snap to the first user-saved template
   // if there is one (and we don't already have a valid pick). The template
@@ -166,6 +162,11 @@ export function NewProjectPanel({
         ?? null;
     }
     if (tab === 'deck') {
+      // Wix Japan rebrand: this is a single-purpose tool — every
+      // deck flows through wix-ja-slide. Prefer that skill when
+      // present; fall back only if the team strips it.
+      const wixJa = skills.find((s) => s.id === 'wix-ja-slide');
+      if (wixJa) return wixJa.id;
       const list = skills.filter((s) => s.mode === 'deck');
       return list.find((s) => s.defaultFor.includes('deck'))?.id
         ?? list[0]?.id
@@ -229,7 +230,10 @@ export function NewProjectPanel({
     // and inspiration ids to empty there so the New Project panel can't
     // accidentally bind a stale DS that the user can no longer see in the
     // form (the picker is hidden for image/video/audio).
-    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : null;
+    // Wix Japan rebrand: pin the design system to wix-japan when the
+    // picker is hidden, so the skill always writes against the right
+    // tokens without the user having to know.
+    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : 'wix-japan';
     const inspirations = showDesignSystemPicker ? selectedDsIds.slice(1) : [];
     const promptTemplatePick =
       tab === 'image'
@@ -445,7 +449,9 @@ export function NewProjectPanel({
               : t('newproj.create')}
           </span>
         </button>
-        {onImportClaudeDesign ? (
+        {/* Wix Japan rebrand: hide the Claude Design ZIP import. The
+            team doesn't need it for this single-purpose slide tool. */}
+        {false && onImportClaudeDesign ? (
           <>
             <input
               ref={importInputRef}

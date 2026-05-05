@@ -2350,7 +2350,11 @@ function GoogleSlidesViewer({
     <div className="viewer google-slides-viewer">
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-          <span className="viewer-meta">Google Slides</span>
+          <span className="viewer-meta">
+            {totalPages
+              ? `${totalPages} ${t('fileViewer.googleSlidesPagesLabel')}`
+              : 'Google Slides'}
+          </span>
         </div>
         <div className="viewer-toolbar-actions">
           {deckUrl ? (
@@ -2363,7 +2367,6 @@ function GoogleSlidesViewer({
               {t('fileViewer.googleSlidesOpen')}
             </a>
           ) : null}
-          <FileActions projectId={projectId} file={file} />
         </div>
       </div>
       <div className="viewer-body">
@@ -2399,10 +2402,10 @@ function GoogleSlidesViewer({
               disabled={pageIdx === 0}
               aria-label={t('fileViewer.previousSlide')}
             >
-              ←
+              <Icon name="chevron-left" size={16} />
             </button>
             <span className="gs-pager-counter">
-              {pageIdx + 1} / {totalPages}
+              {pageIdx + 1} / {totalPages} {t('fileViewer.googleSlidesPagesLabel')}
             </span>
             <button
               type="button"
@@ -2411,7 +2414,7 @@ function GoogleSlidesViewer({
               disabled={pageIdx >= totalPages - 1}
               aria-label={t('fileViewer.nextSlide')}
             >
-              →
+              <Icon name="chevron-right" size={16} />
             </button>
           </div>
         </div>
