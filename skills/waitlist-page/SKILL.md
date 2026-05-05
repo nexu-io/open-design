@@ -156,7 +156,7 @@ Pre-launch pages are your first handshake with future users. This skill builds a
    - Form does NOT use `novalidate`; JS uses `checkValidity()` guard
    - Success message has `role="status"` or `aria-live="polite"`
    - All colors from DESIGN.md or allowed fallback; **no invented hex values**
-   - All user text is HTML-escaped; hex tokens match regex; fonts are URL-encoded
+   - All user text is HTML-escaped; color tokens adhere to strict grammar; fonts are URL-encoded
    - **Pass P0 or do not emit.** If any P0 gate fails, ask the user or fix the token mappings and try again.
 6. **Verify P1 gates** for quality submission (recommended):
    - Hover and active states on submit button
