@@ -1081,6 +1081,18 @@ test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () 
   }
 });
 
+test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is set', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-kimi',
+    ANTHROPIC_BASE_URL: 'https://api.moonshot.cn/v1',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.ANTHROPIC_API_KEY, 'sk-kimi');
+  assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.moonshot.cn/v1');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
 test('spawnEnvForAgent does not mutate the input env', () => {
   const original = { ANTHROPIC_API_KEY: 'sk-leak', PATH: '/usr/bin' };
   const env = spawnEnvForAgent('claude', original);
