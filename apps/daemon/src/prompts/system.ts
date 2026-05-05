@@ -222,8 +222,14 @@ export function composeSystemPrompt({
   // is pinned last so it overrides any softer critique wording earlier in the
   // stack. When disabled (the default) this block is a no-op so no consumer
   // needs to opt in.
+  //
+  // The panel block requires <ARTIFACT mime="text/html"> inside <CRITIQUE_RUN>,
+  // which conflicts with MEDIA_GENERATION_CONTRACT (image/video/audio surfaces
+  // explicitly forbid HTML output). Skip the addendum on media surfaces so
+  // the critique flag is a no-op there until a media-aware panel template
+  // lands.
   const cfg = critique ?? defaultCritiqueConfig();
-  if (cfg.enabled && critiqueBrand && critiqueSkill) {
+  if (cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface) {
     parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 

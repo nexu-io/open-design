@@ -41,4 +41,60 @@ describe('composeSystemPrompt critique wiring', () => {
     expect(out).toContain('maxRounds="4"');
     expect(out).toContain('threshold="9"');
   });
+
+  // Round 1 review feedback on PR #524.
+  it('skips the panel addendum on image surfaces (skillMode=image)', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      skillMode: 'image',
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
+  it('skips the panel addendum on video surfaces (skillMode=video)', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      skillMode: 'video',
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
+  it('skips the panel addendum on audio surfaces (skillMode=audio)', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      skillMode: 'audio',
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
+  it('skips the panel addendum when project metadata.kind is a media kind', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      metadata: { kind: 'image', fidelity: 'production' },
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
+  it('still attaches the panel addendum on non-media surfaces (kind=deck)', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      metadata: { kind: 'deck', fidelity: 'production' },
+    });
+    expect(out).toContain('<CRITIQUE_RUN');
+  });
 });

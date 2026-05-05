@@ -3570,6 +3570,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
+    // Thread the critique config plus the active design-system / skill data
+    // into the composer when critique is enabled. Without this the spawned
+    // child receives the legacy single-pass prompt and the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit. The composer
+    // itself ignores these fields when cfg.enabled is false, so the legacy
+    // path stays untouched.
+    const critiqueBrand = critiqueCfg.enabled
+      && typeof designSystemTitle === 'string'
+      && typeof designSystemBody === 'string'
+      ? { name: designSystemTitle, design_md: designSystemBody }
+      : undefined;
+    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+      ? { id: effectiveSkillId }
+      : undefined;
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
@@ -3582,6 +3596,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       craftSections,
       metadata,
       template,
+      critique: critiqueCfg,
+      critiqueBrand,
+      critiqueSkill,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
