@@ -110,17 +110,24 @@ export function LibrarySection({ cfg, setCfg }: Props) {
       setPreviewBody(null);
       setPreviewLoading(true);
       try {
-        if (tab === 'skills') {
-          const detail = await fetchSkill(id);
-          setPreviewBody(detail?.body ?? null);
-        } else {
-          const detail = await fetchDesignSystem(id);
-          setPreviewBody(detail?.body ?? null);
-        }
+        const detail =
+          tab === 'skills'
+            ? await fetchSkill(id)
+            : await fetchDesignSystem(id);
+        setPreviewId((cur) => {
+          if (cur === id) setPreviewBody(detail?.body ?? null);
+          return cur;
+        });
       } catch {
-        setPreviewBody(null);
+        setPreviewId((cur) => {
+          if (cur === id) setPreviewBody(null);
+          return cur;
+        });
       } finally {
-        setPreviewLoading(false);
+        setPreviewId((cur) => {
+          if (cur === id) setPreviewLoading(false);
+          return cur;
+        });
       }
     },
     [previewId, tab],

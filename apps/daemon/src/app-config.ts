@@ -91,6 +91,8 @@ function applyConfigValue(
   if (key === 'disabledSkills' || key === 'disabledDesignSystems') {
     if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
       target[key] = value;
+    } else {
+      delete target[key];
     }
   }
 }

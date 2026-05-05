@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { PetOverlay } from './components/pet/PetOverlay';
@@ -520,6 +520,18 @@ export function App() {
     void refreshTemplates();
   }, [route.kind, refreshTemplates]);
 
+  const enabledSkills = useMemo(
+    () => skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id)),
+    [skills, config.disabledSkills],
+  );
+  const enabledDS = useMemo(
+    () =>
+      designSystems.filter(
+        (d) => !(config.disabledDesignSystems ?? []).includes(d.id),
+      ),
+    [designSystems, config.disabledDesignSystems],
+  );
+
   return (
     <>
       {activeProject ? (
@@ -529,8 +541,8 @@ export function App() {
           routeFileName={route.kind === 'project' ? route.fileName : null}
           config={config}
           agents={agents}
-          skills={skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id))}
-          designSystems={designSystems.filter((d) => !(config.disabledDesignSystems ?? []).includes(d.id))}
+          skills={enabledSkills}
+          designSystems={enabledDS}
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
           onAgentChange={handleAgentChange}
@@ -548,8 +560,8 @@ export function App() {
         />
       ) : (
         <EntryView
-          skills={skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id))}
-          designSystems={designSystems.filter((d) => !(config.disabledDesignSystems ?? []).includes(d.id))}
+          skills={enabledSkills}
+          designSystems={enabledDS}
           projects={projects}
           templates={templates}
           promptTemplates={promptTemplates}
