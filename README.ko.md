@@ -699,7 +699,7 @@ Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다
   <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design 컨트리뷰터" />
 </a>
 
-첫 PR을 보냈다면 — 환영합니다. [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) 레이블이 시작점입니다.
+첫 PR을 보냈다면 — 환영합니다. [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) 레이블이 시작점입니다.
 
 ## 저장소 활동
 

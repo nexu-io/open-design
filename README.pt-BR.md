@@ -708,7 +708,7 @@ Obrigado a todas as pessoas que ajudaram a empurrar o Open Design pra frente —
   <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Contribuidoras e contribuidores do Open Design" />
 </a>
 
-Se você acabou de mandar seu primeiro PR — bem-vindo. A label [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) é o ponto de entrada.
+Se você acabou de mandar seu primeiro PR — bem-vindo. A label [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) é o ponto de entrada.
 
 ## Atividade do repositório
 

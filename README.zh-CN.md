@@ -697,7 +697,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
   <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design 贡献者" />
 </a>
 
-第一次提 PR？欢迎从 [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) 标签起步。
+第一次提 PR？欢迎从 [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) 标签起步。
 
 ## 仓库活跃度
 

@@ -711,7 +711,7 @@ Merci à toutes les personnes qui font avancer Open Design : code, docs, retours
   <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Contributeurs Open Design" />
 </a>
 
-Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) est le point d’entrée.
+Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) est le point d’entrée.
 
 ## Activité du dépôt
 
