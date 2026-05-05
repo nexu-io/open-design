@@ -16,6 +16,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#FFFFFF',
+  // Explicit responsive viewport so tablets / phones don't render the
+  // shell at desktop width and scale down. Without these the @media
+  // queries in index.css don't take effect on small devices.
+  width: 'device-width',
+  initialScale: 1,
 };
 
 /**

@@ -3367,8 +3367,8 @@ code {
   }
   .entry-side {
     width: 100% !important;
-    min-width: 0;
-    max-width: none;
+    min-width: 0 !important;
+    max-width: none !important;
     border-right: none;
     border-bottom: 1px solid var(--border);
     /* On phones the form is the secondary surface — keep it short so
