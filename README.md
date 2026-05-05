@@ -348,7 +348,37 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 |---|---|
 | Inspect what's in there | `ls -la .od && sqlite3 .od/app.sqlite '.tables'` |
 | Reset to a clean slate | `pnpm tools-dev stop`, `rm -rf .od`, run `pnpm tools-dev run web` again |
-| Move it elsewhere | not supported yet — the path is hard-coded relative to the repo |
+| Move it elsewhere | `OD_DATA_DIR=<absolute-or-relative-path> pnpm tools-dev run web` — the daemon resolves `~/` and anchors relative paths to the repo root. `OD_MEDIA_CONFIG_DIR=<dir>` narrows the override to just `media-config.json` if you want credentials in a separate location. |
+
+#### Migrating a pre-desktop-app `.od/` into the installed Desktop app
+
+If you ran the repo first and only later installed the packaged Desktop app, the two writers point at different roots:
+
+- Repo dev-server (`pnpm tools-dev start web`) writes to `<repo>/.od/`
+- Installed Desktop app writes to `~/Library/Application Support/Open Design/namespaces/<channel>/data/` on macOS, the platform-equivalent under `%APPDATA%` on Windows, and `$XDG_DATA_HOME` on Linux. `<channel>` is `release-stable` for stable installs and `release-beta` for the beta channel.
+
+To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
+
+```bash
+# 1. Quit the Desktop app first (Cmd+Q on macOS) so SQLite-WAL flushes cleanly.
+# 2. Pick the channel you installed; example below is macOS + beta.
+APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
+
+# 3. Back up the empty data dir the Desktop app created on its first launch,
+#    then copy your repo .od/ contents in.
+mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F)"
+mkdir -p "$APP_DATA"
+cp -R <repo>/.od/{app.sqlite*,projects,artifacts,media-config.json} "$APP_DATA/"
+
+# 4. Relaunch the Desktop app — the daemon migrates the SQLite schema on boot.
+```
+
+To keep both writers (repo dev-server and Desktop app) on the *same* data going forward, point the dev-server at the app dir via `OD_DATA_DIR`:
+
+```bash
+OD_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data" \
+  pnpm tools-dev start web
+```
 
 Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md).
 
