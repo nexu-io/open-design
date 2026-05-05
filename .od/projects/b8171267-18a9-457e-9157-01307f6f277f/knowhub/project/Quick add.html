@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knowledge Hub · quick add</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="design-system/tokens.css" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="lib/design-canvas.jsx"></script>
+  <script type="text/babel" src="lib/kh-screens.jsx"></script>
+  <script type="text/babel" src="lib/kh-quickadd.jsx"></script>
+  <script type="text/babel" src="lib/kh-history.jsx"></script>
+  <script type="text/babel" src="lib/kh-quickadd-annotated.jsx"></script>
+
+  <script type="text/babel">
+    const { DesignCanvas, DCSection, DCArtboard,
+            AnnotatedQuickAdd, ScreenLibraryFab, ScreenLibrarySheet,
+            ScreenImportHistory } = window;
+
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection id="flow" title="Quick add · annotated flow"
+                     subtitle="Paste a link you just found. Two taps: FAB → Add to library.">
+            <DCArtboard id="qa-annotated" label="A · Flow walkthrough" width={1500} height={880}>
+              <AnnotatedQuickAdd />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="states" title="States"
+                     subtitle="Every variant of the paste sheet, dark & light.">
+            <DCArtboard id="fab-dark" label="B · Library + FAB (dark)" width={390} height={780}>
+              <div data-theme="dark" style={{ width: '100%', height: '100%' }}>
+                <ScreenLibraryFab />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="fab-light" label="C · Library + FAB (light)" width={390} height={780}>
+              <div data-theme="light" style={{ width: '100%', height: '100%' }}>
+                <ScreenLibraryFab />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="pasted-dark" label="D · Pasted (dark)" width={390} height={780}>
+              <div data-theme="dark" style={{ width: '100%', height: '100%' }}>
+                <ScreenLibrarySheet state="pasted" />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="pasted-light" label="E · Pasted (light)" width={390} height={780}>
+              <div data-theme="light" style={{ width: '100%', height: '100%' }}>
+                <ScreenLibrarySheet state="pasted" />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="empty-dark" label="F · Empty (dark)" width={390} height={780}>
+              <div data-theme="dark" style={{ width: '100%', height: '100%' }}>
+                <ScreenLibrarySheet state="empty" />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="done-dark" label="G · Done (dark)" width={390} height={780}>
+              <div data-theme="dark" style={{ width: '100%', height: '100%' }}>
+                <ScreenLibrarySheet state="done" />
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="history" title="Import history"
+                     subtitle="Every link added via Quick Add, with processing status. Accessed from sheet's 'Done' state or Library overflow.">
+            <DCArtboard id="history-dark" label="H · History (dark)" width={390} height={780}>
+              <div data-theme="dark" style={{ width: '100%', height: '100%' }}>
+                <ScreenImportHistory />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="history-light" label="I · History (light)" width={390} height={780}>
+              <div data-theme="light" style={{ width: '100%', height: '100%' }}>
+                <ScreenImportHistory />
+              </div>
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

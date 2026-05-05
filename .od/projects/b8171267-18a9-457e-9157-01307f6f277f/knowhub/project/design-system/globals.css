@@ -1,0 +1,69 @@
+/* ============================================================
+   Knowledge Hub — Global styles
+   Import in app/layout.tsx AFTER tokens.css.
+   ============================================================ */
+
+@import "./tokens.css";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-feature-settings);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body { min-height: 100dvh; }
+
+/* Selection */
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
+/* Focus — single source of truth */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Reset native button look */
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Tabular numbers for IDs / timestamps / counts */
+.kh-num,
+[data-num] { font-variant-numeric: tabular-nums; }
+
+/* Mono surface */
+.kh-mono { font-family: var(--font-mono); font-feature-settings: normal; }
+
+/* Hide scrollbars on horizontal chip strips */
+.kh-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.kh-scroll-x::-webkit-scrollbar { display: none; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

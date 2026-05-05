@@ -1,0 +1,224 @@
+/* ============================================================
+   Knowledge Hub — Design Tokens
+   Plain CSS variables, shadcn-style naming.
+   Dark-first; light theme via [data-theme="light"] override.
+   System preference is the default; manual toggle wins.
+   ============================================================ */
+
+:root,
+[data-theme="dark"] {
+  /* ── Surfaces ──────────────────────────────────────── */
+  --background:        #08090a;   /* page bg */
+  --background-elev:   #0c0d0f;   /* elevated bg (sheets, sticky bars) */
+  --card:              #0f1011;   /* card / list-row surface */
+  --card-hover:        #131417;
+  --popover:           #0c0d0f;
+
+  /* ── Foreground / text ────────────────────────────── */
+  --foreground:        #f7f8f8;   /* primary text */
+  --foreground-dim:    #c7c9cd;   /* body / secondary */
+  --muted:             #8a8f98;   /* meta, labels */
+  --muted-dim:         #5b5f66;   /* tertiary, timestamps */
+
+  /* ── Borders & rings ─────────────────────────────── */
+  --border:            rgba(255,255,255,0.08);
+  --border-strong:     rgba(255,255,255,0.14);
+  --ring:              rgba(94,106,210,0.55);
+
+  /* ── Brand / primary ─────────────────────────────── */
+  --primary:           #5e6ad2;
+  --primary-foreground:#ffffff;
+  --primary-tint:      rgba(94,106,210,0.14);
+  --primary-tint-strong: rgba(94,106,210,0.22);
+
+  /* ── Status ──────────────────────────────────────── */
+  --success:           #7dd3a0;
+  --info:              #82c7ff;
+  --warning:           #f0c674;
+  --danger:            #e5736e;
+
+  /* ── Component-specific surfaces ─────────────────── */
+  --pill-bg:           rgba(255,255,255,0.04);
+  --nav-bg:            rgba(8,9,10,0.72);
+  --header-bg:         rgba(8,9,10,0.78);
+  --thumb:             #16181c;
+  --thumb-accent:      #1c1f26;
+  --scrim:             rgba(0,0,0,0.4);
+
+  /* ── Selection ──────────────────────────────────── */
+  --selection-bg:      rgba(94,106,210,0.35);
+  --selection-fg:      #ffffff;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --background:        #f7f8f8;
+  --background-elev:   #ffffff;
+  --card:              #ffffff;
+  --card-hover:        #fafafa;
+  --popover:           #ffffff;
+
+  --foreground:        #1a1a1e;
+  --foreground-dim:    #3a3a40;
+  --muted:             #62666d;
+  --muted-dim:         #8f9399;
+
+  --border:            #e6e6e6;
+  --border-strong:     #d1d1d1;
+  --ring:              rgba(94,106,210,0.45);
+
+  --primary:           #5e6ad2;
+  --primary-foreground:#ffffff;
+  --primary-tint:      rgba(94,106,210,0.10);
+  --primary-tint-strong: rgba(94,106,210,0.18);
+
+  --success:           #2e9b65;
+  --info:              #2563c9;
+  --warning:           #b97f12;
+  --danger:            #c0382f;
+
+  --pill-bg:           #f1f2f3;
+  --nav-bg:            rgba(247,248,248,0.82);
+  --header-bg:         rgba(247,248,248,0.85);
+  --thumb:             #e9eaec;
+  --thumb-accent:      #dfe1e4;
+  --scrim:             rgba(20,22,28,0.32);
+
+  --selection-bg:      rgba(94,106,210,0.22);
+  --selection-fg:      #1a1a1e;
+
+  color-scheme: light;
+}
+
+/* System-preference fallback (only when no explicit data-theme) */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --background:        #f7f8f8;
+    --background-elev:   #ffffff;
+    --card:              #ffffff;
+    --card-hover:        #fafafa;
+    --popover:           #ffffff;
+
+    --foreground:        #1a1a1e;
+    --foreground-dim:    #3a3a40;
+    --muted:             #62666d;
+    --muted-dim:         #8f9399;
+
+    --border:            #e6e6e6;
+    --border-strong:     #d1d1d1;
+    --ring:              rgba(94,106,210,0.45);
+
+    --primary-tint:      rgba(94,106,210,0.10);
+    --primary-tint-strong: rgba(94,106,210,0.18);
+
+    --success:           #2e9b65;
+    --info:              #2563c9;
+    --warning:           #b97f12;
+    --danger:            #c0382f;
+
+    --pill-bg:           #f1f2f3;
+    --nav-bg:            rgba(247,248,248,0.82);
+    --header-bg:         rgba(247,248,248,0.85);
+    --thumb:             #e9eaec;
+    --thumb-accent:      #dfe1e4;
+    --scrim:             rgba(20,22,28,0.32);
+
+    --selection-bg:      rgba(94,106,210,0.22);
+    --selection-fg:      #1a1a1e;
+
+    color-scheme: light;
+  }
+}
+
+:root {
+  /* ── Type ────────────────────────────────────────── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular,
+               Menlo, Consolas, monospace;
+  --font-feature-settings: "cv01", "ss03";
+
+  /* type scale (px values; pair with line-heights below) */
+  --text-2xs: 10px;
+  --text-xs:  11px;
+  --text-sm:  12px;
+  --text-base:13px;
+  --text-md:  14px;
+  --text-lg:  15px;
+  --text-xl:  17px;
+  --text-2xl: 20px;
+  --text-3xl: 24px;
+  --text-4xl: 32px;
+
+  --leading-tight:   1.25;
+  --leading-snug:    1.4;
+  --leading-normal:  1.55;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.4px;   /* h1 */
+  --tracking-snug:  -0.2px;   /* titles */
+  --tracking-flat:  -0.1px;   /* body */
+  --tracking-wide:   0.1px;   /* meta */
+  --tracking-caps:   0.8px;   /* uppercase labels */
+
+  /* ── Spacing (4px base) ─────────────────────────── */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  10px;
+  --space-4:  12px;
+  --space-5:  14px;
+  --space-6:  16px;
+  --space-7:  20px;
+  --space-8:  24px;
+  --space-9:  28px;
+  --space-10: 32px;
+  --space-12: 40px;
+  --space-14: 48px;
+  --space-16: 64px;
+
+  /* ── Radius ─────────────────────────────────────── */
+  --radius-xs:    4px;
+  --radius-sm:    6px;
+  --radius-md:    8px;
+  --radius-lg:    10px;
+  --radius-xl:    12px;
+  --radius-2xl:   16px;
+  --radius-full:  9999px;
+
+  /* ── Density (list rows, hit targets) ───────────── */
+  --row-compact:  44px;
+  --row-default:  56px;
+  --row-loose:    72px;
+  --hit-min:      44px;   /* mobile hit-target floor */
+
+  /* ── Shadows (used sparingly) ───────────────────── */
+  --shadow-xs:    0 1px 2px rgba(0,0,0,0.18);
+  --shadow-sm:    0 2px 6px rgba(0,0,0,0.22);
+  --shadow-md:    0 8px 20px rgba(0,0,0,0.30);
+  --shadow-lg:    0 18px 40px rgba(0,0,0,0.40);
+  --shadow-fab:   0 8px 20px rgba(94,106,210,0.35), 0 2px 4px rgba(0,0,0,0.20);
+  --shadow-fab-pressed: 0 2px 8px rgba(94,106,210,0.45), 0 0 0 6px rgba(94,106,210,0.18);
+
+  /* ── Layers ─────────────────────────────────────── */
+  --z-base:      0;
+  --z-sticky:    30;
+  --z-fab:       40;
+  --z-overlay:   60;
+  --z-modal:     70;
+  --z-toast:     80;
+
+  /* ── Motion ─────────────────────────────────────── */
+  --ease-out:     cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-1:   80ms;
+  --duration-2:   140ms;
+  --duration-3:   220ms;
+  --duration-4:   320ms;
+
+  /* ── Backdrop blur ──────────────────────────────── */
+  --blur-sm: 12px;
+  --blur-md: 18px;
+  --blur-lg: 24px;
+}

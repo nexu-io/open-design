@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knowledge Hub · mobile redesign</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="design-system/tokens.css" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; }
+    @keyframes khBlink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="lib/design-canvas.jsx"></script>
+  <script type="text/babel" src="lib/kh-screens.jsx"></script>
+  <script type="text/babel" src="lib/kh-annotated.jsx"></script>
+
+  <script type="text/babel">
+    const { DesignCanvas, DCSection, DCArtboard, AnnotatedLibrary, PlainDevice } = window;
+
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection id="spec" title="Library · annotated spec"
+                     subtitle="Mobile redesign for screens ≤ 640px. Dark is primary; light shown side-by-side.">
+            <DCArtboard id="annotated-dark" label="A · Annotated (dark)" width={900} height={900}>
+              <AnnotatedLibrary mode="dark" />
+            </DCArtboard>
+            <DCArtboard id="annotated-light" label="B · Annotated (light)" width={900} height={900}>
+              <AnnotatedLibrary mode="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="states" title="States"
+                     subtitle="Clean screens without callouts — the actual mobile experience.">
+            <DCArtboard id="dark" label="C · Dark, home" width={390} height={760}>
+              <PlainDevice mode="dark" active="home" />
+            </DCArtboard>
+            <DCArtboard id="light" label="D · Light, home" width={390} height={760}>
+              <PlainDevice mode="light" active="home" />
+            </DCArtboard>
+            <DCArtboard id="search" label="E · Inline search" width={390} height={760}>
+              <PlainDevice mode="dark" active="search" searchOpen={true} />
+            </DCArtboard>
+            <DCArtboard id="library-tab" label="F · Library tab active" width={390} height={760}>
+              <PlainDevice mode="dark" active="library" />
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

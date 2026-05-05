@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knowledge Hub · detail page</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="design-system/tokens.css" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; }
+    @keyframes khBlink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="lib/design-canvas.jsx"></script>
+  <script type="text/babel" src="lib/kh-screens.jsx"></script>
+  <script type="text/babel" src="lib/kh-annotated.jsx"></script>
+  <script type="text/babel" src="lib/kh-detail-screens.jsx"></script>
+  <script type="text/babel" src="lib/kh-detail-annotated.jsx"></script>
+
+  <script type="text/babel">
+    const { DesignCanvas, DCSection, DCArtboard,
+            AnnotatedDetail, PlainDetailDevice } = window;
+
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection id="video" title="Video detail · annotated"
+                     subtitle="Single-column, skim-first. Hero → meta → actions → TOC chips → sections.">
+            <DCArtboard id="video-anno-dark" label="A · Annotated (dark)" width={900} height={900}>
+              <AnnotatedDetail mode="dark" kind="video" />
+            </DCArtboard>
+            <DCArtboard id="video-anno-light" label="B · Annotated (light)" width={900} height={900}>
+              <AnnotatedDetail mode="light" kind="video" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="source" title="Source detail · annotated"
+                     subtitle="Articles, repos, sites. Lighter hero, KV block, markdown analysis.">
+            <DCArtboard id="source-anno-dark" label="C · Annotated (dark)" width={900} height={900}>
+              <AnnotatedDetail mode="dark" kind="source" />
+            </DCArtboard>
+            <DCArtboard id="source-anno-light" label="D · Annotated (light)" width={900} height={900}>
+              <AnnotatedDetail mode="light" kind="source" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="clean" title="Clean states"
+                     subtitle="No callouts — the actual detail experience.">
+            <DCArtboard id="video-dark" label="E · Video, dark" width={390} height={760}>
+              <PlainDetailDevice mode="dark" kind="video" />
+            </DCArtboard>
+            <DCArtboard id="video-light" label="F · Video, light" width={390} height={760}>
+              <PlainDetailDevice mode="light" kind="video" />
+            </DCArtboard>
+            <DCArtboard id="source-dark" label="G · Source, dark" width={390} height={760}>
+              <PlainDetailDevice mode="dark" kind="source" />
+            </DCArtboard>
+            <DCArtboard id="source-light" label="H · Source, light" width={390} height={760}>
+              <PlainDetailDevice mode="light" kind="source" />
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

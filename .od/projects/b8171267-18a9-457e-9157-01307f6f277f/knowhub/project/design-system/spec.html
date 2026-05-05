@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knowledge Hub — Design System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="globals.css" />
+  <style>
+    /* ── Spec layout (not part of the kit; this page only) ── */
+    body { display: flex; min-height: 100dvh; }
+
+    .ds-sidebar {
+      flex-shrink: 0;
+      width: 240px;
+      height: 100dvh;
+      position: sticky; top: 0;
+      border-right: 1px solid var(--border);
+      background: var(--background-elev);
+      padding: 24px 0;
+      overflow-y: auto;
+    }
+    .ds-sidebar-brand {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .ds-sidebar-brand .mark {
+      width: 22px; height: 22px; border-radius: 5px;
+      background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; letter-spacing: -0.3px;
+    }
+    .ds-sidebar-brand .name { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
+    .ds-sidebar-brand .ver {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--muted-dim); margin-left: auto;
+    }
+    .ds-sidebar-section {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--muted);
+      padding: 14px 20px 6px;
+    }
+    .ds-sidebar a {
+      display: block; padding: 6px 20px;
+      font-size: 13px; color: var(--foreground-dim);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      letter-spacing: -0.1px;
+    }
+    .ds-sidebar a:hover { color: var(--foreground); background: var(--card-hover); }
+    .ds-sidebar a.active {
+      color: var(--primary);
+      border-left-color: var(--primary);
+      background: var(--primary-tint);
+    }
+
+    .ds-main { flex: 1; min-width: 0; max-width: 1100px; padding: 32px 48px 96px; }
+    .ds-topbar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 32px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ds-topbar .crumb {
+      font-size: 12px; color: var(--muted); letter-spacing: 0.1px;
+    }
+    .ds-topbar .crumb b { color: var(--foreground); font-weight: 600; }
+    .ds-topbar .spacer { flex: 1; }
+    .ds-theme-switch {
+      display: inline-flex; padding: 2px;
+      background: var(--pill-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .ds-theme-switch button {
+      height: 26px; padding: 0 10px; border-radius: 6px;
+      font-size: 12px; font-weight: 500; color: var(--muted);
+      letter-spacing: -0.1px;
+    }
+    .ds-theme-switch button.on {
+      background: var(--card); color: var(--foreground);
+      box-shadow: var(--shadow-xs);
+    }
+
+    section.ds-section { margin-bottom: 64px; scroll-margin-top: 24px; }
+    section.ds-section > h1 {
+      margin: 0 0 4px; font-size: 28px; font-weight: 600;
+      letter-spacing: -0.6px; color: var(--foreground);
+    }
+    section.ds-section > .ds-lede {
+      margin: 0 0 24px; font-size: 14px; color: var(--muted);
+      max-width: 64ch; line-height: 1.55;
+    }
+
+    h2.ds-h2 {
+      margin: 32px 0 12px; font-size: 16px; font-weight: 600;
+      letter-spacing: -0.2px; color: var(--foreground);
+    }
+    h3.ds-h3 {
+      margin: 20px 0 8px; font-size: 13px; font-weight: 600;
+      letter-spacing: -0.1px; color: var(--foreground-dim);
+    }
+
+    .ds-grid { display: grid; gap: 12px; }
+    .ds-grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .ds-grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .ds-grid-auto { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+    /* swatch card */
+    .ds-swatch {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    .ds-swatch .chip { height: 64px; }
+    .ds-swatch .meta { padding: 10px 12px; }
+    .ds-swatch .meta .name {
+      font-size: 12px; font-weight: 600; color: var(--foreground);
+      letter-spacing: -0.1px;
+    }
+    .ds-swatch .meta .var {
+      margin-top: 2px; font-family: var(--font-mono); font-size: 10px;
+      color: var(--muted-dim); letter-spacing: 0;
+    }
+
+    /* token row (text/spacing/radius) */
+    .ds-row {
+      display: grid;
+      grid-template-columns: 180px 80px 1fr;
+      align-items: center;
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .ds-row:first-child { border-top: 0; }
+    .ds-row .var { font-family: var(--font-mono); color: var(--muted); font-size: 11px; }
+    .ds-row .val { font-family: var(--font-mono); color: var(--foreground-dim); font-size: 11px; }
+    .ds-row .preview { color: var(--foreground-dim); }
+
+    .ds-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    /* component preview frame */
+    .ds-preview {
+      background:
+        repeating-linear-gradient(45deg, transparent 0 9px, var(--border) 9px 10px),
+        var(--background);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+    }
+    .ds-preview.col { flex-direction: column; align-items: stretch; }
+    .ds-preview-label {
+      display: flex; align-items: center; gap: 8px;
+      margin: 16px 0 8px;
+    }
+    .ds-preview-label .dot {
+      width: 6px; height: 6px; border-radius: 3px; background: var(--muted-dim);
+    }
+    .ds-preview-label .name {
+      font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+      letter-spacing: 0;
+    }
+
+    code.ds-code {
+      font-family: var(--font-mono); font-size: 12px;
+      background: var(--pill-bg); border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 4px; color: var(--foreground-dim);
+    }
+    pre.ds-pre {
+      margin: 8px 0 0;
+      padding: 14px 16px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: var(--font-mono); font-size: 12px;
+      line-height: 1.55; color: var(--foreground-dim);
+      overflow-x: auto;
+    }
+
+    /* spacing visual */
+    .ds-spacer-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+    .ds-spacer-row .bar {
+      background: var(--primary-tint); border-radius: 2px;
+      height: 12px;
+    }
+    .ds-spacer-row .label {
+      font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+      width: 80px; flex-shrink: 0;
+    }
+    .ds-spacer-row .px {
+      font-family: var(--font-mono); font-size: 11px; color: var(--muted-dim);
+    }
+
+    /* radius visual */
+    .ds-radius-tile {
+      width: 88px; height: 64px;
+      background: var(--primary-tint);
+      border: 1px solid var(--primary); border-color: rgba(94,106,210,0.4);
+    }
+    .ds-radius-cell {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 16px;
+    }
+    .ds-radius-cell .label {
+      font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    }
+
+    /* Phone frame for component composition demo */
+    .ds-phone {
+      width: 360px; height: 720px;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: var(--shadow-md);
+    }
+  </style>
+</head>
+<body>
+  <aside class="ds-sidebar">
+    <div class="ds-sidebar-brand">
+      <div class="mark">KH</div>
+      <div class="name">Design System</div>
+      <div class="ver">v0.1</div>
+    </div>
+
+    <div class="ds-sidebar-section">Foundations</div>
+    <a href="#overview" class="active">Overview</a>
+    <a href="#colors">Colors</a>
+    <a href="#typography">Typography</a>
+    <a href="#spacing">Spacing</a>
+    <a href="#radius">Radius</a>
+    <a href="#shadows">Shadows &amp; layers</a>
+    <a href="#motion">Motion</a>
+
+    <div class="ds-sidebar-section">Components</div>
+    <a href="#buttons">Button &amp; IconButton</a>
+    <a href="#pills">Pill &amp; Tag</a>
+    <a href="#chipstrip">ChipStrip</a>
+    <a href="#cards">Card</a>
+    <a href="#sections">SectionLabel &amp; DetailSection</a>
+    <a href="#headers">PageHeader &amp; DetailHeader</a>
+    <a href="#bottomnav">BottomNav</a>
+    <a href="#display">KVGrid · Quote · Callout</a>
+
+    <div class="ds-sidebar-section">Patterns</div>
+    <a href="#composition">List → detail</a>
+    <a href="#install">Install</a>
+  </aside>
+
+  <main class="ds-main">
+    <div class="ds-topbar">
+      <div class="crumb"><b>Knowledge Hub</b> · Design System</div>
+      <div class="spacer"></div>
+      <div class="ds-theme-switch" id="themeSwitch">
+        <button data-theme="dark" class="on">Dark</button>
+        <button data-theme="light">Light</button>
+      </div>
+    </div>
+
+    <div id="root"></div>
+  </main>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel">
+    /* eslint-disable */
+    const { useState, useEffect } = React;
+
+    /* ── Theme switcher ─────────────────────────────── */
+    const sw = document.getElementById('themeSwitch');
+    sw.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-theme]');
+      if (!btn) return;
+      const theme = btn.dataset.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      sw.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+    });
+
+    /* ── Sidebar active section ─────────────────────── */
+    const links = document.querySelectorAll('.ds-sidebar a');
+    function syncActive() {
+      const y = window.scrollY + 80;
+      let active = links[0];
+      links.forEach(a => {
+        const id = a.getAttribute('href').slice(1);
+        const el = document.getElementById(id);
+        if (el && el.offsetTop <= y) active = a;
+      });
+      links.forEach(a => a.classList.toggle('active', a === active));
+    }
+    window.addEventListener('scroll', syncActive, { passive: true });
+
+    /* ── Inline icons (mirror lucide visually) ─────── */
+    const I = ({ d, s = 16, sw = 1.6 }) => (
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+        {typeof d === 'string' ? <path d={d} /> : d}
+      </svg>
+    );
+    const Search = (p) => <I {...p} d={<><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>} />;
+    const Sun    = (p) => <I {...p} d={<><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></>} />;
+    const Sparkle= (p) => <I {...p} d="M12 3v4M12 17v4M3 12h4M17 12h4M5.5 5.5l2.8 2.8M15.7 15.7l2.8 2.8M5.5 18.5l2.8-2.8M15.7 8.3l2.8-2.8" />;
+    const Ext    = (p) => <I {...p} d={<><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></>} />;
+    const Back   = (p) => <I {...p} d="M15 6l-6 6 6 6" />;
+    const More   = (p) => <I {...p} d={<><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></>} sw={0} />;
+    const Home   = (p) => <I {...p} d={<><path d="M3.5 11 12 4l8.5 7"/><path d="M5 10v9h14v-9"/></>} />;
+    const Lib    = (p) => <I {...p} d={<><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M8 4v15M3.5 9h4.5"/></>} />;
+    const Ops    = (p) => <I {...p} d={<><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></>} />;
+
+    /* ── Tokens (mirrors tokens.ts; declared inline so spec is self-contained) ─ */
+    const COLOR_TOKENS = [
+      { group: 'Surfaces', items: [
+        ['--background', 'page bg'],
+        ['--background-elev', 'elevated bg'],
+        ['--card', 'card surface'],
+        ['--card-hover', 'card hover'],
+        ['--popover', 'popover/sheet'],
+      ]},
+      { group: 'Foreground', items: [
+        ['--foreground', 'primary text'],
+        ['--foreground-dim', 'body / secondary'],
+        ['--muted', 'meta / labels'],
+        ['--muted-dim', 'tertiary / timestamps'],
+      ]},
+      { group: 'Borders & Ring', items: [
+        ['--border', 'hairline'],
+        ['--border-strong', 'divider'],
+        ['--ring', 'focus ring'],
+      ]},
+      { group: 'Brand', items: [
+        ['--primary', 'indigo · actions'],
+        ['--primary-foreground', 'on-primary text'],
+        ['--primary-tint', 'soft primary'],
+        ['--primary-tint-strong', 'strong primary tint'],
+      ]},
+      { group: 'Status', items: [
+        ['--success', 'completed / OK'],
+        ['--info', 'processing'],
+        ['--warning', 'queued / wait'],
+        ['--danger', 'error / destructive'],
+      ]},
+      { group: 'Component-specific', items: [
+        ['--pill-bg', 'pill / chip surface'],
+        ['--header-bg', 'sticky header w/ blur'],
+        ['--nav-bg', 'bottom nav w/ blur'],
+        ['--thumb', 'placeholder gradient A'],
+        ['--thumb-accent', 'placeholder gradient B'],
+        ['--scrim', 'modal scrim'],
+      ]},
+    ];
+
+    function Swatch({ name, desc }) {
+      const [v, setV] = useState('');
+      useEffect(() => {
+        const c = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        setV(c);
+      });
+      return (
+        <div className="ds-swatch">
+          <div className="chip" style={{ background: `var(${name})`, borderBottom: '1px solid var(--border)' }} />
+          <div className="meta">
+            <div className="name">{desc}</div>
+            <div className="var">{name}</div>
+            <div className="var" style={{ color: 'var(--muted)' }}>{v}</div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Re-implementations of the kit components for previews ──
+       Mirrors design-system/components/* using only CSS vars.    */
+
+    const Button = ({ variant = 'ghost', size = 'md', icon: Icon, children, fullWidth, style, ...rest }) => {
+      const sz = { sm:{h:28,px:10,fs:12,gap:5}, md:{h:32,px:12,fs:13,gap:6}, lg:{h:44,px:16,fs:14,gap:8} }[size];
+      const vstyle = {
+        primary:{background:'var(--primary)',color:'var(--primary-foreground)',border:'1px solid transparent'},
+        ghost:  {background:'transparent',color:'var(--foreground)',border:'1px solid transparent'},
+        outline:{background:'transparent',color:'var(--foreground)',border:'1px solid var(--border)'},
+        danger: {background:'var(--danger)',color:'#fff',border:'1px solid transparent'},
+      }[variant];
+      return (
+        <button {...rest} style={{
+          height: sz.h, padding: `0 ${sz.px}px`, borderRadius: 'var(--radius-md)',
+          display:'inline-flex', alignItems:'center', justifyContent:'center', gap: sz.gap,
+          fontFamily:'inherit', fontSize: sz.fs, fontWeight: 500, letterSpacing:'-0.1px',
+          whiteSpace:'nowrap', cursor:'pointer', width: fullWidth?'100%':undefined,
+          ...vstyle, ...style,
+        }}>
+          {Icon && <Icon s={sz.fs} />} {children}
+        </button>
+      );
+    };
+
+    const IconBtn = ({ icon: Icon, size = 'md' }) => {
+      const dim = size === 'sm' ? 28 : size === 'lg' ? 44 : 36;
+      const ic  = size === 'sm' ? 14 : size === 'lg' ? 20 : 17;
+      return (
+        <button style={{
+          width: dim, height: dim, borderRadius: 'var(--radius-md)',
+          display:'inline-flex', alignItems:'center', justifyContent:'center',
+          color: 'var(--foreground)', background:'transparent', cursor:'pointer',
+        }}><Icon s={ic} /></button>
+      );
+    };
+
+    const Pill = ({ children, tone='neutral', active }) => {
+      const color = active||tone==='primary' ? 'var(--primary)'
+        : tone==='success' ? 'var(--success)'
+        : tone==='info' ? 'var(--info)'
+        : tone==='warning' ? 'var(--warning)'
+        : tone==='danger' ? 'var(--danger)'
+        : 'var(--foreground-dim)';
+      const bg = active||tone==='primary' ? 'var(--primary-tint)' : 'var(--pill-bg)';
+      return (
+        <span style={{
+          display:'inline-flex',alignItems:'center',height:22,padding:'0 8px',
+          borderRadius:9999,fontSize:11,fontWeight:500,letterSpacing:'0.1px',
+          background:bg,color,border:`1px solid ${active?'transparent':'var(--border)'}`,
+        }}>{children}</span>
+      );
+    };
+
+    const Card = ({ children, padded=true, style }) => (
+      <div style={{
+        background:'var(--card)', border:'1px solid var(--border)',
+        borderRadius:'var(--radius-xl)', padding: padded?12:0, ...style,
+      }}>{children}</div>
+    );
+
+    const SectionLabel = ({ label, count }) => (
+      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',
+                   padding:'0 16px',marginTop:20,marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:600,letterSpacing:'0.8px',
+                     textTransform:'uppercase',color:'var(--muted)'}}>{label}</div>
+        {count != null && <div style={{fontSize:11,color:'var(--muted-dim)',
+                     fontVariantNumeric:'tabular-nums'}}>{count}</div>}
+      </div>
+    );
+
+    const DetailSection = ({ label, trailing, children }) => (
+      <section style={{marginTop:28,padding:'0 16px'}}>
+        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:10}}>
+          <div style={{fontSize:11,fontWeight:600,letterSpacing:'0.8px',
+                       textTransform:'uppercase',color:'var(--muted)'}}>{label}</div>
+          {trailing}
+        </div>
+        {children}
+      </section>
+    );
+
+    const PageHeader = ({ title }) => (
+      <div style={{
+        position:'sticky',top:0,zIndex:30,height:56,padding:'0 16px',
+        display:'flex',alignItems:'center',gap:10,
+        background:'var(--header-bg)',backdropFilter:'blur(18px)',
+        WebkitBackdropFilter:'blur(18px)',borderBottom:'1px solid var(--border)',
+      }}>
+        <div style={{
+          width:24,height:24,borderRadius:6,background:'var(--primary)',color:'#fff',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          fontSize:11,fontWeight:700,letterSpacing:-0.3,
+        }}>KH</div>
+        <div style={{fontSize:15,fontWeight:600,color:'var(--foreground)',letterSpacing:-0.2}}>{title}</div>
+        <div style={{flex:1}}/>
+        <IconBtn icon={Search} />
+        <IconBtn icon={Sun} />
+      </div>
+    );
+
+    const DetailHeader = () => (
+      <div style={{
+        position:'sticky',top:0,zIndex:30,height:56,padding:'0 8px 0 4px',
+        display:'flex',alignItems:'center',gap:4,
+        background:'var(--header-bg)',backdropFilter:'blur(18px)',
+        WebkitBackdropFilter:'blur(18px)',borderBottom:'1px solid var(--border)',
+      }}>
+        <IconBtn icon={Back} />
+        <div style={{fontSize:13,fontWeight:500,color:'var(--muted)',letterSpacing:-0.1}}>Library</div>
+        <div style={{flex:1}}/>
+        <IconBtn icon={More} />
+      </div>
+    );
+
+    const BottomNav = () => {
+      const items = [['home','Home',Home],['search','Search',Search],['library','Library',Lib],['ops','Ops',Ops]];
+      return (
+        <div style={{
+          position:'absolute',left:0,right:0,bottom:0,height:64,
+          borderTop:'1px solid var(--border)',background:'var(--nav-bg)',
+          backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
+          display:'flex',zIndex:30,
+        }}>
+          {items.map(([id,label,Ic],i)=>{
+            const on = i===0;
+            return (
+              <button key={id} style={{
+                flex:1,display:'flex',flexDirection:'column',alignItems:'center',
+                justifyContent:'center',gap:3,
+                color: on?'var(--primary)':'var(--muted)',
+              }}>
+                <Ic s={20} sw={on?2:1.6} />
+                <span style={{fontSize:11,fontWeight:on?600:500,letterSpacing:0.1,lineHeight:1}}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    };
+
+    const ChipStrip = ({ items, active }) => (
+      <div className="kh-scroll-x">
+        <div style={{display:'flex',gap:6,padding:'0 16px'}}>
+          {items.map((label, i) => {
+            const on = label === active;
+            return (
+              <span key={label} style={{
+                flexShrink:0,height:28,padding:'0 12px',borderRadius:14,
+                display:'inline-flex',alignItems:'center',
+                fontSize:12,fontWeight:500,letterSpacing:'-0.1px',
+                background: on?'var(--primary-tint)':'var(--pill-bg)',
+                color: on?'var(--primary)':'var(--muted)',
+                border:`1px solid ${on?'transparent':'var(--border)'}`,
+              }}>{label}</span>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+    const KVGrid = ({ items }) => (
+      <div style={{
+        padding:12,background:'var(--card)',border:'1px solid var(--border)',
+        borderRadius:12,display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px 16px',
+      }}>
+        {items.map(([k,v]) => (
+          <div key={k}>
+            <div style={{fontSize:10,color:'var(--muted-dim)',letterSpacing:'0.6px',
+                         textTransform:'uppercase',fontWeight:600}}>{k}</div>
+            <div style={{fontSize:13,color:'var(--foreground-dim)',marginTop:2,letterSpacing:-0.1}}>{v}</div>
+          </div>
+        ))}
+      </div>
+    );
+
+    const Quote = ({ children }) => (
+      <blockquote style={{
+        margin:0,padding:'10px 14px',borderLeft:'2px solid var(--primary)',
+        background:'var(--card)',borderRadius:'0 12px 12px 0',
+        fontSize:14,fontStyle:'italic',lineHeight:1.55,
+        color:'var(--foreground-dim)',letterSpacing:-0.1,
+      }}>{children}</blockquote>
+    );
+
+    const Callout = ({ tone='info', title, children }) => {
+      const accent = { info:'var(--info)', success:'var(--success)',
+        warning:'var(--warning)', danger:'var(--danger)', primary:'var(--primary)' }[tone];
+      return (
+        <div style={{
+          padding:12,background:'var(--card)',border:'1px solid var(--border)',
+          borderLeft:`2px solid ${accent}`,borderRadius:12,
+          fontSize:13,lineHeight:1.55,color:'var(--foreground-dim)',letterSpacing:-0.1,
+        }}>
+          {title && <div style={{fontSize:13,fontWeight:600,color:'var(--foreground)',marginBottom:4}}>{title}</div>}
+          {children}
+        </div>
+      );
+    };
+
+    /* ── Sections ──────────────────────────────────── */
+    function Spec() {
+      return (
+        <>
+          {/* Overview */}
+          <section id="overview" className="ds-section">
+            <h1>Knowledge Hub Design System</h1>
+            <p className="ds-lede">
+              Dark-first, quiet operational UI. Compact information density, restrained
+              indigo primary, no marketing-style hero/card-heavy layouts. Tokens cover
+              surfaces, text hierarchy, borders, focus rings, status colors, spacing,
+              radius, shadows, and density. Components work in both list and detail
+              views without creating a second visual language.
+            </p>
+            <div className="ds-grid ds-grid-3">
+              <Card><div style={{fontSize:12,color:'var(--muted)',marginBottom:6,letterSpacing:0.8,textTransform:'uppercase',fontWeight:600}}>Stack</div>
+                <div style={{fontSize:13,color:'var(--foreground-dim)',lineHeight:1.55}}>
+                  Next.js (app router) · plain CSS variables · CSS modules · lucide-react · Inter + Geist Mono
+                </div></Card>
+              <Card><div style={{fontSize:12,color:'var(--muted)',marginBottom:6,letterSpacing:0.8,textTransform:'uppercase',fontWeight:600}}>Themes</div>
+                <div style={{fontSize:13,color:'var(--foreground-dim)',lineHeight:1.55}}>
+                  Default = system preference. Manual toggle persists to localStorage and overrides via <code className="ds-code">data-theme</code>.
+                </div></Card>
+              <Card><div style={{fontSize:12,color:'var(--muted)',marginBottom:6,letterSpacing:0.8,textTransform:'uppercase',fontWeight:600}}>Naming</div>
+                <div style={{fontSize:13,color:'var(--foreground-dim)',lineHeight:1.55}}>
+                  shadcn-style: <code className="ds-code">--background</code>, <code className="ds-code">--foreground</code>, <code className="ds-code">--primary</code>, <code className="ds-code">--muted</code>.
+                </div></Card>
+            </div>
+          </section>
+
+          {/* Colors */}
+          <section id="colors" className="ds-section">
+            <h1>Colors</h1>
+            <p className="ds-lede">Toggle the theme up top to see all swatches re-render. Values come live from <code className="ds-code">tokens.css</code>.</p>
+            {COLOR_TOKENS.map(({ group, items }) => (
+              <div key={group}>
+                <h2 className="ds-h2">{group}</h2>
+                <div className="ds-grid ds-grid-auto">
+                  {items.map(([n, d]) => <Swatch key={n} name={n} desc={d} />)}
+                </div>
+              </div>
+            ))}
+          </section>
+
+          {/* Typography */}
+          <section id="typography" className="ds-section">
+            <h1>Typography</h1>
+            <p className="ds-lede">Inter for everything; Geist Mono reserved for IDs, timestamps, code, and ops surfaces. Dial-down letter spacing on titles.</p>
+
+            <h2 className="ds-h2">Type scale</h2>
+            <div className="ds-card">
+              {[
+                ['--text-4xl', 32, 'tight', 'Knowledge Hub'],
+                ['--text-3xl', 24, 'tight', 'Building agent orchestration'],
+                ['--text-2xl', 20, 'snug', 'Section header'],
+                ['--text-xl', 17, 'snug', 'Card title'],
+                ['--text-lg', 15, 'snug', 'Header title'],
+                ['--text-md', 14, 'normal', 'Body — long-form analysis paragraph.'],
+                ['--text-base', 13, 'normal', 'Default UI text · button label'],
+                ['--text-sm', 12, 'normal', 'Meta · timestamps · authors'],
+                ['--text-xs', 11, 'wide', 'EYEBROW · UPPERCASE LABEL'],
+                ['--text-2xs', 10, 'wide', 'KV KEY · MICRO-LABEL'],
+              ].map(([n, px, lh, sample]) => (
+                <div className="ds-row" key={n}>
+                  <span className="var">{n}</span>
+                  <span className="val">{px}px</span>
+                  <span className="preview" style={{
+                    fontSize: px,
+                    letterSpacing: px>=20?-0.4:px>=15?-0.2:px>=13?-0.1:0.1,
+                    fontWeight: px>=20?650:px>=15?600:500,
+                    color: px<=11 ? 'var(--muted)' : 'var(--foreground-dim)',
+                    textTransform: px<=11 ? 'uppercase' : 'none',
+                  }}>{sample}</span>
+                </div>
+              ))}
+            </div>
+
+            <h2 className="ds-h2">Mono surface</h2>
+            <div className="ds-preview">
+              <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:'var(--foreground-dim)'}}>
+                42:08 · 8,240 words · processed 2026-04-15
+              </div>
+            </div>
+          </section>
+
+          {/* Spacing */}
+          <section id="spacing" className="ds-section">
+            <h1>Spacing</h1>
+            <p className="ds-lede">4px base. Stay on this scale for everything — gaps, padding, margins.</p>
+            <div className="ds-card" style={{padding:16}}>
+              {[
+                ['--space-1',4],['--space-2',8],['--space-3',10],['--space-4',12],
+                ['--space-5',14],['--space-6',16],['--space-7',20],['--space-8',24],
+                ['--space-9',28],['--space-10',32],['--space-12',40],['--space-14',48],
+                ['--space-16',64],
+              ].map(([n,v]) => (
+                <div className="ds-spacer-row" key={n}>
+                  <div className="label">{n}</div>
+                  <div className="bar" style={{ width: v }} />
+                  <div className="px">{v}px</div>
+                </div>
+              ))}
+            </div>
+
+            <h2 className="ds-h2">Density</h2>
+            <p style={{fontSize:13,color:'var(--muted)',margin:'0 0 8px'}}>
+              List rows and hit targets. <code className="ds-code">--hit-min</code> is the floor for any tap target on mobile.
+            </p>
+            <div className="ds-grid ds-grid-3">
+              <Card><div style={{fontSize:11,color:'var(--muted)',letterSpacing:0.8,textTransform:'uppercase',fontWeight:600,marginBottom:8}}>Compact</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--foreground-dim)'}}>--row-compact · 44px</div>
+                <div style={{height:44,marginTop:8,background:'var(--pill-bg)',borderRadius:6}}/></Card>
+              <Card><div style={{fontSize:11,color:'var(--muted)',letterSpacing:0.8,textTransform:'uppercase',fontWeight:600,marginBottom:8}}>Default</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--foreground-dim)'}}>--row-default · 56px</div>
+                <div style={{height:56,marginTop:8,background:'var(--pill-bg)',borderRadius:6}}/></Card>
+              <Card><div style={{fontSize:11,color:'var(--muted)',letterSpacing:0.8,textTransform:'uppercase',fontWeight:600,marginBottom:8}}>Loose</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--foreground-dim)'}}>--row-loose · 72px</div>
+                <div style={{height:72,marginTop:8,background:'var(--pill-bg)',borderRadius:6}}/></Card>
+            </div>
+          </section>
+
+          {/* Radius */}
+          <section id="radius" className="ds-section">
+            <h1>Radius</h1>
+            <p className="ds-lede">Cards & sheets at <code className="ds-code">12</code>. Buttons at <code className="ds-code">8–10</code>. Pills full-round.</p>
+            <div className="ds-card" style={{display:'flex',flexWrap:'wrap',padding:8}}>
+              {[['xs',4],['sm',6],['md',8],['lg',10],['xl',12],['2xl',16],['full',9999]].map(([k,v]) => (
+                <div className="ds-radius-cell" key={k}>
+                  <div className="ds-radius-tile" style={{borderRadius: v === 9999 ? 9999 : v}} />
+                  <div className="label">--radius-{k} · {v}px</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Shadows & layers */}
+          <section id="shadows" className="ds-section">
+            <h1>Shadows &amp; layers</h1>
+            <p className="ds-lede">Borders carry weight; shadows are reserved for the FAB and modal layer.</p>
+            <div className="ds-grid ds-grid-3">
+              {[['xs','--shadow-xs'],['sm','--shadow-sm'],['md','--shadow-md'],['lg','--shadow-lg'],['fab','--shadow-fab']].map(([k,n])=>(
+                <div key={k} style={{padding:24,background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,
+                  display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+                  <div style={{width:96,height:48,background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,boxShadow:`var(${n})`}}/>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--muted)'}}>{n}</div>
+                </div>
+              ))}
+            </div>
+            <h2 className="ds-h2">Z-layers</h2>
+            <div className="ds-card">
+              {[['--z-base',0],['--z-sticky',30],['--z-fab',40],['--z-overlay',60],['--z-modal',70],['--z-toast',80]].map(([n,v])=>(
+                <div className="ds-row" key={n} style={{gridTemplateColumns:'200px 80px 1fr'}}>
+                  <span className="var">{n}</span><span className="val">{v}</span>
+                  <span style={{fontSize:13,color:'var(--foreground-dim)'}}>{
+                    {0:'page content',30:'sticky headers / bottom nav',40:'FAB',60:'sheets / dropdowns',70:'modals',80:'toasts'}[v]
+                  }</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Motion */}
+          <section id="motion" className="ds-section">
+            <h1>Motion</h1>
+            <p className="ds-lede">Two easings, four durations. Respect <code className="ds-code">prefers-reduced-motion</code> (handled in globals.css).</p>
+            <div className="ds-card">
+              {[
+                ['--duration-1','80ms','tap feedback, color flicks'],
+                ['--duration-2','140ms','hover, button press'],
+                ['--duration-3','220ms','sheet open, popover'],
+                ['--duration-4','320ms','page transitions'],
+              ].map(([n,v,d])=>(
+                <div className="ds-row" key={n}><span className="var">{n}</span><span className="val">{v}</span><span style={{fontSize:13,color:'var(--foreground-dim)'}}>{d}</span></div>
+              ))}
+            </div>
+          </section>
+
+          {/* Buttons */}
+          <section id="buttons" className="ds-section">
+            <h1>Button &amp; IconButton</h1>
+            <p className="ds-lede">Primary for the single most-important action per surface. Outline for secondary; ghost for utility/header chrome.</p>
+            <div className="ds-preview">
+              <Button variant="primary" icon={Sparkle}>Create skill</Button>
+              <Button variant="outline" icon={Ext}>YouTube</Button>
+              <Button variant="ghost">Cancel</Button>
+              <Button variant="danger">Delete</Button>
+            </div>
+            <div className="ds-preview-label"><div className="dot"/><div className="name">sizes</div></div>
+            <div className="ds-preview">
+              <Button variant="primary" size="sm">sm · 28</Button>
+              <Button variant="primary" size="md">md · 32</Button>
+              <Button variant="primary" size="lg">lg · 44</Button>
+            </div>
+            <div className="ds-preview-label"><div className="dot"/><div className="name">icon-only</div></div>
+            <div className="ds-preview">
+              <IconBtn icon={Search}/><IconBtn icon={Sun}/><IconBtn icon={More}/><IconBtn icon={Back}/>
+            </div>
+            <pre className="ds-pre">{`<Button variant="primary" icon={Sparkle}>Create skill</Button>
+<IconButton icon={Search} label="Search" />`}</pre>
+          </section>
+
+          {/* Pills */}
+          <section id="pills" className="ds-section">
+            <h1>Pill &amp; Tag</h1>
+            <p className="ds-lede">Status, kind, count chips. <code className="ds-code">Tag</code> is a Pill with a # prefix for topics.</p>
+            <div className="ds-preview">
+              <Pill>neutral</Pill>
+              <Pill tone="primary" active>active</Pill>
+              <Pill tone="success">done</Pill>
+              <Pill tone="info">processing</Pill>
+              <Pill tone="warning">queued</Pill>
+              <Pill tone="danger">failed</Pill>
+            </div>
+            <div className="ds-preview">
+              <Pill>#agents</Pill>
+              <Pill>#langgraph</Pill>
+              <Pill>#orchestration</Pill>
+              <Pill>#tooling</Pill>
+            </div>
+          </section>
+
+          {/* ChipStrip */}
+          <section id="chipstrip" className="ds-section">
+            <h1>ChipStrip</h1>
+            <p className="ds-lede">Horizontal scrollable. Single-active. Used for in-page TOC and filter rows.</p>
+            <div className="ds-preview col" style={{padding:16}}>
+              <ChipStrip
+                items={['Summary','Takeaways','Things','Quotes','Tools','Screenshots','Transcript']}
+                active="Summary"/>
+            </div>
+          </section>
+
+          {/* Cards */}
+          <section id="cards" className="ds-section">
+            <h1>Card</h1>
+            <p className="ds-lede">Neutral surface. Compose cards with internal sections — don't nest cards inside cards.</p>
+            <div className="ds-preview">
+              <Card style={{width:320}}>
+                <div style={{fontSize:11,color:'var(--muted)',fontWeight:500,letterSpacing:0.1,marginBottom:8}}>
+                  Article · <span style={{color:'var(--success)'}}>done</span>
+                </div>
+                <div style={{fontSize:15,fontWeight:600,color:'var(--foreground)',letterSpacing:-0.2,marginBottom:6}}>
+                  Context engineering is the new prompt engineering
+                </div>
+                <div style={{fontSize:13,lineHeight:1.45,color:'var(--muted)'}}>
+                  A tour through why the “prompt” abstraction is dissolving into long-form context curation.
+                </div>
+              </Card>
+            </div>
+          </section>
+
+          {/* Sections */}
+          <section id="sections" className="ds-section">
+            <h1>SectionLabel &amp; DetailSection</h1>
+            <p className="ds-lede">Eyebrow labels above content groups. <code className="ds-code">SectionLabel</code> for list pages, <code className="ds-code">DetailSection</code> for inner detail pages.</p>
+            <div className="ds-preview col" style={{padding:0}}>
+              <div style={{padding:'16px 0'}}>
+                <SectionLabel label="Videos" count="24 total" />
+                <Card style={{margin:'0 16px'}}>Card 1</Card>
+                <SectionLabel label="Other knowledge" count="12 sources" />
+                <Card style={{margin:'0 16px'}}>Card 2</Card>
+              </div>
+            </div>
+            <div className="ds-preview-label"><div className="dot"/><div className="name">DetailSection</div></div>
+            <div className="ds-preview col" style={{padding:0}}>
+              <div style={{padding:'4px 0 24px'}}>
+                <DetailSection label="Key takeaways" trailing={<span style={{fontSize:11,color:'var(--muted-dim)'}}>3 items</span>}>
+                  <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:10}}>
+                    {['State graphs beat prompt chains.','Checkpoint the entire graph state.','Prefer typed handoffs over ReAct loops.'].map((s,i)=>(
+                      <li key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.55,color:'var(--foreground-dim)'}}>
+                        <span style={{color:'var(--primary)',fontWeight:600}}>→</span><span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </DetailSection>
+              </div>
+            </div>
+          </section>
+
+          {/* Headers */}
+          <section id="headers" className="ds-section">
+            <h1>PageHeader &amp; DetailHeader</h1>
+            <p className="ds-lede">Both are 56px sticky bars with backdrop blur.</p>
+            <div className="ds-preview col" style={{padding:0}}>
+              <PageHeader title="Library" />
+              <div style={{padding:24,fontSize:13,color:'var(--muted)'}}>Page content scrolls beneath…</div>
+            </div>
+            <div className="ds-preview-label"><div className="dot"/><div className="name">DetailHeader</div></div>
+            <div className="ds-preview col" style={{padding:0}}>
+              <DetailHeader />
+              <div style={{padding:24,fontSize:13,color:'var(--muted)'}}>Detail content scrolls beneath…</div>
+            </div>
+          </section>
+
+          {/* BottomNav */}
+          <section id="bottomnav" className="ds-section">
+            <h1>BottomNav</h1>
+            <p className="ds-lede">Fixed 4-item nav. Active item uses <code className="ds-code">--primary</code>.</p>
+            <div className="ds-preview col" style={{padding:0,minHeight:120,position:'relative'}}>
+              <BottomNav />
+            </div>
+          </section>
+
+          {/* Display */}
+          <section id="display" className="ds-section">
+            <h1>KVGrid · Quote · Callout</h1>
+            <p className="ds-lede">Display primitives for detail pages.</p>
+            <h2 className="ds-h2">KVGrid</h2>
+            <div className="ds-preview col">
+              <KVGrid items={[['Type','article'],['Status','done'],['Created','Apr 12, 2026'],['Processed','Apr 12, 2026']]}/>
+            </div>
+            <h2 className="ds-h2">Quote</h2>
+            <div className="ds-preview col">
+              <Quote>“The mistake people make is treating the agent as the program. The graph is the program. The model is just one of the functions you call.”</Quote>
+            </div>
+            <h2 className="ds-h2">Callout</h2>
+            <div className="ds-preview col">
+              <Callout tone="info" title="Heads up">Processing usually takes under a minute. You'll see this row turn green when it's done.</Callout>
+              <Callout tone="success" title="Queued">Will queue for processing — you'll see it in Library instantly.</Callout>
+              <Callout tone="warning" title="Slow source">This site frequently rate-limits scrapers. Expect ~3 minutes.</Callout>
+              <Callout tone="danger" title="Failed">Couldn't fetch this URL. Open it manually and try paste-as-text.</Callout>
+            </div>
+          </section>
+
+          {/* Composition */}
+          <section id="composition" className="ds-section">
+            <h1>List → detail composition</h1>
+            <p className="ds-lede">A whole detail page should feel like a single thoughtful document — header, hero, meta, action bar, TOC, then sections separated by eyebrow labels.</p>
+            <div className="ds-preview" style={{padding:24,justifyContent:'center'}}>
+              <div className="ds-phone">
+                <DetailHeader />
+                <div style={{height:'calc(100% - 56px - 64px)',overflow:'hidden',padding:'8px 0 16px'}}>
+                  <div style={{padding:'8px 16px 0'}}>
+                    <div style={{aspectRatio:'16 / 9',borderRadius:12,
+                      background:'linear-gradient(135deg, var(--thumb), var(--thumb-accent))',
+                      position:'relative',overflow:'hidden'}}>
+                      <div style={{position:'absolute',inset:0,
+                        backgroundImage:'repeating-linear-gradient(135deg, transparent 0 11px, var(--border) 11px 12px)',
+                        opacity:0.6}}/>
+                    </div>
+                  </div>
+                  <div style={{padding:'14px 16px 0'}}>
+                    <h1 style={{margin:0,fontSize:18,fontWeight:650,letterSpacing:-0.4,
+                                color:'var(--foreground)',lineHeight:1.25}}>
+                      Building agent orchestration with LangGraph
+                    </h1>
+                    <div style={{marginTop:8,fontSize:12,color:'var(--muted)'}}>Latent Space · Apr 14</div>
+                  </div>
+                  <div style={{padding:'14px 16px 0',display:'flex',gap:8}}>
+                    <Button variant="primary" size="md" icon={Sparkle}>Create skill</Button>
+                    <Button variant="outline" size="md" icon={Ext}>YouTube</Button>
+                  </div>
+                  <div style={{marginTop:18}}>
+                    <ChipStrip items={['Summary','Takeaways','Tools','Quotes']} active="Summary"/>
+                  </div>
+                  <DetailSection label="Summary">
+                    <p style={{margin:0,fontSize:13,lineHeight:1.6,color:'var(--foreground-dim)',letterSpacing:-0.1}}>
+                      A ground-up walkthrough of stateful agent graphs — how to design nodes, edges, and checkpoints so workflows remain debuggable when tools start failing.
+                    </p>
+                  </DetailSection>
+                </div>
+                <BottomNav />
+              </div>
+            </div>
+          </section>
+
+          {/* Install */}
+          <section id="install" className="ds-section">
+            <h1>Install</h1>
+            <p className="ds-lede">Drop the folder into your Next.js app and import from it.</p>
+            <pre className="ds-pre">{`# 1. Copy the folder
+cp -R design-system src/
+
+# 2. Install runtime deps
+pnpm add lucide-react geist
+
+# 3. In app/layout.tsx
+import "@/design-system/globals.css";
+import { Inter } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+import { ThemeProvider } from "@/design-system/components";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={\`\${inter.variable} \${GeistMono.variable}\`}>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
+    </html>
+  );
+}`}</pre>
+            <h2 className="ds-h2">Wire next/font into the tokens</h2>
+            <p style={{fontSize:13,color:'var(--muted)',margin:'0 0 8px'}}>
+              In <code className="ds-code">tokens.css</code>, swap the bare family names for next/font CSS variables:
+            </p>
+            <pre className="ds-pre">{`:root {
+  --font-sans: var(--font-inter), -apple-system, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, Menlo, monospace;
+}`}</pre>
+          </section>
+
+          <div style={{height:120}}/>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<Spec/>);
+  </script>
+</body>
+</html>
