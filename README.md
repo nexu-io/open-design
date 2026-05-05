@@ -354,31 +354,58 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 
 If you ran the repo first and only later installed the packaged Desktop app, the two writers point at different roots:
 
-- Repo dev-server (`pnpm tools-dev start web`) writes to `<repo>/.od/`
-- Installed Desktop app writes to `~/Library/Application Support/Open Design/namespaces/<channel>/data/` on macOS, the platform-equivalent under `%APPDATA%` on Windows, and `$XDG_DATA_HOME` on Linux. `<channel>` is `release-stable` for stable installs and `release-beta` for the beta channel.
+- Repo dev-server (`pnpm tools-dev start web`) writes to `<repo-root>/.od/`.
+- Installed Desktop app writes under Electron's `userData` path: `<userData>/Open Design/namespaces/<channel>/data/`. `userData` follows OS conventions, and the channel suffix is **platform-specific** (the release workflows append `-win`/`-linux`):
+
+  | Platform | `<userData>` default | Stable channel | Beta channel |
+  |---|---|---|---|
+  | macOS | `~/Library/Application Support` | `release-stable` | `release-beta` |
+  | Windows | `%APPDATA%` (= `%USERPROFILE%\AppData\Roaming`) | `release-stable-win` | `release-beta-win` |
+  | Linux | `$XDG_CONFIG_HOME` (default `~/.config`) | `release-stable-linux` | `release-beta-linux` |
+
+  Example resolved paths:
+  - macOS beta: `~/Library/Application Support/Open Design/namespaces/release-beta/data/`
+  - Windows beta: `%APPDATA%\Open Design\namespaces\release-beta-win\data\`
+  - Linux beta: `~/.config/Open Design/namespaces/release-beta-linux/data/`
+
+  If unsure, inspect the packaged daemon log right after the app boots; it logs the resolved `daemonDataRoot`.
+
+> **⚠️ Do this in a clean state.** Migration replaces (not merges) the Desktop app's data dir with your repo `.od/`. Quit the Desktop app first so SQLite-WAL flushes cleanly. If the Desktop app already has projects you care about, decide which side is authoritative before continuing — the steps below back up the Desktop's current `data/` to a sibling but do not merge.
 
 To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
 
 ```bash
-# 1. Quit the Desktop app first (Cmd+Q on macOS) so SQLite-WAL flushes cleanly.
-# 2. Pick the channel you installed; example below is macOS + beta.
+# Quit the Desktop app first (Cmd+Q on macOS, File → Exit on Windows/Linux).
+# Set REPO and APP_DATA to your actual paths; the example below is macOS + beta.
+REPO="/path/to/open-design"
 APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
 
-# 3. Back up the empty data dir the Desktop app created on its first launch,
-#    then copy your repo .od/ contents in.
-mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F)"
-mkdir -p "$APP_DATA"
-cp -R <repo>/.od/{app.sqlite*,projects,artifacts,media-config.json} "$APP_DATA/"
+# Preflight: see what (if anything) the Desktop app already has.
+ls "$APP_DATA/projects" 2>/dev/null && echo "↑ Desktop already has projects — confirm this is a replace, not a merge."
 
-# 4. Relaunch the Desktop app — the daemon migrates the SQLite schema on boot.
+# Stage into a sibling first, then atomically swap into place. Avoids partial
+# state if the copy fails midway.
+STAGE="${APP_DATA}.staged-$(date +%F-%H%M)"
+mkdir -p "$STAGE"
+rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/"
+
+# Backup the Desktop's current data, then promote the staged copy.
+mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F-%H%M)"
+mv "$STAGE" "$APP_DATA"
+
+# Relaunch the Desktop app. The daemon applies forward schema changes on boot.
 ```
 
-To keep both writers (repo dev-server and Desktop app) on the *same* data going forward, point the dev-server at the app dir via `OD_DATA_DIR`:
+If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` and renaming the `.fresh-baseline-*` directory back into place.
 
-```bash
-OD_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data" \
-  pnpm tools-dev start web
-```
+> **⚠️ Schema migrations are forward-only.** The daemon applies `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` changes on boot; there is no version guard. After migrating, **do not** open the same data dir with an older repo checkout — unsupported columns or behavior mismatches can leave the workspace inconsistent. Back up `app.sqlite*` before the first launch with the new app.
+
+> **⚠️ Advanced: sharing one data dir between repo dev-server and Desktop app.** Pointing both at the same dir via `OD_DATA_DIR` is possible but **only safe one-at-a-time**. The daemon opens `app.sqlite` in WAL mode and writes uncoordinated files under `projects/` and `artifacts/`; running both writers concurrently can corrupt SQLite or clobber artifacts. Always stop the Desktop app before starting the dev-server, and stop the dev-server before opening the Desktop app:
+>
+> ```bash
+> OD_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data" \
+>   pnpm tools-dev start web
+> ```
 
 Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md).
 
