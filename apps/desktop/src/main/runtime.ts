@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
-import { BrowserWindow } from "electron";
+import { BrowserWindow, shell } from "electron";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -171,6 +171,15 @@ async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
   await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
 }
 
+function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function installWindowChromeCssHook(window: BrowserWindow): void {
   window.webContents.on("did-finish-load", () => {
     void applyWindowChromeCss(window).catch((error: unknown) => {
@@ -243,6 +252,20 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isHttpUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    if (!isHttpUrl(url) || url === currentUrl) return;
+    const currentOrigin = currentUrl ? new URL(currentUrl).origin : null;
+    const nextOrigin = new URL(url).origin;
+    if (currentOrigin === nextOrigin) return;
+    event.preventDefault();
+    void shell.openExternal(url);
+  });
 
   if (process.platform === "darwin") {
     window.on("close", (event) => {

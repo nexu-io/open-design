@@ -1,9 +1,18 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
-import { listSkills } from '../src/skills.js';
+
 import { SKILLS_CWD_ALIAS } from '../src/cwd-aliases.js';
+import { listSkills } from '../src/skills.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '../../..');
+const skillsRoot = path.join(repoRoot, 'skills');
+const liveArtifactRoot = path.join(skillsRoot, 'live-artifact');
 
 function fresh(): string {
   return mkdtempSync(path.join(tmpdir(), 'od-skills-'));
@@ -39,6 +48,32 @@ function writeSkill(
     );
   }
 }
+
+describe('listSkills', () => {
+  it('includes the built-in live-artifact skill catalog entry', async () => {
+    const skills = await listSkills(skillsRoot);
+    const skill = skills.find((entry: { id: string }) => entry.id === 'live-artifact');
+
+    expect(skill).toBeTruthy();
+    expect(skill).toMatchObject({
+      id: 'live-artifact',
+      name: 'live-artifact',
+      mode: 'prototype',
+      previewType: 'html',
+    });
+    expect(skill.triggers.length).toBeGreaterThan(0);
+    expect(skill.body).toContain(`> **Skill root (absolute fallback):** \`${liveArtifactRoot}\``);
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/live-artifact/`);
+    expect(skill.body).toContain('references/artifact-schema.md');
+    expect(skill.body).toContain('references/connector-policy.md');
+    expect(skill.body).toContain('references/refresh-contract.md');
+    expect(skill.body).toContain('"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts create --input artifact.json');
+    expect(skill.body).toContain('do not ask “where should the data come from?” before checking daemon connector tools');
+    expect(skill.body).toContain('notion.notion_search');
+    expect(skill.body).toContain('`OD_DAEMON_URL`');
+    expect(skill.body).toContain('`OD_TOOL_TOKEN`');
+  });
+});
 
 describe('listSkills preamble', () => {
   it('emits both a cwd-relative skill root and an absolute fallback', async () => {

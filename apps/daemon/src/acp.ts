@@ -6,6 +6,17 @@ const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
 
+export function buildAcpSessionNewParams(cwd, { mcpServers } = {}) {
+  return {
+    cwd: path.resolve(cwd),
+    // MCP is an optional compatibility layer. Default to no MCP servers so ACP
+    // agents can run through the skill + CLI path without MCP support. Do not
+    // auto-install or mutate user/global MCP config; callers must pass an
+    // explicit per-session MCP descriptor when a compatible agent supports it.
+    mcpServers: Array.isArray(mcpServers) ? mcpServers : [],
+  };
+}
+
 function sendRpc(writable, id, method, params) {
   writable.write(
     `${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`,
@@ -155,10 +166,7 @@ export async function detectAcpModels({
 
     const sendSessionNew = () => {
       expectedId = nextId;
-      writeRpc(nextId, 'session/new', {
-        cwd: path.resolve(cwd),
-        mcpServers: [],
-      });
+      writeRpc(nextId, 'session/new', buildAcpSessionNewParams(cwd));
       nextId += 1;
     };
 
@@ -218,6 +226,7 @@ export function attachAcpSession({
   prompt,
   cwd,
   model,
+  mcpServers,
   send,
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
@@ -382,10 +391,7 @@ export function attachAcpSession({
       writeRpc(
         nextId,
         'session/new',
-        {
-          cwd: effectiveCwd,
-          mcpServers: [],
-        },
+        buildAcpSessionNewParams(effectiveCwd, { mcpServers }),
         'session/new',
       );
       nextId += 1;

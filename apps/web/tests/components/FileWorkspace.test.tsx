@@ -9,6 +9,7 @@ describe('FileWorkspace upload input', () => {
       <FileWorkspace
         projectId="project-1"
         files={[]}
+        liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
         isDeck={false}
         tabsState={{ tabs: [], active: null }}

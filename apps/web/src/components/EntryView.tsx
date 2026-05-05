@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type SyntheticEvent } from 'react';
+import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -24,12 +25,19 @@ import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
 import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
+import {
+  connectConnector,
+  disconnectConnector,
+  fetchConnectorDiscovery,
+  fetchConnectors,
+  fetchConnectorStatuses,
+} from '../providers/registry';
 import { PetRail } from './pet/PetRail';
 import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
 import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 
-type TopTab = 'designs' | 'examples' | 'design-systems' | 'image-templates' | 'video-templates';
+type TopTab = 'designs' | 'examples' | 'design-systems' | 'connectors' | 'image-templates' | 'video-templates';
 
 interface Props {
   skills: SkillSummary[];
@@ -44,17 +52,12 @@ interface Props {
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onOpenProject: (id: string) => void;
+  onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
-  onOpenSettings: () => void;
-  // Deep-link into Settings → Pets so the entry view's "Adopt a pet"
-  // pill drops the user straight onto the catalog instead of asking
-  // them to hunt for the section.
+  onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'language' | 'appearance' | 'notifications' | 'pet' | 'about') => void;
   onAdoptPet: () => void;
-  // Inline adopt from the right-side rail — picks a pet by id and
-  // wakes the overlay without leaving the entry view.
   onAdoptPetInline: (petId: string) => void;
-  // Toggle the overlay visibility (wake / tuck) from the rail.
   onTogglePet: () => void;
 }
 
@@ -62,6 +65,19 @@ const SIDEBAR_MIN = 320;
 const SIDEBAR_MAX = 560;
 const SIDEBAR_DEFAULT = 380;
 const SIDEBAR_STORAGE_KEY = 'od-entry-sidebar-width';
+const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
+
+export function isTrustedConnectorCallbackOrigin(origin: string, currentOrigin?: string): boolean {
+  const expectedOrigin = currentOrigin ?? (typeof window === 'undefined' ? '' : window.location.origin);
+  if (origin === expectedOrigin) return true;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]' || url.hostname === '::1';
+  } catch {
+    return false;
+  }
+}
 
 // Lets the user fully remove the right-side pet rail from the entry
 // layout. They re-summon it from the entry-view avatar dropdown — the
@@ -79,6 +95,116 @@ function loadSidebarWidth(): number {
   } catch {
     return SIDEBAR_DEFAULT;
   }
+}
+
+function mergeConnectors(current: ConnectorDetail[], incoming: ConnectorDetail[]): ConnectorDetail[] {
+  if (!incoming.length) return current;
+  const incomingById = new Map(incoming.map((connector) => [connector.id, connector]));
+  const merged = current.map((connector) => incomingById.get(connector.id) ?? connector);
+  const currentIds = new Set(current.map((connector) => connector.id));
+  for (const connector of incoming) {
+    if (!currentIds.has(connector.id)) merged.push(connector);
+  }
+  return merged;
+}
+
+function applyConnectorStatuses(
+  current: ConnectorDetail[],
+  statuses: ConnectorStatusResponse['statuses'],
+): ConnectorDetail[] {
+  if (!Object.keys(statuses).length) return current;
+  return current.map((connector) => {
+    const next = statuses[connector.id];
+    if (!next) return connector;
+    const { accountLabel: _accountLabel, lastError: _lastError, ...base } = connector;
+    return {
+      ...base,
+      status: next.status,
+      ...(next.accountLabel === undefined ? {} : { accountLabel: next.accountLabel }),
+      ...(next.lastError === undefined ? {} : { lastError: next.lastError }),
+    };
+  });
+}
+
+export function sortConnectorsForDisplay(connectors: ConnectorDetail[]): ConnectorDetail[] {
+  return [...connectors].sort((a, b) => {
+    const aConnected = a.status === 'connected';
+    const bConnected = b.status === 'connected';
+    if (aConnected !== bConnected) return aConnected ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id);
+  });
+}
+
+function normalizedSearchValue(value: string | undefined): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function scoreConnectorText(value: string | undefined, query: string, baseScore: number): number | null {
+  const normalized = normalizedSearchValue(value);
+  if (!normalized) return null;
+  if (normalized === query) return baseScore;
+  if (normalized.startsWith(query)) return baseScore + 1;
+  if (normalized.includes(query)) return baseScore + 2;
+  return null;
+}
+
+export function getConnectorSearchScore(connector: ConnectorDetail, query: string): number | null {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return 0;
+
+  const scores: number[] = [];
+  const collect = (value: string | undefined, baseScore: number) => {
+    const score = scoreConnectorText(value, normalizedQuery, baseScore);
+    if (score !== null) scores.push(score);
+  };
+
+  // Connector identity fields carry the most intent: exact and prefix
+  // name/provider matches should beat incidental mentions elsewhere.
+  collect(connector.name, 0);
+  collect(connector.provider, 0);
+
+  // Secondary connector metadata is still searchable, but lower priority.
+  collect(connector.category, 3);
+  collect(connector.accountLabel, 3);
+
+  // Tool names/titles are more relevant than prose descriptions, but below
+  // connector-level identity matches.
+  for (const tool of connector.tools) {
+    collect(tool.title, 5);
+    collect(tool.name, 5);
+  }
+
+  // Prose descriptions are broad and often mention other products, so they
+  // are intentionally down-ranked rather than excluded.
+  collect(connector.description, 8);
+  for (const tool of connector.tools) {
+    collect(tool.description, 8);
+  }
+
+  return scores.length ? Math.min(...scores) : null;
+}
+
+export function sortConnectorsForSearch(
+  connectors: ConnectorDetail[],
+  query: string,
+): ConnectorDetail[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return sortConnectorsForDisplay(connectors);
+
+  return [...connectors]
+    .map((connector) => ({ connector, score: getConnectorSearchScore(connector, normalizedQuery) }))
+    .filter((entry): entry is { connector: ConnectorDetail; score: number } => entry.score !== null)
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      const aConnected = a.connector.status === 'connected';
+      const bConnected = b.connector.status === 'connected';
+      if (aConnected !== bConnected) return aConnected ? -1 : 1;
+      return (
+        a.connector.name.localeCompare(b.connector.name, undefined, { sensitivity: 'base' }) ||
+        a.connector.id.localeCompare(b.connector.id)
+      );
+    })
+    .map((entry) => entry.connector);
 }
 
 function loadPetRailHidden(): boolean {
@@ -103,6 +229,7 @@ export function EntryView({
   onCreateProject,
   onImportClaudeDesign,
   onOpenProject,
+  onOpenLiveArtifact,
   onDeleteProject,
   onChangeDefaultDesignSystem,
   onOpenSettings,
@@ -117,6 +244,10 @@ export function EntryView({
     useState<PromptTemplateSummary | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [resizing, setResizing] = useState(false);
+  const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
+  const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [connectorDiscoveryLoading, setConnectorDiscoveryLoading] = useState(false);
+  const [connectorDiscoveryLoaded, setConnectorDiscoveryLoaded] = useState(false);
   const [petRailHidden, setPetRailHiddenState] = useState<boolean>(() => loadPetRailHidden());
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
@@ -208,6 +339,84 @@ export function EntryView({
     }
   }, [sidebarWidth]);
 
+  const reloadConnectors = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    if (options.showLoading ?? true) setConnectorsLoading(true);
+    const next = await fetchConnectors();
+    setConnectors(next);
+    setConnectorsLoading(false);
+  }, []);
+
+  const reloadConnectorStatuses = useCallback(async () => {
+    const statuses = await fetchConnectorStatuses();
+    setConnectors((curr) => applyConnectorStatuses(curr, statuses));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Fetch connectors on mount so the New project panel can show
+    // already-configured connectors on the live-artifact tab without
+    // waiting for the user to open the Connectors tab.
+    setConnectorsLoading(true);
+    (async () => {
+      const next = await fetchConnectors();
+      if (cancelled) return;
+      setConnectors(next);
+      setConnectorsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (topTab !== 'connectors') return;
+    if (connectorDiscoveryLoaded) return;
+    let cancelled = false;
+    // Slow Composio discovery is only needed for enriched toolkit metadata
+    // and auth configuration. Keep the initial catalog/status path fast.
+    setConnectorDiscoveryLoading(true);
+    (async () => {
+      const next = await fetchConnectorDiscovery();
+      if (cancelled) return;
+      setConnectors((curr) => mergeConnectors(curr, next));
+      setConnectorDiscoveryLoaded(true);
+      setConnectorDiscoveryLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+      setConnectorDiscoveryLoading(false);
+    };
+  }, [connectorDiscoveryLoaded, topTab]);
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      const data = event.data;
+      if (!data || typeof data !== 'object' || (data as { type?: unknown }).type !== CONNECTOR_CALLBACK_MESSAGE_TYPE) return;
+      if (!isTrustedConnectorCallbackOrigin(event.origin)) return;
+      void reloadConnectorStatuses();
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [reloadConnectorStatuses]);
+
+  // When the OAuth flow is handed off to the user's system browser (desktop
+  // shell opens connector auth URLs externally rather than in an Electron
+  // popup), the callback page has no `window.opener` to postMessage back to.
+  // Refresh connector statuses whenever the window regains focus so the UI
+  // picks up a just-completed connection without manual intervention.
+  useEffect(() => {
+    function onFocus() {
+      void reloadConnectorStatuses();
+    }
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [reloadConnectorStatuses]);
+
+  function updateConnector(next: ConnectorDetail | null) {
+    if (!next) return;
+    setConnectors((curr) => curr.map((connector) => (connector.id === next.id ? next : connector)));
+  }
+
   // Dismiss the avatar dropdown on outside-click / Escape so it behaves
   // like the project-view AvatarMenu (which uses the same shell CSS).
   useEffect(() => {
@@ -229,10 +438,6 @@ export function EntryView({
     };
   }, [avatarMenuOpen]);
 
-  // The right rail tracks its own collapse state internally and tells
-  // us its preferred column width via a CSS variable on the wrapper —
-  // we keep both the expanded and collapsed widths declarative here so
-  // the grid stays in sync with whatever the rail decides to render.
   return (
     <div
       className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
@@ -264,6 +469,9 @@ export function EntryView({
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
           mediaProviders={config.mediaProviders}
+          connectors={connectors}
+          connectorsLoading={connectorsLoading}
+          onOpenConnectorsTab={() => setTopTab('connectors')}
           loading={loading}
         />
         <div className="entry-side-foot">
@@ -294,7 +502,7 @@ export function EntryView({
           <button
             type="button"
             className="foot-pill"
-            onClick={onOpenSettings}
+            onClick={() => onOpenSettings()}
             title={t('settings.envConfigure')}
           >
             <Icon name="settings" size={12} />
@@ -333,6 +541,7 @@ export function EntryView({
               label={t('entry.tabDesignSystems')}
               onClick={setTopTab}
             />
+            <TopTabButton current={topTab} value="connectors" label={t('entry.tabConnectors')} onClick={setTopTab} />
             <TopTabButton
               current={topTab}
               value="image-templates"
@@ -417,6 +626,7 @@ export function EntryView({
                   skills={skills}
                   designSystems={designSystems}
                   onOpen={onOpenProject}
+                  onOpenLiveArtifact={onOpenLiveArtifact}
                   onDelete={onDeleteProject}
                 />
               ) : null}
@@ -429,6 +639,18 @@ export function EntryView({
                   selectedId={defaultDesignSystemId}
                   onSelect={onChangeDefaultDesignSystem}
                   onPreview={previewDesignSystem}
+                />
+              ) : null}
+              {topTab === 'connectors' ? (
+                <ConnectorsTab
+                  connectors={connectors}
+                  loading={connectorsLoading}
+                  toolsLoading={connectorDiscoveryLoading}
+                  toolsLoaded={connectorDiscoveryLoaded}
+                  composioConfigured={Boolean(config.composio?.apiKeyConfigured)}
+                  onOpenSettings={onOpenSettings}
+                  onConnect={async (connectorId) => updateConnector(await connectConnector(connectorId))}
+                  onDisconnect={async (connectorId) => updateConnector(await disconnectConnector(connectorId))}
                 />
               ) : null}
               {topTab === 'image-templates' ? (
@@ -472,6 +694,583 @@ export function EntryView({
       ) : null}
     </div>
   );
+}
+
+function ConnectorsTab({
+  connectors,
+  loading,
+  toolsLoading,
+  toolsLoaded,
+  composioConfigured,
+  onOpenSettings,
+  onConnect,
+  onDisconnect,
+}: {
+  connectors: ConnectorDetail[];
+  loading: boolean;
+  toolsLoading: boolean;
+  toolsLoaded: boolean;
+  composioConfigured: boolean;
+  onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'language' | 'about') => void;
+  onConnect: (connectorId: string) => Promise<void> | void;
+  onDisconnect: (connectorId: string) => Promise<void> | void;
+}) {
+  const t = useT();
+  const [pendingConnectorAction, setPendingConnectorAction] = useState<{
+    connectorId: string;
+    action: 'connect' | 'disconnect';
+  } | null>(null);
+  const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Mask the grid whenever no Composio-backed connector has its auth
+  // configured. We also honor the local config.composio flag so the mask
+  // appears immediately when the key is cleared, before the next list fetch.
+  const anyComposioAuthConfigured = useMemo(
+    () =>
+      connectors.some(
+        (connector) => connector.auth?.provider === 'composio' && connector.auth.configured,
+      ),
+    [connectors],
+  );
+  const needsComposioKey = !composioConfigured && !anyComposioAuthConfigured;
+
+  // Filter and rank connectors by user-visible fields. Exact/prefix matches
+  // on connector name/provider are strongest; broad description matches stay
+  // searchable but are down-ranked.
+  const filteredConnectors = useMemo(() => {
+    return sortConnectorsForSearch(connectors, filter);
+  }, [connectors, filter]);
+
+  const hasQuery = filter.trim().length > 0;
+  const hasNoResults = hasQuery && filteredConnectors.length === 0;
+
+  async function runConnectorAction(connectorId: string, action: 'connect' | 'disconnect') {
+    if (pendingConnectorAction) return;
+    setPendingConnectorAction({ connectorId, action });
+    try {
+      if (action === 'connect') {
+        await onConnect(connectorId);
+      } else {
+        await onDisconnect(connectorId);
+      }
+    } finally {
+      setPendingConnectorAction(null);
+    }
+  }
+
+  const detailConnector = useMemo(
+    () => (detailConnectorId ? connectors.find((c) => c.id === detailConnectorId) ?? null : null),
+    [detailConnectorId, connectors],
+  );
+
+  return (
+    <div className="tab-panel connectors-panel">
+      <div className="tab-panel-toolbar">
+        <div className="toolbar-left connectors-heading">
+          <div>
+            <h2>{t('connectors.title')}</h2>
+            <p>{t('connectors.subtitle')}</p>
+          </div>
+        </div>
+        <div className="toolbar-right">
+          <div className="toolbar-search connectors-search">
+            <span className="search-icon" aria-hidden>
+              <Icon name="search" size={13} />
+            </span>
+            <input
+              ref={searchInputRef}
+              type="search"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && filter) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setFilter('');
+                }
+              }}
+              placeholder={t('connectors.searchPlaceholder')}
+              aria-label={t('connectors.searchAriaLabel')}
+              disabled={needsComposioKey}
+              data-testid="connectors-search-input"
+            />
+            {hasQuery ? (
+              <button
+                type="button"
+                className="toolbar-search-clear"
+                aria-label={t('connectors.searchClear')}
+                onClick={() => {
+                  setFilter('');
+                  searchInputRef.current?.focus();
+                }}
+                data-testid="connectors-search-clear"
+              >
+                <Icon name="close" size={12} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {loading ? (
+        <CenteredLoader label={t('common.loading')} />
+      ) : (
+        <div
+          className={`connector-grid-wrap${needsComposioKey ? ' is-masked' : ''}`}
+          data-testid="connector-grid-wrap"
+        >
+          {hasNoResults && !needsComposioKey ? (
+            <div
+              className="tab-empty connectors-empty"
+              role="status"
+              aria-live="polite"
+              data-testid="connectors-empty"
+            >
+              <p className="connectors-empty-title">
+                {t('connectors.emptyNoMatchTitle', { query: filter.trim() })}
+              </p>
+              <p className="connectors-empty-body">{t('connectors.emptyNoMatchBody')}</p>
+              <button
+                type="button"
+                className="ghost connectors-empty-action"
+                onClick={() => {
+                  setFilter('');
+                  searchInputRef.current?.focus();
+                }}
+              >
+                {t('connectors.emptyNoMatchAction')}
+              </button>
+            </div>
+          ) : (
+            <div
+              className="connector-grid"
+              aria-hidden={needsComposioKey || undefined}
+            >
+              {filteredConnectors.map((connector) => (
+                <ConnectorCard
+                  key={connector.id}
+                  connector={connector}
+                  disabled={needsComposioKey}
+                  pendingAction={
+                    pendingConnectorAction?.connectorId === connector.id
+                      ? pendingConnectorAction.action
+                      : null
+                  }
+                  toolsLoading={toolsLoading}
+                  toolsLoaded={toolsLoaded}
+                  onConnect={(connectorId) => runConnectorAction(connectorId, 'connect')}
+                  onDisconnect={(connectorId) => runConnectorAction(connectorId, 'disconnect')}
+                  onOpenDetails={(connectorId) => setDetailConnectorId(connectorId)}
+                />
+              ))}
+            </div>
+          )}
+          {needsComposioKey ? (
+            <div
+              className="connector-gate"
+              role="region"
+              aria-label={t('connectors.gateTitle')}
+              data-testid="connector-gate"
+            >
+              <div className="connector-gate-card">
+                <div className="connector-gate-icon" aria-hidden>
+                  <Icon name="settings" size={20} />
+                </div>
+                <h3 className="connector-gate-title">{t('connectors.gateTitle')}</h3>
+                <p className="connector-gate-body">{t('connectors.gateBody')}</p>
+                <button
+                  type="button"
+                  className="primary connector-gate-action"
+                  onClick={() => onOpenSettings('composio')}
+                  data-testid="connector-gate-action"
+                >
+                  {t('connectors.gateAction')}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+      {detailConnector ? (
+        <ConnectorDetailDrawer
+          connector={detailConnector}
+          disabled={needsComposioKey}
+          pendingAction={
+            pendingConnectorAction?.connectorId === detailConnector.id
+              ? pendingConnectorAction.action
+              : null
+          }
+          toolsLoading={toolsLoading}
+          toolsLoaded={toolsLoaded}
+          onClose={() => setDetailConnectorId(null)}
+          onConnect={(connectorId) => runConnectorAction(connectorId, 'connect')}
+          onDisconnect={(connectorId) => runConnectorAction(connectorId, 'disconnect')}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ConnectorCard({
+  connector,
+  disabled = false,
+  pendingAction,
+  toolsLoading,
+  toolsLoaded,
+  onConnect,
+  onDisconnect,
+  onOpenDetails,
+}: {
+  connector: ConnectorDetail;
+  disabled?: boolean;
+  pendingAction: 'connect' | 'disconnect' | null;
+  toolsLoading: boolean;
+  toolsLoaded: boolean;
+  onConnect: (connectorId: string) => Promise<void> | void;
+  onDisconnect: (connectorId: string) => Promise<void> | void;
+  onOpenDetails: (connectorId: string) => void;
+}) {
+  const t = useT();
+  const isConnecting = pendingAction === 'connect';
+  const isDisconnecting = pendingAction === 'disconnect';
+  const isPending = pendingAction !== null;
+  const isConnected = connector.status === 'connected';
+  const canConnect = !disabled && !isPending && connector.status === 'available';
+  const canDisconnect = !disabled && !isPending && isConnected;
+  const toolCount = connector.tools.length;
+  const showToolsBadge = toolsLoaded;
+  const toolsBadgeLabel = formatToolsBadge(toolCount, t);
+
+  function openDetails() {
+    if (disabled) return;
+    onOpenDetails(connector.id);
+  }
+
+  function onKeyActivate(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    // Only treat the wrapper itself as a trigger — nested buttons handle
+    // their own activation.
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    openDetails();
+  }
+
+  // Any click on an interactive child (button, link) must not bubble up to
+  // the card-level open handler.
+  function stop(event: SyntheticEvent) {
+    event.stopPropagation();
+  }
+
+  return (
+    <article
+      className={`connector-card status-${connector.status}${disabled ? ' is-locked' : ''}`}
+      data-connector-id={connector.id}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      aria-label={t('connectors.openDetailsAria', { name: connector.name })}
+      onClick={openDetails}
+      onKeyDown={onKeyActivate}
+    >
+      <div className="connector-card-top">
+        <div className="connector-card-head">
+          <h3 className="connector-card-title">{connector.name}</h3>
+          <div className="connector-meta">
+            <span className="connector-meta-item">{connector.category}</span>
+            <span className="connector-meta-dot" aria-hidden>·</span>
+            {showToolsBadge ? (
+              <span className="connector-tools-badge is-ready" title={toolsBadgeLabel}>
+                <Icon name="settings" size={10} />
+                <span>{toolsBadgeLabel}</span>
+              </span>
+            ) : null}
+          </div>
+        </div>
+        {isConnected ? (
+          <span
+            className={`connector-status status-${connector.status}`}
+            aria-label={statusLabel(connector.status, t)}
+          >
+            <span className="connector-status-dot" aria-hidden />
+            {statusLabel(connector.status, t)}
+          </span>
+        ) : connector.status === 'error' || connector.status === 'disabled' ? (
+          <span className={`connector-status status-${connector.status}`}>
+            {statusLabel(connector.status, t)}
+          </span>
+        ) : null}
+      </div>
+      {connector.description ? (
+        <p className="connector-description">{connector.description}</p>
+      ) : null}
+      <div className="connector-actions">
+        {isConnected ? (
+          <button
+            type="button"
+            className={`ghost connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
+            disabled={!canDisconnect}
+            aria-busy={isDisconnecting || undefined}
+            tabIndex={disabled ? -1 : undefined}
+            onMouseDown={stop}
+            onKeyDown={stop}
+            onClick={(e) => {
+              stop(e);
+              onDisconnect(connector.id);
+            }}
+          >
+            {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
+            <span>{t('connectors.disconnect')}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`primary connector-action is-connect${isConnecting ? ' is-loading' : ''}`}
+            disabled={!canConnect}
+            aria-busy={isConnecting || undefined}
+            tabIndex={disabled ? -1 : undefined}
+            onMouseDown={stop}
+            onKeyDown={stop}
+            onClick={(e) => {
+              stop(e);
+              onConnect(connector.id);
+            }}
+          >
+            {isConnecting ? <Icon name="spinner" size={12} /> : null}
+            <span>{t('connectors.connect')}</span>
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function statusLabel(status: ConnectorDetail['status'], t: ReturnType<typeof useT>): string {
+  switch (status) {
+    case 'available':
+      return t('connectors.statusAvailable');
+    case 'connected':
+      return t('connectors.statusConnected');
+    case 'error':
+      return t('connectors.statusError');
+    case 'disabled':
+      return t('connectors.statusDisabled');
+  }
+}
+
+function formatToolsBadge(count: number, t: ReturnType<typeof useT>): string {
+  if (count === 0) return t('connectors.toolsBadgeNone');
+  if (count === 1) return t('connectors.toolsBadgeOne', { n: count });
+  return t('connectors.toolsBadgeMany', { n: count });
+}
+
+function ConnectorDetailDrawer({
+  connector,
+  disabled,
+  pendingAction,
+  toolsLoading,
+  toolsLoaded,
+  onClose,
+  onConnect,
+  onDisconnect,
+}: {
+  connector: ConnectorDetail;
+  disabled: boolean;
+  pendingAction: 'connect' | 'disconnect' | null;
+  toolsLoading: boolean;
+  toolsLoaded: boolean;
+  onClose: () => void;
+  onConnect: (connectorId: string) => Promise<void> | void;
+  onDisconnect: (connectorId: string) => Promise<void> | void;
+}) {
+  const t = useT();
+  const isConnected = connector.status === 'connected';
+  const isConnecting = pendingAction === 'connect';
+  const isDisconnecting = pendingAction === 'disconnect';
+  const isPending = pendingAction !== null;
+  const canConnect = !disabled && !isPending && connector.status === 'available';
+  const canDisconnect = !disabled && !isPending && isConnected;
+  const accountLabel = getDisplayableConnectorAccountLabel(connector);
+  const toolCount = connector.tools.length;
+  const isLoadingTools = !toolsLoaded || (toolsLoading && toolCount === 0);
+  const showToolsBadge = toolsLoaded;
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // ESC to close; focus the close button on mount for keyboard users.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    closeBtnRef.current?.focus();
+    // Lock the background scroll while the drawer is open.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  const statusTone = connector.status;
+
+  return (
+    <div
+      className="connector-drawer-backdrop"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <aside
+        className="connector-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="connector-drawer-title"
+        data-testid="connector-drawer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="connector-drawer-head">
+          <div className="connector-drawer-titles">
+            <div className="connector-drawer-eyebrow">
+              <span>{connector.category}</span>
+              <span className="connector-meta-dot" aria-hidden>·</span>
+              <span>{connector.provider}</span>
+            </div>
+            <h2 id="connector-drawer-title">{connector.name}</h2>
+            <div className="connector-drawer-status">
+              <span className={`connector-status-pill status-${statusTone}`}>
+                <span className="connector-status-dot" aria-hidden />
+                {statusLabel(connector.status, t)}
+              </span>
+              {showToolsBadge ? (
+                <span className="connector-tools-badge is-ready" title={formatToolsBadge(toolCount, t)}>
+                  <Icon name="settings" size={10} />
+                  <span>{formatToolsBadge(toolCount, t)}</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <button
+            ref={closeBtnRef}
+            type="button"
+            className="ghost connector-drawer-close"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            data-testid="connector-drawer-close"
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </header>
+
+        <div className="connector-drawer-body">
+          {connector.description ? (
+            <section className="connector-drawer-section">
+              <h3 className="connector-drawer-section-title">{t('connectors.aboutLabel')}</h3>
+              <p className="connector-drawer-description">{connector.description}</p>
+            </section>
+          ) : null}
+
+          <section className="connector-drawer-section">
+            <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+            <dl className="connector-drawer-details">
+              <div>
+                <dt>{t('connectors.statusLabel')}</dt>
+                <dd>{statusLabel(connector.status, t)}</dd>
+              </div>
+              <div>
+                <dt>{t('connectors.categoryLabel')}</dt>
+                <dd>{connector.category}</dd>
+              </div>
+              <div>
+                <dt>{t('connectors.providerLabel')}</dt>
+                <dd>{connector.provider}</dd>
+              </div>
+              {accountLabel ? (
+                <div>
+                  <dt>{t('connectors.account')}</dt>
+                  <dd>{accountLabel}</dd>
+                </div>
+              ) : null}
+              {connector.lastError ? (
+                <div className="connector-drawer-details-error">
+                  <dt>{t('connectors.statusError')}</dt>
+                  <dd>{connector.lastError}</dd>
+                </div>
+              ) : null}
+            </dl>
+          </section>
+
+          <section className="connector-drawer-section">
+            <h3 className="connector-drawer-section-title">
+              {t('connectors.toolsSection')} <span className="connector-drawer-count">{toolCount}</span>
+            </h3>
+            {isLoadingTools ? (
+              <p className="connector-drawer-empty"><Icon name="spinner" size={12} /> {t('connectors.toolsLoading')}</p>
+            ) : toolCount === 0 ? (
+              <p className="connector-drawer-empty">{t('connectors.noToolsAvailable')}</p>
+            ) : (
+              <ul className="connector-drawer-tools">
+                {connector.tools.map((tool) => (
+                  <li key={tool.name} className="connector-drawer-tool">
+                    <div className="connector-drawer-tool-head">
+                      <span className="connector-drawer-tool-title">{tool.title || tool.name}</span>
+                      <span
+                        className={`connector-drawer-tool-badge side-${tool.safety.sideEffect}`}
+                        title={tool.safety.reason}
+                      >
+                        {tool.safety.sideEffect}
+                      </span>
+                    </div>
+                    {tool.description ? (
+                      <p className="connector-drawer-tool-desc">{tool.description}</p>
+                    ) : null}
+                    <code className="connector-drawer-tool-name">{tool.name}</code>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <footer className="connector-drawer-foot">
+          {isConnected ? (
+            <button
+              type="button"
+              className={`ghost connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
+              disabled={!canDisconnect}
+              aria-busy={isDisconnecting || undefined}
+              onClick={() => onDisconnect(connector.id)}
+            >
+              {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
+              <span>{t('connectors.disconnect')}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`primary connector-action is-connect${isConnecting ? ' is-loading' : ''}`}
+              disabled={!canConnect}
+              aria-busy={isConnecting || undefined}
+              onClick={() => onConnect(connector.id)}
+            >
+              {isConnecting ? <Icon name="spinner" size={12} /> : null}
+              <span>{t('connectors.connect')}</span>
+            </button>
+          )}
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
+function getDisplayableConnectorAccountLabel(connector: ConnectorDetail): string | undefined {
+  if (!connector.accountLabel) return undefined;
+  const provider = connector.auth?.provider ?? connector.provider.toLowerCase();
+  if (provider === 'composio') return undefined;
+  return connector.accountLabel;
 }
 
 function TopTabButton({

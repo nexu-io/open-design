@@ -41,6 +41,7 @@ import {
 export type SettingsSection =
   | 'execution'
   | 'media'
+  | 'composio'
   | 'integrations'
   | 'language'
   | 'appearance'
@@ -54,9 +55,7 @@ interface Props {
   daemonLive: boolean;
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
-  // Optional deep-link target so callers (e.g. the entry-view "adopt a
-  // pet" pill) can pop the dialog open straight on a specific section.
-  defaultSection?: SettingsSection;
+  initialSection?: SettingsSection;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
   onRefreshAgents: (
@@ -358,7 +357,7 @@ export function SettingsDialog({
   daemonLive,
   appVersionInfo,
   welcome,
-  defaultSection,
+  initialSection = 'execution',
   onSave,
   onClose,
   onRefreshAgents,
@@ -381,9 +380,7 @@ export function SettingsDialog({
   }, [initial.theme]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<SettingsSection>(
-    defaultSection ?? 'execution',
-  );
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
@@ -404,13 +401,9 @@ export function SettingsDialog({
   >(() => new Set());
   const languageRef = useRef<HTMLDivElement | null>(null);
 
-  // If the daemon goes offline mid-edit, force API mode so the UI doesn't
-  // pretend Local CLI is selectable.
   useEffect(() => {
-    if (!daemonLive && cfg.mode === 'daemon') {
-      setCfg((c) => ({ ...c, mode: 'api' }));
-    }
-  }, [daemonLive, cfg.mode]);
+    setActiveSection(initialSection);
+  }, [initialSection]);
 
   // Tests pin a result against the unsaved draft. Once the user edits any
   // field that feeds into the test, the result is no longer trustworthy —
@@ -772,6 +765,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.mediaProviders')}</strong>
                 <small>Image / video / audio</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'composio' ? ' active' : ''}`}
+              onClick={() => setActiveSection('composio')}
+            >
+              <Icon name="sliders" size={18} />
+              <span>
+                <strong>Connectors</strong>
+                <small>External system connections</small>
               </span>
             </button>
             <button
@@ -1364,6 +1368,8 @@ export function SettingsDialog({
           {activeSection === 'media' ? <MediaProvidersSection cfg={cfg} setCfg={setCfg} /> : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
+          {activeSection === 'composio' ? <ComposioSection cfg={cfg} setCfg={setCfg} /> : null}
+
           {activeSection === 'language' ? (
           <section className="settings-section">
             <div className="section-head">
@@ -1513,6 +1519,80 @@ export function SettingsDialog({
         </footer>
       </div>
     </div>
+  );
+}
+
+function ComposioSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const composio = cfg.composio ?? {};
+
+  const updateComposio = (patch: NonNullable<AppConfig['composio']>) => {
+    setCfg((curr) => ({ ...curr, composio: { ...(curr.composio ?? {}), ...patch } }));
+  };
+  const hasPendingEdit = Boolean(composio.apiKey?.trim());
+  const apiKeyConfigured = Boolean(hasPendingEdit || composio.apiKeyConfigured);
+  const isSavedState = apiKeyConfigured && !hasPendingEdit;
+  const tail = composio.apiKeyTail?.trim();
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>Connectors</h3>
+          <p className="hint">Manage connector and tool provider settings for this device.</p>
+        </div>
+      </div>
+      <label className="field">
+        <span className="field-label-row">
+          <span className="field-label-group">
+            <span className="field-label">Composio API Key</span>
+            {isSavedState ? (
+              <span className="field-status-badge" title="Saved to local daemon">
+                {tail ? `Saved · ••••${tail}` : 'Saved'}
+              </span>
+            ) : null}
+          </span>
+          <a
+            className="field-label-link"
+            href="https://app.composio.dev"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Get API Key
+            <Icon name="external-link" size={11} />
+          </a>
+        </span>
+        <div className="field-row">
+          <input
+            type="password"
+            value={composio.apiKey ?? ''}
+            placeholder={isSavedState ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
+            onChange={(e) => updateComposio({ apiKey: e.target.value })}
+            aria-describedby="composio-api-key-help"
+          />
+          <button
+            type="button"
+            className="ghost"
+            disabled={!apiKeyConfigured}
+            onClick={() => updateComposio({ apiKey: '', apiKeyConfigured: false, apiKeyTail: '' })}
+          >
+            Clear
+          </button>
+        </div>
+        <span id="composio-api-key-help" className="hint">
+          {isSavedState
+            ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
+            : apiKeyConfigured
+              ? 'Unsaved changes — click Save to store this key in the local daemon.'
+              : 'Keys are stored locally in the daemon and never sent through environment variables.'}
+        </span>
+      </label>
+    </section>
   );
 }
 
