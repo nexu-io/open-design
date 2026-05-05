@@ -1,13 +1,17 @@
 // Coverage for the /api/test/connection route. Hits status mapping for each
-// provider protocol and the agent-not-installed branch (the only spawn
-// outcome we can deterministically reproduce without a live CLI on PATH).
+// provider protocol and uses fake CLI bins for deterministic agent outcomes.
 
 import type http from 'node:http';
+import { promises as fsp } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createAgentSink,
   isSmokeOkReply,
   redactSecrets,
+  testAgentConnection,
+  testProviderConnection,
 } from '../src/connectionTest.js';
 import { startServer } from '../src/server.js';
 
@@ -38,6 +42,43 @@ function passThroughOrUpstream(handler: (url: string, init?: FetchInit) => Respo
   });
 }
 
+async function withFakeCodex<T>(script: string, run: () => Promise<T>): Promise<T> {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-bin-'));
+  const oldPath = process.env.PATH;
+  try {
+    if (process.platform === 'win32') {
+      const runner = path.join(dir, 'codex-test-runner.cjs');
+      await fsp.writeFile(runner, script);
+      await fsp.writeFile(
+        path.join(dir, 'codex.cmd'),
+        `@echo off\r\nnode "${runner}" %*\r\n`,
+      );
+    } else {
+      const bin = path.join(dir, 'codex');
+      await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+      await fsp.chmod(bin, 0o755);
+    }
+    process.env.PATH = `${dir}${path.delimiter}${oldPath ?? ''}`;
+    return await run();
+  } finally {
+    process.env.PATH = oldPath;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function waitForFile(file: string, timeoutMs = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await fsp.access(file);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Timed out waiting for ${file}`);
+}
+
 beforeAll(async () => {
   const started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
   baseUrl = started.url;
@@ -45,6 +86,7 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -78,6 +120,33 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.kind).toBe('success');
     expect(body.model).toBe('claude-sonnet-4-5');
     expect(body.sample).toBe('ok');
+  });
+
+  it('redacts submitted keys from success samples', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse({
+          content: [{ type: 'text', text: 'debug echo sk-success-secret' }],
+        }),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-success-secret',
+        model: 'claude-sonnet-4-5',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.sample).toBe('debug echo [REDACTED]');
+    expect(body.sample).not.toContain('sk-success-secret');
   });
 
   it('maps a 401 to auth_failed', async () => {
@@ -376,32 +445,38 @@ describe('POST /api/test/connection provider mode', () => {
   });
 
   it('allows IPv6 loopback base URLs for local OpenAI-compatible providers', async () => {
-    const fetchMock = passThroughOrUpstream((url) => {
-      if (url === 'http://[::1]:1234/v1/models') {
+    for (const loopbackBaseUrl of [
+      'http://[::1]:1234/v1',
+      'http://[::ffff:127.0.0.1]:1234/v1',
+    ]) {
+      const fetchMock = passThroughOrUpstream((url) => {
+        if (url.endsWith('/models')) {
+          return jsonResponse({
+            data: [{ id: 'local-model', object: 'model' }],
+          });
+        }
         return jsonResponse({
-          data: [{ id: 'local-model', object: 'model' }],
+          choices: [{ message: { role: 'assistant', content: 'ok' } }],
         });
-      }
-      return jsonResponse({
-        choices: [{ message: { role: 'assistant', content: 'ok' } }],
       });
-    });
-    vi.stubGlobal('fetch', fetchMock);
+      vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/test/connection`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'provider',
-        protocol: 'openai',
-        baseUrl: 'http://[::1]:1234/v1',
-        apiKey: 'lm-studio',
-        model: 'local-model',
-      }),
-    });
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.ok).toBe(true);
-    expect(body.kind).toBe('success');
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          baseUrl: loopbackBaseUrl,
+          apiKey: 'lm-studio',
+          model: 'local-model',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.ok).toBe(true);
+      expect(body.kind).toBe('success');
+      vi.unstubAllGlobals();
+    }
   });
 
   it('reports forbidden for internal IPv6 base URLs without calling fetch', async () => {
@@ -512,9 +587,147 @@ describe('POST /api/test/connection provider mode', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('cancels provider probes when the caller aborts', async () => {
+    const controller = new AbortController();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: FetchInput, init?: FetchInit) =>
+        new Promise((_resolve, reject) => {
+          if (init?.signal?.aborted) {
+            reject(new DOMException('Aborted', 'AbortError'));
+            return;
+          }
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+      ),
+    );
+
+    const pending = testProviderConnection({
+      protocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-good',
+      model: 'gpt-4o',
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      kind: 'timeout',
+    });
+  });
 });
 
 describe('POST /api/test/connection agent mode', () => {
+  it('reports success for a fake Codex agent response', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'codex' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'Codex CLI',
+          sample: 'ok',
+        });
+      },
+    );
+  });
+
+  it('classifies split agent model-error text after buffering the full response', async () => {
+    await withFakeCodex(
+      `
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Error:' } }));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: ' model not found' } }));
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'codex', model: 'missing-model' }),
+        });
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'not_found_model',
+          model: 'missing-model',
+        });
+      },
+    );
+  });
+
+  it('reports structured agent stream errors without treating them as success', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'error', message: "The 'gpt-5.5' model requires a newer version of Codex." }));`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'codex' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Codex CLI',
+        });
+        expect(result.detail).toContain('requires a newer version');
+      },
+    );
+  });
+
+  it('reports unknown when the agent emits only raw schema-drift output', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'future.event', payload: { text: 'ok' } }));`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'codex' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'unknown',
+          agentName: 'Codex CLI',
+        });
+      },
+    );
+  });
+
+  it('hard-cancels aborted agent probes before cleaning up', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-marker-'));
+    const pidFile = path.join(markerDir, 'pid');
+    const termFile = path.join(markerDir, 'term');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+process.on('SIGTERM', () => {
+  fs.writeFileSync(${JSON.stringify(termFile)}, 'term');
+});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const controller = new AbortController();
+          const pending = testAgentConnection({
+            agentId: 'codex',
+            signal: controller.signal,
+          });
+          await waitForFile(pidFile);
+          controller.abort();
+          await expect(pending).resolves.toMatchObject({
+            ok: false,
+            kind: 'timeout',
+          });
+        },
+      );
+      await expect(fsp.readFile(termFile, 'utf8')).resolves.toBe('term');
+      const pid = Number(await fsp.readFile(pidFile, 'utf8'));
+      expect(() => process.kill(pid, 0)).toThrow();
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
   it('reports agent_not_installed for an unknown agent id', async () => {
     const res = await realFetch(`${baseUrl}/api/test/connection`, {
       method: 'POST',
@@ -550,18 +763,19 @@ describe('connection test helpers', () => {
   });
 
   it('does not resolve the agent smoke test from thinking deltas', async () => {
+    vi.useFakeTimers();
     const sink = createAgentSink();
     sink.send('agent', { type: 'thinking_delta', delta: 'thinking first' });
-
-    await expect(
-      Promise.race([
-        sink.firstText,
-        new Promise((resolve) => setTimeout(() => resolve('pending'), 0)),
-      ]),
-    ).resolves.toBe('pending');
+    let settled = false;
+    sink.result.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(settled).toBe(false);
 
     sink.send('agent', { type: 'text_delta', delta: 'ok' });
-    await expect(sink.firstText).resolves.toBe('ok');
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(sink.result).resolves.toEqual({ kind: 'text', text: 'ok' });
   });
 
   it('rejects the agent smoke test from structured stream errors', async () => {
@@ -571,9 +785,26 @@ describe('connection test helpers', () => {
       message: "The 'gpt-5.5' model requires a newer version of Codex.",
     });
 
-    await expect(sink.firstText).rejects.toThrow(
-      "The 'gpt-5.5' model requires a newer version of Codex.",
-    );
+    await expect(sink.result).resolves.toMatchObject({
+      kind: 'streamError',
+      error: expect.objectContaining({
+        message: "The 'gpt-5.5' model requires a newer version of Codex.",
+      }),
+    });
+  });
+
+  it('debounces agent text chunks before resolving', async () => {
+    vi.useFakeTimers();
+    const sink = createAgentSink();
+    sink.send('agent', { type: 'text_delta', delta: 'Error:' });
+    await vi.advanceTimersByTimeAsync(499);
+    sink.send('agent', { type: 'text_delta', delta: ' model not found' });
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(sink.result).resolves.toEqual({
+      kind: 'text',
+      text: 'Error: model not found',
+    });
   });
 
   it('requires the smoke reply to be exactly ok after whitespace and case', () => {

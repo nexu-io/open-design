@@ -1,5 +1,3 @@
-// @ts-nocheck
-//
 // Smoke tests for the Settings dialog. Two entry points:
 //
 //   - testProviderConnection: posts a tiny "Reply with only: ok" request to
@@ -35,16 +33,13 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
-
-// Local mirrors of the contract types. This file is `@ts-nocheck`, so the
-// shapes are documentation rather than enforcement; the authoritative
-// definitions live in `packages/contracts/src/api/connectionTest.ts`.
-/**
- * @typedef {import('@open-design/contracts').ConnectionTestKind} ConnectionTestKind
- * @typedef {import('@open-design/contracts').ConnectionTestResponse} ConnectionTestResponse
- * @typedef {import('@open-design/contracts').ProviderTestRequest} ProviderTestRequest
- * @typedef {import('@open-design/contracts').AgentTestRequest} AgentTestRequest
- */
+import type {
+  AgentTestRequest,
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestResponse,
+  ProviderTestRequest,
+} from '@open-design/contracts/api/connectionTest';
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 const PROVIDER_TIMEOUT_MS = 12_000;
@@ -52,6 +47,8 @@ const PROVIDER_TIMEOUT_MS = 12_000;
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
 // run, so 45 s leaves headroom without making a hung child invisible.
 const AGENT_TIMEOUT_MS = 45_000;
+const AGENT_COMPLETION_DEBOUNCE_MS = 500;
+const AGENT_KILL_GRACE_MS = 2_000;
 // Truncates the assistant reply we surface in the success copy so a
 // chatty model can't dump kilobytes into the inline status node.
 const SAMPLE_MAX_CHARS = 120;
@@ -85,51 +82,87 @@ export function redactSecrets(
   return redacted;
 }
 
+type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
+type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
+
 function normalizeBracketedIpv6(hostname: string): string {
   return hostname.startsWith('[') && hostname.endsWith(']')
     ? hostname.slice(1, -1).toLowerCase()
     : hostname.toLowerCase();
 }
 
+function parseIpv4(hostname: string): [number, number, number, number] | null {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return null;
+  const parsed = parts.map((part) => {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const value = Number(part);
+    return value >= 0 && value <= 255 ? value : null;
+  });
+  if (parsed.some((part) => part === null)) return null;
+  return parsed as [number, number, number, number];
+}
+
+function isLoopbackIpv4(hostname: string): boolean {
+  const parts = parseIpv4(hostname);
+  return Boolean(parts && parts[0] === 127);
+}
+
 function isPrivateIpv4(hostname: string): boolean {
+  const parts = parseIpv4(hostname);
+  if (!parts) return false;
+  const [a, b] = parts;
   return (
-    hostname.startsWith('169.254.') ||
-    hostname.startsWith('10.') ||
-    /^192\.168\./.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+    (a === 169 && b === 254) ||
+    a === 10 ||
+    (a === 192 && b === 168) ||
+    (a === 172 && b >= 16 && b <= 31)
   );
 }
 
-function isBlockedIpv6(hostname: string): boolean {
+function ipv4MappedToDotted(hostname: string): string | null {
   const host = normalizeBracketedIpv6(hostname);
-  if (host === '::1') return false;
-  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
-  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
   const mapped = /^::ffff:(.+)$/i.exec(host)?.[1];
-  if (!mapped) return false;
-  if (isPrivateIpv4(mapped.toLowerCase())) return true;
+  if (!mapped) return null;
+  if (parseIpv4(mapped.toLowerCase())) return mapped.toLowerCase();
   const hexParts = mapped.split(':');
   if (
-    hexParts.length === 2 &&
-    hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
+    hexParts.length !== 2 ||
+    !hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
   ) {
-    const value =
-      (Number.parseInt(hexParts[0]!, 16) << 16) |
-      Number.parseInt(hexParts[1]!, 16);
-    const dotted = [
-      (value >>> 24) & 255,
-      (value >>> 16) & 255,
-      (value >>> 8) & 255,
-      value & 255,
-    ].join('.');
-    return isPrivateIpv4(dotted);
+    return null;
   }
-  return false;
+  const hi = hexParts[0];
+  const lo = hexParts[1];
+  if (!hi || !lo) return null;
+  const value =
+    (Number.parseInt(hi, 16) << 16) |
+    Number.parseInt(lo, 16);
+  return [
+    (value >>> 24) & 255,
+    (value >>> 16) & 255,
+    (value >>> 8) & 255,
+    value & 255,
+  ].join('.');
 }
 
-// Inline copy of the proxy route's URL guard. Duplicated on purpose so
-// edits to the chat path can't accidentally tighten/loosen the test
-// path's behavior (and vice versa).
+function isLoopbackHost(hostname: string): boolean {
+  const host = normalizeBracketedIpv6(hostname);
+  if (host === 'localhost' || host === '::1') return true;
+  if (isLoopbackIpv4(host)) return true;
+  const mapped = ipv4MappedToDotted(host);
+  return Boolean(mapped && isLoopbackIpv4(mapped));
+}
+
+function isBlockedInternalHost(hostname: string): boolean {
+  const host = normalizeBracketedIpv6(hostname);
+  if (isPrivateIpv4(host)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
+  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
+  const mapped = ipv4MappedToDotted(host);
+  return Boolean(mapped && isPrivateIpv4(mapped));
+}
+
 export function validateBaseUrl(baseUrl: string): {
   parsed?: URL;
   error?: string;
@@ -145,20 +178,10 @@ export function validateBaseUrl(baseUrl: string): {
     return { error: 'Only http/https allowed' };
   }
   const hostname = parsed.hostname.toLowerCase();
-  const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-  if (
-    !isLoopback &&
-    (isPrivateIpv4(hostname) || isBlockedIpv6(hostname))
-  ) {
+  if (!isLoopbackHost(hostname) && isBlockedInternalHost(hostname)) {
     return { error: 'Internal IPs blocked', forbidden: true };
   }
   return { parsed };
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  return ['localhost', '127.0.0.1', '[::1]', '::1'].includes(
-    hostname.toLowerCase(),
-  );
 }
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
@@ -482,7 +505,7 @@ function extractOpenAIMessageText(data: unknown): string {
 }
 
 export async function testProviderConnection(
-  input: ProviderTestRequest,
+  input: ProviderConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model = String(input.model ?? '');
@@ -494,7 +517,7 @@ export async function testProviderConnection(
       kind,
       latencyMs: Date.now() - start,
       model,
-      detail: validated.error,
+      detail: validated.error ?? '',
     };
   }
 
@@ -514,6 +537,12 @@ export async function testProviderConnection(
   }
 
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (input.signal?.aborted) {
+    controller.abort();
+  } else {
+    input.signal?.addEventListener('abort', abortFromParent, { once: true });
+  }
   const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
@@ -575,10 +604,10 @@ export async function testProviderConnection(
         };
       }
       const replyText = call.extractText(data);
-      let sample = truncateSample(replyText);
-      if (sample && isLikelyModelErrorText(sample)) {
+      let rawSample = truncateSample(replyText);
+      if (rawSample && isLikelyModelErrorText(rawSample)) {
         const detail = redactSecrets(
-          smokeFailureDetail(sample),
+          smokeFailureDetail(rawSample),
           [input.apiKey],
         );
         console.warn(
@@ -593,10 +622,10 @@ export async function testProviderConnection(
           detail,
         };
       }
-      if (!sample && !completion.valid) {
+      if (!rawSample && !completion.valid) {
         const detail = redactSecrets(
           extractProviderErrorDetail(data, rawText) ||
-            smokeFailureDetail(sample),
+            smokeFailureDetail(rawSample),
           [input.apiKey],
         );
         console.warn(
@@ -611,10 +640,11 @@ export async function testProviderConnection(
           detail,
         };
       }
-      if (!sample && completion.valid) {
-        sample = truncateSample(completion.sample ?? 'valid completion');
+      if (!rawSample && completion.valid) {
+        rawSample = truncateSample(completion.sample ?? 'valid completion');
       }
-      if (sample && !isSmokeOkReply(replyText)) {
+      const sample = redactSecrets(rawSample, [input.apiKey]);
+      if (rawSample && !isSmokeOkReply(replyText)) {
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (connected_unexpected_sample) ${sample}`,
         );
@@ -674,43 +704,57 @@ export async function testProviderConnection(
     };
   } finally {
     clearTimeout(timer);
+    input.signal?.removeEventListener('abort', abortFromParent);
   }
 }
 
-// Build a `send(event, payload)` collector that resolves on the first
-// non-empty assistant text. Mirrors the shape startChatRun hands to the
-// stream parsers, so the parsers don't notice they're talking to a test
-// rather than the real SSE writer.
+// Build a `send(event, payload)` collector that buffers assistant text until
+// the stream goes quiet. Mirrors the shape startChatRun hands to the stream
+// parsers, so the parsers don't notice they're talking to a test rather than
+// the real SSE writer.
+type AgentSinkResult =
+  | { kind: 'text'; text: string }
+  | { kind: 'streamError'; error: Error };
+
 interface AgentSink {
   send: (event: string, payload: unknown) => void;
-  firstText: Promise<string>;
+  result: Promise<AgentSinkResult>;
   getText: () => string;
   getStderrTail: () => string;
+  dispose: () => void;
 }
 
 export function createAgentSink(): AgentSink {
   let buffer = '';
   let stderrTail = '';
-  let resolveText!: (value: string) => void;
-  let rejectText!: (err: Error) => void;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let resolveResult!: (value: AgentSinkResult) => void;
   let settled = false;
-  const firstText = new Promise<string>((resolve, reject) => {
-    resolveText = (value) => {
+  const result = new Promise<AgentSinkResult>((resolve) => {
+    resolveResult = (value) => {
       if (settled) return;
       settled = true;
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
       resolve(value);
     };
-    rejectText = (err) => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    };
   });
+
+  const scheduleTextResolution = () => {
+    if (settled || buffer.trim().length === 0) return;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      resolveResult({ kind: 'text', text: buffer });
+    }, AGENT_COMPLETION_DEBOUNCE_MS);
+    debounceTimer.unref?.();
+  };
 
   const consumeText = (text: string) => {
     if (typeof text !== 'string' || text.length === 0) return;
     buffer += text;
-    if (buffer.trim().length > 0) resolveText(buffer);
+    scheduleTextResolution();
   };
 
   const send = (event: string, payload: unknown) => {
@@ -722,7 +766,7 @@ export function createAgentSink(): AgentSink {
           : typeof (data as { error?: { message?: string } }).error?.message === 'string'
             ? (data as { error: { message: string } }).error.message
             : 'agent stream error';
-      rejectText(new Error(message));
+      resolveResult({ kind: 'streamError', error: new Error(message) });
       return;
     }
     if (event === 'agent') {
@@ -730,7 +774,7 @@ export function createAgentSink(): AgentSink {
       if (type === 'error') {
         const message =
           typeof data.message === 'string' ? data.message : 'agent stream error';
-        rejectText(new Error(message));
+        resolveResult({ kind: 'streamError', error: new Error(message) });
         return;
       }
       const delta = data.delta;
@@ -760,9 +804,15 @@ export function createAgentSink(): AgentSink {
 
   return {
     send,
-    firstText,
+    result,
     getText: () => buffer,
     getStderrTail: () => stderrTail,
+    dispose: () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+    },
   };
 }
 
@@ -832,8 +882,20 @@ function attachAgentStreamHandlers(
   return { child, acpSession };
 }
 
+type AgentChild = ReturnType<typeof spawn>;
+type AgentChildExit =
+  | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
+  | { kind: 'spawnError'; error: Error };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+}
+
 export async function testAgentConnection(
-  input: AgentTestRequest,
+  input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model =
@@ -863,9 +925,46 @@ export async function testAgentConnection(
   }
 
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-'));
-  let child: ReturnType<typeof spawn> | null = null;
+  let child: AgentChild | null = null;
+  let childExit: Promise<AgentChildExit> | null = null;
+  let childClosed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
+
+  const resultFromAgentText = (text: string): ConnectionTestResponse => {
+    const latencyMs = Date.now() - start;
+    const rawSample = truncateSample(text);
+    const sample = redactSecrets(rawSample);
+    if (rawSample && isLikelyModelErrorText(rawSample)) {
+      const detail = redactSecrets(smokeFailureDetail(rawSample));
+      console.warn(
+        `[test:agent] ${def.name} → not_found_model: ${detail}`,
+      );
+      return {
+        ok: false,
+        kind: 'not_found_model',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail,
+      };
+    }
+    if (!isSmokeOkReply(text)) {
+      console.warn(
+        `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
+      );
+    }
+    console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
+    return {
+      ok: true,
+      kind: 'success',
+      latencyMs,
+      model,
+      agentName: def.name,
+      sample,
+    };
+  };
 
   try {
     let args: string[];
@@ -927,53 +1026,34 @@ export async function testAgentConnection(
       child.stdin.end(SMOKE_PROMPT, 'utf8');
     }
 
-    const childExit = new Promise<{ kind: 'exit'; code: number | null; signal: NodeJS.Signals | null } | { kind: 'spawnError'; error: Error }>((resolve) => {
-      child!.once('error', (err) => resolve({ kind: 'spawnError', error: err }));
-      child!.once('close', (code, signal) => resolve({ kind: 'exit', code, signal }));
+    childExit = new Promise<AgentChildExit>((resolve) => {
+      child!.once('error', (err) => {
+        childClosed = true;
+        resolve({ kind: 'spawnError', error: err });
+      });
+      child!.once('close', (code, signal) => {
+        childClosed = true;
+        resolve({ kind: 'exit', code, signal });
+      });
     });
-    const timeoutPromise = new Promise<{ kind: 'timeout' }>((resolve) => {
+    const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
       timer = setTimeout(() => resolve({ kind: 'timeout' }), AGENT_TIMEOUT_MS);
+      abortHandler = () => resolve({ kind: 'aborted' });
+      if (input.signal?.aborted) {
+        abortHandler();
+      } else {
+        input.signal?.addEventListener('abort', abortHandler, { once: true });
+      }
     });
 
     const winner = await Promise.race([
-      sink.firstText
-        .then((text) => ({ kind: 'text' as const, text }))
-        .catch((error) => ({ kind: 'streamError' as const, error })),
+      sink.result,
       childExit,
-      timeoutPromise,
+      cancellationPromise,
     ]);
 
     if (winner.kind === 'text') {
-      const latencyMs = Date.now() - start;
-      const sample = truncateSample(winner.text);
-      if (isLikelyModelErrorText(sample)) {
-        const detail = redactSecrets(smokeFailureDetail(sample));
-        console.warn(
-          `[test:agent] ${def.name} → not_found_model: ${detail}`,
-        );
-        return {
-          ok: false,
-          kind: 'not_found_model',
-          latencyMs,
-          model,
-          agentName: def.name,
-          detail,
-        };
-      }
-      if (!isSmokeOkReply(winner.text)) {
-        console.warn(
-          `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
-        );
-      }
-      console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
-      return {
-        ok: true,
-        kind: 'success',
-        latencyMs,
-        model,
-        agentName: def.name,
-        sample,
-      };
+      return resultFromAgentText(winner.text);
     }
     if (winner.kind === 'streamError') {
       const latencyMs = Date.now() - start;
@@ -994,9 +1074,9 @@ export async function testAgentConnection(
         detail,
       };
     }
-    if (winner.kind === 'timeout') {
+    if (winner.kind === 'timeout' || winner.kind === 'aborted') {
       const latencyMs = Date.now() - start;
-      console.warn(`[test:agent] ${def.name} → timeout in ${(latencyMs / 1000).toFixed(1)}s`);
+      console.warn(`[test:agent] ${def.name} → ${winner.kind} in ${(latencyMs / 1000).toFixed(1)}s`);
       return {
         ok: false,
         kind: 'timeout',
@@ -1026,6 +1106,7 @@ export async function testAgentConnection(
     // so the user sees prompts like "Run `claude login`" or OAuth URLs.
     const latencyMs = Date.now() - start;
     const buffered = sink.getText().trim();
+    if (buffered) return resultFromAgentText(buffered);
     const stderrTail = sink.getStderrTail().trim();
     const acpFatal = Boolean(acpSession?.hasFatalError?.());
     const detail = redactSecrets(
@@ -1061,11 +1142,34 @@ export async function testAgentConnection(
     };
   } finally {
     if (timer) clearTimeout(timer);
-    if (child && !child.killed) {
+    if (abortHandler) {
+      input.signal?.removeEventListener('abort', abortHandler);
+    }
+    sink.dispose();
+    if (child && !childClosed) {
       try {
         child.kill('SIGTERM');
       } catch {
         // Already gone — nothing to do.
+      }
+      const closedAfterTerm = childExit
+        ? await Promise.race([
+            childExit.then(() => true),
+            delay(AGENT_KILL_GRACE_MS).then(() => false),
+          ])
+        : false;
+      if (!closedAfterTerm && !childClosed) {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // Already gone — nothing to do.
+        }
+        if (childExit) {
+          await Promise.race([
+            childExit.catch(() => null),
+            delay(AGENT_KILL_GRACE_MS),
+          ]);
+        }
       }
     }
     await fsp

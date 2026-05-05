@@ -161,12 +161,9 @@ describe('SettingsDialog provider connection test requirements', () => {
   it('allows Azure tests to use the daemon default API version', () => {
     expect(
       canRunProviderConnectionTest({
-        ...baseConfig,
-        apiProtocol: 'azure',
         apiKey: 'azure-key',
         baseUrl: 'https://my-azure.openai.azure.com',
         model: 'deployment-one',
-        apiVersion: '',
       }),
     ).toBe(true);
   });
@@ -211,6 +208,7 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('http://localhost:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('http://127.0.0.1:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('http://[::1]:11434/v1')).toBe(true);
+    expect(isValidApiBaseUrl('http://[::ffff:127.0.0.1]:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('  https://resource.openai.azure.com  ')).toBe(true);
 
     expect(isValidApiBaseUrl('ddddd')).toBe(false);
@@ -222,5 +220,8 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
   });
 });

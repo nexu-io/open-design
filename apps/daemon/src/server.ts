@@ -40,6 +40,7 @@ import { createChatRunService } from './runs.js';
 import {
   testAgentConnection,
   testProviderConnection,
+  validateBaseUrl,
 } from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
@@ -3227,72 +3228,86 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
   // request or daemon bug.
   app.post('/api/test/connection', async (req, res) => {
+    const controller = new AbortController();
+    const abortIfRequestAborted = () => {
+      if ((req.aborted || !req.complete) && !res.writableEnded) {
+        controller.abort();
+      }
+    };
+    const abortIfResponseClosed = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    req.on('close', abortIfRequestAborted);
+    res.on('close', abortIfResponseClosed);
     const body = req.body || {};
-    if (body.mode === 'provider') {
-      const protocol = body.protocol;
-      if (
-        typeof protocol !== 'string' ||
-        !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
-      ) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'protocol must be one of anthropic|openai|azure|google',
-        );
+    try {
+      if (body.mode === 'provider') {
+        const protocol = body.protocol;
+        if (
+          typeof protocol !== 'string' ||
+          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'protocol must be one of anthropic|openai|azure|google',
+          );
+        }
+        if (
+          typeof body.baseUrl !== 'string' ||
+          typeof body.apiKey !== 'string' ||
+          typeof body.model !== 'string' ||
+          !body.baseUrl.trim() ||
+          !body.apiKey.trim() ||
+          !body.model.trim()
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'baseUrl, apiKey, and model are required',
+          );
+        }
+        try {
+          const result = await testProviderConnection({
+            protocol,
+            baseUrl: body.baseUrl,
+            apiKey: body.apiKey,
+            model: body.model,
+            apiVersion:
+              typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
+        }
       }
-      if (
-        typeof body.baseUrl !== 'string' ||
-        typeof body.apiKey !== 'string' ||
-        typeof body.model !== 'string' ||
-        !body.baseUrl.trim() ||
-        !body.apiKey.trim() ||
-        !body.model.trim()
-      ) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'baseUrl, apiKey, and model are required',
-        );
-      }
-      try {
-        const result = await testProviderConnection({
-          protocol,
-          baseUrl: body.baseUrl,
-          apiKey: body.apiKey,
-          model: body.model,
-          apiVersion:
-            typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
-        });
-        return res.json(result);
-      } catch (err) {
-        console.warn(
-          `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
-      }
-    }
 
-    if (body.mode === 'agent') {
-      if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
+      if (body.mode === 'agent') {
+        if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
+        }
+        try {
+          const result = await testAgentConnection({
+            agentId: body.agentId,
+            model: typeof body.model === 'string' ? body.model : undefined,
+            reasoning:
+              typeof body.reasoning === 'string' ? body.reasoning : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
+        }
       }
-      try {
-        const result = await testAgentConnection({
-          agentId: body.agentId,
-          model: typeof body.model === 'string' ? body.model : undefined,
-          reasoning:
-            typeof body.reasoning === 'string' ? body.reasoning : undefined,
-        });
-        return res.json(result);
-      } catch (err) {
-        console.warn(
-          `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
-      }
-    }
 
       return sendApiError(
         res,
@@ -3300,6 +3315,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         'BAD_REQUEST',
         'mode must be one of provider|agent',
       );
+    } finally {
+      req.off('close', abortIfRequestAborted);
+      res.off('close', abortIfResponseClosed);
+    }
   });
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
@@ -3311,28 +3330,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
   const validateExternalApiBaseUrl = (baseUrl) => {
-    let parsed;
-    try {
-      parsed = new URL(baseUrl.replace(/\/+$/, ''));
-    } catch {
-      return { error: 'Invalid baseUrl' };
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return { error: 'Only http/https allowed' };
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    const isLoopback =
-      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-    if (
-      !isLoopback &&
-      (hostname.startsWith('169.254.') ||
-        hostname.startsWith('10.') ||
-        /^192\.168\./.test(hostname) ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
-    ) {
-      return { error: 'Internal IPs blocked', forbidden: true };
-    }
-    return { parsed };
+    return validateBaseUrl(baseUrl);
   };
 
   const proxyErrorCode = (status) => {

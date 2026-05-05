@@ -220,23 +220,92 @@ export function isValidApiBaseUrl(value: string): boolean {
   try {
     const url = new URL(trimmed);
     const hostname = url.hostname.toLowerCase();
-    const isLoopback =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '[::1]';
-    const isPrivateIpv4 =
-      hostname.startsWith('169.254.') ||
-      hostname.startsWith('10.') ||
-      /^192\.168\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
     return (
       (url.protocol === 'http:' || url.protocol === 'https:') &&
       Boolean(url.hostname) &&
-      (isLoopback || !isPrivateIpv4)
+      (isLoopbackApiHost(hostname) || !isBlockedInternalApiHost(hostname))
     );
   } catch {
     return false;
   }
+}
+
+function normalizeBracketedIpv6(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1).toLowerCase()
+    : hostname.toLowerCase();
+}
+
+function parseIpv4(hostname: string): [number, number, number, number] | null {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return null;
+  const parsed = parts.map((part) => {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const value = Number(part);
+    return value >= 0 && value <= 255 ? value : null;
+  });
+  if (parsed.some((part) => part === null)) return null;
+  return parsed as [number, number, number, number];
+}
+
+function isLoopbackIpv4(hostname: string): boolean {
+  const parts = parseIpv4(hostname);
+  return Boolean(parts && parts[0] === 127);
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = parseIpv4(hostname);
+  if (!parts) return false;
+  const [a, b] = parts;
+  return (
+    (a === 169 && b === 254) ||
+    a === 10 ||
+    (a === 192 && b === 168) ||
+    (a === 172 && b >= 16 && b <= 31)
+  );
+}
+
+function ipv4MappedToDotted(hostname: string): string | null {
+  const host = normalizeBracketedIpv6(hostname);
+  const mapped = /^::ffff:(.+)$/i.exec(host)?.[1];
+  if (!mapped) return null;
+  if (parseIpv4(mapped.toLowerCase())) return mapped.toLowerCase();
+  const hexParts = mapped.split(':');
+  if (
+    hexParts.length !== 2 ||
+    !hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
+  ) {
+    return null;
+  }
+  const hi = hexParts[0];
+  const lo = hexParts[1];
+  if (!hi || !lo) return null;
+  const value =
+    (Number.parseInt(hi, 16) << 16) |
+    Number.parseInt(lo, 16);
+  return [
+    (value >>> 24) & 255,
+    (value >>> 16) & 255,
+    (value >>> 8) & 255,
+    value & 255,
+  ].join('.');
+}
+
+function isLoopbackApiHost(hostname: string): boolean {
+  const host = normalizeBracketedIpv6(hostname);
+  if (host === 'localhost' || host === '::1') return true;
+  if (isLoopbackIpv4(host)) return true;
+  const mapped = ipv4MappedToDotted(host);
+  return Boolean(mapped && isLoopbackIpv4(mapped));
+}
+
+function isBlockedInternalApiHost(hostname: string): boolean {
+  const host = normalizeBracketedIpv6(hostname);
+  if (isPrivateIpv4(host)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
+  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
+  const mapped = ipv4MappedToDotted(host);
+  return Boolean(mapped && isPrivateIpv4(mapped));
 }
 
 export function updateCurrentApiProtocolConfig(

@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./api/connectionTest": {
+      "types": "./src/api/connectionTest.ts",
+      "default": "./src/api/connectionTest.ts"
+    },
     "./critique": {
       "types": "./src/critique.ts",
       "default": "./src/critique.ts"
