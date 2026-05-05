@@ -847,6 +847,7 @@ export function ProjectView({
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
     ) => {
       if (!activeConversationId) return;
+      if (streaming) return;
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
@@ -1170,6 +1171,7 @@ export function ProjectView({
     [
       attachedComments,
       activeConversationId,
+      streaming,
       messages,
       config,
       agentsById,
@@ -1190,10 +1192,10 @@ export function ProjectView({
 
   const handleSendBoardCommentAttachments = useCallback(
     async (commentAttachments: ChatCommentAttachment[]) => {
-      if (commentAttachments.length === 0) return;
+      if (streaming || commentAttachments.length === 0) return;
       await handleSend('', [], commentAttachments);
     },
-    [handleSend],
+    [handleSend, streaming],
   );
 
   const persistArtifact = useCallback(

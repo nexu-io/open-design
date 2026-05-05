@@ -3049,7 +3049,7 @@ function HtmlViewer({
                   await onRemovePreviewComment(commentId);
                   clearBoardComposer();
                 }}
-                sending={sendingBoardBatch}
+                sending={sendingBoardBatch || streaming}
                 t={t}
               />
             ) : null}
