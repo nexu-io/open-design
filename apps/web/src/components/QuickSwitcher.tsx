@@ -84,11 +84,16 @@ export function QuickSwitcher({ projectId, files, onOpenFile, onClose }: Props) 
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      // Guard against empty matches: matches.length - 1 would be -1, which
+      // would clamp the cursor to a non-existent row and break the
+      // [data-idx="${cursor}"] highlight on the next render with results.
+      if (matches.length === 0) return;
       setCursor((c) => Math.min(c + 1, matches.length - 1));
       return;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
+      if (matches.length === 0) return;
       setCursor((c) => Math.max(c - 1, 0));
       return;
     }
@@ -149,7 +154,8 @@ export function QuickSwitcher({ projectId, files, onOpenFile, onClose }: Props) 
 // Cheap fuzzy: prefix-on-basename beats substring-on-basename beats
 // substring-on-full-name. Good enough for typical file lists; users who
 // want sublime-text-style matching can graduate to a real fuzzy lib later.
-function scoreMatch(file: ProjectFile, q: string): number {
+// Exported for unit testing.
+export function scoreMatch(file: ProjectFile, q: string): number {
   const name = file.name.toLowerCase();
   const base = baseName(name);
   if (base === q) return 1000;
