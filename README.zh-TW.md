@@ -583,7 +583,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 | [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | 跨多個 agent CLI 的 symlink 式 skill 分發靈感來源。 |
 | [Claude Code skills][skill] | `SKILL.md` 規範原樣採納 —— 任何 Claude Code skill 丟進 `skills/` 都能被 daemon 識別。 |
 
-詳盡的師承說明（每一項我們採納了什麼、刻意沒采納什麼）在 [`docs/references.md`](docs/references.md)。
+詳盡的師承說明（每一項我們採納了什麼、刻意沒採納什麼）在 [`docs/references.md`](docs/references.md)。
 
 ## Roadmap
 

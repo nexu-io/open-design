@@ -149,6 +149,19 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+  'settings.library': string;
+  'settings.libraryHint': string;
+  'settings.librarySkills': string;
+  'settings.libraryDesignSystems': string;
+  'settings.librarySearch': string;
+  'settings.libraryAll': string;
+  'settings.libraryPreview': string;
+  'settings.libraryPreviewClose': string;
+  'settings.libraryLoading': string;
+  'settings.libraryNoResults': string;
+  'settings.libraryEnabled': string;
+  'settings.libraryDisabled': string;
+  'settings.libraryToggleLabel': string;
 
   // Notifications (settings + system notifications)
   'settings.notifications': string;

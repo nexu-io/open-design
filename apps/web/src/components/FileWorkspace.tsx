@@ -85,6 +85,7 @@ export function FileWorkspace({
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -229,6 +230,17 @@ export function FileWorkspace({
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
     };
+  }, []);
+
+  useEffect(() => {
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+
+    const onWheel = (event: globalThis.WheelEvent) => {
+      scrollWorkspaceTabsWithWheel(tabBar, event);
+    };
+    tabBar.addEventListener('wheel', onWheel, { passive: false });
+    return () => tabBar.removeEventListener('wheel', onWheel);
   }, []);
 
   // Cmd/Ctrl+P opens the file palette. Capture phase so we beat the
@@ -391,7 +403,12 @@ export function FileWorkspace({
 
   return (
     <div className="workspace" data-testid="file-workspace">
-      <div className="ws-tabs-bar" role="tablist" aria-label={t('workspace.designFiles')}>
+      <div
+        ref={tabsBarRef}
+        className="ws-tabs-bar"
+        role="tablist"
+        aria-label={t('workspace.designFiles')}
+      >
         <button
           type="button"
           className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
@@ -595,6 +612,30 @@ function Tab({
       ) : null}
     </div>
   );
+}
+
+export function scrollWorkspaceTabsWithWheel(
+  tabBar: Pick<HTMLDivElement, 'clientWidth' | 'scrollLeft' | 'scrollWidth'>,
+  event: Pick<globalThis.WheelEvent, 'ctrlKey' | 'deltaMode' | 'deltaX' | 'deltaY' | 'preventDefault'>,
+) {
+  if (event.ctrlKey) return;
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  if (tabBar.scrollWidth <= tabBar.clientWidth) return;
+
+  const before = tabBar.scrollLeft;
+  tabBar.scrollLeft += wheelDeltaToPixels(event.deltaY, event.deltaMode);
+  if (tabBar.scrollLeft === before) return;
+
+  event.preventDefault();
+}
+
+function wheelDeltaToPixels(delta: number, deltaMode: number): number {
+  const WHEEL_DELTA_LINE = 1;
+  const WHEEL_DELTA_PAGE = 2;
+
+  if (deltaMode === WHEEL_DELTA_LINE) return delta * 16;
+  if (deltaMode === WHEEL_DELTA_PAGE) return delta * 160;
+  return delta;
 }
 
 function kindIconName(

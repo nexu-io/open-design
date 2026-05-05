@@ -13,7 +13,7 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 
-import { startServer } from "../src/server.js";
+import { startServer } from "../server.js";
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
