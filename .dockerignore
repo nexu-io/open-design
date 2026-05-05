@@ -4,9 +4,20 @@
 .github
 node_modules
 .od
-*.md
-*.png
-*.jpg
+.tmp
+.claude
+.codex
+.opencode
+.env*
+.npmrc
+reports
+
+# Exclude top-level docs and images only (runtime .md and .png/jpg under
+# skills/, design-systems/, craft/, assets/ must remain in the image)
+/*.md
+/*.png
+/*.jpg
+
 Dockerfile
 .dockerignore
 docker-compose.yml

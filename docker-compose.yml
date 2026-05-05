@@ -3,7 +3,10 @@ services:
     build: .
     container_name: open-design
     ports:
-      - "7456:7456"
+      # Bind only to loopback by default — the daemon is local-first
+      # with no auth. To expose on a LAN, replace 127.0.0.1 with the
+      # desired interface IP and put a reverse proxy / auth layer in front.
+      - "127.0.0.1:7456:7456"
     volumes:
       - od_data:/app/.od
     restart: unless-stopped
@@ -15,7 +18,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
 volumes:
   od_data:
