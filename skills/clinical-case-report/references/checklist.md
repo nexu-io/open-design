@@ -6,7 +6,7 @@
 - [ ] HPI is written as a chronological prose narrative
 - [ ] HPI includes at least one timeline marker (e.g. "2 hours prior to presentation")
 - [ ] Vital signs are present and physiologically plausible
-- [ ] Vital signs are internally consistent (shocked patient has low SBP AND high HR AND raised lactate)
+- [ ] Vital signs are internally consistent with the diagnosis (allowing for clinical variability — bradycardic shock, medication-blunted tachycardia, afebrile pneumonia, early STEMI with normal troponin, etc.)
 - [ ] Assessment contains a clearly stated primary diagnosis
 - [ ] Plan is present and directly addresses the primary diagnosis
 - [ ] No real patient identifiers (direct or indirect): no names, MRNs, exact dates, locations, images, rare condition combos, occupation details, or verbatim stories from real cases
