@@ -3584,6 +3584,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
       ? { id: effectiveSkillId }
       : undefined;
+    // Match the composer's panel-eligibility check so the orchestrator gate
+    // downstream can route ONLY runs whose prompt actually carries the
+    // <CRITIQUE_RUN> instructions. Otherwise a media-surface run, or a run
+    // missing brand/skill data, would still be parsed as Critique Theater
+    // protocol while the model was never told to emit those tags.
+    const isMediaSurface =
+      skillMode === 'image' ||
+      skillMode === 'video' ||
+      skillMode === 'audio' ||
+      metadata?.kind === 'image' ||
+      metadata?.kind === 'video' ||
+      metadata?.kind === 'audio';
+    const critiqueShouldRun = critiqueCfg.enabled
+      && critiqueBrand !== undefined
+      && critiqueSkill !== undefined
+      && !isMediaSurface;
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
@@ -3603,8 +3619,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
-    // `listSkills()` scan in `startChatRun`.
-    return { prompt, activeSkillDir };
+    // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
+    // the same panel-eligibility decision down to the spawn-path
+    // orchestrator gate so prompt and orchestrator stay in lockstep.
+    return { prompt, activeSkillDir, critiqueShouldRun };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -3748,7 +3766,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const { prompt: daemonSystemPrompt, activeSkillDir } =
+    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
       await composeDaemonSystemPrompt({
         agentId,
         projectId,
@@ -4092,7 +4110,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // through to the legacy single-pass code path below with a one-time
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
-    if (critiqueCfg.enabled) {
+    //
+    // Use critiqueShouldRun (computed in the prompt builder) instead of just
+    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
+    // panel addendum. Media surfaces and runs missing brand/skill context
+    // never get the panel prompt, so they must also skip the orchestrator
+    // and fall through to legacy generation; otherwise the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit.
+    if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
         if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
@@ -4109,7 +4134,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
-        const critiqueBus = { emit: (e) => send('agent', e) };
+        // Forward each CritiqueSseEvent on its own contract-defined channel
+        // (critique.run_started, critique.ship, critique.failed, ...) rather
+        // than wrapping the frame inside the legacy 'agent' channel. Clients
+        // that subscribe to the new event names see them directly with the
+        // contract payload as event.data.
+        const critiqueBus = { emit: (e) => send(e.event, e.data) };
 
         // Stderr forwarding and child.on('error') must be wired BEFORE the
         // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
