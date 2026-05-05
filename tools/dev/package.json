@@ -9,13 +9,13 @@
   "scripts": {
     "build": "node ./esbuild.config.mjs",
     "dev": "tsx ./src/index.ts",
-    "test": "node --import tsx --test src/*.test.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@open-design/platform": "workspace:0.3.0",
-    "@open-design/sidecar": "workspace:0.3.0",
-    "@open-design/sidecar-proto": "workspace:0.3.0",
+    "@open-design/platform": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14"
   },
   "devDependencies": {

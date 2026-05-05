@@ -10,12 +10,12 @@
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "dev": "tsx ./src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/platform": "workspace:0.3.0",
-    "@open-design/sidecar": "workspace:0.3.0",
-    "@open-design/sidecar-proto": "workspace:0.3.0",
+    "@open-design/platform": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/sidecar-proto": "workspace:*",
     "@electron/notarize": "3.1.0",
     "cac": "6.7.14",
     "electron-builder": "26.8.1"

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ../scripts/tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:ui:clean": "node --experimental-strip-types scripts/reset-artifacts.ts",
     "test:ui": "corepack pnpm run test:ui:clean && playwright test -c playwright.config.ts",
     "test:ui:headed": "corepack pnpm run test:ui:clean && playwright test -c playwright.config.ts --headed",

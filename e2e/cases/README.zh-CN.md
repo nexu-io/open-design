@@ -91,13 +91,7 @@
 ## 运行方式
 
 ```bash
-pnpm run test:ui
-```
-
-也可以直接在独立测试包内运行：
-
-```bash
-pnpm --filter @open-design/e2e test:ui
+pnpm -C e2e test:ui
 ```
 
 运行完成后会自动生成：

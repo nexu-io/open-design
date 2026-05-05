@@ -444,6 +444,10 @@ export interface Dict {
   'chat.importFolder': string;
   'chat.importSkills': string;
   'chat.importProject': string;
+  'chat.linkedFolderRemoveAria': string;
+  'chat.linkedFolderNotFound': string;
+  'chat.linkedFolderAlready': string;
+  'chat.linkedFolderPickError': string;
   'chat.send': string;
   'chat.stop': string;
   'chat.removeAria': string;

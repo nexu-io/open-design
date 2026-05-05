@@ -76,7 +76,10 @@ export function DesignFilesPanel({
     return groups;
   }, [files]);
 
-  // Prune stale selections when the file list or project changes.
+  // Prune selections that no longer exist in the current file list
+  // (e.g. after a refresh or delete within the same project).
+  // Cross-project leaks are handled by the parent remounting this
+  // component via key={projectId}.
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
@@ -91,7 +94,7 @@ export function DesignFilesPanel({
       }
       return changed ? next : prev;
     });
-  }, [files, projectId]);
+  }, [files]);
 
   const previewFile = useMemo(
     () => files.find((f) => f.name === preview) ?? null,

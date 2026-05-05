@@ -9,7 +9,7 @@ dans une PR.
 Ce guide indique où intervenir pour chaque type de contribution et quel niveau
 une PR doit atteindre avant d’être mergée.
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>Français</b> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>Français</b> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -41,7 +41,7 @@ corepack enable           # sélectionne la version de pnpm définie par package
 pnpm install
 pnpm tools-dev run web    # boucle daemon + web au premier plan
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # build production
+pnpm --filter @open-design/web build  # build du paquet web si nécessaire
 ```
 
 Node `~24` et pnpm `10.33.x` sont requis. `nvm` / `fnm` sont optionnels ;

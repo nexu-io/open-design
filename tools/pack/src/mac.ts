@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
@@ -65,6 +65,8 @@ type MacPaths = {
   systemApplicationsAppPath: string;
   tarballsRoot: string;
   userApplicationsAppPath: string;
+  webStandaloneHookAuditPath: string;
+  webStandaloneHookConfigPath: string;
   zipPath: string;
 };
 
@@ -75,6 +77,7 @@ export type MacPackResult = {
   outputRoot: string;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
+  sizeReport: MacSizeReport;
   to: ToolPackBuildOutput;
   zipPath: string | null;
 };
@@ -145,9 +148,64 @@ export type MacCleanupResult = {
   stop: MacStopResult;
 };
 
-type ElectronBuilderTarget = "dir" | "dmg" | "zip";
+export type ElectronBuilderTarget = "dir" | "dmg" | "zip";
 
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
+const WEB_STANDALONE_HOOK_CONFIG_ENV = "OD_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
+const WEB_STANDALONE_RESOURCE_NAME = "open-design-web-standalone";
+const ELECTRON_BUILDER_ASAR = false;
+const ELECTRON_BUILDER_FILE_PATTERNS = [
+  "**/*",
+  "!**/node_modules/.bin",
+  "!**/node_modules/electron{,/**/*}",
+  "!**/*.map",
+  "!**/*.tsbuildinfo",
+  "!**/.next/cache",
+  "!**/.next/cache/**",
+  "!**/node_modules/better-sqlite3/build/Release/obj",
+  "!**/node_modules/better-sqlite3/build/Release/obj/**",
+  "!**/node_modules/better-sqlite3/deps",
+  "!**/node_modules/better-sqlite3/deps/**",
+] as const;
+
+export type MacSizeReport = {
+  appBytes: number;
+  builder: {
+    asar: boolean;
+    compression: ToolPackConfig["macCompression"];
+    filePatterns: readonly string[];
+    targets: ElectronBuilderTarget[];
+    webOutputMode: ToolPackConfig["webOutputMode"];
+  };
+  dmgBytes: number | null;
+  generatedAt: string;
+  outputRootBytes: number;
+  resourceRootBytes: number;
+  runtimeNamespaceRoot: string;
+  topLevel: {
+    appResourcesBytes: number;
+    electronFrameworksBytes: number;
+    resourcesBytes: number;
+  };
+  tracked: {
+    appNodeModulesBytes: number;
+    betterSqlite3Bytes: number;
+    betterSqlite3SourceResidueBytes: number;
+    bundledNodeBytes: number;
+    electronLocalesBytes: number;
+    markdownBytes: number;
+    nextBytes: number;
+    nextSwcBytes: number;
+    sharpLibvipsBytes: number;
+    sourcemapBytes: number;
+    tsbuildInfoBytes: number;
+    webCopiedStandaloneBytes: number;
+    webNextCacheBytes: number;
+    webPackageBytes: number;
+    webPackageStandaloneBytes: number;
+  };
+  zipBytes: number | null;
+};
 
 function sanitizeNamespace(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
@@ -194,6 +252,8 @@ function resolveMacPaths(config: ToolPackConfig): MacPaths {
     systemApplicationsAppPath: join("/Applications", macAppBundleName(config.namespace)),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userApplicationsAppPath: join(homedir(), "Applications", macAppBundleName(config.namespace)),
+    webStandaloneHookAuditPath: join(namespaceRoot, "web-standalone-after-pack-audit.json"),
+    webStandaloneHookConfigPath: join(namespaceRoot, "web-standalone-after-pack-config.json"),
     zipPath: join(namespaceRoot, "zip", `${PRODUCT_NAME}-${namespaceToken}.zip`),
   };
 }
@@ -205,6 +265,52 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function toPosixPath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
+async function sizePathBytes(
+  path: string,
+  options: { includeFile?: (path: string) => boolean } = {},
+): Promise<number> {
+  let metadata: Awaited<ReturnType<typeof lstat>>;
+  try {
+    metadata = await lstat(path);
+  } catch {
+    return 0;
+  }
+
+  if (!metadata.isDirectory()) {
+    return options.includeFile == null || options.includeFile(toPosixPath(path)) ? metadata.size : 0;
+  }
+
+  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+  let total = 0;
+  for (const entry of entries) {
+    total += await sizePathBytes(join(path, entry.name), options);
+  }
+  return total;
+}
+
+async function sizeExistingFileBytes(path: string): Promise<number | null> {
+  try {
+    const metadata = await stat(path);
+    return metadata.size;
+  } catch {
+    return null;
+  }
+}
+
+async function sumChildDirectorySizes(path: string, includeChild: (name: string) => boolean): Promise<number> {
+  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+  let total = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !includeChild(entry.name)) continue;
+    total += await sizePathBytes(join(path, entry.name));
+  }
+  return total;
 }
 
 async function runPnpm(
@@ -235,6 +341,49 @@ async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
   return packageJson.version;
 }
 
+async function assertWebStandaloneOutput(config: ToolPackConfig): Promise<void> {
+  const webRoot = join(config.workspaceRoot, "apps", "web");
+  const standaloneSourceRoot = join(webRoot, ".next", "standalone");
+  const candidates = [
+    join(standaloneSourceRoot, "apps", "web", "server.js"),
+    join(standaloneSourceRoot, "server.js"),
+  ];
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) return;
+  }
+
+  throw new Error("Next.js standalone server output was not produced under apps/web/.next/standalone");
+}
+
+async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: MacPaths): Promise<string> {
+  const webRoot = join(config.workspaceRoot, "apps", "web");
+  await assertWebStandaloneOutput(config);
+
+  await mkdir(dirname(paths.webStandaloneHookConfigPath), { recursive: true });
+  await writeFile(
+    paths.webStandaloneHookConfigPath,
+    `${JSON.stringify(
+      {
+        auditReportPath: paths.webStandaloneHookAuditPath,
+        pruneCopiedSharp: true,
+        pruneRootNext: true,
+        pruneRootSharp: true,
+        resourceName: WEB_STANDALONE_RESOURCE_NAME,
+        standaloneSourceRoot: join(webRoot, ".next", "standalone"),
+        version: 1,
+        webPublicSourceRoot: join(webRoot, "public"),
+        webStaticSourceRoot: join(webRoot, ".next", "static"),
+        workspaceRoot: config.workspaceRoot,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return paths.webStandaloneHookConfigPath;
+}
+
 async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
@@ -245,7 +394,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@open-design/web", "build"], {
-      OD_WEB_OUTPUT_MODE: "server",
+      OD_WEB_OUTPUT_MODE: config.webOutputMode,
     });
     await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
   } finally {
@@ -345,8 +494,10 @@ async function writeAssembledApp(
     paths.packagedConfigPath,
     `${JSON.stringify(
       {
+        appVersion: packagedVersion,
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
+        webOutputMode: config.webOutputMode,
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,
@@ -379,13 +530,17 @@ async function runElectronBuilder(
 ): Promise<void> {
   const namespaceToken = sanitizeNamespace(config.namespace);
   const packagedVersion = await readPackagedVersion(config);
+  const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
+    ? await writeWebStandaloneHookConfig(config, paths)
+    : null;
   const builderConfig = {
     appId: "io.open-design.desktop",
     artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
+    afterPack: webStandaloneHookConfigPath == null ? undefined : macResources.webStandaloneAfterPackHook,
     afterSign: config.signed ? macResources.notarizeHook : undefined,
-    asar: false,
+    asar: ELECTRON_BUILDER_ASAR,
     buildDependenciesFromSource: false,
-    compression: "maximum",
+    compression: config.macCompression,
     directories: {
       output: paths.appBuilderOutputRoot,
     },
@@ -407,7 +562,7 @@ async function runElectronBuilder(
       { from: paths.resourceRoot, to: "open-design" },
       { from: paths.packagedConfigPath, to: "open-design-config.json" },
     ],
-    files: ["**/*", "!**/node_modules/.bin", "!**/node_modules/electron{,/**/*}"],
+    files: [...ELECTRON_BUILDER_FILE_PATTERNS],
     mac: {
       category: "public.app-category.developer-tools",
       entitlements: config.signed ? macResources.entitlements : undefined,
@@ -448,6 +603,7 @@ async function runElectronBuilder(
     env: {
       ...process.env,
       ...(config.signed ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: "false" }),
+      ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
   });
 }
@@ -544,15 +700,88 @@ async function finalizeMacArtifacts(
   return { dmgPath, latestMacYmlPath, zipPath };
 }
 
+function resolveDarwinArchToken(): "arm64" | "x64" {
+  return process.arch === "arm64" ? "arm64" : "x64";
+}
+
+function isBetterSqlite3SourceResidue(path: string): boolean {
+  return (
+    path.includes("/node_modules/better-sqlite3/deps/") ||
+    path.includes("/node_modules/better-sqlite3/build/Release/obj/")
+  );
+}
+
+async function collectMacSizeReport(
+  config: ToolPackConfig,
+  paths: MacPaths,
+  artifacts: Pick<MacPackResult, "dmgPath" | "zipPath">,
+  targets: ElectronBuilderTarget[],
+): Promise<MacSizeReport> {
+  const appResourcesRoot = join(paths.appPath, "Contents", "Resources");
+  const appNodeModulesRoot = join(appResourcesRoot, "app", "node_modules");
+  const electronFrameworksRoot = join(paths.appPath, "Contents", "Frameworks");
+  const electronFrameworkResourcesRoot = join(
+    electronFrameworksRoot,
+    "Electron Framework.framework",
+    "Versions",
+    "A",
+    "Resources",
+  );
+  const darwinArch = resolveDarwinArchToken();
+
+  return {
+    appBytes: await sizePathBytes(paths.appPath),
+    builder: {
+      asar: ELECTRON_BUILDER_ASAR,
+      compression: config.macCompression,
+      filePatterns: ELECTRON_BUILDER_FILE_PATTERNS,
+      targets,
+      webOutputMode: config.webOutputMode,
+    },
+    dmgBytes: artifacts.dmgPath == null ? null : await sizeExistingFileBytes(artifacts.dmgPath),
+    generatedAt: new Date().toISOString(),
+    outputRootBytes: await sizePathBytes(config.roots.output.namespaceRoot),
+    resourceRootBytes: await sizePathBytes(paths.resourceRoot),
+    runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
+    topLevel: {
+      appResourcesBytes: await sizePathBytes(join(appResourcesRoot, "app")),
+      electronFrameworksBytes: await sizePathBytes(electronFrameworksRoot),
+      resourcesBytes: await sizePathBytes(appResourcesRoot),
+    },
+    tracked: {
+      appNodeModulesBytes: await sizePathBytes(appNodeModulesRoot),
+      betterSqlite3Bytes: await sizePathBytes(join(appNodeModulesRoot, "better-sqlite3")),
+      betterSqlite3SourceResidueBytes: await sizePathBytes(paths.appPath, {
+        includeFile: isBetterSqlite3SourceResidue,
+      }),
+      bundledNodeBytes: await sizePathBytes(join(paths.resourceRoot, "bin", "node")),
+      electronLocalesBytes: await sumChildDirectorySizes(electronFrameworkResourcesRoot, (name) => name.endsWith(".lproj")),
+      markdownBytes: await sizePathBytes(paths.appPath, { includeFile: (path) => path.endsWith(".md") }),
+      nextBytes: await sizePathBytes(join(appNodeModulesRoot, "next")),
+      nextSwcBytes: await sumChildDirectorySizes(join(appNodeModulesRoot, "@next"), (name) => name.startsWith("swc-darwin-")),
+      sharpLibvipsBytes: await sizePathBytes(join(appNodeModulesRoot, "@img", `sharp-libvips-darwin-${darwinArch}`)),
+      sourcemapBytes: await sizePathBytes(paths.appPath, { includeFile: (path) => path.endsWith(".map") }),
+      tsbuildInfoBytes: await sizePathBytes(paths.appPath, { includeFile: (path) => path.endsWith(".tsbuildinfo") }),
+      webCopiedStandaloneBytes: await sizePathBytes(join(appResourcesRoot, WEB_STANDALONE_RESOURCE_NAME)),
+      webNextCacheBytes: await sizePathBytes(join(appNodeModulesRoot, "@open-design", "web", ".next", "cache")),
+      webPackageBytes: await sizePathBytes(join(appNodeModulesRoot, "@open-design", "web")),
+      webPackageStandaloneBytes: await sizePathBytes(join(appNodeModulesRoot, "@open-design", "web", ".next", "standalone")),
+    },
+    zipBytes: artifacts.zipPath == null ? null : await sizeExistingFileBytes(artifacts.zipPath),
+  };
+}
+
 export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   const paths = resolveMacPaths(config);
+  const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
   await buildWorkspaceArtifacts(config);
   await copyResourceTree(config, paths);
   const tarballs = await collectWorkspaceTarballs(config, paths);
   await writeAssembledApp(config, paths, tarballs);
-  await runElectronBuilder(config, paths, resolveElectronBuilderTargets(config.to as MacBuildOutput));
+  await runElectronBuilder(config, paths, targets);
   await clearQuarantine(paths.appPath);
   const artifacts = await finalizeMacArtifacts(config, paths);
+  const sizeReport = await collectMacSizeReport(config, paths, artifacts, targets);
 
   return {
     appPath: paths.appPath,
@@ -561,6 +790,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     outputRoot: config.roots.output.namespaceRoot,
     resourceRoot: paths.resourceRoot,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
+    sizeReport,
     to: config.to,
     zipPath: artifacts.zipPath,
   };

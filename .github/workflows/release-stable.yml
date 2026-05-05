@@ -86,8 +86,8 @@ jobs:
       - name: Typecheck workspaces
         run: pnpm -r --workspace-concurrency=1 --if-present run typecheck
 
-      - name: Check residual JS in TypeScript packages
-        run: pnpm check:residual-js
+      - name: Check repository layout policies
+        run: pnpm guard
 
       # Workspace tests are intentionally not gated here. apps/web's
       # i18n content-coverage tests assert that every locale carries
@@ -154,6 +154,7 @@ jobs:
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace release-stable \
             --portable \
+            --mac-compression normal \
             --to all \
             --json \
             $signed_flag

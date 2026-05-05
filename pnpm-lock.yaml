@@ -9,11 +9,20 @@ importers:
   .:
     devDependencies:
       '@open-design/tools-dev':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:tools/dev
       '@open-design/tools-pack':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:tools/pack
+      '@types/node':
+        specifier: ^20.17.10
+        version: 20.19.39
+      tsx:
+        specifier: 4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
 
   apps/daemon:
     dependencies:
@@ -21,16 +30,16 @@ importers:
         specifier: ^1.0.0
         version: 1.29.0(zod@4.4.2)
       '@open-design/contracts':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/contracts
       '@open-design/platform':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar-proto
       better-sqlite3:
         specifier: ^12.9.0
@@ -70,13 +79,13 @@ importers:
   apps/desktop:
     dependencies:
       '@open-design/platform':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar-proto
     devDependencies:
       '@types/node':
@@ -123,22 +132,22 @@ importers:
   apps/packaged:
     dependencies:
       '@open-design/daemon':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../daemon
       '@open-design/desktop':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../desktop
       '@open-design/platform':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar-proto
       '@open-design/web':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../web
     devDependencies:
       '@types/node':
@@ -160,16 +169,16 @@ importers:
         specifier: ^0.32.1
         version: 0.32.1
       '@open-design/contracts':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/contracts
       '@open-design/platform':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar-proto
       next:
         specifier: ^16.2.4
@@ -288,13 +297,13 @@ importers:
   tools/dev:
     dependencies:
       '@open-design/platform':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar-proto
       cac:
         specifier: 6.7.14
@@ -319,13 +328,13 @@ importers:
         specifier: 3.1.0
         version: 3.1.0
       '@open-design/platform':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/platform
       '@open-design/sidecar':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar
       '@open-design/sidecar-proto':
-        specifier: workspace:0.3.0
+        specifier: workspace:*
         version: link:../../packages/sidecar-proto
       cac:
         specifier: 6.7.14

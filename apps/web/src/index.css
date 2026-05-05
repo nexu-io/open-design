@@ -882,6 +882,39 @@ code {
 }
 .staged-remove:hover { color: var(--red); background: var(--red-bg); }
 
+.linked-dirs-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.linked-dir-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  max-width: 220px;
+}
+.linked-dir-chip svg { flex-shrink: 0; color: var(--text-muted); }
+.linked-dir-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-import-item-enabled {
+  cursor: pointer;
+  color: var(--text);
+}
+.composer-import-item-enabled:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
 .user-attachments {
   display: flex;
   gap: 6px;
@@ -1931,6 +1964,7 @@ code {
 }
 .newproj-option-card {
   min-height: 62px;
+  min-width: 0;
   padding: 10px;
   display: flex;
   align-items: center;
@@ -1945,21 +1979,31 @@ code {
   color: var(--text-muted);
   font-size: 11px;
 }
+.aspect-grid .newproj-option-card {
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 6px;
+}
 .aspect-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
   align-items: center;
   line-height: 1.15;
+  min-width: 0;
+  max-width: 100%;
 }
 .aspect-copy strong {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 650;
+  letter-spacing: -0.005em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .aspect-copy small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 .aspect-glyph {
   flex: none;
@@ -1969,11 +2013,11 @@ code {
   background: var(--bg-subtle);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
 }
-.aspect-1-1 { width: 26px; height: 26px; }
-.aspect-16-9 { width: 36px; height: 20px; }
-.aspect-9-16 { width: 20px; height: 36px; }
-.aspect-4-3 { width: 32px; height: 24px; }
-.aspect-3-4 { width: 24px; height: 32px; }
+.aspect-1-1 { width: 22px; height: 22px; }
+.aspect-16-9 { width: 32px; height: 18px; }
+.aspect-9-16 { width: 18px; height: 32px; }
+.aspect-4-3 { width: 28px; height: 21px; }
+.aspect-3-4 { width: 21px; height: 28px; }
 @media (max-width: 560px) {
   .newproj-model-grid,
   .newproj-option-grid,
@@ -4366,12 +4410,70 @@ code {
   color: var(--text-muted);
   background: var(--bg-panel);
 }
+.markdown-code-block {
+  position: relative;
+}
+.markdown-code-copy {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 1;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-panel) 92%, black 8%);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.markdown-code-block:hover .markdown-code-copy,
+.markdown-code-block:focus-within .markdown-code-copy {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (hover: none) {
+  .markdown-code-copy {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.markdown-code-copy:hover,
+.markdown-code-copy:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-elevated, var(--bg));
+}
+.markdown-code-toast {
+  position: absolute;
+  top: 18px;
+  right: 82px;
+  z-index: 1;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 18%, var(--bg-panel));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  box-shadow: 0 10px 26px color-mix(in oklab, var(--accent) 18%, transparent);
+}
 .markdown-rendered pre {
   margin: 12px 0;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  padding: 12px;
+  padding: 40px 12px 12px;
   overflow: auto;
 }
 .markdown-rendered code {

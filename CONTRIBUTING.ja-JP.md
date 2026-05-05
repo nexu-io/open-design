@@ -4,7 +4,7 @@
 
 このガイドでは、各種コントリビューションの対象場所と、PR がマージされるために満たすべき基準を正確に説明します。
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <b>日本語</b></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <b>日本語</b></p>
 
 ---
 
@@ -33,7 +33,7 @@ corepack enable           # packageManager で指定された pnpm を選択
 pnpm install
 pnpm tools-dev run web    # daemon + web フォアグラウンドループ
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # プロダクションビルド
+pnpm --filter @open-design/web build  # 必要に応じて web パッケージをビルド
 ```
 
 Node `~24` と pnpm `10.33.x` が必要です。`nvm` / `fnm` はオプション。使用する場合は `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。macOS、Linux、WSL2 が主要プラットフォームです。Windows ネイティブでも動作するはずですが、主要ターゲットではありません — 動作しない場合は issue を作成してください。
