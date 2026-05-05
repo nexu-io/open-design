@@ -2402,11 +2402,11 @@ function HtmlViewer({
 
   function openInNewTab() {
     if (!source) return;
-    openSandboxedPreviewInNewTab(source, exportTitle, {
-      deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
-      initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-    });
+    // Open via the daemon's raw URL so Babel can fetch <script type="text/babel"
+    // src="..."> sources, relative <link>/<script>/<img> references resolve,
+    // and any same-origin XHR works. The previously-used sandboxed-iframe
+    // wrapper broke designs that compile JSX in the browser.
+    window.open(projectRawUrl(projectId, file.name), '_blank');
   }
 
   // Returns source with all relative <link href> and <script src> assets
@@ -2859,9 +2859,32 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      void getExportSource().then((html) =>
-                        exportAsPdf(html, exportTitle, { deck: effectiveDeck }),
+                      // Open the file via the daemon's raw URL (HTTP) so any
+                      // relative CSS / JS / image references resolve, and
+                      // browser security policies that block file:// fetch
+                      // (e.g. Babel pulling in <script type="text/babel"
+                      // src="...jsx"> sources) don't apply. Then auto-trigger
+                      // the print dialog after a generous delay so React /
+                      // Babel / fonts / images all settle first.
+                      const win = window.open(
+                        projectRawUrl(projectId, file.name),
+                        '_blank',
                       );
+                      if (!win) return;
+                      const trigger = () => {
+                        try {
+                          win.document.title = exportTitle;
+                        } catch {
+                          /* same-origin guard tripped — fine to ignore */
+                        }
+                        try {
+                          win.focus();
+                          win.print();
+                        } catch {
+                          /* print blocked — user can press Ctrl+P manually */
+                        }
+                      };
+                      win.addEventListener('load', () => setTimeout(trigger, 2000));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
