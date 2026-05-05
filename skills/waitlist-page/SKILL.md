@@ -54,6 +54,10 @@ Pre-launch pages are your first handshake with future users. This skill builds a
    - Animated ticker at the bottom—repeating text like "COMING SOON" + markers (✦). Subtle, behind-the-scenes energy.
    - All colors from DESIGN.md; no invented hex values.
    - **Token mapping rules** — when the template requires tokens not present in DESIGN.md, derive them rather than inventing values:
+     - `--btn-label` / `BTN_LABEL_HEX`: use an explicit button/control text token from DESIGN.md if present; otherwise derive from foreground with sufficient contrast (e.g., `#fff` on dark --fg, darkened --fg on light backgrounds). Validate WCAG AA contrast.
+     - `--ticker-bg` / `TICKER_BG_HEX`: a dark neutral or shade (if DESIGN.md defines a neutral palette) or derived from background at high darkness; typically `#1A1A1A` or a desaturated dark from the brand.
+     - `--ticker-fg` / `TICKER_FG_HEX`: a light neutral (typically `#F5F5F5` or lighter) ensuring readable contrast against --ticker-bg; validate WCAG AA.
+     - `--deco-stroke` / `DECO_STROKE_HEX`: a muted foreground or secondary accent, typically rendered at 12–15% opacity on SVG strokes (e.g., `rgba(0, 0, 0, 0.12)` on light backgrounds, or derive from brand neutrals).
      - `--input-border` / `BORDER_HEX`: foreground color at 35–40% opacity (`color-mix(in srgb, var(--fg) 38%, transparent)`).
      - `--success` / `SUCCESS_HEX`: use an explicit semantic success token from DESIGN.md if present; otherwise `#2D6A4F` is the allowed fallback (it is the only hardcoded hex permitted in a generated page).
      - `--deco-stripe` / `STRIPE_HEX`: a secondary brand accent from DESIGN.md; if only one accent exists, use it at full opacity.

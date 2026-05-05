@@ -16,11 +16,10 @@
       --deco-stripe: #{{STRIPE_HEX}};
       --input-border: #{{BORDER_HEX}};
       --success: #{{SUCCESS_HEX}};
-      /* Button label: white on a dark --fg background; swap if brand uses light-on-light */
-      --btn-label: #fff;
-      /* Ticker ribbon: dark band + light text derived as alpha variants */
-      --ticker-bg: rgba(0, 0, 0, 0.88);
-      --ticker-fg: rgba(255, 255, 255, 0.9);
+      --btn-label: #{{BTN_LABEL_HEX}};
+      --ticker-bg: #{{TICKER_BG_HEX}};
+      --ticker-fg: #{{TICKER_FG_HEX}};
+      --deco-stroke: #{{DECO_STROKE_HEX}};
       --font-body: '{{BODY_FONT}}', sans-serif;
       --font-display: '{{DISPLAY_FONT}}', serif;
     }
@@ -337,7 +336,7 @@
       <input type="email" name="email" placeholder="Work email" required>
       <button type="submit">Join Waitlist</button>
     </form>
-    <p class="success-msg" id="success-msg">You're on the list. We'll be in touch.</p>
+    <p class="success-msg" id="success-msg" role="status">You're on the list. We'll be in touch.</p>
   </section>
 
   <!-- Decorative section -->
@@ -345,7 +344,7 @@
 
     <!-- Coil pattern (optional) -->
     <svg class="coil-row" viewBox="0 0 1440 60" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" data-od-id="coil">
-      <g fill="none" stroke="rgba(0,0,0,0.12)" stroke-width="1.5">
+      <g fill="none" style="stroke: var(--deco-stroke);" stroke-width="1.5">
         <path d="M 9,60 A 41,30 0 0 1 91,60"/>
         <path d="M 94,60 A 41,30 0 0 1 176,60"/>
         <path d="M 179,60 A 41,30 0 0 1 261,60"/>
@@ -372,7 +371,7 @@
     <!-- Floor with perspective grid -->
     <div class="grid-floor">
       <svg class="grid-svg" viewBox="0 0 1280 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" data-od-id="grid">
-        <g stroke="rgba(0,0,0,0.15)" stroke-width="1" fill="none">
+        <g style="stroke: var(--deco-stroke);" stroke-width="1" fill="none">
           <!-- Radiating lines from center top -->
           <line x1="640" y1="0" x2="0"    y2="400"/>
           <line x1="640" y1="0" x2="128"  y2="400"/>
