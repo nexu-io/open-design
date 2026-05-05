@@ -46,6 +46,7 @@ const DICTS: Record<Locale, Dict> = {
   'ko': ko,
   'pl': pl,
   'hu': hu,
+  'tr': tr,
   'fr': fr,
   'uk': uk,
 };
