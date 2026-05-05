@@ -37,13 +37,13 @@ export const ko: Dict = {
   'common.daysShort': '{n}일',
   'common.untitled': '제목 없음',
 
-  'app.brand': 'Open Design',
-  'app.brandPill': 'Research Preview',
-  'app.brandSubtitle': 'by Nexu Labs',
+  'app.brand': 'Wix Japan Slide Generator',
+  'app.brandPill': 'Beta',
+  'app.brandSubtitle': 'by Wix Japan Design',
   'app.welcomeLoading': '워크스페이스를 불러오는 중…',
 
   'settings.welcomeKicker': '환영합니다',
-  'settings.welcomeTitle': 'Open Design 설정',
+  'settings.welcomeTitle': 'Wix Japan Slide Generator 설정',
   'settings.welcomeSubtitle':
     "생성을 실행할 방법을 선택하세요. 상단 바의 Settings 버튼을 통해 언제든지 변경할 수 있습니다.",
   'settings.kicker': '설정',

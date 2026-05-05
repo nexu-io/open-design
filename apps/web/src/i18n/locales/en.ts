@@ -37,13 +37,13 @@ export const en: Dict = {
   'common.daysShort': '{n}d',
   'common.untitled': 'Untitled',
 
-  'app.brand': 'Open Design',
-  'app.brandPill': 'Research Preview',
-  'app.brandSubtitle': 'by Nexu Labs',
+  'app.brand': 'Wix Japan Slide Generator',
+  'app.brandPill': 'Beta',
+  'app.brandSubtitle': 'by Wix Japan Design',
   'app.welcomeLoading': 'Loading workspace…',
 
   'settings.welcomeKicker': 'Welcome',
-  'settings.welcomeTitle': 'Set up Open Design',
+  'settings.welcomeTitle': 'Set up Wix Japan Slide Generator',
   'settings.welcomeSubtitle':
     "Pick how you'd like to run generations. You can change this any time from the Settings button in the top bar.",
   'settings.kicker': 'Settings',

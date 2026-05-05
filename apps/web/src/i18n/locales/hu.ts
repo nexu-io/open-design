@@ -37,13 +37,13 @@ export const hu: Dict = {
   'common.daysShort': '{n}n',
   'common.untitled': 'Cím nélkül',
 
-  'app.brand': 'Open Design',
-  'app.brandPill': 'Kutatási előzetes',
-  'app.brandSubtitle': 'a Nexu Labs-tól',
+  'app.brand': 'Wix Japan Slide Generator',
+  'app.brandPill': 'Beta',
+  'app.brandSubtitle': 'a Wix Japan Design-tól',
   'app.welcomeLoading': 'Munkaterület betöltése…',
 
   'settings.welcomeKicker': 'Üdvözlünk',
-  'settings.welcomeTitle': 'Open Design beállítása',
+  'settings.welcomeTitle': 'Wix Japan Slide Generator beállítása',
   'settings.welcomeSubtitle':
     'Válaszd ki, hogyan szeretnéd futtatni a generálásokat. Ezt bármikor módosíthatod a felső sáv Beállítások gombjával.',
   'settings.kicker': 'Beállítások',

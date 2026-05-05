@@ -37,13 +37,13 @@ export const tr: Dict = {
   'common.daysShort': '{n}g',
   'common.untitled': 'Başlıksız',
 
-  'app.brand': 'Open Design',
+  'app.brand': 'Wix Japan Slide Generator',
   'app.brandPill': 'Önizleme Araştırması',
-  'app.brandSubtitle': 'Nexu Labs tarafından',
+  'app.brandSubtitle': 'Wix Japan Design tarafından',
   'app.welcomeLoading': 'Çalışma alanı yükleniyor…',
 
   'settings.welcomeKicker': 'Hoşgeldiniz',
-  'settings.welcomeTitle': 'Open Design kurulumu',
+  'settings.welcomeTitle': 'Wix Japan Slide Generator kurulumu',
   'settings.welcomeSubtitle':
     "Oluşturmaları nasıl çalıştıracağınızı seçin. Bunu her zaman üst çubuktaki Ayarlar sekmesinden değiştirebilirsiniz.",
   'settings.kicker': 'Ayarlar',

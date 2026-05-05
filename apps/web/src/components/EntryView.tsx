@@ -232,25 +232,8 @@ export function EntryView({
         <div className="entry-header">
           <div className="entry-tabs" role="tablist">
             <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
-            <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
-            <TopTabButton
-              current={topTab}
-              value="design-systems"
-              label={t('entry.tabDesignSystems')}
-              onClick={setTopTab}
-            />
-            <TopTabButton
-              current={topTab}
-              value="image-templates"
-              label={t('entry.tabImageTemplates')}
-              onClick={setTopTab}
-            />
-            <TopTabButton
-              current={topTab}
-              value="video-templates"
-              label={t('entry.tabVideoTemplates')}
-              onClick={setTopTab}
-            />
+            {/* Wix Japan rebrand: hide non-slide tabs (Examples / Design systems / Image / Video templates).
+                Keep the components mounted as conditional renderers below for forward-compat. */}
           </div>
           <div className="entry-header-right">
             {/* Avatar settings live next to tabs to mirror the project view. */}

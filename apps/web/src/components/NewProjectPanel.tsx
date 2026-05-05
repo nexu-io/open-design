@@ -70,6 +70,12 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   other: 'newproj.tabOther',
 };
 
+// Wix Japan rebrand: only show the Slide deck tab in the create panel.
+// Other surfaces (prototype/template/image/video/audio/other) are kept in
+// the codebase but hidden from the sidebar to focus the tool on slides.
+// Re-add entries here to surface them again.
+const VISIBLE_TABS: CreateTab[] = ['deck'];
+
 export function NewProjectPanel({
   skills,
   designSystems,
@@ -84,7 +90,7 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
-  const [tab, setTab] = useState<CreateTab>('prototype');
+  const [tab, setTab] = useState<CreateTab>('deck');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
   const [name, setName] = useState('');
@@ -284,7 +290,7 @@ export function NewProjectPanel({
           <Icon name="chevron-left" size={16} strokeWidth={2} />
         </button>
         <div className="newproj-tabs" role="tablist" ref={tabsRef}>
-          {(Object.keys(TAB_LABEL_KEYS) as CreateTab[]).map((entry) => (
+          {VISIBLE_TABS.map((entry) => (
             <button
               key={entry}
               role="tab"

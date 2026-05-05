@@ -37,13 +37,13 @@ export const fa: Dict = {
   'common.daysShort': '{n}ر',
   'common.untitled': 'بدون عنوان',
 
-  'app.brand': 'Open Design',
-  'app.brandPill': 'پیش‌نمایش تحقیقاتی',
-  'app.brandSubtitle': 'توسط Nexu Labs',
+  'app.brand': 'Wix Japan Slide Generator',
+  'app.brandPill': 'Beta',
+  'app.brandSubtitle': 'توسط Wix Japan Design',
   'app.welcomeLoading': 'در حال بارگذاری فضای کاری…',
 
   'settings.welcomeKicker': 'خوش آمدید',
-  'settings.welcomeTitle': 'Open Design را راه‌اندازی کنید',
+  'settings.welcomeTitle': 'Wix Japan Slide Generator را راه‌اندازی کنید',
   'settings.welcomeSubtitle':
     'نحوه اجرای تولیدات را انتخاب کنید. می‌توانید هر زمان از دکمه تنظیمات در نوار بالا این را تغییر دهید.',
   'settings.kicker': 'تنظیمات',
