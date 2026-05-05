@@ -1,0 +1,22 @@
+services:
+  open-design:
+    build: .
+    container_name: open-design
+    ports:
+      - "7456:7456"
+    volumes:
+      - od_data:/app/.od
+    restart: unless-stopped
+    environment:
+      - OD_PORT=7456
+      - OD_BIND_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7456/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  od_data:
+    driver: local

@@ -1,0 +1,16 @@
+.git
+.gitignore
+.gitattributes
+.github
+node_modules
+.od
+*.md
+*.png
+*.jpg
+Dockerfile
+.dockerignore
+docker-compose.yml
+.edited_image.png
+e2e
+specs
+story
