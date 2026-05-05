@@ -22,6 +22,7 @@ import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { PasteTextDialog } from './PasteTextDialog';
+import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor, type SketchDocument, type SketchItem } from './SketchEditor';
 
 interface Props {
@@ -82,6 +83,7 @@ export function FileWorkspace({
   const [showPasteDialog, setShowPasteDialog] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const visibleFiles = useMemo(
@@ -228,6 +230,27 @@ export function FileWorkspace({
       window.removeEventListener('drop', onDrop);
     };
   }, []);
+
+  // Cmd/Ctrl+P opens the file palette. Capture phase so we beat the
+  // browser's default print dialog. Suppressed while another input has
+  // focus only when the user is mid-IME composition — otherwise the
+  // palette should be reachable from anywhere in the workspace, including
+  // from the chat composer (designers' muscle memory from VS Code).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        if (e.isComposing) return;
+        e.preventDefault();
+        setQuickSwitcherOpen((open) => !open);
+      } else if (e.key === 'Escape' && quickSwitcherOpen) {
+        // The palette handles Esc itself, but also catch it here for the
+        // case where focus has drifted off the palette input.
+        setQuickSwitcherOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [quickSwitcherOpen]);
 
   async function handleDelete(name: string) {
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
@@ -493,6 +516,17 @@ export function FileWorkspace({
               openFile(file.name);
             }
           }}
+        />
+      ) : null}
+      {quickSwitcherOpen ? (
+        <QuickSwitcher
+          projectId={projectId}
+          files={visibleFiles}
+          onOpenFile={(name) => {
+            openFile(name);
+            setQuickSwitcherOpen(false);
+          }}
+          onClose={() => setQuickSwitcherOpen(false)}
         />
       ) : null}
     </div>

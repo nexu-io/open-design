@@ -10185,3 +10185,110 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 [dir="rtl"] .meta {
   text-align: right;
 }
+
+/* ============================================================
+   Quick Switcher (Cmd/Ctrl+P file palette)
+   ============================================================ */
+.qs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 12, 10, 0.32);
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.qs-palette {
+  width: min(560px, 92vw);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text);
+}
+.qs-input {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+}
+.qs-input::placeholder {
+  color: var(--text-faint);
+}
+.qs-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.qs-empty {
+  padding: 20px 16px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.qs-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.qs-row-active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.qs-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qs-path {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.qs-kind {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.qs-row-active .qs-kind {
+  color: var(--accent-strong);
+}
+.qs-footer {
+  display: flex;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.qs-footer kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 2px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+}

@@ -587,6 +587,12 @@ export interface Dict {
   'designFiles.kindSpreadsheet': string;
   'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
+  'quickSwitcher.placeholder': string;
+  'quickSwitcher.empty': string;
+  'quickSwitcher.noMatches': string;
+  'quickSwitcher.navigate': string;
+  'quickSwitcher.open': string;
+  'quickSwitcher.close': string;
   'pasteDialog.title': string;
   'pasteDialog.hint': string;
   'pasteDialog.fileNameLabel': string;
