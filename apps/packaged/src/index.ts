@@ -79,7 +79,10 @@ async function main(): Promise<void> {
   });
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
+    appVersion: config.appVersion,
     nodeCommand: config.nodeCommand,
+    webStandaloneRoot: config.webStandaloneRoot,
+    webOutputMode: config.webOutputMode,
   });
   registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
 

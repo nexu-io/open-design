@@ -1,6 +1,6 @@
 # Quickstart
 
-<p align="center"><b>English</b> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a></p>
+<p align="center"><b>English</b> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a></p>
 
 Run the full product locally.
 
@@ -69,7 +69,7 @@ pnpm tools-dev logs            # show daemon/web/desktop logs
 pnpm tools-dev check           # status + recent logs + common diagnostics
 pnpm tools-dev stop            # stop managed runtimes
 pnpm --filter @open-design/daemon build  # build apps/daemon/dist/cli.js for `od`
-pnpm build                     # production build + static export to apps/web/out/
+pnpm --filter @open-design/web build     # build the web package when needed
 pnpm typecheck                 # workspace typecheck
 ```
 

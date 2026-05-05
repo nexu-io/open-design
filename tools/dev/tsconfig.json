@@ -14,5 +14,5 @@
     "target": "ES2024",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "esbuild.config.mjs"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts", "esbuild.config.mjs"]
 }

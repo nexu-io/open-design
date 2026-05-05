@@ -5,6 +5,10 @@ export interface ParserOptions {
   runId: string;
   adapter: string;
   parserMaxBlockBytes: number;
+  /** Project identity threaded into ship event artifactRef. */
+  projectId?: string;
+  /** Artifact identity threaded into ship event artifactRef. */
+  artifactId?: string;
 }
 
 export async function* parseCritiqueStream(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type {
   Dispatch,
   DragEvent,
@@ -28,8 +28,14 @@ interface Props {
 
 type Section = 'pages' | 'scripts' | 'images' | 'sketches' | 'other';
 type FileBrowserSection = 'folders' | Section;
-type FileRow = { type: 'file'; key: string; file: ProjectFile; depth: 0 | 1; mtime: number };
-type FolderRow = {
+export type FileRow = {
+  type: 'file';
+  key: string;
+  file: ProjectFile;
+  depth: 0 | 1;
+  mtime: number;
+};
+export type FolderRow = {
   type: 'folder';
   key: string;
   label: string;
@@ -38,7 +44,7 @@ type FolderRow = {
   active: boolean;
   mtime: number;
 };
-type BrowserRow = FileRow | FolderRow;
+export type BrowserRow = FileRow | FolderRow;
 
 const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
   pages: 'designFiles.sectionPages',
@@ -105,12 +111,10 @@ export function DesignFilesPanel({
     [expandedFolders, files, preview],
   );
 
-  const folderCount = useMemo(
-    () => folderRows.filter((row) => row.type === 'folder').length,
-    [folderRows],
-  );
-
-  // Prune stale selections when the file list or project changes.
+  // Prune selections that no longer exist in the current file list
+  // (e.g. after a refresh or delete within the same project).
+  // Cross-project leaks are handled by the parent remounting this
+  // component via key={projectId}.
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
@@ -125,7 +129,7 @@ export function DesignFilesPanel({
       }
       return changed ? next : prev;
     });
-  }, [files, projectId]);
+  }, [files]);
 
   const previewFile = useMemo(
     () => files.find((f) => f.name === preview) ?? null,
@@ -277,52 +281,49 @@ export function DesignFilesPanel({
     const active = preview === f.name;
     const isHovered = hover === f.name;
     return (
-      <button
+      <div
         key={row.key}
-        type="button"
         data-testid={`design-file-row-${f.name}`}
         className={`df-row ${row.depth > 0 ? 'nested' : ''} ${active ? 'active' : ''} ${
           selected.has(f.name) ? 'selected' : ''
         }`}
         onMouseEnter={() => setHover(f.name)}
         onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-        onClick={() => setPreview(f.name)}
-        onDoubleClick={() => onOpenFile(f.name)}
       >
-        <span
+        <input
+          type="checkbox"
           className="df-row-check"
+          checked={selected.has(f.name)}
+          aria-label={`Select ${f.name}`}
           onClick={(e) => {
             e.stopPropagation();
+          }}
+          onChange={() => {
             toggleSelect(f.name);
           }}
-          role="checkbox"
-          aria-checked={selected.has(f.name)}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleSelect(f.name);
-            }
-          }}
+        />
+        <button
+          type="button"
+          className="df-row-open"
+          onClick={() => setPreview(f.name)}
+          onDoubleClick={() => onOpenFile(f.name)}
         >
-          {selected.has(f.name) ? '☑' : '☐'}
-        </span>
-        <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-          {kindGlyph(f.kind)}
-        </span>
-        <span className="df-row-name-wrap">
-          <span className="df-row-name" title={f.name}>
-            {displayFileName(f.name, row.depth)}
+          <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+            {kindGlyph(f.kind)}
           </span>
-          <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-        </span>
-        <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
-        <span
+          <span className="df-row-name-wrap">
+            <span className="df-row-name" title={f.name}>
+              {displayFileName(f.name, row.depth)}
+            </span>
+            <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+          </span>
+          <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
+        </button>
+        <button
+          type="button"
           data-testid={`design-file-menu-${f.name}`}
           className="df-row-menu"
           style={isHovered || active ? { opacity: 1 } : undefined}
-          role="button"
           aria-label={t('designFiles.rowMenu')}
           onClick={(e) => {
             e.stopPropagation();
@@ -337,8 +338,8 @@ export function DesignFilesPanel({
           }}
         >
           ⋯
-        </span>
-      </button>
+        </button>
+      </div>
     );
   }
 
@@ -402,7 +403,7 @@ export function DesignFilesPanel({
             <>
               {folderRows.length > 0 ? (
                 <FileSection
-                  count={folderCount}
+                  count={folderRows.length}
                   label={t('designFiles.sectionFolders')}
                   rows={folderRows}
                   selectableFiles={files.filter((file) => topLevelFolder(file.name))}
@@ -566,8 +567,9 @@ function FileSection({
   t: TranslateFn;
 }) {
   const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
-  const visibleRows = rows.slice(0, visibleLimit);
-  const hiddenCount = rows.length - visibleRows.length;
+  const visibleRows = getVisibleRowsForSection(rows, visibleLimit);
+  const topLevelCount = getTopLevelRowCount(rows);
+  const hiddenCount = Math.max(0, topLevelCount - Math.min(visibleLimit, topLevelCount));
 
   return (
     <div className="df-section">
@@ -599,7 +601,9 @@ function FileSection({
           </button>
         ) : null}
       </div>
-      {visibleRows.map(renderRow)}
+      {visibleRows.map((row) => (
+        <Fragment key={row.key}>{renderRow(row)}</Fragment>
+      ))}
       {hiddenCount > 0 ? (
         <button
           type="button"
@@ -610,7 +614,10 @@ function FileSection({
             startSectionExpansion(() => {
               setSectionLimits((curr) => ({
                 ...curr,
-                [section]: Math.min(rows.length, visibleLimit + SECTION_FILE_LIMIT_INCREMENT),
+                [section]: Math.min(
+                  topLevelCount,
+                  visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
+                ),
               }));
             })
           }
@@ -708,7 +715,7 @@ function DfPreview({
   );
 }
 
-function buildFolderRows(
+export function buildFolderRows(
   files: ProjectFile[],
   expandedFolders: ReadonlySet<string>,
   preview: string | null,
@@ -745,14 +752,24 @@ function buildFolderRows(
 
   topLevelEntries.sort((a, b) => b.mtime - a.mtime);
 
-  const rows: BrowserRow[] = [];
-  for (const entry of topLevelEntries) {
-    rows.push(entry);
-    if (entry.type === 'folder' && entry.expanded) {
-      rows.push(
-        ...entry.files.map((file) => ({
+  return topLevelEntries;
+}
+
+export function getVisibleRowsForSection(rows: BrowserRow[], visibleLimit: number): BrowserRow[] {
+  const visibleRows: BrowserRow[] = [];
+  let topLevelSeen = 0;
+
+  for (const row of rows) {
+    if (!isTopLevelRow(row)) continue;
+    if (topLevelSeen >= visibleLimit) break;
+    topLevelSeen += 1;
+    visibleRows.push(row);
+
+    if (row.type === 'folder' && row.expanded) {
+      visibleRows.push(
+        ...row.files.map((file) => ({
           type: 'file' as const,
-          key: `${entry.key}/${file.name}`,
+          key: `${row.key}/${file.name}`,
           file,
           depth: 1 as const,
           mtime: file.mtime,
@@ -760,7 +777,16 @@ function buildFolderRows(
       );
     }
   }
-  return rows;
+
+  return visibleRows;
+}
+
+function getTopLevelRowCount(rows: BrowserRow[]): number {
+  return rows.filter(isTopLevelRow).length;
+}
+
+function isTopLevelRow(row: BrowserRow): boolean {
+  return row.type === 'folder' || row.depth === 0;
 }
 
 function topLevelFolder(name: string): string | null {

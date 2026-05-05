@@ -377,6 +377,7 @@ export function FileWorkspace({
         {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
+            key={projectId}
             projectId={projectId}
             files={files}
             onRefreshFiles={onRefreshFiles}

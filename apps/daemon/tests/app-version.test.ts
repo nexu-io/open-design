@@ -27,6 +27,23 @@ describe('app version helpers', () => {
     expect(resolveAppVersionInfo({ packageMetadata: null, env: {} }).version).toBe(APP_VERSION_FALLBACK);
   });
 
+  it('prefers packaged app version metadata from the environment', () => {
+    expect(resolveAppVersionInfo({
+      packageMetadata: { version: '0.3.0' },
+      env: { OD_APP_VERSION: '0.3.1-beta.1' },
+      resourcesPath: '/Applications/Open Design.app/Contents/Resources',
+      execPath: '/Applications/Open Design.app/Contents/Resources/open-design/bin/node',
+      platform: 'darwin',
+      arch: 'arm64',
+    })).toEqual({
+      version: '0.3.1-beta.1',
+      channel: 'beta',
+      packaged: true,
+      platform: 'darwin',
+      arch: 'arm64',
+    });
+  });
+
   it('detects packaged runtimes without sidecar protocol knowledge', () => {
     expect(isPackagedRuntime({ resourcesPath: '/Applications/Open Design.app/Contents/Resources' })).toBe(true);
     expect(isPackagedRuntime({

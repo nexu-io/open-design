@@ -13,6 +13,5 @@ export * from './api/version';
 export * from './sse/common';
 export * from './sse/chat';
 export * from './sse/proxy';
-export * from './sse/critique';
 export * from './prompts/system';
 export * from './critique';

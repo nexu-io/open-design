@@ -72,11 +72,20 @@ jobs:
       - name: Typecheck workspaces
         run: pnpm -r --workspace-concurrency=1 --if-present run typecheck
 
-      - name: Check residual JS in TypeScript packages
-        run: pnpm check:residual-js
+      - name: Check repository layout policies
+        run: pnpm guard
 
       - name: Test
-        run: pnpm test
+        run: |
+          pnpm --filter @open-design/e2e test
+          pnpm --filter @open-design/contracts test
+          pnpm --filter @open-design/platform test
+          pnpm --filter @open-design/sidecar test
+          pnpm --filter @open-design/sidecar-proto test
+          pnpm --filter @open-design/daemon test
+          pnpm --filter @open-design/web test
+          pnpm --filter @open-design/tools-dev test
+          pnpm --filter @open-design/tools-pack test
 
       # Keep workspace builds serialized so generated dist output and local
       # runtime artifacts are produced in a deterministic order. Parallel
