@@ -2,9 +2,9 @@
 
 ## P0 — Must Pass Before Emitting Artifact
 
-- [ ] Chief complaint is clearly stated in the opening line
-- [ ] HPI is written as a chronological prose narrative
-- [ ] HPI includes at least one timeline marker (e.g. "2 hours prior to presentation")
+- [ ] Chief complaint or ID line is clearly stated in the opening line
+- [ ] **SOAP / Conference format only:** HPI is written as a chronological prose narrative with at least one timeline marker (e.g. "2 hours prior to presentation"); skip for Brief Rounds
+- [ ] **Brief Rounds format only:** ID line present; interval events / current status documented; active problems listed; plan-by-problem present; full HPI and examination sections are not required
 - [ ] Vital signs are present and physiologically plausible
 - [ ] Vital signs are internally consistent with the diagnosis (allowing for clinical variability — bradycardic shock, medication-blunted tachycardia, afebrile pneumonia, early STEMI with normal troponin, etc.)
 - [ ] Assessment contains a clearly stated primary diagnosis
