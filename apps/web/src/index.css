@@ -7069,18 +7069,19 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: #ffffff;
   overflow: hidden;
 }
-/* With rm=minimal on the embed URL Google drops its own bottom
-   chrome, so the iframe is pure slide content at 16:9. The iframe
-   sits flush against the viewer body — no padding, no border, no
-   shadow, no border-radius — so the slide content goes edge-to-edge
-   with no visible band along any side. */
+/* iframe aspect 17:10 (= 1.70). The deck inside is 16:9 (= 1.78);
+   Google's embed reserves ~32px at the bottom for its native page-
+   nav bar (prev/next arrows + page counter), so the actual slide
+   rendering area inside the iframe is wider than 16:9. 17:10 leaves
+   the slide rendering area at almost exactly 16:9, with the nav bar
+   tucked underneath — slide fills wall-to-wall, no letterbox. */
 .google-slides-viewer .viewer-body iframe {
   display: block;
   border: 0;
   outline: 0;
   width: 100%;
   max-width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 17 / 10;
   height: auto;
   background: #ffffff;
 }
