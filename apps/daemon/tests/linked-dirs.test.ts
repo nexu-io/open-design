@@ -28,7 +28,8 @@ test('rejects relative paths', () => {
 
 test('rejects non-existent directories', () => {
   const result = validateLinkedDirs(['/no/such/directory/ever']);
-  assert.ok(result.error.includes('does not exist'));
+  assert.ok(result.error);
+  assert.ok(result.error!.includes('does not exist'));
 });
 
 test('rejects files (non-directories)', () => {
@@ -37,7 +38,8 @@ test('rejects files (non-directories)', () => {
   writeFileSync(file, 'test');
   try {
     const result = validateLinkedDirs([file]);
-    assert.ok(result.error.includes('not a directory'));
+    assert.ok(result.error);
+    assert.ok(result.error!.includes('not a directory'));
   } finally {
     rmSync(tmp, { recursive: true });
   }
