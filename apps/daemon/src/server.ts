@@ -792,6 +792,51 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
+  // Per-page list of slide IDs in deck order. Used by the gallery
+  // viewer to build full-resolution image URLs.
+  app.get('/api/projects/:id/page-ids', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    const deckId = project.metadata?.deckId;
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 404, 'NO_DECK', 'project has no deckId metadata');
+    }
+    try {
+      const { listSlideIds } = await import('./google-slides.js');
+      const ids = await listSlideIds(deckId);
+      res.json({ pageIds: ids });
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
+  // Full-resolution PNG of a deck page. Drive export endpoint serves
+  // at native deck resolution (1920+px) — much sharper than the
+  // Slides API thumbnail (capped at 1600px). Auth-gated server-side.
+  app.get('/api/projects/:id/page-image', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    const deckId = project.metadata?.deckId;
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 404, 'NO_DECK', 'project has no deckId metadata');
+    }
+    const pageId = req.query.pageId;
+    if (typeof pageId !== 'string' || !pageId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'pageId query required');
+    }
+    try {
+      const { fetchPageImage } = await import('./google-slides.js');
+      const buf = await fetchPageImage(deckId, pageId);
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      res.send(buf);
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};

@@ -29,6 +29,7 @@ async function authedClients() {
     throw err;
   }
   return {
+    auth,
     slides: google.slides({ version: 'v1', auth }),
     drive: google.drive({ version: 'v3', auth }),
   };
@@ -771,6 +772,73 @@ export async function getDeckThumbnailUrl(deckId, size = 'MEDIUM') {
     return { url, cached: false };
   } catch (err) {
     if (err.code === 'GOOGLE_API_BAD_REQUEST') throw err;
+    throw wrapApiError(err);
+  }
+}
+
+// Stream a high-resolution PNG render of a single deck page. The
+// Slides API getThumbnail tops out at 1600px wide which looks soft
+// on retina displays — the Drive export/png endpoint serves the
+// page at native resolution (typically 1920+px). We OAuth-fetch the
+// PNG server-side and pipe the bytes to the caller, so the UI can
+// just <img src="/api/projects/:id/pages/:n/image"> without exposing
+// auth.
+export async function fetchPageImage(deckId, pageObjectId) {
+  if (typeof deckId !== 'string' || !deckId) {
+    const err = new Error('deckId required');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
+    throw err;
+  }
+  if (typeof pageObjectId !== 'string' || !pageObjectId) {
+    const err = new Error('pageObjectId required');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
+    throw err;
+  }
+  const { auth } = await authedClients();
+  const accessTokenInfo = await auth.getAccessToken();
+  const accessToken =
+    typeof accessTokenInfo === 'string' ? accessTokenInfo : accessTokenInfo?.token;
+  if (!accessToken) {
+    const err = new Error('Google access token missing');
+    err.code = 'GOOGLE_AUTH_REQUIRED';
+    throw err;
+  }
+  const url = `https://docs.google.com/presentation/d/${encodeURIComponent(
+    deckId,
+  )}/export/png?id=${encodeURIComponent(deckId)}&pageid=${encodeURIComponent(
+    pageObjectId,
+  )}`;
+  const r = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) {
+    const err = new Error(`Drive export PNG returned ${r.status}`);
+    err.code = 'GOOGLE_API_ERROR';
+    throw err;
+  }
+  const buf = Buffer.from(await r.arrayBuffer());
+  return buf;
+}
+
+// Read all slide IDs in deck order. Cheaper helper than
+// readPresentation when callers only need the IDs (e.g. building
+// per-page image URLs in the gallery viewer).
+export async function listSlideIds(deckId) {
+  if (typeof deckId !== 'string' || !deckId) {
+    const err = new Error('deckId required');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
+    throw err;
+  }
+  const { slides } = await authedClients();
+  try {
+    const res = await slides.presentations.get({
+      presentationId: deckId,
+      fields: 'slides(objectId)',
+    });
+    return (res.data.slides || [])
+      .map((s) => s.objectId)
+      .filter((id) => typeof id === 'string' && id.length > 0);
+  } catch (err) {
     throw wrapApiError(err);
   }
 }

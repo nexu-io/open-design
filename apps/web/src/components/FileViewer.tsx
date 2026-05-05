@@ -2188,7 +2188,7 @@ function GoogleSlidesViewer({
   const [result, setResult] = useState<GoogleSlidesResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [fileMissing, setFileMissing] = useState(false);
-  const [pageUrls, setPageUrls] = useState<string[]>([]);
+  const [pageIds, setPageIds] = useState<string[]>([]);
   const [thumbErr, setThumbErr] = useState<string | null>(null);
   const [pageIdx, setPageIdx] = useState(0);
 
@@ -2216,28 +2216,27 @@ function GoogleSlidesViewer({
     };
   }, [projectId, file.name, file.mtime]);
 
-  // Fetch per-page thumbnail URLs for the gallery viewer. We use this
-  // instead of Google's embed iframe because the embed always shows
-  // its own bottom chrome, which produces unfixable letterbox bands.
-  // PNG thumbnails fill the container 16:9 cleanly and we control the
-  // navigation UI ourselves.
+  // Fetch the page IDs once and let each <img> hit a daemon endpoint
+  // that streams a full-resolution PNG via Drive export. That gives
+  // much sharper output than the Slides API thumbnail (which caps at
+  // 1600px wide) on retina / large displays.
   useEffect(() => {
     let cancelled = false;
-    setPageUrls([]);
+    setPageIds([]);
     setThumbErr(null);
     if (!result?.deckId) return;
     (async () => {
       try {
         const r = await fetch(
-          `/api/projects/${encodeURIComponent(projectId)}/thumbnails`,
+          `/api/projects/${encodeURIComponent(projectId)}/page-ids`,
         );
         if (!r.ok) {
           setThumbErr(`status ${r.status}`);
           return;
         }
-        const j = (await r.json()) as { urls?: string[] };
+        const j = (await r.json()) as { pageIds?: string[] };
         if (cancelled) return;
-        setPageUrls(j.urls ?? []);
+        setPageIds(j.pageIds ?? []);
       } catch (err) {
         if (!cancelled) setThumbErr((err as Error).message);
       }
@@ -2249,7 +2248,7 @@ function GoogleSlidesViewer({
 
   const deckUrl = result?.deckUrl;
   const hasResult = result !== null;
-  const totalPages = pageUrls.length || result?.totalPages || 0;
+  const totalPages = pageIds.length || result?.totalPages || 0;
   const goPrev = useCallback(() => {
     setPageIdx((i) => Math.max(0, i - 1));
   }, []);
@@ -2268,7 +2267,7 @@ function GoogleSlidesViewer({
           </span>
         </div>
         <div className="viewer-toolbar-actions">
-          {pageUrls.length > 0 ? (
+          {pageIds.length > 0 ? (
             <div className="gs-pager">
               <button
                 type="button"
@@ -2310,14 +2309,16 @@ function GoogleSlidesViewer({
           <div className="viewer-empty">{t('fileViewer.googleSlidesNotReady')}</div>
         ) : !hasResult ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : pageUrls.length === 0 ? (
+        ) : pageIds.length === 0 ? (
           <div className="viewer-empty">
             {thumbErr ? `Thumbnails unavailable: ${thumbErr}` : t('fileViewer.loading')}
           </div>
         ) : (
           <img
             className="gs-page"
-            src={pageUrls[Math.min(pageIdx, pageUrls.length - 1)]}
+            src={`/api/projects/${encodeURIComponent(projectId)}/page-image?pageId=${encodeURIComponent(
+              pageIds[Math.min(pageIdx, pageIds.length - 1)] ?? '',
+            )}`}
             alt={`Slide ${pageIdx + 1}`}
             draggable={false}
           />
