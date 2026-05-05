@@ -25,6 +25,8 @@ const IGNORE_NAMES = new Set([
   '.DS_Store',
   // Python virtual environments and caches — can contain tens of thousands of
   // files, exhausting the process fd table and breaking child-process spawning.
+  // These names are safe to match at any path depth: a directory named `.venv`
+  // or `__pycache__` is never legitimate authored source in a project tree.
   '.venv',
   'venv',
   '__pycache__',
@@ -32,10 +34,6 @@ const IGNORE_NAMES = new Set([
   '.pytest_cache',
   '.tox',
   '.ruff_cache',
-  // Other common large generated/vendor dirs.
-  'target',  // Rust / Java
-  'vendor',  // Go
-  '.cargo',
 ]);
 export function makeIgnored(rootDir) {
   return (absPath) => {
