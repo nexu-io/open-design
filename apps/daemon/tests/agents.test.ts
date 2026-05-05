@@ -397,6 +397,61 @@ test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
   assert.ok(args.includes('-p'), 'claude argv must include -p');
 });
 
+// ---- Claude Code --add-dir capability (issue #430) -------------------------
+// Skill seeds (`skills/<id>/assets/template.html`) and design-system specs
+// (`design-systems/<id>/DESIGN.md`) live outside the project cwd. Without
+// `--add-dir`, Claude Code's directory access policy blocks reads on any
+// path outside the working directory. Bug was that we probed global `claude
+// --help` for `--add-dir` but that flag only appears in `claude -p --help`.
+
+test('claude buildArgs passes --add-dir when dirs are supplied (issue #430, probing-failed baseline)', () => {
+  // This is the default state before any capability probe runs: agentCapabilities
+  // has no entry -> buildArgs gets `caps = {}` -> caps.addDir is undefined ->
+  // undefined !== false -> true. This is also the "probing threw" case: timeout,
+  // binary not found, non-zero exit code from --help. Dirs are always passed
+  // unless capability probing explicitly detected --help and found no --add-dir.
+  const args = claude.buildArgs(
+    '',
+    [],
+    ['/repo/skills', '/repo/design-systems'],
+    {},
+  );
+
+  const addDirIndex = args.indexOf('--add-dir');
+  assert.ok(addDirIndex >= 0, '--add-dir must be present by default (safe baseline)');
+  assert.equal(args[addDirIndex + 1], '/repo/skills');
+  assert.equal(args[addDirIndex + 2], '/repo/design-systems');
+  // Check flag ordering: --add-dir comes before --permission-mode
+  const permModeIndex = args.indexOf('--permission-mode');
+  assert.ok(
+    addDirIndex < permModeIndex,
+    `--add-dir (index ${addDirIndex}) should appear before --permission-mode (index ${permModeIndex})`,
+  );
+});
+
+test('claude buildArgs drops empty / null dirs but keeps valid ones (issue #430 edge case)', () => {
+  const args = claude.buildArgs('', [], ['', null, '/repo/skills', undefined], {});
+
+  const addDirIndex = args.indexOf('--add-dir');
+  assert.ok(addDirIndex >= 0, '--add-dir should survive filter');
+  // Only the one valid path survives after --add-dir.
+  assert.equal(args[addDirIndex + 1], '/repo/skills');
+  // Should NOT have multiple --add-dir flags (one flag, N arguments).
+  assert.equal(args.filter((a) => a === '--add-dir').length, 1);
+  // Should NOT have null / undefined / '' sneaking into argv.
+  assert.equal(args.includes(''), false);
+  assert.equal(args.includes(null), false);
+  assert.equal(args.includes(undefined), false);
+});
+
+test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430 root cause)', () => {
+  assert.deepEqual(
+    claude.helpArgs,
+    ['-p', '--help'],
+    `claude.helpArgs must be ['-p', '--help'], not just ['--help'], because --add-dir lives under the -p subcommand. Probing global help never finds it! Got: ${JSON.stringify(claude.helpArgs)}`,
+  );
+});
+
 // ---- OpenClaude fallback (issue #235) -------------------------------------
 // OpenClaude (https://github.com/Gitlawb/openclaude) is a Claude Code fork
 // that ships under a different binary name but speaks an argv-compatible

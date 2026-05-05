@@ -91,13 +91,7 @@ Evite priorizar:
 ## Como executar
 
 ```bash
-pnpm run test:ui
-```
-
-Ou direto dentro do pacote de teste:
-
-```bash
-pnpm --filter @open-design/e2e test:ui
+pnpm -C e2e test:ui
 ```
 
 Após a execução são gerados automaticamente:

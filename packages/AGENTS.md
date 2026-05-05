@@ -16,6 +16,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 ## Boundary checklist
 
+- Package tests live in each package's `tests/` directory, sibling to `src/`; keep `src/` source-only and do not add new `*.test.ts` or `*.test.tsx` files under `src/`.
 - Do not move runtime validation/schema enforcement into `contracts` prematurely; current contracts define the typed target shape only.
 - Do not let app packages depend directly on sidecar control-plane details.
 - Do not hard-code Open Design app/source/mode constants in `sidecar` or `platform`.

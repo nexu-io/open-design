@@ -628,6 +628,17 @@ export async function deleteProjectFile(
   }
 }
 
+export async function openFolderDialog(): Promise<string | null> {
+  try {
+    const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return typeof data.path === 'string' && data.path.length > 0 ? data.path : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDesignSystemPreview(id: string): Promise<string | null> {
   try {
     const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/preview`);

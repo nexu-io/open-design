@@ -11,7 +11,7 @@ Este diretório guarda os resultados de execução e relatórios legíveis dos t
 - `junit.xml`: resultado em JUnit, prático para integrar com CI
 - `test-results/`: anexos brutos dos casos com falha (screenshots, traces, error-context)
 
-Antes de cada execução de `pnpm run test:ui` (ou `pnpm --filter @open-design/e2e test:ui`), o sistema limpa automaticamente:
+Antes de cada execução de `pnpm -C e2e test:ui`, o sistema limpa automaticamente:
 
 - `e2e/.od-data/`
 - `e2e/reports/test-results/`

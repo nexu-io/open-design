@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { migrateCritique } from './critique/persistence.js';
 
 let dbInstance = null;
 let dbFile = null;
@@ -180,6 +181,7 @@ function migrate(db) {
   if (!deploymentCols.some((c) => c.name === 'reachable_at')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN reachable_at INTEGER`);
   }
+  migrateCritique(db);
 }
 
 // ---------- deployments ----------

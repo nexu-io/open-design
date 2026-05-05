@@ -69,7 +69,7 @@ pnpm tools-dev logs            # daemon/web/desktop のログを表示
 pnpm tools-dev check           # status + 最近のログ + 一般的な診断
 pnpm tools-dev stop            # 管理対象ランタイムを停止
 pnpm --filter @open-design/daemon build  # `od` 用に apps/daemon/dist/cli.js をビルド
-pnpm build                     # 本番ビルド + apps/web/out/ への静的エクスポート
+pnpm --filter @open-design/web build     # 必要に応じて web パッケージをビルド
 pnpm typecheck                 # workspace の typecheck
 ```
 

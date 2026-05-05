@@ -69,7 +69,7 @@ pnpm tools-dev logs            # daemon/web/desktop logs anzeigen
 pnpm tools-dev check           # status + aktuelle logs + gängige Diagnosen
 pnpm tools-dev stop            # verwaltete Runtimes stoppen
 pnpm --filter @open-design/daemon build  # apps/daemon/dist/cli.js für `od` bauen
-pnpm build                     # Production Build + static export nach apps/web/out/
+pnpm --filter @open-design/web build     # Web-Paket bei Bedarf bauen
 pnpm typecheck                 # Workspace-Typecheck
 ```
 
