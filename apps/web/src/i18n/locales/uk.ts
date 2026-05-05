@@ -76,6 +76,7 @@ export const uk: Dict = {
   'settings.testAuthFailed': 'Помилка автентифікації. Перевірте ключ API.',
   'settings.testForbidden': 'Доступ заборонено. Перевірте обліковий запис, регіон або організацію.',
   'settings.testNotFoundModel': 'Модель \'{model}\' не знайдено на цій кінцевій точці.',
+  'settings.testInvalidModelId': 'ID моделі \'{model}\' недійсний. Власний ID має починатися з літери або цифри й не містити пробілів.',
   'settings.testInvalidBaseUrl': 'Base URL недійсний або недоступний.',
   'settings.testRateLimited': 'Постачальник обмежив тест. Конфігурація виглядає правильною.',
   'settings.testUpstream': 'Постачальник повернув {status}. Спробуйте ще раз за мить.',

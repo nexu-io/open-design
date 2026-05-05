@@ -638,6 +638,8 @@ export function SettingsDialog({
         return t('settings.testForbidden');
       case 'not_found_model':
         return t('settings.testNotFoundModel', { model: testedModel });
+      case 'invalid_model_id':
+        return t('settings.testInvalidModelId', { model: testedModel });
       case 'invalid_base_url':
         return t('settings.testInvalidBaseUrl');
       case 'rate_limited':

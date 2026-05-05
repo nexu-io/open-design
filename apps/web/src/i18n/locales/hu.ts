@@ -77,6 +77,7 @@ export const hu: Dict = {
   'settings.testAuthFailed': 'A hitelesítés sikertelen. Ellenőrizd az API kulcsot.',
   'settings.testForbidden': 'A hozzáférés tiltott. Ellenőrizd a fiókot, régiót vagy szervezetet.',
   'settings.testNotFoundModel': 'A(z) \'{model}\' modell nem található ezen a végponton.',
+  'settings.testInvalidModelId': 'A(z) \'{model}\' modellazonosító érvénytelen. Az egyéni azonosító betűvel vagy számmal kezdődjön, és ne tartalmazzon szóközt.',
   'settings.testInvalidBaseUrl': 'A Base URL érvénytelen vagy nem elérhető.',
   'settings.testRateLimited': 'A szolgáltató korlátozta a tesztet. A konfiguráció érvényesnek tűnik.',
   'settings.testUpstream': 'A szolgáltató {status} kódot adott vissza. Próbáld újra rövidesen.',

@@ -75,6 +75,7 @@ export const fa: Dict = {
   'settings.testAuthFailed': 'احراز هویت ناموفق بود. کلید API را بررسی کنید.',
   'settings.testForbidden': 'دسترسی مجاز نیست. حساب، منطقه یا سازمان را بررسی کنید.',
   'settings.testNotFoundModel': 'مدل \'{model}\' در این نقطه پایانی یافت نشد.',
+  'settings.testInvalidModelId': 'شناسه مدل \'{model}\' نامعتبر است. شناسه سفارشی باید با حرف یا عدد شروع شود و فاصله نداشته باشد.',
   'settings.testInvalidBaseUrl': 'Base URL نامعتبر یا غیرقابل دسترسی است.',
   'settings.testRateLimited': 'ارائه‌دهنده برای آزمایش محدودیت اعمال کرد. پیکربندی معتبر به نظر می‌رسد.',
   'settings.testUpstream': 'ارائه‌دهنده وضعیت {status} را برگرداند. لحظه‌ای دیگر دوباره تلاش کنید.',

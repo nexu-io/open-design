@@ -77,6 +77,7 @@ export const ja: Dict = {
   'settings.testAuthFailed': '認証に失敗しました。API キーを確認してください。',
   'settings.testForbidden': 'アクセスが拒否されました。アカウント、リージョン、組織を確認してください。',
   'settings.testNotFoundModel': 'このエンドポイントにモデル \'{model}\' は見つかりません。',
+  'settings.testInvalidModelId': 'モデル ID \'{model}\' は無効です。カスタム ID は英数字で始まり、空白を含めないでください。',
   'settings.testInvalidBaseUrl': 'Base URL が無効か到達できません。',
   'settings.testRateLimited': 'プロバイダがテストをレート制限しました。設定は有効に見えます。',
   'settings.testUpstream': 'プロバイダが {status} を返しました。少し時間をおいて再試行してください。',

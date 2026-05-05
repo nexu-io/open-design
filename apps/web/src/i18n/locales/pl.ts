@@ -77,6 +77,7 @@ export const pl: Dict = {
   'settings.testAuthFailed': 'Uwierzytelnianie nie powiodło się. Sprawdź klucz API.',
   'settings.testForbidden': 'Brak dostępu. Sprawdź konto, region lub organizację.',
   'settings.testNotFoundModel': 'Nie znaleziono modelu \'{model}\' w tym punkcie końcowym.',
+  'settings.testInvalidModelId': 'Id modelu \'{model}\' jest nieprawidłowy. Własne id musi zaczynać się od litery lub cyfry i nie może zawierać spacji.',
   'settings.testInvalidBaseUrl': 'Base URL jest nieprawidłowy lub nieosiągalny.',
   'settings.testRateLimited': 'Dostawca ograniczył test. Konfiguracja wygląda poprawnie.',
   'settings.testUpstream': 'Dostawca zwrócił {status}. Spróbuj ponownie za chwilę.',

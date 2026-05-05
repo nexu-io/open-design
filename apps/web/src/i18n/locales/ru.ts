@@ -75,6 +75,7 @@ export const ru: Dict = {
   'settings.testAuthFailed': 'Сбой аутентификации. Проверьте ключ API.',
   'settings.testForbidden': 'Доступ запрещен. Проверьте учетную запись, регион или организацию.',
   'settings.testNotFoundModel': 'Модель \'{model}\' не найдена на этом эндпойнте.',
+  'settings.testInvalidModelId': 'ID модели \'{model}\' недействителен. Пользовательский ID должен начинаться с буквы или цифры и не содержать пробелов.',
   'settings.testInvalidBaseUrl': 'Base URL недействителен или недоступен.',
   'settings.testRateLimited': 'Поставщик ограничил тест. Конфигурация выглядит верной.',
   'settings.testUpstream': 'Поставщик вернул {status}. Повторите попытку чуть позже.',

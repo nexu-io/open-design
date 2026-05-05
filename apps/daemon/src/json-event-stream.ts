@@ -108,7 +108,7 @@ function handleOpenCodeEvent(obj, onEvent, state) {
       (obj.error && typeof obj.error === 'object' && obj.error.data?.message) ||
       (obj.error && typeof obj.error === 'object' && obj.error.name) ||
       'OpenCode error';
-    onEvent({ type: 'raw', line: stringifyContent({ type: 'error', message }) });
+    onEvent({ type: 'error', message });
     return true;
   }
 

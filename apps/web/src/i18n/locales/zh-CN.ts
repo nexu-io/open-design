@@ -74,6 +74,7 @@ export const zhCN: Dict = {
   'settings.testAuthFailed': '鉴权失败，请检查 API 密钥。',
   'settings.testForbidden': '访问被拒绝。请检查账号、地区或组织。',
   'settings.testNotFoundModel': '未在此端点找到模型 \'{model}\'。',
+  'settings.testInvalidModelId': '模型 ID \'{model}\' 格式无效。自定义 ID 必须以字母或数字开头，且不能包含空格。',
   'settings.testInvalidBaseUrl': 'Base URL 无效或不可达。',
   'settings.testRateLimited': '提供商对测试进行了限流，配置看起来有效。',
   'settings.testUpstream': '提供商返回 {status}，请稍后再试。',

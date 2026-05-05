@@ -187,7 +187,7 @@ export function validateBaseUrl(baseUrl: string): {
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
   const pathname = url.pathname.replace(/\/+$/, '');
-  url.pathname = /\/v\d+$/.test(pathname)
+  url.pathname = /\/v\d+(\/|$)/.test(pathname)
     ? `${pathname}${suffix}`
     : `${pathname}/v1${suffix}`;
   return url.toString();
@@ -207,7 +207,7 @@ export function isSmokeOkReply(text: unknown): boolean {
 function isLikelyModelErrorText(text: string): boolean {
   return (
     /model/i.test(text) &&
-    /(not found|not exist|does not exist|unknown|invalid|unsupported|not have access|no access|issue with the selected model)/i.test(
+    /(not found|not exist|does not exist|unknown|invalid|unsupported|not supported|not have access|no access|issue with the selected model)/i.test(
       text,
     )
   );
@@ -719,6 +719,7 @@ type AgentSinkResult =
 interface AgentSink {
   send: (event: string, payload: unknown) => void;
   result: Promise<AgentSinkResult>;
+  streamError: Promise<Error>;
   getText: () => string;
   getStderrTail: () => string;
   dispose: () => void;
@@ -729,7 +730,9 @@ export function createAgentSink(): AgentSink {
   let stderrTail = '';
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveResult!: (value: AgentSinkResult) => void;
+  let resolveStreamError!: (value: Error) => void;
   let settled = false;
+  let streamErrorSettled = false;
   const result = new Promise<AgentSinkResult>((resolve) => {
     resolveResult = (value) => {
       if (settled) return;
@@ -741,6 +744,18 @@ export function createAgentSink(): AgentSink {
       resolve(value);
     };
   });
+  const streamError = new Promise<Error>((resolve) => {
+    resolveStreamError = (error) => {
+      if (streamErrorSettled) return;
+      streamErrorSettled = true;
+      resolve(error);
+    };
+  });
+
+  const publishStreamError = (error: Error) => {
+    resolveStreamError(error);
+    resolveResult({ kind: 'streamError', error });
+  };
 
   const scheduleTextResolution = () => {
     if (settled || buffer.trim().length === 0) return;
@@ -766,7 +781,7 @@ export function createAgentSink(): AgentSink {
           : typeof (data as { error?: { message?: string } }).error?.message === 'string'
             ? (data as { error: { message: string } }).error.message
             : 'agent stream error';
-      resolveResult({ kind: 'streamError', error: new Error(message) });
+      publishStreamError(new Error(message));
       return;
     }
     if (event === 'agent') {
@@ -774,7 +789,7 @@ export function createAgentSink(): AgentSink {
       if (type === 'error') {
         const message =
           typeof data.message === 'string' ? data.message : 'agent stream error';
-        resolveResult({ kind: 'streamError', error: new Error(message) });
+        publishStreamError(new Error(message));
         return;
       }
       const delta = data.delta;
@@ -805,6 +820,7 @@ export function createAgentSink(): AgentSink {
   return {
     send,
     result,
+    streamError,
     getText: () => buffer,
     getStderrTail: () => stderrTail,
     dispose: () => {
@@ -967,6 +983,51 @@ export async function testAgentConnection(
     };
   };
 
+  const resultFromStreamError = (error: unknown): ConnectionTestResponse => {
+    const latencyMs = Date.now() - start;
+    const detail = redactSecrets(
+      error instanceof Error ? error.message : String(error),
+    );
+    if (detail && isLikelyModelErrorText(detail)) {
+      console.warn(
+        `[test:agent] ${def.name} → not_found_model: ${detail}`,
+      );
+      return {
+        ok: false,
+        kind: 'not_found_model',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail,
+      };
+    }
+    console.warn(
+      `[test:agent] ${def.name} → stream_error: ${detail}`,
+    );
+    return {
+      ok: false,
+      kind: 'agent_spawn_failed',
+      latencyMs,
+      model,
+      agentName: def.name,
+      detail,
+    };
+  };
+
+  const resultFromCancellation = (
+    kind: 'timeout' | 'aborted',
+  ): ConnectionTestResponse => {
+    const latencyMs = Date.now() - start;
+    console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
+    return {
+      ok: false,
+      kind: 'timeout',
+      latencyMs,
+      model,
+      agentName: def.name,
+    };
+  };
+
   try {
     let args: string[];
     try {
@@ -1016,6 +1077,63 @@ export async function testAgentConnection(
       sink.send,
     );
 
+    const resultFromChildExit = (
+      winner: AgentChildExit,
+    ): ConnectionTestResponse => {
+      if (winner.kind === 'spawnError') {
+        const latencyMs = Date.now() - start;
+        const detail = redactSecrets(winner.error.message);
+        const errnoCode = (winner.error as NodeJS.ErrnoException).code;
+        const isMissing = errnoCode === 'ENOENT';
+        console.warn(
+          `[test:agent] ${def.name} → spawn_failed: ${detail}`,
+        );
+        return {
+          ok: false,
+          kind: isMissing ? 'agent_not_installed' : 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail,
+        };
+      }
+
+      const latencyMs = Date.now() - start;
+      const buffered = sink.getText().trim();
+      const exitedCleanly = winner.code === 0 && !winner.signal;
+      if (buffered) {
+        const rawSample = truncateSample(buffered);
+        if (rawSample && isLikelyModelErrorText(rawSample)) {
+          return resultFromAgentText(buffered);
+        }
+        if (exitedCleanly) return resultFromAgentText(buffered);
+      }
+      const stderrTail = sink.getStderrTail().trim();
+      const acpFatal = Boolean(acpSession?.hasFatalError?.());
+      const detail = redactSecrets(
+        [
+          winner.code != null ? `exit ${winner.code}` : null,
+          winner.signal ? `signal ${winner.signal}` : null,
+          stderrTail ? `stderr: ${stderrTail.slice(-200)}` : null,
+          buffered ? `stdout: ${buffered.slice(-200)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      );
+      const label = buffered ? 'exit_failed' : 'no_text';
+      console.warn(
+        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'})`,
+      );
+      return {
+        ok: false,
+        kind: acpFatal || !exitedCleanly ? 'agent_spawn_failed' : 'unknown',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail: detail || 'Agent exited without producing assistant text',
+      };
+    };
+
     if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
       child.stdin.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code !== 'EPIPE') {
@@ -1046,6 +1164,10 @@ export async function testAgentConnection(
         input.signal?.addEventListener('abort', abortHandler, { once: true });
       }
     });
+    const streamError = sink.streamError.then((error) => ({
+      kind: 'streamError' as const,
+      error,
+    }));
 
     const winner = await Promise.race([
       sink.result,
@@ -1054,83 +1176,26 @@ export async function testAgentConnection(
     ]);
 
     if (winner.kind === 'text') {
-      return resultFromAgentText(winner.text);
+      const completion = await Promise.race([
+        streamError,
+        childExit,
+        cancellationPromise,
+      ]);
+      if (completion.kind === 'streamError') {
+        return resultFromStreamError(completion.error);
+      }
+      if (completion.kind === 'timeout' || completion.kind === 'aborted') {
+        return resultFromCancellation(completion.kind);
+      }
+      return resultFromChildExit(completion);
     }
     if (winner.kind === 'streamError') {
-      const latencyMs = Date.now() - start;
-      const detail = redactSecrets(
-        winner.error instanceof Error
-          ? winner.error.message
-          : String(winner.error),
-      );
-      console.warn(
-        `[test:agent] ${def.name} → stream_error: ${detail}`,
-      );
-      return {
-        ok: false,
-        kind: 'agent_spawn_failed',
-        latencyMs,
-        model,
-        agentName: def.name,
-        detail,
-      };
+      return resultFromStreamError(winner.error);
     }
     if (winner.kind === 'timeout' || winner.kind === 'aborted') {
-      const latencyMs = Date.now() - start;
-      console.warn(`[test:agent] ${def.name} → ${winner.kind} in ${(latencyMs / 1000).toFixed(1)}s`);
-      return {
-        ok: false,
-        kind: 'timeout',
-        latencyMs,
-        model,
-        agentName: def.name,
-      };
+      return resultFromCancellation(winner.kind);
     }
-    if (winner.kind === 'spawnError') {
-      const latencyMs = Date.now() - start;
-      const detail = redactSecrets(winner.error.message);
-      const errnoCode = (winner.error as NodeJS.ErrnoException).code;
-      const isMissing = errnoCode === 'ENOENT';
-      console.warn(
-        `[test:agent] ${def.name} → spawn_failed: ${detail}`,
-      );
-      return {
-        ok: false,
-        kind: isMissing ? 'agent_not_installed' : 'agent_spawn_failed',
-        latencyMs,
-        model,
-        agentName: def.name,
-        detail,
-      };
-    }
-    // child exited without producing assistant text — surface stderr tail
-    // so the user sees prompts like "Run `claude login`" or OAuth URLs.
-    const latencyMs = Date.now() - start;
-    const buffered = sink.getText().trim();
-    if (buffered) return resultFromAgentText(buffered);
-    const stderrTail = sink.getStderrTail().trim();
-    const acpFatal = Boolean(acpSession?.hasFatalError?.());
-    const detail = redactSecrets(
-      [
-        winner.code != null ? `exit ${winner.code}` : null,
-        winner.signal ? `signal ${winner.signal}` : null,
-        stderrTail ? `stderr: ${stderrTail.slice(-200)}` : null,
-        buffered ? `stdout: ${buffered.slice(-200)}` : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    );
-    console.warn(
-      `[test:agent] ${def.name} → no_text (${detail || 'no detail'})`,
-    );
-    return {
-      ok: false,
-      kind: acpFatal ? 'agent_spawn_failed' : 'unknown',
-      latencyMs,
-      model,
-      agentName: def.name,
-      detail: detail || 'Agent exited without producing assistant text',
-    };
+    return resultFromChildExit(winner);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     return {

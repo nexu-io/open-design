@@ -77,6 +77,7 @@ export const ar: Dict = {
   'settings.testAuthFailed': 'فشلت المصادقة. تحقق من مفتاح الـ API.',
   'settings.testForbidden': 'الوصول ممنوع. تحقق من الحساب أو المنطقة أو المؤسسة.',
   'settings.testNotFoundModel': 'لم يتم العثور على النموذج \'{model}\' في هذه النقطة.',
+  'settings.testInvalidModelId': 'معرّف النموذج \'{model}\' غير صالح. يجب أن يبدأ المعرّف المخصص بحرف أو رقم وألا يحتوي على مسافات.',
   'settings.testInvalidBaseUrl': 'Base URL غير صالح أو يتعذر الوصول إليه.',
   'settings.testRateLimited': 'حد المزود معدّل الاختبار. التكوين يبدو صالحاً.',
   'settings.testUpstream': 'أعاد المزود {status}. حاول مرة أخرى بعد قليل.',

@@ -77,6 +77,7 @@ export const tr: Dict = {
   'settings.testAuthFailed': 'Kimlik doğrulama başarısız. API anahtarınızı kontrol edin.',
   'settings.testForbidden': 'Erişim yasak. Hesabı, bölgeyi veya kuruluşu doğrulayın.',
   'settings.testNotFoundModel': 'Bu uçta \'{model}\' modeli bulunamadı.',
+  'settings.testInvalidModelId': '\'{model}\' model id geçersiz. Özel id harf veya rakamla başlamalı ve boşluk içermemelidir.',
   'settings.testInvalidBaseUrl': 'Base URL geçersiz veya erişilemez.',
   'settings.testRateLimited': 'Sağlayıcı testi hız sınırladı. Yapılandırma geçerli görünüyor.',
   'settings.testUpstream': 'Sağlayıcı {status} döndürdü. Birazdan tekrar deneyin.',

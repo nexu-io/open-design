@@ -77,6 +77,7 @@ export const fr: Dict = {
   'settings.testAuthFailed': 'Échec de l’authentification. Vérifiez votre clé API.',
   'settings.testForbidden': 'Accès interdit. Vérifiez le compte, la région ou l’organisation.',
   'settings.testNotFoundModel': 'Modèle \'{model}\' introuvable sur ce point d’accès.',
+  'settings.testInvalidModelId': 'L’id de modèle \'{model}\' est invalide. Les ids personnalisés doivent commencer par une lettre ou un chiffre et ne contenir aucun espace.',
   'settings.testInvalidBaseUrl': 'L’URL de base est invalide ou inaccessible.',
   'settings.testRateLimited': 'Le fournisseur a limité le test. La configuration semble valide.',
   'settings.testUpstream': 'Le fournisseur a renvoyé {status}. Réessayez dans un instant.',

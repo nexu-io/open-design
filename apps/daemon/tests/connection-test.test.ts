@@ -42,19 +42,23 @@ function passThroughOrUpstream(handler: (url: string, init?: FetchInit) => Respo
   });
 }
 
-async function withFakeCodex<T>(script: string, run: () => Promise<T>): Promise<T> {
+async function withFakeAgent<T>(
+  binName: string,
+  script: string,
+  run: () => Promise<T>,
+): Promise<T> {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-bin-'));
   const oldPath = process.env.PATH;
   try {
     if (process.platform === 'win32') {
-      const runner = path.join(dir, 'codex-test-runner.cjs');
+      const runner = path.join(dir, `${binName}-test-runner.cjs`);
       await fsp.writeFile(runner, script);
       await fsp.writeFile(
-        path.join(dir, 'codex.cmd'),
+        path.join(dir, `${binName}.cmd`),
         `@echo off\r\nnode "${runner}" %*\r\n`,
       );
     } else {
-      const bin = path.join(dir, 'codex');
+      const bin = path.join(dir, binName);
       await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
       await fsp.chmod(bin, 0o755);
     }
@@ -64,6 +68,14 @@ async function withFakeCodex<T>(script: string, run: () => Promise<T>): Promise<
     process.env.PATH = oldPath;
     await fsp.rm(dir, { recursive: true, force: true });
   }
+}
+
+async function withFakeCodex<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('codex', script, run);
+}
+
+async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('opencode', script, run);
 }
 
 async function waitForFile(file: string, timeoutMs = 1_000): Promise<void> {
@@ -172,6 +184,40 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.ok).toBe(false);
     expect(body.kind).toBe('auth_failed');
     expect(body.status).toBe(401);
+  });
+
+  it('does not add a duplicate version segment for versioned OpenAI-compatible subpaths', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url.endsWith('/models')) {
+        return Promise.resolve(jsonResponse({ data: [{ id: 'm' }] }));
+      }
+      return Promise.resolve(
+        jsonResponse({
+          choices: [{ message: { content: 'ok' } }],
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.deepinfra.com/v1/openai',
+        apiKey: 'sk-good',
+        model: 'm',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.deepinfra.com/v1/openai/chat/completions',
+      expect.anything(),
+    );
   });
 
   it('maps a 404 to not_found_model', async () => {
@@ -642,6 +688,32 @@ describe('POST /api/test/connection agent mode', () => {
     );
   });
 
+  it('waits for the Codex process before accepting early success text', async () => {
+    await withFakeCodex(
+      `
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setTimeout(() => {
+  console.log(JSON.stringify({ type: 'error', message: 'late failure after ok' }));
+  setTimeout(() => process.exit(1), 50);
+}, 700);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'codex' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Codex CLI',
+          detail: 'late failure after ok',
+        });
+      },
+    );
+  });
+
   it('classifies split agent model-error text after buffering the full response', async () => {
     await withFakeCodex(
       `
@@ -676,6 +748,137 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
         expect(result.detail).toContain('requires a newer version');
       },
     );
+  });
+
+  it('classifies structured Codex model errors as not_found_model', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'error', message: "The 'dddd' model is not supported when using Codex with a ChatGPT account." }));`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'agent',
+            agentId: 'codex',
+            model: 'dddd',
+          }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'not_found_model',
+          model: 'dddd',
+          agentName: 'Codex CLI',
+          detail: "The 'dddd' model is not supported when using Codex with a ChatGPT account.",
+        });
+      },
+    );
+  });
+
+  it('reports OpenCode structured errors without treating them as raw output', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('openai/gpt-5');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'error', error: { data: { message: 'OpenCode auth failed: login required' } } }));
+setTimeout(() => process.exit(0), 50);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+          detail: 'OpenCode auth failed: login required',
+        });
+      },
+    );
+  });
+
+  it('rejects invalid custom model ids before spawning an agent', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              model: '--not-a-model',
+              reasoning: 'totally-invalid-effort',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: false,
+            kind: 'invalid_model_id',
+            model: '--not-a-model',
+            agentName: 'Codex CLI',
+          });
+
+          await expect(fsp.access(argvFile)).rejects.toThrow();
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('drops invalid agent reasoning options before spawning an agent', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              model: 'gpt-5',
+              reasoning: 'totally-invalid-effort',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            model: 'gpt-5',
+          });
+
+          const args = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(args).toEqual(expect.arrayContaining(['--model', 'gpt-5']));
+          expect(args.some((arg) => arg.includes('model_reasoning_effort'))).toBe(false);
+          expect(args.some((arg) => arg.includes('totally-invalid-effort'))).toBe(false);
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
   });
 
   it('reports unknown when the agent emits only raw schema-drift output', async () => {

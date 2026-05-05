@@ -7,6 +7,7 @@ export type ConnectionTestKind =
   | 'auth_failed'
   | 'forbidden'
   | 'not_found_model'
+  | 'invalid_model_id'
   | 'invalid_base_url'
   | 'rate_limited'
   | 'upstream_unavailable'

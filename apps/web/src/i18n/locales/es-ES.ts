@@ -77,6 +77,7 @@ export const esES: Dict = {
   'settings.testAuthFailed': 'Autenticación fallida. Comprueba tu clave de API.',
   'settings.testForbidden': 'Acceso prohibido. Verifica cuenta, región u organización.',
   'settings.testNotFoundModel': 'No se encontró el modelo \'{model}\' en este endpoint.',
+  'settings.testInvalidModelId': 'El id de modelo \'{model}\' no es válido. Los ids personalizados deben empezar con una letra o un número y no contener espacios.',
   'settings.testInvalidBaseUrl': 'La Base URL no es válida o no es accesible.',
   'settings.testRateLimited': 'El proveedor limitó la prueba. La configuración parece válida.',
   'settings.testUpstream': 'El proveedor devolvió {status}. Inténtalo de nuevo.',

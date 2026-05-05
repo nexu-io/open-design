@@ -77,6 +77,7 @@ export const de: Dict = {
   'settings.testAuthFailed': 'Authentifizierung fehlgeschlagen. Pruefen Sie Ihren API-Schluessel.',
   'settings.testForbidden': 'Zugriff verweigert. Pruefen Sie Konto, Region oder Organisation.',
   'settings.testNotFoundModel': 'Modell \'{model}\' an diesem Endpunkt nicht gefunden.',
+  'settings.testInvalidModelId': 'Modell-ID \'{model}\' ist ungueltig. Benutzerdefinierte IDs muessen mit einem Buchstaben oder einer Zahl beginnen und duerfen keine Leerzeichen enthalten.',
   'settings.testInvalidBaseUrl': 'Base URL ist ungueltig oder nicht erreichbar.',
   'settings.testRateLimited': 'Anbieter hat den Test ratenbegrenzt. Konfiguration sieht gueltig aus.',
   'settings.testUpstream': 'Anbieter antwortete mit {status}. Versuchen Sie es gleich erneut.',

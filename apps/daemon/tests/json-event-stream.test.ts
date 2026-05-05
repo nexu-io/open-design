@@ -55,6 +55,22 @@ test('opencode json stream emits tool events', () => {
   ]);
 });
 
+test('opencode json stream emits structured errors as error events', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      error: { data: { message: 'OpenCode auth failed: login required' } },
+    }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'error', message: 'OpenCode auth failed: login required' },
+  ]);
+});
+
 test('unknown json stream lines become raw events', () => {
   const events = [];
   const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));

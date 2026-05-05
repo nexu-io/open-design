@@ -145,6 +145,7 @@ describe('SettingsDialog test status variant', () => {
       'auth_failed',
       'forbidden',
       'not_found_model',
+      'invalid_model_id',
       'invalid_base_url',
       'upstream_unavailable',
       'timeout',

@@ -3991,11 +3991,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
         }
         try {
+          const def = getAgentDef(body.agentId);
+          const testStart = Date.now();
+          const safeModel =
+            def && typeof body.model === 'string'
+              ? isKnownModel(def, body.model)
+                ? body.model
+                : sanitizeCustomModel(body.model)
+              : undefined;
+          if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
+            return res.json({
+              ok: false,
+              kind: 'invalid_model_id',
+              latencyMs: Date.now() - testStart,
+              model: body.model.trim(),
+              agentName: def.name,
+              detail: 'Invalid custom model id. Use a model id that starts with a letter or number and contains no spaces.',
+            });
+          }
+          const safeReasoning =
+            def &&
+            typeof body.reasoning === 'string' &&
+            Array.isArray(def.reasoningOptions)
+              ? (def.reasoningOptions.find((r) => r.id === body.reasoning)?.id ?? undefined)
+              : undefined;
           const result = await testAgentConnection({
             agentId: body.agentId,
-            model: typeof body.model === 'string' ? body.model : undefined,
-            reasoning:
-              typeof body.reasoning === 'string' ? body.reasoning : undefined,
+            model: safeModel ?? undefined,
+            reasoning: safeReasoning,
             signal: controller.signal,
           });
           return res.json(result);

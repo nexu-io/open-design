@@ -101,6 +101,7 @@ export interface Dict {
   'settings.testAuthFailed': string;
   'settings.testForbidden': string;
   'settings.testNotFoundModel': string;
+  'settings.testInvalidModelId': string;
   'settings.testInvalidBaseUrl': string;
   'settings.testRateLimited': string;
   'settings.testUpstream': string;

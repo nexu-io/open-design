@@ -75,6 +75,7 @@ export const en: Dict = {
   'settings.testAuthFailed': 'Authentication failed. Check your API key.',
   'settings.testForbidden': 'Access forbidden. Verify your account, region, or organization.',
   'settings.testNotFoundModel': 'Model \'{model}\' not found on this endpoint.',
+  'settings.testInvalidModelId': 'Model id \'{model}\' is invalid. Custom ids must start with a letter or number and contain no spaces.',
   'settings.testInvalidBaseUrl': 'Base URL is invalid or unreachable.',
   'settings.testRateLimited': 'Provider rate-limited the test. Configuration looks valid.',
   'settings.testUpstream': 'Provider returned {status}. Try again in a moment.',

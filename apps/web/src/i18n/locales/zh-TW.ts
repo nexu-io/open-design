@@ -74,6 +74,7 @@ export const zhTW: Dict = {
   'settings.testAuthFailed': '驗證失敗，請檢查 API 金鑰。',
   'settings.testForbidden': '存取被拒絕，請確認帳戶、地區或組織。',
   'settings.testNotFoundModel': '此端點找不到模型 \'{model}\'。',
+  'settings.testInvalidModelId': '模型 ID \'{model}\' 格式無效。自訂 ID 必須以字母或數字開頭，且不能包含空格。',
   'settings.testInvalidBaseUrl': 'Base URL 無效或無法連線。',
   'settings.testRateLimited': '供應商對測試進行了限流，設定看起來有效。',
   'settings.testUpstream': '供應商回傳 {status}，請稍後再試。',
