@@ -1,4 +1,8 @@
+import { rm } from "node:fs/promises";
+
 import { build } from "esbuild";
+
+await rm("./dist", { force: true, recursive: true });
 
 await build({
   bundle: true,

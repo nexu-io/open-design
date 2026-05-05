@@ -1,5 +1,5 @@
-import type { ProjectFile } from './files';
-import type { PreviewCommentMember, PreviewCommentPosition, PreviewCommentSelectionKind } from './comments';
+import type { ProjectFile } from './files.js';
+import type { PreviewCommentMember, PreviewCommentPosition, PreviewCommentSelectionKind } from './comments.js';
 export type ChatRole = 'user' | 'assistant';
 export interface ChatRequest {
     agentId: string;

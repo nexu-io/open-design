@@ -1,4 +1,4 @@
-import type { BoundedJsonObject, BoundedJsonValue } from './live-artifacts';
+import type { BoundedJsonObject, BoundedJsonValue } from './live-artifacts.js';
 export type ConnectorStatus = 'available' | 'connected' | 'error' | 'disabled';
 export type ConnectorToolSideEffect = 'read' | 'write' | 'destructive' | 'unknown';
 export type ConnectorToolApproval = 'auto' | 'confirm' | 'disabled';

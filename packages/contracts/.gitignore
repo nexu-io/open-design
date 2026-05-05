@@ -1,0 +1,3 @@
+# Keep release-ready dist artifacts trackable in this package.
+!dist/
+!dist/**

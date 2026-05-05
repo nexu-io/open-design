@@ -1,5 +1,5 @@
 import type { OkResponse } from '../common';
-import type { ArtifactKind, ArtifactManifest } from './artifacts';
+import type { ArtifactKind, ArtifactManifest } from './artifacts.js';
 export type ProjectFileKind = 'html' | 'image' | 'video' | 'audio' | 'sketch' | 'text' | 'code' | 'pdf' | 'document' | 'presentation' | 'spreadsheet' | 'binary';
 export interface ProjectFile {
     name: string;

@@ -1,4 +1,4 @@
-import type { ChatMessage } from './chat';
+import type { ChatMessage } from './chat.js';
 export type ProjectKind = 'prototype' | 'deck' | 'template' | 'other' | 'image' | 'video' | 'audio';
 export type MediaAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 export type AudioKind = 'music' | 'speech' | 'sfx';
