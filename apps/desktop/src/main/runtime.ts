@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
-import { BrowserWindow } from "electron";
+import { BrowserWindow, shell } from "electron";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -59,6 +59,7 @@ export type DesktopRuntime = {
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
+  show(): void;
   status(): DesktopStatusSnapshot;
 };
 
@@ -94,6 +95,21 @@ const MAC_WINDOW_CHROME_CSS = `
   }
   .app-chrome-drag {
     -webkit-app-region: drag;
+  }
+  .entry-brand,
+  .entry-header {
+    -webkit-app-region: drag;
+  }
+  .entry-brand button,
+  .entry-brand [role="button"],
+  .entry-header button,
+  .entry-header [role="button"],
+  .entry-tabs,
+  .entry-tabs *,
+  .entry-side-resizer,
+  .avatar-popover,
+  .avatar-popover * {
+    -webkit-app-region: no-drag;
   }
 `;
 
@@ -155,6 +171,15 @@ async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
   await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
 }
 
+function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function installWindowChromeCssHook(window: BrowserWindow): void {
   window.webContents.on("did-finish-load", () => {
     void applyWindowChromeCss(window).catch((error: unknown) => {
@@ -180,6 +205,30 @@ function ensureWindowVisible(window: BrowserWindow): void {
   window.focus();
 }
 
+// PPTX is rendered by the agent into the project folder and reaches the
+// renderer through a normal `<a download>` link to /api/projects/:id/raw/*.
+// Without this hook Electron writes the bytes straight to the OS Downloads
+// folder, so the user never gets to pick a destination. setSaveDialogOptions
+// makes Electron show the native Save As panel before the download starts.
+const SAVE_AS_EXTENSIONS = new Set([".pptx"]);
+
+function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  window.webContents.session.on("will-download", (_event, item) => {
+    const filename = item.getFilename();
+    const dot = filename.lastIndexOf(".");
+    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+    if (!SAVE_AS_EXTENSIONS.has(ext)) return;
+    item.setSaveDialogOptions({
+      title: "Save As",
+      defaultPath: filename,
+      filters: [
+        { name: "PowerPoint Presentation", extensions: ["pptx"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+  });
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
@@ -196,12 +245,36 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
   installWindowChromeCssHook(window);
   showWindowButtons(window);
+  attachDownloadSaveAsDialog(window);
   let currentUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
 
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isHttpUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    if (!isHttpUrl(url) || url === currentUrl) return;
+    const currentOrigin = currentUrl ? new URL(currentUrl).origin : null;
+    const nextOrigin = new URL(url).origin;
+    if (currentOrigin === nextOrigin) return;
+    event.preventDefault();
+    void shell.openExternal(url);
+  });
+
+  if (process.platform === "darwin") {
+    window.on("close", (event) => {
+      if (!stopped) {
+        event.preventDefault();
+        window.hide();
+      }
+    });
+  }
 
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
@@ -286,6 +359,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, image.toPNG());
       return { path: outputPath };
+    },
+    show() {
+      if (!window.isDestroyed()) {
+        window.show();
+        window.focus();
+      }
     },
     status() {
       return {

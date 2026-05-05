@@ -2,16 +2,36 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { projectRawUrl, uploadProjectFiles } from "../providers/registry";
-import type { ChatAttachment, ChatCommentAttachment, ProjectFile } from "../types";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
+import { patchProject } from "../state/projects";
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata } from "../types";
 import { Icon } from "./Icon";
+import { BUILT_IN_PETS, CUSTOM_PET_ID, resolveActivePet } from "./pet/pets";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+
+interface SlashCommand {
+  id: string;
+  // Visible label, e.g. `/hatch`. Shown in the popover row.
+  label: string;
+  // Text inserted into the draft when the user picks the entry. The
+  // cursor is positioned at the end of `insert`, so a trailing space
+  // is the difference between a "ready for argument" command and a
+  // "submit immediately" one.
+  insert: string;
+  // i18n key of the short description shown next to the label.
+  descKey: keyof Dict;
+  // Optional argument hint shown after the description.
+  argHint?: string;
+  // Icon glyph from the project Icon set.
+  icon: 'sparkles' | 'eye' | 'sliders';
+}
 
 interface Props {
   projectId: string | null;
@@ -30,6 +50,16 @@ interface Props {
   // composer's leading gear icon routes here so users can switch models
   // without leaving the chat.
   onOpenSettings?: () => void;
+  // Optional pet wiring — when present, the composer renders a small
+  // 🐾 button + popover so users can adopt / wake / tuck a pet without
+  // leaving chat. Typing `/pet` (or `/pet wake|tuck|<id>`) is parsed
+  // out of the draft and routed to the same handlers.
+  petConfig?: AppConfig['pet'];
+  onAdoptPet?: (petId: string) => void;
+  onTogglePet?: () => void;
+  onOpenPetSettings?: () => void;
+  projectMetadata?: ProjectMetadata;
+  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -61,6 +91,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onSend,
       onStop,
       onOpenSettings,
+      petConfig,
+      onAdoptPet,
+      onTogglePet,
+      onOpenPetSettings,
+      projectMetadata,
+      onProjectMetadataChange,
     },
     ref
   ) {
@@ -72,13 +108,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       q: string;
       cursor: number;
     } | null>(null);
+    // Slash-command popover state — when the draft starts with `/` and
+    // the cursor is still inside that token (no space committed yet),
+    // we show a small palette of supported commands. The query is the
+    // text after `/` so the user can type-to-filter.
+    const [slash, setSlash] = useState<{
+      q: string;
+      cursor: number;
+    } | null>(null);
+    const [slashIndex, setSlashIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [importOpen, setImportOpen] = useState(false);
+    const [petOpen, setPetOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const importMenuRef = useRef<HTMLDivElement | null>(null);
     const importTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const petMenuRef = useRef<HTMLDivElement | null>(null);
+    const petTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const petEnabled = Boolean(onAdoptPet && onTogglePet);
+    const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // initialDraft is only honored on the first non-empty value the parent
     // hands us. After we seed once, the composer is fully under user control
     // — re-renders that pass the same prompt back must not reseed. If the
@@ -117,6 +167,156 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }, [importOpen]);
 
+    useEffect(() => {
+      if (!petOpen) return;
+      function onPointer(e: MouseEvent) {
+        const target = e.target as Node;
+        if (petMenuRef.current?.contains(target)) return;
+        if (petTriggerRef.current?.contains(target)) return;
+        setPetOpen(false);
+      }
+      function onKey(e: KeyboardEvent) {
+        if (e.key === "Escape") setPetOpen(false);
+      }
+      document.addEventListener("mousedown", onPointer);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("mousedown", onPointer);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, [petOpen]);
+
+    // Catalog of supported slash commands. Each entry shows up in the
+    // popover when the user types `/` in the composer. The `insert`
+    // value is what we drop into the draft when the user picks the
+    // entry — usually the canonical command form with a trailing space
+    // ready for an argument.
+    const slashCommands = useMemo<SlashCommand[]>(() => {
+      const list: SlashCommand[] = [];
+      if (petEnabled) {
+        list.push(
+          {
+            id: 'pet',
+            label: '/pet',
+            insert: '/pet ',
+            descKey: 'pet.slashPet',
+            icon: 'sparkles',
+            argHint: 'wake | tuck | <petId>',
+          },
+          {
+            id: 'pet-wake',
+            label: '/pet wake',
+            insert: '/pet wake',
+            descKey: 'pet.slashPetWake',
+            icon: 'eye',
+          },
+          {
+            id: 'pet-tuck',
+            label: '/pet tuck',
+            insert: '/pet tuck',
+            descKey: 'pet.slashPetTuck',
+            icon: 'eye',
+          },
+          {
+            id: 'hatch',
+            label: '/hatch',
+            insert: '/hatch ',
+            descKey: 'pet.slashHatch',
+            icon: 'sparkles',
+            argHint: t('pet.slashHatchArg'),
+          },
+        );
+      }
+      return list;
+    }, [petEnabled, t]);
+
+    const filteredSlash = useMemo(() => {
+      if (!slash) return [] as SlashCommand[];
+      const q = slash.q.toLowerCase();
+      if (!q) return slashCommands;
+      return slashCommands.filter((c) => c.label.toLowerCase().includes(q));
+    }, [slash, slashCommands]);
+
+    function pickSlash(cmd: SlashCommand) {
+      const ta = textareaRef.current;
+      if (!ta || !slash) return;
+      const before = draft.slice(0, slash.cursor);
+      const after = draft.slice(slash.cursor);
+      // Replace the in-flight `/<query>` token with the picked
+      // command's canonical insertion text.
+      const replaced = before.replace(/\/[^\s/]*$/, cmd.insert);
+      const next = replaced + after;
+      setDraft(next);
+      setSlash(null);
+      requestAnimationFrame(() => {
+        ta.focus();
+        const pos = replaced.length;
+        ta.setSelectionRange(pos, pos);
+      });
+    }
+
+    // Expand a `/hatch <concept>` draft into the canonical hatch-pet
+    // skill prompt before sending. Returns null when the draft is not a
+    // hatch command so the caller can fall through to the regular
+    // submit path.
+    function expandHatchCommand(input: string): string | null {
+      const m = /^\/hatch(?:\s+([\s\S]*))?$/i.exec(input.trim());
+      if (!m) return null;
+      const concept = m[1]?.trim() ?? '';
+      const intro = concept
+        ? `Hatch a Codex-compatible animated pet for me. Concept: ${concept}.`
+        : 'Hatch a Codex-compatible animated pet for me.';
+      return [
+        intro,
+        '',
+        'Use the @hatch-pet skill end-to-end:',
+        '1. Generate the base look with $imagegen.',
+        '2. Generate every row strip (idle, running-right, waving, jumping, failed, waiting, running, review).',
+        '3. Mirror running-left from running-right only when the design is symmetric.',
+        '4. Run the deterministic scripts (extract / compose / validate / contact-sheet / videos).',
+        '5. Package the result into ${CODEX_HOME:-$HOME/.codex}/pets/<pet-name>/ with pet.json + spritesheet.webp.',
+        '',
+        'When the spritesheet is saved, tell me the absolute path and the pet folder name. I will adopt it from Settings → Pets → Recently hatched.',
+      ].join('\n');
+    }
+
+    // Parse a `/pet [arg]` slash command out of the draft. Recognized
+    // forms: `/pet` (toggle wake/tuck), `/pet wake`, `/pet tuck`,
+    // `/pet adopt` (open settings), or `/pet <id>` to adopt a built-in
+    // by id. The slash is stripped from the draft on a successful match
+    // so the user does not accidentally send the command to the agent.
+    function tryHandlePetSlash(): boolean {
+      if (!petEnabled) return false;
+      const trimmed = draft.trim();
+      const match = /^\/pet(?:\s+(\S+))?$/i.exec(trimmed);
+      if (!match) return false;
+      const arg = match[1]?.toLowerCase();
+      if (!arg || arg === 'toggle') {
+        onTogglePet?.();
+      } else if (arg === 'wake' || arg === 'show') {
+        if (petConfig?.adopted) {
+          if (!petConfig.enabled) onTogglePet?.();
+        } else {
+          onOpenPetSettings?.();
+        }
+      } else if (arg === 'tuck' || arg === 'hide') {
+        if (petConfig?.enabled) onTogglePet?.();
+      } else if (arg === 'adopt' || arg === 'settings' || arg === 'change') {
+        onOpenPetSettings?.();
+      } else if (arg === CUSTOM_PET_ID) {
+        onAdoptPet?.(CUSTOM_PET_ID);
+      } else {
+        const pet = BUILT_IN_PETS.find((p) => p.id === arg);
+        if (pet) {
+          onAdoptPet?.(pet.id);
+        } else {
+          return false;
+        }
+      }
+      setDraft('');
+      return true;
+    }
+
     useImperativeHandle(
       ref,
       () => ({
@@ -143,6 +343,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStaged([]);
       setUploadError(null);
       setMention(null);
+      setSlash(null);
     }
 
     async function ensureProject(): Promise<string | null> {
@@ -199,6 +400,28 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (files.length > 0) void uploadFiles(files);
     }
 
+    async function handleLinkFolder() {
+      setImportOpen(false);
+      if (!projectId) return;
+      const selected = await openFolderDialog();
+      if (!selected) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const existing = base.linkedDirs ?? [];
+      if (existing.includes(selected)) return;
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [...existing, selected] };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
+
+    async function handleUnlinkFolder(dir: string) {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const existing = base.linkedDirs ?? [];
+      const metadata: ProjectMetadata = { ...base, linkedDirs: existing.filter((d) => d !== dir) };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
+
     function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       const value = e.target.value;
       const cursor = e.target.selectionStart;
@@ -209,6 +432,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const m = /(^|\s)@([^\s@]*)$/.exec(before);
       if (m) setMention({ q: m[2] ?? "", cursor });
       else setMention(null);
+      // Slash-command popover — open as soon as the draft starts with
+      // `/` (and the cursor is still inside the bare command token, no
+      // space yet). Closes once the user commits a space or moves past
+      // the prefix.
+      const slashMatch = /^\/([^\s/]*)$/.exec(before);
+      if (slashMatch) {
+        setSlash({ q: slashMatch[1] ?? '', cursor });
+        setSlashIndex(0);
+      } else {
+        setSlash(null);
+      }
     }
 
     function insertMention(filePath: string) {
@@ -245,6 +479,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function submit() {
       const prompt = draft.trim();
+      // Intercept `/pet …` before sending so the slash command never
+      // hits the agent — it is a local UX hook, not a model prompt.
+      if (tryHandlePetSlash()) return;
+      // `/hatch <concept>` expands into the canonical hatch-pet skill
+      // prompt and *is* sent to the agent — the agent runs the skill,
+      // packages a Codex pet under `~/.codex/pets/`, and the user
+      // adopts it from "Recently hatched" in pet settings afterwards.
+      const hatched = expandHatchCommand(prompt);
+      if (hatched) {
+        if (streaming) return;
+        onSend(hatched, staged, commentAttachments);
+        reset();
+        return;
+      }
       if ((!prompt && commentAttachments.length === 0) || streaming) return;
       onSend(prompt, staged, commentAttachments);
       reset();
@@ -284,6 +532,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           ) : null}
+          {linkedDirs.length > 0 ? (
+            <div className="linked-dirs-row" data-testid="linked-dirs">
+              {linkedDirs.map((dir) => (
+                <div key={dir} className="linked-dir-chip">
+                  <Icon name="folder" size={13} />
+                  <span className="linked-dir-name" title={dir}>
+                    {dir.split('/').pop() || dir}
+                  </span>
+                  <button
+                    className="staged-remove"
+                    onClick={() => handleUnlinkFolder(dir)}
+                    title={t('chat.linkedFolderRemoveAria', { path: dir })}
+                    aria-label={t('chat.linkedFolderRemoveAria', { path: dir })}
+                  >
+                    <Icon name="close" size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {commentAttachments.length > 0 ? (
             <StagedCommentAttachments
               attachments={commentAttachments}
@@ -300,6 +568,31 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onChange={handleChange}
               onPaste={handlePaste}
               onKeyDown={(e) => {
+                if (slash && filteredSlash.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setSlashIndex((i) => (i + 1) % filteredSlash.length);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setSlashIndex(
+                      (i) => (i - 1 + filteredSlash.length) % filteredSlash.length,
+                    );
+                    return;
+                  }
+                  if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey)) {
+                    e.preventDefault();
+                    const safe = Math.min(slashIndex, filteredSlash.length - 1);
+                    pickSlash(filteredSlash[safe]!);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setSlash(null);
+                    return;
+                  }
+                }
                 if (mention && e.key === "Escape") {
                   setMention(null);
                   return;
@@ -312,6 +605,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             />
             {mention && filteredFiles.length > 0 ? (
               <MentionPopover files={filteredFiles} onPick={insertMention} />
+            ) : null}
+            {slash && filteredSlash.length > 0 ? (
+              <SlashPopover
+                commands={filteredSlash}
+                activeIndex={Math.min(slashIndex, filteredSlash.length - 1)}
+                onPick={pickSlash}
+                onHover={(i) => setSlashIndex(i)}
+                t={t}
+              />
             ) : null}
           </div>
           <div className="composer-row">
@@ -374,7 +676,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
                   <ImportItem icon="link" label={t('chat.importGitHub')} t={t} />
                   <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
-                  <ImportItem icon="folder" label={t('chat.importFolder')} t={t} />
+                  <ImportItem
+                    icon="folder"
+                    label={t('chat.importFolder')}
+                    t={t}
+                    enabled
+                    onClick={handleLinkFolder}
+                  />
                   <ImportItem
                     icon="sparkles"
                     label={t('chat.importSkills')}
@@ -384,6 +692,103 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 </div>
               ) : null}
             </div>
+            {petEnabled ? (
+              <div className="composer-pet-wrap">
+                <button
+                  ref={petTriggerRef}
+                  type="button"
+                  className={`composer-pet${petConfig?.adopted ? ' adopted' : ''}`}
+                  onClick={() => setPetOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={petOpen}
+                  title={t('pet.composerTitle')}
+                >
+                  <span className="composer-pet-glyph" aria-hidden>
+                    {(() => {
+                      const active = resolveActivePet(petConfig);
+                      if (active) return active.glyph;
+                      return '🐾';
+                    })()}
+                  </span>
+                  <span className="composer-pet-label">
+                    {petConfig?.adopted
+                      ? petConfig.enabled
+                        ? t('pet.tuck')
+                        : t('pet.wake')
+                      : t('pet.adopt')}
+                  </span>
+                  <Icon name="chevron-down" size={12} />
+                </button>
+                {petOpen ? (
+                  <div
+                    ref={petMenuRef}
+                    className="composer-pet-menu"
+                    role="menu"
+                  >
+                    <div className="composer-pet-menu-head">
+                      <strong>{t('pet.composerMenuTitle')}</strong>
+                      <span>{t('pet.composerMenuHint')}</span>
+                    </div>
+                    {petConfig?.adopted ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="composer-pet-menu-row toggle"
+                        onClick={() => {
+                          onTogglePet?.();
+                          setPetOpen(false);
+                        }}
+                      >
+                        <Icon
+                          name={petConfig.enabled ? 'eye' : 'sparkles'}
+                          size={12}
+                        />
+                        <span>
+                          {petConfig.enabled
+                            ? t('pet.tuck')
+                            : t('pet.wake')}
+                        </span>
+                      </button>
+                    ) : null}
+                    <div className="composer-pet-menu-grid">
+                      {BUILT_IN_PETS.map((p) => {
+                        const active =
+                          petConfig?.adopted && petConfig.petId === p.id;
+                        return (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            key={p.id}
+                            className={`composer-pet-menu-pet${active ? ' active' : ''}`}
+                            onClick={() => {
+                              onAdoptPet?.(p.id);
+                              setPetOpen(false);
+                            }}
+                            style={{ ['--pet-accent' as string]: p.accent }}
+                            title={p.flavor}
+                          >
+                            <span aria-hidden>{p.glyph}</span>
+                            <span>{p.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="composer-pet-menu-row settings"
+                      onClick={() => {
+                        onOpenPetSettings?.();
+                        setPetOpen(false);
+                      }}
+                    >
+                      <Icon name="settings" size={12} />
+                      <span>{t('pet.composerOpenSettings')}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <span className="composer-spacer" />
             {streaming ? (
               <button
@@ -489,27 +894,92 @@ function ImportItem({
   icon,
   label,
   t,
+  enabled,
+  onClick,
 }: {
   icon: "upload" | "link" | "grid" | "folder" | "sparkles" | "file";
   label: string;
   t: TranslateFn;
+  enabled?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
-      className="composer-import-item"
+      className={`composer-import-item${enabled ? ' composer-import-item-enabled' : ''}`}
       role="menuitem"
       tabIndex={-1}
-      disabled
-      title={t('chat.importComingSoon')}
-      onClick={(e) => e.preventDefault()}
+      disabled={!enabled}
+      title={enabled ? label : t('chat.importComingSoon')}
+      onClick={enabled && onClick ? onClick : (e) => e.preventDefault()}
     >
       <span className="ico" aria-hidden>
         <Icon name={icon} size={14} />
       </span>
       <span className="composer-import-item-label">{label}</span>
-      <span className="composer-import-item-soon">{t('chat.importSoon')}</span>
+      {!enabled && <span className="composer-import-item-soon">{t('chat.importSoon')}</span>}
     </button>
+  );
+}
+
+function SlashPopover({
+  commands,
+  activeIndex,
+  onPick,
+  onHover,
+  t,
+}: {
+  commands: SlashCommand[];
+  activeIndex: number;
+  onPick: (cmd: SlashCommand) => void;
+  onHover: (index: number) => void;
+  t: TranslateFn;
+}) {
+  return (
+    <div
+      className="slash-popover"
+      data-testid="slash-popover"
+      role="listbox"
+      aria-label={t('pet.slashPopoverAria')}
+    >
+      <div className="slash-popover-head">
+        <span>{t('pet.slashPopoverTitle')}</span>
+        <span className="slash-popover-hint">{t('pet.slashPopoverHint')}</span>
+      </div>
+      {commands.map((cmd, idx) => {
+        const active = idx === activeIndex;
+        return (
+          <button
+            key={cmd.id}
+            type="button"
+            role="option"
+            aria-selected={active}
+            className={`slash-item${active ? ' active' : ''}`}
+            onMouseDown={(e) => {
+              // Prevent the textarea from losing focus before the click
+              // handler fires — otherwise selectionStart resets and the
+              // pick replacement targets the wrong substring.
+              e.preventDefault();
+            }}
+            onMouseEnter={() => onHover(idx)}
+            onClick={() => onPick(cmd)}
+          >
+            <span className="slash-item-icon" aria-hidden>
+              <Icon name={cmd.icon} size={13} />
+            </span>
+            <span className="slash-item-body">
+              <span className="slash-item-row">
+                <code className="slash-item-label">{cmd.label}</code>
+                {cmd.argHint ? (
+                  <span className="slash-item-arg">{cmd.argHint}</span>
+                ) : null}
+              </span>
+              <span className="slash-item-desc">{t(cmd.descKey)}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

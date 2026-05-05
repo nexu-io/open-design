@@ -70,10 +70,10 @@ npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
 #    is unsandboxed, so renders complete reliably.)
 #
 #    The dispatcher returns within ~1s with a {taskId}; drive the
-#    render to completion by looping `od media wait <taskId>` calls.
+#    render to completion by looping `"$OD_NODE_BIN" "$OD_BIN" media wait <taskId>` calls.
 #    Each call long-polls up to 25s (well under your shell tool's
 #    default 30s cap) and exits 0/2/5 to signal done/running/failed.
-out=$(node "$OD_BIN" media generate \
+out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
   --surface video \
   --model hyperframes-html \
@@ -83,7 +83,7 @@ ec=$?
 task_id=$(printf '%s\n' "$out" | tail -1 | jq -r '.taskId // empty')
 since=$(printf '%s\n' "$out" | tail -1 | jq -r '.nextSince // 0')
 while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
-  out=$(node "$OD_BIN" media wait "$task_id" --since "$since")
+  out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
   since=$(printf '%s\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
 done
@@ -123,7 +123,7 @@ The lighter HF subcommands you CAN still run from your own shell
 Reserve the daemon dispatch for `render`/`inspect`/`preview` (anything
 Chrome-bound).
 
-**Do NOT** call `od media generate --model hyperframes-html` — that
+**Do NOT** call `"$OD_NODE_BIN" "$OD_BIN" media generate --model hyperframes-html` — that
 dispatcher path returns a 400 (`AGENT_RENDERED`) on purpose. HyperFrames
 is rendered by you directly via npx.
 

@@ -6,15 +6,22 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  analyzeDeployPlan,
+  buildDeployFilePlan,
   buildDeployFileSet,
   checkDeploymentUrl,
+  DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES,
+  DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
   deploymentUrlCandidates,
   extractCssReferences,
   extractHtmlReferences,
+  extractInlineCssReferences,
   injectDeployHookScript,
   isVercelProtectedResponse,
   normalizeDeployHookScriptUrl,
+  prepareDeployPreflight,
   resolveReferencedPath,
+  rewriteCssReferences,
   rewriteEntryHtmlReferences,
   waitForReachableDeploymentUrl,
 } from '../src/deploy.js';
@@ -242,6 +249,404 @@ describe('deploy file set', () => {
     expect(normalizeDeployHookScriptUrl('https://cdn.example.com/hook.js')).toBe(
       'https://cdn.example.com/hook.js',
     );
+  });
+
+  it('extracts url() and @import refs from inline <style> blocks', () => {
+    const refs = extractInlineCssReferences(
+      '<!doctype html><style>@import "theme.css";body{background:url("bg.png")}</style>',
+    );
+    expect(refs.sort()).toEqual(['bg.png', 'theme.css']);
+  });
+
+  it('extracts url() refs from style="" attributes', () => {
+    const refs = extractInlineCssReferences(
+      "<div style=\"background:url('bg.png')\"></div><span style=\"--bg:url(/abs.png)\"></span>",
+    );
+    expect(refs.sort()).toEqual(['/abs.png', 'bg.png']);
+  });
+
+  it('skips style-like text inside scripts and comments', () => {
+    const refs = extractInlineCssReferences(
+      '<!-- <style>body{background:url("ghost.png")}</style> -->' +
+        '<script>const css = \'<style>body{background:url("missing.png")}</style>\';</script>',
+    );
+    expect(refs).toEqual([]);
+  });
+
+  it('rewrites url() and @import refs in css content relative to baseDir', () => {
+    expect(
+      rewriteCssReferences(
+        '@import "theme.css";body{background:url("bg.png")}',
+        'sub',
+      ),
+    ).toBe('@import "sub/theme.css";body{background:url("sub/bg.png")}');
+  });
+
+  it('keeps remote, data, and absolute css refs intact when rewriting', () => {
+    expect(
+      rewriteCssReferences(
+        'body{background:url("https://cdn.test/a.png");--data:url(data:image/png,abc);--root:url("/abs.png")}',
+        'sub',
+      ),
+    ).toBe(
+      'body{background:url("https://cdn.test/a.png");--data:url(data:image/png,abc);--root:url("/abs.png")}',
+    );
+  });
+
+  it('bundles assets referenced from inline <style> blocks', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'));
+    await mkdir(path.join(dir, 'fonts'));
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><style>' +
+        '@import "theme.css";' +
+        "body{background:url('assets/bg.png')}" +
+        '@font-face{font-family:Custom;src:url("fonts/custom.woff2") format("woff2");}' +
+        '</style>',
+    );
+    await writeFile(path.join(dir, 'theme.css'), 'body{color:red}');
+    await writeFile(path.join(dir, 'assets', 'bg.png'), 'bg');
+    await writeFile(path.join(dir, 'fonts', 'custom.woff2'), 'font');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual([
+      'assets/bg.png',
+      'fonts/custom.woff2',
+      'index.html',
+      'theme.css',
+    ]);
+  });
+
+  it('bundles assets referenced from style="" attributes', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'));
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><div style="background:url(\'assets/hero.png\')">x</div>',
+    );
+    await writeFile(path.join(dir, 'assets', 'hero.png'), 'hero');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['assets/hero.png', 'index.html']);
+  });
+
+  it('rewrites inline <style> url() refs when entry is in a subdirectory', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub', 'assets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sub', 'page.html'),
+      '<!doctype html><style>body{background:url("assets/bg.png")}</style>',
+    );
+    await writeFile(path.join(dir, 'sub', 'assets', 'bg.png'), 'bg');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['index.html', 'sub/assets/bg.png']);
+    expect(index?.data.toString('utf8')).toContain('url("sub/assets/bg.png")');
+  });
+
+  it('rewrites style="" url() refs when entry is in a subdirectory', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sub', 'page.html'),
+      "<!doctype html><div style=\"background:url('hero.png')\">x</div>",
+    );
+    await writeFile(path.join(dir, 'sub', 'hero.png'), 'hero');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['index.html', 'sub/hero.png']);
+    expect(index?.data.toString('utf8')).toContain("url('sub/hero.png')");
+  });
+
+  it('reports inline <style> assets that are missing on disk', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><style>body{background:url("assets/missing.png")}</style>',
+    );
+
+    await expect(
+      buildDeployFileSet(projectsRoot, projectId, 'index.html'),
+    ).rejects.toMatchObject({
+      details: { missing: ['assets/missing.png'] },
+    });
+  });
+
+  it('extracts and rewrites url() refs from <style> inside <svg>', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub', 'assets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sub', 'page.html'),
+      '<!doctype html><svg><style>circle{fill:url("assets/icon.svg")}</style></svg>',
+    );
+    await writeFile(path.join(dir, 'sub', 'assets', 'icon.svg'), '<svg/>');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual(['index.html', 'sub/assets/icon.svg']);
+    expect(index?.data.toString('utf8')).toContain('url("sub/assets/icon.svg")');
+  });
+
+  it('does not rewrite <style>-like text inside <script> string literals', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'sub'), { recursive: true });
+    const html =
+      '<!doctype html><script>const tpl = \'<style>body{background:url("assets/bg.png")}</style>\';</script>';
+    await writeFile(path.join(dir, 'sub', 'page.html'), html);
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'sub/page.html');
+    const index = files.find((f) => f.file === 'index.html');
+
+    // The fake <style> lives inside a JS string literal, so it must not
+    // be processed as inline CSS: no asset is bundled and the script
+    // body is preserved byte-for-byte.
+    expect(files.map((f) => f.file)).toEqual(['index.html']);
+    expect(index?.data.toString('utf8')).toContain(
+      "const tpl = '<style>body{background:url(\"assets/bg.png\")}</style>';",
+    );
+  });
+
+  it('does not rewrite <style>-like text inside HTML comments', () => {
+    const html =
+      '<!doctype html><!-- <style>body{background:url("ghost.png")}</style> --><h1>x</h1>';
+    expect(rewriteEntryHtmlReferences(html, 'sub')).toBe(html);
+  });
+
+  it('runs in linear time on pathological unclosed url(', () => {
+    const huge = '('.repeat(100_000);
+    const input = `body{background:url${huge}}`;
+    const startExtract = Date.now();
+    const refs = extractCssReferences(input);
+    expect(Date.now() - startExtract).toBeLessThan(500);
+    expect(refs).toEqual([]);
+
+    const startRewrite = Date.now();
+    expect(rewriteCssReferences(input, 'sub')).toBe(input);
+    expect(Date.now() - startRewrite).toBeLessThan(500);
+  });
+});
+
+describe('deploy plan and analyzer', () => {
+  async function setupProject() {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-plan-test-'));
+    const projectId = 'p1';
+    const dir = await ensureProject(path.join(root, 'projects'), projectId);
+    return { projectsRoot: path.join(root, 'projects'), projectId, dir };
+  }
+
+  it('returns the file set plus missing and invalid lists without throwing', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><img src="missing.png">',
+    );
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    expect(plan.entryPath).toBe('index.html');
+    expect(plan.files.map((f) => f.file)).toEqual(['index.html']);
+    expect(plan.missing).toEqual(['missing.png']);
+    expect(plan.invalid).toEqual([]);
+  });
+
+  it('flags missing assets as broken-reference warnings', () => {
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width">',
+      files: [
+        { file: 'index.html', data: Buffer.from('<!doctype html>'), contentType: 'text/html', sourcePath: 'index.html' },
+      ],
+      missing: ['logo.png'],
+      invalid: [],
+    });
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ code: 'broken-reference', path: 'logo.png' }),
+    );
+  });
+
+  it('flags invalid references separately from missing ones', () => {
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width">',
+      files: [],
+      missing: [],
+      invalid: ['../escape.png'],
+    });
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ code: 'invalid-reference', path: '../escape.png' }),
+    );
+  });
+
+  it('flags missing doctype and viewport', () => {
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html: '<html><body><h1>hi</h1></body></html>',
+      files: [],
+    });
+    const codes = warnings.map((w) => w.code).sort();
+    expect(codes).toEqual(['no-doctype', 'no-viewport']);
+  });
+
+  it('flags missing doctype even when a fake doctype lives inside a <script> string', () => {
+    const html =
+      '<html>' +
+      '<head><meta name="viewport" content="width=device-width">' +
+      '<script>const tpl = `<!doctype html><html></html>`;</script>' +
+      '</head><body><h1>hi</h1></body></html>';
+    const { warnings } = analyzeDeployPlan({ entryPath: 'index.html', html, files: [] });
+    expect(warnings.map((w: any) => w.code)).toContain('no-doctype');
+  });
+
+  it('accepts a doctype that follows a leading HTML comment and BOM', () => {
+    const html =
+      '﻿<!-- generated 2026-05-02 -->\n<!doctype html>' +
+      '<meta name="viewport" content="width=device-width">' +
+      '<h1>hi</h1>';
+    const { warnings } = analyzeDeployPlan({ entryPath: 'index.html', html, files: [] });
+    expect(warnings.map((w: any) => w.code)).not.toContain('no-doctype');
+  });
+
+  it('flags external scripts and stylesheets', () => {
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html:
+        '<!doctype html><meta name="viewport" content="width=device-width">' +
+        '<link rel="stylesheet" href="https://cdn.test/x.css">' +
+        '<script src="https://cdn.test/x.js"></script>',
+      files: [],
+    });
+    const codes = warnings.map((w) => w.code).sort();
+    expect(codes).toEqual(['external-script', 'external-stylesheet']);
+    const ext = warnings.find((w) => w.code === 'external-script');
+    expect(ext?.url).toBe('https://cdn.test/x.js');
+  });
+
+  it('does not flag protocol-relative scripts as external when they are in fact external', () => {
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html:
+        '<!doctype html><meta name="viewport" content="width=device-width">' +
+        '<script src="//cdn.test/x.js"></script>',
+      files: [],
+    });
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ code: 'external-script', url: '//cdn.test/x.js' }),
+    );
+  });
+
+  it('flags large per-file assets but not the entry HTML', () => {
+    const big = Buffer.alloc(DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES + 1);
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width">',
+      files: [
+        { file: 'index.html', data: Buffer.alloc(50), contentType: 'text/html', sourcePath: 'index.html' },
+        { file: 'hero.jpg', data: big, contentType: 'image/jpeg', sourcePath: 'hero.jpg' },
+      ],
+    });
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ code: 'large-asset', path: 'hero.jpg' }),
+    );
+    expect(warnings.some((w) => w.code === 'large-html')).toBe(false);
+  });
+
+  it('flags large entry HTML', () => {
+    const huge = Buffer.alloc(DEPLOY_PREFLIGHT_LARGE_HTML_BYTES + 1);
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width">',
+      files: [
+        { file: 'index.html', data: huge, contentType: 'text/html', sourcePath: 'index.html' },
+      ],
+    });
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ code: 'large-html', path: 'index.html' }),
+    );
+  });
+
+  it('reports large-html against the source entry path, not the renamed deploy file', () => {
+    const huge = Buffer.alloc(DEPLOY_PREFLIGHT_LARGE_HTML_BYTES + 1);
+    const { warnings } = analyzeDeployPlan({
+      entryPath: 'pages/landing.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width">',
+      files: [
+        { file: 'index.html', data: huge, contentType: 'text/html', sourcePath: 'pages/landing.html' },
+      ],
+    });
+    const found = warnings.find((w: any) => w.code === 'large-html');
+    expect(found?.path).toBe('pages/landing.html');
+  });
+
+  it('returns no warnings on a healthy entry HTML', () => {
+    const { warnings, totalFiles, totalBytes } = analyzeDeployPlan({
+      entryPath: 'index.html',
+      html: '<!doctype html><meta name="viewport" content="width=device-width"><h1>Hello</h1>',
+      files: [
+        { file: 'index.html', data: Buffer.from('<!doctype html><h1>Hello</h1>'), contentType: 'text/html', sourcePath: 'index.html' },
+      ],
+    });
+    expect(warnings).toEqual([]);
+    expect(totalFiles).toBe(1);
+    expect(totalBytes).toBeGreaterThan(0);
+  });
+
+  it('preflight payload includes provider, entry, file list, totals and warnings', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'));
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width">' +
+        '<script src="https://cdn.test/x.js"></script>' +
+        '<img src="assets/logo.png">',
+    );
+    await writeFile(path.join(dir, 'assets', 'logo.png'), 'logo');
+
+    const result = await prepareDeployPreflight(projectsRoot, projectId, 'index.html');
+    expect(result.providerId).toBe('vercel-self');
+    expect(result.entry).toBe('index.html');
+    expect(result.totalFiles).toBe(2);
+    expect(result.totalBytes).toBeGreaterThan(0);
+    expect(result.files.map((f) => f.path).sort()).toEqual(['assets/logo.png', 'index.html']);
+    const codes = result.warnings.map((w) => w.code);
+    expect(codes).toContain('external-script');
+    expect(codes).not.toContain('broken-reference');
+  });
+
+  it('preflight reports broken references instead of throwing', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><img src="missing.png">',
+    );
+
+    const result = await prepareDeployPreflight(projectsRoot, projectId, 'index.html');
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'broken-reference', path: 'missing.png' }),
+    );
+    expect(result.totalFiles).toBe(1);
+  });
+
+  it('preflight rejects non-html entry names', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(path.join(dir, 'data.json'), '{}');
+    await expect(
+      prepareDeployPreflight(projectsRoot, projectId, 'data.json'),
+    ).rejects.toThrow(/HTML/);
+  });
+
+  it('buildDeployFileSet still throws when missing or invalid refs exist', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(path.join(dir, 'index.html'), '<img src="missing.png">');
+    await expect(
+      buildDeployFileSet(projectsRoot, projectId, 'index.html'),
+    ).rejects.toMatchObject({ details: { missing: ['missing.png'] } });
   });
 });
 

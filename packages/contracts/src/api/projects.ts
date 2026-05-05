@@ -55,6 +55,7 @@ export interface PromptTemplateMetadata {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
@@ -78,6 +79,8 @@ export interface ProjectMetadata {
   // New Project panel. Treated by the system-prompt composer as a stylistic
   // and structural reference for the generation request.
   promptTemplate?: PromptTemplateMetadata;
+  // Absolute paths to local code folders the agent can read via --add-dir.
+  linkedDirs?: string[];
 }
 
 export interface Project {
@@ -209,3 +212,47 @@ export interface DeployProjectFileRequest {
 export interface DeployProjectFileResponse extends DeploymentInfo {}
 
 export interface CheckDeploymentLinkResponse extends DeploymentInfo {}
+
+// Preflight inspects the file set that would be uploaded for a deploy
+// without sending anything to the provider. Lets the UI show file count,
+// total size, and warnings before the user pays the network round-trip.
+
+export type DeployPreflightWarningCode =
+  | 'broken-reference'
+  | 'invalid-reference'
+  | 'large-asset'
+  | 'large-bundle'
+  | 'large-html'
+  | 'external-script'
+  | 'external-stylesheet'
+  | 'no-doctype'
+  | 'no-viewport';
+
+export interface DeployPreflightWarning {
+  code: DeployPreflightWarningCode;
+  message: string;
+  path?: string;
+  url?: string;
+  size?: number;
+}
+
+export interface DeployPreflightFile {
+  path: string;
+  size: number;
+  mime: string;
+  sourcePath: string;
+}
+
+export interface DeployPreflightRequest {
+  fileName: string;
+  providerId?: DeployProviderId;
+}
+
+export interface DeployPreflightResponse {
+  providerId: DeployProviderId;
+  entry: string;
+  files: DeployPreflightFile[];
+  totalFiles: number;
+  totalBytes: number;
+  warnings: DeployPreflightWarning[];
+}

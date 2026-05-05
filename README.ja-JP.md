@@ -17,16 +17,18 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
+  <a href="https://open-design.ai/"><img alt="ダウンロード" src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-open--design.ai-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
   <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -63,7 +65,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 | **永続化** | SQLite（`.od/app.sqlite`）：projects · conversations · messages · tabs · ユーザー templates。翌日開いても、todo カードと開いていたファイルはそのまま。 |
 | **ライフサイクル** | 唯一のエントリポイント `pnpm tools-dev`（start / stop / run / status / logs / inspect / check）— 型付き sidecar stamp で daemon + web（+ desktop）を起動 |
 | **デスクトップ** | オプションの Electron シェル：サンドボックスレンダラ + sidecar IPC（STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN）— 同じチャネルで `tools-dev inspect desktop screenshot` を駆動、E2E テスト対応 |
-| **デプロイ先** | ローカル（`pnpm tools-dev`）· Vercel Web レイヤー · パッケージ版 Electron（`apps/packaged/` プレースホルダー） |
+| **デプロイ先** | ローカル（`pnpm tools-dev`）· Vercel Web レイヤー · macOS（Apple Silicon）と Windows（x64）向けパッケージ版 Electron デスクトップアプリ — [open-design.ai](https://open-design.ai/) または [最新リリース](https://github.com/nexu-io/open-design/releases) からダウンロード |
 | **ライセンス** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -298,6 +300,15 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
 | デスクトップ（オプション） | Electron シェル — sidecar IPC 経由で Web URL を取得、ポート推測なし；同じチャネル（`STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN`）で `tools-dev inspect desktop …` を駆動し E2E 対応 |
 
 ## クイックスタート
+
+### デスクトップアプリのダウンロード（ビルド不要）
+
+Open Design を最速で試す方法は、ビルド済みのデスクトップアプリです — Node、pnpm、clone は不要：
+
+- **[open-design.ai](https://open-design.ai/)** — 公式ダウンロードページ
+- **[GitHub リリース](https://github.com/nexu-io/open-design/releases)**
+
+### ソースから実行
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -619,15 +630,15 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | エージェント | バイナリ | ストリーム形式 | argv 形態（組み立て済みプロンプトパス） |
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json`（型付きイベント） | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
-| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` パーサー | `codex exec --json --skip-git-repo-check --full-auto [-C cwd] [--model …] [-c model_reasoning_effort=…] -`（プロンプトは stdin） |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` パーサー | `gemini --output-format stream-json --skip-trust --yolo [--model …] -`（プロンプトは stdin） |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` パーサー | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]`（プロンプトは stdin） |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` パーサー | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]`（プロンプトは stdin） |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` パーサー | `opencode run --format json --dangerously-skip-permissions [--model …] -`（プロンプトは stdin） |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` パーサー | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`（プロンプトは stdin） |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain`（生 stdout チャンク） | `qwen --yolo [--model …] -`（プロンプトは stdin） |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型付きイベント） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc --no-session [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
+| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
 | **OpenAI 互換 BYOK** | n/a | SSE パススルー | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；loopback / link-local / RFC1918 を拒否 |
 
 新しい CLI の追加 = [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。ストリーム形式は `claude-stream-json` / `copilot-stream-json` / `json-event-stream`（CLI ごとの `eventParser` 付き）/ `acp-json-rpc` / `pi-rpc` / `plain` から選択。
@@ -664,7 +675,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 - [ ] Vercel + トンネルデプロイレシピ（Topology B）
 - [ ] ワンコマンド `npx od init` で `DESIGN.md` 付きプロジェクトをスキャフォールド
 - [ ] Skill マーケットプレイス（`od skills install <github-repo>`）と `od skill add | list | remove | test` CLI サーフェス（[`docs/skills-protocol.md`](docs/skills-protocol.md) にドラフトあり、daemon 実装は未着手）
-- [ ] `apps/packaged/` からの配布可能 Electron ビルド
+- [x] `apps/packaged/` からの配布可能 Electron ビルド — macOS（Apple Silicon）と Windows（x64）のダウンロードは [open-design.ai](https://open-design.ai/) および [GitHub リリースページ](https://github.com/nexu-io/open-design/releases) から
 
 フェーズ別デリバリー計画 → [`docs/roadmap.md`](docs/roadmap.md)。
 
@@ -688,17 +699,17 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 - **Design System を追加** — [`design-systems/<brand>/`](design-systems/) に 9 セクションスキーマの `DESIGN.md` をドロップ。
 - **新しい coding-agent CLI を接続** — [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。
 
-完全なワークフロー、マージ基準、コードスタイル、受け入れない PR の種類 → [`CONTRIBUTING.ja-JP.md`](CONTRIBUTING.ja-JP.md)（[English](CONTRIBUTING.md) · [简体中文](CONTRIBUTING.zh-CN.md)）。
+完全なワークフロー、マージ基準、コードスタイル、受け入れない PR の種類 → [`CONTRIBUTING.ja-JP.md`](CONTRIBUTING.ja-JP.md)（[English](CONTRIBUTING.md) · [Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md)）。
 
 ## コントリビューター
 
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-04-30" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design コントリビューター" />
 </a>
 
-初めての PR を送った方 — ようこそ。[`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) ラベルがエントリポイントです。
+初めての PR を送った方 — ようこそ。[`good-first-issue`](https://github.com/nexu-io/open-design/contribute) ラベルがエントリポイントです。
 
 ## リポジトリ活動
 
@@ -712,9 +723,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-04-30" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-04-30" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-04-30" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
   </picture>
 </a>
 

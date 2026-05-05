@@ -30,7 +30,7 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "./config.js";
-import { winResources } from "./resources.js";
+import { copyBundledResourceTrees, winResources } from "./resources.js";
 
 const execFileAsync = promisify(execFile);
 const PRODUCT_NAME = "Open Design";
@@ -580,6 +580,7 @@ async function runPnpm(config: ToolPackConfig, args: string[], extraEnv: NodeJS.
   await execFileAsync(invocation.command, invocation.args, {
     cwd: config.workspaceRoot,
     env: { ...process.env, ...extraEnv },
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 
@@ -588,7 +589,11 @@ async function runNpmInstall(appRoot: string): Promise<void> {
     args: ["install", "--omit=dev", "--no-package-lock"],
     command: process.platform === "win32" ? "npm.cmd" : "npm",
   });
-  await execFileAsync(invocation.command, invocation.args, { cwd: appRoot, env: process.env });
+  await execFileAsync(invocation.command, invocation.args, {
+    cwd: appRoot,
+    env: process.env,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
 }
 
 async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
@@ -622,9 +627,10 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
 async function copyResourceTree(config: ToolPackConfig, paths: WinPaths): Promise<void> {
   await removeTree(paths.resourceRoot);
   await mkdir(paths.resourceRoot, { recursive: true });
-  await cp(join(config.workspaceRoot, "skills"), join(paths.resourceRoot, "skills"), { recursive: true });
-  await cp(join(config.workspaceRoot, "design-systems"), join(paths.resourceRoot, "design-systems"), { recursive: true });
-  await cp(join(config.workspaceRoot, "assets", "frames"), join(paths.resourceRoot, "frames"), { recursive: true });
+  await copyBundledResourceTrees({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
+  });
   await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await cp(process.execPath, join(paths.resourceRoot, "bin", "node.exe"));
   await chmod(join(paths.resourceRoot, "bin", "node.exe"), 0o755).catch(() => undefined);
@@ -690,6 +696,7 @@ async function writeAssembledApp(config: ToolPackConfig, paths: WinPaths, packed
     paths.packagedConfigPath,
     `${JSON.stringify(
       {
+        appVersion: packagedVersion,
         namespace: config.namespace,
         nodeCommandRelative: join("open-design", "bin", "node.exe"),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),

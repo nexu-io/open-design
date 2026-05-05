@@ -3,7 +3,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile } from '../types';
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile, ProjectMetadata } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -82,6 +82,14 @@ interface Props {
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: () => void;
+  // Optional pet wiring forwarded straight through to ChatComposer's
+  // /pet button. When omitted the composer hides the button entirely.
+  petConfig?: AppConfig['pet'];
+  onAdoptPet?: (petId: string) => void;
+  onTogglePet?: () => void;
+  onOpenPetSettings?: () => void;
+  projectMetadata?: ProjectMetadata;
+  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -112,6 +120,12 @@ export function ChatPane({
   onDeleteConversation,
   onRenameConversation,
   onOpenSettings,
+  petConfig,
+  onAdoptPet,
+  onTogglePet,
+  onOpenPetSettings,
+  projectMetadata,
+  onProjectMetadataChange,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -424,6 +438,12 @@ export function ChatPane({
             onSend={onSend}
             onStop={onStop}
             onOpenSettings={onOpenSettings}
+            petConfig={petConfig}
+            onAdoptPet={onAdoptPet}
+            onTogglePet={onTogglePet}
+            onOpenPetSettings={onOpenPetSettings}
+            projectMetadata={projectMetadata}
+            onProjectMetadataChange={onProjectMetadataChange}
           />
         </>
       ) : null}

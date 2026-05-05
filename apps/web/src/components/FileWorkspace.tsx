@@ -6,21 +6,34 @@ import {
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
-import type { OpenTabsState, PreviewComment, PreviewCommentTarget, ProjectFile } from '../types';
+import {
+  type ChatCommentAttachment,
+  liveArtifactSummaryToWorkspaceEntry,
+  type LiveArtifactSummary,
+  type LiveArtifactEventItem,
+  type LiveArtifactWorkspaceEntry,
+  type OpenTabsState,
+  type PreviewComment,
+  type PreviewCommentTarget,
+  type ProjectFile,
+} from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
-import { FileViewer } from './FileViewer';
+import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
+import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { PasteTextDialog } from './PasteTextDialog';
 import { SketchEditor, type SketchDocument, type SketchItem } from './SketchEditor';
 
 interface Props {
   projectId: string;
   files: ProjectFile[];
+  liveArtifacts: LiveArtifactSummary[];
   onRefreshFiles: () => Promise<void> | void;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
   openRequest?: { name: string; nonce: number } | null;
+  liveArtifactEvents?: LiveArtifactEventItem[];
   // Persisted set of open tabs + active tab. Owned by ProjectView so the
   // daemon's SQLite store can hold the source of truth and survive reloads.
   tabsState: OpenTabsState;
@@ -28,6 +41,7 @@ interface Props {
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
 }
 
 interface SketchState {
@@ -43,16 +57,19 @@ const DESIGN_FILES_TAB = '__design_files__';
 export function FileWorkspace({
   projectId,
   files,
+  liveArtifacts,
   onRefreshFiles,
   isDeck,
   onExportAsPptx,
   streaming,
   openRequest,
+  liveArtifactEvents = [],
   tabsState,
   onTabsStateChange,
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
+  onSendBoardCommentAttachments,
 }: Props) {
   const t = useT();
   // Persisted tabs come from the parent. Active tab can transiently point
@@ -66,6 +83,17 @@ export function FileWorkspace({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
+
+  const visibleFiles = useMemo(
+    () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
+    [files],
+  );
+
+  const liveArtifactEntries = useMemo(
+    () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
+    [liveArtifacts],
+  );
 
   // Pull the persisted active tab in when the parent's hydration completes
   // (or on project switch). Fall back to the Design Files browser so a
@@ -202,18 +230,39 @@ export function FileWorkspace({
     };
   }, []);
 
+  useEffect(() => {
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+
+    const onWheel = (event: globalThis.WheelEvent) => {
+      scrollWorkspaceTabsWithWheel(tabBar, event);
+    };
+    tabBar.addEventListener('wheel', onWheel, { passive: false });
+    return () => tabBar.removeEventListener('wheel', onWheel);
+  }, []);
+
   async function handleDelete(name: string) {
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
     const ok = await deleteProjectFile(projectId, name);
     if (ok) {
       await onRefreshFiles();
       const nextTabs = persistedTabs.filter((n) => n !== name);
-      const nextActive =
-        tabsState.active === name
-          ? nextTabs[nextTabs.length - 1] ?? null
-          : tabsState.active;
-      onTabsStateChange({ tabs: nextTabs, active: nextActive });
-      setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+      if (activeTab === name) {
+        // User is viewing the file being deleted: fall back to another
+        // open tab (or the Design Files panel if none remain).
+        const nextActive = nextTabs[nextTabs.length - 1] ?? null;
+        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+      } else {
+        // Deletion was triggered from the Design Files panel (or another
+        // tab). We preserve `activeTab` because the user is viewing a
+        // different context (Design Files or another tab) and shouldn't
+        // be navigated away. Only clear the persisted active reference
+        // when it points at the deleted file so we don't leave a dangling
+        // pointer behind.
+        const nextActive = tabsState.active === name ? null : tabsState.active;
+        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+      }
       setSketches((curr) => {
         const next = { ...curr };
         delete next[name];
@@ -294,7 +343,7 @@ export function FileWorkspace({
 
   const activeFile = useMemo<ProjectFile | null>(() => {
     if (activeTab === DESIGN_FILES_TAB) return null;
-    const onDisk = files.find((f) => f.name === activeTab);
+    const onDisk = visibleFiles.find((f) => f.name === activeTab);
     if (onDisk) return onDisk;
     if (isSketchName(activeTab) && sketches[activeTab]) {
       return {
@@ -306,7 +355,12 @@ export function FileWorkspace({
       };
     }
     return null;
-  }, [activeTab, files, sketches]);
+  }, [activeTab, visibleFiles, sketches]);
+
+  const activeLiveArtifact = useMemo<LiveArtifactWorkspaceEntry | null>(() => {
+    if (activeTab === DESIGN_FILES_TAB) return null;
+    return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
+  }, [activeTab, liveArtifactEntries]);
 
   // Tabs rendered are persisted tabs plus any pending (un-saved) sketches.
   const tabNames = useMemo(() => {
@@ -326,7 +380,12 @@ export function FileWorkspace({
 
   return (
     <div className="workspace" data-testid="file-workspace">
-      <div className="ws-tabs-bar" role="tablist" aria-label={t('workspace.designFiles')}>
+      <div
+        ref={tabsBarRef}
+        className="ws-tabs-bar"
+        role="tablist"
+        aria-label={t('workspace.designFiles')}
+      >
         <button
           type="button"
           className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
@@ -347,12 +406,16 @@ export function FileWorkspace({
           const dirtyMark =
             sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
           const isPending = sketchEntry && !sketchEntry.persisted;
-          const onDisk = files.find((f) => f.name === name);
-          const kind = onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+          const onDisk = visibleFiles.find((f) => f.name === name);
+          const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
+          const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
           // Wix Japan rebrand: result.json is the deck preview entry
           // for the wix-ja-slide skill; show it labelled as
-          // "プレビュー" rather than the technical filename.
-          const friendlyLabel = name === 'result.json' ? t('workspace.deckPreview') : name;
+          // "プレビュー" rather than the technical filename. Live
+          // artifacts (upstream addition) keep their dynamic title.
+          const friendlyLabel =
+            liveArtifact?.title
+              ?? (name === 'result.json' ? t('workspace.deckPreview') : name);
           return (
             <Tab
               key={name}
@@ -363,6 +426,7 @@ export function FileWorkspace({
               }
               onClose={() => closeTab(name)}
               kind={kind}
+              liveArtifact={liveArtifact}
             />
           );
         })}
@@ -371,10 +435,13 @@ export function FileWorkspace({
         {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
+            key={projectId}
             projectId={projectId}
-            files={files}
+            files={visibleFiles}
+            liveArtifacts={liveArtifactEntries}
             onRefreshFiles={onRefreshFiles}
             onOpenFile={openFile}
+            onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onDeleteFile={(name) => void handleDelete(name)}
             onUpload={() => fileInputRef.current?.click()}
             onUploadFiles={(picked) => void uploadFiles(picked)}
@@ -395,6 +462,13 @@ export function FileWorkspace({
           ) : (
             <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
           )
+        ) : activeLiveArtifact ? (
+          <LiveArtifactViewer
+            projectId={projectId}
+            liveArtifact={activeLiveArtifact}
+            liveArtifactEvents={liveArtifactEvents}
+            onRefreshArtifacts={onRefreshFiles}
+          />
         ) : activeFile ? (
           <FileViewer
             projectId={projectId}
@@ -405,6 +479,7 @@ export function FileWorkspace({
             previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
+            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
           />
         ) : (
           <div className="viewer-empty">
@@ -455,13 +530,15 @@ function Tab({
   onClose,
   closable = true,
   kind,
+  liveArtifact,
 }: {
   label: string;
   active: boolean;
   onActivate: () => void;
   onClose?: () => void;
   closable?: boolean;
-  kind?: ProjectFile['kind'];
+  kind?: ProjectFile['kind'] | 'live-artifact';
+  liveArtifact?: LiveArtifactWorkspaceEntry;
 }) {
   const t = useT();
   const iconName = kindIconName(kind);
@@ -485,6 +562,14 @@ function Tab({
         </span>
       ) : null}
       <span className="ws-tab-label">{label}</span>
+      {liveArtifact ? (
+        <LiveArtifactBadges
+          compact
+          className="ws-live-artifact-badges"
+          status={liveArtifact.status}
+          refreshStatus={liveArtifact.refreshStatus}
+        />
+      ) : null}
       {closable && onClose ? (
         <button
           type="button"
@@ -502,6 +587,30 @@ function Tab({
   );
 }
 
+export function scrollWorkspaceTabsWithWheel(
+  tabBar: Pick<HTMLDivElement, 'clientWidth' | 'scrollLeft' | 'scrollWidth'>,
+  event: Pick<globalThis.WheelEvent, 'ctrlKey' | 'deltaMode' | 'deltaX' | 'deltaY' | 'preventDefault'>,
+) {
+  if (event.ctrlKey) return;
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  if (tabBar.scrollWidth <= tabBar.clientWidth) return;
+
+  const before = tabBar.scrollLeft;
+  tabBar.scrollLeft += wheelDeltaToPixels(event.deltaY, event.deltaMode);
+  if (tabBar.scrollLeft === before) return;
+
+  event.preventDefault();
+}
+
+function wheelDeltaToPixels(delta: number, deltaMode: number): number {
+  const WHEEL_DELTA_LINE = 1;
+  const WHEEL_DELTA_PAGE = 2;
+
+  if (deltaMode === WHEEL_DELTA_LINE) return delta * 16;
+  if (deltaMode === WHEEL_DELTA_PAGE) return delta * 160;
+  return delta;
+}
+
 function kindIconName(
   kind?: string,
 ):
@@ -510,6 +619,7 @@ function kindIconName(
   | 'pencil'
   | 'file'
   | null {
+  if (kind === 'live-artifact') return 'file-code';
   if (kind === 'html') return 'file-code';
   if (kind === 'image') return 'image';
   if (kind === 'sketch') return 'pencil';
@@ -520,6 +630,15 @@ function kindIconName(
 
 function isSketchName(name: string): boolean {
   return name.endsWith('.sketch.json');
+}
+
+function isLiveArtifactImplementationPath(name: string): boolean {
+  if (name === '.live-artifacts') return true;
+  if (!name.startsWith('.live-artifacts/')) return false;
+  // Live artifacts are exposed through virtual tree nodes only. In
+  // particular, keep implementation-only snapshot and tile files hidden even
+  // if a generic project-files endpoint returns them in older daemon builds.
+  return true;
 }
 
 function parseSketchDocument(text: string | null): SketchItem[] {

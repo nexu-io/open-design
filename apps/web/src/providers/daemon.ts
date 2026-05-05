@@ -367,6 +367,28 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
   if (t === 'thinking_start') {
     return { kind: 'status', label: 'thinking' };
   }
+  if (t === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: data.action,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      title: data.title,
+      refreshStatus: data.refreshStatus,
+    };
+  }
+  if (t === 'live_artifact_refresh') {
+    return {
+      kind: 'live_artifact_refresh',
+      phase: data.phase,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      refreshId: data.refreshId,
+      title: data.title,
+      refreshedSourceCount: data.refreshedSourceCount,
+      error: data.error,
+    };
+  }
   if (t === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
     return { kind: 'tool_use', id: data.id, name: data.name, input: data.input ?? null };
   }

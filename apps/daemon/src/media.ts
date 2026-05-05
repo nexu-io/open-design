@@ -509,7 +509,7 @@ const AZURE_DEFAULT_API_VERSION = '2024-02-01';
 
 async function renderOpenAIImage(ctx, credentials) {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI API key — configure it in Settings or set OPENAI_API_KEY');
+    throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);
@@ -688,7 +688,7 @@ function openaiSpeechFormatFor(fileName) {
 
 async function renderOpenAISpeech(ctx, credentials, fileName) {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI API key — configure it in Settings or set OPENAI_API_KEY');
+    throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);
