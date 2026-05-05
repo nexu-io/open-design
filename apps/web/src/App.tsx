@@ -104,7 +104,12 @@ export function App() {
             if (firstAvailable) next.agentId = firstAvailable.id;
           }
           if (!next.designSystemId && dsList.length > 0) {
-            next.designSystemId = dsList.find((d) => d.id === 'default')?.id
+            // Wix Japan rebrand: pin the default to the wix-japan DS
+            // when present so the picker lands on the right entry
+            // for first-run users; fall back to the legacy "default"
+            // alias or the first available system otherwise.
+            next.designSystemId = dsList.find((d) => d.id === 'wix-japan')?.id
+              ?? dsList.find((d) => d.id === 'default')?.id
               ?? dsList[0]!.id;
           }
         } else {

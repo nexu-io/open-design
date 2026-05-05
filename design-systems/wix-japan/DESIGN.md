@@ -1,14 +1,14 @@
 ---
-title: Wix Japan — Design System
+title: Wix Japan Black
 tags: [project/wix-ja-slide-generator, design-system, brand]
 created: 2026-05-04
-revised: 2026-05-04
+revised: 2026-05-05
 schema: awesome-claude-design 9-section
 source_of_truth: "MKT / Wix Com - Google Slides Template (Black)" 130-page template
 template_id: 1UaAYw60JvGotNjx2fqosnZL1EKqZEps-oSq0eCxqT0U
 ---
 
-# Wix Japan
+# Wix Japan Black
 
 > **このドキュメントの根拠**: Wix HQ の brand book は使用していない。ルールはすべて **130 ページ MKT Slides テンプレートから観察できた範囲のみ**。観察できないこと（具体的な hex 値、font weight 数値）は意図的に書いていない。スキルの agent は「テンプレートに無いことはやらない」を原則とする。
 

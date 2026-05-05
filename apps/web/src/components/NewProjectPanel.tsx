@@ -331,7 +331,12 @@ export function NewProjectPanel({
 
         {showDesignSystemPicker ? (
           <DesignSystemPicker
-            designSystems={designSystems}
+            // Wix Japan rebrand: only the Wix Japan design system
+            // is exposed for now. The picker stays mounted as a
+            // single-option dropdown so additional system variants
+            // (Wix HQ, Wix Brand, etc.) can land later by removing
+            // this filter — no UI rework needed.
+            designSystems={designSystems.filter((d) => d.id === 'wix-japan')}
             defaultDesignSystemId={defaultDesignSystemId}
             selectedIds={selectedDsIds}
             multi={dsMulti}
