@@ -2261,34 +2261,10 @@ function GoogleSlidesViewer({
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           <span className="viewer-meta">
-            {totalPages
-              ? `${pageIdx + 1} / ${totalPages}`
-              : 'Google Slides'}
+            {totalPages ? `${pageIdx + 1} / ${totalPages}` : 'Google Slides'}
           </span>
         </div>
         <div className="viewer-toolbar-actions">
-          {pageIds.length > 0 ? (
-            <div className="gs-pager">
-              <button
-                type="button"
-                className="ghost-link"
-                onClick={goPrev}
-                disabled={pageIdx === 0}
-                aria-label={t('fileViewer.previousSlide')}
-              >
-                ←
-              </button>
-              <button
-                type="button"
-                className="ghost-link"
-                onClick={goNext}
-                disabled={pageIdx >= totalPages - 1}
-                aria-label={t('fileViewer.nextSlide')}
-              >
-                →
-              </button>
-            </div>
-          ) : null}
           {deckUrl ? (
             <a
               className="ghost-link viewer-action-open"
@@ -2324,6 +2300,33 @@ function GoogleSlidesViewer({
           />
         )}
       </div>
+      {pageIds.length > 0 ? (
+        <div className="viewer-toolbar gs-bottom-toolbar">
+          <div className="gs-pager">
+            <button
+              type="button"
+              className="ghost-link"
+              onClick={goPrev}
+              disabled={pageIdx === 0}
+              aria-label={t('fileViewer.previousSlide')}
+            >
+              ←
+            </button>
+            <span className="gs-pager-counter">
+              {pageIdx + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="ghost-link"
+              onClick={goNext}
+              disabled={pageIdx >= totalPages - 1}
+              aria-label={t('fileViewer.nextSlide')}
+            >
+              →
+            </button>
+          </div>
+        </div>
+      ) : null}
       {result?.missingFields?.length ||
       result?.missingImages?.length ||
       result?.imageSlots?.some((s) => s.status && s.status !== 'filled') ||

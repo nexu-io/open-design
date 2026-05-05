@@ -7091,24 +7091,48 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   user-select: none;
   -webkit-user-drag: none;
 }
+/* Bottom toolbar dedicated to slide navigation. Centered prev /
+   page-counter / next layout reads as a clear "you are here in the
+   deck" affordance. The top toolbar keeps Download / Edit in Slides
+   / file actions; this bottom strip is just for paging. */
+.google-slides-viewer .gs-bottom-toolbar {
+  justify-content: center;
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--bg-panel);
+}
 .google-slides-viewer .gs-pager {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-right: 8px;
+  gap: 12px;
 }
 .google-slides-viewer .gs-pager button {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+}
+.google-slides-viewer .gs-pager button:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
 }
 .google-slides-viewer .gs-pager button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.google-slides-viewer .gs-pager-counter {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--text-muted);
+  min-width: 4ch;
+  text-align: center;
 }
 /* Make the "open in Google Slides" button stand out as a primary
    action — users need to jump out to Google to actually edit, since

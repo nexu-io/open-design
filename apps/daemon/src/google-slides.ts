@@ -779,11 +779,12 @@ export async function getDeckThumbnailUrl(deckId, size = 'MEDIUM') {
 // Stream a high-resolution PNG render of a single deck page. The
 // Slides API getThumbnail tops out at 1600px wide which looks soft
 // on retina displays — the Drive export/png endpoint serves the
-// page at native resolution (typically 1920+px). We OAuth-fetch the
-// PNG server-side and pipe the bytes to the caller, so the UI can
-// just <img src="/api/projects/:id/pages/:n/image"> without exposing
-// auth.
-export async function fetchPageImage(deckId, pageObjectId) {
+// page at native resolution. Append &w=<px> to ask Google for an
+// upscaled render (default ~1920 → up to 3840 with the param).
+// We OAuth-fetch server-side and stream bytes back, so the UI can
+// just <img src="/api/projects/:id/page-image?pageId=..."> without
+// exposing auth.
+export async function fetchPageImage(deckId, pageObjectId, widthPx = 3840) {
   if (typeof deckId !== 'string' || !deckId) {
     const err = new Error('deckId required');
     err.code = 'GOOGLE_API_BAD_REQUEST';
@@ -794,6 +795,7 @@ export async function fetchPageImage(deckId, pageObjectId) {
     err.code = 'GOOGLE_API_BAD_REQUEST';
     throw err;
   }
+  const w = Number.isFinite(widthPx) && widthPx > 0 ? Math.min(7680, Math.floor(widthPx)) : 3840;
   const { auth } = await authedClients();
   const accessTokenInfo = await auth.getAccessToken();
   const accessToken =
@@ -807,7 +809,7 @@ export async function fetchPageImage(deckId, pageObjectId) {
     deckId,
   )}/export/png?id=${encodeURIComponent(deckId)}&pageid=${encodeURIComponent(
     pageObjectId,
-  )}`;
+  )}&w=${w}`;
   const r = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

@@ -825,9 +825,11 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     if (typeof pageId !== 'string' || !pageId) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'pageId query required');
     }
+    const wRaw = req.query.w;
+    const widthPx = typeof wRaw === 'string' ? Number.parseInt(wRaw, 10) : 3840;
     try {
       const { fetchPageImage } = await import('./google-slides.js');
-      const buf = await fetchPageImage(deckId, pageId);
+      const buf = await fetchPageImage(deckId, pageId, widthPx);
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'private, max-age=300');
       res.send(buf);
