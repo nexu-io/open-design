@@ -78,7 +78,7 @@ od:
       required: true
     - name: logo_mark
       type: string
-      description: "Raw SVG code or text initials representing the brand mark. Inserted as raw HTML."
+      description: "Escaped text initials by default, or allowlist-sanitized inline SVG only with unsafe markup rejected/falling back to text."
       required: false
     - name: display_font_url
       type: string
