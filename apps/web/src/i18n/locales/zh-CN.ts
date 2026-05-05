@@ -488,7 +488,7 @@ export const zhCN: Dict = {
   'fileViewer.markdownStreamingStatus': '正在流式生成…显示部分 Markdown。',
   'fileViewer.markdownErrorStatus': '生成错误。正在显示最后可用内容。',
   'fileViewer.googleSlidesPagesLabel': '页',
-  'fileViewer.googleSlidesOpen': '在 Slides 中打开',
+  'fileViewer.googleSlidesOpen': '在 Slides 编辑 ↗',
   'fileViewer.googleSlidesNotReady': '正在生成 deck…',
   'fileViewer.googleSlidesInvalidUrl': '无效的 embed URL — 只允许 Google Slides 的 /embed 域名。',
   'fileViewer.googleSlidesMissingFields': '缺失的字段',

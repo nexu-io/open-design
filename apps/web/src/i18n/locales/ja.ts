@@ -498,7 +498,7 @@ export const ja: Dict = {
   'fileViewer.markdownStreamingStatus': 'ストリーミング中… 部分的な Markdown を表示しています。',
   'fileViewer.markdownErrorStatus': '生成エラー。最後に利用可能なコンテンツを表示しています。',
   'fileViewer.googleSlidesPagesLabel': 'ページ',
-  'fileViewer.googleSlidesOpen': 'Slides で開く',
+  'fileViewer.googleSlidesOpen': 'Slides で編集 ↗',
   'fileViewer.googleSlidesNotReady': 'デッキを生成中…',
   'fileViewer.googleSlidesInvalidUrl': '無効な embed URL — Google Slides の /embed URL のみ許可されます。',
   'fileViewer.googleSlidesMissingFields': '未入力の項目',

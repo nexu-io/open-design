@@ -2231,7 +2231,7 @@ function GoogleSlidesViewer({
         <div className="viewer-toolbar-actions">
           {deckUrl ? (
             <a
-              className="ghost-link"
+              className="ghost-link viewer-action-open"
               href={deckUrl}
               target="_blank"
               rel="noreferrer noopener"
