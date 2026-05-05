@@ -355,9 +355,9 @@ The daemon owns one hidden folder at the repo root. Everything in it is gitignor
 If you ran the repo first and only later installed the packaged Desktop app, the two writers point at different roots:
 
 - Repo dev-server (`pnpm tools-dev start web`) writes to `<repo-root>/.od/`.
-- Installed Desktop app writes under Electron's `userData` path: `<userData>/Open Design/namespaces/<channel>/data/`. `userData` follows OS conventions, and the channel suffix is **platform-specific** (the release workflows append `-win`/`-linux`):
+- Installed Desktop app writes under `<appData>/Open Design/namespaces/<channel>/data/`, where `<appData>` is Electron's per-OS app-data base (everything before the `Open Design` segment that `app.getPath("userData")` already includes). The channel suffix is **platform-specific** — the release workflows append `-win`/`-linux`:
 
-  | Platform | `<userData>` default | Stable channel | Beta channel |
+  | Platform | `<appData>` (Electron `appData` base) | Stable channel | Beta channel |
   |---|---|---|---|
   | macOS | `~/Library/Application Support` | `release-stable` | `release-beta` |
   | Windows | `%APPDATA%` (= `%USERPROFILE%\AppData\Roaming`) | `release-stable-win` | `release-beta-win` |
@@ -370,30 +370,34 @@ If you ran the repo first and only later installed the packaged Desktop app, the
 
   If unsure, inspect the packaged daemon log right after the app boots; it logs the resolved `daemonDataRoot`.
 
-> **⚠️ Do this in a clean state.** Migration replaces (not merges) the Desktop app's data dir with your repo `.od/`. Quit the Desktop app first so SQLite-WAL flushes cleanly. If the Desktop app already has projects you care about, decide which side is authoritative before continuing — the steps below back up the Desktop's current `data/` to a sibling but do not merge.
+> **⚠️ Do this in a clean state.** Migration replaces (not merges) the Desktop app's data dir with your repo `.od/`. Both writers must be fully stopped before copying — quit the Desktop app **and** stop the repo dev-server. SQLite-WAL needs to flush cleanly on both sides; if either daemon is still running it can write SQLite/WAL pages or project/artifact files mid-snapshot, leaving the staged copy inconsistent. If the Desktop app already has projects you care about, decide which side is authoritative before continuing — the steps below back up the Desktop's current `data/` to a sibling but do not merge.
 
 To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
 
 ```bash
-# Quit the Desktop app first (Cmd+Q on macOS, File → Exit on Windows/Linux).
-# Set REPO and APP_DATA to your actual paths; the example below is macOS + beta.
+set -euo pipefail
+# 1. Stop both writers so the source and target are quiescent.
+#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Windows/Linux).
+#    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
+# 2. Set REPO and APP_DATA to your actual paths; the example below is macOS + beta.
 REPO="/path/to/open-design"
 APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
 
-# Preflight: see what (if anything) the Desktop app already has.
+# 3. Preflight: see what (if anything) the Desktop app already has.
 ls "$APP_DATA/projects" 2>/dev/null && echo "↑ Desktop already has projects — confirm this is a replace, not a merge."
 
-# Stage into a sibling first, then atomically swap into place. Avoids partial
-# state if the copy fails midway.
+# 4. Stage into a sibling first, then atomically swap into place. `set -e` plus
+#    the explicit rsync exit check guarantee a non-zero copy aborts before any
+#    `mv` runs, so the Desktop data dir cannot end up half-populated.
 STAGE="${APP_DATA}.staged-$(date +%F-%H%M)"
 mkdir -p "$STAGE"
-rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/"
+rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed — aborting before swap"; exit 1; }
 
-# Backup the Desktop's current data, then promote the staged copy.
+# 5. Backup the Desktop's current data, then promote the staged copy.
 mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F-%H%M)"
 mv "$STAGE" "$APP_DATA"
 
-# Relaunch the Desktop app. The daemon applies forward schema changes on boot.
+# 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
 ```
 
 If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` and renaming the `.fresh-baseline-*` directory back into place.
