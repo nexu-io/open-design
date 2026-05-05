@@ -231,7 +231,11 @@ export function DesignFilesPanel({
           <span className="crumbs">{t('designFiles.crumbs')}</span>
           {selected.size > 0 ? (
             <div className="df-actions">
-              <button type="button" onClick={() => void handleBatchDownload()}>
+              <button
+                type="button"
+                onClick={() => void handleBatchDownload()}
+                title={t('designFiles.downloadSelected', { n: selected.size })}
+              >
                 <Icon name="download" size={13} />
                 <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
               </button>
@@ -309,6 +313,7 @@ export function DesignFilesPanel({
                     <button
                       type="button"
                       className="df-select-all"
+                      title={t('designFiles.selectAll')}
                       onClick={(e) => {
                         e.stopPropagation();
                         selectAllInSection(sectionFiles);
@@ -320,6 +325,7 @@ export function DesignFilesPanel({
                       <button
                         type="button"
                         className="df-select-all"
+                        title={t('designFiles.clearSelection')}
                         onClick={(e) => {
                           e.stopPropagation();
                           clearSection(sectionFiles);
