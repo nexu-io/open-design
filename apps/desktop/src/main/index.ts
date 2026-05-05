@@ -11,6 +11,7 @@ import {
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
   type DesktopEvalInput,
+  type DesktopExportPdfInput,
   type DesktopScreenshotInput,
   type SidecarStamp,
   type WebStatusSnapshot,
@@ -118,6 +119,8 @@ export async function runDesktopMain(
           return desktop.console();
         case SIDECAR_MESSAGES.CLICK:
           return await desktop.click(request.input as DesktopClickInput);
+        case SIDECAR_MESSAGES.EXPORT_PDF:
+          return await desktop.exportPdf(request.input as DesktopExportPdfInput);
         case SIDECAR_MESSAGES.SHUTDOWN:
           setImmediate(() => {
             void shutdown().finally(() => process.exit(0));

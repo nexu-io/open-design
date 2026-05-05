@@ -26,6 +26,7 @@ import {
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsPdf,
   exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
@@ -2298,7 +2299,13 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck });
+                      void exportProjectAsPdf({
+                        deck: effectiveDeck,
+                        fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
+                        filePath: file.name,
+                        projectId,
+                        title: exportTitle,
+                      });
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>

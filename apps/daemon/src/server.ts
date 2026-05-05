@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
@@ -46,6 +47,7 @@ import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
+import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -998,7 +1000,21 @@ export function createSseResponse(
   };
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
+export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+
+export interface StartServerOptions {
+  desktopPdfExporter?: DesktopPdfExporter | null;
+  host?: string;
+  port?: number;
+  returnServer?: boolean;
+}
+
+export async function startServer({
+  port = 7456,
+  host = process.env.OD_BIND_HOST || '127.0.0.1',
+  returnServer = false,
+  desktopPdfExporter = null,
+}: StartServerOptions = {}) {
   let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -2753,6 +2769,41 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err),
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/export/pdf', async (req, res) => {
+    if (typeof desktopPdfExporter !== 'function') {
+      return sendApiError(
+        res,
+        501,
+        'UPSTREAM_UNAVAILABLE',
+        'desktop PDF export is only available in the desktop runtime',
+      );
+    }
+    try {
+      const { fileName, title, deck } = req.body || {};
+      if (typeof fileName !== 'string' || fileName.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      const input = await buildDesktopPdfExportInput({
+        daemonUrl,
+        deck: deck === true,
+        fileName,
+        projectId: req.params.id,
+        projectsRoot: PROJECTS_DIR,
+        title: typeof title === 'string' ? title : undefined,
+      });
+      const result = await desktopPdfExporter(input);
+      res.json(result);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
       );
     }
   });
