@@ -41,6 +41,9 @@ export async function listDesignSystems(root) {
 }
 
 export async function readDesignSystem(root, id) {
+  if (!id || typeof id !== 'string' || /[/\\]/.test(id) || id === '..' || id === '.') {
+    return null;
+  }
   const file = path.join(root, id, 'DESIGN.md');
   try {
     return await readFile(file, 'utf8');
