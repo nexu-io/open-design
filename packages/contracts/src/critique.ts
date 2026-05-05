@@ -1,5 +1,19 @@
 import { z } from 'zod';
 
+/**
+ * Local mirror of SseTransportEvent from './sse/common'. Re-defining the
+ * three-field interface avoids a cross-file relative import inside this leaf
+ * module: the daemon walks this file via the './critique' subpath export
+ * under NodeNext (which requires explicit '.js' extensions), while the web
+ * Turbopack build refuses to rewrite '.js' to '.ts' on the same source.
+ * Keeping the type local makes the file self-contained for both consumers.
+ */
+interface SseTransportEvent<Name extends string, Payload> {
+  id?: string;
+  event: Name;
+  data: Payload;
+}
+
 export const PANELIST_ROLES = ['designer', 'critic', 'brand', 'a11y', 'copy'] as const;
 export type PanelistRole = typeof PANELIST_ROLES[number];
 
@@ -109,4 +123,53 @@ export function isPanelEvent(value: unknown): value is PanelEvent {
   const t = obj['type'];
   if (typeof t !== 'string' || !PANEL_EVENT_TYPES.has(t as PanelEvent['type'])) return false;
   return typeof obj['runId'] === 'string' && (obj['runId'] as string).length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// SSE wire mapping. Inlined here so the contracts package has zero relative
+// imports inside the leaf module the daemon walks via the './critique'
+// subpath export. The daemon's NodeNext resolution requires explicit .js
+// extensions on relative imports while the web Turbopack build refuses to
+// rewrite .js -> .ts on the same source, so a re-export across files is
+// the worst of both worlds. Keeping the definitions self-contained here
+// avoids the conflict entirely.
+// ---------------------------------------------------------------------------
+
+type PayloadOf<T extends PanelEvent['type']> = Omit<Extract<PanelEvent, { type: T }>, 'type'>;
+
+export type CritiqueSseEvent =
+  | SseTransportEvent<'critique.run_started',       PayloadOf<'run_started'>>
+  | SseTransportEvent<'critique.panelist_open',     PayloadOf<'panelist_open'>>
+  | SseTransportEvent<'critique.panelist_dim',      PayloadOf<'panelist_dim'>>
+  | SseTransportEvent<'critique.panelist_must_fix', PayloadOf<'panelist_must_fix'>>
+  | SseTransportEvent<'critique.panelist_close',    PayloadOf<'panelist_close'>>
+  | SseTransportEvent<'critique.round_end',         PayloadOf<'round_end'>>
+  | SseTransportEvent<'critique.ship',              PayloadOf<'ship'>>
+  | SseTransportEvent<'critique.degraded',          PayloadOf<'degraded'>>
+  | SseTransportEvent<'critique.interrupted',       PayloadOf<'interrupted'>>
+  | SseTransportEvent<'critique.failed',            PayloadOf<'failed'>>
+  | SseTransportEvent<'critique.parser_warning',    PayloadOf<'parser_warning'>>;
+
+export const CRITIQUE_SSE_EVENT_NAMES = [
+  'critique.run_started',
+  'critique.panelist_open',
+  'critique.panelist_dim',
+  'critique.panelist_must_fix',
+  'critique.panelist_close',
+  'critique.round_end',
+  'critique.ship',
+  'critique.degraded',
+  'critique.interrupted',
+  'critique.failed',
+  'critique.parser_warning',
+] as const satisfies readonly CritiqueSseEvent['event'][];
+
+export type CritiqueSseEventName = typeof CRITIQUE_SSE_EVENT_NAMES[number];
+
+export function panelEventToSse(e: PanelEvent): CritiqueSseEvent {
+  const { type, ...payload } = e;
+  // Each PanelEvent variant maps 1:1 to a CritiqueSseEvent variant by
+  // prefixing the type with 'critique.' and moving every other field into
+  // data. The cast is safe by construction.
+  return { event: `critique.${type}`, data: payload } as CritiqueSseEvent;
 }

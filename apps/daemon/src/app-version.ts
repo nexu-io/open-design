@@ -70,7 +70,9 @@ export function resolveAppVersionInfo({
   arch = process.arch,
 }: ResolveAppVersionInfoOptions = {}): AppVersionInfo {
   const packaged = isPackagedRuntime({ resourcesPath, execPath, platform });
-  const version = cleanString(packageMetadata?.version) ?? APP_VERSION_FALLBACK;
+  const version = cleanString(env.OD_APP_VERSION)
+    ?? cleanString(packageMetadata?.version)
+    ?? APP_VERSION_FALLBACK;
   const prereleaseChannel = version.match(/^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/)?.[1]?.split('.')[0] ?? null;
   const channel = cleanString(env.OD_RELEASE_CHANNEL)
     ?? cleanString(env.OD_APP_CHANNEL)

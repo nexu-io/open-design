@@ -127,10 +127,13 @@ export const AGENT_DEFS = [
     // — issue #235) get auto-detected without writing wrapper scripts.
     fallbackBins: ['openclaude'],
     versionArgs: ['--version'],
-    helpArgs: ['--help'],
+    helpArgs: ['-p', '--help'],
     capabilityFlags: {
       // Flag string -> capability key. After probing `--help`, we set
       // `agentCapabilities[id][key] = true` for each substring that matches.
+      // `--add-dir` and `--include-partial-messages` live under `claude -p`
+      // subcommand, so we probe `claude -p --help` instead of `claude --help`.
+      // Fixes issue #430: --add-dir never detected because it wasn't in global help.
       '--include-partial-messages': 'partialMessages',
       '--add-dir': 'addDir',
     },
@@ -156,12 +159,7 @@ export const AGENT_DEFS = [
     // cursor/qwen entries below.
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const caps = agentCapabilities.get('claude') || {};
-      const args = [
-        '-p',
-        '--output-format',
-        'stream-json',
-        '--verbose',
-      ];
+      const args = ['-p', '--output-format', 'stream-json', '--verbose'];
       // `--include-partial-messages` lands richer streaming events but only
       // exists in newer Claude Code builds. Older installs reject it with
       // "unknown option" and exit 1, killing the chat. Gate on the probe.
@@ -213,12 +211,19 @@ export const AGENT_DEFS = [
     // `error: unexpected argument '-' found` and the agent exits with
     // code 2 before any prompt is read (see issue #237). The pipe alone
     // is sufficient for stdin delivery.
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+    buildArgs: (
+      _prompt,
+      _imagePaths,
+      _extra,
+      options = {},
+      runtimeContext = {},
+    ) => {
       const args = [
         'exec',
         '--json',
         '--skip-git-repo-check',
-        '--full-auto',
+        '--sandbox',
+        'workspace-write',
         '-c',
         'sandbox_workspace_write.network_access=true',
       ];
@@ -251,7 +256,13 @@ export const AGENT_DEFS = [
     fetchModels: async (resolvedBin) =>
       detectAcpModels({
         bin: resolvedBin,
-        args: ['--permission-mode', 'dangerous', '--respect-workspace-trust', 'false', 'acp'],
+        args: [
+          '--permission-mode',
+          'dangerous',
+          '--respect-workspace-trust',
+          'false',
+          'acp',
+        ],
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -269,7 +280,13 @@ export const AGENT_DEFS = [
       { id: 'gpt', label: 'gpt' },
       { id: 'gemini', label: 'gemini' },
     ],
-    buildArgs: () => ['--permission-mode', 'dangerous', '--respect-workspace-trust', 'false', 'acp'],
+    buildArgs: () => [
+      '--permission-mode',
+      'dangerous',
+      '--respect-workspace-trust',
+      'false',
+      'acp',
+    ],
     streamFormat: 'acp-json-rpc',
   },
   {
@@ -314,14 +331,22 @@ export const AGENT_DEFS = [
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
-      { id: 'anthropic/claude-sonnet-4-5', label: 'anthropic/claude-sonnet-4-5' },
+      {
+        id: 'anthropic/claude-sonnet-4-5',
+        label: 'anthropic/claude-sonnet-4-5',
+      },
       { id: 'openai/gpt-5', label: 'openai/gpt-5' },
       { id: 'google/gemini-2.5-pro', label: 'google/gemini-2.5-pro' },
     ],
     // Prompt delivered via stdin (`opencode run -`) to avoid Windows
     // `spawn ENAMETOOLONG` while preserving OpenCode's structured stream.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = ['run', '--format', 'json', '--dangerously-skip-permissions'];
+      const args = [
+        'run',
+        '--format',
+        'json',
+        '--dangerously-skip-permissions',
+      ];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -355,6 +380,7 @@ export const AGENT_DEFS = [
     ],
     buildArgs: () => ['acp', '--accept-hooks'],
     streamFormat: 'acp-json-rpc',
+    mcpDiscovery: 'mature-acp',
   },
   {
     id: 'kimi',
@@ -376,6 +402,7 @@ export const AGENT_DEFS = [
     ],
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
+    mcpDiscovery: 'mature-acp',
   },
   {
     id: 'cursor-agent',
@@ -405,9 +432,22 @@ export const AGENT_DEFS = [
     // Passing it makes the CLI treat the dash as the literal user prompt,
     // which then surfaces as "your message only contains '-'". Keep stdin
     // piped for prompt delivery, but do not append a fake prompt arg.
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+    buildArgs: (
+      _prompt,
+      _imagePaths,
+      _extra,
+      options = {},
+      runtimeContext = {},
+    ) => {
       const args = [];
-      args.push('--print', '--output-format', 'stream-json', '--stream-partial-output', '--force', '--trust');
+      args.push(
+        '--print',
+        '--output-format',
+        'stream-json',
+        '--stream-partial-output',
+        '--force',
+        '--trust',
+      );
       if (runtimeContext.cwd) {
         args.push('--workspace', runtimeContext.cwd);
       }
@@ -449,15 +489,11 @@ export const AGENT_DEFS = [
     name: 'GitHub Copilot CLI',
     bin: 'copilot',
     versionArgs: ['--version'],
-    // `-p -` enters Copilot's prompt mode and tells the CLI to read the
-    // prompt body from stdin instead of expecting it as a positional argv
-    // element. Without it the daemon writes the prompt to the child's
-    // stdin pipe (because `promptViaStdin: true` below) but Copilot stays
-    // in interactive mode, never reads stdin, and rejects the run with
-    // `error: too many arguments. Expected 0 arguments but got N` —
-    // the regression filed in #350. PR #258 standardized agents on stdin
-    // delivery and dropped the per-prompt argv path, but missed flipping
-    // Copilot's mode from interactive to `-p -`.
+    // The prompt is passed directly as the value of `-p`: `copilot -p
+    // "<prompt>" --allow-all-tools --output-format json`. Copilot does NOT
+    // treat `-` as a stdin sentinel — it reads it as a literal one-character
+    // prompt string — so the previous `-p -` + stdin pattern produced a
+    // nonsensical single-dash prompt instead of the composed prompt body.
     //
     // `--allow-all-tools` is required for non-interactive runs: without it
     // the CLI blocks waiting for human approval on every tool call. Unlike
@@ -482,10 +518,10 @@ export const AGENT_DEFS = [
       { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
       { id: 'gpt-5.2', label: 'GPT-5.2' },
     ],
-    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    buildArgs: (prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [
         '-p',
-        '-',
+        prompt,
         '--allow-all-tools',
         '--output-format',
         'json',
@@ -499,7 +535,7 @@ export const AGENT_DEFS = [
       for (const d of dirs) args.push('--add-dir', d);
       return args;
     },
-    promptViaStdin: true,
+    promptViaStdin: false,
     streamFormat: 'copilot-stream-json',
   },
   {
@@ -526,7 +562,10 @@ export const AGENT_DEFS = [
     // `pi --list-models` fails or times out.
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
-      { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (anthropic)' },
+      {
+        id: 'anthropic/claude-sonnet-4-5',
+        label: 'Claude Sonnet 4.5 (anthropic)',
+      },
       { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5 (anthropic)' },
       { id: 'openai/gpt-5', label: 'GPT-5 (openai)' },
       { id: 'openai/o4-mini', label: 'o4-mini (openai)' },
@@ -546,7 +585,13 @@ export const AGENT_DEFS = [
     // pi's RPC mode drives the entire conversation over stdio JSON-RPC.
     // The daemon sends a `prompt` command and pi streams back typed events.
     // No prompt in argv — avoids ENAMETOOLONG and keeps the protocol clean.
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+    buildArgs: (
+      _prompt,
+      _imagePaths,
+      _extra,
+      options = {},
+      runtimeContext = {},
+    ) => {
       const args = ['--mode', 'rpc', '--no-session'];
       if (options.model && options.model !== 'default') {
         // pi --model accepts patterns ("sonnet", "anthropic/claude-sonnet-4-5",
@@ -577,9 +622,23 @@ export const AGENT_DEFS = [
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
-    fallbackModels: [
-      DEFAULT_MODEL_OPTION,
-    ],
+    fallbackModels: [DEFAULT_MODEL_OPTION],
+    buildArgs: () => ['acp'],
+    streamFormat: 'acp-json-rpc',
+  },
+  {
+    id: 'kilo',
+    name: 'Kilo',
+    bin: 'kilo',
+    versionArgs: ['--version'],
+    fetchModels: async (resolvedBin) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: ['acp'],
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
+    fallbackModels: [DEFAULT_MODEL_OPTION],
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
   },
@@ -595,11 +654,61 @@ export const AGENT_DEFS = [
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
-    fallbackModels: [
-      DEFAULT_MODEL_OPTION,
-    ],
+    fallbackModels: [DEFAULT_MODEL_OPTION],
     buildArgs: () => [],
     streamFormat: 'acp-json-rpc',
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek TUI',
+    // The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and
+    // delegates to a sibling `deepseek-tui` runtime binary at exec time.
+    // Upstream documents both binaries as required (npm and cargo paths
+    // install them together), so a host with only `deepseek-tui` on PATH
+    // isn't a supported install — and `deepseek-tui` itself doesn't accept
+    // the argv shape `buildArgs` produces (`exec --auto <prompt>`). We only
+    // probe the dispatcher; advertising availability via a `deepseek-tui`
+    // fallback would surface the agent as runnable but make `/api/chat`
+    // exit immediately on the first prompt.
+    bin: 'deepseek',
+    versionArgs: ['--version'],
+    // No `models` subcommand that prints a clean id-per-line list; the
+    // canonical model ids for DeepSeek V4 are documented in the README,
+    // and the CLI accepts arbitrary provider/model strings via `--model`,
+    // so users can paste anything else through the custom-model input.
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+    ],
+    // DeepSeek's exec mode requires the prompt as a positional argument
+    // (no `-` stdin sentinel; `prompt: String` is a required clap field).
+    // `--auto` enables agentic mode with auto-approval — the daemon runs
+    // every CLI without a TTY, so the interactive approval prompt would
+    // hang the run. Streaming is plain text on stdout (tool calls go to
+    // stderr); skipping `--json` keeps deltas streaming live instead of
+    // batched into one trailing summary object at end-of-turn.
+    buildArgs: (prompt, _imagePaths, _extra, options = {}) => {
+      const args = ['exec', '--auto'];
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      args.push(prompt);
+      return args;
+    },
+    // Guard against prompts that would blow Windows' ~32 KB CreateProcess
+    // limit (or Linux MAX_ARG_STRLEN on extreme edges) before spawn. Every
+    // other argv-sensitive adapter sets `promptViaStdin: true` to dodge
+    // this; DeepSeek's CLI doesn't accept `-` as a stdin sentinel yet, so
+    // we have to ship the prompt as argv. The /api/chat spawn path checks
+    // this byte budget against the composed prompt and emits an actionable
+    // SSE error ("reduce skills/design-system context, or use an adapter
+    // with stdin support") instead of letting the spawn fail with a
+    // generic ENAMETOOLONG/E2BIG message. 30_000 bytes leaves ~2.7 KB of
+    // argv headroom under the Windows command-line limit for `exec
+    // --auto --model <id>` and any internal quoting.
+    maxPromptArgBytes: 30_000,
+    streamFormat: 'plain',
   },
 ];
 
@@ -645,10 +754,18 @@ function userToolchainDirs() {
     path.join(home, '.asdf', 'shims'),
     path.join(home, 'Library', 'pnpm'),
     path.join(home, '.cargo', 'bin'),
-    ...(process.platform !== 'win32' && !homeOverride ? ['/opt/homebrew/bin', '/usr/local/bin'] : []),
-    ...existingDirsUnder(path.join(home, '.local', 'share', 'mise', 'installs', 'node'), ['bin']),
+    ...(process.platform !== 'win32' && !homeOverride
+      ? ['/opt/homebrew/bin', '/usr/local/bin']
+      : []),
+    ...existingDirsUnder(
+      path.join(home, '.local', 'share', 'mise', 'installs', 'node'),
+      ['bin'],
+    ),
     ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
-    ...existingDirsUnder(path.join(home, '.local', 'share', 'fnm', 'node-versions'), ['installation', 'bin']),
+    ...existingDirsUnder(
+      path.join(home, '.local', 'share', 'fnm', 'node-versions'),
+      ['installation', 'bin'],
+    ),
   ];
   return cachedToolchainDirs;
 }
@@ -692,7 +809,10 @@ export function resolveOnPath(bin) {
 // when no candidate is on PATH.
 export function resolveAgentExecutable(def) {
   if (!def?.bin) return null;
-  const candidates = [def.bin, ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : [])];
+  const candidates = [
+    def.bin,
+    ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
+  ];
   for (const bin of candidates) {
     const resolved = resolveOnPath(bin);
     if (resolved) return resolved;
@@ -741,7 +861,9 @@ async function probe(def) {
   }
   let version = null;
   try {
-    const { stdout } = await execFileP(resolved, def.versionArgs, { timeout: 3000 });
+    const { stdout } = await execFileP(resolved, def.versionArgs, {
+      timeout: 3000,
+    });
     version = stdout.trim().split('\n')[0];
   } catch {
     // binary exists but --version failed; still mark available
@@ -779,8 +901,8 @@ function stripFns(def) {
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` are probe-only metadata and shouldn't bleed into the
-  // API response either.
+  // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
+  // metadata and shouldn't bleed into the API response either.
   const {
     buildArgs,
     listModels,
@@ -789,12 +911,12 @@ function stripFns(def) {
     helpArgs,
     capabilityFlags,
     fallbackBins,
+    maxPromptArgBytes,
     env,
     ...rest
   } = def;
   return rest;
 }
-
 
 export async function detectAgents() {
   const results = await Promise.all(AGENT_DEFS.map(probe));
@@ -809,6 +931,227 @@ export async function detectAgents() {
 
 export function getAgentDef(id) {
   return AGENT_DEFS.find((a) => a.id === id) || null;
+}
+
+export function buildLiveArtifactsMcpServersForAgent(def, { enabled = true, command = 'od', argsPrefix = [] } = {}) {
+  if (!enabled || def?.mcpDiscovery !== 'mature-acp') return [];
+  return [
+    {
+      name: 'open-design-live-artifacts',
+      command,
+      args: [...argsPrefix, 'mcp', 'live-artifacts'],
+    },
+  ];
+}
+
+// Adapters that ship the prompt as a positional argv arg (no stdin
+// sentinel upstream) declare a `maxPromptArgBytes` budget so the daemon
+// can fail fast with an actionable, adapter-named error before `spawn`
+// surfaces a generic ENAMETOOLONG / E2BIG (Linux MAX_ARG_STRLEN) or
+// CreateProcess command-line-too-long (Windows ~32 KB) failure. Returns
+// null when the prompt fits (or the adapter has no budget — i.e. uses
+// stdin), and a structured error payload otherwise. Pure so it's
+// directly unit-testable for both the oversized and short-prompt paths
+// without spinning up the HTTP server or a real spawn.
+export function checkPromptArgvBudget(def, composed) {
+  if (!def || typeof def.maxPromptArgBytes !== 'number') return null;
+  const bytes = Buffer.byteLength(
+    typeof composed === 'string' ? composed : '',
+    'utf8',
+  );
+  if (bytes <= def.maxPromptArgBytes) return null;
+  return {
+    code: 'AGENT_PROMPT_TOO_LARGE',
+    message:
+      `${def.name} requires the prompt as a command-line argument and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
+      'Reduce the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    bytes,
+    limit: def.maxPromptArgBytes,
+  };
+}
+
+// Mirror of packages/platform's `quoteWindowsCommandArg`, kept local so
+// `checkWindowsCmdShimCommandLineBudget` can run on macOS/Linux against
+// a fake `.cmd` path in tests without forking on `process.platform`.
+// Must stay byte-for-byte identical to the platform copy — the helper's
+// whole point is to compute the exact `cmd.exe /d /s /c "<inner>"` line
+// the spawn path will produce on Windows. The `%` → `"^%"` substitution
+// neutralizes cmd.exe's percent-expansion for prompts that ride argv
+// (DeepSeek TUI today): `%name%` pairs would otherwise be expanded from
+// the daemon environment before the child reads them, leaking secrets
+// like `%DEEPSEEK_API_KEY%` whenever the prompt mentions an env-var name.
+function quoteForWindowsCmdShim(value) {
+  const str = String(value ?? '');
+  if (!/[\s"&<>|^%]/.test(str)) return str;
+  const escaped = str.replace(/"/g, '""').replace(/%/g, '"^%"');
+  return `"${escaped}"`;
+}
+
+// Mirror of libuv's `quote_cmd_arg` (process-stdio.c), the exact rule
+// Node uses on Windows when it composes a CreateProcess command line for
+// a direct executable spawn (not a `.cmd` / `.bat` shim, which goes
+// through `quoteForWindowsCmdShim` above). Each embedded `"` becomes
+// `\"`, every backslash that ends up adjacent to a quote (or to the
+// closing wrap quote) gets doubled, and an arg with whitespace or a
+// quote is wrapped in outer `"..."`. Kept local so the budget check
+// works on macOS/Linux test hosts against a fake `C:\…\foo.exe` path.
+function quoteForWindowsDirectExe(value) {
+  const str = String(value ?? '');
+  // libuv emits a literal `""` for an empty argv entry so it survives
+  // CommandLineToArgvW round-tripping; mirror that.
+  if (str.length === 0) return '""';
+  // Fast path: no whitespace and no quote — pass through unchanged. This
+  // matches libuv's `wcspbrk(source, L" \t\"")` early return.
+  if (!/[\s"]/.test(str)) return str;
+  // No quote, no backslash: simple wrap, no per-char escaping needed.
+  if (!/[\\"]/.test(str)) return `"${str}"`;
+  // Slow path: walk the string, counting consecutive backslashes so we
+  // can double them whenever they precede a `"` or the closing wrap
+  // quote. Following the documented Windows convention:
+  //   - 2n  backslashes + `"`  →  emit `\\` × 2n  + `\"`
+  //   - 2n+1 backslashes + `"` →  emit `\\` × (2n+1) + `\"`
+  //   - n backslashes not before `"`  →  emit `\\` × n unchanged
+  //   - trailing backslashes (before the closing wrap quote)  →  doubled
+  let result = '"';
+  let backslashes = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '\\') {
+      backslashes++;
+    } else if (ch === '"') {
+      result += '\\'.repeat(2 * backslashes + 1) + '"';
+      backslashes = 0;
+    } else {
+      result += '\\'.repeat(backslashes) + ch;
+      backslashes = 0;
+    }
+  }
+  result += '\\'.repeat(2 * backslashes) + '"';
+  return result;
+}
+
+// Windows' CreateProcess caps `lpCommandLine` at 32_767 chars. Going
+// through a `.cmd` / `.bat` shim adds a `cmd.exe /d /s /c "<inner>"`
+// wrapper, and `quoteForWindowsCmdShim` doubles every embedded `"` plus
+// wraps any whitespace/special-char arg in outer quotes — so a prompt
+// well under `maxPromptArgBytes` can still expand past the kernel cap
+// once it's run through the shim. Leave headroom for any per-CLI flag
+// the adapter might tack on at exec time and for cmd.exe's own framing.
+const WINDOWS_CREATE_PROCESS_LIMIT = 32_767;
+const WINDOWS_CREATE_PROCESS_HEADROOM = 256;
+
+// Post-buildArgs guard for argv-bound adapters whose binary resolves to
+// a Windows `.cmd` / `.bat` shim. Computes the exact command line shape
+// `createCommandInvocation` (in packages/platform) hands to `spawn` —
+// `cmd.exe /d /s /c "<quoted command + quoted args>"` — and refuses the
+// run when that line would exceed the CreateProcess limit (less a small
+// headroom). Returns the same `AGENT_PROMPT_TOO_LARGE` shape as
+// `checkPromptArgvBudget` so the SSE error path in `/api/chat` doesn't
+// have to special-case it.
+//
+// No-op when:
+//   - the adapter doesn't declare `maxPromptArgBytes` (stdin adapters
+//     never go through this path);
+//   - the resolved binary isn't a `.cmd` / `.bat` (POSIX hosts and
+//     direct `.exe` resolutions on Windows skip the cmd.exe wrap);
+//   - the assembled line fits comfortably under the kernel cap.
+//
+// Pure: takes `resolvedBin` explicitly so a test on macOS can pass a
+// fake `C:\\…\\deepseek.cmd` path and exercise the same math the daemon
+// would run on Windows.
+export function checkWindowsCmdShimCommandLineBudget(def, resolvedBin, args) {
+  if (!def || typeof def.maxPromptArgBytes !== 'number') return null;
+  if (typeof resolvedBin !== 'string' || !/\.(bat|cmd)$/i.test(resolvedBin))
+    return null;
+  const argList = Array.isArray(args) ? args : [];
+  const inner = [resolvedBin, ...argList].map(quoteForWindowsCmdShim).join(' ');
+  // `cmd.exe /d /s /c "<inner>"` — same shape as buildCmdShimInvocation
+  // in packages/platform; the leading 'cmd.exe ' + '/d /s /c ' framing
+  // plus the two outer quote chars rounds out the full command line.
+  const commandLineLength = 'cmd.exe /d /s /c '.length + inner.length + 2;
+  const safeLimit =
+    WINDOWS_CREATE_PROCESS_LIMIT - WINDOWS_CREATE_PROCESS_HEADROOM;
+  if (commandLineLength <= safeLimit) return null;
+  return {
+    code: 'AGENT_PROMPT_TOO_LARGE',
+    message:
+      `${def.name} on Windows runs through a .cmd shim and this run's prompt would expand past the CreateProcess command-line limit ` +
+      `after cmd.exe quote-doubling (${commandLineLength} > ${safeLimit} chars). ` +
+      'Reduce quote-heavy content in the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    commandLineLength,
+    limit: safeLimit,
+  };
+}
+
+// Heuristic: does `resolvedBin` look like a Windows path? Used by the
+// direct-exe guard so a test on a POSIX host can drive a fake
+// `C:\…\foo.exe` path through the same math the daemon would run on
+// Windows, while still skipping POSIX-shaped paths (which never go
+// through CreateProcess).
+function looksLikeWindowsPath(p) {
+  if (typeof p !== 'string' || p.length === 0) return false;
+  // Drive-letter (`C:\…`, `C:/…`) or UNC (`\\server\share\…`).
+  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\');
+}
+
+// Companion to `checkWindowsCmdShimCommandLineBudget` for argv-bound
+// adapters whose binary resolves directly to a Windows executable
+// (a cargo-installed `deepseek.exe`, a hand-built release, or any other
+// non-shim install path). `createCommandInvocation` does *not* wrap the
+// call in `cmd.exe /d /s /c "<inner>"` for those — but Node/libuv still
+// composes a CreateProcess `lpCommandLine` by walking each argv entry
+// through `quote_cmd_arg`, which doubles backslashes adjacent to quotes
+// and escapes every embedded `"` as `\"`. A quote-heavy prompt that fits
+// under the raw `maxPromptArgBytes` budget can therefore still expand
+// past the kernel's 32_767-char `lpCommandLine` cap on a direct `.exe`
+// spawn, surfacing as a generic `spawn ENAMETOOLONG` instead of the
+// adapter-named `AGENT_PROMPT_TOO_LARGE` the budget guard exists to
+// emit. Returns the same error shape as the cmd-shim guard so the SSE
+// error path in `/api/chat` doesn't have to special-case it.
+//
+// No-op when:
+//   - the adapter doesn't declare `maxPromptArgBytes` (stdin adapters
+//     never go through this path);
+//   - the resolved binary is a `.cmd` / `.bat` shim — that's handled by
+//     `checkWindowsCmdShimCommandLineBudget` so we don't double-emit;
+//   - the resolved binary is a POSIX path on a POSIX host (no
+//     CreateProcess in play);
+//   - the assembled command line fits under the safe limit.
+//
+// Pure: takes `resolvedBin` and `args` explicitly so a test on macOS can
+// pass a fake `C:\…\deepseek.exe` and exercise the same math the daemon
+// would run on Windows. The libuv quoting math lives in
+// `quoteForWindowsDirectExe` above.
+export function checkWindowsDirectExeCommandLineBudget(def, resolvedBin, args) {
+  if (!def || typeof def.maxPromptArgBytes !== 'number') return null;
+  if (typeof resolvedBin !== 'string' || resolvedBin.length === 0) return null;
+  // The cmd-shim guard owns `.bat` / `.cmd`; skip those here so a single
+  // oversized prompt doesn't trip both guards.
+  if (/\.(bat|cmd)$/i.test(resolvedBin)) return null;
+  // Only fire when the spawn would actually go through Windows'
+  // CreateProcess. On POSIX hosts, `execvp` accepts each argv entry as a
+  // separate buffer — there's no command-line concatenation step that
+  // could expand past a kernel cap, so we have nothing to guard.
+  if (process.platform !== 'win32' && !looksLikeWindowsPath(resolvedBin))
+    return null;
+  const argList = Array.isArray(args) ? args : [];
+  // `[command, ...args].map(quote).join(' ')` is the exact shape libuv
+  // builds before handing it to CreateProcess.
+  const commandLineLength = [resolvedBin, ...argList]
+    .map(quoteForWindowsDirectExe)
+    .join(' ').length;
+  const safeLimit =
+    WINDOWS_CREATE_PROCESS_LIMIT - WINDOWS_CREATE_PROCESS_HEADROOM;
+  if (commandLineLength <= safeLimit) return null;
+  return {
+    code: 'AGENT_PROMPT_TOO_LARGE',
+    message:
+      `${def.name} on Windows builds a CreateProcess command line and this run's prompt would expand past the limit ` +
+      `after libuv quote-escaping (${commandLineLength} > ${safeLimit} chars). ` +
+      'Reduce quote-heavy content in the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    commandLineLength,
+    limit: safeLimit,
+  };
 }
 
 // Resolve the absolute path of an agent's binary on the current PATH.
@@ -829,6 +1172,11 @@ export function resolveAgentBin(id) {
 // launched from a shell that exported the key for SDK or scripting use.
 // See issue #398.
 //
+// However, when ANTHROPIC_BASE_URL is set the user is intentionally
+// routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
+// In that case claude login is meaningless, so preserve the API key so
+// the child can authenticate against the custom base URL.
+//
 // Windows env-var names are case-insensitive at the kernel level
 // (`GetEnvironmentVariable`), but spreading `process.env` into a plain
 // object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
@@ -837,6 +1185,13 @@ export function resolveAgentBin(id) {
 export function spawnEnvForAgent(agentId, baseEnv) {
   const env = { ...baseEnv };
   if (agentId !== 'claude') return env;
+  const hasCustomBaseUrl = Object.keys(env).some(
+    (k) =>
+      k.toUpperCase() === 'ANTHROPIC_BASE_URL' &&
+      typeof env[k] === 'string' &&
+      env[k].trim() !== '',
+  );
+  if (hasCustomBaseUrl) return env;
   for (const key of Object.keys(env)) {
     if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
   }
@@ -854,7 +1209,9 @@ export function rememberLiveModels(agentId, models) {
   if (!Array.isArray(models)) return;
   liveModelCache.set(
     agentId,
-    new Set(models.map((m) => m && m.id).filter((id) => typeof id === 'string')),
+    new Set(
+      models.map((m) => m && m.id).filter((id) => typeof id === 'string'),
+    ),
   );
 }
 

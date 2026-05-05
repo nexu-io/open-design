@@ -17,15 +17,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
+  <a href="https://open-design.ai/"><img alt="다운로드" src="https://img.shields.io/badge/%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-open--design.ai-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#디자인-시스템"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#내장-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <b>한국어</b> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <b>한국어</b> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -62,7 +64,7 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 | **영속성** | `.od/app.sqlite`의 SQLite: projects · conversations · messages · tabs · 사용자 templates. 내일 다시 열면 todo 카드와 열린 파일 모두 어제 그 자리. |
 | **라이프사이클** | 단일 입구 `pnpm tools-dev`(start / stop / run / status / logs / inspect / check) — 타입화된 sidecar 스탬프로 daemon + web(+ desktop) 구동 |
 | **데스크탑** | 선택적 Electron 셸: 샌드박스 렌더러 + sidecar IPC(STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN) — 같은 채널이 `tools-dev inspect desktop screenshot`을 구동해 E2E를 돌립니다 |
-| **배포 대상** | 로컬(`pnpm tools-dev`) · Vercel 웹 레이어 · 패키지된 Electron(자리만 잡힘, 진행 중) |
+| **배포 대상** | 로컬 (`pnpm tools-dev`) · Vercel 웹 레이어 · macOS (Apple Silicon)와 Windows (x64)용 패키지된 Electron 데스크톱 앱 — [open-design.ai](https://open-design.ai/) 또는 [최신 릴리스](https://github.com/nexu-io/open-design/releases)에서 다운로드 |
 | **라이선스** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -297,6 +299,15 @@ DISCOVERY 지시문    (turn-1 폼, turn-2 브랜드 분기, TodoWrite, 5차원 
 | 데스크탑(선택) | Electron 셸 — sidecar IPC를 통해 web URL 발견, 포트 추측 없음; 같은 채널(`STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN`)이 `tools-dev inspect desktop …`로 E2E 구동 |
 
 ## 빠른 시작
+
+### 데스크톱 앱 다운로드 (빌드 불필요)
+
+Open Design을 가장 빠르게 사용해 보는 방법은 사전 빌드된 데스크톱 앱입니다 — Node도, pnpm도, clone도 필요 없습니다:
+
+- **[open-design.ai](https://open-design.ai/)** — 공식 다운로드 페이지
+- **[GitHub 릴리스](https://github.com/nexu-io/open-design/releases)**
+
+### 소스에서 실행
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -620,7 +631,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 | 에이전트 | 바이너리 | 스트리밍 형식 | argv 형태(합성된 prompt 경로) |
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json`(타입 이벤트) | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
-| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` 파서 | `codex exec --json --skip-git-repo-check --full-auto [-C cwd] [--model …] [-c model_reasoning_effort=…] -`(prompt는 stdin) |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` 파서 | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]`(prompt는 stdin) |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` 파서 | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]`(prompt는 stdin) |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` 파서 | `opencode run --format json --dangerously-skip-permissions [--model …] -`(prompt는 stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` 파서 | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`(prompt는 stdin) |
@@ -665,7 +676,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 - [ ] Vercel + 터널 배포 레시피(Topology B)
 - [ ] `DESIGN.md`로 프로젝트를 스캐폴딩하는 원클릭 `npx od init`
 - [ ] Skill 마켓플레이스(`od skills install <github-repo>`)와 `od skill add | list | remove | test` CLI 표면([`docs/skills-protocol.md`](docs/skills-protocol.md)에 초안 작성됨, 구현 미완)
-- [ ] `apps/packaged/`에서 패키지된 Electron 빌드
+- [x] `apps/packaged/`에서 패키지된 Electron 빌드 — macOS (Apple Silicon) 및 Windows (x64) 다운로드는 [open-design.ai](https://open-design.ai/)와 [GitHub 릴리스 페이지](https://github.com/nexu-io/open-design/releases)에서 제공
 
 단계별 배포 → [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -696,10 +707,10 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다 — 코드, 문서, 피드백, 새 skill, 새 디자인 시스템, 또는 날카로운 이슈 하나라도. 모든 진짜 기여가 의미 있고, 아래의 벽이 가장 직접적인 "감사합니다"입니다.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-04" alt="Open Design 컨트리뷰터" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design 컨트리뷰터" />
 </a>
 
-첫 PR을 보냈다면 — 환영합니다. [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) 레이블이 시작점입니다.
+첫 PR을 보냈다면 — 환영합니다. [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) 레이블이 시작점입니다.
 
 ## 저장소 활동
 
@@ -713,9 +724,9 @@ Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
   </picture>
 </a>
 

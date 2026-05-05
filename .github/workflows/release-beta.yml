@@ -8,6 +8,21 @@ on:
         required: true
         type: boolean
         default: true
+      enable_mac:
+        description: "Build and publish mac arm64 beta artifacts."
+        required: true
+        type: boolean
+        default: true
+      enable_win:
+        description: "Build and publish Windows x64 beta artifacts."
+        required: true
+        type: boolean
+        default: true
+      enable_linux:
+        description: "Build and publish Linux x64 AppImage beta artifacts."
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -52,6 +67,7 @@ jobs:
   build_mac:
     name: Build beta mac arm64
     needs: metadata
+    if: ${{ inputs.enable_mac }}
     runs-on: macos-14
     env:
       GH_TOKEN: ${{ github.token }}
@@ -108,6 +124,7 @@ jobs:
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace release-beta \
             --portable \
+            --mac-compression normal \
             --to all \
             --json \
             $signed_flag
@@ -169,6 +186,7 @@ jobs:
   build_win:
     name: Build beta win x64
     needs: metadata
+    if: ${{ inputs.enable_win }}
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -255,6 +273,7 @@ jobs:
   build_linux:
     name: Build beta linux x64
     needs: metadata
+    if: ${{ inputs.enable_linux }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -336,9 +355,22 @@ jobs:
       - build_mac
       - build_win
       - build_linux
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.result == 'success' &&
+        (inputs.enable_mac || inputs.enable_win || inputs.enable_linux) &&
+        (!inputs.enable_mac || needs.build_mac.result == 'success') &&
+        (!inputs.enable_win || needs.build_win.result == 'success') &&
+        (!inputs.enable_linux || needs.build_linux.result == 'success')
+      }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      ENABLE_MAC: ${{ inputs.enable_mac }}
+      ENABLE_WIN: ${{ inputs.enable_win }}
+      ENABLE_LINUX: ${{ inputs.enable_linux }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -346,18 +378,21 @@ jobs:
           fetch-depth: 0
 
       - name: Download mac release bundle
+        if: ${{ inputs.enable_mac }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
 
       - name: Download windows release bundle
+        if: ${{ inputs.enable_win }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-beta-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
       - name: Download linux release bundle
+        if: ${{ inputs.enable_linux }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-beta-linux-release-assets
@@ -382,12 +417,15 @@ jobs:
           - channel: beta
           - version: ${{ needs.metadata.outputs.beta_version }}
           - base version: ${{ needs.metadata.outputs.base_version }}
+          - mac enabled: ${{ inputs.enable_mac }}
           - mac signed/notarized: ${{ needs.metadata.outputs.signed }}
+          - windows enabled: ${{ inputs.enable_win }}
           - windows signed: false
+          - linux enabled: ${{ inputs.enable_linux }}
           - branch: ${{ needs.metadata.outputs.branch }}
           - commit: ${{ needs.metadata.outputs.commit }}
 
-          This beta release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, Linux x64 AppImage (no auto-update yet), checksums, and updater feed files.
+          This beta release ships the enabled platform artifacts, checksums, and updater feed files for enabled auto-update platforms. Linux AppImage has no auto-update feed yet.
           EOF
           cat > "$latest_notes_file" <<EOF
           ## Summary
@@ -395,7 +433,7 @@ jobs:
           - latest version: ${{ needs.metadata.outputs.beta_version }}
           - latest tag: ${{ needs.metadata.outputs.version_tag }}
 
-          This release is the mutable beta channel feed carrier. It should contain feed assets only: latest-mac.yml and latest.yml.
+          This release is the mutable beta channel feed carrier. It should contain enabled feed assets only: latest-mac.yml and/or latest.yml. If neither mac nor Windows is enabled, no feed assets are expected.
           EOF
           {
             echo "version_notes_file=$version_notes_file"
@@ -405,12 +443,21 @@ jobs:
       - name: Create or update immutable beta prerelease
         run: |
           set -euo pipefail
-          release_dir="$RUNNER_TEMP/release-assets/mac"
           all_release_dir="$RUNNER_TEMP/release-assets/all"
           mkdir -p "$all_release_dir"
-          cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
-          cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
-          cp "$RUNNER_TEMP/release-assets/linux"/* "$all_release_dir/"
+          for asset_dir in "$RUNNER_TEMP/release-assets/mac" "$RUNNER_TEMP/release-assets/win" "$RUNNER_TEMP/release-assets/linux"; do
+            if [ -d "$asset_dir" ] && compgen -G "$asset_dir/*" > /dev/null; then
+              cp "$asset_dir"/* "$all_release_dir/"
+            fi
+          done
+          if ! compgen -G "$all_release_dir/*" > /dev/null; then
+            echo "no enabled beta release assets were found" >&2
+            exit 1
+          fi
+          declare -A current_release_assets=()
+          for asset_path in "$all_release_dir"/*; do
+            current_release_assets["$(basename "$asset_path")"]=1
+          done
           if gh release view "${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
             gh release edit "${{ needs.metadata.outputs.version_tag }}" \
               --title "${{ needs.metadata.outputs.release_name }}" \
@@ -424,31 +471,56 @@ jobs:
               --prerelease
           fi
           gh release upload "${{ needs.metadata.outputs.version_tag }}" "$all_release_dir"/* --clobber
+          while IFS= read -r asset_name; do
+            if [ -n "$asset_name" ] && [ -z "${current_release_assets[$asset_name]+x}" ]; then
+              gh release delete-asset "${{ needs.metadata.outputs.version_tag }}" "$asset_name" --yes
+            fi
+          done < <(gh release view "${{ needs.metadata.outputs.version_tag }}" --json assets --jq '.assets[].name')
 
       - name: Create or update beta channel feed
         run: |
           set -euo pipefail
           latest_mac_path="$RUNNER_TEMP/release-assets/mac/latest-mac.yml"
           latest_win_path="$RUNNER_TEMP/release-assets/win/latest.yml"
+          feed_assets=()
+          if [ "$ENABLE_MAC" = "true" ]; then
+            if [ ! -f "$latest_mac_path" ]; then
+              echo "expected mac feed not found at $latest_mac_path" >&2
+              exit 1
+            fi
+            feed_assets+=("$latest_mac_path")
+          fi
+          if [ "$ENABLE_WIN" = "true" ]; then
+            if [ ! -f "$latest_win_path" ]; then
+              echo "expected windows feed not found at $latest_win_path" >&2
+              exit 1
+            fi
+            feed_assets+=("$latest_win_path")
+          fi
+          declare -A current_feed_assets=()
+          for feed_asset in "${feed_assets[@]}"; do
+            current_feed_assets["$(basename "$feed_asset")"]=1
+          done
           if gh release view "${{ needs.metadata.outputs.beta_tag }}" >/dev/null 2>&1; then
-            while IFS= read -r asset_name; do
-              if [ -n "$asset_name" ]; then
-                gh release delete-asset "${{ needs.metadata.outputs.beta_tag }}" "$asset_name" --yes
-              fi
-            done < <(gh release view "${{ needs.metadata.outputs.beta_tag }}" --json assets --jq '.assets[].name')
             gh release edit "${{ needs.metadata.outputs.beta_tag }}" \
               --title "Open Design Beta Latest" \
               --notes-file "${{ steps.notes.outputs.latest_notes_file }}" \
               --prerelease
-            gh release upload "${{ needs.metadata.outputs.beta_tag }}" "$latest_mac_path" "$latest_win_path" --clobber
           else
             gh release create "${{ needs.metadata.outputs.beta_tag }}" \
-              "$latest_mac_path" "$latest_win_path" \
               --target "$GITHUB_SHA" \
               --title "Open Design Beta Latest" \
               --notes-file "${{ steps.notes.outputs.latest_notes_file }}" \
               --prerelease
           fi
+          if [ "${#feed_assets[@]}" -gt 0 ]; then
+            gh release upload "${{ needs.metadata.outputs.beta_tag }}" "${feed_assets[@]}" --clobber
+          fi
+          while IFS= read -r asset_name; do
+            if [ -n "$asset_name" ] && [ -z "${current_feed_assets[$asset_name]+x}" ]; then
+              gh release delete-asset "${{ needs.metadata.outputs.beta_tag }}" "$asset_name" --yes
+            fi
+          done < <(gh release view "${{ needs.metadata.outputs.beta_tag }}" --json assets --jq '.assets[].name')
 
       - name: Publish summary
         run: |
@@ -458,10 +530,19 @@ jobs:
             echo "- Version: ${{ needs.metadata.outputs.beta_version }}"
             echo "- Version tag: ${{ needs.metadata.outputs.version_tag }}"
             echo "- Channel feed tag: ${{ needs.metadata.outputs.beta_tag }}"
+            echo "- mac enabled: $ENABLE_MAC"
             echo "- mac signed/notarized: ${{ needs.metadata.outputs.signed }}"
+            echo "- windows enabled: $ENABLE_WIN"
             echo "- windows signed: false"
-            echo "- mac assets: open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.zip"
-            echo "- win assets: open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-win-x64-setup.exe.blockmap"
-            echo "- linux assets: open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-linux-x64.AppImage"
-            echo "- Feeds: latest-mac.yml, latest.yml (no latest-linux.yml; AppImage updater not yet wired)"
+            echo "- linux enabled: $ENABLE_LINUX"
+            if [ "$ENABLE_MAC" = "true" ]; then
+              echo "- mac assets: open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}-mac-arm64.zip"
+            fi
+            if [ "$ENABLE_WIN" = "true" ]; then
+              echo "- win assets: open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-win-x64-setup.exe.blockmap"
+            fi
+            if [ "$ENABLE_LINUX" = "true" ]; then
+              echo "- linux assets: open-design-${{ needs.metadata.outputs.beta_version }}.unsigned-linux-x64.AppImage"
+            fi
+            echo "- Feeds: enabled mac/win feeds only (no latest-linux.yml; AppImage updater not yet wired)"
           } >> "$GITHUB_STEP_SUMMARY"

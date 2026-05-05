@@ -4,7 +4,7 @@ Thanks for thinking about contributing. OD is small on purpose — most of the v
 
 This guide tells you exactly where to look for each type of contribution and what bar a PR has to clear before we merge it.
 
-<p align="center"><b>English</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><b>English</b> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -33,7 +33,7 @@ corepack enable           # selects the pinned pnpm from packageManager
 pnpm install
 pnpm tools-dev run web    # daemon + web foreground loop
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # production build
+pnpm --filter @open-design/web build  # web package build when needed
 ```
 
 Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native should work but isn't a primary target — file an issue if it doesn't.

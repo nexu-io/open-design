@@ -8,6 +8,7 @@ out/
 *.log
 .vite
 .astro/
+.vscode
 
 # Local runtime data — auto-created by the daemon on first start.
 # Holds app.sqlite (project metadata), projects/<id>/ (per-project artifacts,
@@ -38,6 +39,7 @@ tsconfig.tsbuildinfo
 .opencode/
 .claude/
 .codex/
+.deepseek/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/

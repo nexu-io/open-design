@@ -94,7 +94,7 @@ checks, missing side files, or "I am about to dispatch" status updates.
 Use the unified dispatcher — do **not** call provider APIs by hand:
 
 ```bash
-node "$OD_BIN" media generate \
+"$OD_NODE_BIN" "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
   --surface video \
   --model "<videoModel from metadata>" \
@@ -125,4 +125,4 @@ rendered, the filename, and one concrete variation idea.
 - When the underlying model fails (NSFW filter, content policy,
   timeout), report the error verbatim. Don't silently retry.
 - Do not claim a render has been "sent", "started", or "is running"
-  unless you have already called `od media generate`.
+  unless you have already called `"$OD_NODE_BIN" "$OD_BIN" media generate`.

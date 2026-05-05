@@ -21,8 +21,10 @@ import {
   fetchDaemonConfig,
   DEFAULT_PET,
   hasAnyConfiguredProvider,
+  fetchComposioConfigFromDaemon,
   loadConfig,
   saveConfig,
+  syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
@@ -34,6 +36,7 @@ import {
   listTemplates,
   patchProject,
 } from './state/projects';
+import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
   AppConfig,
@@ -45,13 +48,24 @@ import type {
   SkillSummary,
 } from './types';
 
+function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig['composio'] {
+  const apiKey = config?.apiKey?.trim() ?? '';
+  if (apiKey) {
+    return {
+      ...config,
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: apiKey.slice(-4),
+    };
+  }
+  return { ...(config ?? {}) };
+}
+
 export function App() {
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<
-    SettingsSection | undefined
-  >(undefined);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -119,6 +133,7 @@ export function App() {
         promptTemplateList,
         versionInfo,
         daemonConfig,
+        daemonComposioConfig,
       ] = await Promise.all([
         alive ? fetchAgents() : Promise.resolve([] as AgentInfo[]),
         alive ? fetchSkills() : Promise.resolve([] as SkillSummary[]),
@@ -132,6 +147,7 @@ export function App() {
           : Promise.resolve([] as PromptTemplateSummary[]),
         alive ? fetchAppVersionInfo() : Promise.resolve(null),
         alive ? fetchDaemonConfig() : Promise.resolve(null),
+        alive ? fetchComposioConfigFromDaemon() : Promise.resolve(null),
       ]);
       if (cancelled) return;
       setAgents(agentList);
@@ -169,6 +185,10 @@ export function App() {
         }
 
         if (alive) {
+          const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
+          if (!hasLocalComposioKey && daemonComposioConfig) {
+            next.composio = daemonComposioConfig;
+          }
           if (!next.agentId) {
             const firstAvailable = agentList.find((a) => a.available);
             if (firstAvailable) next.agentId = firstAvailable.id;
@@ -177,8 +197,6 @@ export function App() {
             next.designSystemId =
               dsList.find((d) => d.id === 'default')?.id ?? dsList[0]!.id;
           }
-        } else {
-          next.mode = 'api';
         }
         saveConfig(next);
         if (alive && hasAnyConfiguredProvider(next.mediaProviders)) {
@@ -189,6 +207,7 @@ export function App() {
         // writing back is idempotent and ensures both sides stay in sync.
         if (alive) {
           void syncConfigToDaemon(next);
+          void syncComposioConfigToDaemon(next.composio);
         }
 
         // Pop the onboarding modal only on the first run. Once the user has
@@ -249,12 +268,19 @@ export function App() {
     // Saving from any settings dialog (welcome or regular) counts as
     // having completed onboarding — the user has actively chosen a
     // configuration, so future page loads can skip the auto-popup.
-    const withOnboarding: AppConfig = { ...next, onboardingCompleted: true };
+    const withOnboarding: AppConfig = {
+      ...next,
+      composio: normalizeSavedComposioConfig(next.composio),
+      onboardingCompleted: true,
+    };
     saveConfig(withOnboarding);
     void syncMediaProvidersToDaemon(withOnboarding.mediaProviders, {
       force: true,
     });
     void syncConfigToDaemon(withOnboarding);
+    // Keep the Composio secret out of localStorage, but send the raw pending
+    // edit to the daemon before it is normalized away for local persistence.
+    void syncComposioConfigToDaemon(next.composio);
     setConfig(withOnboarding);
     setSettingsOpen(false);
   }, []);
@@ -358,17 +384,18 @@ export function App() {
     navigate({ kind: 'project', projectId: id, fileName: null });
   }, []);
 
-  const handleDeleteProject = useCallback(
-    async (id: string) => {
-      const ok = await deleteProjectApi(id);
-      if (!ok) return;
-      setProjects((curr) => curr.filter((p) => p.id !== id));
-      if (route.kind === 'project' && route.projectId === id) {
-        navigate({ kind: 'home' });
-      }
-    },
-    [route],
-  );
+  const handleOpenLiveArtifact = useCallback((projectId: string, artifactId: string) => {
+    navigate({ kind: 'project', projectId, fileName: liveArtifactTabId(artifactId) });
+  }, []);
+
+  const handleDeleteProject = useCallback(async (id: string) => {
+    const ok = await deleteProjectApi(id);
+    if (!ok) return;
+    setProjects((curr) => curr.filter((p) => p.id !== id));
+    if (route.kind === 'project' && route.projectId === id) {
+      navigate({ kind: 'home' });
+    }
+  }, [route]);
 
   const handleBack = useCallback(() => {
     navigate({ kind: 'home' });
@@ -426,15 +453,15 @@ export function App() {
     };
   }, [route, activeProject, projects, daemonLive]);
 
-  const openSettings = useCallback(() => {
+  const openSettings = useCallback((section: SettingsSection = 'execution') => {
     setSettingsWelcome(false);
-    setSettingsSection(undefined);
+    setSettingsInitialSection(section);
     setSettingsOpen(true);
   }, []);
 
   const openPetSettings = useCallback(() => {
     setSettingsWelcome(false);
-    setSettingsSection('pet');
+    setSettingsInitialSection('pet');
     setSettingsOpen(true);
   }, []);
 
@@ -533,6 +560,7 @@ export function App() {
           onCreateProject={handleCreateProject}
           onImportClaudeDesign={handleImportClaudeDesign}
           onOpenProject={handleOpenProject}
+          onOpenLiveArtifact={handleOpenLiveArtifact}
           onDeleteProject={handleDeleteProject}
           onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
           onOpenSettings={openSettings}
@@ -553,7 +581,7 @@ export function App() {
           daemonLive={daemonLive}
           appVersionInfo={appVersionInfo}
           welcome={settingsWelcome}
-          defaultSection={settingsSection}
+          initialSection={settingsInitialSection}
           onSave={handleConfigSave}
           onClose={() => {
             // Dismissing the welcome modal (Skip for now / backdrop click)

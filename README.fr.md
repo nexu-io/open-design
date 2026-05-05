@@ -17,15 +17,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
+  <a href="https://open-design.ai/"><img alt="Télécharger" src="https://img.shields.io/badge/t%C3%A9l%C3%A9charger-open--design.ai-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#coding-agents-pris-en-charge"><img alt="Agents" src="https://img.shields.io/badge/agents-CLI%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-catalogue-orange?style=flat-square" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-catalogue-teal?style=flat-square" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-rejoindre-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.fr.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.de.md">Deutsch</a> · <b>Français</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <b>Français</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -62,7 +64,7 @@ OD s’appuie sur quatre projets open source :
 | **Persistance** | SQLite dans `.od/app.sqlite` : projects · conversations · messages · tabs · saved templates. Rouvrez demain, la todo card et les fichiers ouverts sont au même endroit. |
 | **Lifecycle** | Un seul point d’entrée : `pnpm tools-dev` (start / stop / run / status / logs / inspect / check), qui démarre daemon + web (+ desktop) avec des typed sidecar stamps |
 | **Desktop** | Shell Electron optionnel avec renderer sandboxé + sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN), utilisé par `tools-dev inspect desktop screenshot` pour l’E2E |
-| **Déployable sur** | Local (`pnpm tools-dev`) · couche web Vercel · Electron empaqueté (placeholder, en cours) |
+| **Déployable sur** | Local (`pnpm tools-dev`) · couche web Vercel · application desktop Electron empaquetée pour macOS (Apple Silicon) et Windows (x64) — téléchargement sur [open-design.ai](https://open-design.ai/) ou la [dernière release](https://github.com/nexu-io/open-design/releases) |
 | **Licence** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -298,6 +300,15 @@ Chaque couche est composable. Chaque couche est un fichier éditable. Lisez [`ap
 | Desktop (optionnel) | Shell Electron, découvre l’URL web par sidecar IPC, sans deviner le port ; le même canal `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` alimente `tools-dev inspect desktop …` pour l’E2E |
 
 ## Quickstart
+
+### Télécharger l'application desktop (aucun build requis)
+
+Le moyen le plus rapide d'essayer Open Design est l'application desktop préconstruite — pas de Node, pas de pnpm, pas de clone :
+
+- **[open-design.ai](https://open-design.ai/)** — page de téléchargement officielle
+- **[Releases GitHub](https://github.com/nexu-io/open-design/releases)**
+
+### Exécuter depuis les sources
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -628,7 +639,7 @@ Auto-détectés depuis `PATH` au boot du daemon. Aucune config nécessaire. Le d
 | Agent | Bin | Format stream | Forme argv (chemin prompt composé) |
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json` | `claude -p --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` (prompt sur stdin) |
-| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + parseur `codex` | `codex exec --json --skip-git-repo-check --full-auto -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]` (prompt sur stdin) |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + parseur `codex` | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]` (prompt sur stdin) |
 | Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + parseur `gemini` | `gemini --output-format stream-json --skip-trust --yolo [--model …]` (prompt sur stdin) |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + parseur `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` |
@@ -677,7 +688,7 @@ Le récit long de provenance vit dans [`docs/references.md`](docs/references.md)
 - [ ] Recette Vercel + tunnel deployment
 - [ ] `npx od init` en une commande pour scaffold un projet avec `DESIGN.md`
 - [ ] Skill marketplace (`od skills install <github-repo>`) et surface CLI `od skill add | list | remove | test`
-- [ ] Build Electron empaqueté depuis `apps/packaged/`
+- [x] Build Electron empaqueté depuis `apps/packaged/` — téléchargements macOS (Apple Silicon) et Windows (x64) sur [open-design.ai](https://open-design.ai/) et la [page des releases GitHub](https://github.com/nexu-io/open-design/releases)
 
 Livraison par phases → [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -708,10 +719,10 @@ Guide complet, critères de merge, style de code et refus fréquents → [`CONTR
 Merci à toutes les personnes qui font avancer Open Design : code, docs, retours, nouveaux Skills, nouveaux Design Systems ou issues bien ciblées. Chaque vraie contribution compte.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-04" alt="Contributeurs Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Contributeurs Open Design" />
 </a>
 
-Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) est le point d’entrée.
+Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) est le point d’entrée.
 
 ## Activité du dépôt
 
@@ -725,9 +736,9 @@ Le SVG ci-dessus est régénéré chaque jour par [`.github/workflows/metrics.ym
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
-    <img alt="Historique des stars Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <img alt="Historique des stars Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
   </picture>
 </a>
 

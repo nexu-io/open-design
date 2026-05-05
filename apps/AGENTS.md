@@ -16,6 +16,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `apps/daemon/sidecar/` contains the daemon sidecar entry.
 - CLI/agent argument changes or stdout parser changes belong in `apps/daemon/src/agents.ts` and the matching parser tests.
 
+## Test layout
+
+- App tests live in each app's `tests/` directory, sibling to `src/`; preserve source-relative subpaths inside `tests/` when useful.
+- Keep app `src/` directories source-only; do not add new `*.test.ts` or `*.test.tsx` files under `src/`.
+
 ## Sidecar awareness
 
 - App business layers must not import sidecar packages or branch on `runtime.mode`, `namespace`, `ipc`, or `source`.

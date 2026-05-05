@@ -8,8 +8,9 @@ import {
 } from "react";
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { projectRawUrl, uploadProjectFiles } from "../providers/registry";
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile } from "../types";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
+import { patchProject } from "../state/projects";
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata } from "../types";
 import { Icon } from "./Icon";
 import { BUILT_IN_PETS, CUSTOM_PET_ID, resolveActivePet } from "./pet/pets";
 
@@ -57,6 +58,8 @@ interface Props {
   onAdoptPet?: (petId: string) => void;
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
+  projectMetadata?: ProjectMetadata;
+  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -92,6 +95,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onAdoptPet,
       onTogglePet,
       onOpenPetSettings,
+      projectMetadata,
+      onProjectMetadataChange,
     },
     ref
   ) {
@@ -123,6 +128,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const petMenuRef = useRef<HTMLDivElement | null>(null);
     const petTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
+    const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // initialDraft is only honored on the first non-empty value the parent
     // hands us. After we seed once, the composer is fully under user control
     // — re-renders that pass the same prompt back must not reseed. If the
@@ -394,6 +400,28 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (files.length > 0) void uploadFiles(files);
     }
 
+    async function handleLinkFolder() {
+      setImportOpen(false);
+      if (!projectId) return;
+      const selected = await openFolderDialog();
+      if (!selected) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const existing = base.linkedDirs ?? [];
+      if (existing.includes(selected)) return;
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [...existing, selected] };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
+
+    async function handleUnlinkFolder(dir: string) {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const existing = base.linkedDirs ?? [];
+      const metadata: ProjectMetadata = { ...base, linkedDirs: existing.filter((d) => d !== dir) };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
+
     function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       const value = e.target.value;
       const cursor = e.target.selectionStart;
@@ -503,6 +531,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onRemove={removeStaged}
               t={t}
             />
+          ) : null}
+          {linkedDirs.length > 0 ? (
+            <div className="linked-dirs-row" data-testid="linked-dirs">
+              {linkedDirs.map((dir) => (
+                <div key={dir} className="linked-dir-chip">
+                  <Icon name="folder" size={13} />
+                  <span className="linked-dir-name" title={dir}>
+                    {dir.split('/').pop() || dir}
+                  </span>
+                  <button
+                    className="staged-remove"
+                    onClick={() => handleUnlinkFolder(dir)}
+                    title={t('chat.linkedFolderRemoveAria', { path: dir })}
+                    aria-label={t('chat.linkedFolderRemoveAria', { path: dir })}
+                  >
+                    <Icon name="close" size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
           ) : null}
           {commentAttachments.length > 0 ? (
             <StagedCommentAttachments
@@ -628,7 +676,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
                   <ImportItem icon="link" label={t('chat.importGitHub')} t={t} />
                   <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
-                  <ImportItem icon="folder" label={t('chat.importFolder')} t={t} />
+                  <ImportItem
+                    icon="folder"
+                    label={t('chat.importFolder')}
+                    t={t}
+                    enabled
+                    onClick={handleLinkFolder}
+                  />
                   <ImportItem
                     icon="sparkles"
                     label={t('chat.importSkills')}
@@ -840,26 +894,30 @@ function ImportItem({
   icon,
   label,
   t,
+  enabled,
+  onClick,
 }: {
   icon: "upload" | "link" | "grid" | "folder" | "sparkles" | "file";
   label: string;
   t: TranslateFn;
+  enabled?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
-      className="composer-import-item"
+      className={`composer-import-item${enabled ? ' composer-import-item-enabled' : ''}`}
       role="menuitem"
       tabIndex={-1}
-      disabled
-      title={t('chat.importComingSoon')}
-      onClick={(e) => e.preventDefault()}
+      disabled={!enabled}
+      title={enabled ? label : t('chat.importComingSoon')}
+      onClick={enabled && onClick ? onClick : (e) => e.preventDefault()}
     >
       <span className="ico" aria-hidden>
         <Icon name={icon} size={14} />
       </span>
       <span className="composer-import-item-label">{label}</span>
-      <span className="composer-import-item-soon">{t('chat.importSoon')}</span>
+      {!enabled && <span className="composer-import-item-soon">{t('chat.importSoon')}</span>}
     </button>
   );
 }

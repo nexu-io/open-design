@@ -93,7 +93,9 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **openclaw** | `openclaw` | `~/.openclaw/` | 〜 | 〜 | 〜 | P2 |
 | **copilot** | `copilot` | `~/.copilot/` | ❌ | ✅ (`edit` tool) | ✅ (`--output-format json` JSONL) | P2 |
 | **kiro** | `kiro-cli` | `~/.kiro/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
+| **kilo** | `kilo` | — | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
 | **vibe** | `vibe-acp` | `~/.vibe/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
+| **deepseek** | `deepseek` | `~/.deepseek/` | `~/.deepseek/skills/` | ❌ (prompt-injected) | ✅ | ✅ (plain text) | P2 |
 
 "P0/P1/P2" correspond to the roadmap phases in [`roadmap.md`](roadmap.md).
 
@@ -195,6 +197,16 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Skill loading: prompt injection only. Github Copilot's tool catalog includes a `skill` tool — native format worth reverse-engineering later.
 - Surgical edits: dedicated `edit` tool.
 - Detection assumes Copilot is already authenticated, via one of: `copilot login` (subcommand, OAuth device flow), the interactive `/login` slash command inside `copilot` with no args.
+
+### 5.9 DeepSeek TUI
+
+- Invocation: `deepseek exec --auto [--model <id>] "<prompt>"`. The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and delegates to a sibling `deepseek-tui` runtime binary at exec time; upstream documents both binaries as required (the npm and cargo paths install them together). We only probe the dispatcher — `deepseek-tui` on its own doesn't accept this argv shape, so advertising it as a fallback would surface the agent as available but fail on the first chat run. A future revision could teach resolution + buildArgs which binary was selected and emit a verified `deepseek-tui` invocation, with a regression test exercising that path.
+- Streaming: plain text deltas to stdout in non-`--json` mode (tool-call notifications go to stderr). Skipping `--json` is intentional — `deepseek exec --json` batches the entire run into one trailing summary object instead of streaming, which would freeze the chat UI until end-of-turn.
+- Auto-approval: `--auto` enables agentic mode with the YOLO permission posture. The daemon runs every CLI without a TTY, so the interactive approval prompt would otherwise hang the run.
+- Skills: prompt injection only in v1. DeepSeek TUI does walk `.agents/skills`, `skills`, `.opencode/skills`, `.claude/skills`, and `~/.deepseek/skills` first-wins, so a future revision can switch to file-placed skill loading the same way Claude Code does.
+- Prompt delivery: positional argv (no stdin sentinel; clap declares `prompt: String` as a required field). This means very large composed prompts can hit Windows' ~32 KB `CreateProcess` limit; for typical chat prompts this is non-issue. Upstream support for a `-` stdin sentinel would let us flip this to `promptViaStdin: true` like the other adapters. To avoid surfacing oversized prompts as a generic `spawn ENAMETOOLONG` / `E2BIG`, the adapter declares `maxPromptArgBytes` (currently 30,000) and `/api/chat` enforces it through three complementary guards: a fast pre-bin-resolution `checkPromptArgvBudget` against the raw composed prompt bytes, a post-`buildArgs` `checkWindowsCmdShimCommandLineBudget` that — when the resolved binary is a Windows `.cmd` / `.bat` shim — recomputes the would-be `cmd.exe /d /s /c "<inner>"` command line using the same per-arg quote-doubling the platform layer applies on Windows, and a sibling `checkWindowsDirectExeCommandLineBudget` that — when the resolved binary is a non-shim Windows install (e.g. a cargo-built `deepseek.exe`) — recomputes the same command line using libuv's `quote_cmd_arg` rules (every `"` becomes `\"`, backslashes adjacent to a quote are doubled). The two Windows guards are mutually exclusive on a given resolution: the cmd-shim guard owns `.cmd`/`.bat`, the direct-exe guard owns everything else. Together they catch quote-heavy prompts (code blocks, JSON-shaped skill seeds) that fit under the raw byte budget but expand past CreateProcess's 32_767-char `lpCommandLine` cap on either install path. All three guards emit the same actionable `AGENT_PROMPT_TOO_LARGE` SSE error telling the user to reduce skills/design-system context, shorten the conversation, or pick an adapter with stdin support, and all three are unit-tested (oversized + short-prompt branches, quote-heavy regressions for both Windows paths, and a mutual-exclusivity check) so the guards can't silently regress.
+- Models: ships `deepseek-v4-pro` and `deepseek-v4-flash` as fallback hints (1M-token context windows, native thinking-mode streaming). Users can paste any other id (e.g. `nvidia-nim/deepseek-v4-pro`, `fireworks/deepseek-v4-flash`) via the Settings dialog's custom-model input.
+- **Gotcha — auth state is not auto-detected.** DeepSeek TUI reads its API key from `~/.deepseek/config.toml` or `DEEPSEEK_API_KEY`. If the user hasn't run `deepseek auth set --provider deepseek` (or set the env var), the first run errors out with a non-actionable message. Detection currently only reports `available: true` based on the binary being on PATH; surface auth state via `deepseek doctor --json` in a follow-up.
 
 ## 6. Capability-driven UI
 
