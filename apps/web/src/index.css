@@ -161,6 +161,11 @@
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; margin: 0; }
+/* Final guard: never allow the page to scroll horizontally. If a
+   descendant ever produces a wider layout than the viewport, the
+   excess is clipped instead of forcing a scrollbar that pushes the
+   right edge of the design grid past the viewport. */
+html, body { overflow-x: hidden; max-width: 100vw; }
 
 body {
   font-family: var(--sans);
