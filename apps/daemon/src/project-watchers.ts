@@ -17,7 +17,26 @@ import { projectDir } from './projects.js';
 // against the path *relative to the watch root* so that ancestor directories
 // (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
 // not accidentally match and silence every event in the tree.
-const IGNORE_NAMES = new Set(['.git', 'node_modules', '.od', 'debug', '.DS_Store']);
+const IGNORE_NAMES = new Set([
+  '.git',
+  'node_modules',
+  '.od',
+  'debug',
+  '.DS_Store',
+  // Python virtual environments and caches — can contain tens of thousands of
+  // files, exhausting the process fd table and breaking child-process spawning.
+  '.venv',
+  'venv',
+  '__pycache__',
+  '.mypy_cache',
+  '.pytest_cache',
+  '.tox',
+  '.ruff_cache',
+  // Other common large generated/vendor dirs.
+  'target',  // Rust / Java
+  'vendor',  // Go
+  '.cargo',
+]);
 export function makeIgnored(rootDir) {
   return (absPath) => {
     const rel = path.relative(rootDir, absPath);
