@@ -2791,57 +2791,61 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         res.header('Access-Control-Allow-Origin', '*');
       }
 
-      // ?print=1 — inject a corrected @page size rule (px→mm) so Chrome's
-      // print dialog uses the right physical dimensions instead of treating
-      // CSS pixels as screen pixels (860px = 8.96in, not 860mm).
+      // Print injection — force a correct physical @page size in mm so Chrome
+      // doesn't treat CSS px as screen pixels (860px = 8.96in, not 860mm).
       //
-      // Detection order: inline HTML → linked CSS files in the project dir.
-      // The corrected rule is injected with !important at the very end of the
-      // document so it wins the cascade regardless of source order.
+      //   ?pagesize=WxH         — explicit override (mm), wins over auto-detect
+      //   ?print=1              — auto-detect from inline <style> or linked CSS
+      //   ?print=1&pagesize=…   — both: override is used
+      //
+      // The corrected rule is injected with !important before </body> AND
+      // after </html> so no other rule wins the cascade.
       const printMode = req.query.print === '1';
-      if (printMode && (file.mime === 'text/html' || /\.html?$/i.test(relPath))) {
+      const pagesizeOverride = typeof req.query.pagesize === 'string' ? req.query.pagesize : null;
+      const isHtml = file.mime === 'text/html' || /\.html?$/i.test(relPath);
+      if (isHtml && (printMode || pagesizeOverride)) {
         let html = file.buffer.toString('utf-8');
+        let pageSize: [number, number] | null = null;
 
-        // Detect @page { size: Wpx Hpx } from a CSS string.
-        const pxPageSize = (css: string): [number, number] | null => {
-          const m = css.match(/@page\s*[^{]*\{[^}]*\bsize\s*:\s*([\d.]+)px\s+([\d.]+)px/i);
-          if (!m) return null;
-          const w = Math.round(parseFloat(m[1]));
-          const h = Math.round(parseFloat(m[2]));
-          return w > 0 && h > 0 ? [w, h] : null;
-        };
+        if (pagesizeOverride) {
+          const parts = pagesizeOverride.split('x').map(Number);
+          if (parts[0] > 0 && parts[1] > 0) pageSize = [parts[0], parts[1]];
+        }
 
-        let detected = pxPageSize(html);
-
-        if (!detected) {
-          // Scan linked local CSS files in document order.
-          const linkRe = /<link\b[^>]*\brel\s*=\s*["']stylesheet["'][^>]*>/gi;
-          const hrefRe = /\bhref\s*=\s*["']([^"']+)["']/i;
-          for (const tag of html.match(linkRe) ?? []) {
-            const hm = hrefRe.exec(tag);
-            const href = hm?.[1]?.trim();
-            if (!href || /^(?:https?:|data:|blob:|\/)/i.test(href)) continue;
-            // Resolve relative to the HTML file's directory inside the project.
-            const htmlDir = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/') + 1) : '';
-            const cssPath = href.startsWith('../')
-              ? href.replace(/^(\.\.\/)+/, '')
-              : htmlDir + href;
-            try {
-              const cssFile = await readProjectFile(PROJECTS_DIR, req.params.id, cssPath);
-              const cssText = cssFile.buffer.toString('utf-8');
-              detected = pxPageSize(cssText);
-              if (detected) break;
-            } catch { /* file not found — skip */ }
+        if (!pageSize && printMode) {
+          // Detect @page { size: Wpx Hpx } from a CSS string.
+          const pxPageSize = (css: string): [number, number] | null => {
+            const m = css.match(/@page\s*[^{]*\{[^}]*\bsize\s*:\s*([\d.]+)px\s+([\d.]+)px/i);
+            if (!m) return null;
+            const w = Math.round(parseFloat(m[1]));
+            const h = Math.round(parseFloat(m[2]));
+            return w > 0 && h > 0 ? [w, h] : null;
+          };
+          pageSize = pxPageSize(html);
+          if (!pageSize) {
+            const linkRe = /<link\b[^>]*\brel\s*=\s*["']stylesheet["'][^>]*>/gi;
+            const hrefRe = /\bhref\s*=\s*["']([^"']+)["']/i;
+            for (const tag of html.match(linkRe) ?? []) {
+              const hm = hrefRe.exec(tag);
+              const href = hm?.[1]?.trim();
+              if (!href || /^(?:https?:|data:|blob:|\/)/i.test(href)) continue;
+              const htmlDir = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/') + 1) : '';
+              const cssPath = href.startsWith('../') ? href.replace(/^(\.\.\/)+/, '') : htmlDir + href;
+              try {
+                const cssFile = await readProjectFile(PROJECTS_DIR, req.params.id, cssPath);
+                pageSize = pxPageSize(cssFile.buffer.toString('utf-8'));
+                if (pageSize) break;
+              } catch { /* skip */ }
+            }
           }
         }
 
-        if (detected) {
-          const [pw, ph] = detected;
+        if (pageSize) {
+          const [pw, ph] = pageSize;
           const styleTag =
             `<style>@page{size:${pw}mm ${ph}mm!important;margin:0!important}` +
             `html,body{margin:0!important;padding:0!important}` +
             `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}</style>`;
-          // Inject before </body> AND after </html> so no later rule can override.
           html = html.includes('</body>')
             ? html.replace('</body>', styleTag + '</body>')
             : html + styleTag;
