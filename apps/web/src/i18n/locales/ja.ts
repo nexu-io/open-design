@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const ja: Dict = {
+  ...en,
   'common.cancel': 'キャンセル',
   'common.save': '保存',
   'common.close': '閉じる',

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createProjectEventsConnection,
   projectEventsUrl,
-  type ProjectFileChangeEvent,
+  type ProjectEvent,
 } from '../../src/providers/project-events';
 
 type Listener = (evt: unknown) => void;
@@ -59,7 +59,7 @@ describe('createProjectEventsConnection', () => {
   });
 
   it('invokes onChange with parsed payload on file-changed events', () => {
-    const seen: ProjectFileChangeEvent[] = [];
+    const seen: ProjectEvent[] = [];
     const conn = createProjectEventsConnection(
       'p1',
       (evt) => seen.push(evt),
@@ -80,7 +80,7 @@ describe('createProjectEventsConnection', () => {
   });
 
   it('ignores malformed payloads instead of throwing', () => {
-    const seen: ProjectFileChangeEvent[] = [];
+    const seen: ProjectEvent[] = [];
     const conn = createProjectEventsConnection(
       'p1',
       (evt) => seen.push(evt),
@@ -89,6 +89,72 @@ describe('createProjectEventsConnection', () => {
     const es = MockEventSource.instances[0]!;
     expect(() => es.dispatch('file-changed', { data: '{not-json' })).not.toThrow();
     expect(seen).toEqual([]);
+    conn.close();
+  });
+
+  it('parses live_artifact events', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('live_artifact', {
+      data: JSON.stringify({
+        type: 'live_artifact',
+        action: 'updated',
+        projectId: 'p1',
+        artifactId: 'artifact-1',
+        title: 'Status Board',
+        refreshStatus: 'running',
+      }),
+    });
+
+    expect(seen).toEqual([
+      {
+        type: 'live_artifact',
+        action: 'updated',
+        projectId: 'p1',
+        artifactId: 'artifact-1',
+        title: 'Status Board',
+        refreshStatus: 'running',
+      },
+    ]);
+    conn.close();
+  });
+
+  it('parses live_artifact_refresh events', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('live_artifact_refresh', {
+      data: JSON.stringify({
+        type: 'live_artifact_refresh',
+        phase: 'succeeded',
+        projectId: 'p1',
+        artifactId: 'artifact-1',
+        refreshId: 'refresh-000001',
+        title: 'Status Board',
+        refreshedSourceCount: 1,
+      }),
+    });
+
+    expect(seen).toEqual([
+      {
+        type: 'live_artifact_refresh',
+        phase: 'succeeded',
+        projectId: 'p1',
+        artifactId: 'artifact-1',
+        refreshId: 'refresh-000001',
+        title: 'Status Board',
+        refreshedSourceCount: 1,
+      },
+    ]);
     conn.close();
   });
 

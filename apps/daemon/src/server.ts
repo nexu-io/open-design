@@ -3,13 +3,16 @@ import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import net from 'node:net';
 import { composeSystemPrompt } from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
+  buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
@@ -104,6 +107,26 @@ import {
   upsertPreviewComment,
 } from './db.js';
 import {
+  createLiveArtifact,
+  deleteLiveArtifact,
+  ensureLiveArtifactPreview,
+  getLiveArtifact,
+  LiveArtifactRefreshLockError,
+  LiveArtifactStoreValidationError,
+  listLiveArtifacts,
+  listLiveArtifactRefreshLogEntries,
+  readLiveArtifactCode,
+  recoverStaleLiveArtifactRefreshes,
+  updateLiveArtifact,
+} from './live-artifacts/store.js';
+import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
+import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
+import { registerConnectorRoutes } from './connectors/routes.js';
+import { configureConnectorCredentialStore, ConnectorServiceError, deleteConnectorCredentialsByProvider, FileConnectorCredentialStore } from './connectors/service.js';
+import { composioConnectorProvider } from './connectors/composio.js';
+import { configureComposioConfigStore, readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './connectors/composio-config.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
+import {
   buildDeployFileSet,
   checkDeploymentUrl,
   DeployError,
@@ -125,11 +148,17 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
   const daemonDir =
     base === 'dist' || base === 'src' ? path.dirname(moduleDir) : moduleDir;
   return path.resolve(daemonDir, '../..');
+}
+
+export function resolveDaemonCliPath(): string {
+  const packageJsonPath = require.resolve('@open-design/daemon/package.json');
+  return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
@@ -290,7 +319,8 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
 // when this project shipped with Vite; the daemon serves whatever the
 // frontend toolchain emits, no further config needed.
 const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
-const OD_BIN = path.join(PROJECT_ROOT, 'apps', 'daemon', 'dist', 'cli.js');
+const OD_BIN = resolveDaemonCliPath();
+const OD_NODE_BIN = process.execPath;
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -349,6 +379,66 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
+const activeChatAgentEventSinks = new Map();
+const activeProjectEventSinks = new Map();
+
+function emitChatAgentEvent(runId, payload) {
+  const sink = activeChatAgentEventSinks.get(runId);
+  if (!sink) return false;
+  return sink(payload);
+}
+
+function emitLiveArtifactEvent(grant, action, artifact) {
+  if (!artifact?.id) return false;
+  const payload = {
+    type: 'live_artifact',
+    action,
+    projectId: artifact.projectId ?? grant.projectId,
+    artifactId: artifact.id,
+    title: artifact.title ?? artifact.id,
+    refreshStatus: artifact.refreshStatus,
+  };
+  let emitted = emitProjectLiveArtifactEvent(payload.projectId, payload);
+  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
+  return emitted;
+}
+
+function emitLiveArtifactRefreshEvent(grant, payload) {
+  if (!payload?.artifactId) return false;
+  const event = {
+    type: 'live_artifact_refresh',
+    projectId: grant.projectId,
+    ...payload,
+  };
+  let emitted = emitProjectLiveArtifactEvent(grant.projectId, event);
+  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
+  return emitted;
+}
+
+function emitProjectLiveArtifactEvent(projectId, payload) {
+  const sinks = activeProjectEventSinks.get(projectId);
+  if (!sinks || sinks.size === 0) return false;
+  for (const sink of Array.from(sinks)) {
+    try {
+      sink(payload);
+    } catch {
+      sinks.delete(sink);
+    }
+  }
+  if (sinks.size === 0) activeProjectEventSinks.delete(projectId);
+  return true;
+}
+
+// Windows ENAMETOOLONG mitigation constants
+const CMD_BAT_RE = /\.(cmd|bat)$/i;
+const PROMPT_TEMP_FILE = () =>
+  '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
+const promptFileBootstrap = (fp) =>
+  `Your full instructions are stored in the file: ${fp.replace(/\\/g, '/')}. ` +
+  'Open that file first and follow every instruction in it exactly — ' +
+  'it contains the system prompt, design system, skill workflow, and user request. ' +
+  'Do not begin your response until you have read the entire file.';
+
 // Load Critique Theater config once at startup so a bad OD_CRITIQUE_* value
 // surfaces immediately as a boot-time RangeError instead of silently at
 // run time. Default: enabled=false (M0 dark launch).
@@ -358,8 +448,48 @@ const critiqueCfg = loadCritiqueConfigFromEnv();
 // Adapter denylist for orchestrator routing is implicit: anything that is
 // not the 'plain' streamFormat falls through to legacy single-pass.
 const critiqueWarnedAdapters = new Set<string>();
-
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
+
+export function createAgentRuntimeEnv(
+  baseEnv: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  daemonUrl: string,
+  toolTokenGrant: { token?: string } | null = null,
+  nodeBin: string = process.execPath,
+): NodeJS.ProcessEnv {
+  const env = {
+    ...baseEnv,
+    OD_DAEMON_URL: daemonUrl,
+    OD_NODE_BIN: nodeBin,
+  };
+
+  if (toolTokenGrant?.token) {
+    env.OD_TOOL_TOKEN = toolTokenGrant.token;
+  } else {
+    delete env.OD_TOOL_TOKEN;
+  }
+
+  return env;
+}
+
+export function createAgentRuntimeToolPrompt(
+  daemonUrl: string,
+  toolTokenGrant: { token?: string } | null = null,
+): string {
+  const tokenLine = toolTokenGrant?.token
+    ? '- `OD_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
+    : '- `OD_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
+
+  return [
+    '## Runtime tool environment',
+    '',
+    `- Daemon URL: \`${daemonUrl}\` (also available as \`OD_DAEMON_URL\`).`,
+    '- `OD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
+    '- `OD_BIN` is the absolute path to the Open Design CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
+    '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
+    tokenLine,
+    '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
+  ].join('\n');
+}
 
 export function normalizeProjectDisplayStatus(status) {
   return status === 'starting' || status === 'queued' ? 'running' : status;
@@ -427,6 +557,187 @@ function sanitizeArchiveFilename(raw) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
   return cleaned;
+}
+
+function sendLiveArtifactRouteError(res, err) {
+  if (err instanceof LiveArtifactStoreValidationError) {
+    return sendApiError(res, 400, 'LIVE_ARTIFACT_INVALID', err.message, {
+      details: { kind: 'validation', issues: err.issues },
+    });
+  }
+  if (err instanceof LiveArtifactRefreshLockError) {
+    return sendApiError(res, 409, 'REFRESH_LOCKED', err.message, {
+      details: { artifactId: err.artifactId },
+    });
+  }
+  if (err instanceof LiveArtifactRefreshUnavailableError) {
+    return sendApiError(res, 400, 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE', err.message);
+  }
+  if (err instanceof LiveArtifactRefreshAbortError) {
+    return sendApiError(res, err.kind === 'cancelled' ? 499 : 504, 'LIVE_ARTIFACT_REFRESH_TIMEOUT', err.message, {
+      details: { kind: err.kind, timeoutMs: err.timeoutMs ?? null, step: err.step ?? null },
+    });
+  }
+  if (err instanceof ConnectorServiceError) {
+    return sendApiError(res, err.status, err.code, err.message, err.details === undefined ? {} : { details: err.details });
+  }
+  if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+    return sendApiError(res, 404, 'LIVE_ARTIFACT_NOT_FOUND', 'live artifact not found');
+  }
+  return sendApiError(res, 500, 'LIVE_ARTIFACT_STORAGE_FAILED', String(err));
+}
+
+function normalizeLocalAuthority(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || /[\s/@]/.test(trimmed) || trimmed.includes(',')) return null;
+
+  try {
+    const parsed = new URL(`http://${trimmed}`);
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+    if (!hostname || parsed.username || parsed.password || parsed.pathname !== '/') return null;
+    return { hostname, port: parsed.port };
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname) {
+  const normalized = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (normalized === 'localhost') return true;
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
+  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
+  return false;
+}
+
+function isLoopbackPeerAddress(address) {
+  if (typeof address !== 'string') return false;
+  const normalized = address.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!normalized) return false;
+  if (normalized.startsWith('::ffff:')) return isLoopbackPeerAddress(normalized.slice('::ffff:'.length));
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
+  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
+  return false;
+}
+
+function localOriginFromHeader(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'null' || trimmed.includes(',')) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
+    if (!isLoopbackHostname(parsed.hostname)) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function validateLocalDaemonRequest(req) {
+  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) {
+    return {
+      ok: false,
+      message: 'request peer must be a loopback address',
+      details: { peer: 'remoteAddress' },
+    };
+  }
+
+  const host = normalizeLocalAuthority(req.get('host'));
+  if (!host || !isLoopbackHostname(host.hostname)) {
+    return {
+      ok: false,
+      message: 'request host must be a loopback daemon address',
+      details: { header: 'host' },
+    };
+  }
+
+  const originHeader = req.get('origin');
+  if (originHeader !== undefined && !localOriginFromHeader(originHeader)) {
+    return {
+      ok: false,
+      message: 'request origin must be a loopback daemon origin',
+      details: { header: 'origin' },
+    };
+  }
+
+  return { ok: true, origin: localOriginFromHeader(originHeader) };
+}
+
+function requireLocalDaemonRequest(req, res, next) {
+  const validation = validateLocalDaemonRequest(req);
+  if (!validation.ok) {
+    return sendApiError(res, 403, 'FORBIDDEN', validation.message, validation.details ? { details: validation.details } : {});
+  }
+
+  res.setHeader('Vary', 'Origin');
+  if (validation.origin) {
+    res.setHeader('Access-Control-Allow-Origin', validation.origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '600');
+  next();
+}
+
+function setLiveArtifactPreviewHeaders(res) {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'none'",
+      "base-uri 'none'",
+      "script-src 'none'",
+      "object-src 'none'",
+      "connect-src 'none'",
+      "form-action 'none'",
+      "frame-ancestors 'self'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "style-src 'unsafe-inline'",
+      'sandbox allow-same-origin',
+    ].join('; '),
+  );
+}
+
+function setLiveArtifactCodeHeaders(res) {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+function bearerTokenFromRequest(req) {
+  const header = req.get('authorization');
+  if (typeof header !== 'string') return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match?.[1];
+}
+
+function authorizeToolRequest(req, res, operation) {
+  const endpoint = req.path;
+  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), { endpoint, operation });
+  if (!validation.ok) {
+    const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
+    sendApiError(res, status, validation.code, validation.message, {
+      details: { endpoint, operation },
+    });
+    return null;
+  }
+  return validation.grant;
+}
+
+function requestProjectOverride(projectId, tokenProjectId) {
+  return typeof projectId === 'string' && projectId.length > 0 && projectId !== tokenProjectId;
+}
+
+function requestRunOverride(runId, tokenRunId) {
+  return typeof runId === 'string' && runId.length > 0 && runId !== tokenRunId;
 }
 
 function openNativeFolderDialog() {
@@ -722,6 +1033,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Health/version remain open for monitoring probes.
   // Non-browser clients (no Origin header) are always allowed.
   app.use('/api', (req, res, next) => {
+    // Live artifact previews have stricter local-daemon validation and
+    // loopback CORS handling on the route itself. Let that middleware produce
+    // the structured error shape and preflight headers for preview embeds.
+    if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
+
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
@@ -748,6 +1064,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
+  configureComposioConfigStore(RUNTIME_DATA_DIR);
+  let daemonUrl = `http://127.0.0.1:${port}`;
 
   // Boot reconcile: any critique_runs row left in 'running' state by a prior
   // daemon crash gets flipped to 'interrupted' with rounds_json.recoveryReason
@@ -768,6 +1087,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // hits a populated cache even if /api/agents hasn't been called yet.
   void detectAgents().catch(() => {});
 
+  await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
+    console.warn('[od] Failed to recover stale live artifact refreshes:', error);
+  });
+
   if (fs.existsSync(STATIC_DIR)) {
     app.use(express.static(STATIC_DIR));
   }
@@ -780,6 +1103,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  registerConnectorRoutes(app, { sendApiError, authorizeToolRequest, projectsRoot: PROJECTS_DIR, requireLocalDaemonRequest });
+
+  app.get('/api/connectors/composio/config', (_req, res) => {
+    try {
+      res.json(readPublicComposioConfig());
+    } catch (err) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.put('/api/connectors/composio/config', requireLocalDaemonRequest, (req, res) => {
+    try {
+      const before = readComposioConfig();
+      const cfg = writeComposioConfig(req.body);
+      const after = readComposioConfig();
+      composioConnectorProvider.clearDiscoveryCache();
+      if (!cfg.configured || (before.apiKey && before.apiKey !== after.apiKey)) {
+        deleteConnectorCredentialsByProvider('composio');
+      }
+      res.json(cfg);
+    } catch (err) {
+      res.status(400).json({ error: String(err && err.message ? err.message : err) });
+    }
   });
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -1157,6 +1505,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let sub;
     try {
       const sse = createSseResponse(res);
+      const projectEventSink = (payload) => {
+        sse.send(payload.type, payload);
+      };
+      let sinks = activeProjectEventSinks.get(req.params.id);
+      if (!sinks) {
+        sinks = new Set();
+        activeProjectEventSinks.set(req.params.id, sinks);
+      }
+      sinks.add(projectEventSink);
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
       });
@@ -1167,6 +1524,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           sub = null;
           Promise.resolve(unsubscribe()).catch(() => {});
         }
+        const currentSinks = activeProjectEventSinks.get(req.params.id);
+        currentSinks?.delete(projectEventSink);
+        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
       };
       res.on('close', cleanup);
       res.on('finish', cleanup);
@@ -1765,6 +2125,310 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       });
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/live-artifacts', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const artifacts = await listLiveArtifacts({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+      });
+      res.json({ artifacts });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.options('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, (_req, res) => {
+    res.status(204).end();
+  });
+
+  app.get('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
+      if (variant === 'template' || variant === 'rendered-source') {
+        const html = await readLiveArtifactCode({
+          projectsRoot: PROJECTS_DIR,
+          projectId,
+          artifactId: req.params.artifactId,
+          variant: variant === 'template' ? 'template' : 'rendered',
+        });
+        setLiveArtifactCodeHeaders(res);
+        return res.status(200).send(html);
+      }
+      if (variant !== 'rendered') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'variant must be rendered, template, or rendered-source');
+      }
+
+      const record = await ensureLiveArtifactPreview({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      setLiveArtifactPreviewHeaders(res);
+      res.status(200).send(record.html);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const record = await getLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/live-artifacts/:artifactId/refreshes', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const refreshes = await listLiveArtifactRefreshLogEntries({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      res.json({ refreshes });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/create', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:create');
+      if (!toolGrant) return;
+      const { projectId, input, templateHtml, provenanceJson, createdByRunId } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (requestRunOverride(createdByRunId, toolGrant.runId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'createdByRunId is derived from the tool token', {
+          details: { suppliedRunId: createdByRunId },
+        });
+      }
+
+      const record = await createLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+        input: input ?? {},
+        templateHtml,
+        provenanceJson,
+        createdByRunId: toolGrant.runId,
+      });
+      emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/tools/live-artifacts/list', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:list');
+      if (!toolGrant) return;
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+
+      const artifacts = await listLiveArtifacts({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+      });
+      res.json({ artifacts });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/update', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:update');
+      if (!toolGrant) return;
+      const { projectId, artifactId, input, templateHtml, provenanceJson } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (typeof artifactId !== 'string' || artifactId.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
+      }
+
+      const record = await updateLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+        artifactId,
+        input: input ?? {},
+        templateHtml,
+        provenanceJson,
+      });
+      emitLiveArtifactEvent(toolGrant, 'updated', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/refresh', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:refresh');
+      if (!toolGrant) return;
+      const { projectId, artifactId } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (typeof artifactId !== 'string' || artifactId.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
+      }
+
+      let result;
+      try {
+        result = await refreshLiveArtifact({
+          projectsRoot: PROJECTS_DIR,
+          projectId: toolGrant.projectId,
+          artifactId,
+          onStarted: ({ refreshId }) => {
+            emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
+          },
+        });
+      } catch (refreshErr) {
+        emitLiveArtifactRefreshEvent(toolGrant, {
+          phase: 'failed',
+          artifactId,
+          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        });
+        throw refreshErr;
+      }
+      emitLiveArtifactRefreshEvent(toolGrant, {
+        phase: 'succeeded',
+        artifactId,
+        refreshId: result.refresh.id,
+        title: result.artifact.title,
+        refreshedSourceCount: result.refresh.refreshedSourceCount,
+      });
+      res.json(result);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.patch('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const record = await updateLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+        input: req.body ?? {},
+      });
+      emitLiveArtifactEvent({ projectId }, 'updated', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.delete('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const existing = await getLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      await deleteLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      updateProject(db, projectId, {});
+      emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
+      res.json({ ok: true });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.options('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, (_req, res) => {
+    res.status(204).end();
+  });
+
+  app.post('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      let result;
+      try {
+        result = await refreshLiveArtifact({
+          projectsRoot: PROJECTS_DIR,
+          projectId,
+          artifactId: req.params.artifactId,
+          onStarted: ({ refreshId }) => {
+            emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
+          },
+        });
+      } catch (refreshErr) {
+        emitLiveArtifactRefreshEvent({ projectId }, {
+          phase: 'failed',
+          artifactId: req.params.artifactId,
+          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        });
+        throw refreshErr;
+      }
+      emitLiveArtifactRefreshEvent({ projectId }, {
+        phase: 'succeeded',
+        artifactId: req.params.artifactId,
+        refreshId: result.refresh.id,
+        title: result.artifact.title,
+        refreshedSourceCount: result.refresh.refreshedSourceCount,
+      });
+      res.json(result);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
     }
   });
 
@@ -2654,6 +3318,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+    const runId = run.id;
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
@@ -2733,6 +3398,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
+    const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
+      ? toolTokenRegistry.mint({
+          runId,
+          projectId,
+          allowedEndpoints: CHAT_TOOL_ENDPOINTS,
+          allowedOperations: CHAT_TOOL_OPERATIONS,
+        })
+      : null;
+    let toolTokenRevoked = false;
+    const revokeToolToken = (reason) => {
+      if (toolTokenRevoked || !toolTokenGrant) return;
+      toolTokenRevoked = true;
+      toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
+    };
+    const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
     const { prompt: daemonSystemPrompt, activeSkillDir } =
       await composeDaemonSystemPrompt({
@@ -2740,7 +3420,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId,
         designSystemId,
       });
-    const instructionPrompt = [daemonSystemPrompt, systemPrompt]
+    const instructionPrompt = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
       .join('\n\n---\n\n');
@@ -2824,6 +3504,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
+      enabled: Boolean(toolTokenGrant?.token),
+      command: process.execPath,
+      argsPrefix: [OD_BIN],
+    });
 
     // Pre-flight the composed prompt against any argv-byte budget the
     // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
@@ -2847,24 +3532,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const resolvedBin = resolveAgentBin(agentId);
-
-    // If detection can't find the binary, surface a friendly SSE error
-    // pointing at /api/agents instead of silently falling back to
-    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
-    // from issue #10.
-    if (!resolvedBin) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          'AGENT_UNAVAILABLE',
-          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
-            'Install it and refresh the agent list (GET /api/agents) before retrying.',
-          { retryable: true },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
 
     const args = def.buildArgs(
       composed,
@@ -2930,10 +3597,33 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const send = (event, data) => design.runs.emit(run, event, data);
-
+    const unregisterChatAgentEventSink = () => {
+      activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
+    };
+    if (toolTokenGrant?.runId) {
+      activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) =>
+        send('agent', payload),
+      );
+    }
+    // If detection can't find the binary, surface a friendly SSE error
+    // pointing at /api/agents instead of silently falling back to
+    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
+    // from issue #10.
+    if (!resolvedBin) {
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload(
+        'AGENT_UNAVAILABLE',
+        `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+          'Install it and refresh the agent list (GET /api/agents) before retrying.',
+        { retryable: true },
+      ));
+      return design.runs.finish(run, 'failed', 1, null);
+    }
     const odMediaEnv = {
       OD_BIN,
-      OD_DAEMON_URL: `http://127.0.0.1:${resolvedPort}`,
+      OD_NODE_BIN,
+      OD_DAEMON_URL: daemonUrl,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
             OD_PROJECT_ID: projectId,
@@ -2942,12 +3632,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : {}),
     };
 
-    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+    if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      return;
+    }
 
     run.status = 'running';
     run.updatedAt = Date.now();
     send('start', {
-      runId: run.id,
+      runId,
       agentId,
       bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
@@ -2955,6 +3649,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       cwd,
       model: safeModel,
       reasoning: safeReasoning,
+      toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
 
     let child;
@@ -2966,11 +3661,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = spawnEnvForAgent(def.id, {
-        ...process.env,
-        ...(def.env || {}),
+      const env = {
+        ...spawnEnvForAgent(
+          def.id,
+          {
+            ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
+            ...(def.env || {}),
+          },
+        ),
         ...odMediaEnv,
-      });
+      };
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,
@@ -3006,15 +3706,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          `spawn failed: ${err.message}`,
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      design.runs.finish(run, 'failed', 1, null);
+      return;
     }
 
     child.stdout.setEncoding('utf8');
@@ -3127,6 +3823,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
+        mcpServers,
         send,
       });
     } else if (def.streamFormat === 'json-event-stream') {
@@ -3142,13 +3839,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
-      send(
-        'error',
-        createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message),
-      );
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
@@ -3795,6 +4493,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!returnServer) {
         console.log(`[od] daemon listening on ${url}`);
       }
+      daemonUrl = url;
       resolve(returnServer ? { url, server } : url);
     });
     // `app.listen` throws synchronously when the port is already in use on

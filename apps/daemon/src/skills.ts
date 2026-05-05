@@ -119,6 +119,7 @@ export async function listSkills(skillsRoot) {
 // Authoring guidance lives in the preamble itself so an agent can pick
 // the right form on its own without daemon-side feature detection.
 function withSkillRootPreamble(body, dir) {
+  const referencedFiles = collectReferencedSideFiles(body);
   const folder = path.basename(dir);
   const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
   const preamble = [
@@ -133,10 +134,25 @@ function withSkillRootPreamble(body, dir) {
     "> back to the absolute path: `" + dir + "/assets/template.html`.",
     "> Either form resolves to the same file; the relative form keeps you",
     "> inside the project working directory, which is preferred.",
+    ...(referencedFiles.length > 0
+      ? [
+          ">",
+          "> Known side files in this skill: " +
+            referencedFiles.map((file) => "`" + file + "`").join(", ") +
+            ".",
+        ]
+      : []),
     "",
     "",
   ].join("\n");
   return preamble + body;
+}
+
+function collectReferencedSideFiles(body) {
+  const files = new Set();
+  const matches = body.matchAll(/\b(?:assets|references)\/[A-Za-z0-9._-]+\b/g);
+  for (const match of matches) files.add(match[0]);
+  return Array.from(files).sort();
 }
 
 async function dirHasAttachments(dir) {

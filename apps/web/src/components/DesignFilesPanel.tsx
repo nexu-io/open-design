@@ -9,16 +9,19 @@ import type {
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
-import type { ProjectFile, ProjectFileKind } from '../types';
+import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
 import { Icon } from './Icon';
+import { LiveArtifactBadges } from './LiveArtifactBadges';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 interface Props {
   projectId: string;
   files: ProjectFile[];
+  liveArtifacts: LiveArtifactWorkspaceEntry[];
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
+  onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
   onDeleteFile: (name: string) => void;
   onUpload: () => void;
   onUploadFiles: (files: File[]) => void;
@@ -67,8 +70,10 @@ const SECTION_FILE_LIMIT_INCREMENT = 200;
 export function DesignFilesPanel({
   projectId,
   files,
+  liveArtifacts,
   onRefreshFiles,
   onOpenFile,
+  onOpenLiveArtifact,
   onDeleteFile,
   onUpload,
   onUploadFiles,
@@ -397,10 +402,43 @@ export function DesignFilesPanel({
           )}
         </div>
         <div className="df-body">
-          {files.length === 0 ? (
+          {files.length === 0 && liveArtifacts.length === 0 ? (
             <div className="df-empty">{t('designFiles.empty')}</div>
           ) : (
             <>
+              {liveArtifacts.length > 0 ? (
+                <div className="df-section" key="live-artifacts">
+                  <div className="df-section-label">{t('designFiles.sectionLiveArtifacts')}</div>
+                  {liveArtifacts.map((artifact) => (
+                    <button
+                      key={artifact.artifactId}
+                      type="button"
+                      data-testid={`design-file-row-${artifact.tabId}`}
+                      className="df-row"
+                      onDoubleClick={() => onOpenLiveArtifact(artifact.tabId)}
+                      onClick={() => onOpenLiveArtifact(artifact.tabId)}
+                    >
+                      <span className="df-row-icon" data-kind="live-artifact" aria-hidden>
+                        ◉
+                      </span>
+                      <span className="df-row-name-wrap">
+                        <span className="df-row-name">{artifact.title}</span>
+                        <span className="df-row-sub">
+                          <span>{t('designFiles.kindLiveArtifact')}</span>
+                          <LiveArtifactBadges
+                            compact
+                            status={artifact.status}
+                            refreshStatus={artifact.refreshStatus}
+                          />
+                        </span>
+                      </span>
+                      <span className="df-row-time">
+                        {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {folderRows.length > 0 ? (
                 <FileSection
                   count={folderRows.length}

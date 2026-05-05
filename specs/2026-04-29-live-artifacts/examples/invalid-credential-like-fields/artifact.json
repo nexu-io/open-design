@@ -1,0 +1,32 @@
+{
+  "title": "Invalid Credential-Like Fields",
+  "preview": {
+    "type": "html",
+    "entry": "index.html"
+  },
+  "document": {
+    "format": "html_template_v1",
+    "templatePath": "template.html",
+    "generatedPreviewPath": "index.html",
+    "dataPath": "data.json",
+    "dataJson": {
+      "title": "Invalid Credential-Like Fields",
+      "account": "fixture-service"
+    },
+    "sourceJson": {
+      "type": "connector_tool",
+      "toolName": "fixture.read",
+      "input": {
+        "token": "REDACTED_FIXTURE_TOKEN",
+        "password": "REDACTED_FIXTURE_PASSWORD"
+      },
+      "connector": {
+        "connectorId": "fixture",
+        "accountLabel": "fixture-service",
+        "toolName": "fixture.read",
+        "approvalPolicy": "read_only_auto"
+      },
+      "refreshPermission": "none"
+    }
+  }
+}

@@ -25,6 +25,7 @@ describe('DesignFilesPanel folder rows', () => {
     projectId: 'project-1',
     onRefreshFiles: vi.fn(),
     onOpenFile: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
     onDeleteFile: vi.fn(),
     onUpload: vi.fn(),
     onUploadFiles: vi.fn(),
@@ -41,6 +42,7 @@ describe('DesignFilesPanel folder rows', () => {
           file('created-by-codex/README.md', 'text', 3),
           file('created-by-codex/audit.html', 'html', 2),
         ]}
+        liveArtifacts={[]}
       />,
     );
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // @ts-nocheck
 import { startServer } from './server.js';
+import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
+import { runConnectorsToolCli } from './tools-connectors-cli.js';
+import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 
 const argv = process.argv.slice(2);
 
@@ -59,6 +62,17 @@ const SUBCOMMAND_MAP = {
   mcp: runMcp,
 };
 
+if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
+  try {
+    const { exitCode } = await runLiveArtifactsMcpServer();
+    process.exit(exitCode);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+    process.exit(1);
+  }
+}
+
 const first = argv.find((a) => !a.startsWith('-'));
 if (first && SUBCOMMAND_MAP[first]) {
   const idx = argv.indexOf(first);
@@ -67,6 +81,27 @@ if (first && SUBCOMMAND_MAP[first]) {
   process.exit(0);
 }
 
+if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
+  runLiveArtifactsToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
+} else if (argv[0] === 'tools' && argv[1] === 'connectors') {
+  runConnectorsToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
+} else {
 // Default: daemon mode.
 let port = Number(process.env.OD_PORT) || 7456;
 let host = process.env.OD_BIND_HOST || '127.0.0.1';
@@ -97,11 +132,24 @@ startServer({ port, host }).then(url => {
     });
   }
 });
+}
 
 function printRootHelp() {
   console.log(`Usage:
   od [--port <n>] [--host <addr>] [--no-open]
       Start the local daemon and open the web UI.
+
+  od tools live-artifacts <create|list|update|refresh> [options]
+      Manage live artifacts through daemon wrapper commands.
+
+  od tools connectors <list|execute> [options]
+      Discover and execute configured connectors.
+
+  od mcp live-artifacts
+      Start the MCP server exposing live-artifact and connector tools.
+
+  "$OD_NODE_BIN" "$OD_BIN" tools ...
+      Recommended agent-runtime form; avoids relying on user PATH for od or node.
 
   od media generate --surface <image|video|audio> --model <id> [opts]
       Generate a media artifact and write it into the active project.
@@ -127,7 +175,7 @@ What the daemon does:
   * serves the chat UI at http://<host>:<port>
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
-    dispatcher that the agent calls via \`od media generate\`.`);
+     dispatcher that the agent calls via \`od media generate\`.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +385,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart) {
   process.stdout.write(JSON.stringify(handoff) + '\n');
   process.stderr.write(
     `task ${taskId} still running after ${handoff.elapsed}s. ` +
-      `Run \`od media wait ${taskId} --since ${since}\` to continue ` +
+      `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
       `(exit code 2 = still running).\n`,
   );
   process.exit(2);
@@ -414,6 +462,7 @@ function parseFlags(argv, opts = {}) {
 
 function printMediaHelp() {
   console.log(`Usage: od media generate --surface <image|video|audio> --model <id> [opts]
+       "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 
 Required:
   --surface  image | video | audio

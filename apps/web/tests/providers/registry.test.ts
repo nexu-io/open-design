@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchAppVersionInfo, fetchProjectFileText, uploadProjectFiles } from '../../src/providers/registry';
+import {
+  fetchAppVersionInfo,
+  fetchConnectorDiscovery,
+  fetchProjectFileText,
+  uploadProjectFiles,
+} from '../../src/providers/registry';
 
 describe('fetchAppVersionInfo', () => {
   afterEach(() => {
@@ -94,6 +99,30 @@ describe('fetchProjectFileText', () => {
         url: '/api/projects/project-1/raw/diagram.svg',
       }),
     );
+  });
+});
+
+describe('fetchConnectorDiscovery', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('caches connector discovery after a successful fetch', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      connectors: [{ id: 'github', name: 'GitHub', tools: [{ name: 'issues' }] }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchConnectorDiscovery({ refresh: true })).resolves.toEqual([
+      { id: 'github', name: 'GitHub', tools: [{ name: 'issues' }] },
+    ]);
+    await expect(fetchConnectorDiscovery()).resolves.toEqual([
+      { id: 'github', name: 'GitHub', tools: [{ name: 'issues' }] },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/connectors/discovery?refresh=true');
   });
 });
 
