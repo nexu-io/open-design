@@ -78,23 +78,25 @@ export function QuickSwitcher({ projectId, files, onOpenFile, onClose }: Props) 
   );
 
   function onKeyDown(e: React.KeyboardEvent) {
+    // Don't intercept navigation/commit keys while an IME composition is
+    // active — those keys are how users select / commit candidates when
+    // typing CJK file names. Without this guard, ↑↓/Enter would steer the
+    // palette cursor instead of the IME picker.
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Escape') {
       onClose();
       return;
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      // Guard against empty matches: matches.length - 1 would be -1, which
-      // would clamp the cursor to a non-existent row and break the
-      // [data-idx="${cursor}"] highlight on the next render with results.
       if (matches.length === 0) return;
-      setCursor((c) => Math.min(c + 1, matches.length - 1));
+      setCursor((c) => nextCursor(c, matches.length, 1));
       return;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (matches.length === 0) return;
-      setCursor((c) => Math.max(c - 1, 0));
+      setCursor((c) => nextCursor(c, matches.length, -1));
       return;
     }
     if (e.key === 'Enter') {
@@ -149,6 +151,16 @@ export function QuickSwitcher({ projectId, files, onOpenFile, onClose }: Props) 
       </div>
     </div>
   );
+}
+
+// Cursor advance with wrap-around. Pulled out as a pure function so the
+// boundary-wrap behavior can be unit-tested without simulating keyboard
+// events (the rest of the test suite uses static-markup rendering).
+// Exported for unit testing.
+export function nextCursor(current: number, total: number, direction: 1 | -1): number {
+  if (total <= 0) return 0;
+  if (direction === 1) return (current + 1) % total;
+  return (current - 1 + total) % total;
 }
 
 // Cheap fuzzy: prefix-on-basename beats substring-on-basename beats

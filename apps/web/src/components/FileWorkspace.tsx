@@ -243,14 +243,17 @@ export function FileWorkspace({
     return () => tabBar.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Cmd/Ctrl+P opens the file palette. Capture phase so we beat the
-  // browser's default print dialog. Suppressed while another input has
-  // focus only when the user is mid-IME composition — otherwise the
-  // palette should be reachable from anywhere in the workspace, including
-  // from the chat composer (designers' muscle memory from VS Code).
+  // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
+  // so we beat the browser's default print dialog. Platform-gated so on
+  // macOS we don't steal Ctrl+P from native readline ("previous line") in
+  // text fields, and on win/linux we don't steal Cmd+P (rare but possible
+  // on remapped keyboards).
   useEffect(() => {
+    const isMac =
+      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
         if (e.isComposing) return;
         e.preventDefault();
         setQuickSwitcherOpen((open) => !open);

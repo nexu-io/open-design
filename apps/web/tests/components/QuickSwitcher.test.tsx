@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { QuickSwitcher, scoreMatch } from '../../src/components/QuickSwitcher';
+import { nextCursor, QuickSwitcher, scoreMatch } from '../../src/components/QuickSwitcher';
 import type { ProjectFile } from '../../src/types';
 
 // QuickSwitcher reads recents from localStorage during render. The default
@@ -67,6 +67,37 @@ describe('scoreMatch — fuzzy ranking tiers', () => {
     // The component lowercases the query before calling scoreMatch, so
     // scoreMatch itself can rely on the contract that q is already lower.
     expect(scoreMatch(file({ name: 'Hero.tsx' }), 'hero')).toBeGreaterThan(0);
+  });
+});
+
+describe('nextCursor — arrow-key wrap behavior', () => {
+  it('moves forward through the list without wrapping in the middle', () => {
+    expect(nextCursor(0, 5, 1)).toBe(1);
+    expect(nextCursor(2, 5, 1)).toBe(3);
+  });
+
+  it('moves backward through the list without wrapping in the middle', () => {
+    expect(nextCursor(3, 5, -1)).toBe(2);
+    expect(nextCursor(1, 5, -1)).toBe(0);
+  });
+
+  it('wraps from the last row to the first when pressing ↓', () => {
+    // Row 4 (last of 5) → 0 (first). Documented behavior in the PR test plan.
+    expect(nextCursor(4, 5, 1)).toBe(0);
+  });
+
+  it('wraps from the first row to the last when pressing ↑', () => {
+    expect(nextCursor(0, 5, -1)).toBe(4);
+  });
+
+  it('returns 0 when the list is empty (no division-by-zero, no NaN)', () => {
+    expect(nextCursor(0, 0, 1)).toBe(0);
+    expect(nextCursor(0, 0, -1)).toBe(0);
+  });
+
+  it('stays put on a single-item list (wrap is a no-op)', () => {
+    expect(nextCursor(0, 1, 1)).toBe(0);
+    expect(nextCursor(0, 1, -1)).toBe(0);
   });
 });
 
