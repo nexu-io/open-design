@@ -2436,7 +2436,13 @@ function GoogleSlidesViewer({
               </ul>
             </details>
           ) : null}
-          {result.missingImages?.length ? (
+          {/* Round 13: imageSlots is the structured successor to the
+              legacy missingImages list — agents populated both during
+              the schema transition and the UI was rendering two near-
+              identical panels. Suppress missingImages when the newer
+              imageSlots field has any pending entry. */}
+          {result.missingImages?.length &&
+          !result.imageSlots?.some((s) => s.status && s.status !== 'filled') ? (
             <details>
               <summary>
                 {t('fileViewer.googleSlidesMissingImages')} ({result.missingImages.length})
