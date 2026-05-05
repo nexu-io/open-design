@@ -21,32 +21,32 @@ Type voice should stay aligned with the broader BMW family system: BMW Type Next
 
 ## 2. Color Palette & Roles
 ### Brand & Accent
-- **Primary** (`{colors.primary}` — #ffffff): The system's primary type and CTA color. Used for h1/h2/h3 display, body text on dark, and primary button labels (the buttons themselves are transparent or canvas-colored — the white text + outline IS the button).
-- **M Blue Light** (`{colors.m-blue-light}` — #0066b1): The first stop in the M tricolor stripe. Used on M-badge accents and motorsport chrome.
-- **M Blue Dark** (`{colors.m-blue-dark}` — #1c69d4): The middle stop and BMW heritage blue value, repurposed as the middle band of the M stripe.
-- **M Red** (`{colors.m-red}` — #e22718): The third stop. The signature M-power red, used in the stripe and on motorsport-pace callouts.
-- **Electric Blue** (`{colors.electric-blue}` — #0653b6): A separate electric-vehicle accent used on M xDrive electric model pages. Distinct from the heritage blue — feels colder, more digital.
+- **Primary** (#ffffff): `{colors.primary}`. The system's primary type and CTA color. Used for h1/h2/h3 display, body text on dark, and primary button labels (the buttons themselves are transparent or canvas-colored — the white text + outline IS the button).
+- **M Blue Light** (#0066b1): `{colors.m-blue-light}`. The first stop in the M tricolor stripe. Used on M-badge accents and motorsport chrome.
+- **M Blue Dark** (#1c69d4): `{colors.m-blue-dark}`. The middle stop and BMW heritage blue value, repurposed as the middle band of the M stripe.
+- **M Red** (#e22718): `{colors.m-red}`. The third stop. The signature M-power red, used in the stripe and on motorsport-pace callouts.
+- **Electric Blue** (#0653b6): `{colors.electric-blue}`. A separate electric-vehicle accent used on M xDrive electric model pages. Distinct from the heritage blue — feels colder, more digital.
 
 ### Surface
-- **Canvas** (`{colors.canvas}` — #000000): The default page floor across the analyzed editorial and marketing surfaces. True black.
-- **Surface Soft** (`{colors.surface-soft}` — #0d0d0d): A barely-different-from-black used for spec table cells and footer-adjacent strips.
-- **Surface Card** (`{colors.surface-card}` — #1a1a1a): Cards, secondary buttons, icon-button backgrounds.
-- **Surface Elevated** (`{colors.surface-elevated}` — #262626): One step lighter, used for nested cards inside dark bands.
-- **Carbon Gray** (`{colors.carbon-gray}` — #2b2b2b): Carbon-fiber-inspired surface tone used on technical-spec cards.
+- **Canvas** (#000000): `{colors.canvas}`. The default page floor across the analyzed editorial and marketing surfaces. True black.
+- **Surface Soft** (#0d0d0d): `{colors.surface-soft}`. A barely-different-from-black used for spec table cells and footer-adjacent strips.
+- **Surface Card** (#1a1a1a): `{colors.surface-card}`. Cards, secondary buttons, icon-button backgrounds.
+- **Surface Elevated** (#262626): `{colors.surface-elevated}`. One step lighter, used for nested cards inside dark bands.
+- **Carbon Gray** (#2b2b2b): `{colors.carbon-gray}`. Carbon-fiber-inspired surface tone used on technical-spec cards.
 
 ### Hairlines & Borders
-- **Hairline** (`{colors.hairline}` — #3c3c3c): The 1px divider tone on dark surfaces. Used between body sections, between table rows, around card outlines.
-- **Hairline Strong** (`{colors.hairline-strong}` — #262626): Same hex as `{colors.surface-elevated}` — borders feel like one-step elevations rather than ink lines.
+- **Hairline** (#3c3c3c): `{colors.hairline}`. The 1px divider tone on dark surfaces. Used between body sections, between table rows, around card outlines.
+- **Hairline Strong** (#262626): `{colors.hairline-strong}`. Same hex as `{colors.surface-elevated}` — borders feel like one-step elevations rather than ink lines.
 
 ### Text
-- **Ink / On Dark** (`{colors.on-dark}` — #ffffff): All headline and primary text on dark canvas.
-- **Body** (`{colors.body}` — #bbbbbb): Default running-text color (slightly cooler than pure white). Used for body paragraphs and secondary metadata.
-- **Body Strong** (`{colors.body-strong}` — #e6e6e6): Emphasized body / lead paragraph.
-- **Muted** (`{colors.muted}` — #7e7e7e): Footer links, breadcrumbs, captions.
+- **Ink / On Dark** (#ffffff): `{colors.on-dark}`. All headline and primary text on dark canvas.
+- **Body** (#bbbbbb): `{colors.body}`. Default running-text color (slightly cooler than pure white). Used for body paragraphs and secondary metadata.
+- **Body Strong** (#e6e6e6): `{colors.body-strong}`. Emphasized body / lead paragraph.
+- **Muted** (#7e7e7e): `{colors.muted}`. Footer links, breadcrumbs, captions.
 
 ### Semantic
-- **Warning** (`{colors.warning}` — #f4b400): Used very sparingly on technical-warning callouts.
-- **Success** (`{colors.success}` — #0fa336): Order-confirmation states (rare on marketing surfaces).
+- **Warning** (#f4b400): `{colors.warning}`. Used very sparingly on technical-warning callouts.
+- **Success** (#0fa336): `{colors.success}`. Order-confirmation states (rare on marketing surfaces).
 
 ## 3. Typography Rules
 ### Font Family
