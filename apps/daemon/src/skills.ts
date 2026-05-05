@@ -6,6 +6,37 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
+import { SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
+
+// Persisted skill ids on existing projects can outlive a folder rename.
+// listSkills() derives the id from the SKILL.md frontmatter `name`, so once
+// a skill is renamed the old id stops resolving and composeSystemPrompt
+// silently drops the skill body for projects saved against the old id.
+// This map forwards deprecated ids to their current canonical id; callers
+// resolve through findSkillById() before scanning the listing. Leave entries
+// here for at least one stable release after a rename so on-disk projects
+// keep composing with the intended skill prompt.
+export const SKILL_ID_ALIASES = Object.freeze({
+  "editorial-collage": "open-design-landing",
+  "editorial-collage-deck": "open-design-landing-deck",
+});
+
+export function resolveSkillId(id) {
+  if (typeof id !== "string" || id.length === 0) return id;
+  return SKILL_ID_ALIASES[id] ?? id;
+}
+
+// Lookup helper that mirrors `skills.find((s) => s.id === id)` but first
+// rewrites any deprecated id to its current canonical form. Use this at
+// every site that resolves a stored or external skill id; calling
+// `.find()` directly will silently miss aliased ids.
+export function findSkillById(skills, id) {
+  if (!Array.isArray(skills) || typeof id !== "string" || id.length === 0) {
+    return undefined;
+  }
+  const canonical = resolveSkillId(id);
+  return skills.find((s) => s.id === canonical);
+}
 
 export async function listSkills(skillsRoot) {
   const out = [];
@@ -26,12 +57,15 @@ export async function listSkills(skillsRoot) {
       const { data, body } = parseFrontmatter(raw);
       const hasAttachments = await dirHasAttachments(dir);
       const mode = data.od?.mode || inferMode(body, data.description);
+      const surface = normalizeSurface(data.od?.surface, mode);
       out.push({
         id: data.name || entry.name,
         name: data.name || entry.name,
         description: data.description || "",
         triggers: Array.isArray(data.triggers) ? data.triggers : [],
         mode,
+        surface,
+        craftRequires: normalizeCraftRequires(data.od?.craft?.requires),
         platform: normalizePlatform(
           data.od?.platform,
           mode,
@@ -65,17 +99,40 @@ export async function listSkills(skillsRoot) {
 
 // Skills that ship side files (e.g. `assets/template.html`, `references/*.md`)
 // need the agent to know where the skill lives on disk — relative paths in the
-// SKILL.md body resolve against the agent's CWD, which is the daemon root, not
-// the skill folder. We prepend a short preamble so any capable code agent can
-// open those files via absolute paths.
+// SKILL.md body would otherwise resolve against the agent's CWD, which is the
+// project folder (`.od/projects/<id>/`), not the skill folder.
+//
+// We prepend a short preamble that advertises two paths:
+//
+//   1. A CWD-relative alias path (`.od-skills/<folder>/`) — the primary one.
+//      Before spawning the agent the chat handler copies the active skill
+//      into `<cwd>/.od-skills/<folder>/` (see `cwd-aliases.ts`), so this
+//      path is inside the agent's working directory on every CLI and is
+//      not blocked by directory-access policies (issue #430).
+//   2. The absolute repo path — a fallback for the cases the staged copy
+//      cannot exist for: `/api/runs` calls without a project (cwd falls
+//      back to the repo root, where the absolute path *is* an in-cwd
+//      path), or environments where staging fails. Claude/Copilot are
+//      additionally given `--add-dir` for that absolute path, so the
+//      fallback round-trips even under their permission policy.
+//
+// Authoring guidance lives in the preamble itself so an agent can pick
+// the right form on its own without daemon-side feature detection.
 function withSkillRootPreamble(body, dir) {
+  const folder = path.basename(dir);
+  const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
   const preamble = [
-    "> **Skill root (absolute):** `" + dir + "`",
+    "> **Skill root (relative to project):** `" + skillRootRel + "/`",
+    "> **Skill root (absolute fallback):** `" + dir + "`",
     ">",
     "> This skill ships side files alongside `SKILL.md`. When the workflow",
     "> below references relative paths such as `assets/template.html` or",
-    "> `references/layouts.md`, resolve them against the skill root above and",
-    "> open them via their full absolute path.",
+    "> `references/layouts.md`, prefer the relative form rooted at the",
+    "> first path above — e.g. open `" + skillRootRel + "/assets/template.html`.",
+    "> If that path is not reachable from your working directory, fall",
+    "> back to the absolute path: `" + dir + "/assets/template.html`.",
+    "> Either form resolves to the same file; the relative form keeps you",
+    "> inside the project working directory, which is preferred.",
     "",
     "",
   ].join("\n");
@@ -93,6 +150,27 @@ async function dirHasAttachments(dir) {
   } catch {
     return false;
   }
+}
+
+// Craft sections live at <projectRoot>/craft/<name>.md. We accept any
+// alphanumeric+dash slug here so adding a new section is as simple as
+// dropping a file in craft/ and listing its name in the skill — no
+// daemon-side allowlist to keep in sync. The compose path checks the
+// file actually exists before injecting; missing files fall through
+// silently. The frontend can render the requested list verbatim.
+function normalizeCraftRequires(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const v of value) {
+    if (typeof v !== "string") continue;
+    const slug = v.trim().toLowerCase();
+    if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out;
 }
 
 function normalizeDefaultFor(value) {
@@ -153,11 +231,24 @@ function derivePrompt(data) {
 
 function inferMode(body, description) {
   const hay = `${description ?? ""}\n${body ?? ""}`.toLowerCase();
+  if (/\bimage|poster|illustration|photography|图片|海报|插画/.test(hay)) return "image";
+  if (/\bvideo|motion|shortform|animation|视频|动效|短片/.test(hay)) return "video";
+  if (/\baudio|music|jingle|tts|sound|音频|音乐|配音|音效/.test(hay)) return "audio";
   if (/\bppt|deck|slide|presentation|幻灯|投影/.test(hay)) return "deck";
   if (/\bdesign[- ]system|\bdesign\.md|\bdesign tokens/.test(hay))
     return "design-system";
   if (/\btemplate\b/.test(hay)) return "template";
   return "prototype";
+}
+
+const KNOWN_SURFACES = new Set(["web", "image", "video", "audio"]);
+function normalizeSurface(value, mode) {
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (KNOWN_SURFACES.has(v)) return v;
+  }
+  if (mode === "image" || mode === "video" || mode === "audio") return mode;
+  return "web";
 }
 
 // Validate platform tag — only desktop / mobile are meaningful for the

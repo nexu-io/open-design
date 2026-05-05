@@ -101,7 +101,7 @@ Usage: publish-images.sh [options]
 
 Options:
   --platforms <list>              default: linux/amd64,linux/arm64
-  --arch <amd64|arm64>            shorthand for a single platform
+  --arch <amd64|arm64>            publish a single platform as <tag>-<arch>
   --image_tag <tag>               default: latest
   --registry <registry>           default: docker.io
   --image_namespace <namespace>   default: vanjayak
@@ -246,6 +246,26 @@ image_with_arch_suffix() {
   repo="${image%:*}"
   tag="${image##*:}"
   printf '%s:%s-%s' "$repo" "$tag" "$arch"
+}
+
+image_for_single_arch() {
+  local image="$1"
+  local platform="$2"
+  local arch
+  local repo
+  local tag
+
+  arch="$(platform_to_arch "$platform")" || die "unsupported platform '$platform'"
+  repo="${image%:*}"
+  tag="${image##*:}"
+  case "$tag" in
+    *-amd64|*-arm64)
+      printf '%s' "$image"
+      ;;
+    *)
+      printf '%s:%s-%s' "$repo" "$tag" "$arch"
+      ;;
+  esac
 }
 
 node_local_base_image() {
@@ -613,6 +633,8 @@ for platform in "${platform_list[@]}"; do
   image_for_platform="$IMAGE"
   if [[ "$platform_total" -gt 1 ]]; then
     image_for_platform="$(image_with_arch_suffix "$IMAGE" "$platform")"
+  elif [[ -n "$SINGLE_ARCH" ]]; then
+    image_for_platform="$(image_for_single_arch "$IMAGE" "$platform")"
   fi
 
   run_build "$image_for_platform" "$platform" \
@@ -628,4 +650,9 @@ if [[ "$platform_total" -gt 1 ]]; then
   merge_manifest_for_image "$IMAGE" "${image_sources[@]}"
 fi
 
-log "image: ${IMAGE}"
+published_image="$IMAGE"
+if [[ "$platform_total" -eq 1 && -n "$SINGLE_ARCH" ]]; then
+  published_image="${image_sources[0]}"
+fi
+
+log "image: ${published_image}"

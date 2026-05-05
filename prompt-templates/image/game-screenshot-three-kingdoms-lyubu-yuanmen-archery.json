@@ -1,0 +1,27 @@
+{
+  "id": "game-screenshot-three-kingdoms-lyubu-yuanmen-archery",
+  "surface": "image",
+  "title": "Game Screenshot - Three Kingdoms ARPG: Lü Bu's Yuanmen Archery",
+  "summary": "An in-game action-RPG screenshot of the famous Three Kingdoms scene where Lü Bu shoots down a distant halberd at the camp gate to stop a battle. Rendered in the cinematic photoreal style of Black Myth: Wukong, Unreal Engine 5 Nanite/Lumen, third-person over-the-shoulder gameplay camera. Full in-game HUD overlay (HP + qi bars, minimap, skill hotbar, lock-on target marker with distance readout to the far halberd) makes it read as a real next-gen ARPG capture rather than a cutscene. Tuned for gpt-image-2 at 16:9.",
+  "category": "Game UI",
+  "tags": [
+    "game-ui",
+    "arpg",
+    "three-kingdoms",
+    "lyubu",
+    "archery",
+    "cinematic",
+    "hud",
+    "unreal-engine-5"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "16:9",
+  "prompt": "In-game screenshot from a next-gen action RPG in the style of Black Myth Wukong, Unreal Engine 5 Nanite/Lumen rendering. Third-person over-the-shoulder gameplay camera, positioned about 2 meters behind and slightly above the playable character.\n\n# Playable character\n{argument name=\"character\" default=\"Lü Bu, a Three Kingdoms era Chinese warrior general. Tall muscular build, long black hair tied in a high topknot with a phoenix-feather pin, wearing ornate crimson and blackened-iron lamellar armor with gold trim, a red silk cloak flowing behind him, a fanged guardian mask on his forehead\"}.\n\n# Action pose\nThe character is drawing a massive recurved warbow at full tension, an arrow nocked and glowing with {argument name=\"qi_color\" default=\"orange\"} qi runes, standing firm with a wide battle stance on dry yellow earth.\n\n# Setting\n{argument name=\"setting\" default=\"An ancient Chinese military camp at golden hour, two wooden camp-gate pillars framing the scene with crimson banners bearing a bold calligraphy Chinese character. Distant in the background a lone halberd standing upright about 150 paces away against a blazing orange sunset with god-rays through dust haze. Soldiers silhouetted at the sides watching tensely.\"}\n\n# IN-GAME HUD OVERLAY (clean semi-transparent dark backgrounds, game-studio UI polish)\n- Upper-left corner: circular portrait of the character with a red vertical HP bar and blue qi bar, a Chinese calligraphy-style character name above.\n- Upper-right corner: small round minimap with faint glowing dots and a compass ring.\n- Lower-left: 4 circular skill icons with Chinese characters, each with cooldown rings.\n- Lower-center: a narrow white button prompt with game-style border.\n- Lower-right: stamina ring and dodge prompt.\n- Center-screen upper-third: a locked-on target marker floating over the distant halberd with an orange diamond indicator and a small distance readout.\n\n# Rendering\nPhotorealistic PBR materials, detailed fabric folds, subsurface-scattered skin, Unreal Engine 5 Nanite geometry. Golden hour rim lighting, volumetric sand particles, soft lens flare from sun. Slightly hazy atmosphere with depth fog. Cinematic but clearly gameplay-framed, not movie-cutscene.\n\nAspect ratio 16:9 landscape.\n\n# Negative prompt\nno watermark, no studio logos, no warped Chinese characters, no fake gibberish glyphs, no movie-cutscene framing, no first-person view, no anime cel-shading, no low-res UI, no duplicated HUD widgets, no extra fingers on the character, no modern clothing, no firearms, no generic Western fantasy look, no cluttered or overlapping UI panels, no signature.",
+  "previewImageUrl": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/game-screenshot-three-kingdoms-lyubu-yuanmen-archery.jpg",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "open-design contributors",
+    "url": "https://github.com/nexu-io/open-design"
+  }
+}

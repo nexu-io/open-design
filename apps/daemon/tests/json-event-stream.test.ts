@@ -216,6 +216,53 @@ test('codex json stream emits status text and usage events', () => {
   ]);
 });
 
+test('codex json stream emits command execution tool events', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-1',
+        type: 'command_execution',
+        command: "/bin/zsh -lc 'echo hello-from-codex'",
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+      '\n' +
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'item-1',
+          type: 'command_execution',
+          command: "/bin/zsh -lc 'echo hello-from-codex'",
+          aggregated_output: 'hello-from-codex\n',
+          exit_code: 0,
+          status: 'completed',
+        },
+      }) +
+      '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-1',
+      name: 'Bash',
+      input: { command: "/bin/zsh -lc 'echo hello-from-codex'" },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-1',
+      content: 'hello-from-codex\n',
+      isError: false,
+    },
+  ]);
+});
+
 test('unhandled structured events fall back to raw', () => {
   const events = [];
   const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));

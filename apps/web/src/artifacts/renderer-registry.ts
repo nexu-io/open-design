@@ -1,4 +1,5 @@
 import { inferLegacyManifest } from './manifest';
+import { renderMarkdownToSafeHtml } from './markdown';
 import type { ArtifactManifest, ArtifactRendererId } from './types';
 import type { ProjectFile } from '../types';
 
@@ -9,6 +10,15 @@ export interface ArtifactRendererContext {
 
 export interface ArtifactRenderer {
   id: ArtifactRendererId;
+  /**
+   * Whether this renderer can receive partial content during streaming.
+   * - true + renderPartial defined → renderer produces useful intermediate output
+   * - true without renderPartial → renderer tolerates partial content but
+   *   should be considered visually meaningful only when status === "complete"
+   * - false → consumer should show skeleton/loading state until status === "complete"
+   */
+  supportsStreaming: boolean;
+  renderPartial?: (content: string) => string;
   canRender: (ctx: ArtifactRendererContext) => boolean;
 }
 
@@ -23,6 +33,7 @@ function resolveManifest(file: ProjectFile): ArtifactManifest | null {
 
 export const HtmlRenderer: ArtifactRenderer = {
   id: 'html',
+  supportsStreaming: false,
   canRender: ({ file, isDeckHint }) => {
     const manifest = resolveManifest(file);
     if (!manifest) return false;
@@ -34,11 +45,45 @@ export const HtmlRenderer: ArtifactRenderer = {
 
 export const DeckHtmlRenderer: ArtifactRenderer = {
   id: 'deck-html',
+  supportsStreaming: false,
   canRender: ({ file, isDeckHint }) => {
     const manifest = resolveManifest(file);
     if (!manifest) return false;
     if (manifest.kind === 'deck' || manifest.renderer === 'deck-html') return true;
     return file.kind === 'html' && isDeckHint;
+  },
+};
+
+export const ReactComponentRenderer: ArtifactRenderer = {
+  id: 'react-component',
+  supportsStreaming: false,
+  canRender: ({ file }) => {
+    const manifest = resolveManifest(file);
+    if (!manifest) return false;
+    return manifest.kind === 'react-component' || manifest.renderer === 'react-component';
+  },
+};
+
+export const MarkdownRenderer: ArtifactRenderer = {
+  id: 'markdown',
+  supportsStreaming: true,
+  renderPartial: renderMarkdownToSafeHtml,
+  canRender: ({ file }) => {
+    const manifest = resolveManifest(file);
+    if (!manifest) return false;
+    if (manifest.renderer === 'markdown' || manifest.kind === 'markdown-document') return true;
+    return file.kind === 'text' && /\.md$/i.test(file.name);
+  },
+};
+
+export const SvgRenderer: ArtifactRenderer = {
+  id: 'svg',
+  supportsStreaming: false,
+  canRender: ({ file }) => {
+    const manifest = resolveManifest(file);
+    if (!manifest) return false;
+    if (manifest.renderer === 'svg' || manifest.kind === 'svg') return true;
+    return (file.kind === 'image' || file.kind === 'sketch') && /\.svg$/i.test(file.name);
   },
 };
 
@@ -55,6 +100,9 @@ export class RendererRegistry {
 }
 
 export const artifactRendererRegistry = new RendererRegistry([
+  ReactComponentRenderer,
   DeckHtmlRenderer,
   HtmlRenderer,
+  MarkdownRenderer,
+  SvgRenderer,
 ]);

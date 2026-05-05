@@ -1,0 +1,68 @@
+name: github-metrics
+
+on:
+  schedule:
+    # Runs daily at 00:15 UTC; output is committed to docs/assets/github-metrics.svg.
+    - cron: '15 0 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/metrics.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  metrics:
+    name: Generate repository metrics SVG
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub repository metrics
+        uses: lowlighter/metrics@latest
+        with:
+          # Output path; the action opens/updates a PR when this file changes.
+          # Requires manual review to merge. If metrics unchanged, no PR is created.
+          filename: docs/assets/github-metrics.svg
+
+          # Auth: METRICS_TOKEN must be a fine-grained PAT or GitHub App token that
+          # can create pull requests in this repository. GITHUB_TOKEN is kept only
+          # as a read/render fallback because many orgs disallow PR creation from it.
+          token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
+          committer_token: ${{ secrets.METRICS_TOKEN }}
+          output_action: pull-request
+          output_condition: data-changed
+
+          # Use the repository template (per-repo metrics, not user metrics).
+          # Organization-owned repositories must be targeted explicitly, otherwise
+          # lowlighter/metrics infers the token owner and treats the target as an org.
+          template: repository
+          base: ''
+          user: nexu-io
+          repo: open-design
+
+          # Plugins. Anything that requires a personal token will silently no-op
+          # without METRICS_TOKEN — the rest still produce a useful SVG.
+          plugin_contributors: yes
+          plugin_contributors_categories: |
+            {
+              "Skills": "skills/**",
+              "Design systems": "design-systems/**",
+              "Web": "apps/web/**",
+              "Daemon": "apps/daemon/**",
+              "Docs": "docs/**"
+            }
+          plugin_followup: yes
+          plugin_followup_sections: pr, issue
+          plugin_languages: yes
+          plugin_languages_details: lines, percentage
+          plugin_languages_limit: 8
+          plugin_lines: yes
+          plugin_traffic: yes
+          plugin_stargazers: yes
+          plugin_stargazers_charts_type: chartist
+
+          config_timezone: Asia/Shanghai
+          config_display: large

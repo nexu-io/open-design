@@ -4,7 +4,7 @@
 
 The adapter layer is OD's most load-bearing design decision. We delegate the **entire agent loop** — model calls, tool use, context management, permission handling, resume, cancel — to the user's existing code agent CLI. OD's job is to detect it, feed it a skill + prompt + working directory, and stream its output back to the web UI.
 
-> **Thesis:** The code agent space has already converged on a few strong implementations (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, OpenClaw). Reimplementing a 7th is worse than just talking to all of them.
+> **Thesis:** The code agent space has already converged on a few strong implementations (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, OpenClaw). Reimplementing another one is worse than just talking to all of them.
 >
 > **Inspiration:** [multica](https://github.com/multica-ai/multica) (PATH-scan detection + daemon architecture) and [cc-switch](https://github.com/farion1231/cc-switch) (per-agent config format knowledge + symlink-based skill distribution).
 
@@ -86,11 +86,16 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **claude-code** | `claude` | `~/.claude/` | `~/.claude/skills/` | ✅ | ✅ | ✅ | P0 (MVP) |
 | **api-fallback** | *(direct Anthropic API)* | — | — | ❌ (prompt-injected) | 〜 | ✅ | P0 (MVP) |
 | **codex** | `codex` | `~/.codex/` | `~/.codex/skills/` | 〜 (varies by version) | 〜 (regenerate w/ scoping) | ✅ | P1 |
+| **devin** | `devin` | `~/.config/devin/` | `~/.config/devin/skills/` | ✅ | ✅ | ✅ (`acp-json-rpc`) | P1 |
 | **cursor-agent** | `cursor-agent` | `~/.cursor/` | n/a (via project `.cursorrules`) | ❌ (prompt-injected) | ✅ | ✅ | P1 |
 | **gemini-cli** | `gemini` | `~/.config/gemini/` | ❌ | ❌ (prompt-injected) | ❌ (regenerate) | ✅ | P2 |
 | **opencode** | `opencode` | `~/.opencode/` | 〜 | 〜 | ✅ | P2 |
 | **openclaw** | `openclaw` | `~/.openclaw/` | 〜 | 〜 | 〜 | P2 |
 | **copilot** | `copilot` | `~/.copilot/` | ❌ | ✅ (`edit` tool) | ✅ (`--output-format json` JSONL) | P2 |
+| **kiro** | `kiro-cli` | `~/.kiro/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
+| **kilo** | `kilo` | — | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
+| **vibe** | `vibe-acp` | `~/.vibe/` | ❌ | ✅ | ✅ (`acp-json-rpc`) | P2 |
+| **deepseek** | `deepseek` | `~/.deepseek/` | `~/.deepseek/skills/` | ❌ (prompt-injected) | ✅ | ✅ (plain text) | P2 |
 
 "P0/P1/P2" correspond to the roadmap phases in [`roadmap.md`](roadmap.md).
 
@@ -145,7 +150,17 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Surgical edits: Codex's edit tool exists but the tool-call schema is different enough that we regenerate files instead in v1. Revisit in v2.
 - **Gotcha:** Codex's CLI auth state can be "authenticated to wrong org." Detect by running `codex whoami` at detect time.
 
-### 5.4 Cursor Agent
+### 5.4 Devin for Terminal
+
+- Invocation: `devin --permission-mode dangerous --respect-workspace-trust false acp`.
+- Install/update: macOS/Linux/WSL users can install with `curl -fsSL https://cli.devin.ai/install.sh | bash`; run `devin update` for existing installs.
+- Version requirement: requires a Devin CLI build with the `devin acp` subcommand (verified with `devin 2026.5.1-1`). Check with `devin acp --help`; if the subcommand is missing, update or reinstall Devin for Terminal.
+- Streaming: Agent Client Protocol JSON-RPC over stdio, handled by the daemon's shared `acp-json-rpc` transport.
+- Skill loading: Devin supports `.devin/skills/` and `~/.config/devin/skills/`; OD's current daemon also prompt-injects the selected skill body into the composed prompt, so no per-project skill install is required for generation.
+- Surgical edits: Devin's own edit/write tools handle targeted changes.
+- Permission: `--permission-mode dangerous` avoids headless approval prompts in the web UI; `--respect-workspace-trust false` ensures Devin doesn't block on trust prompts for newly created project dirs. Org/team-level policies still apply inside Devin.
+
+### 5.5 Cursor Agent
 
 - Invocation: `cursor-agent --workspace <dir> "<prompt>"` (rough; verify with CLI docs at implementation time).
 - Streaming: yes, JSON lines.
@@ -153,12 +168,14 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Surgical edits: Cursor's inline edit tool is strong; map our `refine` call to its edit protocol.
 - **Gotcha:** Cursor Agent operates on workspaces, not single files. Constrain the workspace to the artifact dir to prevent over-broad changes.
 
-### 5.5 Gemini CLI
+### 5.6 Gemini CLI
 
 - Invocation: `gemini` with the composed prompt delivered via **stdin** (no `-p` flag).
   Gemini CLI enters headless mode automatically when stdin is a pipe and no `-p` flag is
   supplied — verified with `gemini@0.1.x`.
-- Streaming: yes, plain text to stdout.
+- Trust: `GEMINI_CLI_TRUST_WORKSPACE=true` is set in the spawned process instead of
+  passing `--skip-trust`, which is version-fragile across Gemini CLI releases.
+- Streaming: yes, `--output-format stream-json` to stdout.
 - Skill loading: prompt injection only.
 - Surgical edits: regenerate whole file.
 - **Gotcha — `spawn ENAMETOOLONG` on Windows:** Passing the full composed prompt as a
@@ -169,17 +186,27 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - **Gotcha:** Gemini's tool-use format is distinct; we translate our file-write tool to its
   `file_tool` equivalent when that feature is implemented.
 
-### 5.6 OpenCode / OpenClaw
+### 5.7 OpenCode / OpenClaw
 
 - Less-matured CLIs. Targeting P2. Expect bumps; adapter implementations will likely be the thinnest possible "shell out, parse output, synthesize events" approach.
 
-### 5.7 GitHub Copilot CLI
+### 5.8 GitHub Copilot CLI
 
 - Invocation: `copilot -p "<prompt>" --allow-all-tools --output-format json --add-dir <skills> --add-dir <design-systems>`. `--allow-all-tools` is mandatory in non-interactive mode — without it the CLI blocks waiting for human approval on every tool call. Unlike Codex (where `exec` is a dedicated headless subcommand with auto-approve baked in) or Claude Code (which inherits its permission policy from `~/.claude/settings.json`), Copilot's `-p` mode always prompts unless this flag is passed explicitly. `--add-dir` (repeatable) widens the path-level sandbox so Copilot can read skill seeds and design-system specs that live outside the project cwd.
 - Streaming: `--output-format json` emits JSONL with the same expressive shape as Claude Code's stream-json (`assistant.reasoning_delta`, `assistant.message_delta`, `tool.execution_start/complete`, `result`). `apps/daemon/src/copilot-stream.ts` maps these onto the same UI events as `claude-stream.ts`.
 - Skill loading: prompt injection only. Github Copilot's tool catalog includes a `skill` tool — native format worth reverse-engineering later.
 - Surgical edits: dedicated `edit` tool.
 - Detection assumes Copilot is already authenticated, via one of: `copilot login` (subcommand, OAuth device flow), the interactive `/login` slash command inside `copilot` with no args.
+
+### 5.9 DeepSeek TUI
+
+- Invocation: `deepseek exec --auto [--model <id>] "<prompt>"`. The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and delegates to a sibling `deepseek-tui` runtime binary at exec time; upstream documents both binaries as required (the npm and cargo paths install them together). We only probe the dispatcher — `deepseek-tui` on its own doesn't accept this argv shape, so advertising it as a fallback would surface the agent as available but fail on the first chat run. A future revision could teach resolution + buildArgs which binary was selected and emit a verified `deepseek-tui` invocation, with a regression test exercising that path.
+- Streaming: plain text deltas to stdout in non-`--json` mode (tool-call notifications go to stderr). Skipping `--json` is intentional — `deepseek exec --json` batches the entire run into one trailing summary object instead of streaming, which would freeze the chat UI until end-of-turn.
+- Auto-approval: `--auto` enables agentic mode with the YOLO permission posture. The daemon runs every CLI without a TTY, so the interactive approval prompt would otherwise hang the run.
+- Skills: prompt injection only in v1. DeepSeek TUI does walk `.agents/skills`, `skills`, `.opencode/skills`, `.claude/skills`, and `~/.deepseek/skills` first-wins, so a future revision can switch to file-placed skill loading the same way Claude Code does.
+- Prompt delivery: positional argv (no stdin sentinel; clap declares `prompt: String` as a required field). This means very large composed prompts can hit Windows' ~32 KB `CreateProcess` limit; for typical chat prompts this is non-issue. Upstream support for a `-` stdin sentinel would let us flip this to `promptViaStdin: true` like the other adapters. To avoid surfacing oversized prompts as a generic `spawn ENAMETOOLONG` / `E2BIG`, the adapter declares `maxPromptArgBytes` (currently 30,000) and `/api/chat` enforces it through three complementary guards: a fast pre-bin-resolution `checkPromptArgvBudget` against the raw composed prompt bytes, a post-`buildArgs` `checkWindowsCmdShimCommandLineBudget` that — when the resolved binary is a Windows `.cmd` / `.bat` shim — recomputes the would-be `cmd.exe /d /s /c "<inner>"` command line using the same per-arg quote-doubling the platform layer applies on Windows, and a sibling `checkWindowsDirectExeCommandLineBudget` that — when the resolved binary is a non-shim Windows install (e.g. a cargo-built `deepseek.exe`) — recomputes the same command line using libuv's `quote_cmd_arg` rules (every `"` becomes `\"`, backslashes adjacent to a quote are doubled). The two Windows guards are mutually exclusive on a given resolution: the cmd-shim guard owns `.cmd`/`.bat`, the direct-exe guard owns everything else. Together they catch quote-heavy prompts (code blocks, JSON-shaped skill seeds) that fit under the raw byte budget but expand past CreateProcess's 32_767-char `lpCommandLine` cap on either install path. All three guards emit the same actionable `AGENT_PROMPT_TOO_LARGE` SSE error telling the user to reduce skills/design-system context, shorten the conversation, or pick an adapter with stdin support, and all three are unit-tested (oversized + short-prompt branches, quote-heavy regressions for both Windows paths, and a mutual-exclusivity check) so the guards can't silently regress.
+- Models: ships `deepseek-v4-pro` and `deepseek-v4-flash` as fallback hints (1M-token context windows, native thinking-mode streaming). Users can paste any other id (e.g. `nvidia-nim/deepseek-v4-pro`, `fireworks/deepseek-v4-flash`) via the Settings dialog's custom-model input.
+- **Gotcha — auth state is not auto-detected.** DeepSeek TUI reads its API key from `~/.deepseek/config.toml` or `DEEPSEEK_API_KEY`. If the user hasn't run `deepseek auth set --provider deepseek` (or set the env var), the first run errors out with a non-actionable message. Detection currently only reports `available: true` based on the binary being on PATH; surface auth state via `deepseek doctor --json` in a follow-up.
 
 ## 6. Capability-driven UI
 

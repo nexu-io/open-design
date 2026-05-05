@@ -59,12 +59,59 @@ export type DesktopRuntime = {
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
+  show(): void;
   status(): DesktopStatusSnapshot;
 };
 
 export type DesktopRuntimeOptions = {
   discoverUrl(): Promise<string | null>;
 };
+
+const MAC_WINDOW_CHROME =
+  process.platform === "darwin"
+    ? ({
+        titleBarStyle: "hiddenInset" as const,
+        trafficLightPosition: { x: 14, y: 12 },
+      })
+    : {};
+
+const MAC_WINDOW_CHROME_CSS = `
+  .app-chrome-header {
+    --app-chrome-traffic-space: 56px !important;
+    -webkit-app-region: drag;
+  }
+  .app-chrome-traffic-space {
+    flex: 0 0 56px !important;
+    width: 56px !important;
+  }
+  .app-chrome-header button,
+  .app-chrome-header [role="button"],
+  .app-chrome-header [contenteditable],
+  .app-chrome-actions,
+  .app-chrome-actions *,
+  .avatar-popover,
+  .avatar-popover * {
+    -webkit-app-region: no-drag;
+  }
+  .app-chrome-drag {
+    -webkit-app-region: drag;
+  }
+  .entry-brand,
+  .entry-header {
+    -webkit-app-region: drag;
+  }
+  .entry-brand button,
+  .entry-brand [role="button"],
+  .entry-header button,
+  .entry-header [role="button"],
+  .entry-tabs,
+  .entry-tabs *,
+  .entry-side-resizer,
+  .avatar-popover,
+  .avatar-popover * {
+    -webkit-app-region: no-drag;
+  }
+`;
 
 function createPendingHtml(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
@@ -119,12 +166,67 @@ function mapConsoleLevel(level: number): string {
   }
 }
 
+async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
+}
+
+function installWindowChromeCssHook(window: BrowserWindow): void {
+  window.webContents.on("did-finish-load", () => {
+    void applyWindowChromeCss(window).catch((error: unknown) => {
+      console.error("desktop window chrome CSS injection failed", error);
+    });
+  });
+}
+
+function showWindowButtons(window: BrowserWindow): void {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  window.setWindowButtonVisibility(true);
+}
+
+// Windows focus-stealing prevention can leave a detached-spawned GUI
+// window minimized or hidden even when constructed with show:true,
+// leaving users unable to locate the window. Cross-platform safe: only
+// acts when the window is actually minimized or hidden, preserving any
+// user-adjusted window state.
+function ensureWindowVisible(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  if (!window.isVisible()) window.show();
+  window.focus();
+}
+
+// PPTX is rendered by the agent into the project folder and reaches the
+// renderer through a normal `<a download>` link to /api/projects/:id/raw/*.
+// Without this hook Electron writes the bytes straight to the OS Downloads
+// folder, so the user never gets to pick a destination. setSaveDialogOptions
+// makes Electron show the native Save As panel before the download starts.
+const SAVE_AS_EXTENSIONS = new Set([".pptx"]);
+
+function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  window.webContents.session.on("will-download", (_event, item) => {
+    const filename = item.getFilename();
+    const dot = filename.lastIndexOf(".");
+    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+    if (!SAVE_AS_EXTENSIONS.has(ext)) return;
+    item.setSaveDialogOptions({
+      title: "Save As",
+      defaultPath: filename,
+      filters: [
+        { name: "PowerPoint Presentation", extensions: ["pptx"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+  });
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
     height: 900,
     show: true,
     title: "Open Design",
+    ...MAC_WINDOW_CHROME,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -132,9 +234,24 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  installWindowChromeCssHook(window);
+  showWindowButtons(window);
+  attachDownloadSaveAsDialog(window);
   let currentUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+
+  window.on("focus", () => showWindowButtons(window));
+  window.on("blur", () => showWindowButtons(window));
+
+  if (process.platform === "darwin") {
+    window.on("close", (event) => {
+      if (!stopped) {
+        event.preventDefault();
+        window.hide();
+      }
+    });
+  }
 
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
@@ -149,6 +266,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   await window.loadURL(createPendingHtml());
+  showWindowButtons(window);
+  ensureWindowVisible(window);
 
   const schedule = (delayMs: number) => {
     if (stopped) return;
@@ -165,6 +284,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (url != null && url !== currentUrl) {
         currentUrl = url;
         await window.loadURL(url);
+        showWindowButtons(window);
       }
       schedule(url == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {
@@ -216,6 +336,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, image.toPNG());
       return { path: outputPath };
+    },
+    show() {
+      if (!window.isDestroyed()) {
+        window.show();
+        window.focus();
+      }
     },
     status() {
       return {

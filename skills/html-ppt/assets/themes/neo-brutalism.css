@@ -1,0 +1,17 @@
+/* theme: neo-brutalism — 厚描边、硬阴影、明黄 */
+:root{
+  --bg:#fffef0;--bg-soft:#fffbd0;--surface:#ffffff;--surface-2:#fff38a;
+  --border:#000000;--border-strong:#000000;
+  --text-1:#000000;--text-2:#222222;--text-3:#555555;
+  --accent:#ffd400;--accent-2:#ff5ca8;--accent-3:#3a7cff;
+  --good:#00b36b;--warn:#ff9900;--bad:#ff3a30;
+  --grad:linear-gradient(135deg,#ffd400,#ff5ca8);
+  --grad-soft:linear-gradient(135deg,#fffbd0,#fff);
+  --radius:6px;--radius-sm:4px;--radius-lg:10px;
+  --shadow:6px 6px 0 #000;--shadow-lg:10px 10px 0 #000;
+  --font-sans:'Space Grotesk','Inter','Noto Sans SC',sans-serif;
+  --font-display:'Archivo Black','Space Grotesk',sans-serif;
+  --letter-tight:-.03em;
+}
+.card{border:3px solid #000}
+.pill{border:2px solid #000;background:#ffd400;color:#000}

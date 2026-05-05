@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClaudeStreamHandler } from '../../apps/daemon/src/claude-stream.js';
 import { createCopilotStreamHandler } from '../../apps/daemon/src/copilot-stream.js';
+import { mapPiRpcEvent } from '../../apps/daemon/src/pi-rpc.js';
 
 describe('structured agent stream fixtures', () => {
   it('emits TodoWrite tool_use from Claude Code stream JSON', () => {
@@ -31,6 +32,36 @@ describe('structured agent stream fixtures', () => {
       input: {
         todos: [{ content: 'Run QA', status: 'pending' }],
       },
+    });
+  });
+
+  it('emits TodoWrite tool_use from Pi RPC tool_execution events', () => {
+    const events: unknown[] = [];
+    const send = (_channel: string, payload: unknown) => { events.push(payload); };
+    const ctx = { runStartedAt: Date.now(), sentFirstToken: { value: false } };
+
+    mapPiRpcEvent(
+      { type: 'tool_execution_start', toolCallId: 'pi-call-1', toolName: 'TodoWrite', args: { todos: [{ content: 'Run QA', status: 'pending' }] } },
+      send,
+      ctx,
+    );
+    mapPiRpcEvent(
+      { type: 'tool_execution_end', toolCallId: 'pi-call-1', toolName: 'TodoWrite', result: { content: [{ type: 'text', text: 'written' }] }, isError: false },
+      send,
+      ctx,
+    );
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'pi-call-1',
+      name: 'TodoWrite',
+      input: { todos: [{ content: 'Run QA', status: 'pending' }] },
+    });
+    expect(events).toContainEqual({
+      type: 'tool_result',
+      toolUseId: 'pi-call-1',
+      content: 'written',
+      isError: false,
     });
   });
 

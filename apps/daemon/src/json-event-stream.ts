@@ -203,7 +203,7 @@ function handleCursorEvent(obj, onEvent, state) {
   return false;
 }
 
-function handleCodexEvent(obj, onEvent) {
+function handleCodexEvent(obj, onEvent, state) {
   if (!obj || typeof obj !== 'object') return false;
 
   if (obj.type === 'thread.started') {
@@ -214,6 +214,48 @@ function handleCodexEvent(obj, onEvent) {
   if (obj.type === 'turn.started') {
     onEvent({ type: 'status', label: 'running' });
     return true;
+  }
+
+  if (obj.type === 'item.started' && obj.item && typeof obj.item === 'object') {
+    const item = obj.item;
+    if (item.type === 'command_execution' && typeof item.id === 'string') {
+      if (!state.codexToolUses.has(item.id)) {
+        state.codexToolUses.add(item.id);
+        onEvent({
+          type: 'tool_use',
+          id: item.id,
+          name: 'Bash',
+          input: {
+            command: typeof item.command === 'string' ? item.command : '',
+          },
+        });
+      }
+      return true;
+    }
+  }
+
+  if (obj.type === 'item.completed' && obj.item && typeof obj.item === 'object') {
+    const item = obj.item;
+    if (item.type === 'command_execution' && typeof item.id === 'string') {
+      if (!state.codexToolUses.has(item.id)) {
+        state.codexToolUses.add(item.id);
+        onEvent({
+          type: 'tool_use',
+          id: item.id,
+          name: 'Bash',
+          input: {
+            command: typeof item.command === 'string' ? item.command : '',
+          },
+        });
+      }
+      onEvent({
+        type: 'tool_result',
+        toolUseId: item.id,
+        content: stringifyContent(item.aggregated_output ?? ''),
+        isError: typeof item.exit_code === 'number' ? item.exit_code !== 0 : item.status === 'failed',
+      });
+      return true;
+    }
   }
 
   if (
@@ -247,6 +289,7 @@ export function createJsonEventStreamHandler(kind, onEvent) {
   const state = {
     cursorTextSoFar: '',
     openCodeToolUses: new Set(),
+    codexToolUses: new Set(),
   };
 
   function handleLine(line) {
@@ -261,7 +304,7 @@ export function createJsonEventStreamHandler(kind, onEvent) {
     if (kind === 'opencode' && handleOpenCodeEvent(obj, onEvent, state)) return;
     if (kind === 'gemini' && handleGeminiEvent(obj, onEvent)) return;
     if (kind === 'cursor-agent' && handleCursorEvent(obj, onEvent, state)) return;
-    if (kind === 'codex' && handleCodexEvent(obj, onEvent)) return;
+    if (kind === 'codex' && handleCodexEvent(obj, onEvent, state)) return;
 
     onEvent({ type: 'raw', line });
   }

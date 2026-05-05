@@ -27,6 +27,7 @@ export interface UICase {
     | 'question-form-selection-limit'
     | 'question-form-submit-persistence'
     | 'generation-does-not-create-extra-file'
+    | 'comment-attachment-flow'
     | 'deck-pagination-next-prev-correctness'
     | 'deck-pagination-per-file-isolated'
     | 'uploaded-image-renders-in-preview'

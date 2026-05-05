@@ -7,7 +7,7 @@
  */
 import type { AppConfig, ChatMessage } from '../types';
 import type { StreamHandlers } from './anthropic';
-import { parseSseFrame } from './sse';
+import { streamProxyEndpoint } from './api-proxy';
 
 export async function streamMessageOpenAI(
   cfg: AppConfig,
@@ -16,76 +16,7 @@ export async function streamMessageOpenAI(
   signal: AbortSignal,
   handlers: StreamHandlers,
 ): Promise<void> {
-  if (!cfg.apiKey) {
-    handlers.onError(new Error('Missing API key — open Settings and paste one in.'));
-    return;
-  }
-
-  let acc = '';
-
-  try {
-    const resp = await fetch('/api/proxy/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: cfg.baseUrl,
-        apiKey: cfg.apiKey,
-        model: cfg.model,
-        systemPrompt: system,
-        messages: history.map((m) => ({ role: m.role, content: m.content })),
-      }),
-      signal,
-    });
-
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text().catch(() => '');
-      handlers.onError(new Error(`proxy ${resp.status}: ${text || 'no body'}`));
-      return;
-    }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      let idx: number;
-      while ((idx = buf.indexOf('\n\n')) !== -1) {
-        const frame = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-
-        const parsed = parseSseFrame(frame);
-        if (!parsed || parsed.kind !== 'event') continue;
-
-        if (parsed.event === 'delta') {
-          const text = String(parsed.data.text ?? '');
-          if (text) {
-            acc += text;
-            handlers.onDelta(text);
-          }
-          continue;
-        }
-
-        if (parsed.event === 'error') {
-          handlers.onError(new Error(String(parsed.data.message ?? 'proxy error')));
-          return;
-        }
-
-        if (parsed.event === 'end') {
-          handlers.onDone(acc);
-          return;
-        }
-      }
-    }
-
-    handlers.onDone(acc);
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return;
-    handlers.onError(err instanceof Error ? err : new Error(String(err)));
-  }
+  return streamProxyEndpoint('/api/proxy/openai/stream', cfg, system, history, signal, handlers);
 }
 
 /**
@@ -95,25 +26,37 @@ export async function streamMessageOpenAI(
 export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   const m = model.toLowerCase();
   const u = baseUrl.toLowerCase();
-  // MiMo
-  if (m.startsWith('mimo')) return true;
+  const parsed = new URL(u || 'https://api.anthropic.com', 'https://local.invalid');
+  const pathSegments = parsed.pathname.split('/').filter(Boolean);
+  const isOfficialAnthropic = parsed.hostname === 'api.anthropic.com';
+  const isAnthropicEndpoint = pathSegments.at(-1) === 'anthropic' || (
+    /^v\d+$/.test(pathSegments.at(-1) ?? '') && pathSegments.at(-2) === 'anthropic'
+  );
+
+  // Anthropic endpoint paths should win for providers that expose both
+  // protocol shapes on the same host, e.g. /v1/anthropic or /anthropic/v1.
+  if (isAnthropicEndpoint) return false;
+
+  // Explicit OpenAI-compatible providers/models should win even when a host or
+  // unrelated path segment happens to contain the word "anthropic".
   if (u.includes('xiaomimimo.com/v1')) return true;
-  // DeepSeek
-  if (m.startsWith('deepseek')) return true;
+  if (u.includes('api.minimaxi.com/v1')) return true;
   if (u.includes('api.deepseek')) return true;
-  // Groq / Llama / Mixtral
-  if (m.startsWith('groq') || m.startsWith('llama') || m.startsWith('mixtral')) return true;
   if (u.includes('api.groq')) return true;
-  // Together
   if (u.includes('api.together')) return true;
-  // OpenRouter
   if (u.includes('openrouter')) return true;
-  // OpenAI direct
   if (u.includes('openai.com')) return true;
-  // Known non-Anthropic model prefixes — route to OpenAI-compatible.
+  if (m.startsWith('deepseek')) return true;
+  if (m.startsWith('groq') || m.startsWith('llama') || m.startsWith('mixtral')) return true;
   if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return true;
-  // If the base URL is NOT the Anthropic default, assume OpenAI-compatible
-  // as the safe fallback for third-party providers.
-  if (u && !u.includes('anthropic')) return true;
+
+  // MiMo exposes both OpenAI-compatible (/v1) and Anthropic-compatible
+  // (/anthropic) endpoints with the same model names, so path shape must break
+  // the tie for this provider.
+  if (m.startsWith('mimo')) return true;
+
+  // If the base URL is custom and not clearly Anthropic-compatible, preserve
+  // the existing OpenAI-compatible fallback for third-party providers.
+  if (u && !isOfficialAnthropic) return true;
   return false;
 }

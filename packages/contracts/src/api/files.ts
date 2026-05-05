@@ -4,6 +4,8 @@ import type { ArtifactKind, ArtifactManifest } from './artifacts';
 export type ProjectFileKind =
   | 'html'
   | 'image'
+  | 'video'
+  | 'audio'
   | 'sketch'
   | 'text'
   | 'code'

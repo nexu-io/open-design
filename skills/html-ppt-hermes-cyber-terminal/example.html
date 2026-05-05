@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes Cyber Terminal</title>
+<style>/* html-ppt :: shared webfonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
+
+</style>
+<style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
+/* Default tokens. Themes in assets/themes/*.css override the :root block. */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f2f2f4;
+  --border: rgba(0,0,0,.08);
+  --border-strong: rgba(0,0,0,.16);
+  --text-1: #111216;
+  --text-2: #55596a;
+  --text-3: #8a8f9e;
+  --accent: #3b6cff;
+  --accent-2: #7a5cff;
+  --accent-3: #ff5c8a;
+  --good: #1aaf6c;
+  --warn: #f5a524;
+  --bad:  #e0445a;
+  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
+  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --radius-lg: 26px;
+  --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
+  --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
+  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
+  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --font-display: var(--font-sans);
+  --letter-tight: -.03em;
+  --letter-normal: -.01em;
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
+  font-family:var(--font-sans);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  letter-spacing:var(--letter-normal)}
+img,svg,video{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+/* ================= SLIDE SYSTEM ================= */
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg)}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;
+  box-sizing:border-box;
+  opacity:0;pointer-events:none;
+  transition:opacity .5s var(--ease), transform .5s var(--ease);
+  transform:translateX(30px);
+  overflow:hidden;
+}
+.slide.is-active{opacity:1;pointer-events:auto;transform:translateX(0);z-index:2}
+.slide.is-prev{transform:translateX(-30px)}
+
+/* single-page standalone (used when a layout file is opened directly) */
+body.single .slide{position:relative;width:100vw;height:100vh;opacity:1;transform:none;pointer-events:auto}
+
+/* ================= TYPOGRAPHY ================= */
+.eyebrow{font-size:13px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)}
+.kicker{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--text-1)}
+h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
+h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
+h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
+.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.serif{font-family:var(--font-serif)}
+.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+
+/* ================= LAYOUT PRIMITIVES ================= */
+.stack>*+*{margin-top:14px}
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.fill{flex:1}
+.sp-t{padding-top:24px}.sp-b{padding-bottom:24px}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+.mb-s{margin-bottom:8px}.mb-m{margin-bottom:18px}.mb-l{margin-bottom:32px}
+
+/* ================= CARDS ================= */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface-2);border:1px solid var(--border)}
+.card-outline{background:transparent;border:1.5px solid var(--border-strong);box-shadow:none}
+.card-accent{background:var(--surface);border-top:3px solid var(--accent)}
+.card-hover{transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+.card-hover:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;
+  background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
+.pill-accent{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent)}
+
+/* ================= BARS / DIVIDERS ================= */
+.divider{height:1px;background:var(--border);width:100%}
+.divider-accent{height:3px;width:72px;background:var(--accent);border-radius:2px}
+
+/* ================= CHROME (header/footer/progress) ================= */
+.deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
+.slide-number::before{content:attr(data-current)}
+.slide-number::after{content:" / " attr(data-total)}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:3px;background:transparent;z-index:20}
+.progress-bar > span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
+
+/* ================= PRESENTER / OVERVIEW ================= */
+.notes{display:none!important}
+.notes-overlay{position:fixed;inset:auto 0 0 0;max-height:42vh;background:rgba(20,22,30,.95);color:#e8ebf4;
+  padding:20px 32px;font-size:16px;line-height:1.6;border-top:1px solid rgba(255,255,255,.1);transform:translateY(100%);
+  transition:transform .3s var(--ease);z-index:40;overflow:auto;font-family:var(--font-sans)}
+.notes-overlay.open{transform:translateY(0)}
+.overview{position:fixed;inset:0;background:rgba(10,12,18,.92);backdrop-filter:blur(12px);z-index:50;
+  display:none;padding:40px;overflow:auto}
+.overview.open{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-content:start}
+.overview .thumb{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  aspect-ratio:16/9;overflow:hidden;cursor:pointer;position:relative;color:var(--text-1);padding:16px;
+  font-size:11px;transition:transform .2s var(--ease)}
+.overview .thumb:hover{transform:scale(1.04)}
+.overview .thumb .n{position:absolute;top:8px;left:10px;font-weight:700;font-size:14px;color:var(--text-3)}
+.overview .thumb .t{position:absolute;bottom:10px;left:14px;right:14px;font-weight:600;color:var(--text-1)}
+
+/* ================= PRESENTER VIEW ================= */
+/* Presenter view opens in a separate popup window (S key).
+ * All presenter styles are self-contained in the popup HTML generated by runtime.js.
+ * The audience window (this file) is NOT affected — it stays as normal deck view.
+ * Only the .notes class below is needed to hide speaker notes from audience. */
+
+/* ================= UTILITY ================= */
+.hidden{display:none!important}
+.nowrap{white-space:nowrap}
+.tr{text-align:right}.tc{text-align:center}.tl{text-align:left}
+.uppercase{text-transform:uppercase;letter-spacing:.12em}
+
+/* ================= PRINT ================= */
+@media print{
+  .slide{position:relative;opacity:1!important;transform:none!important;page-break-after:always;height:100vh}
+  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview{display:none!important}
+}
+
+</style>
+<style>/* hermes-cyber-terminal — 暗终端 + 霓虹绿青 + 扫描线 */
+.tpl-hermes-cyber-terminal{
+  --hc-bg:#0a0c10;
+  --hc-bg2:#15151b;
+  --hc-surface:#12141a;
+  --hc-border:rgba(126,211,164,.18);
+  --hc-ink:#e4e2d8;
+  --hc-ink2:#8a8892;
+  --hc-green:#7ed3a4;
+  --hc-cyan:#64dfdf;
+  --hc-amber:#e9c58a;
+  --hc-rose:#d4a0b9;
+  --hc-red:#ff6b6b;
+  background:var(--hc-bg);
+  color:var(--hc-ink);
+  font-family:'JetBrains Mono','SF Mono','Inter','Noto Sans SC',monospace;
+}
+.tpl-hermes-cyber-terminal .slide{background:var(--hc-bg);color:var(--hc-ink);padding:60px 84px;overflow:hidden}
+.tpl-hermes-cyber-terminal .hc-scanlines{position:absolute;inset:0;pointer-events:none;z-index:3;background:repeating-linear-gradient(180deg,transparent 0,transparent 3px,rgba(126,211,164,.025) 3px,rgba(126,211,164,.025) 4px);mix-blend-mode:screen}
+.tpl-hermes-cyber-terminal .hc-grid{position:absolute;inset:0;pointer-events:none;opacity:.35;background-image:linear-gradient(rgba(126,211,164,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(126,211,164,.08) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse at 50% 50%,black 30%,transparent 80%)}
+.tpl-hermes-cyber-terminal .hc-vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,transparent 50%,rgba(0,0,0,.6) 100%)}
+.tpl-hermes-cyber-terminal .slide > *{position:relative;z-index:2}
+.tpl-hermes-cyber-terminal .hc-chrome{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;font-size:11px;color:var(--hc-ink2);letter-spacing:.18em;text-transform:uppercase}
+.tpl-hermes-cyber-terminal .hc-chrome .dots{display:flex;gap:8px}
+.tpl-hermes-cyber-terminal .hc-chrome .dots span{width:11px;height:11px;border-radius:50%;background:#2a2d33}
+.tpl-hermes-cyber-terminal .hc-chrome .dots span:nth-child(1){background:#ff5f57}
+.tpl-hermes-cyber-terminal .hc-chrome .dots span:nth-child(2){background:#febc2e}
+.tpl-hermes-cyber-terminal .hc-chrome .dots span:nth-child(3){background:var(--hc-green)}
+.tpl-hermes-cyber-terminal .hc-prompt{color:var(--hc-green);font-weight:500}
+.tpl-hermes-cyber-terminal .hc-prompt::before{content:'$ ';color:var(--hc-cyan)}
+.tpl-hermes-cyber-terminal .hc-h1{font-family:'JetBrains Mono',monospace;font-size:72px;font-weight:700;line-height:1.05;letter-spacing:-.02em;color:var(--hc-green);text-shadow:0 0 30px rgba(126,211,164,.35),0 0 60px rgba(126,211,164,.1);margin:14px 0 12px}
+.tpl-hermes-cyber-terminal .hc-h2{font-size:46px;font-weight:600;color:var(--hc-ink);margin:0 0 10px;letter-spacing:-.015em}
+.tpl-hermes-cyber-terminal .hc-h3{font-size:22px;font-weight:600;color:var(--hc-amber);margin:0 0 10px}
+.tpl-hermes-cyber-terminal .hc-lede{font-size:18px;line-height:1.7;color:var(--hc-ink2);max-width:780px;font-family:'Inter','Noto Sans SC',sans-serif}
+.tpl-hermes-cyber-terminal .hc-cursor{display:inline-block;width:12px;height:1em;background:var(--hc-green);vertical-align:middle;margin-left:6px;animation:hcBlink 1s steps(2) infinite}
+@keyframes hcBlink{50%{opacity:0}}
+.tpl-hermes-cyber-terminal .hc-card{background:var(--hc-surface);border:1px solid var(--hc-border);border-radius:10px;padding:20px 24px;position:relative}
+.tpl-hermes-cyber-terminal .hc-card::before{content:'';position:absolute;top:-1px;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--hc-green),transparent)}
+.tpl-hermes-cyber-terminal .hc-card .lbl{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--hc-ink2);margin-bottom:8px}
+.tpl-hermes-cyber-terminal .hc-card .val{font-size:22px;font-weight:700;color:var(--hc-green);font-family:'JetBrains Mono',monospace}
+.tpl-hermes-cyber-terminal .hc-card .desc{font-size:13px;color:var(--hc-ink2);margin-top:10px;line-height:1.55;font-family:'Inter',sans-serif}
+.tpl-hermes-cyber-terminal .hc-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px}
+.tpl-hermes-cyber-terminal .hc-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px}
+.tpl-hermes-cyber-terminal .hc-codebox{background:#0c0d12;border:1px solid var(--hc-border);border-radius:10px;padding:22px 26px;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.85;color:#d8d4c8;box-shadow:inset 0 0 60px rgba(126,211,164,.04)}
+.tpl-hermes-cyber-terminal .hc-codebox .cm{color:#5a6068}
+.tpl-hermes-cyber-terminal .hc-codebox .kw{color:var(--hc-amber)}
+.tpl-hermes-cyber-terminal .hc-codebox .st{color:var(--hc-green)}
+.tpl-hermes-cyber-terminal .hc-codebox .fn{color:var(--hc-cyan)}
+.tpl-hermes-cyber-terminal .hc-codebox .var{color:var(--hc-rose)}
+.tpl-hermes-cyber-terminal .hc-codebox .hl{color:#fff;background:rgba(126,211,164,.15);padding:0 4px;border-radius:3px}
+.tpl-hermes-cyber-terminal .hc-tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border:1px solid var(--hc-border);border-radius:4px;color:var(--hc-green);background:rgba(126,211,164,.04);margin:2px 6px 2px 0;text-transform:uppercase;letter-spacing:.1em}
+.tpl-hermes-cyber-terminal .hc-tag.amber{color:var(--hc-amber);border-color:rgba(233,197,138,.2);background:rgba(233,197,138,.04)}
+.tpl-hermes-cyber-terminal .hc-tag.red{color:var(--hc-red);border-color:rgba(255,107,107,.25);background:rgba(255,107,107,.05)}
+.tpl-hermes-cyber-terminal .hc-big{font-family:'JetBrains Mono',monospace;font-size:140px;font-weight:700;line-height:1;color:var(--hc-green);text-shadow:0 0 40px rgba(126,211,164,.4),0 0 80px rgba(126,211,164,.15);letter-spacing:-.04em}
+.tpl-hermes-cyber-terminal .hc-footer{position:absolute;left:84px;right:84px;bottom:32px;display:flex;justify-content:space-between;font-size:10px;color:var(--hc-ink2);letter-spacing:.2em;text-transform:uppercase;border-top:1px solid rgba(126,211,164,.1);padding-top:14px}
+
+</style>
+<style>
+/* Static-preview fallback (runtime.js is absent — keep every slide visible) */
+.deck{height:auto;min-height:100vh;overflow:visible}
+.slide{position:relative;inset:auto;opacity:1;pointer-events:auto;transform:none;height:100vh;page-break-after:always}
+.deck-header,.deck-footer,.slide-number,.progress-bar,.notes-overlay,.overview{pointer-events:none}
+.notes{display:none!important}
+</style></head>
+<body class="tpl-hermes-cyber-terminal">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active">
+    <div class="hc-grid"></div>
+    <div class="hc-vignette"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>~/hermes · zsh · 118x42 · 01:37:04</div></div>
+    <div style="margin:auto 0">
+      <p class="hc-prompt">whoami --hermes</p>
+      <h1 class="hc-h1">HERMES<br>AGENT / v0.9.2<span class="hc-cursor"></span></h1>
+      <p class="hc-lede">一个号称能「自主跑完整软件工程任务」的命令行 agent。<br>真的好用？还是又一轮营销？—— 我连续跑了 72 小时，告诉你答案。</p>
+      <div style="margin-top:26px">
+        <span class="hc-tag">rust-core</span>
+        <span class="hc-tag">mcp-native</span>
+        <span class="hc-tag amber">72h-benchmark</span>
+        <span class="hc-tag red">honest-review</span>
+      </div>
+    </div>
+    <div class="hc-footer"><span>hermes-review · lewis · 2026</span><span>01 / 08</span></div>
+  </section>
+
+  <!-- 2. SECTION DIVIDER -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>section · 01/04</div></div>
+    <div style="margin:auto 0">
+      <p class="hc-prompt">cat chapter_01.md</p>
+      <h1 class="hc-h1" style="font-size:110px">// Setup</h1>
+      <p class="hc-lede">从 <code style="color:var(--hc-amber)">brew install hermes</code> 到第一次 prompt —— 一共 4 分 22 秒。</p>
+    </div>
+    <div class="hc-footer"><span>section · setup</span><span>02 / 08</span></div>
+  </section>
+
+  <!-- 3. CONTENT — spec cards -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · cold-start</div></div>
+    <h2 class="hc-h2">开箱数据</h2>
+    <p class="hc-lede">cold start → first-successful-task 三次平均</p>
+    <div class="hc-grid-3">
+      <div class="hc-card"><div class="lbl">install time</div><div class="val">42s</div><div class="desc">单 binary，无 docker，无 python env。</div></div>
+      <div class="hc-card"><div class="lbl">first token</div><div class="val">1.8s</div><div class="desc">接入 claude-opus-4-6，无预热。</div></div>
+      <div class="hc-card"><div class="lbl">first PR merged</div><div class="val">4m22s</div><div class="desc">跑的是 fix-a-typo 级别的低难度任务。</div></div>
+    </div>
+    <div class="hc-grid-2">
+      <div class="hc-card"><div class="lbl">// verdict +</div><div class="val" style="color:var(--hc-green);font-size:18px">冷启动是真的快</div><div class="desc">和 OpenClaw 的 docker + pip 流程比，快不止一个数量级。</div></div>
+      <div class="hc-card"><div class="lbl">// verdict -</div><div class="val" style="color:var(--hc-red);font-size:18px">MCP 服务器配置不够友好</div><div class="desc">env 变量需要手动塞进 ~/.hermes/env，文档几乎没写。</div></div>
+    </div>
+    <div class="hc-footer"><span>data · verified 3 runs</span><span>03 / 08</span></div>
+  </section>
+
+  <!-- 4. CODE -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>trace · hermes run</div></div>
+    <p class="hc-prompt">hermes run "refactor auth module to use pkce"</p>
+    <h3 class="hc-h3" style="margin-top:12px">↓ 真实 trace (节选)</h3>
+    <pre class="hc-codebox" style="margin-top:10px"><span class="cm"># hermes v0.9.2 · session 42a1</span>
+[<span class="fn">plan</span>]    <span class="st">"分析 src/auth/*.ts → 找 oauth flow → 抽成 pkce"</span>
+[<span class="fn">read</span>]    src/auth/oauth.ts       <span class="cm">// 214 lines</span>
+[<span class="fn">read</span>]    src/auth/token.ts       <span class="cm">// 88 lines</span>
+[<span class="kw">think</span>]   <span class="st">"发现 implicit flow，改为 code+pkce，需新 state param"</span>
+[<span class="fn">edit</span>]    src/auth/oauth.ts       <span class="hl">+43 -17</span>
+[<span class="fn">edit</span>]    src/auth/token.ts       <span class="hl">+12 -4</span>
+[<span class="fn">test</span>]    pnpm vitest auth        <span class="st">PASS 18/18</span>
+[<span class="fn">commit</span>]  <span class="var">"feat(auth): migrate to oauth2 code+pkce"</span>
+[<span class="fn">push</span>]    origin feat/pkce-auth   <span class="st">ok</span>
+
+<span class="cm"># 总耗时 3m 14s · 14k tokens · $0.21</span></pre>
+    <div class="hc-footer"><span>trace · live</span><span>04 / 08</span></div>
+  </section>
+
+  <!-- 5. CHART -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · hermes vs openclaw</div></div>
+    <h2 class="hc-h2">72 小时对比</h2>
+    <p class="hc-lede">同一组 48 个 GitHub issue，两个 agent 各跑一遍</p>
+    <svg viewBox="0 0 1000 380" style="width:100%;max-width:1040px;margin-top:24px" xmlns="http://www.w3.org/2000/svg">
+      <g font-family="JetBrains Mono, monospace" font-size="13" fill="#8a8892">
+        <!-- axis -->
+        <line x1="80" y1="40" x2="80" y2="320" stroke="rgba(126,211,164,.2)"/>
+        <line x1="80" y1="320" x2="960" y2="320" stroke="rgba(126,211,164,.2)"/>
+        <!-- y labels -->
+        <text x="70" y="46" text-anchor="end">100%</text>
+        <text x="70" y="116" text-anchor="end">75%</text>
+        <text x="70" y="186" text-anchor="end">50%</text>
+        <text x="70" y="256" text-anchor="end">25%</text>
+        <text x="70" y="324" text-anchor="end">0</text>
+        <!-- bars: hermes -->
+        <g>
+          <rect x="130" y="80"  width="80" height="240" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
+          <text x="170" y="76" text-anchor="middle" fill="#7ed3a4" font-weight="700">82%</text>
+          <text x="170" y="345" text-anchor="middle">resolved</text>
+          <rect x="240" y="146" width="80" height="174" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
+          <text x="280" y="142" text-anchor="middle" fill="#7ed3a4" font-weight="700">58%</text>
+          <text x="280" y="345" text-anchor="middle">one-shot</text>
+          <rect x="350" y="60"  width="80" height="260" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
+          <text x="390" y="56" text-anchor="middle" fill="#7ed3a4" font-weight="700">89%</text>
+          <text x="390" y="345" text-anchor="middle">test-pass</text>
+          <rect x="460" y="110" width="80" height="210" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
+          <text x="500" y="106" text-anchor="middle" fill="#7ed3a4" font-weight="700">71%</text>
+          <text x="500" y="345" text-anchor="middle">pr-merged</text>
+        </g>
+        <!-- bars: openclaw -->
+        <g>
+          <rect x="570" y="150" width="80" height="170" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
+          <text x="610" y="146" text-anchor="middle" fill="#e9c58a" font-weight="700">60%</text>
+          <text x="610" y="345" text-anchor="middle">resolved</text>
+          <rect x="680" y="212" width="80" height="108" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
+          <text x="720" y="208" text-anchor="middle" fill="#e9c58a" font-weight="700">38%</text>
+          <text x="720" y="345" text-anchor="middle">one-shot</text>
+          <rect x="790" y="130" width="80" height="190" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
+          <text x="830" y="126" text-anchor="middle" fill="#e9c58a" font-weight="700">67%</text>
+          <text x="830" y="345" text-anchor="middle">test-pass</text>
+        </g>
+        <!-- legend -->
+        <g transform="translate(820,50)">
+          <rect x="0" y="0" width="14" height="14" fill="rgba(126,211,164,.15)" stroke="#7ed3a4"/>
+          <text x="22" y="12" fill="#7ed3a4">hermes 0.9.2</text>
+          <rect x="0" y="22" width="14" height="14" fill="rgba(233,197,138,.12)" stroke="#e9c58a"/>
+          <text x="22" y="34" fill="#e9c58a">openclaw 2.1</text>
+        </g>
+      </g>
+    </svg>
+    <div class="hc-footer"><span>benchmark · n=48</span><span>05 / 08</span></div>
+  </section>
+
+  <!-- 6. STATS -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>tldr</div></div>
+    <p class="hc-prompt">echo $VERDICT</p>
+    <div class="hc-big">7.8<span style="font-size:60px;color:var(--hc-ink2)">/ 10</span></div>
+    <p class="hc-lede" style="margin-top:14px">值得装，还不值得完全依赖。</p>
+    <div class="hc-grid-2" style="margin-top:24px">
+      <div class="hc-card"><div class="lbl">+ strong points</div><div class="desc">• rust 本体冷启快<br>• trace 可读性极强<br>• diff 审核友好，commit message 也写得合格</div></div>
+      <div class="hc-card"><div class="lbl">- weak points</div><div class="desc">• plan 阶段偶尔跳步<br>• 超 50k LoC 仓库会 OOM<br>• MCP 配置需要手动塞 env</div></div>
+    </div>
+    <div class="hc-footer"><span>verdict · honest</span><span>06 / 08</span></div>
+  </section>
+
+  <!-- 7. CTA -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>install</div></div>
+    <h2 class="hc-h2">想自己跑一遍？</h2>
+    <p class="hc-lede">三条命令，不到 5 分钟就能看见它干第一件事。</p>
+    <pre class="hc-codebox" style="margin-top:22px"><span class="cm"># 1. install</span>
+<span class="kw">$</span> brew install hermes-agent/tap/hermes
+
+<span class="cm"># 2. auth (先准备好 anthropic api key)</span>
+<span class="kw">$</span> hermes auth login
+
+<span class="cm"># 3. first task</span>
+<span class="kw">$</span> cd ~/your-repo && hermes run <span class="st">"add a CHANGELOG.md from git log"</span></pre>
+    <div style="margin-top:26px">
+      <span class="hc-tag">brew-ready</span>
+      <span class="hc-tag">opus-4.6</span>
+      <span class="hc-tag amber">needs-api-key</span>
+    </div>
+    <div class="hc-footer"><span>try-it-now</span><span>07 / 08</span></div>
+  </section>
+
+  <!-- 8. THANKS -->
+  <section class="slide">
+    <div class="hc-grid"></div>
+    <div class="hc-scanlines"></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>EOF</div></div>
+    <div style="margin:auto 0">
+      <p class="hc-prompt">exit 0</p>
+      <h1 class="hc-h1" style="font-size:120px">// thanks<span class="hc-cursor"></span></h1>
+      <p class="hc-lede">完整 trace、48 个任务的 PR 列表、benchmark 脚本都在 <span style="color:var(--hc-amber)">github.com/lewis/hermes-review</span></p>
+    </div>
+    <div class="hc-footer"><span>session closed</span><span>08 / 08</span></div>
+  </section>
+
+</div>
+
+</body>
+</html>

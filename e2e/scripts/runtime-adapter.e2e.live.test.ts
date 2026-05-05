@@ -1,3 +1,4 @@
+import type http from 'node:http';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -19,17 +20,12 @@ interface AgentsResponse {
   agents: AgentInfo[];
 }
 
-interface StartServerResult {
-  url: string;
-  server: { close: (callback: (err?: Error) => void) => void };
-}
-
 interface ParsedSseEvent {
   event: string;
   data: Record<string, unknown>;
 }
 
-type StartServer = (options: { port: number; returnServer: true }) => Promise<StartServerResult>;
+type StartServer = (options: { port: number; returnServer: true }) => Promise<http.Server | undefined>;
 type CloseDatabase = () => void;
 
 const liveTimeoutMs = Number(process.env.OD_RUNTIME_LIVE_TIMEOUT_MS || 180_000);
@@ -38,7 +34,7 @@ const maxRuntimeCount = 8;
 const marker = 'OD_RUNTIME_ADAPTER_LIVE_OK';
 
 let baseUrl: string;
-let server: StartServerResult['server'] | undefined;
+let server: http.Server | undefined;
 let startServer: StartServer;
 let closeDatabase: CloseDatabase | undefined;
 let detectedAgents: AgentInfo[] | undefined;
@@ -50,8 +46,15 @@ test.before(async () => {
   ({ startServer } = await import('../../apps/daemon/dist/server.js') as { startServer: StartServer });
   ({ closeDatabase } = await import('../../apps/daemon/dist/db.js') as { closeDatabase: CloseDatabase });
   const started = await startServer({ port: 0, returnServer: true });
-  baseUrl = started.url;
-  server = started.server;
+  if (started == null) {
+    throw new Error('startServer did not return a server handle');
+  }
+  const address = started.address();
+  if (address == null || typeof address === 'string') {
+    throw new Error('startServer did not bind to a TCP port');
+  }
+  server = started;
+  baseUrl = `http://127.0.0.1:${address.port}`;
 });
 
 test.after(async () => {

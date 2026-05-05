@@ -54,10 +54,10 @@ The optimization work should proceed in dependency order. Some items can run in 
 | Workstream | Status | Optimization | Covers | Depends on | Output |
 |---|---|---|---|---|---|
 | W1 | Completed | Confirm architecture and capability boundaries | R4, R15 | — | Written ownership rules for web, daemon, shared contracts, and dangerous local capabilities. See `specs/current/architecture-boundaries.md`. |
-| W2 | Planned | Define API, SSE, and error contracts | R2, R7, R8 | W1 | Shared request/response types, SSE event union, and error model. |
-| W3 | Planned | Add gradual TypeScript support | R1 | W2 for highest-value shared types | Daemon TS config, `allowJs`, typed new modules, typed contracts imported by web and daemon. |
+| W2 | Completed | Define API, SSE, and error contracts | R2, R7, R8 | W1 | `packages/contracts` now provides shared request/response types, SSE event unions, and error model helpers consumed by web and daemon. |
+| W3 | Completed | Migrate project-owned code to TypeScript | R1 | W2 for highest-value shared types | Daemon, root scripts, and e2e support now use TypeScript sources; daemon compiles to `apps/daemon/dist`; residual JS is checked by `pnpm check:residual-js`. |
 | W4 | Planned | Add runtime validation at daemon boundaries | R3, R4 | W2 | Schemas for HTTP requests, paths, agents, models, uploads, task IDs, and command args. |
-| W5 | Planned | Modularize `server.js` | R6 | W2, W3, W4 | Thin route handlers plus services/adapters for agents, DB, FS, streams, and artifacts. |
+| W5 | Planned | Modularize `server.ts` | R6 | W2, W3, W4 | Thin route handlers plus services/adapters for agents, DB, FS, streams, and artifacts. |
 | W6 | Planned | Introduce agent process/task manager | R5, R8, R11 | W2, W5 | Task state machine, cancellation, timeout, cleanup, exit handling, and concurrency controls. |
 | W7 | Planned | Strengthen SQLite migrations | R9 | W5 or a clear DB adapter boundary | Migration table, ordered migrations, startup checks, backup strategy, migration tests. |
 | W8 | Planned | Build the daemon test pyramid | R10 | W2, W4, W5 | Contract tests, route integration tests, service unit tests, migration tests, SSE tests, and mocked agent-process tests. |

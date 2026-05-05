@@ -4,6 +4,7 @@ import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import { renderModelOptions } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
+import { apiProtocolLabel } from '../utils/apiProtocol';
 
 interface Props {
   config: AppConfig;
@@ -21,7 +22,7 @@ interface Props {
 }
 
 /**
- * Compact avatar at the right of the project topbar. Click opens a dropdown
+ * Compact settings control at the right of the project header. Click opens a dropdown
  * with current execution mode, the agent picker (when in daemon mode), and
  * a Settings entry — replaces the wide AgentPicker + env-pill row.
  */
@@ -81,19 +82,14 @@ export function AvatarMenu({
     <div className="avatar-menu" ref={wrapRef}>
       <button
         type="button"
-        className="avatar-btn"
+        className="settings-icon-btn"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
         title={t('avatar.title')}
+        aria-label={t('avatar.title')}
       >
-        <img
-          src="/avatar.png"
-          alt=""
-          aria-hidden
-          draggable={false}
-          className="avatar-btn-photo"
-        />
+        <Icon name="settings" size={17} />
       </button>
       {open ? (
         <div className="avatar-popover" role="menu">
@@ -101,7 +97,7 @@ export function AvatarMenu({
             <span className="who">
               {config.mode === 'daemon'
                 ? t('avatar.localCli')
-                : t('avatar.anthropicApi')}
+                : apiProtocolLabel(config.apiProtocol)}
             </span>
             <span className="where">
               {config.mode === 'api'

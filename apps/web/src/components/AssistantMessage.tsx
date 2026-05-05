@@ -8,7 +8,8 @@ import { Icon } from './Icon';
 import { useT } from '../i18n';
 import { unfinishedTodosFromEvents, type TodoItem } from '../runtime/todos';
 import type { Dict } from '../i18n/types';
-import { agentDisplayName } from '../utils/agentLabels';
+import { agentDisplayName, exactAgentDisplayName } from '../utils/agentLabels';
+import { exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import type { AgentEvent, ChatMessage, ProjectFile } from '../types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -70,7 +71,10 @@ export function AssistantMessage({
 
   return (
     <div className="msg assistant">
-      <div className="role">{roleLabel}</div>
+      <div className="role">
+        <span>{roleLabel}</span>
+        <MessageTimestamp message={message} t={t} />
+      </div>
       <div className="assistant-flow">
         {blocks.length === 0 && streaming ? (
           <WaitingPill startedAt={message.startedAt} latestStatus={latestStatusLabel(events)} />
@@ -101,6 +105,7 @@ export function AssistantMessage({
               <ToolGroupCard
                 key={i}
                 items={b.items}
+                runStreaming={streaming}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
               />
@@ -135,13 +140,40 @@ export function AssistantMessage({
   );
 }
 
-function assistantRoleLabel(message: ChatMessage, t: TranslateFn): string {
-  const fromMetadata = agentDisplayName(message.agentId, message.agentName);
-  if (fromMetadata) return fromMetadata;
+function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
+  const ts = messageTime(message);
+  if (!ts) return null;
+  return (
+    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
+      {relativeTimeLong(ts, t)}
+    </time>
+  );
+}
+
+export function assistantRoleLabel(message: ChatMessage, t: TranslateFn): string {
+  const model = assistantModelDetail(message);
+  const fromName = message.agentName?.trim();
+  if (fromName) return appendRoleModel(exactAgentDisplayName(fromName) ?? fromName, model);
+  const fromId = agentDisplayName(message.agentId);
+  if (fromId) return appendRoleModel(fromId, model);
   const starting = message.events?.find(
     (e) => e.kind === 'status' && e.label === 'starting' && e.detail,
   ) as Extract<AgentEvent, { kind: 'status' }> | undefined;
-  return agentDisplayName(starting?.detail) ?? t('assistant.role');
+  return appendRoleModel(agentDisplayName(starting?.detail) ?? t('assistant.role'), model);
+}
+
+function assistantModelDetail(message: ChatMessage): string | null {
+  const initializing = message.events?.find(
+    (e) => e.kind === 'status' && e.label === 'initializing' && e.detail,
+  ) as Extract<AgentEvent, { kind: 'status' }> | undefined;
+  const detail = initializing?.detail?.trim();
+  if (!detail || detail === 'default') return null;
+  return detail;
+}
+
+function appendRoleModel(label: string, model: string | null): string {
+  if (!model || label.includes(' · ')) return label;
+  return `${label} · ${model}`;
 }
 
 function AssistantFooter({
@@ -499,10 +531,12 @@ interface ToolItem {
 
 function ToolGroupCard({
   items,
+  runStreaming,
   projectFileNames,
   onRequestOpenFile,
 }: {
   items: ToolItem[];
+  runStreaming: boolean;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
 }) {
@@ -516,6 +550,7 @@ function ToolGroupCard({
       <ToolCard
         use={items[0]!.use}
         result={items[0]!.result}
+        runStreaming={runStreaming}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
       />
@@ -545,6 +580,7 @@ function ToolGroupCard({
               key={i}
               use={it.use}
               result={it.result}
+              runStreaming={runStreaming}
               projectFileNames={projectFileNames}
               onRequestOpenFile={onRequestOpenFile}
             />

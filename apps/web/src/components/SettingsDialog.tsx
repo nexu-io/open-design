@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import { AgentIcon } from './AgentIcon';
@@ -9,39 +10,269 @@ import {
   renderModelOptions,
 } from './modelOptions';
 import { KNOWN_PROVIDERS } from '../state/config';
-import type { AgentInfo, AppConfig, ExecMode } from '../types';
+import {
+  MAX_MAX_TOKENS,
+  MIN_MAX_TOKENS,
+  modelMaxTokensDefault,
+} from '../state/maxTokens';
+import type { AgentInfo, ApiProtocol, ApiProtocolConfig, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
+import { MEDIA_PROVIDERS } from '../media/models';
+import type { MediaProvider } from '../media/models';
+import { PetSettings } from './pet/PetSettings';
+import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import {
+  FAILURE_SOUNDS,
+  SUCCESS_SOUNDS,
+  notificationPermission,
+  playSound,
+  requestNotificationPermission,
+  showCompletionNotification,
+} from '../utils/notifications';
+
+export type SettingsSection =
+  | 'execution'
+  | 'media'
+  | 'integrations'
+  | 'language'
+  | 'appearance'
+  | 'notifications'
+  | 'pet'
+  | 'about';
 
 interface Props {
   initial: AppConfig;
   agents: AgentInfo[];
   daemonLive: boolean;
+  appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
+  // Optional deep-link target so callers (e.g. the entry-view "adopt a
+  // pet" pill) can pop the dialog open straight on a specific section.
+  defaultSection?: SettingsSection;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
-  onRefreshAgents: () => void;
+  onRefreshAgents: (
+    options?: { throwOnError?: boolean },
+  ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
 }
 
-const SUGGESTED_MODELS = [
-  'claude-opus-4-5',
-  'claude-sonnet-4-5',
-  'claude-haiku-4-5',
-  'mimo-v2.5-pro',
+const SUGGESTED_MODELS_BY_PROTOCOL = {
+  anthropic: [
+    'claude-opus-4-5',
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'deepseek-chat',
+    'deepseek-reasoner',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.5',
+    'MiniMax-M2.1-highspeed',
+    'MiniMax-M2.1',
+    'MiniMax-M2',
+    'mimo-v2.5-pro',
+  ],
+  openai: [
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o3',
+    'o4-mini',
+    'deepseek-chat',
+    'deepseek-reasoner',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.5',
+    'MiniMax-M2.1-highspeed',
+    'MiniMax-M2.1',
+    'MiniMax-M2',
+    'mimo-v2.5-pro',
+  ],
+  azure: [
+    'gpt-4o',
+    'gpt-4o-mini',
+  ],
+  google: [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+  ],
+} as const;
+
+const API_PROTOCOL_TABS: Array<{
+  id: ApiProtocol;
+  title: string;
+}> = [
+  { id: 'anthropic', title: 'Anthropic' },
+  { id: 'openai', title: 'OpenAI' },
+  { id: 'azure', title: 'Azure OpenAI' },
+  { id: 'google', title: 'Google Gemini' },
 ];
+
+const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
+  anthropic: 'Anthropic API',
+  openai: 'OpenAI API',
+  azure: 'Azure OpenAI',
+  google: 'Google Gemini',
+};
+
+const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
+  anthropic: 'sk-ant-...',
+  openai: 'sk-...',
+  azure: 'azure key',
+  google: 'AIza...',
+};
+
+type RescanNotice =
+  | { kind: 'success'; count: number }
+  | { kind: 'error' };
+
+function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
+  const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
+  return {
+    apiKey: '',
+    baseUrl: provider?.baseUrl ?? '',
+    model: provider?.model ?? '',
+    apiVersion: '',
+    apiProviderBaseUrl: provider ? provider.baseUrl : null,
+  };
+}
+
+function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
+  return {
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    model: config.model,
+    apiVersion: config.apiVersion ?? '',
+    apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+  };
+}
+
+function applyApiProtocolConfig(
+  config: AppConfig,
+  protocol: ApiProtocol,
+  apiConfig: ApiProtocolConfig,
+): AppConfig {
+  return {
+    ...config,
+    apiProtocol: protocol,
+    apiKey: apiConfig.apiKey,
+    baseUrl: apiConfig.baseUrl,
+    model: apiConfig.model,
+    apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
+    apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
+  };
+}
+
+export function isValidApiBaseUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    const hostname = url.hostname.toLowerCase();
+    const isLoopback =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]';
+    const isPrivateIpv4 =
+      hostname.startsWith('169.254.') ||
+      hostname.startsWith('10.') ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      Boolean(url.hostname) &&
+      (isLoopback || !isPrivateIpv4)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function updateCurrentApiProtocolConfig(
+  config: AppConfig,
+  patch: Partial<ApiProtocolConfig>,
+): AppConfig {
+  const protocol = config.apiProtocol ?? 'anthropic';
+  const nextApiConfig: ApiProtocolConfig = {
+    ...currentApiProtocolConfig(config),
+    ...patch,
+  };
+  return applyApiProtocolConfig(
+    {
+      ...config,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        [protocol]: nextApiConfig,
+      },
+    },
+    protocol,
+    nextApiConfig,
+  );
+}
+
+export function switchApiProtocolConfig(
+  config: AppConfig,
+  protocol: ApiProtocol,
+): AppConfig {
+  const currentProtocol = config.apiProtocol ?? 'anthropic';
+  const apiProtocolConfigs = {
+    ...(config.apiProtocolConfigs ?? {}),
+    [currentProtocol]: currentApiProtocolConfig(config),
+  };
+  const nextApiConfig =
+    apiProtocolConfigs[protocol] ?? defaultApiProtocolConfig(protocol);
+  return applyApiProtocolConfig(
+    {
+      ...config,
+      mode: 'api',
+      apiProtocolConfigs,
+    },
+    protocol,
+    nextApiConfig,
+  );
+}
 
 export function SettingsDialog({
   initial,
   agents,
   daemonLive,
+  appVersionInfo,
   welcome,
+  defaultSection,
   onSave,
   onClose,
   onRefreshAgents,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
+
+  // Revert the live theme preview when the dialog closes without saving.
+  // On Save, App's useLayoutEffect fires after unmount and applies the new
+  // saved theme, so this cleanup is effectively a no-op in that path.
+  useLayoutEffect(() => {
+    const saved = initial.theme ?? 'system';
+    return () => {
+      if (saved === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    };
+  }, [initial.theme]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsSection>(
+    defaultSection ?? 'execution',
+  );
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
+  const [agentRescanRunning, setAgentRescanRunning] = useState(false);
+  const [agentRescanNotice, setAgentRescanNotice] =
+    useState<RescanNotice | null>(null);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
   // If the daemon goes offline mid-edit, force API mode so the UI doesn't
@@ -78,17 +309,76 @@ export function SettingsDialog({
     };
   }, [languageOpen]);
 
+  // Close the language menu on window resize so its placement (computed on
+  // open) cannot end up stale relative to the new viewport dimensions.
+  useEffect(() => {
+    if (!languageOpen) return;
+    const handleResize = () => setLanguageOpen(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [languageOpen]);
+
   const installedCount = useMemo(
     () => agents.filter((a) => a.available).length,
     [agents],
   );
 
   const setMode = (mode: ExecMode) => setCfg((c) => ({ ...c, mode }));
+  const setApiProtocol = (protocol: ApiProtocol) =>
+    setCfg((c) => switchApiProtocolConfig(c, protocol));
+  const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
+    setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
+  const handleRefreshAgents = async () => {
+    if (agentRescanRunning) return;
+    setAgentRescanRunning(true);
+    setAgentRescanNotice(null);
+    try {
+      const refreshed = await onRefreshAgents({ throwOnError: true });
+      const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
+      setAgentRescanNotice({
+        kind: 'success',
+        count: nextAgents.filter((a) => a.available).length,
+      });
+    } catch {
+      setAgentRescanNotice({ kind: 'error' });
+    } finally {
+      setAgentRescanRunning(false);
+    }
+  };
 
+  const apiProtocol = cfg.apiProtocol ?? 'anthropic';
+  const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
+  const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const canSave =
     cfg.mode === 'daemon'
       ? Boolean(cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available)
-      : Boolean(cfg.apiKey.trim() && cfg.model.trim() && cfg.baseUrl.trim());
+      : Boolean(
+          cfg.apiKey.trim() &&
+          cfg.model.trim() &&
+          baseUrlValid,
+        );
+
+  const protocolProviders = useMemo(
+    () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
+    [apiProtocol],
+  );
+  const selectedProviderIndex =
+    cfg.apiProviderBaseUrl == null
+      ? -1
+      : protocolProviders.findIndex(
+          (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
+        );
+  const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const apiModelOptions = useMemo(
+    () => Array.from(new Set(
+      selectedProvider?.models?.length
+        ? selectedProvider.models
+        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+    )),
+    [apiProtocol, cfg.baseUrl, selectedProvider],
+  );
+  const apiModelCustom = Boolean(cfg.model) && !apiModelOptions.includes(cfg.model);
+  const apiModelSelectValue = apiModelCustom || !cfg.model ? CUSTOM_MODEL_SENTINEL : cfg.model;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -104,6 +394,26 @@ export function SettingsDialog({
               <span className="kicker">{t('settings.welcomeKicker')}</span>
               <h2>{t('settings.welcomeTitle')}</h2>
               <p className="subtitle">{t('settings.welcomeSubtitle')}</p>
+              {/* First-run users see a mini pet teaser inside the welcome
+                  modal so adoption is part of the warm intro rather than
+                  hidden behind another nav click. The chip nudges them
+                  toward Pets without forcing them to leave the rest of
+                  the welcome flow. */}
+              <button
+                type="button"
+                className="welcome-pet-teaser"
+                onClick={() => setActiveSection('pet')}
+              >
+                <span className="welcome-pet-glyph" aria-hidden>🐾</span>
+                <span className="welcome-pet-copy">
+                  <strong>{t('pet.welcomeTeaserTitle')}</strong>
+                  <span>{t('pet.welcomeTeaserBody')}</span>
+                </span>
+                <span className="welcome-pet-cta">
+                  {t('pet.welcomeTeaserCta')}
+                  <Icon name="chevron-right" size={12} />
+                </span>
+              </button>
             </>
           ) : (
             <>
@@ -114,60 +424,200 @@ export function SettingsDialog({
           )}
         </header>
 
-        <div
-          className="seg-control"
-          role="tablist"
-          aria-label={t('settings.modeAria')}
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={cfg.mode === 'daemon'}
-            className={'seg-btn' + (cfg.mode === 'daemon' ? ' active' : '')}
-            disabled={!daemonLive}
-            onClick={() => setMode('daemon')}
-            title={
-              daemonLive
-                ? t('settings.modeDaemonHelp')
-                : t('settings.modeDaemonOffline')
-            }
-          >
-            <span className="seg-title">{t('settings.modeDaemon')}</span>
-            <span className="seg-meta">
-              {daemonLive
-                ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
-                : t('settings.modeDaemonOfflineMeta')}
-            </span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={cfg.mode === 'api'}
-            className={'seg-btn' + (cfg.mode === 'api' ? ' active' : '')}
-            onClick={() => setMode('api')}
-          >
-            <span className="seg-title">{t('settings.modeApi')}</span>
-            <span className="seg-meta">{t('settings.modeApiMeta')}</span>
-          </button>
-        </div>
-
         <div className="modal-body">
+          <aside className="settings-sidebar" aria-label="Settings sections">
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
+              onClick={() => setActiveSection('execution')}
+            >
+              <Icon name="sliders" size={18} />
+              <span>
+                <strong>{t('settings.envConfigure')}</strong>
+                <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
+              onClick={() => setActiveSection('media')}
+            >
+              <Icon name="image" size={18} />
+              <span>
+                <strong>{t('settings.mediaProviders')}</strong>
+                <small>Image / video / audio</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
+              onClick={() => setActiveSection('integrations')}
+            >
+              <Icon name="link" size={18} />
+              <span>
+                <strong>MCP server</strong>
+                <small>Connect your coding agent</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
+              onClick={() => setActiveSection('language')}
+            >
+              <Icon name="languages" size={18} />
+              <span>
+                <strong>{t('settings.language')}</strong>
+                <small>{t('settings.languageHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
+              onClick={() => setActiveSection('appearance')}
+            >
+              <Icon name="sun-moon" size={18} />
+              <span>
+                <strong>{t('settings.appearance')}</strong>
+                <small>{t('settings.appearanceHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
+              onClick={() => setActiveSection('notifications')}
+            >
+              <Icon name="bell" size={18} />
+              <span>
+                <strong>{t('settings.notifications')}</strong>
+                <small>{t('settings.notificationsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
+              onClick={() => setActiveSection('pet')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('pet.navTitle')}</strong>
+                <small>{t('pet.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'about' ? ' active' : ''}`}
+              onClick={() => setActiveSection('about')}
+            >
+              <Icon name="settings" size={18} />
+              <span>
+                <strong>{t('settings.about')}</strong>
+                <small>{t('settings.aboutHint')}</small>
+              </span>
+            </button>
+          </aside>
+          <div className="settings-content">
+          {activeSection === 'execution' ? (
+            <>
+              <div
+                className="seg-control"
+                role="tablist"
+                aria-label={t('settings.modeAria')}
+                style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cfg.mode === 'daemon'}
+                  className={'seg-btn' + (cfg.mode === 'daemon' ? ' active' : '')}
+                  disabled={!daemonLive}
+                  onClick={() => setMode('daemon')}
+                  title={
+                    daemonLive
+                      ? t('settings.modeDaemonHelp')
+                      : t('settings.modeDaemonOffline')
+                  }
+                >
+                  <span className="seg-title">{t('settings.localCli')}</span>
+                  <span className="seg-meta">
+                    {daemonLive
+                      ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
+                      : t('settings.modeDaemonOfflineMeta')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cfg.mode === 'api'}
+                  className={'seg-btn' + (cfg.mode === 'api' ? ' active' : '')}
+                  onClick={() => setMode('api')}
+                >
+                  <span className="seg-title">{t('settings.modeApiMeta')}</span>
+                  <span className="seg-meta">{t('settings.modeApi')}</span>
+                </button>
+              </div>
+              {cfg.mode === 'api' ? (
+                <div
+                  className="protocol-chips"
+                  role="tablist"
+                  aria-label={t('settings.protocolAria')}
+                >
+                  {API_PROTOCOL_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={apiProtocol === tab.id}
+                      className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
+                      onClick={() => setApiProtocol(tab.id)}
+                    >
+                      {tab.title}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
           {cfg.mode === 'daemon' ? (
             <section className="settings-section">
               <div className="section-head">
                 <div>
-                  <h3>{t('settings.codeAgent')}</h3>
+                  <h3>{t('settings.localCli')}</h3>
                   <p className="hint">{t('settings.codeAgentHint')}</p>
                 </div>
                 <button
                   type="button"
-                  className="ghost icon-btn"
-                  onClick={onRefreshAgents}
+                  className={
+                    'ghost icon-btn settings-rescan-btn' +
+                    (agentRescanRunning ? ' loading' : '')
+                  }
+                  onClick={() => void handleRefreshAgents()}
+                  disabled={agentRescanRunning}
                   title={t('settings.rescanTitle')}
                 >
-                  {t('settings.rescan')}
+                  {agentRescanRunning ? (
+                    <>
+                      <Icon name="spinner" size={13} className="icon-spin" />
+                      <span>{t('settings.rescanRunning')}</span>
+                    </>
+                  ) : (
+                    t('settings.rescan')
+                  )}
                 </button>
               </div>
+              {agentRescanNotice ? (
+                <p
+                  className={
+                    'settings-rescan-status ' + agentRescanNotice.kind
+                  }
+                  role={
+                    agentRescanNotice.kind === 'error' ? 'alert' : 'status'
+                  }
+                >
+                  {agentRescanNotice.kind === 'success'
+                    ? t('settings.rescanSuccess', {
+                        count: agentRescanNotice.count,
+                      })
+                    : t('settings.rescanFailed')}
+                </p>
+              ) : null}
               {agents.length === 0 ? (
                 <div className="empty-card">
                   {t('settings.noAgentsDetected')}
@@ -327,16 +777,48 @@ export function SettingsDialog({
           ) : (
             <section className="settings-section">
               <div className="section-head">
-                <h3>{t('settings.apiSection')}</h3>
+                <div>
+                  <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                </div>
               </div>
+              <label className="field">
+                <span className="field-label">{t('settings.quickFillProvider')}</span>
+                <select
+                  value={selectedProviderIndex >= 0 ? String(selectedProviderIndex) : ''}
+                  onChange={(e) => {
+                    if (e.target.value === '') {
+                      updateApiConfig({
+                        baseUrl: '',
+                        model: '',
+                        apiProviderBaseUrl: null,
+                      });
+                      return;
+                    }
+                    const idx = Number(e.target.value);
+                    if (!isNaN(idx) && protocolProviders[idx]) {
+                      const p = protocolProviders[idx]!;
+                      updateApiConfig({
+                        baseUrl: p.baseUrl,
+                        model: p.model,
+                        apiProviderBaseUrl: p.baseUrl,
+                      });
+                    }
+                  }}
+                >
+                  <option value="">{t('settings.customProvider')}</option>
+                  {protocolProviders.map((p, i) => (
+                    <option key={p.label} value={i}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
               <label className="field">
                 <span className="field-label">{t('settings.apiKey')}</span>
                 <div className="field-row">
                   <input
                     type={showApiKey ? 'text' : 'password'}
-                    placeholder="sk-ant-..."
+                    placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
                     value={cfg.apiKey}
-                    onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
+                    onChange={(e) => updateApiConfig({ apiKey: e.target.value })}
                     autoFocus
                   />
                   <button
@@ -352,49 +834,87 @@ export function SettingsDialog({
                 </div>
               </label>
               <label className="field">
-                <span className="field-label">{t('settings.model')}</span>
-                <input
-                  type="text"
-                  value={cfg.model}
-                  list="suggested-models"
-                  onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-                />
-                <datalist id="suggested-models">
-                  {SUGGESTED_MODELS.map((m) => (
-                    <option value={m} key={m} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="field">
-                <span className="field-label">{t('settings.baseUrl')}</span>
-                <input
-                  type="text"
-                  value={cfg.baseUrl}
-                  onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Quick fill provider</span>
+                <span className="field-label">
+                  {apiProtocol === 'azure'
+                    ? t('settings.azureDeploymentModel')
+                    : t('settings.model')}
+                </span>
                 <select
-                  value=""
+                  value={apiModelSelectValue}
                   onChange={(e) => {
-                    const idx = Number(e.target.value);
-                    if (!isNaN(idx) && KNOWN_PROVIDERS[idx]) {
-                      const p = KNOWN_PROVIDERS[idx]!;
-                      setCfg((c) => ({ ...c, baseUrl: p.baseUrl, model: p.model }));
+                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                      updateApiConfig({ model: '' });
+                    } else {
+                      updateApiConfig({ model: e.target.value });
                     }
                   }}
                 >
-                  <option value="">— choose a provider —</option>
-                  {KNOWN_PROVIDERS.map((p, i) => (
-                    <option key={i} value={i}>{p.label}</option>
+                  {apiModelOptions.map((m) => (
+                    <option value={m} key={m}>{m}</option>
                   ))}
+                  <option value={CUSTOM_MODEL_SENTINEL}>{t('settings.modelCustom')}</option>
                 </select>
               </label>
+              {!selectedProvider ? (
+                <p className="hint">{t('settings.suggestedModelsHint')}</p>
+              ) : null}
+              {apiProtocol === 'azure' ? (
+                <p className="hint">{t('settings.azureDeploymentModelHint')}</p>
+              ) : null}
+              {apiModelCustom || apiModelSelectValue === CUSTOM_MODEL_SENTINEL ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.modelCustomLabel')}</span>
+                  <input
+                    type="text"
+                    value={cfg.model}
+                    placeholder={t('settings.modelCustomPlaceholder')}
+                    onChange={(e) => updateApiConfig({ model: e.target.value.trim() })}
+                  />
+                </label>
+              ) : null}
+              <label className="field">
+                <span className="field-label">{t('settings.baseUrl')}</span>
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={cfg.baseUrl}
+                  aria-invalid={baseUrlInvalid || undefined}
+                  aria-describedby={
+                    baseUrlInvalid ? 'settings-base-url-error' : undefined
+                  }
+                  onChange={(e) => updateApiConfig({ baseUrl: e.target.value, apiProviderBaseUrl: null })}
+                />
+                {baseUrlInvalid ? (
+                  <span
+                    id="settings-base-url-error"
+                    className="settings-field-error"
+                    role="alert"
+                  >
+                    {t('settings.baseUrlInvalid')}
+                  </span>
+                ) : null}
+              </label>
+              {apiProtocol === 'azure' ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.apiVersion')}</span>
+                  <input
+                    type="text"
+                    value={cfg.apiVersion ?? ''}
+                    placeholder="2024-10-21"
+                    onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
+                  />
+                </label>
+              ) : null}
               <p className="hint">{t('settings.apiHint')}</p>
             </section>
           )}
+            </>
+          ) : null}
 
+          {activeSection === 'media' ? <MediaProvidersSection cfg={cfg} setCfg={setCfg} /> : null}
+          {activeSection === 'integrations' ? <IntegrationsSection /> : null}
+
+          {activeSection === 'language' ? (
           <section className="settings-section">
             <div className="section-head">
               <div>
@@ -421,15 +941,24 @@ export function SettingsDialog({
                 </span>
                 <Icon name="chevron-down" size={16} />
               </button>
-              {languageOpen && languageMenuRect ? (
+              {languageOpen && languageMenuRect ? (() => {
+                const spaceBelow = window.innerHeight - languageMenuRect.bottom;
+                const spaceAbove = languageMenuRect.top;
+                // Prefer downward if at least 200px available (enough for ~5 options)
+                const openDownward = spaceBelow >= spaceAbove || spaceBelow >= 200;
+                return (
                 <div
                   className="settings-language-menu"
                   role="menu"
                   style={{
-                    bottom: window.innerHeight - languageMenuRect.top + 6,
+                    top: openDownward ? languageMenuRect.bottom + 6 : undefined,
+                    bottom: openDownward
+                      ? undefined
+                      : window.innerHeight - languageMenuRect.top + 6,
                     left: languageMenuRect.left,
                     width: languageMenuRect.width,
-                  }}
+                    '--menu-available-h': `${(openDownward ? spaceBelow : spaceAbove) - 6}px`,
+                  } as React.CSSProperties}
                 >
                   {LOCALES.map((code) => {
                     const active = locale === code;
@@ -458,9 +987,65 @@ export function SettingsDialog({
                     );
                   })}
                 </div>
-              ) : null}
+                );
+              })() : null}
             </div>
           </section>
+          ) : null}
+
+          {activeSection === 'appearance' ? (
+            <AppearanceSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'notifications' ? (
+            <NotificationsSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'pet' ? (
+            <PetSettings cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'about' ? (
+            <section className="settings-section">
+              <div className="section-head">
+                <div>
+                  <h3>{t('settings.about')}</h3>
+                  <p className="hint">{t('settings.aboutHint')}</p>
+                </div>
+              </div>
+              {appVersionInfo ? (
+                <dl className="settings-about-list">
+                  <div>
+                    <dt>{t('settings.appVersion')}</dt>
+                    <dd>{appVersionInfo.version}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appChannel')}</dt>
+                    <dd>{appVersionInfo.channel}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appRuntime')}</dt>
+                    <dd>
+                      {appVersionInfo.packaged
+                        ? t('settings.runtimePackaged')
+                        : t('settings.runtimeDevelopment')}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appPlatform')}</dt>
+                    <dd>{appVersionInfo.platform}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.appArchitecture')}</dt>
+                    <dd>{appVersionInfo.arch}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <div className="empty-card">{t('settings.versionUnavailable')}</div>
+              )}
+            </section>
+          ) : null}
+          </div>
         </div>
 
         <footer className="modal-foot">
@@ -479,4 +1064,911 @@ export function SettingsDialog({
       </div>
     </div>
   );
+}
+
+function MediaProvidersSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const providers = MEDIA_PROVIDERS
+    .filter((p) => p.settingsVisible !== false)
+    .slice()
+    .sort((a, b) => {
+      const aEntry = cfg.mediaProviders?.[a.id];
+      const bEntry = cfg.mediaProviders?.[b.id];
+      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim());
+      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim());
+      if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
+      if (a.integrated !== b.integrated) return a.integrated ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+  const updateProvider = (
+    provider: MediaProvider,
+    patch: { apiKey?: string; baseUrl?: string },
+  ) => {
+    setCfg((curr) => {
+      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '' };
+      const next = { ...prev, ...patch };
+      const map = { ...(curr.mediaProviders ?? {}) };
+      if (!next.apiKey.trim() && !next.baseUrl.trim()) {
+        delete map[provider.id];
+      } else {
+        map[provider.id] = next;
+      }
+      return { ...curr, mediaProviders: map };
+    });
+  };
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.mediaProviders')}</h3>
+          <p className="hint">{t('settings.mediaProvidersHint')}</p>
+        </div>
+      </div>
+      <div className="media-provider-list">
+        {providers.map((provider) => {
+          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '' };
+          const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
+          const disabled = !provider.integrated;
+          return (
+            <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
+              <div className="media-provider-head">
+                <div className="media-provider-meta">
+                  <span className="media-provider-name">{provider.label}</span>
+                  <span className="media-provider-hint">{provider.hint}</span>
+                </div>
+                <div className="media-provider-badges">
+                  <span className={`media-provider-badge ${provider.integrated ? 'integrated' : 'unsupported'}`}>
+                    {provider.integrated ? 'Integrated' : 'Unsupported'}
+                  </span>
+                  {configured ? (
+                    <span className="media-provider-badge on">
+                      {t('settings.mediaProviderConfigured')}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="media-provider-body">
+                <input
+                  type="password"
+                  value={entry.apiKey}
+                  placeholder={t('settings.mediaProviderPlaceholder')}
+                  aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
+                  disabled={disabled}
+                  onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
+                />
+                <input
+                  value={entry.baseUrl}
+                  placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
+                  aria-label={`${provider.label} ${t('settings.mediaProviderBaseUrl')}`}
+                  disabled={disabled}
+                  onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={!configured}
+                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '' })}
+                >
+                  {t('settings.mediaProviderClear')}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// Per-client install paths. Each entry's `snippet` is what the user
+// copies; some clients also support a richer `deeplink` flow that
+// triggers a one-click install with an in-client approval dialog.
+//
+// Schemas drift between clients in deliberate ways. VS Code keys
+// servers under "servers" with a required "type" field; Zed uses
+// "context_servers"; Cursor, Windsurf, and Antigravity share
+// "mcpServers"; Claude Code is best served by its CLI which writes
+// to the local config for you. Verified against each tool's official
+// docs in May 2026.
+//
+// Important: every snippet uses absolute paths to `node` and the
+// daemon's built cli.js, fetched from the daemon at runtime. macOS
+// and Linux ship a system /usr/bin/od (octal-dump) that shadows any
+// `od` we might add to PATH, and most Open Design users run from
+// source where `od` is not installed globally. The installer panel
+// must NOT reference bare `od`.
+type McpClientId =
+  | 'claude'
+  | 'codex'
+  | 'cursor'
+  | 'vscode'
+  | 'zed'
+  | 'windsurf'
+  | 'antigravity';
+
+interface McpInstallInfo {
+  command: string;
+  args: string[];
+  daemonUrl: string;
+  platform: 'darwin' | 'linux' | 'win32' | string;
+  cliExists: boolean;
+  nodeExists: boolean;
+  buildHint: string | null;
+}
+
+interface McpClient {
+  id: McpClientId;
+  label: string;
+  // Function so the dropdown can show different methods per OS
+  // (Claude Code uses CLI on POSIX but JSON edit on Windows because
+  // the bash/PowerShell/cmd.exe quoting is too fragile to reliably
+  // emit a single command that works in every shell).
+  buildMethod: (info: McpInstallInfo) => string;
+  // Function so per-OS path hints (~/.cursor on POSIX vs
+  // %USERPROFILE%\.cursor on Windows) and shortcut differences
+  // (⌘⇧P vs Ctrl+Shift+P) can be rendered correctly.
+  buildInstruction: (info: McpInstallInfo) => string;
+  buildSnippet: (info: McpInstallInfo) => string;
+  buildSnippetLang: (info: McpInstallInfo) => 'bash' | 'json' | 'toml';
+  // Optional one-click install action. Currently only Cursor
+  // supports deeplinks of this shape.
+  buildDeeplink?: (info: McpInstallInfo) => string;
+  deeplinkLabel?: string;
+}
+
+// Path hint per OS. Localizes the "where to paste" copy so a
+// Windows user does not see ~/.cursor/mcp.json (which their shell
+// will not expand) or a Linux user does not see %APPDATA% paths.
+function homeConfigPath(
+  platform: McpInstallInfo['platform'],
+  posix: string,
+  windows: string,
+): string {
+  return platform === 'win32' ? windows : posix;
+}
+
+function commandPaletteShortcut(platform: McpInstallInfo['platform']): string {
+  return platform === 'darwin' ? '⌘⇧P' : 'Ctrl+Shift+P';
+}
+
+function settingsShortcut(platform: McpInstallInfo['platform']): string {
+  return platform === 'darwin' ? '⌘,' : 'Ctrl+,';
+}
+
+// btoa() requires every input character be representable in Latin-1
+// (codepoints 0-255). A Mac/Linux home directory like
+// "/Users/Émile/.fnm/.../node" trips that and throws
+// InvalidCharacterError. UTF-8-encode the string into bytes first,
+// then map each byte back to a Latin-1 char before base64'ing.
+function utf8Btoa(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  return btoa(bin);
+}
+
+function buildSharedMcpJson(info: McpInstallInfo): string {
+  const inner = { command: info.command, args: info.args };
+  const innerJson = JSON.stringify(inner, null, 2)
+    .split('\n')
+    .map((line, i) => (i === 0 ? line : `    ${line}`))
+    .join('\n');
+  return `{
+  "mcpServers": {
+    "open-design": ${innerJson}
+  }
+}`;
+}
+
+const MCP_CLIENTS: McpClient[] = [
+  {
+    id: 'claude',
+    label: 'Claude Code',
+    // `claude mcp add-json <name> '<json>'` takes ONLY the inner
+    // server-config object, not the full mcpServers wrapper. We
+    // inline the JSON into the command itself so the snippet is a
+    // real one-liner the user can copy and run, no template
+    // substitution. Single quotes around the JSON work in bash, zsh,
+    // PowerShell, and Git Bash; the only outlier is Windows cmd.exe,
+    // where users would need to swap to PowerShell.
+    buildMethod: () => 'CLI command',
+    buildInstruction: () => 'Run this in your terminal.',
+    buildSnippet: (info) => {
+      const inner = JSON.stringify({ command: info.command, args: info.args });
+      return `claude mcp add-json --scope user open-design '${inner}'`;
+    },
+    buildSnippetLang: () => 'bash',
+  },
+  {
+    id: 'codex',
+    label: 'Codex',
+    // Codex CLI shares config between the terminal CLI and the IDE
+    // extension at ~/.codex/config.toml (TOML, not JSON, and a
+    // different table key from every other client - mcp_servers
+    // rather than mcpServers / servers / context_servers). Schema
+    // ref: https://developers.openai.com/codex/mcp.
+    //
+    // For our payload (just command + args, both strings/arrays of
+    // strings) JSON.stringify happens to produce valid TOML literal
+    // values, since TOML basic strings use the same double-quote
+    // escape rules and TOML inline arrays match JSON array syntax.
+    buildMethod: () => 'TOML config',
+    buildInstruction: (info) => {
+      const path = homeConfigPath(
+        info.platform,
+        '~/.codex/config.toml',
+        '%USERPROFILE%\\.codex\\config.toml',
+      );
+      return `Append this table to ${path}. The same config is shared between the Codex CLI and the Codex IDE extension.`;
+    },
+    buildSnippet: (info) => `[mcp_servers.open-design]
+command = ${JSON.stringify(info.command)}
+args = ${JSON.stringify(info.args)}`,
+    buildSnippetLang: () => 'toml',
+  },
+  {
+    id: 'cursor',
+    label: 'Cursor',
+    buildMethod: () => 'One-click install',
+    buildInstruction: (info) =>
+      `Click "Install in Cursor" to install with an approval dialog, or merge this JSON into ${homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json')}.`,
+    buildSnippet: buildSharedMcpJson,
+    buildSnippetLang: () => 'json',
+    buildDeeplink: (info) => {
+      const inner = { command: info.command, args: info.args };
+      // Cursor expects the inner server-config object base64-encoded
+      // as ?config=...; the handler decodes it and pops an approval
+      // dialog before writing to mcp.json. We UTF-8-encode first so
+      // non-Latin1 chars in paths (e.g. an accented username) do not
+      // throw from btoa().
+      const encoded = utf8Btoa(JSON.stringify(inner));
+      return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
+    },
+    deeplinkLabel: 'Install in Cursor',
+  },
+  {
+    id: 'vscode',
+    label: 'VS Code',
+    buildMethod: () => 'JSON config',
+    buildInstruction: (info) =>
+      `Open the Command Palette (${commandPaletteShortcut(info.platform)}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.`,
+    buildSnippet: (info) => `{
+  "servers": {
+    "open-design": {
+      "type": "stdio",
+      "command": ${JSON.stringify(info.command)},
+      "args": ${JSON.stringify(info.args)}
+    }
+  }
+}`,
+    buildSnippetLang: () => 'json',
+  },
+  {
+    id: 'antigravity',
+    label: 'Antigravity',
+    buildMethod: () => 'JSON config',
+    buildInstruction: () =>
+      'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
+    buildSnippet: buildSharedMcpJson,
+    buildSnippetLang: () => 'json',
+  },
+  {
+    id: 'zed',
+    label: 'Zed',
+    buildMethod: () => 'JSON config',
+    buildInstruction: (info) =>
+      `Open Zed Settings (${settingsShortcut(info.platform)}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".`,
+    buildSnippet: (info) => `{
+  "context_servers": {
+    "open-design": {
+      "source": "custom",
+      "command": ${JSON.stringify(info.command)},
+      "args": ${JSON.stringify(info.args)}
+    }
+  }
+}`,
+    buildSnippetLang: () => 'json',
+  },
+  {
+    id: 'windsurf',
+    label: 'Windsurf',
+    buildMethod: () => 'JSON config',
+    buildInstruction: (info) =>
+      `Open ${homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json')} (or use the MCPs icon in Cascade → Configure) and merge:`,
+    buildSnippet: buildSharedMcpJson,
+    buildSnippetLang: () => 'json',
+  },
+];
+
+function IntegrationsSection() {
+  const [clientId, setClientId] = useState<McpClientId>('claude');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [info, setInfo] = useState<McpInstallInfo | null>(null);
+  const [infoError, setInfoError] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  // The reset is wired through a ref-driven timer rather than effect
+  // cleanup so re-clicks during the 2s window restart the countdown.
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  // Close the dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!pickerRef.current) return;
+      if (!pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pickerOpen]);
+
+  // Pull the absolute paths to node + cli.js from the running daemon
+  // so snippets work even when `od` isn't on PATH (the realistic
+  // case for source clones, plus macOS/Linux ship a /usr/bin/od that
+  // shadows any global install). Fetched on mount; if the daemon is
+  // unreachable we surface a clear error instead of a half-built
+  // snippet that would silently fail when pasted.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/mcp/install-info')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`daemon ${res.status}`);
+        return (await res.json()) as McpInstallInfo;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setInfo(data);
+        setInfoError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setInfoError(String(err && err.message ? err.message : err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const client = MCP_CLIENTS.find((c) => c.id === clientId) ?? MCP_CLIENTS[0]!;
+  const snippet = info ? client.buildSnippet(info) : '';
+  const snippetLang: 'bash' | 'json' | 'toml' = info
+    ? client.buildSnippetLang(info)
+    : 'json';
+
+  // Reset the "Copied" badge when the user flips to a different
+  // client; otherwise the green check sits there next to a snippet
+  // they haven't actually copied.
+  useEffect(() => {
+    setCopied(false);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+  }, [clientId]);
+
+  const onCopy = async () => {
+    if (!snippet) return;
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail under non-secure contexts; the snippet
+      // is selectable so the user can still copy manually.
+      setCopied(false);
+    }
+  };
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>MCP server</h3>
+          <p className="hint">
+            Lets a coding agent in another repo (Claude Code, Cursor,
+            VS Code, Antigravity, Zed, Windsurf) read your Open Design
+            projects. Use it to pull a design into your app without
+            exporting a zip first.
+          </p>
+        </div>
+      </div>
+
+      <div className="settings-about-list" style={{ display: 'block' }}>
+        {infoError ? (
+          <div
+            className="empty-card"
+            style={{ marginBottom: 14, color: 'var(--danger-fg, #f88)' }}
+          >
+            Couldn&rsquo;t reach the local daemon to resolve install paths
+            ({infoError}). Make sure Open Design is running, then reopen this
+            panel.
+          </div>
+        ) : null}
+
+        {info && (!info.cliExists || !info.nodeExists) ? (
+          <div
+            className="empty-card"
+            style={{
+              marginBottom: 14,
+              borderLeft: '3px solid var(--warning-fg, #fbbf24)',
+            }}
+          >
+            <strong>
+              {!info.cliExists
+                ? 'Build the daemon first.'
+                : 'Node binary is missing.'}
+            </strong>{' '}
+            {info.buildHint ??
+              'apps/daemon/dist/cli.js is missing. Run `pnpm build` and refresh.'}
+          </div>
+        ) : null}
+
+        <div
+          className="ds-picker"
+          ref={pickerRef}
+          style={{ marginBottom: 14 }}
+        >
+          <button
+            type="button"
+            className={`ds-picker-trigger${pickerOpen ? ' open' : ''}`}
+            onClick={() => setPickerOpen((v) => !v)}
+            aria-haspopup="listbox"
+            aria-expanded={pickerOpen}
+          >
+            <span className="ds-picker-meta">
+              <span className="ds-picker-title">{client.label}</span>
+              <span className="ds-picker-sub">
+                {info ? client.buildMethod(info) : ''}
+              </span>
+            </span>
+            <Icon
+              name="chevron-down"
+              size={14}
+              className="ds-picker-chevron"
+              style={{ transform: pickerOpen ? 'rotate(180deg)' : undefined }}
+            />
+          </button>
+          {pickerOpen ? (
+            <div className="ds-picker-popover" role="listbox">
+              <div className="ds-picker-list">
+                {MCP_CLIENTS.map((c) => {
+                  const active = c.id === clientId;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      className={`ds-picker-item${active ? ' active' : ''}`}
+                      onClick={() => {
+                        setClientId(c.id);
+                        setPickerOpen(false);
+                      }}
+                    >
+                      <span className="ds-picker-item-text">
+                        <span className="ds-picker-item-title">{c.label}</span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          {info ? c.buildMethod(info) : ''}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {info ? (
+          <p style={{ margin: '0 0 10px' }}>{client.buildInstruction(info)}</p>
+        ) : null}
+
+        {client.buildDeeplink && info ? (
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                // Use a hidden anchor so the cursor:// scheme is
+                // handled the same way as a normal link click; some
+                // browsers block window.location assignments to
+                // unknown schemes from button handlers.
+                const url = client.buildDeeplink!(info);
+                const a = document.createElement('a');
+                a.href = url;
+                a.rel = 'noopener noreferrer';
+                a.click();
+              }}
+              disabled={!info.cliExists || !info.nodeExists}
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              <Icon name="link" size={14} />
+              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel}</span>
+            </button>
+            <span
+              style={{
+                marginLeft: 10,
+                fontSize: 12,
+                color: 'var(--fg-2, #9aa0a6)',
+              }}
+            >
+              Cursor pops an approval dialog before writing the config.
+            </span>
+          </div>
+        ) : null}
+
+        <div style={{ position: 'relative' }}>
+          <pre
+            style={{
+              background: 'var(--surface-2, #11141a)',
+              color: 'var(--fg-1, #e6e6e6)',
+              padding: '12px 14px',
+              borderRadius: 8,
+              overflowX: 'auto',
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+              fontSize: 12,
+              lineHeight: 1.55,
+              margin: 0,
+              userSelect: 'text',
+              whiteSpace: snippetLang === 'bash' ? 'pre-wrap' : 'pre',
+              wordBreak: snippetLang === 'bash' ? 'break-all' : 'normal',
+              minHeight: 60,
+            }}
+            data-lang={snippetLang}
+          >
+            <code>
+              {snippet ||
+                (infoError
+                  ? '# resolving paths failed, see the error above'
+                  : '# loading install paths from the local daemon…')}
+            </code>
+          </pre>
+          <button
+            type="button"
+            className="ghost"
+            onClick={onCopy}
+            disabled={!snippet}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              padding: '4px 10px',
+              fontSize: 12,
+            }}
+            aria-label="Copy MCP configuration snippet"
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={14} />
+            <span style={{ marginLeft: 6 }}>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            padding: '10px 12px',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
+            borderLeft: '3px solid var(--accent)',
+            borderRadius: 6,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Restart your client to pick up the new server.</strong>{' '}
+          <span style={{ color: 'var(--text-muted)' }}>
+            Most editors only load MCP servers at startup. In Cursor / VS
+            Code / Antigravity / Windsurf you can run{' '}
+            <code>Developer: Reload Window</code> from the command palette
+            instead of a full restart. Zed and Claude Code need a quit and
+            reopen.
+          </span>
+        </div>
+
+        <div style={{ marginTop: 20, lineHeight: 1.55 }}>
+          <p
+            style={{
+              margin: '0 0 8px',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: 600,
+            }}
+          >
+            What your agent can do
+          </p>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: 18,
+              fontSize: 13,
+              color: 'var(--text)',
+            }}
+          >
+            <li>
+              Read or search any file in a project (HTML, JSX, CSS, JSON,
+              SVG, Markdown).
+            </li>
+            <li>
+              Pull a design bundle in one call: the entry file plus every
+              CSS variable, component, and font it references.
+            </li>
+            <li>
+              Default to the project and file you have open in Open Design,
+              so you can say &ldquo;build this in my app&rdquo; without
+              re-stating which design.
+            </li>
+          </ul>
+        </div>
+
+        <p
+          style={{
+            marginTop: 14,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            lineHeight: 1.5,
+          }}
+        >
+          Open Design must be running for MCP tool calls to succeed. If
+          you started your coding agent before opening Open Design,
+          restart the agent so it can reach the live daemon.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+const THEMES: Array<{ value: AppTheme; labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark' }> = [
+  { value: 'system', labelKey: 'settings.themeSystem' },
+  { value: 'light', labelKey: 'settings.themeLight' },
+  { value: 'dark', labelKey: 'settings.themeDark' },
+];
+
+function AppearanceSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const current = cfg.theme ?? 'system';
+
+  // Apply the draft theme immediately so the user sees a live preview
+  // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
+  useLayoutEffect(() => {
+    if (current === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', current);
+    }
+  }, [current]);
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.appearance')}</h3>
+          <p className="hint">{t('settings.appearanceHint')}</p>
+        </div>
+      </div>
+      <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
+        {THEMES.map(({ value, labelKey }) => (
+          <button
+            key={value}
+            type="button"
+            className={'seg-btn' + (current === value ? ' active' : '')}
+            aria-pressed={current === value}
+            onClick={() => setCfg((c) => ({ ...c, theme: value }))}
+          >
+            <span className="seg-title">{t(labelKey)}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NotificationsSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const notif = cfg.notifications ?? DEFAULT_NOTIFICATIONS;
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(
+    () => notificationPermission(),
+  );
+  const [testStatus, setTestStatus] = useState<ReturnType<typeof testNotificationStatusText> | null>(null);
+
+  const updateNotif = (
+    patch: Partial<NonNullable<AppConfig['notifications']>>,
+  ) => {
+    setCfg((c) => ({
+      ...c,
+      notifications: { ...DEFAULT_NOTIFICATIONS, ...(c.notifications ?? {}), ...patch },
+    }));
+  };
+
+  const toggleSound = () => {
+    const next = !notif.soundEnabled;
+    updateNotif({ soundEnabled: next });
+    // Give the user immediate audible feedback when turning the master
+    // switch on so they know which sound they're signing up for. Resuming
+    // the AudioContext also bakes in their gesture for later auto-plays.
+    if (next) playSound(notif.successSoundId);
+  };
+
+  const toggleDesktop = async () => {
+    if (notif.desktopEnabled) {
+      updateNotif({ desktopEnabled: false });
+      return;
+    }
+    const result = await requestNotificationPermission();
+    setPermission(result);
+    if (result === 'granted') {
+      updateNotif({ desktopEnabled: true });
+    } else {
+      updateNotif({ desktopEnabled: false });
+    }
+  };
+
+  const sendTestNotification = async () => {
+    const result = await showCompletionNotification({
+      status: 'succeeded',
+      title: t('notify.successTitle'),
+      body: t('notify.successBody'),
+    });
+    setPermission(notificationPermission());
+    setTestStatus(testNotificationStatusText(result));
+  };
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.notifications')}</h3>
+          <p className="hint">{t('settings.notificationsHint')}</p>
+        </div>
+      </div>
+
+      <div className="settings-subsection">
+        <div className="section-head">
+          <div>
+            <h4>{t('settings.notifyCompletionSound')}</h4>
+            <p className="hint">{t('settings.notifyCompletionSoundHint')}</p>
+          </div>
+        </div>
+        <div className="seg-control" role="group" aria-label={t('settings.notifyCompletionSound')} style={{ '--seg-cols': 1 } as React.CSSProperties}>
+          <button
+            type="button"
+            className={'seg-btn' + (notif.soundEnabled ? ' active' : '')}
+            aria-pressed={notif.soundEnabled}
+            onClick={toggleSound}
+          >
+            <span className="seg-title">{notif.soundEnabled ? t('common.active') : t('common.offline')}</span>
+          </button>
+        </div>
+
+        {notif.soundEnabled ? (
+          <>
+            <div className="settings-field">
+              <label>{t('settings.notifySuccessSound')}</label>
+              <div className="seg-control" role="group" aria-label={t('settings.notifySuccessSound')} style={{ '--seg-cols': SUCCESS_SOUNDS.length } as React.CSSProperties}>
+                {SUCCESS_SOUNDS.map((sound) => (
+                  <button
+                    key={sound.id}
+                    type="button"
+                    className={'seg-btn' + (notif.successSoundId === sound.id ? ' active' : '')}
+                    aria-pressed={notif.successSoundId === sound.id}
+                    onClick={() => {
+                      updateNotif({ successSoundId: sound.id });
+                      playSound(sound.id);
+                    }}
+                  >
+                    <span className="seg-title">{t(sound.labelKey)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="settings-field">
+              <label>{t('settings.notifyFailureSound')}</label>
+              <div className="seg-control" role="group" aria-label={t('settings.notifyFailureSound')} style={{ '--seg-cols': FAILURE_SOUNDS.length } as React.CSSProperties}>
+                {FAILURE_SOUNDS.map((sound) => (
+                  <button
+                    key={sound.id}
+                    type="button"
+                    className={'seg-btn' + (notif.failureSoundId === sound.id ? ' active' : '')}
+                    aria-pressed={notif.failureSoundId === sound.id}
+                    onClick={() => {
+                      updateNotif({ failureSoundId: sound.id });
+                      playSound(sound.id);
+                    }}
+                  >
+                    <span className="seg-title">{t(sound.labelKey)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      <div className="settings-subsection">
+        <div className="section-head">
+          <div>
+            <h4>{t('settings.notifyDesktop')}</h4>
+            <p className="hint">{t('settings.notifyDesktopHint')}</p>
+          </div>
+        </div>
+        <div className="seg-control" role="group" aria-label={t('settings.notifyDesktop')} style={{ '--seg-cols': 1 } as React.CSSProperties}>
+          <button
+            type="button"
+            className={'seg-btn' + (notif.desktopEnabled ? ' active' : '')}
+            aria-pressed={notif.desktopEnabled}
+            disabled={permission === 'unsupported'}
+            onClick={() => { void toggleDesktop(); }}
+          >
+            <span className="seg-title">{notif.desktopEnabled ? t('common.active') : t('common.offline')}</span>
+          </button>
+        </div>
+        {permission === 'unsupported' ? (
+          <p className="hint">{t('settings.notifyDesktopUnsupported')}</p>
+        ) : null}
+        {permission === 'denied' ? (
+          <p className="hint">{t('settings.notifyDesktopBlocked')}</p>
+        ) : null}
+        {notif.desktopEnabled && permission === 'granted' ? (
+          <>
+            <button type="button" className="ghost" onClick={() => { void sendTestNotification(); }}>
+              {t('settings.notifyTest')}
+            </button>
+            {testStatus ? <p className="hint" role="status">{t(testStatus)}</p> : null}
+          </>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function testNotificationStatusText(
+  result: Awaited<ReturnType<typeof showCompletionNotification>>,
+):
+  | 'settings.notifyTestSent'
+  | 'settings.notifyDesktopBlocked'
+  | 'settings.notifyDesktopUnsupported'
+  | 'settings.notifyTestFailed' {
+  if (result === 'shown') return 'settings.notifyTestSent';
+  if (result === 'permission-denied') return 'settings.notifyDesktopBlocked';
+  if (result === 'unsupported') return 'settings.notifyDesktopUnsupported';
+  return 'settings.notifyTestFailed';
 }

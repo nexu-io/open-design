@@ -1,4 +1,5 @@
 import type { ProjectFile } from './files';
+import type { PreviewCommentPosition } from './comments';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -7,9 +8,49 @@ export interface ChatRequest {
   message: string;
   systemPrompt?: string;
   projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  clientRequestId?: string | null;
+  skillId?: string | null;
+  designSystemId?: string | null;
   attachments?: string[];
+  commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+}
+
+export interface ChatRunCreateRequest extends ChatRequest {
+  projectId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  clientRequestId: string;
+}
+
+export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+
+export interface ChatRunCreateResponse {
+  runId: string;
+}
+
+export interface ChatRunStatusResponse {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  assistantMessageId: string | null;
+  agentId: string | null;
+  status: ChatRunStatus;
+  createdAt: number;
+  updatedAt: number;
+  exitCode?: number | null;
+  signal?: string | null;
+}
+
+export interface ChatRunListResponse {
+  runs: ChatRunStatusResponse[];
+}
+
+export interface ChatRunCancelResponse {
+  ok: true;
 }
 
 export interface ChatAttachment {
@@ -17,6 +58,19 @@ export interface ChatAttachment {
   name: string;
   kind: 'image' | 'file';
   size?: number;
+}
+
+export interface ChatCommentAttachment {
+  id: string;
+  order: number;
+  filePath: string;
+  elementId: string;
+  selector: string;
+  label: string;
+  comment: string;
+  currentText: string;
+  pagePosition: PreviewCommentPosition;
+  htmlHint: string;
 }
 
 export type PersistedAgentEvent =
@@ -35,8 +89,13 @@ export interface ChatMessage {
   agentId?: string;
   agentName?: string;
   events?: PersistedAgentEvent[];
+  createdAt?: number;
+  runId?: string;
+  runStatus?: ChatRunStatus;
+  lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;
   attachments?: ChatAttachment[];
+  commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
 }

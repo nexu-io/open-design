@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -12,8 +12,12 @@
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
+    "tools-pack": "pnpm exec tools-pack",
     "build": "pnpm --filter @open-design/web build",
     "check:residual-js": "node --experimental-strip-types scripts/check-residual-js.ts",
+    "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
+    "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
+    "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
     "test:e2e:live": "pnpm --filter @open-design/e2e test:e2e:live",
     "test": "pnpm -r --workspace-concurrency=1 --if-present run test",
     "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
@@ -22,7 +26,8 @@
     "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && pnpm --filter @open-design/daemon build && pnpm check:residual-js"
   },
   "devDependencies": {
-    "@open-design/tools-dev": "workspace:0.1.0"
+    "@open-design/tools-dev": "workspace:0.3.0",
+    "@open-design/tools-pack": "workspace:0.3.0"
   },
   "engines": {
     "node": "~24",

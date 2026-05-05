@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateArtifactManifestInput } from '../src/artifact-manifest.js';
+import { inferLegacyManifest, validateArtifactManifestInput } from '../src/artifact-manifest.js';
 
 function validBase() {
   return {
@@ -44,5 +44,35 @@ describe('validateArtifactManifestInput', () => {
       'index.html',
     );
     expect(res.ok).toBe(false);
+  });
+
+  it('defaults status to complete when missing', () => {
+    const res = validateArtifactManifestInput(validBase(), 'index.html');
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value?.status).toBe('complete');
+  });
+
+  it('preserves valid status values', () => {
+    const res = validateArtifactManifestInput({ ...validBase(), status: 'streaming' }, 'index.html');
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value?.status).toBe('streaming');
+  });
+});
+
+describe('inferLegacyManifest', () => {
+  it('infers markdown manifest for .md files', () => {
+    const out = inferLegacyManifest('README.md');
+    expect(out?.kind).toBe('markdown-document');
+    expect(out?.renderer).toBe('markdown');
+    expect(out?.status).toBe('complete');
+    expect(out?.exports).toEqual(['md', 'html', 'pdf', 'zip']);
+  });
+
+  it('infers svg manifest for .svg files', () => {
+    const out = inferLegacyManifest('logo.svg');
+    expect(out?.kind).toBe('svg');
+    expect(out?.renderer).toBe('svg');
+    expect(out?.status).toBe('complete');
+    expect(out?.exports).toEqual(['svg', 'zip']);
   });
 });

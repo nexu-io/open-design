@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { join, resolve } from "node:path";
 
 import {
   bootstrapSidecarRuntime,
@@ -68,18 +69,18 @@ describe("generic sidecar path boundary", () => {
       source: "tool",
     });
 
-    expect(sourceRoot).toBe("/repo/product/.fake-tmp/tool");
+    expect(sourceRoot).toBe(resolve("/repo/product", ".fake-tmp", "tool"));
     expect(resolveNamespaceRoot({ base: sourceRoot, contract: fakeContract, namespace: "alpha" })).toBe(
-      "/repo/product/.fake-tmp/tool/alpha",
+      join(sourceRoot, "alpha"),
     );
     expect(
       resolveAppRuntimePath({
         app: "ui",
         contract: fakeContract,
         fileName: "cache",
-        namespaceRoot: "/repo/product/.fake-tmp/tool/alpha",
+        namespaceRoot: join(sourceRoot, "alpha"),
       }),
-    ).toBe("/repo/product/.fake-tmp/tool/alpha/ui/cache");
+    ).toBe(join(sourceRoot, "alpha", "ui", "cache"));
   });
 
   it("resolves descriptor-specific IPC paths", () => {
@@ -95,9 +96,7 @@ describe("generic sidecar path boundary", () => {
     };
 
     expect(resolveNamespace({ contract: fakeContract, env })).toBe("selected");
-    expect(resolveSidecarBase({ contract: fakeContract, env, projectRoot: "/repo/product", source: "tool" })).toBe(
-      "/runtime/base",
-    );
+    expect(resolveSidecarBase({ contract: fakeContract, env, projectRoot: "/repo/product", source: "tool" })).toBe(resolve("/runtime/base"));
   });
 });
 
@@ -105,24 +104,24 @@ describe("generic sidecar bootstrap", () => {
   it("creates and validates launch env from descriptor env names", () => {
     const stamp: FakeStamp = {
       app: "api",
-      ipc: "/tmp/fake-product/ipc/alpha/api.sock",
+      ipc: resolveAppIpcPath({ app: "api", contract: fakeContract, namespace: "alpha" }),
       mode: "dev",
       namespace: "alpha",
       source: "tool",
     };
 
     expect(createSidecarLaunchEnv({ base: "/runtime/base", contract: fakeContract, extraEnv: {}, stamp })).toEqual({
-      FAKE_BASE: "/runtime/base",
+      FAKE_BASE: resolve("/runtime/base"),
       FAKE_IPC_PATH: stamp.ipc,
       FAKE_NAMESPACE: stamp.namespace,
       FAKE_SOURCE: stamp.source,
     });
 
     expect(
-      bootstrapSidecarRuntime(stamp, { FAKE_BASE: "/runtime/base" }, { app: "api", contract: fakeContract }),
+      bootstrapSidecarRuntime(stamp, { FAKE_BASE: resolve("/runtime/base") }, { app: "api", contract: fakeContract }),
     ).toEqual({
       app: "api",
-      base: "/runtime/base",
+      base: resolve("/runtime/base"),
       ipc: stamp.ipc,
       mode: "dev",
       namespace: "alpha",

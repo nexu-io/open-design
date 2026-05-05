@@ -35,6 +35,7 @@ const ALLOWED_RENDERERS = new Set([
 ]);
 
 const ALLOWED_EXPORTS = new Set(['html', 'pdf', 'zip', 'pptx', 'jsx', 'md', 'svg', 'txt']);
+const ALLOWED_STATUS = new Set(['streaming', 'complete', 'error']);
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -95,6 +96,15 @@ export function validateArtifactManifestInput(manifest, entry) {
     }
     if (!ALLOWED_EXPORTS.has(exp)) {
       return { ok: false, error: `artifactManifest.exports contains unsupported value: ${exp}` };
+    }
+  }
+
+  if (manifest.status !== undefined) {
+    if (typeof manifest.status !== 'string') {
+      return { ok: false, error: 'artifactManifest.status must be a string' };
+    }
+    if (!ALLOWED_STATUS.has(manifest.status)) {
+      return { ok: false, error: 'artifactManifest.status is not allowed' };
     }
   }
 
@@ -176,6 +186,7 @@ export function sanitizeManifest(manifest, entry) {
     title: manifest.title || entry,
     entry,
     renderer: manifest.renderer,
+    status: ALLOWED_STATUS.has(manifest.status) ? manifest.status : 'complete',
     exports: manifest.exports,
     supportingFiles: Array.isArray(manifest.supportingFiles)
       ? manifest.supportingFiles.map((x) => x.replace(/\\/g, '/'))
@@ -214,7 +225,33 @@ export function inferLegacyManifest(entry) {
       title: entry,
       entry,
       renderer: isDeck ? 'deck-html' : 'html',
+      status: 'complete',
       exports: isDeck ? ['html', 'pdf', 'pptx', 'zip'] : ['html', 'pdf', 'zip'],
+      metadata: { inferred: true },
+    };
+  }
+
+  if (ext === '.md') {
+    return {
+      version: MANIFEST_VERSION,
+      kind: 'markdown-document',
+      title: entry,
+      entry,
+      renderer: 'markdown',
+      status: 'complete',
+      exports: ['md', 'html', 'pdf', 'zip'],
+      metadata: { inferred: true },
+    };
+  }
+  if (ext === '.svg') {
+    return {
+      version: MANIFEST_VERSION,
+      kind: 'svg',
+      title: entry,
+      entry,
+      renderer: 'svg',
+      status: 'complete',
+      exports: ['svg', 'zip'],
       metadata: { inferred: true },
     };
   }

@@ -30,12 +30,17 @@ export type ArtifactExportKind =
   | 'svg'
   | 'txt';
 
+export type ArtifactStatus = 'streaming' | 'complete' | 'error';
+
 export interface ArtifactManifest {
   version: 1;
   kind: ArtifactKind;
   title: string;
   entry: string;
   renderer: ArtifactRendererId;
+  // Optional for backward compatibility with older manifests.
+  // Frontend + daemon normalize missing status to "complete".
+  status?: ArtifactStatus;
   exports: ArtifactExportKind[];
   /**
    * Reserved for future multi-file artifact packaging.

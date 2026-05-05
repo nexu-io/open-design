@@ -109,14 +109,15 @@ These four runtimes currently use the unified `json-event-stream` output format,
 Codex currently uses:
 
 ```bash
-codex exec --json --skip-git-repo-check --full-auto -C <cwd> <prompt>
+codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true -C <cwd>
 ```
 
 The current integration uses the lightweight structured path through `exec --json`. Compared with the original plain-text `codex exec`, this path adds:
 
 - `--json`: structured event output
 - `--skip-git-repo-check`: allows running in a temporary working directory
-- `--full-auto`: non-interactive automatic execution
+- `--sandbox workspace-write`: allows Codex to edit within the project workspace without using the deprecated `--full-auto` shortcut
+- `-c sandbox_workspace_write.network_access=true`: keeps network access enabled inside the workspace-write sandbox
 - `-C <cwd>`: explicit working directory
 
 The daemon currently maps:
@@ -131,10 +132,10 @@ The daemon currently maps:
 Gemini currently uses:
 
 ```bash
-gemini --output-format stream-json --skip-trust -p <prompt>
+GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo
 ```
 
-The daemon currently maps:
+The daemon delivers the prompt over stdin rather than argv. It currently maps:
 
 - `init` → `status(initializing)`
 - `message(role=assistant)` → `text_delta`
@@ -279,5 +280,5 @@ The current implementation already has the core outline of the target architectu
 - `detectAgents()` corresponds to `detect()`.
 - `AGENT_DEFS` corresponds to the adapter registry.
 - `buildArgs()` corresponds to runtime-specific invocation.
-- `streamFormat` + `claude-stream.js` + `json-event-stream.js` + `acp.js` correspond to stream normalization.
+- `streamFormat` + `claude-stream.ts` + `json-event-stream.ts` + `acp.ts` correspond to stream normalization.
 - `/api/chat` corresponds to unified run orchestration.

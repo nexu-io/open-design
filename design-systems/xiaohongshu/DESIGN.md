@@ -31,7 +31,7 @@ All values below are sampled from production CSS at `https://www.xiaohongshu.com
 
 ### Primary Brand
 - **Brand Red — Token** (`#FF2442`): `--primary` and `--color-red`. The design-system source of truth. Use for accents, active tabs, hearts, primary CTAs.
-- **Brand Red — Component** (`#FF2E4D`): hard-coded on `.reds-button-new.primary`, `.active-bar`, outlined-button border. Slightly pinker, lower visual sting. Use when emitting actual buttons or active-bar UI.
+- **Brand Red — Component** (`#FF2E4D`): hard-coded on `.reds-button-new.primary`, `.active-bar`, outlined-button border. Slightly pinker and marginally lighter — same red channel (`FF`), with `+10` on green (`24` → `2E`) and `+11` on blue (`42` → `4D`). The lifted green/blue raises overall lightness while the proportionally larger blue lift nudges the hue a touch toward pink, the net effect of which likely reduces visual sting on large button fills. Whether this divergence from `--primary` is intentional (accessibility / large-fill ergonomics) or historical drift (a hard-coded override that should eventually merge back to the token) is undocumented upstream. Use when emitting actual buttons or active-bar UI; see §9 *Brand Red Disambiguation* for the per-surface rule.
 - **Star Yellow** (`#FDBC5F`): bookmark / collect-active icon fill (sampled from `<symbol id="collected">` SVG). Only place yellow is allowed.
 
 ### Neutrals (translucent overlay system)
@@ -56,7 +56,7 @@ All values below are sampled from production CSS at `https://www.xiaohongshu.com
 - **Warning** (`#FF7D03`) — `--warning`. Background variant `#FFF2E6` (`--warning2`).
 - **Info** (`#3D8AF5`) — `--info` / `--color-blue`. Almost never appears in consumer flow.
 - **Link** (`#133667`) — `--link`. Deep navy, not a typical link blue. In practice, brand red is used for emphasis instead.
-- **Danger / Error**: no independent token — danger reuses `--primary` (brand red).
+- **Danger / Error**: no independent token — danger reuses `--primary` (brand red). Heads-up for skill authors: an emitted destructive action and an emitted primary CTA will therefore be visually identical out of the box (a "Delete account" button reads exactly like a "Follow" button). RED's production destructive treatment is not directly observable in this snapshot, so as a defensive default, differentiate destructive intent via outline-style + brand-red text, or a leading destructive icon, when the difference matters.
 
 ### Functional Gradients (the only gradients allowed)
 Brand red itself is **never gradient**. The only gradients in the system are functional:
@@ -64,6 +64,9 @@ Brand red itself is **never gradient**. The only gradients in the system are fun
 - **Video Player Mask** (`linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0) 50%, rgba(0,0,0,0.75))`) — `--mask-video-player-mask`. Top + bottom gradient on video tiles.
 
 ### Dark Mode
+
+Dark mode follows `prefers-color-scheme: dark` with a manual override; both the `:root[dark]` attribute and the `.force-dark` class are honored in source.
+
 - **Surface** (`#19191E`) — purple-tinted near-black, not pure `#000`.
 - **Canvas** (`#0E0E11`) — deepest layer.
 - **Title** (`rgba(255,255,255,0.84)`).
@@ -236,7 +239,7 @@ Five-column masonry at the standard desktop width, stepping down on narrower vie
 | 500–690px | 3 | 10px |
 | < 500px | 2 | 10px |
 
-Implementation is JavaScript-positioned (`translate3d` + ResizeObserver), not CSS Grid, because card heights are unknown until images load. The masonry deliberately does not align rows — variable image height *is* the realism.
+Implementation is JavaScript-positioned (`translate3d` + ResizeObserver), not CSS Grid, because card heights are unknown until images load. This also predates widespread CSS Masonry support (still behind flags in most browsers as of 2026); the JS approach buys cross-browser consistency at the cost of layout-shift risk on slow image loads. The masonry deliberately does not align rows — variable image height *is* the realism.
 
 ### Mobile Two-Column
 
@@ -273,16 +276,17 @@ Three levels, used sparingly.
 
 | Level | Treatment | Use |
 |---|---|---|
-| Flat (0) | No shadow | Default — feed cards, tags, buttons |
-| Subtle (1) | `0 4px 12px rgba(0,0,0,0.08)` | PC card hover only |
-| Modal (2) | `0 8px 32px rgba(0,0,0,0.12)` | Centered modals on PC |
+| Flat (0) | No shadow | Default — feed cards, tags, buttons (both modes) |
+| Subtle (1) | `0 4px 12px rgba(0,0,0,0.08)` | PC card hover (light mode only) |
+| Modal (2) | `0 8px 32px rgba(0,0,0,0.12)` | Centered modal on PC (light mode only) |
+| Dark mode | Drop shadows or replace with a `1px` hairline (`rgba(255,255,255,0.07)`) | `rgba(0,0,0,*)` shadows are invisible on the `#19191E` canvas; the scrim alone provides modal separation, and the PC card-hover `translateY(-2px)` is dropped entirely (motion + shadow both read as no-ops against the dark surface) |
 
 **Shadow is the exception, not the rule.** Depth comes from:
 1. Background color contrast (`#F5F5F5` canvas under `#FFFFFF` cards)
 2. Generous radius (cards visually float because corners are rounded)
 3. Whitespace between elements
 
-No neumorphism. No glassmorphism. No coloured shadows. Bottom sheet has no shadow at all — the scrim provides the separation.
+No neumorphism. No glassmorphism. No coloured shadows. Bottom sheet has no shadow at all — the scrim provides the separation. In dark mode, drop the PC card-hover effect (`translateY(-2px)` + alpha-on-black shadow) entirely; both motion and shadow read as no-ops against the dark canvas.
 
 ## 7. Do's and Don'ts
 
@@ -301,10 +305,12 @@ No neumorphism. No glassmorphism. No coloured shadows. Bottom sheet has no shado
 - ❌ Don't use purple, deep blue, or black-gold as a primary color. Tech / fintech / luxury vocabulary is the wrong genre — RED is lifestyle.
 - ❌ Don't gradient the brand red itself. The only gradients are functional (search-hotspot badge, video mask).
 - ❌ Don't fill an entire hero with a brand-color background. Brand red is accent-only; a red-bordered hero reads as a sale poster, not a feed.
+- ❌ Don't fabricate the `小红书` wordmark or the RED logotype as artifact output. Tokens are not protectable; the wordmark is — that is the part of the brand identity with actual IP risk. When a logo placeholder is needed, emit a labelled grey block (e.g. an empty pill with `LOGO` in `rgba(0,0,0,0.45)`) and let the user drop in a licensed asset.
 - ❌ Don't use Inter, Helvetica, or Roboto as the Chinese display face. PingFang SC is the system — Latin fallback chains use `-apple-system` first.
+- ❌ Don't reference the `RED Number` family standalone in generated CSS. End users do not have it installed; without the PingFang fallback chain it silently falls back to whatever the OS picks, which breaks digit alignment. Always emit it inside a stack, e.g. `font-family: 'RED Number', PingFang SC, -apple-system, 'Helvetica Neue', Arial, sans-serif;`.
 - ❌ Don't ship light / thin weights at body sizes. Notes carry dense Chinese text; light weights destroy mobile legibility.
 - ❌ Don't add a left-border colored accent stripe to cards (the SaaS / dashboard tell). Cards separate via canvas color and radius, not colored chrome.
-- ❌ Don't drop heavy shadows. If a shadow is visible at glance, it's too strong.
+- ❌ Don't drop heavy shadows. Concrete threshold: avoid alpha darker than `rgba(0,0,0,0.15)` or spread greater than `16px`. If the shadow is visible at arm's length on a phone, it is too strong for this system.
 - ❌ Don't pile glassmorphism, neumorphism, or 2020-era trend effects. The visual era reference is "lifestyle magazine", not "tech demo".
 - ❌ Don't write a "Trusted by 10,000+ teams" enterprise social-proof block. UGC trust comes from real people, not logo walls.
 - ❌ Don't write hero CTAs in all-caps Latin. Sentence-case Chinese, sentence-case Latin, no exceptions.
@@ -344,9 +350,19 @@ No neumorphism. No glassmorphism. No coloured shadows. Bottom sheet has no shado
 
 ## 9. Agent Prompt Guide
 
+### Brand Red Disambiguation
+
+Two reds ship in the live system. They split by **surface**, not by mood — the wrong surface choice is the most common artifact-level slop in this design system, so the rule is explicit:
+
+- **Default — emit `#FF2442`** (`--primary` / `--color-red`) for everything that is *not* a pixel-for-pixel replica of an existing component: new CTAs, hearts, accent fills, tag-on-trending, page-token references.
+- **Pixel-replica — emit `#FF2E4D`** *only* when reproducing the live `.reds-button-new.primary` button fill, the `.active-bar` tab indicator, or the outlined follow-button border. Treat this as the production-fidelity value; do not generalize it to other components.
+- **Never mix the two on one component.** `background: #FF2442` next to `border: 1px solid #FF2E4D` on the same element is the failure mode this rule prevents — pick one surface category, then stay in it.
+
+The Component One-Liners block below is intentional: the primary CTA uses `#FF2442` (token red, default) while the tab indicator uses `#FF2E4D` (component red, pixel-replica). They are different surfaces, so they get different reds.
+
 ### Quick Color Reference
 
-- Brand: `#FF2442` (token) / `#FF2E4D` (component layer)
+- Brand: `#FF2442` (token, default) / `#FF2E4D` (component layer, pixel-replica only — see disambiguation above)
 - Star (collect): `#FDBC5F`
 - Surface: `#FFFFFF`
 - Canvas: `#F5F5F5`

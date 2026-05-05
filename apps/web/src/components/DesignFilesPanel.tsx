@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -30,6 +30,8 @@ const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
 };
 
 const SECTION_ORDER: Section[] = ['pages', 'sketches', 'scripts', 'images', 'other'];
+const INITIAL_SECTION_FILE_LIMIT = 30;
+const SECTION_FILE_LIMIT_INCREMENT = 200;
 
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
@@ -55,6 +57,9 @@ export function DesignFilesPanel({
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
+  const [isSectionExpansionPending, startSectionExpansion] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const grouped = useMemo(() => {
     const groups: Record<Section, ProjectFile[]> = {
@@ -69,6 +74,26 @@ export function DesignFilesPanel({
       groups[sectionFor(f)].push(f);
     }
     return groups;
+  }, [files]);
+
+  // Prune selections that no longer exist in the current file list
+  // (e.g. after a refresh or delete within the same project).
+  // Cross-project leaks are handled by the parent remounting this
+  // component via key={projectId}.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const names = new Set(files.map((f) => f.name));
+      const next = new Set(prev);
+      let changed = false;
+      for (const n of next) {
+        if (!names.has(n)) {
+          next.delete(n);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [files]);
 
   const previewFile = useMemo(
@@ -97,6 +122,71 @@ export function DesignFilesPanel({
       await onRefreshFiles();
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  function toggleSelect(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }
+
+  function selectAllInSection(sectionFiles: ProjectFile[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const f of sectionFiles) next.add(f.name);
+      return next;
+    });
+  }
+
+  function clearSection(sectionFiles: ProjectFile[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const f of sectionFiles) next.delete(f.name);
+      return next;
+    });
+  }
+
+  async function handleBatchDownload() {
+    const fileList = [...selected];
+    if (fileList.length === 0) return;
+    try {
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: fileList }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.message || `request failed (${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const header = resp.headers.get('content-disposition') || '';
+      const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+      let filename = 'project.zip';
+      if (star && star[1]) {
+        try {
+          filename = decodeURIComponent(star[1]);
+        } catch {
+          filename = star[1];
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      console.warn('[batchDownload] failed:', err);
     }
   }
 
@@ -132,7 +222,15 @@ export function DesignFilesPanel({
             <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
           </button>
           <span className="crumbs">{t('designFiles.crumbs')}</span>
-          <div className="df-actions">
+          {selected.size > 0 ? (
+            <div className="df-actions">
+              <button type="button" onClick={() => void handleBatchDownload()}>
+                <Icon name="download" size={13} />
+                <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="df-actions">
             <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
               <Icon name="pencil" size={13} />
               <span>{t('designFiles.newSketch')}</span>
@@ -151,17 +249,46 @@ export function DesignFilesPanel({
               <span>{t('designFiles.upload.label')}</span>
             </button>
           </div>
+          )}
         </div>
         <div className="df-body">
           {files.length === 0 ? (
             <div className="df-empty">{t('designFiles.empty')}</div>
           ) : (
-            SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => (
+            SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => {
+              const sectionFiles = grouped[section];
+              const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
+              const visibleFiles = sectionFiles.slice(0, visibleLimit);
+              const hiddenCount = sectionFiles.length - visibleFiles.length;
+              return (
               <div className="df-section" key={section}>
                 <div className="df-section-label">
                   {t(SECTION_LABEL_KEY[section])}
+                  <span className="df-section-count">{sectionFiles.length}</span>
+                  <button
+                    type="button"
+                    className="df-select-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectAllInSection(sectionFiles);
+                    }}
+                  >
+                    {t('designFiles.selectAll')}
+                  </button>
+                  {sectionFiles.some((f) => selected.has(f.name)) ? (
+                    <button
+                      type="button"
+                      className="df-select-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearSection(sectionFiles);
+                      }}
+                    >
+                      {t('designFiles.clearSelection')}
+                    </button>
+                  ) : null}
                 </div>
-                {grouped[section].map((f) => {
+                {visibleFiles.map((f) => {
                   const active = preview === f.name;
                   const isHovered = hover === f.name;
                   return (
@@ -169,12 +296,31 @@ export function DesignFilesPanel({
                       key={f.name}
                       type="button"
                       data-testid={`design-file-row-${f.name}`}
-                      className={`df-row ${active ? 'active' : ''}`}
+                      className={`df-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
                       onMouseEnter={() => setHover(f.name)}
                       onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
                       onClick={() => setPreview(f.name)}
                       onDoubleClick={() => onOpenFile(f.name)}
                     >
+                      <span
+                        className="df-row-check"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(f.name);
+                        }}
+                        role="checkbox"
+                        aria-checked={selected.has(f.name)}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleSelect(f.name);
+                          }
+                        }}
+                      >
+                        {selected.has(f.name) ? '☑' : '☐'}
+                      </span>
                       <span className="df-row-icon" data-kind={f.kind} aria-hidden>
                         {kindGlyph(f.kind)}
                       </span>
@@ -206,8 +352,35 @@ export function DesignFilesPanel({
                     </button>
                   );
                 })}
+                {hiddenCount > 0 ? (
+                  <button
+                    type="button"
+                    className="df-section-more"
+                    disabled={isSectionExpansionPending}
+                    aria-busy={isSectionExpansionPending}
+                    onClick={() =>
+                      startSectionExpansion(() => {
+                        setSectionLimits((curr) => ({
+                          ...curr,
+                          [section]: Math.min(
+                            sectionFiles.length,
+                            visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
+                          ),
+                        }));
+                      })
+                    }
+                  >
+                    <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
+                    <span>
+                      {t('designFiles.showMore', {
+                        n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
+                      })}
+                    </span>
+                  </button>
+                ) : null}
               </div>
-            ))
+              );
+            })
           )}
           <div
             className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
@@ -250,10 +423,12 @@ export function DesignFilesPanel({
           className="df-row-popover"
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               const name = menuPos.name;
               setMenuPos(null);
               onOpenFile(name);
@@ -266,7 +441,13 @@ export function DesignFilesPanel({
             download={menuPos.name}
             style={{ textDecoration: 'none' }}
           >
-            <button type="button" onClick={() => setMenuPos(null)}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuPos(null);
+              }}
+            >
               {t('designFiles.download')}
             </button>
           </a>
@@ -274,7 +455,9 @@ export function DesignFilesPanel({
             type="button"
             className="danger"
             data-testid={`design-file-delete-${menuPos.name}`}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
               const name = menuPos.name;
               setMenuPos(null);
               onDeleteFile(name);
@@ -308,6 +491,15 @@ function DfPreview({
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
           <iframe title={file.name} src={url} sandbox="allow-scripts" />
+        ) : file.kind === 'video' ? (
+          <video
+            src={`${url}?v=${Math.round(file.mtime)}`}
+            controls
+            playsInline
+            preload="metadata"
+          />
+        ) : file.kind === 'audio' ? (
+          <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
         ) : (
           <div
             style={{

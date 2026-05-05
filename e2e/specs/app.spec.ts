@@ -91,7 +91,10 @@ for (const entry of automatedCases()) {
     }
 
     if (entry.mockArtifact) {
-      await page.route('**/api/chat', async (route) => {
+      await page.route('**/api/runs', async (route) => {
+        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
+      });
+      await page.route('**/api/runs/*/events', async (route) => {
         const artifact =
           `<artifact identifier="${entry.mockArtifact!.identifier}" type="text/html" title="${entry.mockArtifact!.title}">` +
           entry.mockArtifact!.html +
@@ -121,7 +124,10 @@ for (const entry of automatedCases()) {
     }
 
     if (entry.flow === 'question-form-selection-limit') {
-      await page.route('**/api/chat', async (route) => {
+      await page.route('**/api/runs', async (route) => {
+        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
+      });
+      await page.route('**/api/runs/*/events', async (route) => {
         const form = [
           '<question-form id="discovery" title="Quick brief — 30 seconds">',
           JSON.stringify(
@@ -169,7 +175,10 @@ for (const entry of automatedCases()) {
 
     if (entry.flow === 'question-form-submit-persistence') {
       let requestCount = 0;
-      await page.route('**/api/chat', async (route) => {
+      await page.route('**/api/runs', async (route) => {
+        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
+      });
+      await page.route('**/api/runs/*/events', async (route) => {
         requestCount += 1;
         const chunk =
           requestCount === 1
@@ -203,7 +212,7 @@ for (const entry of automatedCases()) {
           `data: ${JSON.stringify({ chunk })}`,
           '',
           'event: end',
-          'data: {"code":0}',
+          'data: {"code":0,"status":"succeeded"}',
           '',
           '',
         ].join('\n');
@@ -277,6 +286,10 @@ for (const entry of automatedCases()) {
       await runGenerationDoesNotCreateExtraFileFlow(page, entry);
       return;
     }
+    if (entry.flow === 'comment-attachment-flow') {
+      await runCommentAttachmentFlow(page, entry);
+      return;
+    }
 
     await sendPrompt(page, entry.prompt);
 
@@ -314,7 +327,7 @@ async function sendPrompt(
       await expect(input).toHaveValue(prompt, { timeout: 1500 });
       await expect(sendButton).toBeEnabled({ timeout: 1500 });
       const chatResponse = page.waitForResponse(
-        (resp) => resp.url().includes('/api/chat') && resp.request().method() === 'POST',
+        (resp) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
         { timeout: 2000 },
       );
       await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -329,7 +342,7 @@ async function sendPrompt(
         await expect(input).toHaveValue(prompt, { timeout: 1500 });
         await expect(sendButton).toBeEnabled({ timeout: 1500 });
         const chatResponse = page.waitForResponse(
-          (resp) => resp.url().includes('/api/chat') && resp.request().method() === 'POST',
+          (resp) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
           { timeout: 2000 },
         );
         await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -466,6 +479,77 @@ async function runGenerationDoesNotCreateExtraFileFlow(
   const reloadedFiles = await listProjectFilesFromApi(page, projectId);
   expect(reloadedFiles.map((file) => file.name)).toEqual(initialFiles.map((file) => file.name));
   await expect(page.getByText(entry.mockArtifact!.fileName, { exact: true })).toBeVisible();
+}
+
+async function runCommentAttachmentFlow(
+  page: Parameters<typeof test>[0]['page'],
+  entry: UICase,
+) {
+  await sendPrompt(page, entry.prompt);
+  await expectArtifactVisible(page, entry);
+
+  await page.getByTestId('comment-mode-toggle').click();
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await frame.locator('[data-od-id="hero-title"]').click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
+  await page.getByTestId('comment-add-send').click();
+
+  await expect(page.getByTestId('staged-comment-attachments')).toBeVisible();
+  await expect(page.getByTestId('staged-comment-attachments')).toContainText('hero-title');
+  await expect(page.getByTestId('staged-comment-attachments')).toContainText('Make the headline more specific.');
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
+
+  await frame.locator('[data-od-id="hero-copy"]').hover();
+  await expect(page.getByTestId('comment-target-overlay')).toBeVisible();
+  await expect(page.getByTestId('comment-target-overlay')).toContainText('hero-copy');
+
+  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await expect(page.getByTestId('comment-popover-input')).toHaveValue('Make the headline more specific.');
+  await page.getByTestId('comment-popover').getByRole('button', { name: 'Close' }).click();
+
+  await page.getByRole('tab', { name: 'Comments' }).click();
+  await expect(page.getByTestId('comments-panel')).toBeVisible();
+  await expect(page.getByTestId('comments-panel').getByRole('heading', { name: 'Attached to chat' })).toBeVisible();
+  await expect(page.getByTestId('comments-panel').getByRole('heading', { name: 'Saved comments' })).toBeVisible();
+
+  await page.getByTestId('comments-panel')
+    .locator('[data-testid="comment-card-hero-title"]')
+    .getByRole('button', { name: 'Remove' })
+    .click();
+  await page.getByRole('tab', { name: 'Chat' }).click();
+  await expect(page.getByTestId('staged-comment-attachments')).toHaveCount(0);
+  await expect(page.getByTestId('chat-send')).toBeDisabled();
+
+  await page.getByRole('tab', { name: 'Comments' }).click();
+  await page.getByTestId('comments-panel')
+    .locator('[data-testid="comment-card-hero-title"]')
+    .getByRole('button', { name: 'Add' })
+    .click();
+  await page.getByRole('tab', { name: 'Chat' }).click();
+  await expect(page.getByTestId('staged-comment-attachments')).toContainText('hero-title');
+
+  const runRequest = page.waitForRequest(
+    (request) => request.url().includes('/api/runs') && request.method() === 'POST',
+  );
+  await page.getByTestId('chat-send').click();
+  const request = await runRequest;
+  const body = request.postDataJSON() as {
+    message?: string;
+    commentAttachments?: Array<{ elementId?: string; comment?: string; filePath?: string }>;
+  };
+
+  expect(body.message).toMatch(/\n\n## user\n$/);
+  expect(body.message).not.toContain('Apply selected preview comments');
+  expect(body.commentAttachments).toEqual([
+    expect.objectContaining({
+      elementId: 'hero-title',
+      comment: 'Make the headline more specific.',
+      filePath: 'commentable-artifact.html',
+    }),
+  ]);
 }
 
 async function createProjectNameOnly(
@@ -672,13 +756,25 @@ async function runDesignFilesDeleteFlow(
     await dialog.accept();
   });
 
+  const pngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+
+  // Upload a sibling file first so that, after deleting trash-me.png, there
+  // is a fallback tab the buggy code would have navigated to. The fix must
+  // keep the user in the Design Files panel instead.
+  await page.getByTestId('design-files-upload-input').setInputFiles({
+    name: 'keep-me.png',
+    mimeType: 'image/png',
+    buffer: pngBytes,
+  });
+  await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
+
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'trash-me.png',
     mimeType: 'image/png',
-    buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
-      'base64',
-    ),
+    buffer: pngBytes,
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
@@ -695,6 +791,15 @@ async function runDesignFilesDeleteFlow(
 
   await expect(fileRow).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
+
+  // Bug #115: deleting from the Design Files panel must not navigate the
+  // user into another tab. The Design Files tab should remain the active
+  // view, and the sibling tab should still exist (just not auto-activated).
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
 }
 
 async function runDesignFilesTabPersistenceFlow(

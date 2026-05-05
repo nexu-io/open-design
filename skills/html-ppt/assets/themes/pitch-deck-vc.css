@@ -1,0 +1,21 @@
+/* theme: pitch-deck-vc — YC 风融资 pitch */
+:root{
+  --bg:#ffffff;--bg-soft:#fafbfc;--surface:#ffffff;--surface-2:#f5f7fa;
+  --border:rgba(20,30,50,.1);--border-strong:rgba(20,30,50,.22);
+  --text-1:#0b0d12;--text-2:#4a5270;--text-3:#8b93a8;
+  --accent:#0070f3;--accent-2:#7928ca;--accent-3:#ff4ecb;
+  --good:#0cce6b;--warn:#f5a524;--bad:#ee0000;
+  --grad:linear-gradient(135deg,#0070f3,#7928ca);
+  --grad-soft:linear-gradient(135deg,#e8f0ff,#f3e8ff);
+  --radius:14px;--radius-sm:8px;--radius-lg:22px;
+  --shadow:0 2px 8px rgba(20,30,50,.06),0 12px 32px rgba(20,30,50,.06);
+  --shadow-lg:0 8px 24px rgba(20,30,50,.1),0 30px 80px rgba(20,30,50,.1);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+  --font-display:'Inter','Noto Sans SC',sans-serif;
+}
+.slide{padding:88px 120px}
+h1.title,.h1{font-weight:800;letter-spacing:-.035em}
+h1.title .gradient-text,.h1 .gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.card{border:1px solid var(--border)}
+.divider-accent{background:var(--grad);height:4px;width:64px;border-radius:2px}
+.kicker{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}

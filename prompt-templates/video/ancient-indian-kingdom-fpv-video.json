@@ -1,0 +1,22 @@
+{
+  "id": "ancient-indian-kingdom-fpv-video",
+  "surface": "video",
+  "title": "Ancient Indian Kingdom FPV Video",
+  "summary": "A fast-paced FPV drone-style cinematic prompt depicting a mystical Indian kingdom with temples and jungles.",
+  "category": "General",
+  "tags": [
+    "cinematic",
+    "nature"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "extremely fast-paced cinematic FPV flying through the ancient Indian Dandaka kingdom, dense mystical forests, towering sal and teak trees, tribal settlements, ancient ashrams, sages meditating, wildlife moving through fog, dramatic sunlight rays piercing canopy, rivers cutting through rugged terrain, ruined temples covered in vines, hyper-realistic textures, high-speed aerial dives and sharp turns, immersive depth, volumetric lighting, earthy tones, epic scale, realism, cinematic color grading, smooth stabilization, ultra-detailed environment, intense atmosphere",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/146717bc1b96541c0da02f0ba053b9c3/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/146717bc1b96541c0da02f0ba053b9c3/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Shushant Lakhyani",
+    "url": "https://x.com/shushant_l/status/2049141805233672529"
+  }
+}

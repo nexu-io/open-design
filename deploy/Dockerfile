@@ -22,6 +22,9 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/postinstall.mjs ./scripts/postinstall.mjs
+COPY packages ./packages
+COPY tools ./tools
 COPY apps/daemon/package.json ./apps/daemon/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY e2e/package.json ./e2e/package.json
@@ -30,7 +33,8 @@ RUN corepack enable && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps
-RUN pnpm --filter @open-design/web build && \
+RUN pnpm --filter @open-design/daemon build && \
+    pnpm --filter @open-design/web build && \
     pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
@@ -73,13 +77,17 @@ COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daem
 COPY --from=build --chown=open-design:open-design /app/apps/web/out ./apps/web/out
 COPY --chown=open-design:open-design skills ./skills
 COPY --chown=open-design:open-design design-systems ./design-systems
+COPY --chown=open-design:open-design craft ./craft
+COPY --chown=open-design:open-design prompt-templates ./prompt-templates
 COPY --chown=open-design:open-design assets/frames ./assets/frames
+COPY --chown=open-design:open-design assets/community-pets ./assets/community-pets
 
 RUN mkdir -p /app/.od && \
     chown -R open-design:open-design /app
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
+ENV OD_BIND_HOST=0.0.0.0
 ENV OD_HOST=0.0.0.0
 ENV OD_PORT=7456
 
@@ -87,4 +95,4 @@ EXPOSE 7456
 
 USER open-design
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "apps/daemon/cli.js", "--no-open"]
+CMD ["node", "apps/daemon/dist/cli.js", "--no-open"]

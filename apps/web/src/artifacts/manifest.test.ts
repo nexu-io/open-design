@@ -27,12 +27,66 @@ describe('parseArtifactManifest', () => {
     });
     expect(parseArtifactManifest(raw)).toBeNull();
   });
+
+  it('defaults status to complete when missing', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'html',
+      title: 'x',
+      entry: 'index.html',
+      renderer: 'html',
+      exports: ['html'],
+    });
+    const out = parseArtifactManifest(raw);
+    expect(out?.status).toBe('complete');
+  });
+
+  it('preserves valid status when provided', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'html',
+      title: 'x',
+      entry: 'index.html',
+      renderer: 'html',
+      status: 'streaming',
+      exports: ['html'],
+    });
+    const out = parseArtifactManifest(raw);
+    expect(out?.status).toBe('streaming');
+  });
 });
 
 describe('inferLegacyManifest', () => {
+  it('infers markdown manifests for .md files', () => {
+    const out = inferLegacyManifest({ entry: 'README.md' });
+    expect(out?.kind).toBe('markdown-document');
+    expect(out?.renderer).toBe('markdown');
+    expect(out?.status).toBe('complete');
+  });
+
+  it('infers svg manifests for .svg files', () => {
+    const out = inferLegacyManifest({ entry: 'logo.svg' });
+    expect(out?.kind).toBe('svg');
+    expect(out?.renderer).toBe('svg');
+    expect(out?.status).toBe('complete');
+  });
+
   it('returns null for non-artifact file types', () => {
     expect(inferLegacyManifest({ entry: 'photo.png' })).toBeNull();
     expect(inferLegacyManifest({ entry: 'archive.bin' })).toBeNull();
+  });
+
+  it('infers React component artifacts from JSX and TSX entries', () => {
+    expect(inferLegacyManifest({ entry: 'Card.jsx' })).toMatchObject({
+      kind: 'react-component',
+      renderer: 'react-component',
+      exports: ['jsx', 'html', 'zip'],
+    });
+    expect(inferLegacyManifest({ entry: 'Card.tsx' })).toMatchObject({
+      kind: 'react-component',
+      renderer: 'react-component',
+      exports: ['jsx', 'html', 'zip'],
+    });
   });
 });
 
@@ -56,6 +110,7 @@ describe('createHtmlArtifactManifest', () => {
     expect(out.version).toBe(1);
     expect(out.kind).toBe('html');
     expect(out.renderer).toBe('html');
+    expect(out.status).toBe('complete');
     expect(out.exports).toEqual(['html', 'pdf', 'zip']);
     expect(out.entry).toBe('index.html');
     expect(out.title).toBe('Landing');

@@ -19,6 +19,19 @@ Defaults:
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 
+When exposing the service through a public IP, domain, or reverse proxy, set
+`OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be allowed to
+call `/api`:
+
+```bash
+OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
+```
+
+Pin a specific published image with a digest instead of the mutable `latest` tag:
+
+```bash
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design@sha256:<digest> docker compose up -d --no-build
+```
 The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.

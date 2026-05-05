@@ -30,6 +30,7 @@ export async function listDesignSystems(root) {
         category: extractCategory(raw) ?? 'Uncategorized',
         summary: summarize(raw),
         swatches: extractSwatches(raw),
+        surface: extractSurface(raw),
         body: raw,
       });
     } catch {
@@ -66,6 +67,14 @@ function summarize(raw) {
 function extractCategory(raw) {
   const m = /^>\s*Category:\s*(.+?)\s*$/im.exec(raw);
   return m?.[1];
+}
+
+const KNOWN_SURFACES = new Set(['web', 'image', 'video', 'audio']);
+function extractSurface(raw) {
+  const m = /^>\s*Surface:\s*(.+?)\s*$/im.exec(raw);
+  if (!m) return 'web';
+  const v = m[1].trim().toLowerCase();
+  return KNOWN_SURFACES.has(v) ? v : 'web';
 }
 
 // Strip boilerplate like "Design System Inspired by Cohere" → "Cohere" so

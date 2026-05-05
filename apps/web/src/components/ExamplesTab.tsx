@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
+import {
+  localizeSkillDescription,
+  localizeSkillPrompt,
+} from '../i18n/content';
 import type { Dict } from '../i18n/types';
 import { fetchSkillExample } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import type { SkillSummary } from '../types';
+import type { SkillSummary, Surface } from '../types';
+import { Icon } from './Icon';
 import { PreviewModal } from './PreviewModal';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -15,7 +20,16 @@ interface Props {
 }
 
 type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document';
+type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
+
+const SURFACE_PILLS: { value: SurfaceFilter; labelKey: keyof Dict }[] = [
+  { value: 'all', labelKey: 'examples.modeAll' },
+  { value: 'web', labelKey: 'examples.surfaceWeb' },
+  { value: 'image', labelKey: 'examples.surfaceImage' },
+  { value: 'video', labelKey: 'examples.surfaceVideo' },
+  { value: 'audio', labelKey: 'examples.surfaceAudio' },
+];
 
 const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
@@ -74,12 +88,31 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
   return true;
 }
 
+function surfaceOf(skill: SkillSummary): Surface {
+  if (skill.surface) return skill.surface;
+  if (skill.mode === 'image' || skill.mode === 'video' || skill.mode === 'audio') return skill.mode;
+  return 'web';
+}
+
+function matchesSurface(skill: SkillSummary, filter: SurfaceFilter): boolean {
+  return filter === 'all' || surfaceOf(skill) === filter;
+}
+
+function quotePrompt(locale: string, text: string): string {
+  return locale === 'de' ? `„${text}“` : `“${text}”`;
+}
+
 export function ExamplesTab({ skills, onUsePrompt }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
+  // Free-text search filters by skill name + description + prompt so users
+  // can find a known example by typing any associated word ("airbnb",
+  // "wireframe", "deck") without having to click through filter pills first.
+  const [search, setSearch] = useState('');
   const [previewSkillId, setPreviewSkillId] = useState<string | null>(null);
 
   const loadPreview = useCallback(
@@ -107,31 +140,38 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   );
 
   const modeCounts = useMemo(() => {
+    const surfaceScoped = skills.filter((skill) => matchesSurface(skill, surfaceFilter));
     const c: Record<ModeFilter, number> = {
-      all: skills.length,
+      all: surfaceScoped.length,
       'prototype-desktop': 0,
       'prototype-mobile': 0,
       deck: 0,
       document: 0,
     };
-    for (const s of skills) {
+    for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
       if (matchesMode(s, 'prototype-mobile')) c['prototype-mobile']++;
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
     }
     return c;
+  }, [skills, surfaceFilter]);
+
+  const surfaceCounts = useMemo(() => {
+    const counts: Record<SurfaceFilter, number> = { all: skills.length, web: 0, image: 0, video: 0, audio: 0 };
+    for (const s of skills) counts[surfaceOf(s)]++;
+    return counts;
   }, [skills]);
 
   const scenarioCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const s of skills) {
-      if (!matchesMode(s, modeFilter)) continue;
+      if (!matchesSurface(s, surfaceFilter) || !matchesMode(s, modeFilter)) continue;
       const tag = s.scenario || 'general';
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
     return counts;
-  }, [skills, modeFilter]);
+  }, [skills, surfaceFilter, modeFilter]);
 
   const scenarioOptions = useMemo(() => {
     const have = new Set(scenarioCounts.keys());
@@ -142,10 +182,15 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   }, [scenarioCounts]);
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     const matched = skills.filter((s) => {
-      if (!matchesMode(s, modeFilter)) return false;
-      if (scenarioFilter === 'all') return true;
-      return (s.scenario || 'general') === scenarioFilter;
+      if (!matchesSurface(s, surfaceFilter) || !matchesMode(s, modeFilter)) return false;
+      if (scenarioFilter !== 'all' && (s.scenario || 'general') !== scenarioFilter) return false;
+      if (!q) return true;
+      const desc = localizeSkillDescription(locale, s);
+      const prompt = localizeSkillPrompt(locale, s) || '';
+      const haystack = `${s.name} ${desc} ${prompt} ${s.scenario ?? ''}`.toLowerCase();
+      return haystack.includes(q);
     });
     // Featured magazine-style examples float to the top (lower priority
     // number wins). Non-featured skills keep their server-side order so
@@ -159,7 +204,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
         return a.idx - b.idx;
       })
       .map(({ s }) => s);
-  }, [skills, modeFilter, scenarioFilter]);
+  }, [skills, surfaceFilter, modeFilter, scenarioFilter, search, locale]);
 
   if (skills.length === 0) {
     return <div className="tab-empty">{t('examples.emptyNoSkills')}</div>;
@@ -168,6 +213,42 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   return (
     <div className="tab-panel examples-panel">
       <div className="examples-toolbar">
+        <div className="examples-search">
+          <span className="search-icon" aria-hidden>
+            <Icon name="search" size={13} />
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('examples.searchPlaceholder')}
+            aria-label={t('examples.searchAria')}
+          />
+        </div>
+        <div
+          className="examples-filter-row"
+          role="tablist"
+          aria-label={t('examples.surfaceLabel')}
+        >
+          <span className="examples-filter-label">{t('examples.surfaceLabel')}</span>
+          {SURFACE_PILLS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              role="tab"
+              aria-selected={surfaceFilter === p.value}
+              className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
+              onClick={() => {
+                setSurfaceFilter(p.value);
+                setModeFilter('all');
+                setScenarioFilter('all');
+              }}
+            >
+              {t(p.labelKey)}
+              <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
+            </button>
+          ))}
+        </div>
         <div
           className="examples-filter-row"
           role="tablist"
@@ -240,12 +321,16 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       {previewSkill ? (
         <PreviewModal
           title={previewSkill.name}
-          subtitle={previewSkill.examplePrompt || previewSkill.description.replace(/\s+/g, ' ').slice(0, 160)}
+          subtitle={
+            localizeSkillPrompt(locale, previewSkill)
+            ?? localizeSkillDescription(locale, previewSkill).slice(0, 160)
+          }
           views={[
             {
               id: 'preview',
               label: t('examples.previewLabel'),
               html: previews[previewSkill.id],
+              deck: previewSkill.mode === 'deck',
             },
           ]}
           exportTitleFor={() => previewSkill.name}
@@ -269,7 +354,7 @@ function ExampleCard({
   onUsePrompt: () => void;
   onOpenPreview: () => void;
 }) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
@@ -294,6 +379,8 @@ function ExampleCard({
   const exportTitle = skill.name;
   const isMobile = skill.platform === 'mobile';
   const isDeck = skill.mode === 'deck';
+  const displayPrompt = localizeSkillPrompt(locale, skill);
+  const displayDescription = localizeSkillDescription(locale, skill).slice(0, 240);
 
   return (
     <div
@@ -351,9 +438,7 @@ function ExampleCard({
           ) : null}
         </div>
         <div className="example-prompt">
-          {skill.examplePrompt
-            ? `“${skill.examplePrompt}”`
-            : skill.description.replace(/\s+/g, ' ').slice(0, 240)}
+          {displayPrompt ? quotePrompt(locale, displayPrompt) : displayDescription}
         </div>
         <div className="example-card-actions">
           <button

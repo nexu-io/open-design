@@ -1,17 +1,26 @@
 /**
  * Renders a single tool_use (optionally paired with its tool_result) as an
- * inline card in the assistant message stream. Tools we recognize get
- * specialized layouts; unknown ones fall back to a generic command/output
- * card.
+ * inline card in the assistant message stream. Lookup order:
+ *
+ *   1. user-registered renderer in `tool-renderers` (the extension point
+ *      analogous to CopilotKit's `useCopilotAction({ render })`)
+ *   2. hardcoded family card for tools we ship with (TodoWrite / Write /
+ *      Edit / Read / Bash / Glob / Grep / WebFetch / WebSearch)
+ *   3. generic command/output fallback
  */
 import { useState } from 'react';
 import { useT } from '../i18n';
 import { parseTodoWriteInput } from '../runtime/todos';
+import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
 import type { AgentEvent } from '../types';
 
 interface Props {
   use: Extract<AgentEvent, { kind: 'tool_use' }>;
   result?: Extract<AgentEvent, { kind: 'tool_result' }> | undefined;
+  // True while the parent run is still streaming. Forwarded to registered
+  // renderers via `status` so they can distinguish "executing" (run alive)
+  // from "inProgress" (run dead before result arrived).
+  runStreaming?: boolean;
   // Set of file names that exist in the project folder. When the tool's
   // `file_path`/`path` argument's basename appears in this set we surface
   // an "open" button on the card. Pass `undefined` to skip the existence
@@ -22,8 +31,27 @@ interface Props {
   onRequestOpenFile?: (name: string) => void;
 }
 
-export function ToolCard({ use, result, projectFileNames, onRequestOpenFile }: Props) {
+export function ToolCard({
+  use,
+  result,
+  runStreaming,
+  projectFileNames,
+  onRequestOpenFile,
+}: Props) {
   const name = use.name;
+  const custom = getToolRenderer(name);
+  if (custom) {
+    // A misbehaving third-party renderer must not take down the whole
+    // assistant message — catch synchronous throws and fall through to the
+    // built-in family card. (React's own error boundaries still cover
+    // throws raised inside the returned tree once it's mounted.)
+    try {
+      const node = custom(toRenderProps(use, result, runStreaming ?? false));
+      if (node !== undefined && node !== null && node !== false) return <>{node}</>;
+    } catch (err) {
+      console.error(`[ToolCard] custom renderer for "${name}" threw; falling back`, err);
+    }
+  }
   const ctx: FileToolCtx = { projectFileNames, onRequestOpenFile };
   if (name === 'TodoWrite') return <TodoCard input={use.input} />;
   if (name === 'Write' || name === 'create_file')

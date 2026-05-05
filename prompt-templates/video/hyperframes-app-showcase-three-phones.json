@@ -1,0 +1,18 @@
+{
+  "id": "hyperframes-app-showcase-three-phones",
+  "surface": "video",
+  "title": "HyperFrames: 12-Second App Showcase — Three Floating Phones",
+  "summary": "A 12-second 16:9 app showcase composition — three floating iPhone screens hover in 3D space, each rotating in turn to surface a different feature, beat-synced label callouts, end logo lockup. Built directly on the HyperFrames `app-showcase` catalog block.",
+  "category": "Product",
+  "tags": ["hyperframes", "app-showcase", "product", "3d", "mobile"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 12-second HyperFrames app-showcase composition (1920×1080, 30fps) with three floating iPhone screens, each highlighting a feature of a fictional fitness app. Pull `npx hyperframes add app-showcase`, `npx hyperframes add ui-3d-reveal`, `npx hyperframes add shimmer-sweep`, and `npx hyperframes add logo-outro`.\n\nVisual identity: warm canvas #fff5e8, ink text #1a1410, single hot accent #ff5e3a, secondary teal #2bbab2 used only on the active feature pill. Display: \"General Sans\" 88px for the headline; body \"Inter\" 24px; mono on the in-app data labels.\n\nThe three phones (left, center, right) carry these screens — render each as a sub-composition under `screens/`:\n1. Left phone — workout summary card (3 rings, distance / pace / heart-rate).\n2. Center phone — live activity timer (large MM:SS counter, tabular-nums), pause / resume buttons.\n3. Right phone — weekly streak grid (7 cells × 4 rows, the active week glowing).\n\nAnimation (12s total):\n• 0–1.0s — headline \"YOUR WEEK, IN MOTION\" rises from y=50 → 0 over 0.7s ease expo.out at the top of the canvas. A hairline rule wipes in below it.\n• 0.6–2.0s — the three phones fly in via ui-3d-reveal: left from x=-260 + rotateY=-20°, right from x=+260 + rotateY=+20°, center from z=-300, all easing expo.out 1.4s, staggered 180ms.\n• 2.0–4.0s — left phone front-facing: rotateY tweens to 0°, scale to 1.04 over 0.6s, then a label callout \"workout summary\" types in to its left over 0.4s. Hold 1s. Then phone returns to its idle 3D pose.\n• 4.0–6.0s — center phone takes over with the same beat (label callout \"live activity\").\n• 6.0–8.0s — right phone takes over (label callout \"streaks\").\n• 8.0–10.0s — all three phones reset to idle, gently bobbing on a sin wave (deterministic, finite repeats — calculate cycles from the 2.0s window).\n• 10.0–12.0s — logo-outro fires in the bottom-right corner with a final shimmer-sweep across the headline.\n\nNon-negotiables: deterministic only; entrance-only animations; phones use a non-timed wrapper `<div>` if you nest video screens — never put video directly inside a timed clip; no `repeat: -1` (compute exact cycle count); min 24px on label callouts; all timelines paused:true; root data-duration=12. Run `npx hyperframes inspect --samples 12` to catch label overlap with phones.\n\nOutput: `app-showcase-12s.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/app-showcase"
+  }
+}
