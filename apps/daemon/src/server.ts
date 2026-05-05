@@ -2791,28 +2791,64 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         res.header('Access-Control-Allow-Origin', '*');
       }
 
-      // ?pagesize=WxH (mm) — inject a corrected @page rule so Chrome's print
-      // dialog picks up the right physical dimensions instead of defaulting to A4.
-      // Use !important on size/margin to beat any pre-existing @page rule
-      // (e.g. banner.css with @page { size: 860px 2340px }).
-      const pagesizeParam = req.query.pagesize;
-      if (pagesizeParam && (file.mime === 'text/html' || /\.html?$/i.test(relPath))) {
-        const parts = String(pagesizeParam).split('x').map(Number);
-        const pw = parts[0]; const ph = parts[1];
-        if (pw > 0 && ph > 0) {
-          const styleTag = `<style>@page{size:${pw}mm ${ph}mm!important;margin:0!important}` +
+      // ?print=1 — inject a corrected @page size rule (px→mm) so Chrome's
+      // print dialog uses the right physical dimensions instead of treating
+      // CSS pixels as screen pixels (860px = 8.96in, not 860mm).
+      //
+      // Detection order: inline HTML → linked CSS files in the project dir.
+      // The corrected rule is injected with !important at the very end of the
+      // document so it wins the cascade regardless of source order.
+      const printMode = req.query.print === '1';
+      if (printMode && (file.mime === 'text/html' || /\.html?$/i.test(relPath))) {
+        let html = file.buffer.toString('utf-8');
+
+        // Detect @page { size: Wpx Hpx } from a CSS string.
+        const pxPageSize = (css: string): [number, number] | null => {
+          const m = css.match(/@page\s*[^{]*\{[^}]*\bsize\s*:\s*([\d.]+)px\s+([\d.]+)px/i);
+          if (!m) return null;
+          const w = Math.round(parseFloat(m[1]));
+          const h = Math.round(parseFloat(m[2]));
+          return w > 0 && h > 0 ? [w, h] : null;
+        };
+
+        let detected = pxPageSize(html);
+
+        if (!detected) {
+          // Scan linked local CSS files in document order.
+          const linkRe = /<link\b[^>]*\brel\s*=\s*["']stylesheet["'][^>]*>/gi;
+          const hrefRe = /\bhref\s*=\s*["']([^"']+)["']/i;
+          for (const tag of html.match(linkRe) ?? []) {
+            const hm = hrefRe.exec(tag);
+            const href = hm?.[1]?.trim();
+            if (!href || /^(?:https?:|data:|blob:|\/)/i.test(href)) continue;
+            // Resolve relative to the HTML file's directory inside the project.
+            const htmlDir = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/') + 1) : '';
+            const cssPath = href.startsWith('../')
+              ? href.replace(/^(\.\.\/)+/, '')
+              : htmlDir + href;
+            try {
+              const cssFile = await readProjectFile(PROJECTS_DIR, req.params.id, cssPath);
+              const cssText = cssFile.buffer.toString('utf-8');
+              detected = pxPageSize(cssText);
+              if (detected) break;
+            } catch { /* file not found — skip */ }
+          }
+        }
+
+        if (detected) {
+          const [pw, ph] = detected;
+          const styleTag =
+            `<style>@page{size:${pw}mm ${ph}mm!important;margin:0!important}` +
             `html,body{margin:0!important;padding:0!important}` +
             `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}</style>`;
-          let html = file.buffer.toString('utf-8');
-          // Inject before </body> AND after </html> so it always wins the
-          // cascade — some designs add @page rules from inline <style> tags
-          // late in <body> which would otherwise override us.
+          // Inject before </body> AND after </html> so no later rule can override.
           html = html.includes('</body>')
             ? html.replace('</body>', styleTag + '</body>')
             : html + styleTag;
           html += styleTag;
-          return res.type('text/html').send(html);
         }
+
+        return res.type('text/html').send(html);
       }
 
       res.type(file.mime).send(file.buffer);

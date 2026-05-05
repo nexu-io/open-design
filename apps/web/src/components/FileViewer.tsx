@@ -2859,45 +2859,19 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      // Open the file via the daemon's raw URL (HTTP) so any
-                      // relative CSS / JS / image references resolve, and
-                      // browser security policies that block file:// fetch
-                      // (e.g. Babel pulling in <script type="text/babel"
-                      // src="...jsx"> sources) don't apply. Then auto-trigger
-                      // the print dialog after a generous delay so React /
-                      // Babel / fonts / images all settle first.
-                      //
-                      // Open the new tab synchronously (popup blockers reject
-                      // window.open inside an awaited promise), then load the
-                      // real URL once we've detected the page size from the
-                      // HTML source or any linked CSS files.
-                      const win = window.open('about:blank', '_blank');
+                      // Open the raw daemon URL with ?print=1. The daemon
+                      // auto-detects @page { size: Xpx Ypx } from the HTML
+                      // and any linked CSS files, converts px→mm, and injects
+                      // a corrected @page rule so Chrome prints the right
+                      // physical size instead of treating px as screen pixels.
+                      const exportUrl = `${projectRawUrl(projectId, file.name)}?print=1`;
+                      const win = window.open(exportUrl, '_blank');
                       if (!win) return;
                       const trigger = () => {
-                        try {
-                          win.document.title = exportTitle;
-                        } catch {
-                          /* same-origin guard tripped — fine to ignore */
-                        }
-                        try {
-                          win.focus();
-                          win.print();
-                        } catch {
-                          /* print blocked — user can press Ctrl+P manually */
-                        }
+                        try { win.document.title = exportTitle; } catch { /* cross-origin */ }
+                        try { win.focus(); win.print(); } catch { /* blocked — user presses Ctrl+P */ }
                       };
-                      void detectPrintPageSize(source ?? '', projectId, file.name)
-                        .then((pagesizeParam) => {
-                          const rawUrl = projectRawUrl(projectId, file.name);
-                          const exportUrl = pagesizeParam
-                            ? `${rawUrl}?pagesize=${pagesizeParam}`
-                            : rawUrl;
-                          win.addEventListener('load', () => setTimeout(trigger, 2000));
-                          win.location.href = exportUrl;
-                        })
-                        .catch(() => {
-                          win.location.href = projectRawUrl(projectId, file.name);
-                        });
+                      win.addEventListener('load', () => setTimeout(trigger, 2000));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
