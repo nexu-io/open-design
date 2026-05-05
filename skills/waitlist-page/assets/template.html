@@ -21,6 +21,7 @@
       --ticker-fg: {{TICKER_FG_EXPRESSION}};
       --deco-stroke: {{DECO_STROKE_EXPRESSION}};
       --logo-shadow: {{LOGO_SHADOW_EXPRESSION}};
+      --logo-fg: {{LOGO_FG_EXPRESSION}};
       --font-body: {{BODY_FONT_CSS}}, sans-serif;
       --font-display: {{DISPLAY_FONT_CSS}}, serif;
     }
@@ -68,6 +69,17 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      color: var(--logo-fg);
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-container svg {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
 
     .logo-text {

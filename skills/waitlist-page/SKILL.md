@@ -76,9 +76,13 @@ od:
       type: string
       description: "CSS color expression for logo container shadow (e.g., 'rgba(0,0,0,0.08)'). Typically a subtle foreground shade."
       required: true
+    - name: logo_fg_expression
+      type: string
+      description: "CSS color expression for logo text/initials (e.g., 'rgba(255,255,255,1)' or '#fff'). Ensure contrast against accent."
+      required: true
     - name: logo_mark
       type: string
-      description: "Escaped text initials by default, or allowlist-sanitized inline SVG only with unsafe markup rejected/falling back to text."
+      description: "Text initials are HTML-escaped by default. Inline SVG is allowed only after strict allowlist-based sanitization (removing scripts, event handlers, foreignObject, and external references); unsafe input falls back to escaped text."
       required: false
     - name: display_font_url
       type: string
@@ -120,7 +124,7 @@ Pre-launch pages are your first handshake with future users. This skill builds a
    - **Text tokens** (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before insertion into HTML text nodes or attribute values.
    - **HTML tokens** (`{{LOGO_MARK}}`): If using text initials, HTML-escape them by default. If using inline SVG, you must strictly sanitize it using an allowlist: strip `<script>` tags, event handlers (`on*`), `<foreignObject>`, external refs (`href`, `xlink:href`, `url()`), and any disallowed attributes/elements before insertion. If the SVG cannot be safely sanitized, fallback to escaped text initials. Never emit raw, unsanitized arbitrary HTML. Ensure any SVG scales cleanly within its container.
    - **Hex color tokens** (`{{BG_HEX}}`, `{{FG_HEX}}`, `{{ACCENT_HEX}}`, `{{DECO_HEX}}`, `{{STRIPE_HEX}}`, `{{SUCCESS_HEX}}`): Validate each matches `/^[0-9A-Fa-f]{6}$/`. Read them from DESIGN.md or ask the user. Derive `--success` from DESIGN.md if present; otherwise use the allowed fallback `#2D6A4F` only.
-   - **CSS expression tokens** (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`, `{{LOGO_SHADOW_EXPRESSION}}`): Validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or add extra quotes. Examples: `rgba(196, 169, 154, 0.38)`, `color-mix(in srgb, var(--fg) 38%, transparent)`. Insert as-is into `:root` CSS variables.
+   - **CSS expression tokens** (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`, `{{LOGO_SHADOW_EXPRESSION}}`, `{{LOGO_FG_EXPRESSION}}`): Validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or add extra quotes. Examples: `rgba(196, 169, 154, 0.38)`, `color-mix(in srgb, var(--fg) 38%, transparent)`. Insert as-is into `:root` CSS variables.
    - **Font name tokens** (`{{DISPLAY_FONT_CSS}}`, `{{BODY_FONT_CSS}}`): These are CSS font-family values, already quoted if they contain spaces (e.g., `'DM Sans'`, `Syne`). Insert as-is into `--font-display` and `--font-body` declarations; do NOT add extra quotes.
    - **Font URL tokens** (`{{DISPLAY_FONT_URL}}`, `{{BODY_FONT_URL}}`): Spaces must be encoded as `+` for the Google Fonts URL (e.g., `DM+Sans`, `IBM+Plex+Serif`). Validate the URL is well-formed before insertion.
 3. **Verify token mapping rules** — All color tokens are now in CSS variables:
@@ -136,6 +140,7 @@ Pre-launch pages are your first handshake with future users. This skill builds a
    - `--ticker-fg` = `{{TICKER_FG_EXPRESSION}}` (animated ticker text)
    - `--deco-stroke` = `{{DECO_STROKE_EXPRESSION}}` (SVG strokes, typically muted with 12–15% opacity)
    - `--logo-shadow` = `{{LOGO_SHADOW_EXPRESSION}}` (logo container shadow, subtle foreground shade)
+   - `--logo-fg` = `{{LOGO_FG_EXPRESSION}}` (contrasting text color for logo initials)
 4. **Responsive layout** — The template includes mobile-first scaling:
    - 375px: form stacks to single column, logo shrinks to 40px, decoration compresses, no horizontal scroll.
    - 768px: comfortable two-column breathing room.

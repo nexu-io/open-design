@@ -28,6 +28,7 @@
 - [ ] Keyboard: Tab reaches each form field and the submit button; Enter submits the form
 - [ ] Color contrast of body text on background meets WCAG AA (≥ 4.5:1)
 - [ ] Color contrast of button label on button background meets WCAG AA (≥ 4.5:1)
+- [ ] Color contrast of logo text/initials on logo container background meets WCAG AA (≥ 4.5:1)
 - [ ] Logo alt text or `aria-label` present if logo is an `<img>` or meaningful SVG
 - [ ] Ticker ribbon has `aria-hidden="true"` (decorative, not meaningful content)
 - [ ] `<html lang="">` attribute is set to the correct language code
