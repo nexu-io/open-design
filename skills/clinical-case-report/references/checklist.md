@@ -9,6 +9,8 @@
 - [ ] Vital signs are internally consistent with the diagnosis (allowing for clinical variability — bradycardic shock, medication-blunted tachycardia, afebrile pneumonia, early STEMI with normal troponin, etc.)
 - [ ] Assessment contains a clearly stated primary diagnosis
 - [ ] Plan is present and directly addresses the primary diagnosis
+- [ ] If the plan includes medications: a prescribing-safety block is present before drug recommendations, confirming known inputs (allergies, renal/hepatic function, anticoagulants) and calling out unknowns (weight, bleeding risk, pregnancy); doses defer to "per local formulary/protocol" when key variables are missing
+- [ ] Medication plan is labelled as educational/simulated — not a substitute for clinician judgment
 - [ ] No real patient identifiers (direct or indirect): no names, MRNs, exact dates, locations, images, rare condition combos, occupation details, or verbatim stories from real cases
 - [ ] All data is synthetic, de-identified, or clearly fictional
 - [ ] If based on a real case, apply formal de-identification before use
@@ -23,7 +25,7 @@
 - [ ] Differential diagnosis contains 3 to 5 items
 - [ ] Each differential item includes one sentence of supporting or refuting evidence
 - [ ] Lab values use correct units and are within realistic ranges for the diagnosis
-- [ ] Plan is specific — drug names, doses, routes, and frequencies are written out
+- [ ] Plan is specific — drug names, doses, routes, and frequencies are written out where safety inputs are known; unknown variables defer to "per local formulary/protocol"
 - [ ] Plan is organised by problem using numbered headers
 - [ ] Critical findings are visually highlighted (red callout box)
 - [ ] Document is print-friendly (white background, `@media print` rules present)
