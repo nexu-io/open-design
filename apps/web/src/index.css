@@ -2854,8 +2854,12 @@ code {
 .design-card-thumb-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* contain (not cover) so the deck's first slide is shown in full
+     instead of having its edges cropped. Slides are 16:9 and the
+     card thumb is closer to 4:3, so cover was hiding the right edge. */
+  object-fit: contain;
   display: block;
+  background: var(--bg-subtle);
 }
 .design-card-thumb::before {
   /* Folder-shape icon */
