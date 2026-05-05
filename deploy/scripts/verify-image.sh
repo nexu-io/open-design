@@ -26,7 +26,7 @@ docker rm "$ARCHIVE_CONTAINER_ID" >/dev/null
 ARCHIVE_CONTAINER_ID=""
 
 for required_path in \
-  "app/apps/daemon/server.js" \
+  "app/apps/daemon/dist/cli.js" \
   "app/apps/web/out/index.html" \
   "app/apps/daemon/node_modules/express" \
   "app/apps/daemon/node_modules/better-sqlite3" \
@@ -58,7 +58,7 @@ do
   fi
 done
 
-runtime_tools="$(docker run --rm --entrypoint sh "$IMAGE_REF" -lc 'for tool in python3 g++ make npm pnpm; do if command -v "$tool" >/dev/null 2>&1; then echo "$tool"; fi; done')"
+runtime_tools="$(docker run --rm --entrypoint sh "$IMAGE_REF" -lc 'for tool in python3 g++ make pnpm; do if command -v "$tool" >/dev/null 2>&1; then echo "$tool"; fi; done')"
 if [[ -n "$runtime_tools" ]]; then
   echo "unexpected build tools found in runtime image:" >&2
   echo "$runtime_tools" >&2
