@@ -9,18 +9,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { de } from './locales/de';
 import { en } from './locales/en';
-import { esES } from './locales/es-ES';
-import { fa } from './locales/fa';
 import { ja } from './locales/ja';
-import { ko } from './locales/ko';
-import { ptBR } from './locales/pt-BR';
-import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
-import { zhTW } from './locales/zh-TW';
-import { pl } from './locales/pl';
-import { hu } from './locales/hu';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -29,27 +20,17 @@ export type { Locale } from './types';
 type DictKey = keyof Dict;
 
 const DICTS: Record<Locale, Dict> = {
-  'en': en,
-  'de': de,
-  'zh-CN': zhCN,
-  'zh-TW': zhTW,
-  'pt-BR': ptBR,
-  'es-ES': esES,
-  'ru': ru,
-  'fa': fa,
   'ja': ja,
-  'ko': ko,
-  'pl': pl,
-  'hu': hu,
+  'zh-CN': zhCN,
+  'en': en,
 };
 
 const LS_KEY = 'open-design:locale';
 
-// First-run default is English. We honor an explicit user pick saved to
-// localStorage but never auto-detect from `navigator.language`, so the
-// initial experience is consistent and predictable.
+// Wix Japan rebrand: first-run default is Japanese (the team writes JP
+// for users; ZH and EN are kept for internal notes and HQ comms).
 function detectInitialLocale(): Locale {
-  if (typeof window === 'undefined') return 'en';
+  if (typeof window === 'undefined') return 'ja';
   try {
     const stored = window.localStorage.getItem(LS_KEY);
     if (stored && (LOCALES as string[]).includes(stored)) {
@@ -58,7 +39,7 @@ function detectInitialLocale(): Locale {
   } catch {
     /* ignore */
   }
-  return 'en';
+  return 'ja';
 }
 
 interface I18nContextValue {
@@ -96,8 +77,8 @@ export function I18nProvider({ initial, children }: ProviderProps) {
 
   const t = useCallback(
     (key: DictKey, vars?: Record<string, string | number>): string => {
-      const dict = DICTS[locale] ?? en;
-      const raw = dict[key] ?? en[key] ?? key;
+      const dict = DICTS[locale] ?? ja;
+      const raw = dict[key] ?? ja[key] ?? en[key] ?? key;
       if (!vars) return raw;
       return raw.replace(/\{(\w+)\}/g, (_, name: string) => {
         const v = vars[name];
@@ -122,10 +103,10 @@ export function useI18n(): I18nContextValue {
     // mounted (e.g. an isolated test). This keeps the API safe to call
     // without requiring every callsite to wrap in a provider.
     return {
-      locale: 'en',
+      locale: 'ja',
       setLocale: () => { },
       t: (key, vars) => {
-        const raw = en[key] ?? key;
+        const raw = ja[key] ?? en[key] ?? key;
         if (!vars) return raw;
         return raw.replace(/\{(\w+)\}/g, (_, n: string) => {
           const v = vars[n];

@@ -928,8 +928,10 @@ export const GERMAN_CONTENT_IDS = {
   promptTemplateTags: Object.keys(DE_PROMPT_TEMPLATE_TAGS),
 };
 
-function isGerman(locale: Locale): boolean {
-  return locale === 'de';
+function isGerman(_locale: Locale): boolean {
+  // Wix Japan rebrand dropped the 'de' locale; helper kept as a stub
+  // so call sites remain unchanged but always fall through to defaults.
+  return false;
 }
 
 function normalizeText(text: string): string {

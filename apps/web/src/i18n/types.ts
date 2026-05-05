@@ -1,22 +1,15 @@
-// Supported UI locales. Adding a new locale requires creating a new
-// dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja' | 'ko' | 'pl' | 'hu';
+// Supported UI locales. Wix Japan rebrand: scope to ja / zh-CN / en
+// only — the team writes JP for users, ZH for internal notes, EN for
+// HQ. Adding a new locale requires creating a new dictionary in
+// `./locales/` and registering it in `./index.tsx`.
+export type Locale = 'ja' | 'zh-CN' | 'en';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja', 'ko', 'pl', 'hu'];
+export const LOCALES: Locale[] = ['ja', 'zh-CN', 'en'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
-  'en': 'English',
-  'de': 'Deutsch',
-  'zh-CN': '简体中文',
-  'zh-TW': '繁體中文',
-  'pt-BR': 'Português (Brasil)',
-  'es-ES': 'Español (España)',
-  'ru': 'Русский',
-  'fa': 'فارسی',
   'ja': '日本語',
-  'ko': '한국어',
-  'pl': 'Polski',
-  'hu': 'Magyar'
+  'zh-CN': '简体中文',
+  'en': 'English',
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
