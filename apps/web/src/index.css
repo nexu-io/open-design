@@ -1593,23 +1593,19 @@ code {
   gap: 12px;
 }
 .entry-brand-mark {
-  width: 44px;
+  /* Wix Japan rebrand: removed circular gradient chip in favor of the
+     bare wordmark, which fits horizontal logos better. The container
+     keeps a fixed height so the lockup line stays consistent. */
   height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
-  color: var(--accent);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-  overflow: hidden;
 }
 .entry-brand-mark .brand-mark-img {
-  width: 100%;
   height: 100%;
+  width: auto;
   object-fit: contain;
   display: block;
-  padding: 2px;
   user-select: none;
   -webkit-user-drag: none;
 }
