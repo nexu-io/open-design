@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -2188,12 +2188,16 @@ function GoogleSlidesViewer({
   const [result, setResult] = useState<GoogleSlidesResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [fileMissing, setFileMissing] = useState(false);
+  const [pageUrls, setPageUrls] = useState<string[]>([]);
+  const [thumbErr, setThumbErr] = useState<string | null>(null);
+  const [pageIdx, setPageIdx] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setResult(null);
     setParseError(null);
     setFileMissing(false);
+    setPageIdx(0);
     void fetchProjectFileText(projectId, file.name).then((text) => {
       if (cancelled) return;
       if (text === null || text === '') {
@@ -2212,23 +2216,80 @@ function GoogleSlidesViewer({
     };
   }, [projectId, file.name, file.mtime]);
 
-  const embedUrlValid = isValidGoogleSlidesEmbed(result?.embedUrl);
+  // Fetch per-page thumbnail URLs for the gallery viewer. We use this
+  // instead of Google's embed iframe because the embed always shows
+  // its own bottom chrome, which produces unfixable letterbox bands.
+  // PNG thumbnails fill the container 16:9 cleanly and we control the
+  // navigation UI ourselves.
+  useEffect(() => {
+    let cancelled = false;
+    setPageUrls([]);
+    setThumbErr(null);
+    if (!result?.deckId) return;
+    (async () => {
+      try {
+        const r = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/thumbnails`,
+        );
+        if (!r.ok) {
+          setThumbErr(`status ${r.status}`);
+          return;
+        }
+        const j = (await r.json()) as { urls?: string[] };
+        if (cancelled) return;
+        setPageUrls(j.urls ?? []);
+      } catch (err) {
+        if (!cancelled) setThumbErr((err as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, result?.deckId, file.mtime]);
+
   const deckUrl = result?.deckUrl;
   const hasResult = result !== null;
-  const embedUrlMissing = hasResult && !result?.embedUrl;
-  const embedUrlInvalid = hasResult && !embedUrlValid && !embedUrlMissing;
+  const totalPages = pageUrls.length || result?.totalPages || 0;
+  const goPrev = useCallback(() => {
+    setPageIdx((i) => Math.max(0, i - 1));
+  }, []);
+  const goNext = useCallback(() => {
+    setPageIdx((i) => Math.min(Math.max(0, totalPages - 1), i + 1));
+  }, [totalPages]);
 
   return (
     <div className="viewer google-slides-viewer">
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           <span className="viewer-meta">
-            {result?.totalPages
-              ? `${result.totalPages} ${t('fileViewer.googleSlidesPagesLabel')}`
+            {totalPages
+              ? `${pageIdx + 1} / ${totalPages}`
               : 'Google Slides'}
           </span>
         </div>
         <div className="viewer-toolbar-actions">
+          {pageUrls.length > 0 ? (
+            <div className="gs-pager">
+              <button
+                type="button"
+                className="ghost-link"
+                onClick={goPrev}
+                disabled={pageIdx === 0}
+                aria-label={t('fileViewer.previousSlide')}
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                className="ghost-link"
+                onClick={goNext}
+                disabled={pageIdx >= totalPages - 1}
+                aria-label={t('fileViewer.nextSlide')}
+              >
+                →
+              </button>
+            </div>
+          ) : null}
           {deckUrl ? (
             <a
               className="ghost-link viewer-action-open"
@@ -2247,19 +2308,18 @@ function GoogleSlidesViewer({
           <div className="viewer-empty">{parseError}</div>
         ) : fileMissing ? (
           <div className="viewer-empty">{t('fileViewer.googleSlidesNotReady')}</div>
-        ) : embedUrlMissing ? (
-          <div className="viewer-empty">{t('fileViewer.googleSlidesNotReady')}</div>
-        ) : embedUrlInvalid ? (
-          <div className="viewer-empty">{t('fileViewer.googleSlidesInvalidUrl')}</div>
-        ) : !embedUrlValid ? (
+        ) : !hasResult ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        ) : pageUrls.length === 0 ? (
+          <div className="viewer-empty">
+            {thumbErr ? `Thumbnails unavailable: ${thumbErr}` : t('fileViewer.loading')}
+          </div>
         ) : (
-          <iframe
-            data-testid="google-slides-embed-frame"
-            title={file.name}
-            src={result?.embedUrl}
-            allow="autoplay; fullscreen"
-            referrerPolicy="strict-origin-when-cross-origin"
+          <img
+            className="gs-page"
+            src={pageUrls[Math.min(pageIdx, pageUrls.length - 1)]}
+            alt={`Slide ${pageIdx + 1}`}
+            draggable={false}
           />
         )}
       </div>

@@ -775,6 +775,60 @@ export async function getDeckThumbnailUrl(deckId, size = 'MEDIUM') {
   }
 }
 
+// Fetch thumbnail URLs for every page of a deck. Used by the
+// gallery-style slide viewer that replaced Google's embed iframe so
+// the UI can render each page as a 16:9 PNG with its own prev/next
+// controls (Google embed insisted on bundling chrome that produced
+// letterbox bands no matter how the iframe was sized).
+const ALL_THUMBNAILS_CACHE = new Map(); // deckId -> { urls, expiresAt }
+export async function getDeckAllThumbnailUrls(deckId, size = 'LARGE') {
+  if (typeof deckId !== 'string' || !deckId) {
+    const err = new Error('deckId required');
+    err.code = 'GOOGLE_API_BAD_REQUEST';
+    throw err;
+  }
+  const cacheKey = `${deckId}:${size}`;
+  const cached = ALL_THUMBNAILS_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { urls: cached.urls, cached: true };
+  }
+  const { slides } = await authedClients();
+  try {
+    const meta = await slides.presentations.get({
+      presentationId: deckId,
+      fields: 'slides(objectId)',
+    });
+    const slideIds = (meta.data.slides || [])
+      .map((s) => s.objectId)
+      .filter((id) => typeof id === 'string' && id.length > 0);
+    if (slideIds.length === 0) {
+      const err = new Error(`deck ${deckId} has no slides`);
+      err.code = 'GOOGLE_API_BAD_REQUEST';
+      throw err;
+    }
+    const urls = await Promise.all(
+      slideIds.map(async (pageObjectId) => {
+        const thumb = await slides.presentations.pages.getThumbnail({
+          presentationId: deckId,
+          pageObjectId,
+          'thumbnailProperties.thumbnailSize': size,
+          'thumbnailProperties.mimeType': 'PNG',
+        });
+        return thumb.data.contentUrl ?? null;
+      }),
+    );
+    const filtered = urls.filter((u) => typeof u === 'string');
+    ALL_THUMBNAILS_CACHE.set(cacheKey, {
+      urls: filtered,
+      expiresAt: Date.now() + THUMBNAIL_TTL_MS,
+    });
+    return { urls: filtered, cached: false };
+  } catch (err) {
+    if (err.code === 'GOOGLE_API_BAD_REQUEST') throw err;
+    throw wrapApiError(err);
+  }
+}
+
 // Read the deck's high-level structure (slide count, slide IDs, page
 // element summary). Used by the skill to verify a copy succeeded and to
 // look up real placeholder object IDs after copy (object IDs are stable

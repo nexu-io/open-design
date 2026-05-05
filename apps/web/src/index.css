@@ -7069,21 +7069,39 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: #ffffff;
   overflow: hidden;
 }
-/* iframe aspect 17:10 (= 1.70). The deck inside is 16:9 (= 1.78);
-   Google's embed reserves ~32px at the bottom for its native page-
-   nav bar (prev/next arrows + page counter), so the actual slide
-   rendering area inside the iframe is wider than 16:9. 17:10 leaves
-   the slide rendering area at almost exactly 16:9, with the nav bar
-   tucked underneath — slide fills wall-to-wall, no letterbox. */
-.google-slides-viewer .viewer-body iframe {
+/* Gallery-style slide viewer: each page is a Slides API thumbnail
+   PNG rendered at the deck's native 16:9 aspect. No iframe, no
+   Google chrome, no letterbox — the page fills the available area
+   exactly. */
+.google-slides-viewer .viewer-body .gs-page {
   display: block;
-  border: 0;
-  outline: 0;
   width: 100%;
   max-width: 100%;
-  aspect-ratio: 17 / 10;
+  aspect-ratio: 16 / 9;
   height: auto;
+  object-fit: contain;
   background: #ffffff;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.google-slides-viewer .gs-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+.google-slides-viewer .gs-pager button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+.google-slides-viewer .gs-pager button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 /* Make the "open in Google Slides" button stand out as a primary
    action — users need to jump out to Google to actually edit, since

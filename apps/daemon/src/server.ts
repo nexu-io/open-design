@@ -772,6 +772,26 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
+  // Per-page thumbnail URLs for a deck. Powers the gallery-style
+  // slide viewer that replaced Google's embed iframe (whose chrome
+  // produced unfixable letterbox bands).
+  app.get('/api/projects/:id/thumbnails', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    const deckId = project.metadata?.deckId;
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 404, 'NO_DECK', 'project has no deckId metadata');
+    }
+    try {
+      const { getDeckAllThumbnailUrls } = await import('./google-slides.js');
+      const result = await getDeckAllThumbnailUrls(deckId, 'LARGE');
+      res.json(result);
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
