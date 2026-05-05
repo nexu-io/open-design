@@ -539,6 +539,29 @@ export async function duplicateSlide(deckId, slideObjectId, idMap) {
       throw wrapApiError(err);
     }
   }
+  // v4 (Round 11): when idMap is omitted, capture the source slide's
+  // element order before duplication, then post-duplication read the new
+  // slide's element order, and build elementIdMap by index. Slides API
+  // duplicateObject preserves child order, so index-based pairing is
+  // safe. This saves callers a second `readPresentation` round-trip.
+  let sourceElementIds = null;
+  if (!idMap) {
+    try {
+      const beforeRes = await slides.presentations.get({
+        presentationId: deckId,
+        fields: 'slides(objectId,pageElements(objectId))',
+      });
+      const src = (beforeRes.data.slides || []).find(
+        (s) => s.objectId === slideObjectId,
+      );
+      if (src) {
+        sourceElementIds = (src.pageElements || []).map((e) => e.objectId);
+      }
+    } catch {
+      // proceed without source pairing; reply just won't include elementIdMap
+    }
+  }
+
   const request = { duplicateObject: { objectId: slideObjectId } };
   if (idMap && typeof idMap === 'object') {
     request.duplicateObject.objectIds = idMap;
@@ -549,7 +572,29 @@ export async function duplicateSlide(deckId, slideObjectId, idMap) {
       requestBody: { requests: [request] },
     });
     const reply = res.data.replies?.[0]?.duplicateObject;
-    return { ok: true, newSlideId: reply?.objectId };
+    const newSlideId = reply?.objectId;
+    let elementIdMap = null;
+    if (!idMap && sourceElementIds && newSlideId) {
+      try {
+        const afterRes = await slides.presentations.get({
+          presentationId: deckId,
+          fields: 'slides(objectId,pageElements(objectId))',
+        });
+        const newSlide = (afterRes.data.slides || []).find(
+          (s) => s.objectId === newSlideId,
+        );
+        const newElementIds = (newSlide?.pageElements || []).map((e) => e.objectId);
+        if (newElementIds.length === sourceElementIds.length) {
+          elementIdMap = {};
+          for (let i = 0; i < sourceElementIds.length; i++) {
+            elementIdMap[sourceElementIds[i]] = newElementIds[i];
+          }
+        }
+      } catch {
+        // proceed without elementIdMap
+      }
+    }
+    return { ok: true, newSlideId, ...(elementIdMap ? { elementIdMap } : {}) };
   } catch (err) {
     throw wrapApiError(err);
   }
