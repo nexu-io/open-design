@@ -7062,20 +7062,24 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   min-height: 0;
 }
 .google-slides-viewer .viewer-body {
-  /* Force a 16:9 stage so the slide deck (which is also 16:9)
-     fills the container without the top/bottom letterbox bands
-     Google's embed adds when the iframe area is the wrong shape. */
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
   background: var(--bg-subtle, #f5f5f5);
+  overflow: hidden;
 }
+/* Aspect ratio empirically tuned for Google Slides embed: a 16:9
+   slide + Google's own ~32px bottom navigation chrome wants the
+   iframe slightly taller than 16:9 so the slide actually fills the
+   width with no horizontal letterbox. 17:10 (= 1.70) is the closest
+   round number that nails it without leaving a visible top/bottom
+   gap for typical pane widths. */
 .google-slides-viewer .viewer-body iframe {
   border: 0;
   width: 100%;
   max-width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 17 / 10;
   height: auto;
   background: var(--bg-subtle, #f5f5f5);
   border-radius: 6px;
