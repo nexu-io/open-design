@@ -593,6 +593,28 @@ code {
 }
 .pane:last-child { border-right: none; }
 
+/* Project view responsive: shrink the chat pane on mid-size laptops,
+   then collapse to a vertical stack on phones so the deck preview
+   stays full-width. */
+@media (max-width: 1280px) and (min-width: 981px) {
+  .split {
+    grid-template-columns: minmax(320px, 380px) 1fr;
+  }
+}
+@media (max-width: 980px) {
+  .split {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(min-content, max-content);
+  }
+  .pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .pane:last-child {
+    border-bottom: none;
+  }
+}
+
 /* -------- Chat sticky header --------------------------------------- */
 .chat-header {
   display: flex;
@@ -1574,10 +1596,21 @@ code {
 
 .entry {
   display: grid;
+  /* Wix Japan responsive: sidebar starts at 380px and shrinks via the
+     media queries below as viewport narrows. Below ~980px we stack the
+     panels vertically (see @media block lower in this file). */
   grid-template-columns: 380px 1fr;
   height: 100%;
   min-height: 0;
   background: var(--bg);
+}
+
+/* Mid-size laptops / split-screen windows: shrink the sidebar so the
+   project grid keeps room to breathe instead of clipping a column. */
+@media (max-width: 1280px) and (min-width: 981px) {
+  .entry {
+    grid-template-columns: 320px 1fr;
+  }
 }
 
 .entry-side {
@@ -1623,8 +1656,16 @@ code {
   font-weight: 600;
   font-size: 22px;
   letter-spacing: -0.015em;
-  line-height: 1;
+  line-height: 1.15;
   color: var(--text-strong);
+}
+/* Responsive: pull the title smaller on narrow sidebars so the
+   "Wix Japan Slide Generator" lockup doesn't wrap into three lines.
+   Below 980px the layout stacks and the title gets full width back. */
+@media (max-width: 1280px) and (min-width: 981px) {
+  .entry-brand-title {
+    font-size: 18px;
+  }
 }
 .entry-brand-pill {
   font-size: 10.5px;
@@ -3281,7 +3322,7 @@ code {
 }
 .ds-row-swatch + .ds-row-swatch { border-left: 1px solid rgba(0, 0, 0, 0.05); }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .entry {
     grid-template-columns: 1fr !important;
     height: auto;
@@ -3293,10 +3334,30 @@ code {
     max-width: none;
     border-right: none;
     border-bottom: 1px solid var(--border);
+    /* On phones the form is the secondary surface — keep it short so
+       the design grid is reachable without scrolling past it. */
+    padding: 20px 16px 16px;
   }
   .entry-side-resizer { display: none; }
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
+  /* Tighten the design grid on narrow widths so cards stay legible. */
+  .design-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+}
+
+/* Phones: tightest layout. Side margins shrink and the design grid
+   collapses to a single column so cards don't wrap their thumbnails. */
+@media (max-width: 600px) {
+  .design-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .entry-tab-content {
+    padding: 12px;
+  }
 }
 
 /* ============================================================
