@@ -100,6 +100,30 @@ od:
 
 outline が `[image: ...]` マーカーを含む場合、cwd 内のファイル一覧と照合して画像存在を確認する（次の Step で使う）。
 
+#### 1.0 daemon project レコードを登録（**Round 11 v2、必須**）
+
+cwd は通常 `~/Code/open-design/.od/projects/<projectId>/`。**daemon の sqlite に project レコードがあるかを確認**し、無ければ作る:
+
+```bash
+# 確認: project が daemon DB にあるか
+curl -s "http://localhost:<daemon_port>/api/projects/<projectId>" | jq -r '.project.id // "missing"'
+
+# 無ければ POST して作る
+curl -X POST "http://localhost:<daemon_port>/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "<projectId>",
+    "name": "<読みやすい deck title>",
+    "skillId": "wix-ja-slide",
+    "designSystemId": "wix-japan",
+    "metadata": {}
+  }'
+```
+
+これを skip すると web UI の主页 Designs リストに deck が出ない（Phase 6 まで Round 7-11 で実際に発生していた問題、backfill が必要だった）。
+
+cwd の `<projectId>` は path basename で取れる（例: `wix-ja-e2e12-1777950000`）。「読みやすい title」は outline の最上位 `# 大見出し` を採用、無ければ projectId をそのまま。
+
 ### Step 1.5: Outline gap 分析 & ユーザー Q&A（Gap 2 fix: ハルシネーション根絶）
 
 **deck 生成の前に、ユーザーと 1 ターン対話する**。これが`[要◯◯]`プレースホルダ満載で出来上がる失敗パターンを防ぐ唯一の方法。
@@ -972,6 +996,20 @@ result.json を書く前に **`userActions` 配列を構築**する。以下の�
 > **チェック**: `result.json.artifact.json` を書いた後、open-design Web UI の右ペインで Slides /embed iframe が表示されればパイプライン成功。表示されなければ manifest の `kind` または `renderer` 値を確認（`google-slides-deck` / `google-slides` 完全一致）。
 
 `deck-plan.md` も cwd に書き残し、ユーザーが後で「なぜこの layout / なぜこの語彙」を辿れるようにする。
+
+#### 10.3 daemon project status を completed に更新（**Round 11 v2、必須**）
+
+result.json と artifact sidecar を書いた**後**、daemon の project record の status を `completed` に PATCH。これで主页 Designs リストの「未開始」表示が「完了」に変わる。
+
+```bash
+curl -X PATCH "http://localhost:<daemon_port>/api/projects/<projectId>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": {"value": "succeeded"}}'
+```
+
+> **注意**: daemon の status は内部で run records から計算される派生値。skill 流れは agent run を経由しないので、PATCH しないと永遠に `not_started` のまま。Round 11 v1 では Round 7-11 の 5 件が backfill 必要だった。
+>
+> Status 値: `succeeded` / `failed` / `canceled`。途中失敗時は `failed`、ユーザーが Step 9.5 で諦めて中断したら `canceled`。
 
 ---
 
