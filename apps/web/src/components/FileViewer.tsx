@@ -2260,9 +2260,7 @@ function GoogleSlidesViewer({
     <div className="viewer google-slides-viewer">
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {totalPages ? `${pageIdx + 1} / ${totalPages}` : 'Google Slides'}
-          </span>
+          <span className="viewer-meta">Google Slides</span>
         </div>
         <div className="viewer-toolbar-actions">
           {deckUrl ? (
@@ -2298,7 +2296,7 @@ function GoogleSlidesViewer({
           <iframe
             className="gs-page-pdf"
             title={file.name}
-            src={`/api/projects/${encodeURIComponent(projectId)}/deck-pdf#page=${pageIdx + 1}&toolbar=0&navpanes=0&statusbar=0&view=FitH`}
+            src={`/api/projects/${encodeURIComponent(projectId)}/deck-pdf#page=${pageIdx + 1}&toolbar=0&navpanes=0&statusbar=0&view=Fit&pagemode=none`}
           />
         )}
       </div>
