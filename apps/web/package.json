@@ -35,6 +35,7 @@
     "@open-design/sidecar-proto": "workspace:0.2.0",
     "next": "^16.2.4",
     "openai": "^6.35.0",
+    "pdfjs-dist": "^5.7.284",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

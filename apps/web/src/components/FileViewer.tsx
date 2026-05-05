@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+// pdfjs needs a separate worker bundle; we ship it under /public so
+// it's served same-origin without bundler url-import gymnastics.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -2177,6 +2181,92 @@ function isValidGoogleSlidesEmbed(url: unknown): url is string {
   return typeof url === 'string' && GOOGLE_SLIDES_EMBED_PATTERN.test(url);
 }
 
+// Renders a single PDF page onto a <canvas> using pdfjs. The browser's
+// native PDF viewer wraps every page in a non-removable gray
+// background; pdfjs lets us render straight to a canvas with no
+// chrome, which is what we want for the slide gallery.
+function PdfCanvasPage({
+  pdfUrl,
+  pageNumber,
+  className,
+}: {
+  pdfUrl: string;
+  pageNumber: number;
+  className?: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const docRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+
+  // Load the PDF document once per URL.
+  useEffect(() => {
+    let cancelled = false;
+    const task = pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true });
+    task.promise.then(
+      (doc) => {
+        if (cancelled) {
+          doc.destroy();
+          return;
+        }
+        docRef.current = doc;
+        // Trigger render of current page once doc loads.
+        renderPage();
+      },
+      () => {
+        /* swallow — empty canvas stays */
+      },
+    );
+    return () => {
+      cancelled = true;
+      task.destroy();
+      docRef.current?.destroy();
+      docRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfUrl]);
+
+  // Render the currently-active page whenever it changes or the
+  // canvas resizes (resize observer below).
+  const renderPage = useCallback(async () => {
+    const doc = docRef.current;
+    const canvas = canvasRef.current;
+    if (!doc || !canvas) return;
+    const safePage = Math.min(Math.max(1, pageNumber), doc.numPages);
+    const page = await doc.getPage(safePage);
+    // Render at the canvas's actual pixel size × devicePixelRatio so
+    // the result is sharp on retina without scaling artifacts.
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth || 1280;
+    const viewport1 = page.getViewport({ scale: 1 });
+    const scale = (cssWidth * dpr) / viewport1.width;
+    const viewport = page.getViewport({ scale });
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    canvas.style.height = `${viewport.height / dpr}px`;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+  }, [pageNumber]);
+
+  useEffect(() => {
+    void renderPage();
+  }, [renderPage]);
+
+  // Re-render on container resize so the canvas stays sharp at any
+  // viewport width.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      void renderPage();
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [renderPage]);
+
+  return <canvas ref={canvasRef} className={className} />;
+}
+
 function GoogleSlidesViewer({
   projectId,
   file,
@@ -2288,15 +2378,14 @@ function GoogleSlidesViewer({
             {thumbErr ? `Thumbnails unavailable: ${thumbErr}` : t('fileViewer.loading')}
           </div>
         ) : (
-          // Use a fresh PDF export of the deck as the render source.
-          // PDF is vector — text and shapes stay sharp at any zoom on
-          // any display, which PNG thumbnails couldn't manage even at
-          // 8K. Hash params hide the browser PDF chrome and jump to
-          // the active page.
-          <iframe
+          // Render the deck PDF directly onto a canvas via pdfjs so
+          // there's no browser PDF viewer chrome (no gray padding
+          // around the page, no toolbar, no scroll bands). Vector
+          // source stays crisp at any zoom.
+          <PdfCanvasPage
+            pdfUrl={`/api/projects/${encodeURIComponent(projectId)}/deck-pdf`}
+            pageNumber={pageIdx + 1}
             className="gs-page-pdf"
-            title={file.name}
-            src={`/api/projects/${encodeURIComponent(projectId)}/deck-pdf#page=${pageIdx + 1}&toolbar=0&navpanes=0&statusbar=0&view=Fit&pagemode=none`}
           />
         )}
       </div>

@@ -7089,14 +7089,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
     0 12px 32px rgba(0, 0, 0, 0.10);
+  /* Canvas-rendered PDF: pdfjs sets canvas.width/height in device
+     pixels, but we let CSS drive the visual size so the canvas
+     fills the stage exactly. */
+  object-fit: contain;
 }
 .google-slides-viewer .viewer-body .gs-page {
-  object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
-}
-.google-slides-viewer .viewer-body .gs-page-pdf {
-  border: 0;
 }
 /* Bottom toolbar dedicated to slide navigation. Centered prev /
    page-counter / next layout reads as a clear "you are here in the
