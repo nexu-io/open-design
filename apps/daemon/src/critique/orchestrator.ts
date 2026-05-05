@@ -141,15 +141,22 @@ export async function runOrchestrator(
   // Helper: SIGTERM the child on non-clean termination paths.
   const killChild = () => { child?.kill('SIGTERM'); };
 
-  // Build a rejection promise for early child exit with non-zero code.
-  // Resolves (not rejects) for exit code 0 so the parser loop continues.
-  // Rejects with ChildExitError for non-zero exit so the race can classify it.
+  // Build a rejection promise for early child exit with non-zero code or
+  // signal-terminated exit. Resolves (not rejects) only for a clean code 0
+  // exit with no signal so the parser loop can finish naturally. A non-null
+  // signal means the child was killed (by us, by the user via /cancel, by
+  // the OS, etc.) and is treated as terminal so the orchestrator can persist
+  // 'interrupted' instead of falling through to the no-SHIP fallback path
+  // and reporting below_threshold for a user-cancelled run.
   const childExitRace: Promise<never> | null = childExitPromise
-    ? childExitPromise.then(({ code }) => {
+    ? childExitPromise.then(({ code, signal: exitSignal }) => {
+        if (exitSignal !== null) {
+          return Promise.reject(new ChildSignaledError(exitSignal));
+        }
         if (code !== 0 && code !== null) {
           return Promise.reject(new ChildExitError(code));
         }
-        // Zero exit or signal-terminated: let the parser finish naturally.
+        // Clean exit with no signal: let the parser finish naturally.
         return new Promise<never>(() => { /* intentionally pending */ });
       })
     : null;
@@ -289,7 +296,12 @@ export async function runOrchestrator(
         finalStatus = ship.status;
         finalComposite = ship.composite;
       }
-      artifactPath = `${artifactDir}/${ship.artifactRef.artifactId || 'artifact'}`;
+      // artifactPath stays null until a future phase actually extracts the
+      // <SHIP><ARTIFACT> body and writes it to disk. Persisting a synthesized
+      // path that no file occupies would let UI/replay/export code dereference
+      // a missing file. The transcript still carries the ship event with the
+      // artifact reference so consumers can find the run.
+      artifactPath = null;
     } else {
       // No SHIP arrived - apply fallback policy.
       killChild();
@@ -390,6 +402,41 @@ export async function runOrchestrator(
       };
       collectedEvents.push(failedEvent);
       bus.emit(panelEventToSse(failedEvent));
+    } else if (err instanceof ChildSignaledError) {
+      // Signal-terminated child (e.g. SIGTERM from /api/runs/:id/cancel)
+      // is classified as 'interrupted' so the persisted critique row
+      // reflects the actual cause (user/operator interruption) rather
+      // than getting flushed through the no-SHIP fallback as
+      // 'below_threshold'. If at least one round closed cleanly, ship
+      // the best-so-far via selectFallbackRound, mirroring the abort path.
+      finalStatus = 'interrupted';
+      const fallback = completedRounds.length > 0
+        ? selectFallbackRound(completedRounds, cfg.fallbackPolicy)
+        : null;
+      if (fallback !== null) {
+        finalComposite = fallback.composite;
+        const syntheticShip: Extract<PanelEvent, { type: 'ship' }> = {
+          type: 'ship',
+          runId,
+          round: fallback.n,
+          composite: fallback.composite,
+          status: 'interrupted',
+          artifactRef: { projectId, artifactId: params.artifactId },
+          summary: `Child terminated by signal ${err.signal} after round ${fallback.n}, best composite ${fallback.composite.toFixed(2)}`,
+        };
+        collectedEvents.push(syntheticShip);
+        bus.emit(panelEventToSse(syntheticShip));
+      }
+      const interruptedEvent: Extract<PanelEvent, { type: 'interrupted' }> = {
+        type: 'interrupted',
+        runId,
+        bestRound: completedRounds.length > 0
+          ? (completedRounds[completedRounds.length - 1]?.n ?? 0)
+          : 0,
+        composite: finalComposite ?? 0,
+      };
+      collectedEvents.push(interruptedEvent);
+      bus.emit(panelEventToSse(interruptedEvent));
     } else if (
       err instanceof MalformedBlockError ||
       err instanceof OversizeBlockError ||
@@ -483,6 +530,21 @@ class ChildExitError extends Error {
   constructor(public readonly code: number) {
     super(`child exited with code ${code}`);
     this.name = 'ChildExitError';
+  }
+}
+
+/**
+ * Thrown when the child process is signal-terminated (SIGTERM, SIGINT, etc.)
+ * before the parser finishes. From the orchestrator's perspective this is
+ * always treated as 'interrupted': the daemon kills the child via
+ * /api/runs/:id/cancel, the user kills it manually, or the OS terminates it.
+ * Either way the run was cut short externally and shouldn't fall through to
+ * the no-SHIP fallback path that would persist below_threshold.
+ */
+class ChildSignaledError extends Error {
+  constructor(public readonly signal: string) {
+    super(`child terminated by signal ${signal}`);
+    this.name = 'ChildSignaledError';
   }
 }
 
