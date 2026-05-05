@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -1204,13 +1204,14 @@ function BoardComposerPopover({
 }) {
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
   const podMembers = target.podMembers ?? [];
+  const titleId = useId();
   return (
     <div
       className="comment-popover"
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"
-      aria-labelledby={`board-composer-title-${target.elementId}`}
+      aria-labelledby={titleId}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -1220,7 +1221,7 @@ function BoardComposerPopover({
     >
       <div className="comment-popover-head">
         <div>
-          <strong id={`board-composer-title-${target.elementId}`}>{target.elementId}</strong>
+          <strong id={titleId}>{target.elementId}</strong>
           <span>{target.label}</span>
           <span>{selectionKindLabel(target.selectionKind, target.memberCount)}</span>
         </div>
@@ -2187,6 +2188,12 @@ function HtmlViewer({
     win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
   }, [boardMode, boardTool, srcDoc]);
 
+  function syncCommentMode() {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
+  }
+
   useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
@@ -2991,6 +2998,7 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     src={previewSrcUrl}
+                    onLoad={syncCommentMode}
                   />
                 ) : (
                   <iframe
@@ -3000,6 +3008,7 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     srcDoc={srcDoc}
+                    onLoad={syncCommentMode}
                   />
                 )}
               </div>
