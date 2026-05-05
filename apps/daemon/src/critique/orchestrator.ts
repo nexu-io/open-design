@@ -183,8 +183,14 @@ export async function runOrchestrator(
     };
 
     for await (const event of parseCritiqueStream(timedSource, parserOpts)) {
-      collectedEvents.push(event);
-      bus.emit(panelEventToSse(event));
+      // Ship events are buffered, not emitted raw. The normalized ship event
+      // (with daemon-authoritative status/composite from decideRound(...))
+      // is emitted after the loop so SSE clients and the transcript only
+      // ever see daemon-scored ship payloads, not the agent's raw claim.
+      if (event.type !== 'ship') {
+        collectedEvents.push(event);
+        bus.emit(panelEventToSse(event));
+      }
 
       switch (event.type) {
         case 'run_started': {
@@ -269,33 +275,67 @@ export async function runOrchestrator(
     }
 
     // 3. Determine final status and composite.
-    if (shipEvent !== null) {
-      // Daemon-authoritative scoring: when SHIP references a round we've
-      // closed, derive status from decideRound(...) using the daemon's
-      // computed composite/mustFix rather than trusting the agent's
-      // <SHIP composite=... status=...> attributes. A composite divergence
-      // larger than COMPOSITE_TOLERANCE emits composite_mismatch.
-      const ship = shipEvent;
-      const shippedRound = completedRounds.find((r) => r.n === ship.round);
-      if (shippedRound !== undefined) {
-        if (Math.abs(ship.composite - shippedRound.composite) > COMPOSITE_TOLERANCE) {
-          const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
-            type: 'parser_warning',
-            runId,
-            kind: 'composite_mismatch',
-            position: 0,
-          };
-          collectedEvents.push(warning);
-          bus.emit(panelEventToSse(warning));
-        }
-        const decision = decideRound(shippedRound.composite, shippedRound.mustFix, cfg);
-        finalStatus = decision === 'ship' ? 'shipped' : 'below_threshold';
-        finalComposite = shippedRound.composite;
-      } else {
-        // SHIP referenced an unknown round: fall back to the agent value.
-        finalStatus = ship.status;
-        finalComposite = ship.composite;
+    //
+    // The agent's raw <SHIP> was buffered (not emitted) by the parser loop
+    // above. We resolve it here against the daemon scoreboard, then emit a
+    // single normalized ship event so the transcript and SSE bus reflect the
+    // daemon-authoritative status/composite, not the agent's claim.
+    let resolvedShip = shipEvent;
+    if (resolvedShip !== null) {
+      const shippedRound = completedRounds.find((r) => r.n === resolvedShip!.round);
+      if (shippedRound === undefined) {
+        // The agent claimed a SHIP for a round that was never closed by the
+        // daemon. Trusting it would re-open the scoring-integrity hole this
+        // patch is meant to close, so we drop the agent ship, emit a
+        // parser_warning, and fall through to the no-SHIP fallback policy.
+        const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
+          type: 'parser_warning',
+          runId,
+          kind: 'duplicate_ship',
+          position: 0,
+        };
+        collectedEvents.push(warning);
+        bus.emit(panelEventToSse(warning));
+        resolvedShip = null;
       }
+    }
+
+    if (resolvedShip !== null) {
+      // Daemon-authoritative scoring: derive status from decideRound(...)
+      // using the daemon's computed composite/mustFix rather than the
+      // agent's <SHIP composite=... status=...> attributes. A composite
+      // divergence larger than COMPOSITE_TOLERANCE emits composite_mismatch.
+      const ship = resolvedShip;
+      const shippedRound = completedRounds.find((r) => r.n === ship.round)!;
+      if (Math.abs(ship.composite - shippedRound.composite) > COMPOSITE_TOLERANCE) {
+        const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
+          type: 'parser_warning',
+          runId,
+          kind: 'composite_mismatch',
+          position: 0,
+        };
+        collectedEvents.push(warning);
+        bus.emit(panelEventToSse(warning));
+      }
+      const decision = decideRound(shippedRound.composite, shippedRound.mustFix, cfg);
+      finalStatus = decision === 'ship' ? 'shipped' : 'below_threshold';
+      finalComposite = shippedRound.composite;
+
+      // Emit the daemon-authoritative ship event. SSE clients and the
+      // transcript see this single normalized payload, never the raw agent
+      // claim from the buffered shipEvent.
+      const normalizedShip: Extract<PanelEvent, { type: 'ship' }> = {
+        type: 'ship',
+        runId,
+        round: shippedRound.n,
+        composite: shippedRound.composite,
+        status: finalStatus,
+        artifactRef: { projectId, artifactId: params.artifactId },
+        summary: ship.summary,
+      };
+      collectedEvents.push(normalizedShip);
+      bus.emit(panelEventToSse(normalizedShip));
+
       // artifactPath stays null until a future phase actually extracts the
       // <SHIP><ARTIFACT> body and writes it to disk. Persisting a synthesized
       // path that no file occupies would let UI/replay/export code dereference
@@ -303,7 +343,8 @@ export async function runOrchestrator(
       // artifact reference so consumers can find the run.
       artifactPath = null;
     } else {
-      // No SHIP arrived - apply fallback policy.
+      // No SHIP arrived (or the agent SHIP was rejected as malformed above).
+      // Apply fallback policy over the daemon's closed rounds.
       killChild();
       const fallback = selectFallbackRound(completedRounds, cfg.fallbackPolicy);
       if (fallback !== null) {
