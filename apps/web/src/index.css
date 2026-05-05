@@ -1641,10 +1641,8 @@ code {
     grid-template-columns: 320px 1fr;
   }
   /* Smaller card floor for narrow mains so 3 cols still fit. */
-  .design-grid .design-card {
-    flex-basis: 200px;
-  }
   .design-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 12px;
   }
 }
@@ -2787,42 +2785,34 @@ code {
   line-height: 0;
 }
 
-/* Designs grid — flex layout so the last row stretches to fill the
-   available width rather than leaving a column empty on the right
-   when the project count is not a multiple of the column count.
-   Cards have a sensible base width (220-280px) and grow to consume
-   remaining space, with a max-width to keep cards from becoming
-   uncomfortably wide on ultra-wide displays.
-   The card size adapts to viewport: on wider screens cards get a
-   bigger floor so fewer cols appear and each card has more room
-   for its thumbnail. */
+/* Designs grid — CSS Grid auto-fit with a viewport-aware track floor.
+   Grid handles the wrap math natively (a column track only exists
+   if it actually fits), so cards never overflow the container
+   regardless of how the user sizes the window. The minmax floor
+   grows on wider viewports so cards keep readable thumbnails on
+   ultra-wide displays.
+   `auto-fit` collapses any empty trailing track when the project
+   count doesn't fully fill the last row; the remaining cards stretch
+   over those collapsed tracks, eliminating the "right side is empty"
+   look when there's only one or two items in the final row.
+   `width: 100%` + `max-width: 100%` + `min-width: 0` ensure the grid
+   never tries to expand past .entry-tab-content. */
 .design-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
-}
-/* Cards grow to fill the row, but a viewport-aware max-width keeps
-   them from ballooning past readable size when the last row has
-   only one or two items. Without a cap, two cards in the last row
-   on a 1920 monitor each stretched to 800px and overshot the
-   thumbnail; with this cap they stay around 360-440 and the row
-   leaves a moderate but harmless gap on the right. */
-.design-grid .design-card {
-  flex-grow: 1;
-  flex-shrink: 1;
-  flex-basis: 220px;
-  max-width: 360px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 @media (min-width: 1600px) {
-  .design-grid .design-card {
-    flex-basis: 260px;
-    max-width: 400px;
+  .design-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
 }
 @media (min-width: 2000px) {
-  .design-grid .design-card {
-    flex-basis: 300px;
-    max-width: 440px;
+  .design-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   }
 }
 .design-card {
@@ -3423,20 +3413,16 @@ code {
   .entry-side-resizer { display: none; }
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
-  .design-grid .design-card {
-    flex-basis: 160px;
-  }
   .design-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 10px;
   }
 }
 
 /* Phones: tightest layout. */
 @media (max-width: 600px) {
-  .design-grid .design-card {
-    flex-basis: 100%;
-  }
   .design-grid {
+    grid-template-columns: 1fr;
     gap: 12px;
   }
   .entry-tab-content {
