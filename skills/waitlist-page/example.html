@@ -207,7 +207,7 @@
     .ticker-wrap {
       width: 100%;
       overflow: hidden;
-      background: #1A1108;
+      background: rgba(0, 0, 0, 0.9);
       padding: 10px 0;
       flex-shrink: 0;
     }
@@ -223,7 +223,7 @@
       font-weight: 600;
       letter-spacing: 0.15em;
       text-transform: uppercase;
-      color: #F5EDE0;
+      color: rgba(255, 255, 255, 0.9);
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -237,6 +237,12 @@
     @keyframes ticker-scroll {
       from { transform: translateX(0); }
       to   { transform: translateX(-50%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ticker-track {
+        animation: none;
+      }
     }
     @media (max-width: 600px) {
       .logo {
@@ -285,8 +291,8 @@
     <h1 class="headline">Meridian is<br>almost here</h1>
     <p class="subtext">The workspace that connects your ideas before you've finished thinking them.</p>
 
-    <form class="form-row" id="waitlist-form" novalidate>
-      <input type="text" name="firstname" placeholder="First name" autocomplete="given-name" required>
+    <form class="form-row" id="waitlist-form">
+      <input type="text" name="firstname" placeholder="First name" autocomplete="given-name">
       <input type="email" name="email" placeholder="Work email" autocomplete="email" required>
       <button type="submit">Join the Waitlist</button>
     </form>
@@ -375,6 +381,10 @@
   <script>
     document.getElementById('waitlist-form').addEventListener('submit', function(e) {
       e.preventDefault();
+      if (!this.checkValidity()) {
+        this.reportValidity();
+        return;
+      }
       this.style.display = 'none';
       document.getElementById('success-msg').classList.add('visible');
     });

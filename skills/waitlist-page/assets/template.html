@@ -16,6 +16,11 @@
       --deco-stripe: #{{STRIPE_HEX}};
       --input-border: #{{BORDER_HEX}};
       --success: #{{SUCCESS_HEX}};
+      /* Button label: white on a dark --fg background; swap if brand uses light-on-light */
+      --btn-label: #fff;
+      /* Ticker ribbon: dark band + light text derived as alpha variants */
+      --ticker-bg: rgba(0, 0, 0, 0.88);
+      --ticker-fg: rgba(255, 255, 255, 0.9);
       --font-body: '{{BODY_FONT}}', sans-serif;
       --font-display: '{{DISPLAY_FONT}}', serif;
     }
@@ -156,7 +161,7 @@
       font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
-      color: #fff;
+      color: var(--btn-label);
       background: var(--fg);
       border: none;
       border-radius: 2px;
@@ -227,7 +232,7 @@
     .ticker-wrap {
       width: 100%;
       overflow: hidden;
-      background: #1A1A1A;
+      background: var(--ticker-bg);
       padding: 10px 0;
       flex-shrink: 0;
     }
@@ -245,7 +250,7 @@
       font-weight: 600;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #E5E5E5;
+      color: var(--ticker-fg);
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -261,6 +266,12 @@
     @keyframes ticker-scroll {
       from { transform: translateX(0); }
       to   { transform: translateX(-50%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ticker-track {
+        animation: none;
+      }
     }
 
     /* Responsive */
@@ -321,8 +332,8 @@
     <h1 class="headline" data-od-id="headline">{{PRODUCT_NAME}}<br>is launching</h1>
     <p class="subtext" data-od-id="tagline">{{TAGLINE}}</p>
 
-    <form class="form-row" id="waitlist-form" novalidate data-od-id="form">
-      <input type="text" name="firstname" placeholder="First name" required>
+    <form class="form-row" id="waitlist-form" data-od-id="form">
+      <input type="text" name="firstname" placeholder="First name">
       <input type="email" name="email" placeholder="Work email" required>
       <button type="submit">Join Waitlist</button>
     </form>
@@ -418,6 +429,10 @@
   <script>
     document.getElementById('waitlist-form').addEventListener('submit', function(e) {
       e.preventDefault();
+      if (!this.checkValidity()) {
+        this.reportValidity();
+        return;
+      }
       this.style.display = 'none';
       document.getElementById('success-msg').classList.add('visible');
     });
