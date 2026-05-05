@@ -15,7 +15,7 @@
 - [ ] Form does **not** use `novalidate`; JS guard calls `checkValidity()` before showing success state
 - [ ] Success message uses `role="status"` or `aria-live="polite"` so screen readers announce it
 - [ ] All color values derived from DESIGN.md; only allowed hardcoded exception is `#2D6A4F` for `--success`
-- [ ] All user-supplied text tokens are HTML-escaped; hex tokens match `/^[0-9A-Fa-f]{6}$/`; font name tokens are URL-encoded in the Google Fonts URL; `{{LOGO_MARK}}` is replaced with SVG or text initials
+- [ ] All user-supplied text tokens are HTML-escaped; hex tokens match `/^[0-9A-Fa-f]{6}$/`; font name tokens are URL-encoded in the Google Fonts URL; `{{LOGO_MARK}}` is escaped text initials or strictly sanitized inline SVG (no scripts/events)
 
 ## P1 — Should pass for quality submission
 

@@ -118,7 +118,7 @@ Pre-launch pages are your first handshake with future users. This skill builds a
 
 2. **Map tokens from inputs** — For each placeholder in the template (e.g., `{{PRODUCT_NAME}}`, `{{BG_HEX}}`, `{{BORDER_EXPRESSION}}`, `{{LOGO_MARK}}`), follow the replacement rules below:
    - **Text tokens** (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before insertion into HTML text nodes or attribute values.
-   - **HTML tokens** (`{{LOGO_MARK}}`): Insert raw SVG or text initials representing the brand mark. Do not HTML-escape. Ensure any SVG scales cleanly within its container.
+   - **HTML tokens** (`{{LOGO_MARK}}`): If using text initials, HTML-escape them by default. If using inline SVG, you must strictly sanitize it using an allowlist: strip `<script>` tags, event handlers (`on*`), `<foreignObject>`, external refs (`href`, `xlink:href`, `url()`), and any disallowed attributes/elements before insertion. If the SVG cannot be safely sanitized, fallback to escaped text initials. Never emit raw, unsanitized arbitrary HTML. Ensure any SVG scales cleanly within its container.
    - **Hex color tokens** (`{{BG_HEX}}`, `{{FG_HEX}}`, `{{ACCENT_HEX}}`, `{{DECO_HEX}}`, `{{STRIPE_HEX}}`, `{{SUCCESS_HEX}}`): Validate each matches `/^[0-9A-Fa-f]{6}$/`. Read them from DESIGN.md or ask the user. Derive `--success` from DESIGN.md if present; otherwise use the allowed fallback `#2D6A4F` only.
    - **CSS expression tokens** (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`, `{{LOGO_SHADOW_EXPRESSION}}`): Validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or add extra quotes. Examples: `rgba(196, 169, 154, 0.38)`, `color-mix(in srgb, var(--fg) 38%, transparent)`. Insert as-is into `:root` CSS variables.
    - **Font name tokens** (`{{DISPLAY_FONT_CSS}}`, `{{BODY_FONT_CSS}}`): These are CSS font-family values, already quoted if they contain spaces (e.g., `'DM Sans'`, `Syne`). Insert as-is into `--font-display` and `--font-body` declarations; do NOT add extra quotes.
@@ -186,7 +186,7 @@ This skill enforces a hardened, template-based workflow to ensure compliance. **
 - Mobile fit: No horizontal scroll at 375px. Email input and submit button are fully visible (no clipping) at 375×667 and 390×844. Vertical overflow is scrollable, not hidden.
 - Typographic discipline: Display + body fonts only (2-font rule). Consistent sizing across sections.
 - Form structure: Two fields (first name optional, email required), `checkValidity()` guard, success message with `role="status"`.
-- Token escaping: All user-supplied text HTML-escaped; hex tokens match `/^[0-9A-Fa-f]{6}$/`; CSS expressions are valid; font names are URL-encoded; `{{LOGO_MARK}}` is replaced with SVG or text.
+- Token escaping: All user-supplied text HTML-escaped; hex tokens match `/^[0-9A-Fa-f]{6}$/`; CSS expressions are valid; font names are URL-encoded; `{{LOGO_MARK}}` is escaped text initials or strictly sanitized inline SVG (no scripts, no event handlers, no foreignObject, no external hrefs).
 
 **P1 gates (should pass for quality submission):**
 - Hero section visually distinct and above-the-fold.
