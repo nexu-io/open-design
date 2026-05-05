@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,5 +27,24 @@ describe('@open-design/contracts package runtime shape', () => {
     expect(pkg.exports?.['.']?.types).toBe('./dist/index.d.ts');
     expect(pkg.exports?.['./critique']?.default).toBe('./dist/critique.mjs');
     expect(pkg.exports?.['./critique']?.types).toBe('./dist/critique.d.ts');
+  });
+
+  it('points every runtime export at generated files', async () => {
+    await expect(access(join(packageRoot, 'dist/index.mjs'))).resolves.toBeUndefined();
+    await expect(access(join(packageRoot, 'dist/index.d.ts'))).resolves.toBeUndefined();
+    await expect(access(join(packageRoot, 'dist/critique.mjs'))).resolves.toBeUndefined();
+    await expect(access(join(packageRoot, 'dist/critique.d.ts'))).resolves.toBeUndefined();
+  });
+
+  it('makes runtime exports importable through package exports', async () => {
+    const contracts = await import('@open-design/contracts');
+    const critique = await import('@open-design/contracts/critique');
+
+    expect(contracts.composeSystemPrompt).toEqual(expect.any(Function));
+    expect(contracts.exampleHealthResponse).toEqual({ ok: true, service: 'daemon' });
+    expect(critique.defaultCritiqueConfig()).toMatchObject({
+      enabled: false,
+      protocolVersion: critique.CRITIQUE_PROTOCOL_VERSION,
+    });
   });
 });
