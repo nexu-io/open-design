@@ -1093,6 +1093,28 @@ test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is se
   assert.equal(env.PATH, '/usr/bin');
 });
 
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is empty', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_BASE_URL: '',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is whitespace', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_BASE_URL: '   ',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
 test('spawnEnvForAgent does not mutate the input env', () => {
   const original = { ANTHROPIC_API_KEY: 'sk-leak', PATH: '/usr/bin' };
   const env = spawnEnvForAgent('claude', original);

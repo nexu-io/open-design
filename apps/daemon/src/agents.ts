@@ -1173,7 +1173,10 @@ export function spawnEnvForAgent(agentId, baseEnv) {
   const env = { ...baseEnv };
   if (agentId !== 'claude') return env;
   const hasCustomBaseUrl = Object.keys(env).some(
-    (k) => k.toUpperCase() === 'ANTHROPIC_BASE_URL',
+    (k) =>
+      k.toUpperCase() === 'ANTHROPIC_BASE_URL' &&
+      typeof env[k] === 'string' &&
+      env[k].trim() !== '',
   );
   if (hasCustomBaseUrl) return env;
   for (const key of Object.keys(env)) {
