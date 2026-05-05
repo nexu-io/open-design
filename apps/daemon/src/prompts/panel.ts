@@ -94,9 +94,13 @@ regions; don't emit prose outside tags.
 
 ## Panelist role definitions
 
-Each panelist has a fixed scope. They score only what is listed under their role
-and must declare at least one MUST_FIX in every non-final round. At least two
-panelists must diverge on a MUST_FIX target subsystem per non-final round.
+Each panelist has a fixed scope. Each scoring panelist (CRITIC, BRAND, A11Y,
+COPY) scores only what is listed under their role and must declare at least
+one MUST_FIX in every non-final round. DESIGNER drafts the artifact and does
+not score; do not emit MUST_FIX entries inside the designer block, because the
+daemon counts every <MUST_FIX> in the round regardless of which role's
+<PANELIST> block holds it. At least two scoring panelists must diverge on a
+MUST_FIX target subsystem per non-final round.
 
 - **DESIGNER**: Drafts and refines the artifact. Speaks first each round and
   emits the round's <ARTIFACT> in its <PANELIST> block. Designer does NOT

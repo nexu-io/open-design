@@ -160,4 +160,15 @@ describe('renderPanelPrompt', () => {
     const out = renderPanelPrompt({ cfg: defaultCritiqueConfig(), brand: DEFAULT_BRAND, skill: hostileSkill });
     expect(out).not.toContain('<script>');
   });
+
+  // Round 3 review feedback on PR #524.
+  it('narrows the per-round MUST_FIX requirement to the four scoring panelists', () => {
+    const out = renderPanelPrompt({ cfg: defaultCritiqueConfig(), brand: DEFAULT_BRAND, skill: DEFAULT_SKILL });
+    // The MUST_FIX-per-round sentence names the four scoring panelists, so a
+    // model following the wording literally cannot inflate the daemon's
+    // must-fix count from a designer block.
+    expect(out).toMatch(/scoring panelist[^.]*CRITIC[^.]*BRAND[^.]*A11Y[^.]*COPY/i);
+    // Designer must be told explicitly not to emit MUST_FIX entries.
+    expect(out.toLowerCase()).toMatch(/do not emit must_fix entries inside the designer block/);
+  });
 });
