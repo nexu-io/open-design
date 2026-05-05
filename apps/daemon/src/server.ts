@@ -668,9 +668,23 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
 );
 export function resolveDataDir(raw, projectRoot) {
   if (!raw) return path.join(projectRoot, '.od');
-  const expanded = raw.startsWith('~/')
-    ? path.join(os.homedir(), raw.slice(2))
-    : raw;
+  // Some launchers (systemd unit files, NixOS modules, certain Docker
+  // entrypoints) pass OD_DATA_DIR with literal $HOME or ${HOME} because
+  // the variable is never expanded by a shell. Without explicit handling
+  // here those resolve against PROJECT_ROOT and produce nonsense paths
+  // like /opt/open-design/$HOME/.open-design. Expand the unambiguous
+  // shorthands (~/, $HOME, ${HOME}) before resolving so the env var
+  // works the way operators expect across all launch surfaces. We rebuild
+  // via path.join so the platform separator is correct on Windows even
+  // when the input used forward slashes.
+  const home = os.homedir();
+  let expanded = raw;
+  if (expanded === '~' || expanded === '$HOME' || expanded === '${HOME}') {
+    expanded = home;
+  } else {
+    const homePrefix = /^(~|\$\{HOME\}|\$HOME)\/(.*)$/.exec(expanded);
+    if (homePrefix) expanded = path.join(home, homePrefix[2]);
+  }
   const resolved = path.isAbsolute(expanded)
     ? expanded
     : path.resolve(projectRoot, expanded);
