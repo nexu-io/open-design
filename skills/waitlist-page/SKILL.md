@@ -28,6 +28,22 @@ od:
     - name: tagline
       type: string
       required: true
+    - name: display_font_url
+      type: string
+      description: "Display font name with spaces encoded as '+' (e.g., 'Syne', 'DM+Sans'). Used in Google Fonts URL."
+      required: true
+    - name: display_font_css
+      type: string
+      description: "Display font name as it appears in CSS (e.g., 'Syne', 'DM Sans'). Used in CSS font-family."
+      required: true
+    - name: body_font_url
+      type: string
+      description: "Body font name with spaces encoded as '+' (e.g., 'DM+Sans', 'IBM+Plex+Serif'). Used in Google Fonts URL."
+      required: true
+    - name: body_font_css
+      type: string
+      description: "Body font name as it appears in CSS (e.g., 'DM Sans', 'IBM Plex Serif'). Used in CSS font-family."
+      required: true
   outputs:
     primary: index.html
   capabilities_required:
@@ -68,7 +84,10 @@ Pre-launch pages are your first handshake with future users. This skill builds a
    - **Token escaping rules** — apply before inserting any user-supplied value:
      - Text tokens (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before inserting into HTML text nodes or attribute values.
      - CSS variable tokens (`BG_HEX`, `FG_HEX`, etc.): validate each matches `/^[0-9A-Fa-f]{6}$/`; reject and ask the user if they don't match.
-     - Font name tokens (`DISPLAY_FONT`, `BODY_FONT`): URL-encode spaces as `+` in the Google Fonts URL; CSS-quote names containing spaces (`'DM Sans'`).
+     - Font name tokens: two variants per font family for correct encoding:
+       - `{{BODY_FONT_URL}}` / `{{DISPLAY_FONT_URL}}`: used in the Google Fonts `href`—spaces must be encoded as `+` (e.g., `DM+Sans`, `IBM+Plex+Serif`). Provide the URL-safe form only.
+       - `{{BODY_FONT_CSS}}` / `{{DISPLAY_FONT_CSS}}`: used in CSS `font-family` declarations—spaces remain literal and names with spaces are quoted (e.g., `'DM Sans'`, `'IBM Plex Serif'`). Provide the CSS-safe form only.
+       - Do not use a single token for both; they require different encoding. Always require both variants from the user.
      - Never reflect raw user input into `<script>` blocks or event-handler attributes.
 
 ## Quality gates

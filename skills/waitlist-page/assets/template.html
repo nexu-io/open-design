@@ -6,7 +6,7 @@
   <title>{{PRODUCT_NAME}} — Coming Soon</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family={{DISPLAY_FONT}}:wght@700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family={{DISPLAY_FONT_URL}}:wght@700;800&family={{BODY_FONT_URL}}:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #{{BG_HEX}};
@@ -20,8 +20,8 @@
       --ticker-bg: #{{TICKER_BG_HEX}};
       --ticker-fg: #{{TICKER_FG_HEX}};
       --deco-stroke: #{{DECO_STROKE_HEX}};
-      --font-body: '{{BODY_FONT}}', sans-serif;
-      --font-display: '{{DISPLAY_FONT}}', serif;
+      --font-body: '{{BODY_FONT_CSS}}', sans-serif;
+      --font-display: '{{DISPLAY_FONT_CSS}}', serif;
     }
 
     *, *::before, *::after {
@@ -41,8 +41,9 @@
       color: var(--fg);
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
+      min-height: 100svh;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     /* Logo — reusable component */
