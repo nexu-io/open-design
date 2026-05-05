@@ -3,6 +3,39 @@ import { useT } from '../i18n';
 import type { DesignSystemSummary, Project, ProjectDisplayStatus, SkillSummary } from '../types';
 import { Icon } from './Icon';
 
+// Wix Japan rebrand: each design card asks the daemon for the deck's
+// first-page thumbnail URL on mount. The endpoint is silent (404) for
+// projects without a deckId — we fall back to the folder icon. URL is
+// served from a 25-minute daemon-side cache so re-renders don't hammer
+// Google Slides.
+function DesignCardThumb({ projectId }: { projectId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/thumbnail`);
+        if (!r.ok) return;
+        const j = (await r.json()) as { url?: string };
+        if (!cancelled && j.url) setUrl(j.url);
+      } catch {
+        /* fall back to folder icon */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+  if (url) {
+    return (
+      <div className="design-card-thumb design-card-thumb--image" aria-hidden>
+        <img src={url} alt="" className="design-card-thumb-img" draggable={false} />
+      </div>
+    );
+  }
+  return <div className="design-card-thumb" aria-hidden />;
+}
+
 type SubTab = 'recent' | 'yours';
 
 const DESIGNS_VIEW_STORAGE_KEY = 'od:designs:view';
@@ -174,7 +207,7 @@ export function DesignsTab({ projects, skills, designSystems, onOpen, onDelete }
                 >
                   <Icon name="close" size={12} />
                 </button>
-                <div className="design-card-thumb" aria-hidden />
+                <DesignCardThumb projectId={p.id} />
                 <div className="design-card-meta-block">
                   <div className="design-card-name" title={p.name}>{p.name}</div>
                   <div className="design-card-meta">

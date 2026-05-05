@@ -22,12 +22,14 @@
   --text-soft: #989590;
   --text-faint: #b3b0a8;
 
-  /* Accent — Claude rust/burnt-sienna. */
-  --accent: #c96442;
-  --accent-strong: #b45a3b;
-  --accent-soft: #f5d8cb;
-  --accent-tint: #fbeee5;
-  --accent-hover: #b45a3b;
+  /* Accent — Wix Japan Black. Mono palette derived from the
+     Wix Japan design system (DESIGN.md): black is primary, soft/tint
+     are neutral greys for hover and background states. */
+  --accent: #000000;
+  --accent-strong: #1a1a1a;
+  --accent-soft: #d8d8d8;
+  --accent-tint: #f2f2f2;
+  --accent-hover: #1a1a1a;
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #1f7a3a;
@@ -80,11 +82,12 @@
   --text-soft: #6e6b65;
   --text-faint: #4e4b46;
 
-  --accent: #d97a56;
-  --accent-strong: #e8896a;
-  --accent-soft: #3d2318;
-  --accent-tint: #2e1a12;
-  --accent-hover: #e8896a;
+  /* Wix Japan Black — dark mode inverts to white on dark grey. */
+  --accent: #ffffff;
+  --accent-strong: #f2f2f2;
+  --accent-soft: #2a2a2a;
+  --accent-tint: #1f1f1f;
+  --accent-hover: #f2f2f2;
 
   --green: #4caf72;
   --green-bg: #0f2a18;
@@ -127,11 +130,11 @@
     --text-soft: #6e6b65;
     --text-faint: #4e4b46;
 
-    --accent: #d97a56;
-    --accent-strong: #e8896a;
-    --accent-soft: #3d2318;
-    --accent-tint: #2e1a12;
-    --accent-hover: #e8896a;
+    --accent: #ffffff;
+    --accent-strong: #f2f2f2;
+    --accent-soft: #2a2a2a;
+    --accent-tint: #1f1f1f;
+    --accent-hover: #f2f2f2;
 
     --green: #4caf72;
     --green-bg: #0f2a18;
@@ -2732,6 +2735,20 @@ code {
   color: var(--text-faint);
   font-size: 38px;
   position: relative;
+  overflow: hidden;
+}
+/* Wix Japan: when the daemon returns a real first-page thumbnail, the
+   folder icon (::before / ::after) is suppressed and the image fills
+   the thumb area edge-to-edge. */
+.design-card-thumb--image::before,
+.design-card-thumb--image::after {
+  display: none;
+}
+.design-card-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .design-card-thumb::before {
   /* Folder-shape icon */

@@ -387,18 +387,18 @@ export const ja: Dict = {
   'chat.send': '送信',
   'chat.stop': '停止',
   'chat.removeAria': '{name} を削除',
-  'chat.example1Title': '編集ピッチデッキ',
-  'chat.example1Tag': '雑誌',
+  'chat.example1Title': '月次 Performance Report',
+  'chat.example1Tag': 'マンスリー',
   'chat.example1Prompt':
-    'シードラウンドを調達するデザインスタジオの10スライド編集ピッチデッキ — スイスグリッドレイアウト、大きなセリフ体の見出しにボールドドロップキャップ、等幅フォントのセクション番号、余白を活かしたデザイン、テキスト中心のスライドと交互に配置したフルブリード写真スライド。カバー、ビジョン、マーケット、プロダクト、トラクション、チーム、調達額、連絡先。',
-  'chat.example2Title': 'SaaS 分析ダッシュボード',
-  'chat.example2Tag': 'データ',
+    'Wix Japan の月次 Performance Report — 8 ページ構成: Cover、Executive Summary（3 ハイライト bullet）、Top Metrics（KPI 4 行）、主要キャンペーン振り返り（image + body）、新製品/機能ローンチ、Product Insight、来月の重点（3 bullets）、Closing。Wix Japan Black + Mono token、template P28 / P53 / P31 / P110 を使用。',
+  'chat.example2Title': 'Internal Design Newsletter',
+  'chat.example2Tag': 'チーム',
   'chat.example2Prompt':
-    '開発者ツール SaaS の高密度な分析ダッシュボード — 前週比デルタ付き KPI ストリップ、積み上げ折れ線グラフ2本（MRR とアクティブワークスペース）、使用状況のワールドヒートマップ、コホートリテンショングリッド、トップ顧客リーダーボード、リアルタイムイベントフィード。ダークテーマ、表形式等幅数字、スパークラインアクセント。',
-  'chat.example3Title': '年次報告書 長スクロール',
-  'chat.example3Tag': '編集',
+    'Wix Japan Design Team 向け internal newsletter deck — 6-8 ページ: Cover（号数 + 配信日）、今号の目次、メンバーフォーカス（人物紹介 + 写真）、進行中プロジェクトの一言ハイライト、デザインリソース紹介（fonts / books / refs）、来号の予告、Closing。文章は Slack 風で軽め、絵文字は最小限、デザインは Mono ベース。',
+  'chat.example3Title': 'Product Launch Deck',
+  'chat.example3Tag': 'ローンチ',
   'chat.example3Prompt':
-    '気候系 NPO のインタラクティブ年次報告書 — 大きな引用ブロック、データビジュアライゼーション（積み上げ棒グラフ、アニメーションカウンター、プロジェクトサイトのコロプレスマップ）、写真ブレーカー、ドナーウォール、最後にコールトゥアクションを混在させた長スクロール編集レイアウト。モダンなセリフ体本文、サンセリフのチャートラベル、土のようなペーパーパレット。',
+    '新機能 / 新製品ローンチ用の社内向け説明 deck — Cover、What is it?（1 行コンセプト）、Why now（マーケット / ユーザー課題）、How it works（image + 3 bullets）、Demo（screenshot 1 枚）、Target users、Go-to-market（タイムライン）、Risks & Mitigations、Q&A。フォーマル寄り、断定形、image-marker のある section は T+IMG family を強制。',
 
   'preview.shareMenu': '共有 ▾',
   'preview.openInNewTab': '新しいタブで開く',
