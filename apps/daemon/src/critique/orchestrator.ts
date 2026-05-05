@@ -23,6 +23,14 @@ import {
 } from './errors.js';
 
 /**
+ * Tolerance used when comparing the agent-supplied composite attribute on
+ * <ROUND_END> / <SHIP> against the daemon's computed composite. Composites
+ * are weighted floats so a tiny FP delta is normal; anything larger than this
+ * is reported as a composite_mismatch parser warning.
+ */
+const COMPOSITE_TOLERANCE = 0.01;
+
+/**
  * SSE bus contract: the orchestrator emits CritiqueSseEvent variants here so
  * the existing /api/projects/:id/events stream can fan them out unchanged.
  * Implementations should be non-blocking; backpressure is the caller's job.
@@ -114,7 +122,7 @@ export async function runOrchestrator(
     id: runId,
     projectId,
     conversationId,
-    status: 'running' as CritiqueRunRow['status'],
+    status: 'running',
     protocolVersion: cfg.protocolVersion,
   });
 
@@ -212,8 +220,24 @@ export async function runOrchestrator(
         case 'round_end': {
           const rs = roundStates.get(event.round);
           if (rs !== undefined) {
-            rs.composite = event.composite;
-            rs.mustFix = event.mustFix;
+            // Daemon-side composite (computed via configured weights from
+            // panelist_close events) is the source of truth. The agent's
+            // <ROUND_END composite="..."> attribute is advisory: if it
+            // diverges beyond COMPOSITE_TOLERANCE we emit a composite_mismatch
+            // parser_warning, but the daemon value is what scores and persists.
+            // Same policy for mustFix, which is tallied from panelist_must_fix
+            // events.
+            if (Math.abs(event.composite - rs.composite) > COMPOSITE_TOLERANCE
+              || event.mustFix !== rs.mustFix) {
+              const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
+                type: 'parser_warning',
+                runId,
+                kind: 'composite_mismatch',
+                position: 0,
+              };
+              collectedEvents.push(warning);
+              bus.emit(panelEventToSse(warning));
+            }
             completedRounds.push({ ...rs });
           }
           roundDeadline = null;
@@ -239,9 +263,33 @@ export async function runOrchestrator(
 
     // 3. Determine final status and composite.
     if (shipEvent !== null) {
-      finalStatus = shipEvent.status;
-      finalComposite = shipEvent.composite;
-      artifactPath = `${artifactDir}/${shipEvent.artifactRef.artifactId || 'artifact'}`;
+      // Daemon-authoritative scoring: when SHIP references a round we've
+      // closed, derive status from decideRound(...) using the daemon's
+      // computed composite/mustFix rather than trusting the agent's
+      // <SHIP composite=... status=...> attributes. A composite divergence
+      // larger than COMPOSITE_TOLERANCE emits composite_mismatch.
+      const ship = shipEvent;
+      const shippedRound = completedRounds.find((r) => r.n === ship.round);
+      if (shippedRound !== undefined) {
+        if (Math.abs(ship.composite - shippedRound.composite) > COMPOSITE_TOLERANCE) {
+          const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
+            type: 'parser_warning',
+            runId,
+            kind: 'composite_mismatch',
+            position: 0,
+          };
+          collectedEvents.push(warning);
+          bus.emit(panelEventToSse(warning));
+        }
+        const decision = decideRound(shippedRound.composite, shippedRound.mustFix, cfg);
+        finalStatus = decision === 'ship' ? 'shipped' : 'below_threshold';
+        finalComposite = shippedRound.composite;
+      } else {
+        // SHIP referenced an unknown round: fall back to the agent value.
+        finalStatus = ship.status;
+        finalComposite = ship.composite;
+      }
+      artifactPath = `${artifactDir}/${ship.artifactRef.artifactId || 'artifact'}`;
     } else {
       // No SHIP arrived - apply fallback policy.
       killChild();

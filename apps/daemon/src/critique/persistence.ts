@@ -56,7 +56,9 @@ export interface CritiqueRunInsert {
   projectId: string;
   conversationId?: string | null;
   artifactPath?: string | null;
-  status: CritiqueRunStatus;
+  /** Accepts 'running' in addition to the terminal statuses so callers can
+   *  create in-flight rows without a type cast. */
+  status: CritiqueRunStatus | 'running';
   score?: number | null;
   rounds?: CritiqueRoundSummary[];
   transcriptPath?: string | null;

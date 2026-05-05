@@ -2955,6 +2955,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           for await (const chunk of child.stdout) yield String(chunk);
         })();
         const critiqueBus = { emit: (e) => send('agent', e) };
+
+        // Stderr forwarding and child.on('error') must be wired BEFORE the
+        // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
+        // fill the OS pipe and deadlock the run until the total timeout, and
+        // an early child error fired before the orchestrator returns has no
+        // listener. Both registrations are idempotent and the run lifecycle
+        // is owned solely by the orchestrator's awaited result below.
+        child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+        child.on('error', (err) => {
+          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
+        });
+
         // Wrap the child's close event so the orchestrator can race child
         // exit against parser completion, abort, and timeouts in one awaited
         // flow. Without this the orchestrator can't tell a non-zero exit
@@ -2963,7 +2975,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           child.once('close', (code, signal) => resolve({ code, signal }));
         });
         try {
-          await runOrchestrator({
+          const orchestratorResult = await runOrchestrator({
             runId: critiqueRunId,
             projectId: typeof projectId === 'string' ? projectId : '',
             conversationId: typeof conversationId === 'string' ? conversationId : null,
@@ -2977,15 +2989,24 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             child,
             childExitPromise,
           });
-          design.runs.finish(run, 'succeeded', 0, null);
+          // Map the critique terminal status to the chat run lifecycle.
+          // 'shipped' and 'below_threshold' both ran to a ship decision and
+          // finalize as 'succeeded'; every other status (timed_out,
+          // interrupted, degraded, failed, legacy) is a failure path so the
+          // run reflects the real outcome instead of a misleading success.
+          const succeeded = orchestratorResult.status === 'shipped'
+            || orchestratorResult.status === 'below_threshold';
+          if (run.cancelRequested) {
+            design.runs.finish(run, 'canceled', 1, null);
+          } else if (succeeded) {
+            design.runs.finish(run, 'succeeded', 0, null);
+          } else {
+            design.runs.finish(run, 'failed', 1, null);
+          }
         } catch (err) {
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
           design.runs.finish(run, 'failed', 1, null);
         }
-        child.stderr.on('data', (chunk) => send('stderr', { chunk }));
-        child.on('error', (err) => {
-          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
-        });
         return;
       }
     }
