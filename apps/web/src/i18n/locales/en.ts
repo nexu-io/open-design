@@ -500,7 +500,7 @@ export const en: Dict = {
   'fileViewer.markdownStreamingStatus': 'Streaming… showing partial markdown.',
   'fileViewer.markdownErrorStatus': 'Generation error. Showing last available content.',
   'fileViewer.googleSlidesPagesLabel': 'pages',
-  'fileViewer.googleSlidesOpen': 'Edit in Slides ↗',
+  'fileViewer.googleSlidesOpen': 'Edit in Google Slides ↗',
   'fileViewer.googleSlidesNotReady': 'Generating deck…',
   'fileViewer.googleSlidesInvalidUrl': 'Invalid embed URL — only Google Slides /embed URLs are allowed.',
   'fileViewer.googleSlidesMissingFields': 'Missing fields',

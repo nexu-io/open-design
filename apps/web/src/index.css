@@ -588,15 +588,9 @@ code {
    inside the chat pane only — that two-tone split read as
    inconsistent in design critique. */
 
-/* Wix Japan rebrand: hide the "Design Files" tab in the project
-   workspace tabs bar. Designers don't need to see the raw
-   file-list view; the deck preview tab (renamed "プレビュー") is
-   auto-opened when entering a project. The tab itself stays in the
-   DOM so the workspace's keyboard shortcuts and routing still work
-   if a user navigates back to it via the URL. */
-.ws-tabs-bar .design-files-tab {
-  display: none !important;
-}
+/* Design Files tab kept visible — designers may want to inspect
+   uploaded references, sketches, or the raw deck-plan.md alongside
+   the rendered preview. */
 
 /* -------- Split / panes -------------------------------------------- */
 .split {

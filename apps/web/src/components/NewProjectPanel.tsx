@@ -128,12 +128,16 @@ export function NewProjectPanel({
   const [videoPromptTemplate, setVideoPromptTemplate] =
     useState<PromptTemplatePick | null>(null);
 
-  // Wix Japan rebrand: design system is always wix-japan for this
-  // single-purpose tool. Hide the picker entirely so designers don't
-  // see the freeform fallback or the menu of unrelated systems. We
-  // still pin the wix-japan id below in the create handler so the
-  // skill writes against the right tokens.
-  const showDesignSystemPicker = false;
+  // Design system is meaningful for the structured/visual surfaces
+  // (prototype, deck, template, freeform "other"). The media surfaces
+  // use prompt templates instead. Wix Japan team plans to add more
+  // template variants over time, so the picker stays visible —
+  // designers need to see options.
+  const showDesignSystemPicker =
+    tab === 'prototype' ||
+    tab === 'deck' ||
+    tab === 'template' ||
+    tab === 'other';
 
   // When entering the template tab, snap to the first user-saved template
   // if there is one (and we don't already have a valid pick). The template
@@ -230,10 +234,7 @@ export function NewProjectPanel({
     // and inspiration ids to empty there so the New Project panel can't
     // accidentally bind a stale DS that the user can no longer see in the
     // form (the picker is hidden for image/video/audio).
-    // Wix Japan rebrand: pin the design system to wix-japan when the
-    // picker is hidden, so the skill always writes against the right
-    // tokens without the user having to know.
-    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : 'wix-japan';
+    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : null;
     const inspirations = showDesignSystemPicker ? selectedDsIds.slice(1) : [];
     const promptTemplatePick =
       tab === 'image'
