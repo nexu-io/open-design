@@ -286,6 +286,24 @@ export function ProjectView({
     requestOpenFile(routeFileName);
   }, [routeFileName, requestOpenFile]);
 
+  // Wix Japan rebrand: default to opening the deck preview when the
+  // user clicks a project card. If the project has a result.json
+  // (the wix-ja-slide skill writes one for every completed deck) and
+  // no specific file is being requested via the URL, auto-select it
+  // so the right pane shows the slide preview instead of a file list.
+  const autoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (routeFileName) return; // user is asking for a specific file
+    if (!tabsLoadedRef.current) return;
+    if (projectFiles.length === 0) return;
+    if (autoOpenedRef.current === project.id) return;
+    if (openTabsState.active) return; // already showing something
+    const hasResult = projectFiles.some((f) => f.name === 'result.json');
+    if (!hasResult) return;
+    autoOpenedRef.current = project.id;
+    requestOpenFile('result.json');
+  }, [project.id, projectFiles, openTabsState.active, requestOpenFile, routeFileName]);
+
   // Sync the URL when the active tab changes, so reload + share-link both
   // land back on the same view. Replace (not push) on tab activation so the
   // history stack doesn't fill with every tab click.
