@@ -811,6 +811,30 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
+  // Stream a freshly-exported PDF of the project's deck. The
+  // gallery viewer uses this as its primary render path because PDF
+  // is vector — text and shapes stay crisp at any zoom level, with
+  // none of the resolution / chrome compromises of PNG thumbnails or
+  // the Google embed iframe.
+  app.get('/api/projects/:id/deck-pdf', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    const deckId = project.metadata?.deckId;
+    if (typeof deckId !== 'string' || !deckId) {
+      return sendApiError(res, 404, 'NO_DECK', 'project has no deckId metadata');
+    }
+    try {
+      const { exportPdf } = await import('./google-slides.js');
+      const buf = await exportPdf(deckId);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Cache-Control', 'private, max-age=120');
+      res.send(buf);
+    } catch (err) {
+      const { status, code } = mapGoogleError(err);
+      sendApiError(res, status, code, err.message);
+    }
+  });
+
   // Full-resolution PNG of a deck page. Drive export endpoint serves
   // at native deck resolution (1920+px) — much sharper than the
   // Slides API thumbnail (capped at 1600px). Auth-gated server-side.
@@ -826,7 +850,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'pageId query required');
     }
     const wRaw = req.query.w;
-    const widthPx = typeof wRaw === 'string' ? Number.parseInt(wRaw, 10) : 3840;
+    const widthPx = typeof wRaw === 'string' ? Number.parseInt(wRaw, 10) : 7680;
     try {
       const { fetchPageImage } = await import('./google-slides.js');
       const buf = await fetchPageImage(deckId, pageId, widthPx);

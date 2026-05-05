@@ -2290,13 +2290,15 @@ function GoogleSlidesViewer({
             {thumbErr ? `Thumbnails unavailable: ${thumbErr}` : t('fileViewer.loading')}
           </div>
         ) : (
-          <img
-            className="gs-page"
-            src={`/api/projects/${encodeURIComponent(projectId)}/page-image?pageId=${encodeURIComponent(
-              pageIds[Math.min(pageIdx, pageIds.length - 1)] ?? '',
-            )}`}
-            alt={`Slide ${pageIdx + 1}`}
-            draggable={false}
+          // Use a fresh PDF export of the deck as the render source.
+          // PDF is vector — text and shapes stay sharp at any zoom on
+          // any display, which PNG thumbnails couldn't manage even at
+          // 8K. Hash params hide the browser PDF chrome and jump to
+          // the active page.
+          <iframe
+            className="gs-page-pdf"
+            title={file.name}
+            src={`/api/projects/${encodeURIComponent(projectId)}/deck-pdf#page=${pageIdx + 1}&toolbar=0&navpanes=0&statusbar=0&view=FitH`}
           />
         )}
       </div>

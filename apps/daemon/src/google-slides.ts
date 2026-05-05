@@ -784,7 +784,7 @@ export async function getDeckThumbnailUrl(deckId, size = 'MEDIUM') {
 // We OAuth-fetch server-side and stream bytes back, so the UI can
 // just <img src="/api/projects/:id/page-image?pageId=..."> without
 // exposing auth.
-export async function fetchPageImage(deckId, pageObjectId, widthPx = 3840) {
+export async function fetchPageImage(deckId, pageObjectId, widthPx = 7680) {
   if (typeof deckId !== 'string' || !deckId) {
     const err = new Error('deckId required');
     err.code = 'GOOGLE_API_BAD_REQUEST';
