@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canRunProviderConnectionTest,
   isValidApiBaseUrl,
+  shouldShowCustomModelInput,
   switchApiProtocolConfig,
+  testStatusVariant,
   updateCurrentApiProtocolConfig,
 } from './SettingsDialog';
-import type { AppConfig } from '../types';
+import type { AppConfig, ConnectionTestResponse } from '../types';
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -122,6 +125,83 @@ describe('SettingsDialog API protocol switching', () => {
       model: 'deployment-one',
       apiVersion: '2024-10-21',
     });
+  });
+});
+
+describe('SettingsDialog test status variant', () => {
+  const baseResult: ConnectionTestResponse = { ok: false, kind: 'unknown', latencyMs: 0 };
+  it('returns success for an ok result', () => {
+    expect(testStatusVariant({ ok: true, kind: 'success', latencyMs: 12 })).toBe(
+      'success',
+    );
+  });
+  it('returns warn for rate-limit (config still looks valid)', () => {
+    expect(testStatusVariant({ ...baseResult, kind: 'rate_limited' })).toBe(
+      'warn',
+    );
+  });
+  it('returns error for the failure kinds', () => {
+    for (const kind of [
+      'auth_failed',
+      'forbidden',
+      'not_found_model',
+      'invalid_base_url',
+      'upstream_unavailable',
+      'timeout',
+      'agent_not_installed',
+      'agent_spawn_failed',
+      'unknown',
+    ] as const) {
+      expect(testStatusVariant({ ...baseResult, kind })).toBe('error');
+    }
+  });
+});
+
+describe('SettingsDialog provider connection test requirements', () => {
+  it('allows Azure tests to use the daemon default API version', () => {
+    expect(
+      canRunProviderConnectionTest({
+        ...baseConfig,
+        apiProtocol: 'azure',
+        apiKey: 'azure-key',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        model: 'deployment-one',
+        apiVersion: '',
+      }),
+    ).toBe(true);
+  });
+
+  it('still requires the shared provider fields', () => {
+    expect(
+      canRunProviderConnectionTest({ ...baseConfig, apiKey: '' }),
+    ).toBe(false);
+    expect(
+      canRunProviderConnectionTest({ ...baseConfig, baseUrl: '' }),
+    ).toBe(false);
+    expect(
+      canRunProviderConnectionTest({ ...baseConfig, model: '' }),
+    ).toBe(false);
+  });
+});
+
+describe('SettingsDialog custom model picker state', () => {
+  it('keeps custom input visible while an intermediate value matches a known model', () => {
+    expect(
+      shouldShowCustomModelInput('gpt-5', ['gpt-5', 'o3'], true),
+    ).toBe(true);
+  });
+
+  it('uses the dropdown when a known model is selected outside custom mode', () => {
+    expect(
+      shouldShowCustomModelInput('gpt-5', ['gpt-5', 'o3'], false),
+    ).toBe(false);
+  });
+
+  it('shows custom input for unknown or empty model values', () => {
+    expect(
+      shouldShowCustomModelInput('gpt-5.5', ['gpt-5', 'o3'], false),
+    ).toBe(true);
+    expect(shouldShowCustomModelInput('', ['gpt-5', 'o3'], false)).toBe(true);
   });
 });
 

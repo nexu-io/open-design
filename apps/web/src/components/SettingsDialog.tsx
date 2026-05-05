@@ -6,7 +6,6 @@ import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
-  isCustomModel,
   renderModelOptions,
 } from './modelOptions';
 import { KNOWN_PROVIDERS } from '../state/config';
@@ -15,7 +14,17 @@ import {
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
-import type { AgentInfo, ApiProtocol, ApiProtocolConfig, AppConfig, AppTheme, AppVersionInfo, ExecMode } from '../types';
+import type {
+  AgentInfo,
+  ApiProtocol,
+  ApiProtocolConfig,
+  AppConfig,
+  AppTheme,
+  AppVersionInfo,
+  ConnectionTestResponse,
+  ExecMode,
+} from '../types';
+import { testAgent, testApiProvider } from '../providers/connection-test';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
@@ -130,6 +139,43 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
 type RescanNotice =
   | { kind: 'success'; count: number }
   | { kind: 'error' };
+
+type TestState =
+  | { status: 'idle' }
+  | { status: 'running' }
+  | { status: 'done'; result: ConnectionTestResponse };
+
+// Map a test result to the visual severity of its inline status node so
+// the same green/red/amber palette as the Rescan status applies.
+export function testStatusVariant(
+  result: ConnectionTestResponse,
+): 'success' | 'warn' | 'error' {
+  if (result.ok) return 'success';
+  if (result.kind === 'rate_limited') return 'warn';
+  return 'error';
+}
+
+export function shouldShowCustomModelInput(
+  modelValue: string,
+  knownModelIds: readonly string[],
+  explicitCustomMode: boolean,
+): boolean {
+  return (
+    explicitCustomMode ||
+    !modelValue ||
+    !knownModelIds.includes(modelValue)
+  );
+}
+
+export function canRunProviderConnectionTest(
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'>,
+): boolean {
+  return (
+    Boolean(config.apiKey.trim()) &&
+    Boolean(config.baseUrl.trim()) &&
+    Boolean(config.model.trim())
+  );
+}
 
 function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
@@ -273,6 +319,20 @@ export function SettingsDialog({
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
+  const [agentTestState, setAgentTestState] = useState<TestState>({
+    status: 'idle',
+  });
+  const [providerTestState, setProviderTestState] = useState<TestState>({
+    status: 'idle',
+  });
+  const agentTestAbortRef = useRef<AbortController | null>(null);
+  const providerTestAbortRef = useRef<AbortController | null>(null);
+  const agentTestRevisionRef = useRef(0);
+  const providerTestRevisionRef = useRef(0);
+  const [apiModelCustomEditing, setApiModelCustomEditing] = useState(false);
+  const [agentCustomModelIds, setAgentCustomModelIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const languageRef = useRef<HTMLDivElement | null>(null);
 
   // If the daemon goes offline mid-edit, force API mode so the UI doesn't
@@ -282,6 +342,44 @@ export function SettingsDialog({
       setCfg((c) => ({ ...c, mode: 'api' }));
     }
   }, [daemonLive, cfg.mode]);
+
+  // Tests pin a result against the unsaved draft. Once the user edits any
+  // field that feeds into the test, the result is no longer trustworthy —
+  // clear it so we don't show a stale "Connected" line next to fresh input.
+  // If a test is already running, leave the running state visible and let the
+  // stale result be ignored when it returns; the button stays disabled so a
+  // new smoke test cannot overlap the old one.
+  const agentChoiceForTest = cfg.agentModels?.[cfg.agentId ?? ''];
+  useEffect(() => {
+    agentTestRevisionRef.current += 1;
+    setAgentTestState((state) =>
+      state.status === 'running' ? state : { status: 'idle' },
+    );
+  }, [
+    cfg.agentId,
+    agentChoiceForTest?.model,
+    agentChoiceForTest?.reasoning,
+  ]);
+  useEffect(() => {
+    providerTestRevisionRef.current += 1;
+    setProviderTestState((state) =>
+      state.status === 'running' ? state : { status: 'idle' },
+    );
+  }, [
+    cfg.apiProtocol,
+    cfg.apiKey,
+    cfg.baseUrl,
+    cfg.model,
+    cfg.apiVersion,
+  ]);
+  // Releasing the abort controllers on unmount avoids the "setState after
+  // unmount" warning if the dialog closes while a test is still running.
+  useEffect(() => {
+    return () => {
+      agentTestAbortRef.current?.abort();
+      providerTestAbortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!languageOpen) return;
@@ -324,8 +422,10 @@ export function SettingsDialog({
   );
 
   const setMode = (mode: ExecMode) => setCfg((c) => ({ ...c, mode }));
-  const setApiProtocol = (protocol: ApiProtocol) =>
+  const setApiProtocol = (protocol: ApiProtocol) => {
+    setApiModelCustomEditing(false);
     setCfg((c) => switchApiProtocolConfig(c, protocol));
+  };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
     setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
   const handleRefreshAgents = async () => {
@@ -343,6 +443,156 @@ export function SettingsDialog({
       setAgentRescanNotice({ kind: 'error' });
     } finally {
       setAgentRescanRunning(false);
+    }
+  };
+
+  const handleTestAgent = async () => {
+    if (agentTestState.status === 'running') {
+      return;
+    }
+    const selected = agents.find((a) => a.id === cfg.agentId && a.available);
+    if (!selected) return;
+    const choice = cfg.agentModels?.[selected.id] ?? {};
+    const controller = new AbortController();
+    const revision = agentTestRevisionRef.current;
+    agentTestAbortRef.current = controller;
+    setAgentTestState({ status: 'running' });
+    const clearIfStale = () => {
+      if (agentTestAbortRef.current === controller) {
+        setAgentTestState({ status: 'idle' });
+      }
+    };
+    try {
+      const result = await testAgent(
+        {
+          agentId: selected.id,
+          model: choice.model || undefined,
+          reasoning: choice.reasoning || undefined,
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (agentTestRevisionRef.current !== revision) {
+        clearIfStale();
+        return;
+      }
+      setAgentTestState({ status: 'done', result });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (agentTestRevisionRef.current !== revision) {
+        clearIfStale();
+        return;
+      }
+      setAgentTestState({
+        status: 'done',
+        result: {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model: choice.model || 'default',
+          detail: err instanceof Error ? err.message : 'Test request failed',
+        },
+      });
+    } finally {
+      if (agentTestAbortRef.current === controller) {
+        agentTestAbortRef.current = null;
+      }
+    }
+  };
+
+  const handleTestProvider = async () => {
+    if (providerTestState.status === 'running') {
+      return;
+    }
+    const controller = new AbortController();
+    const revision = providerTestRevisionRef.current;
+    providerTestAbortRef.current = controller;
+    setProviderTestState({ status: 'running' });
+    const clearIfStale = () => {
+      if (providerTestAbortRef.current === controller) {
+        setProviderTestState({ status: 'idle' });
+      }
+    };
+    try {
+      const result = await testApiProvider(
+        {
+          protocol: apiProtocol,
+          baseUrl: cfg.baseUrl,
+          apiKey: cfg.apiKey,
+          model: cfg.model,
+          apiVersion:
+            apiProtocol === 'azure'
+              ? cfg.apiVersion?.trim() || undefined
+              : undefined,
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (providerTestRevisionRef.current !== revision) {
+        clearIfStale();
+        return;
+      }
+      setProviderTestState({ status: 'done', result });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (providerTestRevisionRef.current !== revision) {
+        clearIfStale();
+        return;
+      }
+      setProviderTestState({
+        status: 'done',
+        result: {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model: cfg.model,
+          detail: err instanceof Error ? err.message : 'Test request failed',
+        },
+      });
+    } finally {
+      if (providerTestAbortRef.current === controller) {
+        providerTestAbortRef.current = null;
+      }
+    }
+  };
+
+  const renderTestMessage = (
+    result: ConnectionTestResponse,
+    kindForSuccess: 'api' | 'cli',
+  ): string => {
+    const ms = Math.max(0, Math.round(result.latencyMs));
+    const sample = result.sample ?? '';
+    const agentName = result.agentName ?? '';
+    const testedModel = result.model ?? cfg.model;
+    if (result.ok) {
+      return kindForSuccess === 'api'
+        ? t('settings.testSuccessApi', { ms, sample })
+        : t('settings.testSuccessCli', { agentName, ms, sample });
+    }
+    switch (result.kind) {
+      case 'auth_failed':
+        return t('settings.testAuthFailed');
+      case 'forbidden':
+        return t('settings.testForbidden');
+      case 'not_found_model':
+        return t('settings.testNotFoundModel', { model: testedModel });
+      case 'invalid_base_url':
+        return t('settings.testInvalidBaseUrl');
+      case 'rate_limited':
+        return t('settings.testRateLimited');
+      case 'upstream_unavailable':
+        return t('settings.testUpstream', { status: result.status ?? 0 });
+      case 'timeout':
+        return t('settings.testTimeout', { ms });
+      case 'agent_not_installed':
+        return t('settings.testAgentMissing', { agentName });
+      case 'agent_spawn_failed':
+        return t('settings.testAgentSpawn', {
+          agentName,
+          detail: result.detail ?? '',
+        });
+      default:
+        return t('settings.testUnknown', { detail: result.detail ?? '' });
     }
   };
 
@@ -377,8 +627,15 @@ export function SettingsDialog({
     )),
     [apiProtocol, cfg.baseUrl, selectedProvider],
   );
-  const apiModelCustom = Boolean(cfg.model) && !apiModelOptions.includes(cfg.model);
-  const apiModelSelectValue = apiModelCustom || !cfg.model ? CUSTOM_MODEL_SENTINEL : cfg.model;
+  const apiModelCustomActive =
+    shouldShowCustomModelInput(
+      cfg.model,
+      apiModelOptions,
+      apiModelCustomEditing,
+    );
+  const apiModelSelectValue = apiModelCustomActive
+    ? CUSTOM_MODEL_SENTINEL
+    : cfg.model;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -582,25 +839,59 @@ export function SettingsDialog({
                   <h3>{t('settings.localCli')}</h3>
                   <p className="hint">{t('settings.codeAgentHint')}</p>
                 </div>
-                <button
-                  type="button"
-                  className={
-                    'ghost icon-btn settings-rescan-btn' +
-                    (agentRescanRunning ? ' loading' : '')
-                  }
-                  onClick={() => void handleRefreshAgents()}
-                  disabled={agentRescanRunning}
-                  title={t('settings.rescanTitle')}
-                >
-                  {agentRescanRunning ? (
-                    <>
-                      <Icon name="spinner" size={13} className="icon-spin" />
-                      <span>{t('settings.rescanRunning')}</span>
-                    </>
-                  ) : (
-                    t('settings.rescan')
-                  )}
-                </button>
+                <div className="section-head-actions">
+                  {(() => {
+                    const selected = agents.find(
+                      (a) => a.id === cfg.agentId && a.available,
+                    );
+                    const running = agentTestState.status === 'running';
+                    const disabled = running || !selected;
+                    return (
+                      <button
+                        type="button"
+                        className={
+                          'ghost icon-btn settings-test-btn' +
+                          (running ? ' loading' : '')
+                        }
+                        onClick={() => void handleTestAgent()}
+                        disabled={disabled}
+                        title={t('settings.testTitle')}
+                      >
+                        {running ? (
+                          <>
+                            <Icon
+                              name="spinner"
+                              size={13}
+                              className="icon-spin"
+                            />
+                            <span>{t('settings.test')}</span>
+                          </>
+                        ) : (
+                          t('settings.test')
+                        )}
+                      </button>
+                    );
+                  })()}
+                  <button
+                    type="button"
+                    className={
+                      'ghost icon-btn settings-rescan-btn' +
+                      (agentRescanRunning ? ' loading' : '')
+                    }
+                    onClick={() => void handleRefreshAgents()}
+                    disabled={agentRescanRunning}
+                    title={t('settings.rescanTitle')}
+                  >
+                    {agentRescanRunning ? (
+                      <>
+                        <Icon name="spinner" size={13} className="icon-spin" />
+                        <span>{t('settings.rescanRunning')}</span>
+                      </>
+                    ) : (
+                      t('settings.rescan')
+                    )}
+                  </button>
+                </div>
               </div>
               {agentRescanNotice ? (
                 <p
@@ -616,6 +907,25 @@ export function SettingsDialog({
                         count: agentRescanNotice.count,
                       })
                     : t('settings.rescanFailed')}
+                </p>
+              ) : null}
+              {agentTestState.status === 'running' ? (
+                <p
+                  className="settings-test-status running"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {t('settings.testRunning')}
+                </p>
+              ) : agentTestState.status === 'done' ? (
+                <p
+                  className={
+                    'settings-test-status ' +
+                    testStatusVariant(agentTestState.result)
+                  }
+                  role={agentTestState.result.ok ? 'status' : 'alert'}
+                >
+                  {renderTestMessage(agentTestState.result, 'cli')}
                 </p>
               ) : null}
               {agents.length === 0 ? (
@@ -703,7 +1013,12 @@ export function SettingsDialog({
                   choice.reasoning ??
                   selected.reasoningOptions?.[0]?.id ?? '';
                 const customActive =
-                  hasModels && isCustomModel(modelValue, selected.models!);
+                  hasModels &&
+                  shouldShowCustomModelInput(
+                    modelValue,
+                    selected.models!.map((m) => m.id),
+                    agentCustomModelIds.has(selected.id),
+                  );
                 const selectValue = customActive
                   ? CUSTOM_MODEL_SENTINEL
                   : modelValue;
@@ -720,10 +1035,23 @@ export function SettingsDialog({
                             if (e.target.value === CUSTOM_MODEL_SENTINEL) {
                               // Switching to "Custom…" should clear the
                               // value so the input below opens empty for
-                              // typing — keeping the previous live id
-                              // would defeat the point.
+                              // typing. Keep an explicit edit-mode flag so
+                              // intermediate values like `gpt-5` do not
+                              // collapse the custom input while typing
+                              // `gpt-5.5`.
+                              setAgentCustomModelIds((prev) => {
+                                const next = new Set(prev);
+                                next.add(selected.id);
+                                return next;
+                              });
                               setChoice({ model: '' });
                             } else {
+                              setAgentCustomModelIds((prev) => {
+                                if (!prev.has(selected.id)) return prev;
+                                const next = new Set(prev);
+                                next.delete(selected.id);
+                                return next;
+                              });
                               setChoice({ model: e.target.value });
                             }
                           }}
@@ -780,13 +1108,63 @@ export function SettingsDialog({
                 <div>
                   <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
                 </div>
+                {(() => {
+                  const running = providerTestState.status === 'running';
+                  const hasRequired = canRunProviderConnectionTest(cfg);
+                  const disabled = running || !hasRequired;
+                  return (
+                    <button
+                      type="button"
+                      className={
+                        'ghost icon-btn settings-test-btn' +
+                        (running ? ' loading' : '')
+                      }
+                      onClick={() => void handleTestProvider()}
+                      disabled={disabled}
+                      title={t('settings.testTitle')}
+                    >
+                      {running ? (
+                        <>
+                          <Icon
+                            name="spinner"
+                            size={13}
+                            className="icon-spin"
+                          />
+                          <span>{t('settings.test')}</span>
+                        </>
+                      ) : (
+                        t('settings.test')
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
+              {providerTestState.status === 'running' ? (
+                <p
+                  className="settings-test-status running"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {t('settings.testRunning')}
+                </p>
+              ) : providerTestState.status === 'done' ? (
+                <p
+                  className={
+                    'settings-test-status ' +
+                    testStatusVariant(providerTestState.result)
+                  }
+                  role={providerTestState.result.ok ? 'status' : 'alert'}
+                >
+                  {renderTestMessage(providerTestState.result, 'api')}
+                </p>
+              ) : null}
               <label className="field">
                 <span className="field-label">{t('settings.quickFillProvider')}</span>
                 <select
                   value={selectedProviderIndex >= 0 ? String(selectedProviderIndex) : ''}
                   onChange={(e) => {
                     if (e.target.value === '') {
+                      setApiModelCustomEditing(false);
                       updateApiConfig({
                         baseUrl: '',
                         model: '',
@@ -797,6 +1175,7 @@ export function SettingsDialog({
                     const idx = Number(e.target.value);
                     if (!isNaN(idx) && protocolProviders[idx]) {
                       const p = protocolProviders[idx]!;
+                      setApiModelCustomEditing(false);
                       updateApiConfig({
                         baseUrl: p.baseUrl,
                         model: p.model,
@@ -843,8 +1222,10 @@ export function SettingsDialog({
                   value={apiModelSelectValue}
                   onChange={(e) => {
                     if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                      setApiModelCustomEditing(true);
                       updateApiConfig({ model: '' });
                     } else {
+                      setApiModelCustomEditing(false);
                       updateApiConfig({ model: e.target.value });
                     }
                   }}
@@ -861,7 +1242,7 @@ export function SettingsDialog({
               {apiProtocol === 'azure' ? (
                 <p className="hint">{t('settings.azureDeploymentModelHint')}</p>
               ) : null}
-              {apiModelCustom || apiModelSelectValue === CUSTOM_MODEL_SENTINEL ? (
+              {apiModelCustomActive ? (
                 <label className="field">
                   <span className="field-label">{t('settings.modelCustomLabel')}</span>
                   <input

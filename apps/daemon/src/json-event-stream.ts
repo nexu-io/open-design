@@ -20,6 +20,27 @@ function stringifyContent(value) {
   }
 }
 
+function extractErrorMessage(value, fallback) {
+  if (typeof value === 'string') {
+    const parsed = safeParseJson(value);
+    if (parsed && typeof parsed === 'object') {
+      return extractErrorMessage(parsed, value);
+    }
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    if (typeof value.detail === 'string' && value.detail) return value.detail;
+    if (typeof value.message === 'string' && value.message) {
+      return extractErrorMessage(value.message, value.message);
+    }
+    if (typeof value.error === 'string' && value.error) return value.error;
+    if (value.error && typeof value.error === 'object') {
+      return extractErrorMessage(value.error, fallback);
+    }
+  }
+  return fallback;
+}
+
 function formatOpenCodeUsage(tokens) {
   if (!tokens || typeof tokens !== 'object') return null;
   const usage = {};
@@ -206,6 +227,28 @@ function handleCursorEvent(obj, onEvent, state) {
 function handleCodexEvent(obj, onEvent, state) {
   if (!obj || typeof obj !== 'object') return false;
 
+  if (obj.type === 'error') {
+    if (!state.codexErrorEmitted) {
+      state.codexErrorEmitted = true;
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.message ?? obj.error, 'Codex error'),
+      });
+    }
+    return true;
+  }
+
+  if (obj.type === 'turn.failed') {
+    if (!state.codexErrorEmitted) {
+      state.codexErrorEmitted = true;
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.error ?? obj.message, 'Codex turn failed'),
+      });
+    }
+    return true;
+  }
+
   if (obj.type === 'thread.started') {
     onEvent({ type: 'status', label: 'initializing' });
     return true;
@@ -290,6 +333,7 @@ export function createJsonEventStreamHandler(kind, onEvent) {
     cursorTextSoFar: '',
     openCodeToolUses: new Set(),
     codexToolUses: new Set(),
+    codexErrorEmitted: false,
   };
 
   function handleLine(line) {

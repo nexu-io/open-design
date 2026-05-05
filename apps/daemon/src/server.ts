@@ -33,6 +33,10 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import {
+  testAgentConnection,
+  testProviderConnection,
+} from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
@@ -2938,7 +2942,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } else if (def.streamFormat === 'json-event-stream') {
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        (ev) => send('agent', ev),
+        (ev) => {
+          if (ev?.type === 'error') {
+            send(
+              'error',
+              createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                typeof ev.message === 'string' ? ev.message : 'Agent stream error',
+              ),
+            );
+            return;
+          }
+          send('agent', ev);
+        },
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
@@ -3008,6 +3024,88 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const run = design.runs.create();
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
+  });
+
+  // ---- Connection tests (single-shot JSON; no SSE) ------------------------
+  // Settings dialog uses these to verify a config works without sending a
+  // real chat. Always return HTTP 200 with `ok: false` on upstream-caused
+  // failures so the web layer can render a categorized inline status without
+  // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
+  // request or daemon bug.
+  app.post('/api/test/connection', async (req, res) => {
+    const body = req.body || {};
+    if (body.mode === 'provider') {
+      const protocol = body.protocol;
+      if (
+        typeof protocol !== 'string' ||
+        !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+      ) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'protocol must be one of anthropic|openai|azure|google',
+        );
+      }
+      if (
+        typeof body.baseUrl !== 'string' ||
+        typeof body.apiKey !== 'string' ||
+        typeof body.model !== 'string' ||
+        !body.baseUrl.trim() ||
+        !body.apiKey.trim() ||
+        !body.model.trim()
+      ) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'baseUrl, apiKey, and model are required',
+        );
+      }
+      try {
+        const result = await testProviderConnection({
+          protocol,
+          baseUrl: body.baseUrl,
+          apiKey: body.apiKey,
+          model: body.model,
+          apiVersion:
+            typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+        });
+        return res.json(result);
+      } catch (err) {
+        console.warn(
+          `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
+      }
+    }
+
+    if (body.mode === 'agent') {
+      if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
+      }
+      try {
+        const result = await testAgentConnection({
+          agentId: body.agentId,
+          model: typeof body.model === 'string' ? body.model : undefined,
+          reasoning:
+            typeof body.reasoning === 'string' ? body.reasoning : undefined,
+        });
+        return res.json(result);
+      } catch (err) {
+        console.warn(
+          `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
+      }
+    }
+
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'mode must be one of provider|agent',
+      );
   });
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------

@@ -216,6 +216,33 @@ test('codex json stream emits status text and usage events', () => {
   ]);
 });
 
+test('codex json stream emits structured errors once', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      message: JSON.stringify({
+        detail: "The 'gpt-5.5' model requires a newer version of Codex.",
+      }),
+    }) +
+      '\n' +
+      JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'plain failure' },
+      }) +
+      '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: "The 'gpt-5.5' model requires a newer version of Codex.",
+    },
+  ]);
+});
+
 test('codex json stream emits command execution tool events', () => {
   const events = [];
   const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
