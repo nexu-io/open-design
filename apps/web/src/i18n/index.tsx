@@ -14,6 +14,7 @@ import { en } from './locales/en';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
 import { ar } from './locales/ar';
+import { he } from './locales/he';
 import { ja } from './locales/ja';
 import { ko } from './locales/ko';
 import { ptBR } from './locales/pt-BR';
@@ -41,6 +42,7 @@ const DICTS: Record<Locale, Dict> = {
   'ru': ru,
   'fa': fa,
   'ar': ar,
+  'he': he,
   'ja': ja,
   'ko': ko,
   'pl': pl,
@@ -80,7 +82,7 @@ interface ProviderProps {
   children: ReactNode;
 }
 
-const RTL_LOCALES: Locale[] = ['ar', 'fa'];
+const RTL_LOCALES: Locale[] = ['ar', 'fa', 'he'];
 
 export function I18nProvider({ initial, children }: ProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectInitialLocale());
