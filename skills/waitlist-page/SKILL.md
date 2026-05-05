@@ -72,6 +72,10 @@ od:
       type: string
       description: "CSS color expression for SVG strokes (e.g., 'rgba(0,0,0,0.12)'). Typically a muted foreground or neutral."
       required: true
+    - name: logo_shadow_expression
+      type: string
+      description: "CSS color expression for logo container shadow (e.g., 'rgba(0,0,0,0.08)'). Typically a subtle foreground shade."
+      required: true
     - name: display_font_url
       type: string
       description: "Display font name with spaces encoded as '+' (e.g., 'Syne', 'DM+Sans'). Used in Google Fonts URL."
@@ -121,13 +125,14 @@ Pre-launch pages are your first handshake with future users. This skill builds a
      - `--ticker-bg` / `{{TICKER_BG_EXPRESSION}}`: full CSS expression for ticker background (e.g., `rgba(0, 0, 0, 0.9)`). Must be valid CSS.
      - `--ticker-fg` / `{{TICKER_FG_EXPRESSION}}`: full CSS expression for ticker text (e.g., `rgba(255, 255, 255, 0.9)`). Validate WCAG AA contrast.
      - `--deco-stroke` / `{{DECO_STROKE_EXPRESSION}}`: full CSS expression for SVG decoration strokes (e.g., `rgba(0, 0, 0, 0.12)`). Typically muted foreground or neutral with opacity 12–15%.
+     - `--logo-shadow` / `{{LOGO_SHADOW_EXPRESSION}}`: full CSS expression for logo container shadow (e.g., `rgba(0, 0, 0, 0.08)`). Typically a subtle foreground shade with low opacity for depth.
      - Never ask the user for hex values when derivation is possible.
 8. **Responsive scaling**. Test at 375px, 768px, 1440px. Mobile: form stacks to single column, logo shrinks to 40px, decoration compresses. No horizontal scrolling. All text remains readable. Desktop: centered layout, comfortable whitespace.
 9. **Emit clean HTML**. Single file, CSS inlined, SVG for graphics. Use semantic tags. Mark interactive elements with `data-od-id` (headline, form, logo, ticker, grid, etc.) so agents can customize without parsing.
    - **Token escaping rules** — apply before inserting any user-supplied value:
      - Text tokens (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before inserting into HTML text nodes or attribute values.
      - Hex color tokens (`{{*_HEX}}`): validate each matches `/^[0-9A-Fa-f]{6}$/`; reject and ask the user if they don't match.
-     - CSS expression tokens (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`): validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or extra quotes.
+     - CSS expression tokens (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`, `{{LOGO_SHADOW_EXPRESSION}}`): validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or extra quotes.
      - Font name tokens (`{{DISPLAY_FONT_CSS}}`, `{{BODY_FONT_CSS}}`): these should be CSS font-family values, already quoted if they contain spaces (e.g., `'DM Sans'`, `Syne`). Do NOT add extra quotes in the template—they are inserted as-is into the `font-family` declaration.
      - Font URL tokens (`{{DISPLAY_FONT_URL}}`, `{{BODY_FONT_URL}}`): spaces must be encoded as `+` for the Google Fonts URL (e.g., `DM+Sans`); validate the URL is well-formed before insertion.
      - Never reflect raw user input into `<script>` blocks or event-handler attributes.
