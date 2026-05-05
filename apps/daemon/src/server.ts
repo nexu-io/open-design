@@ -655,7 +655,7 @@ export function createSseResponse(
   };
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || process.env.OD_HOST || '127.0.0.1', returnServer = false } = {}) {
+export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
   let resolvedPort = port;
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
@@ -3678,7 +3678,7 @@ export function isLocalSameOrigin(req, port) {
   const ports = [port];
   const webPort = Number(process.env.OD_WEB_PORT);
   if (webPort && webPort !== port) ports.push(webPort);
-  const bindHost = process.env.OD_BIND_HOST || process.env.OD_HOST || '127.0.0.1';
+  const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
   const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
   const extraAllowedOrigins = configuredAllowedOrigins();
   const allowedHosts = new Set([

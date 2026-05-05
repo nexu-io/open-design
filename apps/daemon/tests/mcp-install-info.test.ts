@@ -97,7 +97,6 @@ describe('GET /api/mcp/install-info', () => {
   afterEach(() => {
     delete process.env.OD_ALLOWED_ORIGINS;
     delete process.env.OD_BIND_HOST;
-    delete process.env.OD_HOST;
   });
 
   it('returns command, args, platform, daemonUrl', async () => {
@@ -138,17 +137,6 @@ describe('GET /api/mcp/install-info', () => {
       headers: {
         Host: 'od.example.com',
         Origin: 'https://od.example.com',
-      },
-    });
-    expect(res.status).toBe(200);
-  });
-
-  it('accepts legacy OD_HOST as a bind host fallback', async () => {
-    process.env.OD_HOST = '0.0.0.0';
-    const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`, {
-      headers: {
-        Host: `0.0.0.0:${port}`,
-        Origin: `http://0.0.0.0:${port}`,
       },
     });
     expect(res.status).toBe(200);
