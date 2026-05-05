@@ -182,6 +182,12 @@ export function App() {
               ...daemonConfig.agentModels,
             };
           }
+          if (daemonConfig.disabledSkills !== undefined) {
+            next.disabledSkills = daemonConfig.disabledSkills;
+          }
+          if (daemonConfig.disabledDesignSystems !== undefined) {
+            next.disabledDesignSystems = daemonConfig.disabledDesignSystems;
+          }
         }
 
         if (alive) {
@@ -541,8 +547,8 @@ export function App() {
           routeFileName={route.kind === 'project' ? route.fileName : null}
           config={config}
           agents={agents}
-          skills={enabledSkills}
-          designSystems={enabledDS}
+          skills={skills}
+          designSystems={designSystems}
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
           onAgentChange={handleAgentChange}
