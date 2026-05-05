@@ -17,7 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
+  <a href="https://open-design.ai/"><img alt="다운로드" src="https://img.shields.io/badge/%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-open--design.ai-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#디자인-시스템"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
@@ -63,7 +64,7 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 | **영속성** | `.od/app.sqlite`의 SQLite: projects · conversations · messages · tabs · 사용자 templates. 내일 다시 열면 todo 카드와 열린 파일 모두 어제 그 자리. |
 | **라이프사이클** | 단일 입구 `pnpm tools-dev`(start / stop / run / status / logs / inspect / check) — 타입화된 sidecar 스탬프로 daemon + web(+ desktop) 구동 |
 | **데스크탑** | 선택적 Electron 셸: 샌드박스 렌더러 + sidecar IPC(STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN) — 같은 채널이 `tools-dev inspect desktop screenshot`을 구동해 E2E를 돌립니다 |
-| **배포 대상** | 로컬(`pnpm tools-dev`) · Vercel 웹 레이어 · 패키지된 Electron(자리만 잡힘, 진행 중) |
+| **배포 대상** | 로컬 (`pnpm tools-dev`) · Vercel 웹 레이어 · macOS (Apple Silicon)와 Windows (x64)용 패키지된 Electron 데스크톱 앱 — [open-design.ai](https://open-design.ai/) 또는 [최신 릴리스](https://github.com/nexu-io/open-design/releases)에서 다운로드 |
 | **라이선스** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -298,6 +299,15 @@ DISCOVERY 지시문    (turn-1 폼, turn-2 브랜드 분기, TodoWrite, 5차원 
 | 데스크탑(선택) | Electron 셸 — sidecar IPC를 통해 web URL 발견, 포트 추측 없음; 같은 채널(`STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN`)이 `tools-dev inspect desktop …`로 E2E 구동 |
 
 ## 빠른 시작
+
+### 데스크톱 앱 다운로드 (빌드 불필요)
+
+Open Design을 가장 빠르게 사용해 보는 방법은 사전 빌드된 데스크톱 앱입니다 — Node도, pnpm도, clone도 필요 없습니다:
+
+- **[open-design.ai](https://open-design.ai/)** — 공식 다운로드 페이지
+- **[GitHub 릴리스](https://github.com/nexu-io/open-design/releases)**
+
+### 소스에서 실행
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -666,7 +676,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 - [ ] Vercel + 터널 배포 레시피(Topology B)
 - [ ] `DESIGN.md`로 프로젝트를 스캐폴딩하는 원클릭 `npx od init`
 - [ ] Skill 마켓플레이스(`od skills install <github-repo>`)와 `od skill add | list | remove | test` CLI 표면([`docs/skills-protocol.md`](docs/skills-protocol.md)에 초안 작성됨, 구현 미완)
-- [ ] `apps/packaged/`에서 패키지된 Electron 빌드
+- [x] `apps/packaged/`에서 패키지된 Electron 빌드 — macOS (Apple Silicon) 및 Windows (x64) 다운로드는 [open-design.ai](https://open-design.ai/)와 [GitHub 릴리스 페이지](https://github.com/nexu-io/open-design/releases)에서 제공
 
 단계별 배포 → [`docs/roadmap.md`](docs/roadmap.md).
 

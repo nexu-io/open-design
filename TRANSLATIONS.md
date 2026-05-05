@@ -216,6 +216,17 @@ on them now, with rough triggers for revisiting:
 - **Translation memory tooling** (Crowdin / Weblate / Lingui). Re-evaluate
   once the project hits ~12-15 active locales **or** when contributors
   start visibly duplicating effort across PRs.
+- **README template-driven generation** (e.g. [NRG](https://github.com/nanolaba/readme-generator),
+  custom `.src.md` build scripts, All Contributors-style tooling).
+  Re-evaluate once the project hits ≥15 locales **or** README structural
+  edits become more frequent than monthly. Discussion in
+  [#195](https://github.com/nexu-io/open-design/issues/195): template-driven
+  generation solves the "update line 27 in 10 README variants" brittleness,
+  but forces a shared structure that today's locale variants intentionally
+  diverge from (e.g. `README.zh-TW.md`'s "上手體驗" section, the pt-BR /
+  pt-PT precedent for content-level — not just translation-level —
+  differences). Worth revisiting once locale voice is more settled or
+  the manual-update cost grows.
 
 ## Open questions
 

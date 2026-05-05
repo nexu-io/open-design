@@ -1172,6 +1172,11 @@ export function resolveAgentBin(id) {
 // launched from a shell that exported the key for SDK or scripting use.
 // See issue #398.
 //
+// However, when ANTHROPIC_BASE_URL is set the user is intentionally
+// routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
+// In that case claude login is meaningless, so preserve the API key so
+// the child can authenticate against the custom base URL.
+//
 // Windows env-var names are case-insensitive at the kernel level
 // (`GetEnvironmentVariable`), but spreading `process.env` into a plain
 // object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
@@ -1180,6 +1185,13 @@ export function resolveAgentBin(id) {
 export function spawnEnvForAgent(agentId, baseEnv) {
   const env = { ...baseEnv };
   if (agentId !== 'claude') return env;
+  const hasCustomBaseUrl = Object.keys(env).some(
+    (k) =>
+      k.toUpperCase() === 'ANTHROPIC_BASE_URL' &&
+      typeof env[k] === 'string' &&
+      env[k].trim() !== '',
+  );
+  if (hasCustomBaseUrl) return env;
   for (const key of Object.keys(env)) {
     if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
   }

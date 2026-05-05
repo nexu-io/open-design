@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, parse as parsePath } from 'node:path';
 
 export const APP_VERSION_FALLBACK = '0.0.0';
 
@@ -31,8 +33,42 @@ export interface ReadAppVersionInfoOptions extends ResolveAppVersionInfoOptions 
   packageJsonUrl?: URL | undefined;
 }
 
-const DEFAULT_PACKAGE_JSON_URL = new URL('../package.json', import.meta.url);
 const processWithResources = process as NodeJS.Process & { resourcesPath?: string };
+
+// The compiled daemon ships in two layouts depending on which tsconfig produced
+// it: `dist/app-version.js` (rootDir=src, used by the `od` CLI) and
+// `dist/src/app-version.js` (rootDir=., used by the packaged sidecar entry).
+// A fixed relative path like `../package.json` only points at the daemon
+// `package.json` in the first layout — in the sidecar layout it resolves to
+// `dist/package.json`, which does not exist, so the version silently falls
+// back to `APP_VERSION_FALLBACK`. Walk up from `import.meta.url` until we find
+// a real `package.json` so both build outputs (and the TypeScript source
+// during `tools-dev`) read the daemon's actual version. Callers that already
+// inject the version via `OD_APP_VERSION` (packaged runtime) keep working
+// because that env still wins inside `resolveAppVersionInfo`.
+async function findNearestPackageJsonUrl(startUrl: URL): Promise<URL | null> {
+  let currentDir: string;
+  try {
+    currentDir = dirname(fileURLToPath(startUrl));
+  } catch {
+    return null;
+  }
+
+  const root = parsePath(currentDir).root;
+  while (true) {
+    const candidate = join(currentDir, 'package.json');
+    try {
+      const stats = await stat(candidate);
+      if (stats.isFile()) return pathToFileURL(candidate);
+    } catch {
+      // try the parent directory
+    }
+    if (currentDir === root) return null;
+    const parent = dirname(currentDir);
+    if (parent === currentDir) return null;
+    currentDir = parent;
+  }
+}
 
 function cleanString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -93,7 +129,7 @@ async function readPackageMetadata(packageJsonUrl: URL): Promise<PackageMetadata
 }
 
 export async function readCurrentAppVersionInfo({
-  packageJsonUrl = DEFAULT_PACKAGE_JSON_URL,
+  packageJsonUrl,
   packageMetadata,
   env,
   resourcesPath,
@@ -101,6 +137,8 @@ export async function readCurrentAppVersionInfo({
   platform,
   arch,
 }: ReadAppVersionInfoOptions = {}): Promise<AppVersionInfo> {
-  const metadata = packageMetadata ?? await readPackageMetadata(packageJsonUrl);
+  const resolvedUrl = packageJsonUrl ?? await findNearestPackageJsonUrl(new URL(import.meta.url));
+  const metadata = packageMetadata
+    ?? (resolvedUrl ? await readPackageMetadata(resolvedUrl) : null);
   return resolveAppVersionInfo({ env, packageMetadata: metadata, resourcesPath, execPath, platform, arch });
 }

@@ -48,10 +48,16 @@ describe('buildSrcdoc', () => {
 
     expect(srcdoc).toContain('data-od-comment-bridge');
     expect(srcdoc).toContain('var enabled = true;');
+    expect(srcdoc).toContain("var mode = 'picker';");
     expect(srcdoc).toContain("type: 'od:comment-target'");
     expect(srcdoc).toContain("type: 'od:comment-hover'");
     expect(srcdoc).toContain("type: 'od:comment-leave'");
     expect(srcdoc).toContain("type: 'od:comment-targets'");
+    expect(srcdoc).toContain("postStroke('od:pod-stroke')");
+    expect(srcdoc).toContain("postStroke('od:pod-select')");
+    expect(srcdoc).toContain('data-od-comment-mode-kind');
+    expect(srcdoc).toContain("body * { cursor: crosshair !important; }");
+    expect(srcdoc).toContain('MutationObserver(schedulePostTargets)');
     expect(srcdoc).toContain("document.addEventListener('scroll', schedulePostTargets, true);");
     expect(srcdoc).toContain('data-od-comment-bridge-style');
   });

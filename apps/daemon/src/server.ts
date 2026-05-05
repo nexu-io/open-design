@@ -180,6 +180,16 @@ export function normalizeCommentAttachments(input) {
       const label = cleanString(raw.label);
       const comment = cleanString(raw.comment);
       if (!filePath || !elementId || !selector || !comment) return null;
+      const selectionKind = raw.selectionKind === 'pod' ? 'pod' : 'element';
+      const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
+      const memberCount =
+        selectionKind === 'pod'
+          ? (podMembers.length > 0
+              ? podMembers.length
+              : Number.isFinite(raw.memberCount)
+                ? Math.max(0, Math.round(raw.memberCount))
+                : 0)
+          : 0;
       return {
         id: cleanString(raw.id) || `comment-${index + 1}`,
         order: Number.isFinite(raw.order)
@@ -193,6 +203,10 @@ export function normalizeCommentAttachments(input) {
         currentText: compactString(raw.currentText, 160),
         pagePosition: normalizeAttachmentPosition(raw.pagePosition),
         htmlHint: compactString(raw.htmlHint, 180),
+        selectionKind,
+        memberCount,
+        podMembers,
+        source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
       };
     })
     .filter(Boolean)
@@ -205,12 +219,14 @@ export function renderCommentAttachmentHint(commentAttachments) {
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: edit the target element by default. Use the smallest necessary parent wrapper only if the target cannot satisfy the comment. Preserve stable ids and unrelated siblings.',
+    'Scope: treat each attachment as the default refinement target. For single elements, edit the target element first. For pods, coordinate the captured group as one design region and preserve unrelated areas.',
   ];
   for (const item of commentAttachments) {
+    const targetKind = item.selectionKind === 'pod' ? 'pod' : 'element';
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
+      `targetKind: ${targetKind}`,
       `file: ${item.filePath}`,
       `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
@@ -219,6 +235,14 @@ export function renderCommentAttachmentHint(commentAttachments) {
       `htmlHint: ${item.htmlHint || '(none)'}`,
       `comment: ${item.comment}`,
     );
+    if (targetKind === 'pod') {
+      lines.push(`memberCount: ${item.memberCount || item.podMembers.length || 0}`);
+      item.podMembers.slice(0, 8).forEach((member, memberIndex) => {
+        lines.push(
+          `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
+        );
+      });
+    }
   }
   lines.push('</attached-preview-comments>');
   return lines.join('\n');
@@ -241,6 +265,27 @@ function normalizeAttachmentPosition(input) {
     width: finiteAttachmentNumber(value.width),
     height: finiteAttachmentNumber(value.height),
   };
+}
+
+function normalizeAttachmentPodMembers(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((member) => {
+      if (!member || typeof member !== 'object') return null;
+      const elementId = cleanString(member.elementId);
+      const selector = cleanString(member.selector);
+      const label = cleanString(member.label);
+      if (!elementId || !selector) return null;
+      return {
+        elementId,
+        selector,
+        label,
+        text: compactString(member.text, 160),
+        position: normalizeAttachmentPosition(member.position),
+        htmlHint: compactString(member.htmlHint, 180),
+      };
+    })
+    .filter(Boolean);
 }
 
 function finiteAttachmentNumber(value) {

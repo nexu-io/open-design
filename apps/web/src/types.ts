@@ -30,6 +30,8 @@ import type {
   ProviderTestRequest,
   PersistedAgentEvent,
   Project,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -48,6 +50,8 @@ import type {
   SkillSummary,
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
+
+export type { PreviewCommentMember, PreviewCommentSelectionKind } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
 export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
@@ -271,6 +275,9 @@ export interface AppConfig {
   // configs that pre-date the feature land at `undefined`, which the loader
   // normalizes to a safe default (everything off).
   notifications?: NotificationsConfig;
+  // IDs of skills/design-systems the user has explicitly disabled.
+  disabledSkills?: string[];
+  disabledDesignSystems?: string[];
 }
 
 export interface ComposioSettings {

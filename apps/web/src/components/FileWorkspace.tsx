@@ -7,6 +7,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import {
+  type ChatCommentAttachment,
   liveArtifactSummaryToWorkspaceEntry,
   type LiveArtifactSummary,
   type LiveArtifactEventItem,
@@ -40,6 +41,7 @@ interface Props {
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
 }
 
 interface SketchState {
@@ -67,6 +69,7 @@ export function FileWorkspace({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
+  onSendBoardCommentAttachments,
 }: Props) {
   const t = useT();
   // Persisted tabs come from the parent. Active tab can transiently point
@@ -452,6 +455,7 @@ export function FileWorkspace({
             previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
+            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
           />
         ) : (
           <div className="viewer-empty">

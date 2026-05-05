@@ -1,5 +1,9 @@
 import type { ProjectFile } from './files';
-import type { PreviewCommentPosition } from './comments';
+import type {
+  PreviewCommentMember,
+  PreviewCommentPosition,
+  PreviewCommentSelectionKind,
+} from './comments';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -71,6 +75,10 @@ export interface ChatCommentAttachment {
   currentText: string;
   pagePosition: PreviewCommentPosition;
   htmlHint: string;
+  selectionKind?: PreviewCommentSelectionKind;
+  memberCount?: number;
+  podMembers?: PreviewCommentMember[];
+  source?: 'saved-comment' | 'board-batch';
 }
 
 export type PersistedAgentEvent =

@@ -171,6 +171,17 @@ function migrate(db) {
   if (!messageCols.some((c) => c.name === 'comment_attachments_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
   }
+
+  const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all();
+  if (!previewCommentCols.some((c) => c.name === 'selection_kind')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN selection_kind TEXT`);
+  }
+  if (!previewCommentCols.some((c) => c.name === 'member_count')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN member_count INTEGER`);
+  }
+  if (!previewCommentCols.some((c) => c.name === 'pod_members_json')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN pod_members_json TEXT`);
+  }
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all();
   if (!deploymentCols.some((c) => c.name === 'status')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
@@ -738,6 +749,8 @@ export function listPreviewComments(db, projectId, conversationId) {
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
               file_path AS filePath, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
+              selection_kind AS selectionKind, member_count AS memberCount,
+              pod_members_json AS podMembersJson,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
         WHERE project_id = ? AND conversation_id = ?
@@ -758,6 +771,15 @@ export function upsertPreviewComment(db, projectId, conversationId, input) {
   const text = typeof target.text === 'string' ? compactWhitespace(target.text).slice(0, 160) : '';
   const htmlHint = typeof target.htmlHint === 'string' ? compactWhitespace(target.htmlHint).slice(0, 180) : '';
   const position = normalizePosition(target.position);
+  const selectionKind = target.selectionKind === 'pod' ? 'pod' : 'element';
+  const podMembers = selectionKind === 'pod' ? normalizePodMembers(target.podMembers) : [];
+  const memberCount = selectionKind === 'pod'
+    ? (podMembers.length > 0
+        ? podMembers.length
+        : Number.isFinite(target.memberCount)
+          ? Math.max(0, Math.round(target.memberCount))
+          : 0)
+    : 0;
   const now = Date.now();
   const existing = db
     .prepare(
@@ -771,14 +793,18 @@ export function upsertPreviewComment(db, projectId, conversationId, input) {
   db.prepare(
     `INSERT INTO preview_comments
        (id, project_id, conversation_id, file_path, element_id, selector, label,
-        text, position_json, html_hint, note, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        text, position_json, html_hint, selection_kind, member_count, pod_members_json,
+        note, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_id, conversation_id, file_path, element_id) DO UPDATE SET
        selector = excluded.selector,
        label = excluded.label,
        text = excluded.text,
        position_json = excluded.position_json,
        html_hint = excluded.html_hint,
+       selection_kind = excluded.selection_kind,
+       member_count = excluded.member_count,
+       pod_members_json = excluded.pod_members_json,
        note = excluded.note,
        status = 'open',
        updated_at = excluded.updated_at`,
@@ -793,6 +819,9 @@ export function upsertPreviewComment(db, projectId, conversationId, input) {
     text,
     JSON.stringify(position),
     htmlHint,
+    selectionKind,
+    selectionKind === 'pod' ? memberCount : null,
+    selectionKind === 'pod' ? JSON.stringify(podMembers) : null,
     note,
     'open',
     createdAt,
@@ -828,6 +857,8 @@ function getPreviewComment(db, projectId, conversationId, id) {
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
               file_path AS filePath, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
+              selection_kind AS selectionKind, member_count AS memberCount,
+              pod_members_json AS podMembersJson,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
         WHERE id = ? AND project_id = ? AND conversation_id = ?`,
@@ -837,6 +868,8 @@ function getPreviewComment(db, projectId, conversationId, id) {
 }
 
 function normalizePreviewComment(row) {
+  const podMembers = parseJsonOrUndef(row.podMembersJson);
+  const normalizedPodMembers = Array.isArray(podMembers) ? podMembers : undefined;
   return {
     id: row.id,
     projectId: row.projectId,
@@ -848,6 +881,14 @@ function normalizePreviewComment(row) {
     text: row.text,
     position: parseJsonOrUndef(row.positionJson) ?? { x: 0, y: 0, width: 0, height: 0 },
     htmlHint: row.htmlHint,
+    selectionKind: row.selectionKind === 'pod' ? 'pod' : 'element',
+    memberCount:
+      normalizedPodMembers && normalizedPodMembers.length > 0
+        ? normalizedPodMembers.length
+        : Number.isFinite(row.memberCount)
+          ? row.memberCount
+          : undefined,
+    podMembers: normalizedPodMembers,
     note: row.note,
     status: row.status,
     createdAt: row.createdAt,
@@ -858,6 +899,32 @@ function normalizePreviewComment(row) {
 function cleanRequiredString(value, name) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} required`);
   return value.trim();
+}
+
+function normalizePodMembers(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((member) => {
+      if (!member || typeof member !== 'object') return null;
+      const elementId = cleanRequiredString(member.elementId, 'podMember.elementId');
+      const selector = cleanRequiredString(member.selector, 'podMember.selector');
+      const label = cleanRequiredString(member.label, 'podMember.label');
+      return {
+        elementId,
+        selector,
+        label,
+        text:
+          typeof member.text === 'string'
+            ? compactWhitespace(member.text).slice(0, 160)
+            : '',
+        position: normalizePosition(member.position),
+        htmlHint:
+          typeof member.htmlHint === 'string'
+            ? compactWhitespace(member.htmlHint).slice(0, 180)
+            : '',
+      };
+    })
+    .filter(Boolean);
 }
 
 function compactWhitespace(value) {

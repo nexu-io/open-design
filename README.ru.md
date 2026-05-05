@@ -17,7 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
+  <a href="https://open-design.ai/"><img alt="Скачать" src="https://img.shields.io/badge/%D1%81%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-open--design.ai-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#поддерживаемые-coding-agent-cli"><img alt="Agents" src="https://img.shields.io/badge/agents-12%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#системы-дизайна"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
@@ -63,7 +64,7 @@ OD стоит на плечах четырёх open-source проектов:
 | **Persistence** | SQLite в `.od/app.sqlite`: projects · conversations · messages · tabs · saved templates. Откройте завтра — и todo card с открытыми файлами будут ровно там, где вы их оставили. |
 | **Lifecycle** | Единая точка входа: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) — поднимает daemon + web (+ desktop) под typed sidecar stamps |
 | **Desktop** | Опциональная Electron-оболочка с sandboxed renderer + sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN) — именно через неё работает `tools-dev inspect desktop screenshot` для E2E |
-| **Deployable to** | Локально (`pnpm tools-dev`) · web-слой на Vercel · packaged Electron (placeholder, in-flight) |
+| **Deployable to** | Локально (`pnpm tools-dev`) · web-слой на Vercel · упакованное Electron desktop-приложение для macOS (Apple Silicon) и Windows (x64) — скачать на [open-design.ai](https://open-design.ai/) или на [странице последнего релиза](https://github.com/nexu-io/open-design/releases) |
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -299,6 +300,15 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
 | Desktop (optional) | Electron shell — узнаёт web URL через sidecar IPC, без угадывания портов; тот же канал `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` используется `tools-dev inspect desktop …` для E2E |
 
 ## Быстрый старт
+
+### Скачать desktop-приложение (без сборки)
+
+Самый быстрый способ попробовать Open Design — готовое desktop-приложение, без Node, pnpm и клонирования:
+
+- **[open-design.ai](https://open-design.ai/)** — официальная страница загрузки
+- **[GitHub-релизы](https://github.com/nexu-io/open-design/releases)**
+
+### Запуск из исходников
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -674,7 +684,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 - [ ] Рецепт деплоя на Vercel + через tunnel (Topology B)
 - [ ] Однокомандный `npx od init`, создающий проект с `DESIGN.md`
 - [ ] Marketplace навыков (`od skills install <github-repo>`) и CLI surface `od skill add | list | remove | test` (набросан в [`docs/skills-protocol.md`](docs/skills-protocol.md), реализация впереди)
-- [ ] Packaged Electron build на базе `apps/packaged/`
+- [x] Packaged Electron build на базе `apps/packaged/` — загрузки для macOS (Apple Silicon) и Windows (x64) на [open-design.ai](https://open-design.ai/) и [странице релизов GitHub](https://github.com/nexu-io/open-design/releases)
 
 Поэтапная поставка → [`docs/roadmap.md`](docs/roadmap.md).
 

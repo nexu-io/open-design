@@ -9,6 +9,8 @@ export interface AppConfigPrefs {
   agentModels?: Record<string, AgentModelPrefs>;
   skillId?: string | null;
   designSystemId?: string | null;
+  disabledSkills?: string[];
+  disabledDesignSystems?: string[];
 }
 
 export interface AppConfigResponse {
