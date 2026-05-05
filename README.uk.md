@@ -220,7 +220,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 
 ### 1 · Ми не постачаємо агента. Ваш — достатньо хороший.
 
-При запуску демон сканує ваш `PATH` на наявність [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) та [`vibe-acp`](https://github.com/mistralai/mistral-vibe) на старті. Ті, що знайдені, стають кандидатами на роль "двигуна" дизайну — вони керуються через stdio з одним адаптером на CLI, який можна змінити у виборі моделі. Натхненно [`multica`](https://github.com/multica-ai/multica) та [`cc-switch`](https://github.com/farion1231/cc-switch). Немає встановленого CLI? Режим API використовує той самий конвеєр — виберіть Anthropic, OpenAI-сумісний, Azure OpenAI або Google Gemini, і демон передаватиме нормалізовані фрагменти SSE, з блокуванням внутрішніх мереж на краю.
+При запуску демон сканує ваш `PATH` на наявність [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) та [`vibe-acp`](https://github.com/mistralai/mistral-vibe) на старті. Ті, що знайдені, стають кандидатами на роль "двигуна" дизайну — вони керуються через stdio з одним адаптером на CLI, який можна змінити у виборі моделі. Натхненно [`multica`](https://github.com/multica-ai/multica) та [`cc-switch`](https://github.com/farion1231/cc-switch). Немає встановленого CLI? Режим API використовує той самий конвеєр — виберіть Anthropic, OpenAI-сумісний, Azure OpenAI або Google Gemini, і демон передаватиме нормалізовані фрагменти SSE, з блокуванням внутрішніх мереж на краю.
 
 ### 2 · Навички — це файли, а не плагіни.
 
@@ -623,7 +623,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -649,7 +649,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
 | **Багатопровайдерний BYOK** | н/д | Нормалізація SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-сумісний / Azure OpenAI / Gemini; захист від SSRF проти loopback / link-local / RFC1918 |
 
 Додавання нового CLI — це один запис у [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат потоку — один із `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (з `eventParser` для кожного CLI), `acp-json-rpc`, `pi-rpc` або `plain`.

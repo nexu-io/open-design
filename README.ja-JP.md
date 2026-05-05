@@ -220,7 +220,7 @@ Skill の追加はフォルダ 1 つで完了します。拡張 frontmatter の�
 
 ### 1 · エージェントは同梱しない — あなたのもので十分
 
-Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/mariozechner/pi-ai) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
+Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
 
 ### 2 · Skill はファイルであり、プラグインではない
 
@@ -618,7 +618,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -640,7 +640,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型付きイベント） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
