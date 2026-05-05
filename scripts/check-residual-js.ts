@@ -43,6 +43,8 @@ const allowedExactPaths = new Set([
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
+  // electron-builder hook path; CJS compatibility entry used by tools-pack mac builds.
+  "tools/pack/resources/mac/web-standalone-after-pack.cjs",
 ]);
 
 const allowedPathPrefixes = [

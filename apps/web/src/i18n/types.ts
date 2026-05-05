@@ -444,6 +444,10 @@ export interface Dict {
   'chat.importFolder': string;
   'chat.importSkills': string;
   'chat.importProject': string;
+  'chat.linkedFolderRemoveAria': string;
+  'chat.linkedFolderNotFound': string;
+  'chat.linkedFolderAlready': string;
+  'chat.linkedFolderPickError': string;
   'chat.send': string;
   'chat.stop': string;
   'chat.removeAria': string;
@@ -493,6 +497,9 @@ export interface Dict {
   'designFiles.rowMenu': string;
   'designFiles.openInTab': string;
   'designFiles.download': string;
+  'designFiles.downloadSelected': string;
+  'designFiles.clearSelection': string;
+  'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
   'designFiles.dropDesc': string;
   'designFiles.upload.title': string;

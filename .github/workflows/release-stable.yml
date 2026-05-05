@@ -154,6 +154,7 @@ jobs:
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace release-stable \
             --portable \
+            --mac-compression normal \
             --to all \
             --json \
             $signed_flag

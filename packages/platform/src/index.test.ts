@@ -186,6 +186,60 @@ describe("createCommandInvocation", () => {
     ]);
   });
 
+  // cmd.exe runs percent-expansion on the inner command line of `cmd /s /c
+  // "..."` regardless of inner quote state, so a `.cmd` shim spawn whose
+  // argv carries an attacker-influenced `%DEEPSEEK_API_KEY%` substring would
+  // otherwise have the daemon environment substituted into the child's
+  // command line before the child saw the prompt. Pin that the constructed
+  // invocation breaks every potential `%var%` pair with `"^%"` so cmd has no
+  // chance to expand it, while `CommandLineToArgvW` still concatenates the
+  // surrounding quote segments back into the original arg.
+  it("escapes %var% sequences in argv so cmd.exe cannot expand them on a .cmd shim", () => {
+    setPlatform("win32");
+    const invocation = createCommandInvocation({
+      command: "C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd",
+      args: ["exec", "--auto", "write a function that reads %DEEPSEEK_API_KEY% from env"],
+      env: { ComSpec: "cmd.exe" } as NodeJS.ProcessEnv,
+    });
+
+    expect(invocation.command).toBe("cmd.exe");
+    expect(invocation.windowsVerbatimArguments).toBe(true);
+    // The full inner line cmd.exe receives after `/s` strips its outer wrap.
+    const innerLine = invocation.args[3];
+    if (typeof innerLine !== "string") throw new Error("expected an inner cmd line");
+
+    // The literal `%DEEPSEEK_API_KEY%` pair must NOT survive intact in the
+    // inner line — if it did, cmd would expand it before the child runs.
+    expect(innerLine).not.toContain("%DEEPSEEK_API_KEY%");
+
+    // Each `%` must be wrapped in `"^%"` so cmd's `^` escape neutralizes the
+    // percent and `CommandLineToArgvW` rejoins the quote segments. Two `%`
+    // chars in the prompt → two escaped occurrences.
+    const escapedOccurrences = innerLine.split('"^%"').length - 1;
+    expect(escapedOccurrences).toBe(2);
+
+    // Sanity: the literal env-var name still appears (the prompt itself is
+    // not corrupted, only the surrounding `%` are escaped).
+    expect(innerLine).toContain("DEEPSEEK_API_KEY");
+  });
+
+  it("does not perturb argv quoting when no %var% sequence is present", () => {
+    setPlatform("win32");
+    const invocation = createCommandInvocation({
+      command: "deepseek.cmd",
+      args: ["exec", "--auto", "write hello world"],
+      env: { ComSpec: "cmd.exe" } as NodeJS.ProcessEnv,
+    });
+    // Pre-fix shape — adding the `%` escape must not change the line for
+    // ordinary prompts that happen not to mention env-var names.
+    expect(invocation.args).toEqual([
+      "/d",
+      "/s",
+      "/c",
+      '"deepseek.cmd exec --auto "write hello world""',
+    ]);
+  });
+
   it("falls back to process.env.ComSpec when env override is absent", () => {
     setPlatform("win32");
     const original = process.env.ComSpec;

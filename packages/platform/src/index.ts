@@ -147,9 +147,24 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// `cmd.exe /s /c "..."` runs percent-expansion on the inner line *regardless*
+// of whether the `%name%` pair sits inside a `"..."` quoted segment, so a
+// `.cmd` / `.bat` shim spawn with an attacker-influenced argv (e.g. an LLM
+// adapter that ships the user prompt as a positional argument) lets a stray
+// `%DEEPSEEK_API_KEY%` substring substitute live env values into the line
+// before the child sees it. Plain quote-doubling is not enough on its own.
+//
+// The fix is to break each potential `%var%` pair by toggling out of the
+// outer quote with `"^%"`: cmd treats the `^` as the standard escape for the
+// next char (here, `%`), making it literal and skipping percent-expansion;
+// `CommandLineToArgvW` then concatenates the surrounding quote segments back
+// into one literal arg with the `%` preserved. The two layers cancel, so the
+// child receives the original arg byte-for-byte while cmd never has a chance
+// to expand anything inside it.
 function quoteWindowsCommandArg(value: string): string {
-  if (!/[\s"&<>|^]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
+  if (!/[\s"&<>|^%]/.test(value)) return value;
+  const escaped = value.replace(/"/g, '""').replace(/%/g, '"^%"');
+  return `"${escaped}"`;
 }
 
 // Build the `cmd.exe /d /s /c "<line>"` invocation Node uses internally for

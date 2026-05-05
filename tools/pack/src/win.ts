@@ -696,6 +696,7 @@ async function writeAssembledApp(config: ToolPackConfig, paths: WinPaths, packed
     paths.packagedConfigPath,
     `${JSON.stringify(
       {
+        appVersion: packagedVersion,
         namespace: config.namespace,
         nodeCommandRelative: join("open-design", "bin", "node.exe"),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),

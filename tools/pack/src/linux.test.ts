@@ -14,6 +14,7 @@ function makeConfig(): ToolPackConfig {
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
+    macCompression: "normal",
     namespace: "default",
     platform: "linux",
     portable: false,
@@ -37,6 +38,7 @@ function makeConfig(): ToolPackConfig {
     silent: true,
     signed: false,
     to: "all",
+    webOutputMode: "server",
     workspaceRoot: "/work",
   };
 }

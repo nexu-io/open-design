@@ -17,6 +17,7 @@
     "check:residual-js": "node --experimental-strip-types scripts/check-residual-js.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
     "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
+    "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
     "test:e2e:live": "pnpm --filter @open-design/e2e test:e2e:live",
     "test": "pnpm -r --workspace-concurrency=1 --if-present run test",
     "test:ui:clean": "pnpm --filter @open-design/e2e test:ui:clean",
