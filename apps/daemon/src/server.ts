@@ -644,13 +644,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Shared by the global origin middleware and isLocalSameOrigin() so
   // both use the same policy (loopback + explicit bind host, HTTP + HTTPS,
   // OD_WEB_PORT support).
-  function buildAllowedOrigins() {
+  let _cachedAllowedOrigins = null;
+  function getAllowedOrigins() {
+    if (_cachedAllowedOrigins) return _cachedAllowedOrigins;
     const ports = [resolvedPort];
     const webPort = Number(process.env.OD_WEB_PORT);
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
+    _cachedAllowedOrigins = new Set(
       ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         // When bound to a specific non-loopback address (e.g. Tailscale,
@@ -659,6 +661,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
     );
+    return _cachedAllowedOrigins;
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -690,7 +693,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'Server initializing' });
     }
 
-    if (!buildAllowedOrigins().has(String(origin))) {
+    if (!getAllowedOrigins().has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
