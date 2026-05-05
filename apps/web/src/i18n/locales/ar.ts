@@ -539,6 +539,7 @@ export const ar: Dict = {
   'chat.linkedFolderAlready': 'هذا المجلد مرتبط بالفعل',
   'chat.linkedFolderPickError': 'تعذر فتح منتقي المجلدات',
   'chat.send': 'إرسال',
+  'chat.queue': 'Queue',
   'chat.stop': 'إيقاف',
   'chat.removeAria': 'إزالة {name}',
   'chat.example1Title': 'عرض تقديمي تحريري',

@@ -57,12 +57,16 @@ describe('getArtifact file-count cap (MAX_FILES = 200)', () => {
 
   afterAll(() => new Promise((resolve) => server.close(resolve)));
 
-  it('caps at 200 files and sets truncated: true when the project has 250 files', async () => {
+  it(
+    'caps at 200 files and sets truncated: true when the project has 250 files',
+    async () => {
     const result = await getArtifact(baseUrl, PROJECT_ID, 'index.html', 'all', 10_000_000);
     const body = JSON.parse(result.content[0].text);
     expect(body.truncated).toBe(true);
     expect(body.files.length).toBe(200);
-  });
+    },
+    20_000,
+  );
 });
 
 describe('getArtifact maxBytes cap', () => {

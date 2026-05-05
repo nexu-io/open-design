@@ -539,6 +539,7 @@ export const fr: Dict = {
   'chat.linkedFolderAlready': 'Ce dossier est déjà lié',
   'chat.linkedFolderPickError': 'Impossible d\'ouvrir le sélecteur de dossier',
   'chat.send': 'Envoyer',
+  'chat.queue': 'Queue',
   'chat.stop': 'Arrêter',
   'chat.removeAria': 'Retirer {name}',
   'chat.example1Title': 'Pitch deck éditorial',

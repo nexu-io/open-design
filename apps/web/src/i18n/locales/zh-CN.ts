@@ -541,6 +541,7 @@ export const zhCN: Dict = {
   'chat.linkedFolderAlready': '该文件夹已关联',
   'chat.linkedFolderPickError': '无法打开文件夹选择器',
   'chat.send': '发送',
+  'chat.queue': 'Queue',
   'chat.stop': '停止',
   'chat.removeAria': '移除 {name}',
   'chat.example1Title': '编辑风路演 PPT',

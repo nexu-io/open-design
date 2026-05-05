@@ -306,7 +306,8 @@ async function consumeDaemonRun({
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
             endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
-            onRunStatus?.(endStatus);
+            // Deferred after onDone flush
+            // onRunStatus?.(endStatus);
           }
         }
       }
@@ -336,6 +337,7 @@ async function consumeDaemonRun({
       return;
     }
     handlers.onDone(acc);
+    if (endStatus) onRunStatus(endStatus);
   } finally {
     cancelSignal?.removeEventListener('abort', cancelRun);
   }

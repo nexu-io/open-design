@@ -549,6 +549,7 @@ export const ptBR: Dict = {
   'chat.linkedFolderAlready': 'Esta pasta já está vinculada',
   'chat.linkedFolderPickError': 'Não foi possível abrir o seletor de pasta',
   'chat.send': 'Enviar',
+  'chat.queue': 'Queue',
   'chat.stop': 'Parar',
   'chat.removeAria': 'Remover {name}',
   'chat.example1Title': 'Pitch deck editorial',

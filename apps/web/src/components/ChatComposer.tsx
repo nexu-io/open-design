@@ -534,7 +534,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // adopts it from "Recently hatched" in pet settings afterwards.
       const hatched = expandHatchCommand(prompt);
       if (hatched) {
-        if (streaming) return;
         onSend(hatched, staged, commentAttachments);
         reset();
         return;
@@ -548,7 +547,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         reset();
         return;
       }
-      if ((!prompt && commentAttachments.length === 0) || streaming) return;
+      if ((!prompt && commentAttachments.length === 0)) return;
       onSend(prompt, staged, commentAttachments);
       reset();
     }
@@ -850,22 +849,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 type="button"
                 className="composer-send stop"
                 onClick={onStop}
+                style={{ marginRight: 8 }}
               >
                 <Icon name="stop" size={13} />
                 <span>{t('chat.stop')}</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                className="composer-send"
-                data-testid="chat-send"
-                onClick={() => void submit()}
-                disabled={!draft.trim() && commentAttachments.length === 0}
-              >
-                <Icon name="send" size={13} />
-                <span>{t('chat.send')}</span>
-              </button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              className="composer-send"
+              data-testid="chat-send"
+              onClick={() => void submit()}
+              disabled={!draft.trim() && commentAttachments.length === 0}
+            >
+              <Icon name="send" size={13} />
+              <span>{streaming ? t('chat.queue') : t('chat.send')}</span>
+            </button>
           </div>
         </div>
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}

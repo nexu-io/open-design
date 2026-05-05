@@ -539,6 +539,7 @@ export const hu: Dict = {
   'chat.linkedFolderAlready': 'Ez a mappa már hozzá van kapcsolva',
   'chat.linkedFolderPickError': 'Nem sikerült megnyitni a mappaválasztót',
   'chat.send': 'Küldés',
+  'chat.queue': 'Queue',
   'chat.stop': 'Leállítás',
   'chat.removeAria': '{name} eltávolítása',
   'chat.example1Title': 'Magazinszerű pitch deck',

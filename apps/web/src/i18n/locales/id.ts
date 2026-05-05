@@ -68,13 +68,12 @@ export const id: Dict = {
   'settings.testTitle': 'Kirim prompt kecil untuk memverifikasi koneksi',
   'settings.testRunning': 'Menguji koneksi...',
   'settings.testCancel': 'Batal',
-  'settings.testSuccessApi': 'Tersambung. Membalas dalam {ms} md — \'{sample}\'',
-  'settings.testSuccessCli': '{agentName} membalas dalam {ms} md — \'{sample}\'',
+  'settings.testSuccessApi': "Tersambung. Membalas dalam {ms} md — '{sample}'",
+  'settings.testSuccessCli': "{agentName} membalas dalam {ms} md — '{sample}'",
   'settings.testAuthFailed': 'Autentikasi gagal. Periksa API key kamu.',
   'settings.testForbidden': 'Akses ditolak. Verifikasi akun, wilayah, atau organisasi kamu.',
-  'settings.testNotFoundModel': 'Model \'{model}\' tidak ditemukan di endpoint ini.',
-  'settings.testInvalidModelId':
-    'ID model \'{model}\' tidak valid. ID kustom harus diawali huruf atau angka dan tidak boleh berisi spasi.',
+  'settings.testNotFoundModel': "Model '{model}' tidak ditemukan di endpoint ini.",
+  'settings.testInvalidModelId': "ID model '{model}' tidak valid. ID kustom harus diawali huruf atau angka dan tidak boleh berisi spasi.",
   'settings.testInvalidBaseUrl': 'Base URL tidak valid atau tidak dapat dijangkau.',
   'settings.testRateLimited': 'Provider membatasi laju tes. Konfigurasi tampak valid.',
   'settings.testUpstream': 'Provider mengembalikan {status}. Coba lagi sebentar lagi.',
@@ -82,8 +81,7 @@ export const id: Dict = {
   'settings.testAgentMissing': '{agentName} tidak terpasang atau tidak ada di PATH.',
   'settings.testAgentSpawn': 'Tidak dapat memulai {agentName}: {detail}.',
   'settings.testUnknown': 'Tes gagal: {detail}',
-  'settings.noAgentsDetected':
-    'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
+  'settings.noAgentsDetected': 'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'Provider isi cepat',
   'settings.customProvider': 'Provider kustom',
@@ -95,17 +93,13 @@ export const id: Dict = {
   'settings.model': 'Model',
   'settings.suggestedModelsHint': 'Ini model yang disarankan untuk protokol ini. Provider kamu mungkin mendukung model lain.',
   'settings.baseUrl': 'Base URL',
-  'settings.baseUrlInvalid':
-    'Masukkan URL publik http:// atau https:// yang valid. Localhost diizinkan; IP jaringan privat diblokir.',
+  'settings.baseUrlInvalid': 'Masukkan URL publik http:// atau https:// yang valid. Localhost diizinkan; IP jaringan privat diblokir.',
   'settings.azureDeploymentModel': 'Nama deployment',
-  'settings.azureDeploymentModelHint':
-    'Untuk Azure OpenAI, field ini digunakan sebagai nama deployment di /openai/deployments/<model>. Masukkan nama deployment yang kamu buat di Azure.',
+  'settings.azureDeploymentModelHint': 'Untuk Azure OpenAI, field ini digunakan sebagai nama deployment di /openai/deployments/<model>. Masukkan nama deployment yang kamu buat di Azure.',
   'settings.apiVersion': 'Versi API',
   'settings.maxTokens': 'Token maks (opsional)',
-  'settings.maxTokensHint':
-    'Batas panjang respons. Setiap model punya default sendiri; kosongkan untuk memakainya, atau isi angka untuk menimpa.',
-  'settings.apiHint':
-    'Panggilan dikirim langsung dari browser ini ke base URL yang kamu atur. Tanpa proxy. Key tidak keluar dari localStorage.',
+  'settings.maxTokensHint': 'Batas panjang respons. Setiap model punya default sendiri; kosongkan untuk memakainya, atau isi angka untuk menimpa.',
+  'settings.apiHint': 'Panggilan dikirim langsung dari browser ini ke base URL yang kamu atur. Tanpa proxy. Key tidak keluar dari localStorage.',
   'settings.skipForNow': 'Lewati dulu',
   'settings.getStarted': 'Mulai',
   'settings.envConfigure': 'Atur mode eksekusi',
@@ -121,8 +115,7 @@ export const id: Dict = {
   'settings.themeDark': 'Gelap',
   'settings.modelPicker': 'Model',
   'settings.reasoningPicker': 'Kekuatan penalaran',
-  'settings.modelPickerHint':
-    'Diambil dari CLI jika tersedia. "Default" mengikuti konfigurasi CLI; "Custom..." untuk mengetik model id sendiri.',
+  'settings.modelPickerHint': 'Diambil dari CLI jika tersedia. "Default" mengikuti konfigurasi CLI; "Custom..." untuk mengetik model id sendiri.',
   'settings.cliEnvTitle': 'Lokasi konfigurasi CLI',
   'settings.cliEnvHint': 'Atur direktori konfigurasi non-rahasia untuk menjalankan aplikasi paket dan deteksi agent.',
   'settings.cliEnvClaudeConfigDir': 'Direktori konfigurasi Claude Code',
@@ -161,12 +154,10 @@ export const id: Dict = {
   'settings.connectorsApiKeyPlaceholder': 'Tempel API key Composio',
   'settings.connectorsClear': 'Hapus',
   'settings.connectorsClearConfirmTitle': 'Hapus API key Composio yang tersimpan?',
-  'settings.connectorsClearConfirmBody':
-    'Menghapus key akan memutus semua konektor Composio yang terkait dengan workspace ini. Akun terhubung, grant OAuth, dan akses alat semuanya akan dihapus.',
+  'settings.connectorsClearConfirmBody': 'Menghapus key akan memutus semua konektor Composio yang terkait dengan workspace ini. Akun terhubung, grant OAuth, dan akses alat semuanya akan dihapus.',
   'settings.connectorsClearConfirmContinue': 'Lanjutkan',
   'settings.connectorsClearFinalTitle': 'Ini akan memutus semua konektor',
-  'settings.connectorsClearFinalBody':
-    'Tindakan ini tidak bisa dibatalkan. Kamu harus menghubungkan ulang setiap integrasi dari awal setelah menempelkan key baru.',
+  'settings.connectorsClearFinalBody': 'Tindakan ini tidak bisa dibatalkan. Kamu harus menghubungkan ulang setiap integrasi dari awal setelah menempelkan key baru.',
   'settings.connectorsClearFinalConfirm': 'Hapus key & putuskan koneksi',
   'settings.connectorsClearArming': 'Tunggu…',
   'settings.connectorsClearCancel': 'Batal',
@@ -174,12 +165,9 @@ export const id: Dict = {
   'settings.connectorsSaveKeyTitle': 'Kirim key ini ke daemon lokal',
   'settings.connectorsKeySaving': 'Menyimpan…',
   'settings.connectorsKeyError': 'Tidak bisa menyimpan key. Pastikan daemon lokal berjalan lalu coba lagi.',
-  'settings.connectorsHelpSaved':
-    'Key kamu tersimpan di daemon lokal. Tempel key baru untuk menggantinya, atau Hapus untuk menghapusnya.',
-  'settings.connectorsHelpUnsaved':
-    'Ada perubahan yang belum disimpan — klik Simpan key untuk menyimpan kredensial ini di daemon lokal dan menyegarkan katalog di bawah.',
-  'settings.connectorsHelpEmpty':
-    'Tambahkan key untuk memuat katalog di bawah. Key disimpan secara lokal di daemon dan tidak pernah dikirim lewat environment variable.',
+  'settings.connectorsHelpSaved': 'Key kamu tersimpan di daemon lokal. Tempel key baru untuk menggantinya, atau Hapus untuk menghapusnya.',
+  'settings.connectorsHelpUnsaved': 'Ada perubahan yang belum disimpan — klik Simpan key untuk menyimpan kredensial ini di daemon lokal dan menyegarkan katalog di bawah.',
+  'settings.connectorsHelpEmpty': 'Tambahkan key untuk memuat katalog di bawah. Key disimpan secara lokal di daemon dan tidak pernah dikirim lewat environment variable.',
   'settings.connectorsLoadingSavedKey': 'Memeriksa key yang tersimpan di daemon lokal…',
   'settings.autosaveSaving': 'Menyimpan…',
   'settings.autosaveSaved': 'Semua perubahan tersimpan',
@@ -293,8 +281,7 @@ export const id: Dict = {
   'connectors.statusError': 'Error',
   'connectors.statusDisabled': 'Nonaktif',
   'connectors.gateTitle': 'Konfigurasikan API key Composio',
-  'connectors.gateBody':
-    'Konektor membutuhkan API key Composio. Tambahkan di Pengaturan untuk membuka integrasi yang tersedia.',
+  'connectors.gateBody': 'Konektor membutuhkan API key Composio. Tambahkan di Pengaturan untuk membuka integrasi yang tersedia.',
   'connectors.aboutLabel': 'Tentang',
   'connectors.detailsLabel': 'Detail',
   'connectors.statusLabel': 'Status',
@@ -640,6 +627,7 @@ export const id: Dict = {
   'chat.linkedFolderAlready': 'Folder ini sudah tertaut',
   'chat.linkedFolderPickError': 'Tidak bisa membuka pemilih folder',
   'chat.send': 'Kirim',
+  'chat.queue': 'Antri',
   'chat.stop': 'Stop',
   'chat.removeAria': 'Hapus {name}',
   'chat.example1Title': 'Pitch editorial',
@@ -647,8 +635,7 @@ export const id: Dict = {
   'chat.example1Prompt': 'Buat pitch deck bergaya majalah untuk seed round startup AI.',
   'chat.example2Title': 'Dashboard analitik SaaS',
   'chat.example2Tag': 'Data',
-  'chat.example2Prompt':
-    'Buat dashboard analitik padat untuk SaaS developer tools dengan KPI, grafik MRR, peta heatmap penggunaan, kohort retensi, dan feed event real-time.',
+  'chat.example2Prompt': 'Buat dashboard analitik padat untuk SaaS developer tools dengan KPI, grafik MRR, peta heatmap penggunaan, kohort retensi, dan feed event real-time.',
   'chat.example3Title': 'Laporan tahunan long-scroll',
   'chat.example3Tag': 'Editorial',
   'chat.example3Prompt': 'Buat laporan tahunan long-scroll dengan hero editorial, angka utama, timeline, dan visualisasi data.',
@@ -1116,8 +1103,7 @@ export const id: Dict = {
   'pet.atlasImport': 'Impor sprite Codex',
   'pet.atlasImportTitle': 'Impor atlas hatch-pet 8x9 / 192x208 (PNG atau WebP).',
   'pet.atlasPickerTitle': 'Pilih baris animasi',
-  'pet.atlasPickerHint':
-    'Pet Codex memiliki 9 baris animasi. Secara default, atlas penuh dipertahankan agar pet mengganti baris saat hover, drag, dan idle. Kamu juga bisa membekukannya ke satu loop.',
+  'pet.atlasPickerHint': 'Pet Codex memiliki 9 baris animasi. Secara default, atlas penuh dipertahankan agar pet mengganti baris saat hover, drag, dan idle. Kamu juga bisa membekukannya ke satu loop.',
   'pet.atlasCancel': 'Buang atlas',
   'pet.atlasAdopt': 'Bekukan ke baris ini',
   'pet.atlasAdoptFull': 'Gunakan atlas penuh (animasi)',

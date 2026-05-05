@@ -431,6 +431,7 @@ export const ja: Dict = {
   'chat.linkedFolderAlready': 'このフォルダーは既にリンクされています',
   'chat.linkedFolderPickError': 'フォルダー選択を開けません',
   'chat.send': '送信',
+  'chat.queue': 'Queue',
   'chat.stop': '停止',
   'chat.removeAria': '{name} を削除',
   'chat.example1Title': '編集ピッチデッキ',

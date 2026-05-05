@@ -279,6 +279,16 @@ export function ProjectView({
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  interface QueuedMessage {
+    prompt: string;
+    attachments: ChatAttachment[];
+    commentAttachments: ChatCommentAttachment[];
+    projectId: string;
+    conversationId: string;
+    runId?: string;  // Optional: for handleStop to cancel queued daemon run
+  }
+  
+  const [queuedMessage, setQueuedMessage] = useState<QueuedMessage | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   const sendTextBufferRef = useRef<BufferedTextUpdates | null>(null);
@@ -286,6 +296,7 @@ export function ProjectView({
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
   const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
+  const canceledMessageIdsRef = useRef<Set<string>>(new Set());
   const skillCache = useRef<Map<string, string>>(new Map());
   const designCache = useRef<Map<string, string>>(new Map());
   const templateCache = useRef<Map<string, ProjectTemplate>>(new Map());
@@ -641,9 +652,9 @@ export function ProjectView({
   ]);
 
   const persistMessage = useCallback(
-    (m: ChatMessage) => {
+    async (m: ChatMessage) => {
       if (!activeConversationId) return;
-      void saveMessage(project.id, activeConversationId, m);
+      await saveMessage(project.id, activeConversationId, m);
     },
     [project.id, activeConversationId],
   );
@@ -978,8 +989,8 @@ export function ProjectView({
       meta?: { research?: ResearchOptions },
     ) => {
       if (!activeConversationId) return;
-      if (streaming) return;
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
+
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
@@ -1011,6 +1022,7 @@ export function ProjectView({
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const assistantId = crypto.randomUUID();
+      
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -1019,10 +1031,71 @@ export function ProjectView({
         agentName: assistantAgentName,
         events: [],
         createdAt: startedAt,
-        runStatus: config.mode === 'daemon' ? 'running' : undefined,
+        runStatus: config.mode === 'daemon' ? (streaming ? 'queued' : 'running') : undefined,
         startedAt,
       };
       const nextHistory = [...messages, userMsg];
+
+      if (streaming) {
+        if (config.mode === 'daemon') {
+          // Eagerly persist and queue via daemon to survive reloads
+          setMessages((curr) => [...curr, userMsg, assistantMsg]);
+          await persistMessage(userMsg);
+          await persistMessage(assistantMsg);
+
+          const transcript = nextHistory
+            .map((m) => '## ' + m.role + '\n' + m.content.trim())
+            .join('\n\n');
+            
+          fetch('/api/runs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: config.agentId,
+              message: transcript,
+              rebuildTranscript: true,
+              projectId: project.id,
+              conversationId: activeConversationId,
+              assistantMessageId: assistantId,
+              clientRequestId: crypto.randomUUID(),
+              skillId: project.skillId ?? null,
+              designSystemId: project.designSystemId ?? null,
+              attachments: attachments.map((a) => a.path),
+              commentAttachments,
+              model: selectedAgentChoice?.model ?? null,
+              reasoning: selectedAgentChoice?.reasoning ?? null,
+            }),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.runId) {
+                if (shouldCancelQueuedDaemonRun(canceledMessageIdsRef.current, assistantId)) {
+                  void fetch(`/api/runs/${data.runId}/cancel`, { method: 'POST' }).catch(() => {});
+                  // It was canceled via Stop button. The message is already locally marked 'canceled'.
+                  // Just patch the runId in silently.
+                  updateMessageById(assistantId, (prev) => ({ ...prev, runId: data.runId }), false);
+                } else {
+                  updateMessageById(assistantId, (prev) => ({ ...prev, runId: data.runId }), true);
+                }
+                persistMessageById(assistantId);
+              }
+            })
+            .catch(() => {
+              updateMessageById(assistantId, (prev) => ({ ...prev, runStatus: 'failed' }), true);
+            });
+          return;
+        }
+
+        // For API mode (which isn't cross-reload anyway), keep local UI mirror
+        setQueuedMessage({
+          prompt,
+          attachments,
+          commentAttachments,
+          projectId: project.id,
+          conversationId: activeConversationId,
+        });
+        return;
+      }
       setMessages([...nextHistory, assistantMsg]);
       setStreaming(true);
       setArtifact(null);
@@ -1171,6 +1244,7 @@ export function ProjectView({
         },
         onDone: () => {
           textBuffer.flush();
+          await persistMessageById(assistantId);
           textBuffer.cancel();
           cancelSendTextBuffer();
           for (const ev of parser.flush()) {
@@ -1302,6 +1376,7 @@ export function ProjectView({
       }
     },
     [
+      streaming,
       attachedComments,
       activeConversationId,
       streaming,
@@ -1330,6 +1405,26 @@ export function ProjectView({
     },
     [handleSend, streaming],
   );
+
+  // Dispatch queued messages after the current run finishes.
+  useEffect(() => {
+    if (!streaming && queuedMessage) {
+      if (
+        queuedMessage.projectId !== project.id ||
+        queuedMessage.conversationId !== activeConversationId
+      ) {
+        // Clear if the user switched contexts before the stream finished
+        setQueuedMessage(null);
+        return;
+      }
+      const { prompt, attachments, commentAttachments } = queuedMessage;
+      setQueuedMessage(null);
+      // Wait a tick so state has settled (streaming=false) before dispatching
+      setTimeout(() => {
+        void handleSend(prompt, attachments, commentAttachments);
+      }, 0);
+    }
+  }, [streaming, queuedMessage, project.id, activeConversationId, handleSend]);
 
   const persistArtifact = useCallback(
     async (art: Artifact) => {
@@ -1470,11 +1565,21 @@ export function ProjectView({
     }
     reattachControllersRef.current.clear();
     setStreaming(false);
+    if(queuedMessage?.runId){
+      void fetch(`/api/runs/${queuedMessage.runId}/cancel`,{method: 'POST'}).catch(()=>{});
+    }
+    setQueuedMessage(null);
     setMessages((curr) => {
       const finalized: ChatMessage[] = [];
       const next = curr.map((m) => {
         if (m.role !== 'assistant') return m;
         if (isActiveRunStatus(m.runStatus)) {
+          canceledMessageIdsRef.current.add(m.id);
+          // If the run was queued or running on the daemon, tell it to abort.
+          // (Active runs with attached SSE controllers will also abort via signal).
+          if (m.runId) {
+            void fetch(`/api/runs/${m.runId}/cancel`, { method: 'POST' }).catch(() => {});
+          }
           const updated = { ...m, runStatus: 'canceled' as const, endedAt: m.endedAt ?? stoppedAt };
           finalized.push(updated);
           return updated;
@@ -1832,7 +1937,6 @@ export function ProjectView({
               onRequestOpenFile={requestOpenFile}
               initialDraft={initialDraft}
               onSubmitForm={(text) => {
-                if (streaming) return;
                 void handleSend(text, [], []);
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
@@ -2049,4 +2153,11 @@ function createBufferedTextUpdates({
   }
 
   return { appendContent, appendTextEvent, appendEvent, flush, cancel };
+}
+
+export function shouldCancelQueuedDaemonRun(
+  canceledMessageIds: ReadonlySet<string>,
+  assistantMessageId: string,
+): boolean {
+  return canceledMessageIds.has(assistantMessageId);
 }

@@ -539,6 +539,7 @@ export const ko: Dict = {
   'chat.linkedFolderAlready': '이미 연결된 폴더입니다',
   'chat.linkedFolderPickError': '폴더 선택기를 열 수 없습니다',
   'chat.send': '전송',
+  'chat.queue': 'Queue',
   'chat.stop': '중지',
   'chat.removeAria': '{name} 제거',
   'chat.example1Title': '에디토리얼 피치 덱',

@@ -432,6 +432,7 @@ export const de: Dict = {
   'chat.linkedFolderAlready': 'Dieser Ordner ist bereits verknüpft',
   'chat.linkedFolderPickError': 'Ordnerauswahl konnte nicht geöffnet werden',
   'chat.send': 'Senden',
+  'chat.queue': 'Queue',
   'chat.stop': 'Stoppen',
   'chat.removeAria': '{name} entfernen',
   'chat.example1Title': 'Editorial Pitch Deck',

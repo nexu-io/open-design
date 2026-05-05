@@ -550,6 +550,7 @@ export const en: Dict = {
   'chat.linkedFolderAlready': 'This folder is already linked',
   'chat.linkedFolderPickError': 'Could not open folder picker',
   'chat.send': 'Send',
+  'chat.queue': 'Queue',
   'chat.stop': 'Stop',
   'chat.removeAria': 'Remove {name}',
   'chat.example1Title': 'Editorial pitch deck',

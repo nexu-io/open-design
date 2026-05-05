@@ -549,6 +549,7 @@ export const ru: Dict = {
   'chat.linkedFolderAlready': 'Эта папка уже связана',
   'chat.linkedFolderPickError': 'Не удалось открыть выбор папки',
   'chat.send': 'Отправить',
+  'chat.queue': 'Queue',
   'chat.stop': 'Остановить',
   'chat.removeAria': 'Удалить {name}',
   'chat.example1Title': 'Редакционная презентация',

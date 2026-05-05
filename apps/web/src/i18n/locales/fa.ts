@@ -550,6 +550,7 @@ export const fa: Dict = {
   'chat.linkedFolderAlready': 'این پوشه قبلاً لینک شده است',
   'chat.linkedFolderPickError': 'انتخابگر پوشه باز نشد',
   'chat.send': 'ارسال',
+  'chat.queue': 'Queue',
   'chat.stop': 'توقف',
   'chat.removeAria': 'حذف {name}',
   'chat.example1Title': 'ارائه سردبیری',

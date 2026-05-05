@@ -532,6 +532,7 @@ export const tr: Dict = {
   'chat.linkedFolderAlready': 'Bu klasör zaten bağlantılı',
   'chat.linkedFolderPickError': 'Klasör seçici açılamadı',
   'chat.send': 'Gönder',
+  'chat.queue': 'Queue',
   'chat.stop': 'Durdur',
   'chat.removeAria': '{name}’ı sil',
   'chat.example1Title': 'Editörlük sunum dosyası',

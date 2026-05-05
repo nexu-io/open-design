@@ -550,6 +550,7 @@ export const uk: Dict = {
   'chat.linkedFolderAlready': 'Ця папка вже пов\'язана',
   'chat.linkedFolderPickError': 'Не вдалося відкрити вибір папки',
   'chat.send': 'Надіслати',
+  'chat.queue': 'Queue',
   'chat.stop': 'Зупинити',
   'chat.removeAria': 'Видалити {name}',
   'chat.example1Title': 'Редакційна піч-дека',

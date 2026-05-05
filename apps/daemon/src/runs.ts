@@ -10,6 +10,7 @@ export function createChatRunService({
   ttlMs = 30 * 60 * 1000,
 }) {
   const runs = new Map();
+  const starters = new Map();
 
   const create = (meta = {}) => {
     const now = Date.now();
@@ -41,7 +42,10 @@ export function createChatRunService({
 
   const scheduleCleanup = (run) => {
     setTimeout(() => {
-      if (TERMINAL_RUN_STATUSES.has(run.status)) runs.delete(run.id);
+      if (TERMINAL_RUN_STATUSES.has(run.status)) {
+        runs.delete(run.id);
+        starters.delete(run.id);
+      }
     }, ttlMs).unref?.();
   };
 
@@ -68,8 +72,33 @@ export function createChatRunService({
     signal: run.signal,
   });
 
+  const maybeStartNext = (conversationId) => {
+    if (!conversationId) return;
+    const conversationRuns = Array.from(runs.values())
+      .filter((r) => r.conversationId === conversationId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    
+    // Check if any run is currently active for this conversation.
+    const activeRun = conversationRuns.find((r) => (!TERMINAL_RUN_STATUSES.has(r.status) && r.status !== 'queued') || r._isStarting);
+    if (activeRun) return;
+
+    // Find the oldest queued run.
+    const nextRun = conversationRuns.find((r) => r.status === 'queued' && !r._isStarting);
+    if (nextRun) {
+      const starter = starters.get(nextRun.id);
+      if (starter) {
+        // Remove from starters map once we're about to run it
+        starters.delete(nextRun.id);
+        // Mark as starting to prevent race condition while async preflight runs
+        nextRun._isStarting = true;
+        start(nextRun, starter);
+      }
+    }
+  };
+
   const finish = (run, status, code = null, signal = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    run._isStarting = false;
     run.status = status;
     run.exitCode = code;
     run.signal = signal;
@@ -90,7 +119,17 @@ export function createChatRunService({
   const start = (run, starter) => {
     void starter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
+    }).finally(() => {
+      run._isStarting = false;
     });
+    return run;
+  };
+
+  const enqueue = (run, starter) => {
+    if (run.status !== 'queued') return run; // Only enqueue fresh runs
+    if (!run.conversationId) return start(run, starter);
+    starters.set(run.id, starter);
+    maybeStartNext(run.conversationId);
     return run;
   };
 
@@ -151,6 +190,8 @@ export function createChatRunService({
   return {
     create,
     start,
+    enqueue,
+    maybeStartNext,
     get,
     list,
     stream,

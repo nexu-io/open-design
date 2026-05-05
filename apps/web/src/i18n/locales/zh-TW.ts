@@ -541,6 +541,7 @@ export const zhTW: Dict = {
   'chat.linkedFolderAlready': '該資料夾已關聯',
   'chat.linkedFolderPickError': '無法開啟資料夾選擇器',
   'chat.send': '傳送',
+  'chat.queue': 'Queue',
   'chat.stop': '停止',
   'chat.removeAria': '移除 {name}',
   'chat.example1Title': '編輯風路演 PPT',

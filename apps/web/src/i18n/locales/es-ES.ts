@@ -433,6 +433,7 @@ export const esES: Dict = {
   'chat.linkedFolderAlready': 'Esta carpeta ya está vinculada',
   'chat.linkedFolderPickError': 'No se pudo abrir el selector de carpetas',
   'chat.send': 'Enviar',
+  'chat.queue': 'Queue',
   'chat.stop': 'Detener',
   'chat.removeAria': 'Quitar {name}',
   'chat.example1Title': 'Pitch deck editorial',

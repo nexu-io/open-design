@@ -701,6 +701,7 @@ export interface Dict {
   'chat.linkedFolderAlready': string;
   'chat.linkedFolderPickError': string;
   'chat.send': string;
+  'chat.queue': string;
   'chat.stop': string;
   'chat.removeAria': string;
   'chat.example1Title': string;

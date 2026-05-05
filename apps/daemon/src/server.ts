@@ -2282,6 +2282,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
+
+    // If an assistant message was just marked terminal, the UI has finished flushing it.
+    if (saved.role === 'assistant' && design.runs.isTerminal(saved.runStatus)) {
+      // Skip drain if active canceled runs inflight (race protection)
+      const activeRuns = design.runs.listActiveChatRuns(req.params.cid);
+      if (!activeRuns.some((r) => r.status === 'canceled')) {
+      setImmediate(() => design.runs.maybeStartNext(req.params.cid));
+      }
+    }
+    
     res.json({ message: saved });
   });
 
@@ -4166,6 +4176,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const {
       agentId,
       message,
+      rebuildTranscript,
       systemPrompt,
       imagePaths = [],
       projectId,
@@ -4188,6 +4199,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (typeof clientRequestId === 'string' && clientRequestId)
       run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+
+    let finalMessage = message;
+    if (rebuildTranscript && conversationId) {
+      try {
+        const msgs = listMessages(db, conversationId);
+        let cutoff = msgs.length;
+        if (assistantMessageId) {
+          const idx = msgs.findIndex((m) => m.id === assistantMessageId);
+          if (idx !== -1) cutoff = idx;
+        }
+        // Build transcript in the same format as the frontend
+        finalMessage = msgs
+          .slice(0, cutoff)
+          .map((m) => `## ${m.role}\n${m.content.trim()}`)
+          .join('\n\n');
+      } catch (err) {
+        console.error(`[od] failed to rebuild transcript for run ${run.id}:`, err);
+      }
+    }
+
     const def = getAgentDef(agentId);
     if (!def)
       return design.runs.fail(
@@ -4415,7 +4446,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : linkedDirsHint
             ? `# Instructions${linkedDirsHint}\n\n---\n`
             : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      `# User request\n\n${finalMessage || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
       safeImages.length
         ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
         : '',
@@ -5094,7 +5125,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
     res.status(202).json(body);
-    design.runs.start(run, () => startChatRun(req.body || {}, run));
+    design.runs.enqueue(run, () => startChatRun(req.body || {}, run));
   });
 
   app.get('/api/runs', (req, res) => {
@@ -5127,9 +5158,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   app.post('/api/chat', (req, res) => {
-    const run = design.runs.create();
+    const run = design.runs.create(req.body || {});
     design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(req.body || {}, run));
+    design.runs.enqueue(run, () => startChatRun(req.body || {}, run));
   });
 
   // ---- Connection tests (single-shot JSON; no SSE) ------------------------
