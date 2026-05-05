@@ -34,8 +34,10 @@ formatting conventions used in hospital settings worldwide.
 
 ## What you will produce
 
-A single-page HTML case report (`index.html`) containing:
+A single-page HTML case report (`index.html`). Content varies by format
+(see `references/case-formats.md` — selected in Step 0):
 
+**SOAP / Conference format:**
 - **Patient identification** — age, sex, chief complaint
 - **History of Present Illness (HPI)** — chronological narrative with
   pertinent positives and negatives
@@ -47,6 +49,13 @@ A single-page HTML case report (`index.html`) containing:
 - **Assessment** — primary diagnosis and differential (3–5 items)
   with clinical reasoning for each
 - **Management Plan** — evidence-based, organised by problem
+
+**Brief Rounds format** (daily review, ward round, handover, ICU, post-call):
+- **ID line** — age, sex, day of admission, primary problem
+- **Interval events / current status** — what has changed since last review
+- **Active problems** — numbered list
+- **Plan-by-problem** — concise actions for each active problem
+- Full HPI and systematic physical examination are **not** included
 
 ---
 
@@ -76,7 +85,8 @@ proceeding. Do not proceed without it.
 
 ### Step 2 — Build the clinical narrative
 
-Write the HPI as a continuous prose narrative in standard clinical style:
+**For SOAP / Conference outputs:** write the HPI as a continuous prose
+narrative in standard clinical style:
 
 > "This is a [age]-year-old [sex] with a history of [relevant PMH] who
 > presents with [chief complaint]. Symptoms began [timeline] and are
@@ -85,6 +95,14 @@ Write the HPI as a continuous prose narrative in standard clinical style:
 
 The HPI must be chronological. Include timeline markers
 ("2 hours prior to presentation", "onset yesterday morning").
+
+**For Brief Rounds outputs** (daily review, ward round, handover, ICU,
+post-call): skip the full HPI and examination. Instead produce:
+
+- **ID line**: "[Age][sex], Day [N] of admission, [primary problem]"
+- **Interval events / current status**: what has changed since last review
+- **Active problems**: numbered list
+- **Plan-by-problem**: concise action for each active problem
 
 ### Step 3 — Generate physiologically consistent clinical data
 
