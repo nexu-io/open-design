@@ -131,7 +131,7 @@ export function LibrarySection({ cfg, setCfg }: Props) {
       const set = new Set(c.disabledSkills ?? []);
       if (disabled) set.add(id);
       else set.delete(id);
-      return { ...c, disabledSkills: set.size > 0 ? [...set] : undefined };
+      return { ...c, disabledSkills: [...set] };
     });
   }
 
@@ -140,7 +140,7 @@ export function LibrarySection({ cfg, setCfg }: Props) {
       const set = new Set(c.disabledDesignSystems ?? []);
       if (disabled) set.add(id);
       else set.delete(id);
-      return { ...c, disabledDesignSystems: set.size > 0 ? [...set] : undefined };
+      return { ...c, disabledDesignSystems: [...set] };
     });
   }
 
@@ -305,54 +305,56 @@ export function LibrarySection({ cfg, setCfg }: Props) {
         ) : filteredDS.length === 0 ? (
           <p className="library-empty">{t('settings.libraryNoResults')}</p>
         ) : (
-          Array.from(groupedDS.entries()).map(([category, items]) => (
-            <div key={category} className="library-group">
-              <h4 className="library-group-title">
-                {category} <span className="library-group-count">{items.length}</span>
-              </h4>
-              <div className="ds-grid">
-                {items.map((ds) => (
-                  <div
-                    key={ds.id}
-                    className={`library-ds-card${disabledDS.has(ds.id) ? ' disabled' : ''}`}
-                  >
-                    <div className="library-ds-card-content" onClick={() => openPreview(ds.id)}>
-                      {ds.swatches && ds.swatches.length > 0 && (
-                        <div className="library-ds-swatches">
-                          {ds.swatches.slice(0, 4).map((c, i) => (
-                            <span
-                              key={i}
-                              className="library-ds-swatch"
-                              style={{ backgroundColor: c }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      <div className="library-ds-title">{ds.title}</div>
-                      <div className="library-ds-summary">{ds.summary}</div>
+          <>
+            {Array.from(groupedDS.entries()).map(([category, items]) => (
+              <div key={category} className="library-group">
+                <h4 className="library-group-title">
+                  {category} <span className="library-group-count">{items.length}</span>
+                </h4>
+                <div className="ds-grid">
+                  {items.map((ds) => (
+                    <div
+                      key={ds.id}
+                      className={`library-ds-card${disabledDS.has(ds.id) ? ' disabled' : ''}`}
+                    >
+                      <div className="library-ds-card-content" onClick={() => openPreview(ds.id)}>
+                        {ds.swatches && ds.swatches.length > 0 && (
+                          <div className="library-ds-swatches">
+                            {ds.swatches.slice(0, 4).map((c, i) => (
+                              <span
+                                key={i}
+                                className="library-ds-swatch"
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        <div className="library-ds-title">{ds.title}</div>
+                        <div className="library-ds-summary">{ds.summary}</div>
+                      </div>
+                      <label className="toggle-switch toggle-switch-sm" title={t('settings.libraryToggleLabel')}>
+                        <input
+                          type="checkbox"
+                          checked={!disabledDS.has(ds.id)}
+                          onChange={(e) => toggleDSDisabled(ds.id, !e.target.checked)}
+                        />
+                        <span className="toggle-slider" />
+                      </label>
                     </div>
-                    <label className="toggle-switch toggle-switch-sm" title={t('settings.libraryToggleLabel')}>
-                      <input
-                        type="checkbox"
-                        checked={!disabledDS.has(ds.id)}
-                        onChange={(e) => toggleDSDisabled(ds.id, !e.target.checked)}
-                      />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
-                ))}
-              </div>
-              {previewId && filteredDS.some((d) => d.id === previewId) && (
-                <div className="library-preview">
-                  {previewLoading ? (
-                    <p>{t('settings.libraryLoading')}</p>
-                  ) : previewBody ? (
-                    <pre className="library-preview-body">{previewBody}</pre>
-                  ) : null}
+                  ))}
                 </div>
-              )}
-            </div>
-          ))
+              </div>
+            ))}
+            {previewId && filteredDS.some((d) => d.id === previewId) && (
+              <div className="library-preview">
+                {previewLoading ? (
+                  <p>{t('settings.libraryLoading')}</p>
+                ) : previewBody ? (
+                  <pre className="library-preview-body">{previewBody}</pre>
+                ) : null}
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
