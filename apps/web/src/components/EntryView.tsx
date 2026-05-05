@@ -167,6 +167,26 @@ export function EntryView({
     }
   }, [sidebarWidth]);
 
+  // Keep the sidebar width within the viewport. The user-stored width
+  // persists across sessions, but on a narrower laptop / split-screen
+  // window we cap it so the design grid retains room. The CSS media
+  // queries handle the actual stack-vertical layout below 980px; here
+  // we just clamp the inline style so it stops competing with the
+  // breakpoint rules.
+  useEffect(() => {
+    function clampToViewport() {
+      const w = window.innerWidth;
+      let cap = SIDEBAR_MAX;
+      if (w <= 980) cap = w; // stacked layout takes over
+      else if (w <= 1280) cap = 320;
+      else if (w <= 1440) cap = 380;
+      setSidebarWidth((prev) => Math.min(prev, cap));
+    }
+    clampToViewport();
+    window.addEventListener('resize', clampToViewport);
+    return () => window.removeEventListener('resize', clampToViewport);
+  }, []);
+
   return (
     <div
       className="entry"

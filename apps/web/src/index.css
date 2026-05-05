@@ -578,6 +578,35 @@ code {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 
+/* Chat pane keeps the Claude rust accent locally — feedback was that
+   the Wix Japan black version felt heavier than the original. The
+   home view (Designs grid, sidebar, Create button) stays on the
+   black accent; this scoped override only re-tints the chat surface
+   (starter card icon chips, tag pills, send button hover, etc). */
+.chat-pane {
+  --accent: #c96442;
+  --accent-strong: #b45a3b;
+  --accent-soft: #f5d8cb;
+  --accent-tint: #fbeee5;
+  --accent-hover: #b45a3b;
+}
+[data-theme="dark"] .chat-pane {
+  --accent: #d97a56;
+  --accent-strong: #e8896a;
+  --accent-soft: #3d2318;
+  --accent-tint: #2e1a12;
+  --accent-hover: #e8896a;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .chat-pane {
+    --accent: #d97a56;
+    --accent-strong: #e8896a;
+    --accent-soft: #3d2318;
+    --accent-tint: #2e1a12;
+    --accent-hover: #e8896a;
+  }
+}
+
 /* -------- Split / panes -------------------------------------------- */
 .split {
   display: grid;
@@ -1610,6 +1639,12 @@ code {
 @media (max-width: 1280px) and (min-width: 981px) {
   .entry {
     grid-template-columns: 320px 1fr;
+  }
+  /* The narrower main area would otherwise drop to 2 cards per row
+     and waste the right side. Smaller minmax keeps 3 columns. */
+  .design-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
   }
 }
 
@@ -2746,10 +2781,12 @@ code {
   line-height: 0;
 }
 
-/* Designs grid */
+/* Designs grid — auto-fit so the last row stretches to fill instead
+   of leaving an empty column on the right when project count is not
+   a multiple of the column count. Cards still respect a 220px floor. */
 .design-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
 }
 .design-card {

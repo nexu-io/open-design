@@ -380,18 +380,18 @@ export const zhCN: Dict = {
   'chat.send': '发送',
   'chat.stop': '停止',
   'chat.removeAria': '移除 {name}',
-  'chat.example1Title': '月度 Performance Report',
-  'chat.example1Tag': '月报',
+  'chat.example1Title': '编辑风路演 PPT',
+  'chat.example1Tag': '杂志',
   'chat.example1Prompt':
-    'Wix Japan 月度 Performance Report —— 8 页：封面、Executive Summary（3 条 highlight bullet）、Top Metrics（4 行 KPI）、主要 campaign 回顾（image + body）、新产品/功能 launch、Product Insight、下月重点（3 bullets）、Closing。Wix Japan Black + Mono token，使用模板的 P28 / P53 / P31 / P110。',
-  'chat.example2Title': 'Internal Design Newsletter',
-  'chat.example2Tag': '团队',
+    '为一家正在融种子轮的设计工作室制作 10 张编辑风路演 PPT —— 瑞士网格布局，超大号衬线标题加粗体首字下沉，等宽字体的章节编号，留白充足，整页大图与文字密集页穿插出现。封面、愿景、市场、产品、增长、团队、融资诉求、联系方式。',
+  'chat.example2Title': 'SaaS 分析仪表盘',
+  'chat.example2Tag': '数据',
   'chat.example2Prompt':
-    'Wix Japan Design Team 内部 newsletter deck —— 6-8 页：封面（期号 + 日期）、本期目录、成员聚焦（人物介绍 + 照片）、进行中项目一句话亮点、设计资源（fonts / books / refs）、下期预告、Closing。Slack 风文案，少用 emoji，Mono 配色。',
-  'chat.example3Title': 'Product Launch Deck',
-  'chat.example3Tag': '发布',
+    '为一款面向开发者的 SaaS 设计一份信息密度高的分析仪表盘 —— 顶部 KPI 条带（含周环比变化）、两张堆叠折线图（MRR 与活跃工作区）、全球使用热力图、留存矩阵、客户排行榜以及实时事件流。深色主题，等宽数字，迷你图作为点缀。',
+  'chat.example3Title': '长滚动年度报告',
+  'chat.example3Tag': '编辑',
   'chat.example3Prompt':
-    '新功能/新产品发布的内部说明 deck —— 封面、What is it?（一行 concept）、Why now（market / user pain）、How it works（image + 3 bullets）、Demo（一张 screenshot）、目标用户、go-to-market 时间线、风险与缓解、Q&A。正式语气，断定句式，含 image marker 的 section 强制 T+IMG family。',
+    '为一家关注气候议题的非营利机构制作互动式年度报告 —— 长滚动编辑式布局，混合大段引言区块、数据可视化（堆叠柱状图、动态计数器、项目地点分布的等值线地图）、摄影分隔页、捐赠者墙，以及最终行动号召。现代衬线正文、无衬线图表标签、大地纸张配色。',
 
   'preview.shareMenu': '分享 ▾',
   'preview.openInNewTab': '在新标签页中打开',

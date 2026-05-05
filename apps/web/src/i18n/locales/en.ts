@@ -388,18 +388,18 @@ export const en: Dict = {
   'chat.send': 'Send',
   'chat.stop': 'Stop',
   'chat.removeAria': 'Remove {name}',
-  'chat.example1Title': 'Monthly Performance Report',
-  'chat.example1Tag': 'Monthly',
+  'chat.example1Title': 'Editorial pitch deck',
+  'chat.example1Tag': 'Magazine',
   'chat.example1Prompt':
-    "Wix Japan's monthly performance report — 8 pages: Cover, Executive Summary (3 highlight bullets), Top Metrics (4 KPI lines), key campaign recap (image + body), product/feature launches, product insight, next month's focus (3 bullets), Closing. Wix Japan Black + Mono tokens; reuse canonicals P28 / P53 / P31 / P110.",
-  'chat.example2Title': 'Internal Design Newsletter',
-  'chat.example2Tag': 'Team',
+    'A 10-slide editorial pitch deck for a design studio raising a seed round — Swiss-grid layout, oversized serif headlines with bold drop caps, monospace section numbers, generous negative space, and full-bleed photo slides interleaved with text-heavy ones. Cover, vision, market, product, traction, team, ask, contact.',
+  'chat.example2Title': 'SaaS analytics dashboard',
+  'chat.example2Tag': 'Data',
   'chat.example2Prompt':
-    "Internal newsletter deck for the Wix Japan design team — 6-8 pages: Cover (issue number + date), table of contents, member spotlight (portrait + intro), one-liner project highlights, design resources (fonts / books / refs), what's coming next, Closing. Slack-tone copy, minimal emoji, Mono palette.",
-  'chat.example3Title': 'Product Launch Deck',
-  'chat.example3Tag': 'Launch',
+    'A dense analytics dashboard for a developer-tools SaaS — KPI strip with week-over-week deltas, two stacked line charts (MRR and active workspaces), a world heatmap of usage, a cohort retention grid, a top-customers leaderboard, and a real-time event feed. Dark theme, tabular monospace numerals, sparkline accents.',
+  'chat.example3Title': 'Annual report long-scroll',
+  'chat.example3Tag': 'Editorial',
   'chat.example3Prompt':
-    'Internal product/feature launch deck — Cover, What is it? (one-line concept), Why now (market / user pain), How it works (image + 3 bullets), Demo (one screenshot), target users, go-to-market timeline, risks & mitigations, Q&A. Formal tone, declarative voice; sections with image markers must use T+IMG family.',
+    'An interactive annual report for a climate non-profit — long-scroll editorial layout mixing big pull-quote blocks, data visualizations (stacked bars, animated counters, a choropleth map of project sites), photography breakers, donor wall, and a final call-to-action. Modern serif body, sans-serif chart labels, earthy paper palette.',
 
   'preview.shareMenu': 'Share ▾',
   'preview.openInNewTab': 'Open in new tab',

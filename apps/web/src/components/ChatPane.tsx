@@ -209,7 +209,7 @@ export function ChatPane({
   }
 
   return (
-    <div className="pane">
+    <div className="pane chat-pane">
       <div className="chat-header">
         <div className="chat-header-tabs" role="tablist">
           <button
