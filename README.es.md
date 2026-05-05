@@ -665,11 +665,11 @@ Todo lo siguiente es el playbook de [`huashu-design`](https://github.com/alchain
 | Design system | Propietario | `DESIGN.md` (roadmap v0.2) | **`DESIGN.md` × 129 sistemas incluidos** |
 | Flexibilidad de proveedor | Solo Anthropic | 7+ via [`pi-ai`][piai] | **15 adapters CLI + proxy BYOK OpenAI-compatible** |
 | Formulario inicial de preguntas | ❌ | ❌ | **✅ Regla dura, turno 1** |
-| Selector de direcci�n | ❌ | ❌ | **✅ 5 direcciones deterministas** |
+| Selector de dirección | ❌ | ❌ | **✅ 5 direcciones deterministas** |
 | Progreso todo en vivo + stream de tools | ❌ | ✅ | **✅** (patrón UX de open-codesign) |
 | Preview en iframe sandboxed | ❌ | ✅ | **✅** (patrón de open-codesign) |
 | Import de ZIP de Claude Design | n/a | ❌ | **✅ `POST /api/import/claude-design`: seguir editando donde Anthropic lo dejó** |
-| Ediciones quir�rgicas en comment-mode | ❌ | ✅ | 🟡 parcial: comentarios en elementos del preview + adjuntos de chat; patching dirigido confiable sigue en progreso |
+| Ediciones quirúrgicas en comment-mode | ❌ | ✅ | 🟡 parcial: comentarios en elementos del preview + adjuntos de chat; patching dirigido confiable sigue en progreso |
 | Panel de tweaks emitido por IA | ❌ | ✅ | 🚧 roadmap: el panel UX dedicado en el lado del chat aún no está implementado |
 | Workspace de nivel filesystem | ❌ | parcial (Electron sandbox) | **✅ cwd real, tools reales, SQLite persistido (projects · conversations · messages · tabs · templates)** |
 | Autocrítica five-dim | ❌ | ❌ | **✅ Gate pre-emit** |
