@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ja' | 'ko' | 'pl' | 'hu' | 'tr';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'tr' | 'fr' | 'uk';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ja', 'ko', 'pl', 'hu', 'tr'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'tr', 'fr', 'uk'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -13,11 +13,14 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'es-ES': 'Español (España)',
   'ru': 'Русский',
   'fa': 'فارسی',
+  'ar': 'العربية',
   'ja': '日本語',
   'ko': '한국어',
   'pl': 'Polski',
   'hu': 'Magyar',
-  'tr': 'Türkçe'
+  'tr': 'Türkçe',
+  'fr': 'Français',
+  'uk': 'Українська'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -75,6 +78,7 @@ export interface Dict {
   'settings.title': string;
   'settings.subtitle': string;
   'settings.modeAria': string;
+  'settings.protocolAria': string;
   'settings.modeDaemon': string;
   'settings.modeDaemonHelp': string;
   'settings.modeDaemonOffline': string;
@@ -86,17 +90,27 @@ export interface Dict {
   'settings.codeAgentHint': string;
   'settings.rescan': string;
   'settings.rescanTitle': string;
+  'settings.rescanRunning': string;
+  'settings.rescanSuccess': string;
+  'settings.rescanFailed': string;
   'settings.noAgentsDetected': string;
   'settings.apiSection': string;
+  'settings.quickFillProvider': string;
+  'settings.customProvider': string;
   'settings.apiKey': string;
   'settings.showKey': string;
   'settings.hideKey': string;
   'settings.show': string;
   'settings.hide': string;
   'settings.model': string;
+  'settings.suggestedModelsHint': string;
   'settings.maxTokens': string;
   'settings.maxTokensHint': string;
   'settings.baseUrl': string;
+  'settings.baseUrlInvalid': string;
+  'settings.azureDeploymentModel': string;
+  'settings.azureDeploymentModelHint': string;
+  'settings.apiVersion': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
   'settings.getStarted': string;
@@ -137,10 +151,37 @@ export interface Dict {
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
 
+  // Notifications (settings + system notifications)
+  'settings.notifications': string;
+  'settings.notificationsHint': string;
+  'settings.notifyCompletionSound': string;
+  'settings.notifyCompletionSoundHint': string;
+  'settings.notifySuccessSound': string;
+  'settings.notifyFailureSound': string;
+  'settings.notifyDesktop': string;
+  'settings.notifyDesktopHint': string;
+  'settings.notifyDesktopBlocked': string;
+  'settings.notifyDesktopUnsupported': string;
+  'settings.notifyTest': string;
+  'settings.notifyTestSent': string;
+  'settings.notifyTestFailed': string;
+  'settings.notifySoundDing': string;
+  'settings.notifySoundChime': string;
+  'settings.notifySoundTwoToneUp': string;
+  'settings.notifySoundPluck': string;
+  'settings.notifySoundBuzz': string;
+  'settings.notifySoundTwoToneDown': string;
+  'settings.notifySoundThud': string;
+  'notify.successTitle': string;
+  'notify.failureTitle': string;
+  'notify.successBody': string;
+  'notify.failureBody': string;
+
   // Entry view / tabs
   'entry.tabDesigns': string;
   'entry.tabExamples': string;
   'entry.tabDesignSystems': string;
+  'entry.tabConnectors': string;
   'entry.tabImageTemplates': string;
   'entry.tabVideoTemplates': string;
   'entry.openSettingsTitle': string;
@@ -148,12 +189,51 @@ export interface Dict {
   'entry.resizeAria': string;
   'entry.loadingWorkspace': string;
 
+  // Connectors tab
+  'connectors.title': string;
+  'connectors.subtitle': string;
+  'connectors.account': string;
+  'connectors.noAccount': string;
+  'connectors.tools': string;
+  'connectors.connect': string;
+  'connectors.disconnect': string;
+  'connectors.configure': string;
+  'connectors.unavailable': string;
+  'connectors.phaseStubTitle': string;
+  'connectors.statusAvailable': string;
+  'connectors.statusConnected': string;
+  'connectors.statusError': string;
+  'connectors.statusDisabled': string;
+  'connectors.gateTitle': string;
+  'connectors.gateBody': string;
+  'connectors.gateAction': string;
+  'connectors.aboutLabel': string;
+  'connectors.detailsLabel': string;
+  'connectors.statusLabel': string;
+  'connectors.categoryLabel': string;
+  'connectors.providerLabel': string;
+  'connectors.toolsSection': string;
+  'connectors.toolsLoading': string;
+  'connectors.noToolsAvailable': string;
+  'connectors.openDetailsAria': string;
+  'connectors.toolsBadgeNone': string;
+  'connectors.toolsBadgeOne': string;
+  'connectors.toolsBadgeMany': string;
+  'connectors.searchPlaceholder': string;
+  'connectors.searchAriaLabel': string;
+  'connectors.searchClear': string;
+  'connectors.emptyNoMatchTitle': string;
+  'connectors.emptyNoMatchBody': string;
+  'connectors.emptyNoMatchAction': string;
+
   // New project panel
   'newproj.tabPrototype': string;
+  'newproj.tabLiveArtifact': string;
   'newproj.tabDeck': string;
   'newproj.tabTemplate': string;
   'newproj.tabOther': string;
   'newproj.titlePrototype': string;
+  'newproj.titleLiveArtifact': string;
   'newproj.titleDeck': string;
   'newproj.titleTemplate': string;
   'newproj.titleImage': string;
@@ -175,6 +255,7 @@ export interface Dict {
   'newproj.fileSingular': string;
   'newproj.filePlural': string;
   'newproj.create': string;
+  'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
   'newproj.importClaudeZip': string;
@@ -215,6 +296,15 @@ export interface Dict {
   'newproj.audioDurationSeconds': string;
   'newproj.voiceLabel': string;
   'newproj.voicePlaceholder': string;
+  'newproj.connectorsLabel': string;
+  'newproj.connectorsHint': string;
+  'newproj.connectorsEmptyTitle': string;
+  'newproj.connectorsEmptyBody': string;
+  'newproj.connectorsEmptyCta': string;
+  'newproj.connectorsLoading': string;
+  'newproj.connectorsCountOne': string;
+  'newproj.connectorsCountMany': string;
+  'newproj.connectorsManage': string;
   'newproj.promptTemplateLabel': string;
   'newproj.promptTemplateNoneTitle': string;
   'newproj.promptTemplateNoneSub': string;
@@ -254,6 +344,15 @@ export interface Dict {
   'designs.deleteTitle': string;
   'designs.deleteConfirm': string;
   'designs.cardFreeform': string;
+  'designs.badgeLive': string;
+  'designs.liveArtifactBadgesAria': string;
+  'designs.liveCount': string;
+  'designs.statusLive': string;
+  'designs.statusArchived': string;
+  'designs.statusError': string;
+  'designs.statusRefreshing': string;
+  'designs.statusRefreshFailed': string;
+  'designs.statusRefreshed': string;
   'designs.status.notStarted': string;
   'designs.status.queued': string;
   'designs.status.running': string;
@@ -293,6 +392,8 @@ export interface Dict {
   'examples.scenarioLegal': string;
   'examples.scenarioEducation': string;
   'examples.scenarioPersonal': string;
+  'examples.searchPlaceholder': string;
+  'examples.searchAria': string;
   'examples.emptyNoSkills': string;
   'examples.emptyNoMatch': string;
   'examples.openPreview': string;
@@ -403,6 +504,10 @@ export interface Dict {
   'chat.importFolder': string;
   'chat.importSkills': string;
   'chat.importProject': string;
+  'chat.linkedFolderRemoveAria': string;
+  'chat.linkedFolderNotFound': string;
+  'chat.linkedFolderAlready': string;
+  'chat.linkedFolderPickError': string;
   'chat.send': string;
   'chat.stop': string;
   'chat.removeAria': string;
@@ -452,6 +557,9 @@ export interface Dict {
   'designFiles.rowMenu': string;
   'designFiles.openInTab': string;
   'designFiles.download': string;
+  'designFiles.downloadSelected': string;
+  'designFiles.clearSelection': string;
+  'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
   'designFiles.dropDesc': string;
   'designFiles.upload.title': string;
@@ -466,7 +574,9 @@ export interface Dict {
   'designFiles.sectionScripts': string;
   'designFiles.sectionImages': string;
   'designFiles.sectionSketches': string;
+  'designFiles.sectionLiveArtifacts': string;
   'designFiles.sectionOther': string;
+  'designFiles.showMore': string;
   'designFiles.kindHtml': string;
   'designFiles.kindImage': string;
   'designFiles.kindSketch': string;
@@ -476,6 +586,7 @@ export interface Dict {
   'designFiles.kindDocument': string;
   'designFiles.kindPresentation': string;
   'designFiles.kindSpreadsheet': string;
+  'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
   'pasteDialog.title': string;
   'pasteDialog.hint': string;
@@ -547,6 +658,7 @@ export interface Dict {
   'fileViewer.exportPptxNa': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
+  'fileViewer.exportMd': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
@@ -556,6 +668,964 @@ export interface Dict {
   'fileViewer.templateNamePrompt': string;
   'fileViewer.templateNameDefault': string;
   'fileViewer.templateDescPrompt': string;
+  'liveArtifact.refresh.button': string;
+  'liveArtifact.refresh.buttonTitle': string;
+  'liveArtifact.refresh.loadingTitle': string;
+  'liveArtifact.refresh.noSourceTitle': string;
+  'liveArtifact.refresh.running': string;
+  'liveArtifact.refresh.runningMessage': string;
+  'liveArtifact.refresh.runningAction': string;
+  'liveArtifact.refresh.successOne': string;
+  'liveArtifact.refresh.successMany': string;
+  'liveArtifact.refresh.successAction': string;
+  'liveArtifact.refresh.previousFailure': string;
+  'liveArtifact.refresh.failureAction': string;
+  'liveArtifact.refresh.networkFailure': string;
+  'liveArtifact.refresh.genericFailure': string;
+  'liveArtifact.refresh.statusNever': string;
+  'liveArtifact.refresh.statusReady': string;
+  'liveArtifact.refresh.statusSucceeded': string;
+  'liveArtifact.refresh.statusFailed': string;
+  'fileViewer.deployToVercel': string;
+  'fileViewer.redeployToVercel': string;
+  'fileViewer.deployingToVercel': string;
+  'fileViewer.preparingPublicLink': string;
+  'fileViewer.copyDeployLink': string;
+  'fileViewer.deployModalTitle': string;
+  'fileViewer.deployModalSubtitle': string;
+  'fileViewer.vercelToken': string;
+  'fileViewer.vercelTokenGetLink': string;
+  'fileViewer.vercelTokenPlaceholder': string;
+  'fileViewer.vercelTokenReuseHint': string;
+  'fileViewer.vercelTokenRequired': string;
+  'fileViewer.vercelTeamId': string;
+  'fileViewer.vercelTeamSlug': string;
+  'fileViewer.optional': string;
+  'fileViewer.vercelPreviewOnly': string;
+  'fileViewer.savingConfig': string;
+  'fileViewer.deployConfigSaveFailed': string;
+  'fileViewer.deployFailed': string;
+  'fileViewer.deployResultLabel': string;
+  'fileViewer.deployLinkPreparingLabel': string;
+  'fileViewer.deployLinkDelayed': string;
+  'fileViewer.deployLinkProtectedLabel': string;
+  'fileViewer.deployLinkProtected': string;
+  'fileViewer.retryLink': string;
+
+  // Question form (assistant question UX)
+  'questionForm.submit': string;
+  'questionForm.skip': string;
+  'questionForm.locked': string;
+
+  // Conversations dropdown
+  'conv.switch': string;
+  'conv.label': string;
+  'conv.heading': string;
+  'conv.new': string;
+  'conv.empty': string;
+  'conv.untitled': string;
+  'conv.renameTooltip': string;
+  'conv.delete': string;
+  'conv.deleteConfirm': string;
+
+  // Agent picker (legacy / alt)
+  'agentPicker.label': string;
+  'agentPicker.modeChoose': string;
+  'agentPicker.localCli': string;
+  'agentPicker.daemonOff': string;
+  'agentPicker.byok': string;
+  'agentPicker.selectAgent': string;
+  'agentPicker.noAgents': string;
+  'agentPicker.notInstalled': string;
+  'agentPicker.rescan': string;
+
+  // Tool cards (assistant action cards)
+  'tool.openInTab': string;
+  'tool.open': string;
+  'tool.todos': string;
+  'tool.write': string;
+  'tool.edit': string;
+  'tool.read': string;
+  'tool.bash': string;
+  'tool.glob': string;
+  'tool.grep': string;
+  'tool.fetch': string;
+  'tool.search': string;
+  'tool.lines': string;
+  'tool.changeSingular': string;
+  'tool.changePlural': string;
+  'tool.in': string;
+  'tool.hide': string;
+  'tool.output': string;
+  'tool.running': string;
+  'tool.error': string;
+  'tool.done': string;
+
+  // Assistant message scaffolding
+  'assistant.role': string;
+  'assistant.workingLabel': string;
+  'assistant.doneLabel': string;
+  'assistant.unfinishedLabel': string;
+  'assistant.unfinishedSummary': string;
+  'assistant.unfinishedMore': string;
+  'assistant.continueRemaining': string;
+  'assistant.outTokens': string;
+  'assistant.producedFiles': string;
+  'assistant.openFile': string;
+  'assistant.downloadFile': string;
+  'assistant.thinking': string;
+  'assistant.systemReminder': string;
+  'assistant.waitingFirstOutput': string;
+  'assistant.statusBootingAgent': string;
+  'assistant.statusStarting': string;
+  'assistant.statusRequesting': string;
+  'assistant.statusThinking': string;
+  'assistant.statusStreaming': string;
+  'assistant.slowHint': string;
+  'assistant.verbEditing': string;
+  'assistant.verbWriting': string;
+  'assistant.verbReading': string;
+  'assistant.verbSearching': string;
+  'assistant.verbRunning': string;
+  'assistant.verbTodos': string;
+  'assistant.verbFetching': string;
+  'assistant.verbCalling': string;
+
+  // Question form labels
+  'qf.answered': string;
+  'qf.choose': string;
+  'qf.required': string;
+  'qf.lockedSubmitted': string;
+  'qf.lockedPrev': string;
+  'qf.hint': string;
+  'qf.submitDefault': string;
+  'qf.submitDisabledTitle': string;
+  'qf.submitTitle': string;
+  'qf.cardSelected': string;
+  'qf.cardRefs': string;
+  'qf.cardSampleText': string;
+
+  // Pet (Codex-style floating companion)
+  'pet.title': string;
+  'pet.subtitle': string;
+  'pet.navTitle': string;
+  'pet.navHint': string;
+  // Tabs in pet settings — split sources so the choice feels exclusive
+  'pet.tabBuiltIn': string;
+  'pet.tabBuiltInHint': string;
+  'pet.builtInEmpty': string;
+  'pet.tabCustom': string;
+  'pet.tabCustomHint': string;
+  'pet.tabCommunity': string;
+  'pet.tabCommunityHint': string;
+  'pet.tabsAria': string;
+  'pet.adopt': string;
+  'pet.adoptedBadge': string;
+  'pet.adoptCallout': string;
+  'pet.changePet': string;
+  'pet.wake': string;
+  'pet.tuck': string;
+  'pet.wakeTitle': string;
+  'pet.tuckTitle': string;
+  'pet.settingsTitle': string;
+  'pet.useCustom': string;
+  'pet.customTitle': string;
+  'pet.customHint': string;
+  'pet.customGreetingPlaceholder': string;
+  'pet.fieldName': string;
+  'pet.fieldGlyph': string;
+  'pet.fieldGlyphHint': string;
+  'pet.fieldGreeting': string;
+  'pet.fieldAccent': string;
+  'pet.fieldAccentCustom': string;
+  'pet.overlayAria': string;
+  'pet.spriteAria': string;
+  'pet.spriteTitle': string;
+  // Right-side rail (entry view)
+  'pet.railAria': string;
+  'pet.railTitle': string;
+  'pet.railHint': string;
+  'pet.railExpand': string;
+  'pet.railCollapse': string;
+  'pet.railHide': string;
+  'pet.railShow': string;
+  'pet.railCustomFlavor': string;
+  'pet.railCustomize': string;
+  // Composer pet menu
+  'pet.composerTitle': string;
+  'pet.composerMenuTitle': string;
+  'pet.composerMenuHint': string;
+  'pet.composerOpenSettings': string;
+  // Welcome modal teaser
+  'pet.welcomeTeaserTitle': string;
+  'pet.welcomeTeaserBody': string;
+  'pet.welcomeTeaserCta': string;
+  // Image upload + spritesheet controls
+  'pet.imageUpload': string;
+  'pet.imageReplace': string;
+  'pet.imageRemove': string;
+  'pet.imageHintIdle': string;
+  'pet.imageHintActive': string;
+  'pet.fieldFrames': string;
+  'pet.fieldFramesHint': string;
+  'pet.fieldFps': string;
+  'pet.fieldFpsHint': string;
+
+  // Codex hatch-pet skill — atlas import + AI generation
+  'pet.atlasImport': string;
+  'pet.atlasImportTitle': string;
+  'pet.atlasPickerTitle': string;
+  'pet.atlasPickerHint': string;
+  'pet.atlasCancel': string;
+  'pet.atlasAdopt': string;
+  'pet.atlasAdoptFull': string;
+  'pet.atlasAdoptFullTitle': string;
+  'pet.atlasAdoptRowTitle': string;
+  'pet.atlasActiveHint': string;
+  'pet.atlasRow.idle': string;
+  'pet.atlasRow.running-right': string;
+  'pet.atlasRow.running-left': string;
+  'pet.atlasRow.waving': string;
+  'pet.atlasRow.jumping': string;
+  'pet.atlasRow.failed': string;
+  'pet.atlasRow.waiting': string;
+  'pet.atlasRow.running': string;
+  'pet.atlasRow.review': string;
+  'pet.hatchTitle': string;
+  'pet.hatchHint': string;
+  'pet.hatchConcept': string;
+  'pet.hatchConceptPlaceholder': string;
+  'pet.hatchCopy': string;
+  'pet.hatchCopied': string;
+  'pet.hatchFoot': string;
+  // Slash-command popover in the chat composer
+  'pet.slashPopoverAria': string;
+  'pet.slashPopoverTitle': string;
+  'pet.slashPopoverHint': string;
+  'pet.slashPet': string;
+  'pet.slashPetWake': string;
+  'pet.slashPetTuck': string;
+  'pet.slashHatch': string;
+  'pet.slashHatchArg': string;
+  // Recently-hatched section in pet settings
+  'pet.codexTitle': string;
+  'pet.codexSubtitle': string;
+  'pet.codexSubtitleWithDir': string;
+  'pet.codexEmpty': string;
+  'pet.codexLoading': string;
+  'pet.codexRefresh': string;
+  'pet.codexAdopt': string;
+  'pet.codexAdopting': string;
+  'pet.communitySync': string;
+  'pet.communitySyncing': string;
+  'pet.communitySyncTitle': string;
+  'pet.communitySyncDone': string;
+  'pet.communitySyncFailed': string;
+  'pet.codexBundled': string;
+  'pet.codexBundledTitle': string;
+
+  // Sketch editor
+  'sketch.toolSelect': string;
+  'sketch.toolPen': string;
+  'sketch.toolText': string;
+  'sketch.toolRect': string;
+  'sketch.toolArrow': string;
+  'sketch.toolEraser': string;
+  'sketch.color': string;
+  'sketch.strokeSize': string;
+  'sketch.undo': string;
+  'sketch.clear': string;
+  'sketch.close': string;
+  'sketch.textPrompt': string;
+}
+// Supported UI locales. Adding a new locale requires creating a new
+// dictionary in `./locales/` and registering it in `./index.tsx`.
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'tr' | 'fr' | 'uk';
+
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'tr', 'fr', 'uk'];
+
+export const LOCALE_LABEL: Record<Locale, string> = {
+  'en': 'English',
+  'de': 'Deutsch',
+  'zh-CN': '简体中文',
+  'zh-TW': '繁體中文',
+  'pt-BR': 'Português (Brasil)',
+  'es-ES': 'Español (España)',
+  'ru': 'Русский',
+  'fa': 'فارسی',
+  'ar': 'العربية',
+  'ja': '日本語',
+  'ko': '한국어',
+  'pl': 'Polski',
+  'hu': 'Magyar',
+  'tr': 'Türkçe',
+  'fr': 'Français',
+  'uk': 'Українська'
+};
+
+// Translation dictionary shape — flat keys, dot-namespaced. We keep it
+// flat (not deeply nested) so missing-key TS errors point straight at the
+// offending string instead of a generic object mismatch.
+export interface Dict {
+  // Common
+  'common.cancel': string;
+  'common.save': string;
+  'common.close': string;
+  'common.delete': string;
+  'common.rename': string;
+  'common.preview': string;
+  'common.share': string;
+  'common.search': string;
+  'common.searchEllipsis': string;
+  'common.loading': string;
+  'common.all': string;
+  'common.none': string;
+  'common.default': string;
+  'common.installed': string;
+  'common.notInstalled': string;
+  'common.active': string;
+  'common.offline': string;
+  'common.selected': string;
+  'common.create': string;
+  'common.openPreview': string;
+  'common.exitFullscreen': string;
+  'common.fullscreen': string;
+  'common.openInNewTab': string;
+  'common.exportPdf': string;
+  'common.exportZip': string;
+  'common.exportHtml': string;
+  'common.justNow': string;
+  'common.minutesAgo': string;
+  'common.hoursAgo': string;
+  'common.daysAgo': string;
+  'common.now': string;
+  'common.minutesShort': string;
+  'common.hoursShort': string;
+  'common.daysShort': string;
+  'common.untitled': string;
+
+  // App / brand
+  'app.brand': string;
+  'app.brandPill': string;
+  'app.brandSubtitle': string;
+  'app.welcomeLoading': string;
+
+  // Settings dialog
+  'settings.welcomeKicker': string;
+  'settings.welcomeTitle': string;
+  'settings.welcomeSubtitle': string;
+  'settings.kicker': string;
+  'settings.title': string;
+  'settings.subtitle': string;
+  'settings.modeAria': string;
+  'settings.protocolAria': string;
+  'settings.modeDaemon': string;
+  'settings.modeDaemonHelp': string;
+  'settings.modeDaemonOffline': string;
+  'settings.modeDaemonOfflineMeta': string;
+  'settings.modeDaemonInstalledMeta': string;
+  'settings.modeApi': string;
+  'settings.modeApiMeta': string;
+  'settings.codeAgent': string;
+  'settings.codeAgentHint': string;
+  'settings.rescan': string;
+  'settings.rescanTitle': string;
+  'settings.rescanRunning': string;
+  'settings.rescanSuccess': string;
+  'settings.rescanFailed': string;
+  'settings.noAgentsDetected': string;
+  'settings.apiSection': string;
+  'settings.quickFillProvider': string;
+  'settings.customProvider': string;
+  'settings.apiKey': string;
+  'settings.showKey': string;
+  'settings.hideKey': string;
+  'settings.show': string;
+  'settings.hide': string;
+  'settings.model': string;
+  'settings.suggestedModelsHint': string;
+  'settings.maxTokens': string;
+  'settings.maxTokensHint': string;
+  'settings.baseUrl': string;
+  'settings.baseUrlInvalid': string;
+  'settings.azureDeploymentModel': string;
+  'settings.azureDeploymentModelHint': string;
+  'settings.apiVersion': string;
+  'settings.apiHint': string;
+  'settings.skipForNow': string;
+  'settings.getStarted': string;
+  'settings.envConfigure': string;
+  'settings.localCli': string;
+  'settings.anthropicApi': string;
+  'settings.noAgentSelected': string;
+  'settings.language': string;
+  'settings.languageHint': string;
+  'settings.appearance': string;
+  'settings.appearanceHint': string;
+  'settings.themeSystem': string;
+  'settings.themeLight': string;
+  'settings.themeDark': string;
+  'settings.modelPicker': string;
+  'settings.reasoningPicker': string;
+  'settings.modelPickerHint': string;
+  'settings.modelCustom': string;
+  'settings.modelCustomLabel': string;
+  'settings.modelCustomPlaceholder': string;
+  'settings.mediaProviders': string;
+  'settings.mediaProvidersHint': string;
+  'settings.mediaProviderApiKey': string;
+  'settings.mediaProviderBaseUrl': string;
+  'settings.mediaProviderConfigured': string;
+  'settings.mediaProviderUnset': string;
+  'settings.mediaProviderClear': string;
+  'settings.mediaProviderPlaceholder': string;
+  'settings.mediaProviderBaseUrlPlaceholder': string;
+  'settings.about': string;
+  'settings.aboutHint': string;
+  'settings.appVersion': string;
+  'settings.appChannel': string;
+  'settings.appRuntime': string;
+  'settings.appPlatform': string;
+  'settings.appArchitecture': string;
+  'settings.runtimePackaged': string;
+  'settings.runtimeDevelopment': string;
+  'settings.versionUnavailable': string;
+
+  // Notifications (settings + system notifications)
+  'settings.notifications': string;
+  'settings.notificationsHint': string;
+  'settings.notifyCompletionSound': string;
+  'settings.notifyCompletionSoundHint': string;
+  'settings.notifySuccessSound': string;
+  'settings.notifyFailureSound': string;
+  'settings.notifyDesktop': string;
+  'settings.notifyDesktopHint': string;
+  'settings.notifyDesktopBlocked': string;
+  'settings.notifyDesktopUnsupported': string;
+  'settings.notifyTest': string;
+  'settings.notifyTestSent': string;
+  'settings.notifyTestFailed': string;
+  'settings.notifySoundDing': string;
+  'settings.notifySoundChime': string;
+  'settings.notifySoundTwoToneUp': string;
+  'settings.notifySoundPluck': string;
+  'settings.notifySoundBuzz': string;
+  'settings.notifySoundTwoToneDown': string;
+  'settings.notifySoundThud': string;
+  'notify.successTitle': string;
+  'notify.failureTitle': string;
+  'notify.successBody': string;
+  'notify.failureBody': string;
+
+  // Entry view / tabs
+  'entry.tabDesigns': string;
+  'entry.tabExamples': string;
+  'entry.tabDesignSystems': string;
+  'entry.tabConnectors': string;
+  'entry.tabImageTemplates': string;
+  'entry.tabVideoTemplates': string;
+  'entry.openSettingsTitle': string;
+  'entry.openSettingsAria': string;
+  'entry.resizeAria': string;
+  'entry.loadingWorkspace': string;
+
+  // Connectors tab
+  'connectors.title': string;
+  'connectors.subtitle': string;
+  'connectors.account': string;
+  'connectors.noAccount': string;
+  'connectors.tools': string;
+  'connectors.connect': string;
+  'connectors.disconnect': string;
+  'connectors.configure': string;
+  'connectors.unavailable': string;
+  'connectors.phaseStubTitle': string;
+  'connectors.statusAvailable': string;
+  'connectors.statusConnected': string;
+  'connectors.statusError': string;
+  'connectors.statusDisabled': string;
+  'connectors.gateTitle': string;
+  'connectors.gateBody': string;
+  'connectors.gateAction': string;
+  'connectors.aboutLabel': string;
+  'connectors.detailsLabel': string;
+  'connectors.statusLabel': string;
+  'connectors.categoryLabel': string;
+  'connectors.providerLabel': string;
+  'connectors.toolsSection': string;
+  'connectors.toolsLoading': string;
+  'connectors.noToolsAvailable': string;
+  'connectors.openDetailsAria': string;
+  'connectors.toolsBadgeNone': string;
+  'connectors.toolsBadgeOne': string;
+  'connectors.toolsBadgeMany': string;
+  'connectors.searchPlaceholder': string;
+  'connectors.searchAriaLabel': string;
+  'connectors.searchClear': string;
+  'connectors.emptyNoMatchTitle': string;
+  'connectors.emptyNoMatchBody': string;
+  'connectors.emptyNoMatchAction': string;
+
+  // New project panel
+  'newproj.tabPrototype': string;
+  'newproj.tabLiveArtifact': string;
+  'newproj.tabDeck': string;
+  'newproj.tabTemplate': string;
+  'newproj.tabOther': string;
+  'newproj.titlePrototype': string;
+  'newproj.titleLiveArtifact': string;
+  'newproj.titleDeck': string;
+  'newproj.titleTemplate': string;
+  'newproj.titleImage': string;
+  'newproj.titleVideo': string;
+  'newproj.titleAudio': string;
+  'newproj.titleOther': string;
+  'newproj.namePlaceholder': string;
+  'newproj.fidelityLabel': string;
+  'newproj.fidelityWireframe': string;
+  'newproj.fidelityHigh': string;
+  'newproj.toggleSpeakerNotes': string;
+  'newproj.toggleSpeakerNotesHint': string;
+  'newproj.toggleAnimations': string;
+  'newproj.toggleAnimationsHint': string;
+  'newproj.templateLabel': string;
+  'newproj.noTemplatesTitle': string;
+  'newproj.noTemplatesBody': string;
+  'newproj.savedTemplate': string;
+  'newproj.fileSingular': string;
+  'newproj.filePlural': string;
+  'newproj.create': string;
+  'newproj.createLiveArtifact': string;
+  'newproj.createFromTemplate': string;
+  'newproj.createDisabledTitle': string;
+  'newproj.importClaudeZip': string;
+  'newproj.importClaudeZipTitle': string;
+  'newproj.importingClaudeZip': string;
+  'newproj.privacyFooter': string;
+  'newproj.designSystem': string;
+  'newproj.dsNoneFreeform': string;
+  'newproj.dsNoneSubtitleEmpty': string;
+  'newproj.dsNoneSubtitleSelected': string;
+  'newproj.dsCategoryFallback': string;
+  'newproj.dsSearch': string;
+  'newproj.dsModeAria': string;
+  'newproj.dsModeSingle': string;
+  'newproj.dsModeMulti': string;
+  'newproj.dsNoneTitle': string;
+  'newproj.dsNoneSub': string;
+  'newproj.dsEmpty': string;
+  'newproj.dsFootSingular': string;
+  'newproj.dsFootPlural': string;
+  'newproj.dsFootClear': string;
+  'newproj.dsBadgeDefault': string;
+  'newproj.dsPrimaryFallback': string;
+  'newproj.surfaceImage': string;
+  'newproj.surfaceVideo': string;
+  'newproj.surfaceAudio': string;
+  'newproj.modelLabel': string;
+  'newproj.aspectLabel': string;
+  'newproj.imageStyleLabel': string;
+  'newproj.imageStylePlaceholder': string;
+  'newproj.videoLengthLabel': string;
+  'newproj.videoLengthSeconds': string;
+  'newproj.audioKindLabel': string;
+  'newproj.audioKindMusic': string;
+  'newproj.audioKindSpeech': string;
+  'newproj.audioKindSfx': string;
+  'newproj.audioDurationLabel': string;
+  'newproj.audioDurationSeconds': string;
+  'newproj.voiceLabel': string;
+  'newproj.voicePlaceholder': string;
+  'newproj.connectorsLabel': string;
+  'newproj.connectorsHint': string;
+  'newproj.connectorsEmptyTitle': string;
+  'newproj.connectorsEmptyBody': string;
+  'newproj.connectorsEmptyCta': string;
+  'newproj.connectorsLoading': string;
+  'newproj.connectorsCountOne': string;
+  'newproj.connectorsCountMany': string;
+  'newproj.connectorsManage': string;
+  'newproj.promptTemplateLabel': string;
+  'newproj.promptTemplateNoneTitle': string;
+  'newproj.promptTemplateNoneSub': string;
+  'newproj.promptTemplateRefSub': string;
+  'newproj.promptTemplateSearch': string;
+  'newproj.promptTemplateEmpty': string;
+  'newproj.promptTemplateBodyLabel': string;
+  'newproj.promptTemplateOptimizeHint': string;
+  'newproj.promptTemplateBodyEmpty': string;
+
+  // Prompt templates
+  'promptTemplates.searchPlaceholder': string;
+  'promptTemplates.countLabel': string;
+  'promptTemplates.emptyImage': string;
+  'promptTemplates.emptyVideo': string;
+  'promptTemplates.emptyNoMatch': string;
+  'promptTemplates.attributionFooter': string;
+  'promptTemplates.openPreviewTitle': string;
+  'promptTemplates.sourcePrefix': string;
+  'promptTemplates.fetchError': string;
+  'promptTemplates.promptLabel': string;
+  'promptTemplates.copyPrompt': string;
+  'promptTemplates.copyDone': string;
+  'promptTemplates.modelHint': string;
+  'promptTemplates.openSource': string;
+  'promptTemplates.openFullscreen': string;
+  'promptTemplates.closeFullscreen': string;
+  'promptTemplates.retry': string;
+
+  // Designs tab
+  'designs.subRecent': string;
+  'designs.subYours': string;
+  'designs.filterAria': string;
+  'designs.searchPlaceholder': string;
+  'designs.emptyNoProjects': string;
+  'designs.emptyNoMatch': string;
+  'designs.deleteTitle': string;
+  'designs.deleteConfirm': string;
+  'designs.cardFreeform': string;
+  'designs.badgeLive': string;
+  'designs.liveArtifactBadgesAria': string;
+  'designs.liveCount': string;
+  'designs.statusLive': string;
+  'designs.statusArchived': string;
+  'designs.statusError': string;
+  'designs.statusRefreshing': string;
+  'designs.statusRefreshFailed': string;
+  'designs.statusRefreshed': string;
+  'designs.status.notStarted': string;
+  'designs.status.queued': string;
+  'designs.status.running': string;
+  'designs.status.awaitingInput': string;
+  'designs.status.succeeded': string;
+  'designs.status.failed': string;
+  'designs.status.canceled': string;
+  'designs.viewToggleAria': string;
+  'designs.viewGrid': string;
+  'designs.viewKanban': string;
+  'designs.kanbanEmptyColumn': string;
+  'designs.deleteAria': string;
+
+  // Examples tab
+  'examples.typeLabel': string;
+  'examples.surfaceLabel': string;
+  'examples.surfaceWeb': string;
+  'examples.surfaceImage': string;
+  'examples.surfaceVideo': string;
+  'examples.surfaceAudio': string;
+  'examples.scenarioLabel': string;
+  'examples.modeAll': string;
+  'examples.modePrototypeDesktop': string;
+  'examples.modePrototypeMobile': string;
+  'examples.modeDeck': string;
+  'examples.modeDocument': string;
+  'examples.scenarioGeneral': string;
+  'examples.scenarioEngineering': string;
+  'examples.scenarioProduct': string;
+  'examples.scenarioDesign': string;
+  'examples.scenarioMarketing': string;
+  'examples.scenarioSales': string;
+  'examples.scenarioFinance': string;
+  'examples.scenarioHr': string;
+  'examples.scenarioOperations': string;
+  'examples.scenarioSupport': string;
+  'examples.scenarioLegal': string;
+  'examples.scenarioEducation': string;
+  'examples.scenarioPersonal': string;
+  'examples.searchPlaceholder': string;
+  'examples.searchAria': string;
+  'examples.emptyNoSkills': string;
+  'examples.emptyNoMatch': string;
+  'examples.openPreview': string;
+  'examples.loadingPreview': string;
+  'examples.hoverPreview': string;
+  'examples.usePrompt': string;
+  'examples.previewModalTitle': string;
+  'examples.shareTitle': string;
+  'examples.shareLoadFirst': string;
+  'examples.shareMenu': string;
+  'examples.exportPdfAllSlides': string;
+  'examples.exportPptxLocked': string;
+  'examples.tagSlideDeck': string;
+  'examples.tagTemplate': string;
+  'examples.tagDesignSystem': string;
+  'examples.tagMobilePrototype': string;
+  'examples.tagDesktopPrototype': string;
+  'examples.tagImage': string;
+  'examples.tagVideo': string;
+  'examples.tagAudio': string;
+  'examples.previewLabel': string;
+
+  // Design systems tab
+  'ds.surfaceLabel': string;
+  'ds.surfaceWeb': string;
+  'ds.surfaceImage': string;
+  'ds.surfaceVideo': string;
+  'ds.surfaceAudio': string;
+  'ds.searchPlaceholder': string;
+  'ds.emptyNoMatch': string;
+  'ds.badgeDefault': string;
+  'ds.preview': string;
+  'ds.previewTitle': string;
+  'ds.categoryAll': string;
+  'ds.categoryUncategorized': string;
+  'ds.showcase': string;
+  'ds.tokens': string;
+  'ds.specToggle': string;
+  'ds.specLoading': string;
+
+  // Avatar menu (project topbar)
+  'avatar.title': string;
+  'avatar.localCli': string;
+  'avatar.anthropicApi': string;
+  'avatar.useLocal': string;
+  'avatar.useApi': string;
+  'avatar.codeAgent': string;
+  'avatar.rescan': string;
+  'avatar.settings': string;
+  'avatar.backToProjects': string;
+  'avatar.metaActive': string;
+  'avatar.metaOffline': string;
+  'avatar.metaSelected': string;
+  'avatar.noAgentSelected': string;
+  'avatar.modelSection': string;
+  'avatar.modelLabel': string;
+  'avatar.reasoningLabel': string;
+  'avatar.customSuffix': string;
+
+  // Project view / chat pane / composer
+  'project.backToProjects': string;
+  'project.metaFreeform': string;
+  'chat.tabChat': string;
+  'chat.tabComments': string;
+  'chat.commentsSoon': string;
+  'chat.comments.attached': string;
+  'chat.comments.emptyAttached': string;
+  'chat.comments.saved': string;
+  'chat.comments.emptySaved': string;
+  'chat.comments.add': string;
+  'chat.comments.addAll': string;
+  'chat.comments.remove': string;
+  'chat.comments.placeholder': string;
+  'chat.comments.addSend': string;
+  'chat.comments.updateSend': string;
+  'chat.comments.removeAttachment': string;
+  'chat.comments.removeAttachmentAria': string;
+  'chat.conversationsTitle': string;
+  'chat.conversationsAria': string;
+  'chat.newConversation': string;
+  'chat.newConversationsTitle': string;
+  'chat.conversationsHeading': string;
+  'chat.new': string;
+  'chat.emptyConversations': string;
+  'chat.deleteConversation': string;
+  'chat.deleteConversationConfirm': string;
+  'chat.untitledConversation': string;
+  'chat.startTitle': string;
+  'chat.startHint': string;
+  'chat.fillInputTitle': string;
+  'chat.jumpToLatest': string;
+  'chat.scrollToLatest': string;
+  'chat.you': string;
+  'chat.openFile': string;
+  'chat.composerPlaceholder': string;
+  'chat.composerHint': string;
+  'chat.cliSettingsTitle': string;
+  'chat.cliSettingsAria': string;
+  'chat.attachTitle': string;
+  'chat.attachAria': string;
+  'chat.importTitle': string;
+  'chat.importLabel': string;
+  'chat.importComingSoon': string;
+  'chat.importSoon': string;
+  'chat.importFig': string;
+  'chat.importGitHub': string;
+  'chat.importWeb': string;
+  'chat.importFolder': string;
+  'chat.importSkills': string;
+  'chat.importProject': string;
+  'chat.linkedFolderRemoveAria': string;
+  'chat.linkedFolderNotFound': string;
+  'chat.linkedFolderAlready': string;
+  'chat.linkedFolderPickError': string;
+  'chat.send': string;
+  'chat.stop': string;
+  'chat.removeAria': string;
+  'chat.example1Title': string;
+  'chat.example1Tag': string;
+  'chat.example1Prompt': string;
+  'chat.example2Title': string;
+  'chat.example2Tag': string;
+  'chat.example2Prompt': string;
+  'chat.example3Title': string;
+  'chat.example3Tag': string;
+  'chat.example3Prompt': string;
+
+  // Preview modal
+  'preview.shareMenu': string;
+  'preview.openInNewTab': string;
+  'preview.exit': string;
+  'preview.fullscreen': string;
+  'preview.closeTitle': string;
+  'preview.loading': string;
+  'preview.showSidebar': string;
+  'preview.hideSidebar': string;
+
+  // Misc fallback names
+  'misc.savedTemplate': string;
+  'misc.primary': string;
+  'misc.designSystem': string;
+
+  // Workspace / file viewer / design files panel
+  'workspace.designFiles': string;
+  'workspace.closeTab': string;
+  'workspace.deleteFileConfirm': string;
+  'workspace.openFromDesignFiles': string;
+  'workspace.designFilesLink': string;
+  'workspace.loadingSketch': string;
+  'designFiles.title': string;
+  'designFiles.upload': string;
+  'designFiles.pasteText': string;
+  'designFiles.newSketch': string;
+  'designFiles.empty': string;
+  'designFiles.refresh': string;
+  'designFiles.delete': string;
+  'designFiles.searchPlaceholder': string;
+  'designFiles.up': string;
+  'designFiles.back': string;
+  'designFiles.crumbs': string;
+  'designFiles.rowMenu': string;
+  'designFiles.openInTab': string;
+  'designFiles.download': string;
+  'designFiles.downloadSelected': string;
+  'designFiles.clearSelection': string;
+  'designFiles.selectAll': string;
+  'designFiles.dropTitle': string;
+  'designFiles.dropDesc': string;
+  'designFiles.upload.title': string;
+  'designFiles.paste.title': string;
+  'designFiles.upload.label': string;
+  'designFiles.paste.label': string;
+  'designFiles.previewOpen': string;
+  'designFiles.previewClose': string;
+  'designFiles.modified': string;
+  'designFiles.weeksAgo': string;
+  'designFiles.sectionPages': string;
+  'designFiles.sectionScripts': string;
+  'designFiles.sectionImages': string;
+  'designFiles.sectionSketches': string;
+  'designFiles.sectionLiveArtifacts': string;
+  'designFiles.sectionOther': string;
+  'designFiles.showMore': string;
+  'designFiles.kindHtml': string;
+  'designFiles.kindImage': string;
+  'designFiles.kindSketch': string;
+  'designFiles.kindText': string;
+  'designFiles.kindCode': string;
+  'designFiles.kindPdf': string;
+  'designFiles.kindDocument': string;
+  'designFiles.kindPresentation': string;
+  'designFiles.kindSpreadsheet': string;
+  'designFiles.kindLiveArtifact': string;
+  'designFiles.kindBinary': string;
+  'pasteDialog.title': string;
+  'pasteDialog.hint': string;
+  'pasteDialog.fileNameLabel': string;
+  'pasteDialog.namePlaceholder': string;
+  'pasteDialog.contentLabel': string;
+  'pasteDialog.contentPlaceholder': string;
+  'pasteDialog.save': string;
+  'pasteDialog.cancel': string;
+  'sketch.save': string;
+  'sketch.cancel': string;
+  'sketch.saving': string;
+  'sketch.tooltipDirty': string;
+  'sketch.tooltipClean': string;
+  'fileViewer.empty': string;
+  'fileViewer.loading': string;
+  'fileViewer.exportPptx': string;
+  'fileViewer.openInNewTab': string;
+  'fileViewer.copyPath': string;
+  'fileViewer.copied': string;
+  'fileViewer.share': string;
+  'fileViewer.binaryMeta': string;
+  'fileViewer.binaryNote': string;
+  'fileViewer.pdfMeta': string;
+  'fileViewer.documentMeta': string;
+  'fileViewer.presentationMeta': string;
+  'fileViewer.spreadsheetMeta': string;
+  'fileViewer.previewUnavailable': string;
+  'fileViewer.download': string;
+  'fileViewer.open': string;
+  'fileViewer.imageMeta': string;
+  'fileViewer.reactMeta': string;
+  'fileViewer.sketchMeta': string;
+  'fileViewer.markdownStreamingMeta': string;
+  'fileViewer.markdownErrorMeta': string;
+  'fileViewer.markdownStreamingStatus': string;
+  'fileViewer.markdownErrorStatus': string;
+  'fileViewer.videoMeta': string;
+  'fileViewer.audioMeta': string;
+  'fileViewer.reload': string;
+  'fileViewer.reloadDisk': string;
+  'fileViewer.copy': string;
+  'fileViewer.copyTitle': string;
+  'fileViewer.saveDisabled': string;
+  'fileViewer.save': string;
+  'fileViewer.preview': string;
+  'fileViewer.source': string;
+  'fileViewer.tweaks': string;
+  'fileViewer.comment': string;
+  'fileViewer.edit': string;
+  'fileViewer.draw': string;
+  'fileViewer.zoomOut': string;
+  'fileViewer.zoomIn': string;
+  'fileViewer.resetZoom': string;
+  'fileViewer.reloadAria': string;
+  'fileViewer.previousSlide': string;
+  'fileViewer.nextSlide': string;
+  'fileViewer.slideNavAria': string;
+  'fileViewer.present': string;
+  'fileViewer.presentInTab': string;
+  'fileViewer.presentFullscreen': string;
+  'fileViewer.presentNewTab': string;
+  'fileViewer.exitPresentation': string;
+  'fileViewer.shareLabel': string;
+  'fileViewer.exportPdf': string;
+  'fileViewer.exportPdfAllSlides': string;
+  'fileViewer.exportPptxBusy': string;
+  'fileViewer.exportPptxHint': string;
+  'fileViewer.exportPptxNa': string;
+  'fileViewer.exportZip': string;
+  'fileViewer.exportHtml': string;
+  'fileViewer.exportMd': string;
+  'fileViewer.exportJsx': string;
+  'fileViewer.exportReactHtml': string;
+  'fileViewer.saveAsTemplate': string;
+  'fileViewer.savingTemplate': string;
+  'fileViewer.savedTemplate': string;
+  'fileViewer.savedTemplateFail': string;
+  'fileViewer.templateNamePrompt': string;
+  'fileViewer.templateNameDefault': string;
+  'fileViewer.templateDescPrompt': string;
+  'liveArtifact.refresh.button': string;
+  'liveArtifact.refresh.buttonTitle': string;
+  'liveArtifact.refresh.loadingTitle': string;
+  'liveArtifact.refresh.noSourceTitle': string;
+  'liveArtifact.refresh.running': string;
+  'liveArtifact.refresh.runningMessage': string;
+  'liveArtifact.refresh.runningAction': string;
+  'liveArtifact.refresh.successOne': string;
+  'liveArtifact.refresh.successMany': string;
+  'liveArtifact.refresh.successAction': string;
+  'liveArtifact.refresh.previousFailure': string;
+  'liveArtifact.refresh.failureAction': string;
+  'liveArtifact.refresh.networkFailure': string;
+  'liveArtifact.refresh.genericFailure': string;
+  'liveArtifact.refresh.statusNever': string;
+  'liveArtifact.refresh.statusReady': string;
+  'liveArtifact.refresh.statusSucceeded': string;
+  'liveArtifact.refresh.statusFailed': string;
   'fileViewer.deployToVercel': string;
   'fileViewer.redeployToVercel': string;
   'fileViewer.deployingToVercel': string;
