@@ -2793,18 +2793,24 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
       // ?pagesize=WxH (mm) — inject a corrected @page rule so Chrome's print
       // dialog picks up the right physical dimensions instead of defaulting to A4.
+      // Use !important on size/margin to beat any pre-existing @page rule
+      // (e.g. banner.css with @page { size: 860px 2340px }).
       const pagesizeParam = req.query.pagesize;
-      if (pagesizeParam && file.mime === 'text/html') {
+      if (pagesizeParam && (file.mime === 'text/html' || /\.html?$/i.test(relPath))) {
         const parts = String(pagesizeParam).split('x').map(Number);
         const pw = parts[0]; const ph = parts[1];
         if (pw > 0 && ph > 0) {
-          const styleTag = `<style>@page{size:${pw}mm ${ph}mm;margin:0}` +
+          const styleTag = `<style>@page{size:${pw}mm ${ph}mm!important;margin:0!important}` +
+            `html,body{margin:0!important;padding:0!important}` +
             `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}</style>`;
           let html = file.buffer.toString('utf-8');
-          // Inject as the last element before </body> so it wins the cascade.
+          // Inject before </body> AND after </html> so it always wins the
+          // cascade — some designs add @page rules from inline <style> tags
+          // late in <body> which would otherwise override us.
           html = html.includes('</body>')
             ? html.replace('</body>', styleTag + '</body>')
             : html + styleTag;
+          html += styleTag;
           return res.type('text/html').send(html);
         }
       }

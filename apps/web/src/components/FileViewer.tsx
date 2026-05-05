@@ -2867,15 +2867,11 @@ function HtmlViewer({
                       // the print dialog after a generous delay so React /
                       // Babel / fonts / images all settle first.
                       //
-                      // Append ?pagesize=WxH so the daemon injects a corrected
-                      // @page rule using mm units — Chrome then pre-selects the
-                      // right paper size instead of defaulting to A4.
-                      const pagesizeParam = extractPrintPageSize(source ?? '');
-                      const rawUrl = projectRawUrl(projectId, file.name);
-                      const exportUrl = pagesizeParam
-                        ? `${rawUrl}?pagesize=${pagesizeParam}`
-                        : rawUrl;
-                      const win = window.open(exportUrl, '_blank');
+                      // Open the new tab synchronously (popup blockers reject
+                      // window.open inside an awaited promise), then load the
+                      // real URL once we've detected the page size from the
+                      // HTML source or any linked CSS files.
+                      const win = window.open('about:blank', '_blank');
                       if (!win) return;
                       const trigger = () => {
                         try {
@@ -2890,7 +2886,18 @@ function HtmlViewer({
                           /* print blocked — user can press Ctrl+P manually */
                         }
                       };
-                      win.addEventListener('load', () => setTimeout(trigger, 2000));
+                      void detectPrintPageSize(source ?? '', projectId, file.name)
+                        .then((pagesizeParam) => {
+                          const rawUrl = projectRawUrl(projectId, file.name);
+                          const exportUrl = pagesizeParam
+                            ? `${rawUrl}?pagesize=${pagesizeParam}`
+                            : rawUrl;
+                          win.addEventListener('load', () => setTimeout(trigger, 2000));
+                          win.location.href = exportUrl;
+                        })
+                        .catch(() => {
+                          win.location.href = projectRawUrl(projectId, file.name);
+                        });
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
@@ -3306,16 +3313,45 @@ function hasRelativeAssetRefs(html: string): boolean {
   return false;
 }
 
-// Parse @page { size: Wpx Hpx } from a design's HTML source and return a
-// "WxH" string for use as the ?pagesize= query parameter. The daemon then
-// injects a corrected @page rule with mm units so Chrome's print dialog
-// pre-selects the right paper size. Returns null when no @page size is found.
-function extractPrintPageSize(html: string): string | null {
-  const m = html.match(/@page\s*\{[^}]*\bsize\s*:\s*([\d.]+)px\s+([\d.]+)px/i);
+// Parse @page { size: Wpx Hpx } from a chunk of CSS or HTML containing inline
+// <style> blocks. Returns "WxH" or null. The values are parsed as px but used
+// as mm by the daemon — designers commonly draw banners with 1px == 1mm.
+function extractPageSizeFromCss(css: string): string | null {
+  const m = css.match(/@page\s*\{[^}]*\bsize\s*:\s*([\d.]+)px\s+([\d.]+)px/i);
   if (!m) return null;
   const w = Math.round(parseFloat(m[1]));
   const h = Math.round(parseFloat(m[2]));
   return w > 0 && h > 0 ? `${w}x${h}` : null;
+}
+
+// Detect the print page size by scanning the HTML source AND any linked
+// stylesheets (banner.css, tokens.css, …). Async because we may need to
+// fetch the linked CSS files from the daemon.
+async function detectPrintPageSize(
+  html: string,
+  projectId: string,
+  fileName: string,
+): Promise<string | null> {
+  const inline = extractPageSizeFromCss(html);
+  if (inline) return inline;
+
+  const linkTags = html.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of linkTags) {
+    const rel = readHtmlAttr(tag, 'rel');
+    if (!rel || !/\bstylesheet\b/i.test(rel)) continue;
+    const href = readHtmlAttr(tag, 'href');
+    if (!href) continue;
+    if (/^(?:https?:|data:|blob:|\/)/i.test(href)) continue;
+    try {
+      const css = await fetchProjectRelativeText(projectId, fileName, href);
+      if (!css) continue;
+      const found = extractPageSizeFromCss(css);
+      if (found) return found;
+    } catch {
+      /* skip */
+    }
+  }
+  return null;
 }
 
 async function inlineRelativeAssets(
