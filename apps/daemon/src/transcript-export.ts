@@ -27,7 +27,10 @@
 //     contract above).
 //   * `kind: 'tool_use'` and `kind: 'tool_result'` flush any pending text /
 //     thinking accumulator and emit verbatim.
-//   * `kind: 'status' | 'usage' | 'raw'` drop (telemetry / parser fallback).
+//   * `kind: 'status'` with `label === 'thinking'` is the daemon's translated
+//     thinking_start marker; it flushes the prior accumulator so adjacent
+//     thinking segments preserve their original block boundaries. Other
+//     `status` labels and `kind: 'usage' | 'raw'` drop (telemetry).
 //   * Type-change between text ↔ thinking flushes the prior accumulator.
 //
 // Content fallback: user-typed messages persist as plain text in
@@ -391,9 +394,10 @@ function parseCommentAttachments(raw: string | null): CommentAttachmentRef[] {
 }
 
 // Walk arrival-order. Maintain a single accumulator for the current run of
-// text or thinking events; flush on type change, on any tool block, and at
-// end-of-stream. Telemetry events drop without flushing (they neither
-// contribute content nor signal a content boundary).
+// text or thinking events; flush on type change, on any tool block, on a
+// status thinking-start marker, and at end-of-stream. Pure telemetry events
+// (status with non-thinking label, usage, raw) drop without flushing — they
+// neither contribute content nor signal a content boundary.
 //
 // Both `kind: 'text'` and `kind: 'thinking'` carry their content in a `text`
 // field per PersistedAgentEvent; the output blocks rename thinking's field
@@ -455,10 +459,19 @@ function coalesceBlocks(events: PersistedAgentEvent[]): Block[] {
         });
         break;
       }
-      // Telemetry: status, usage, raw — intentional drop. status with
-      // label === 'thinking' is the daemon's translated thinking_start
-      // marker; we don't use it as a flush trigger because adjacent
-      // thinking blocks merge harmlessly for an LLM consumer.
+      case 'status': {
+        // status with label === 'thinking' is the daemon's translated
+        // thinking_start marker (apps/web/src/providers/daemon.ts:367-369).
+        // It signals a new thinking segment, so flush the prior accumulator
+        // — without this, two thinking segments separated only by the
+        // marker would merge into one block and synthesis could not recover
+        // the original boundaries. Other status labels are pure telemetry
+        // and drop without flushing.
+        if (ev.label === 'thinking') flush();
+        break;
+      }
+      // Telemetry: usage, raw — intentional drop, neither contributes
+      // content nor signals a content boundary.
       default:
         break;
     }

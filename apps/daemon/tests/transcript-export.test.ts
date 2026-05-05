@@ -274,9 +274,9 @@ describe('exportProjectTranscript', () => {
   });
 
   it('coalesces consecutive thinking events into one thinking block', () => {
-    // The persisted shape does not carry a separate thinking_start signal —
-    // a continuous thinking run produces one block. Adjacent thinking-only
-    // runs merge harmlessly for an LLM consumer (acceptable today).
+    // A continuous thinking run with no intervening boundary marker
+    // produces one block. Boundary-preservation across thinking-start
+    // markers is exercised in test #25 below.
     const { db, projectsRoot } = setup();
     seedConversation(db, { id: 'c1', createdAt: 100 });
     seedMessage(db, 'c1', {
@@ -653,5 +653,34 @@ describe('exportProjectTranscript', () => {
     const lines = readLines(result.path);
     expect(lines[0].kind).toBe('header');
     expect(lines[2].id).toBe('m1');
+  });
+
+  // ---------- Codex P2 (3188524878): thinking-start boundary preservation ----------
+
+  it('flushes thinking accumulator on status thinking-start marker so adjacent segments stay separate', () => {
+    // The web translator emits `{ kind: 'status', label: 'thinking' }` at
+    // every thinking_start (apps/web/src/providers/daemon.ts:367-369).
+    // Two thinking segments separated only by that marker must stay as two
+    // blocks; merging them would lose the original boundary and make the
+    // transcript non-lossless for synthesis.
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', {
+      id: 'm1',
+      role: 'assistant',
+      events: [
+        { kind: 'thinking', text: 'a' },
+        { kind: 'thinking', text: 'b' },
+        { kind: 'status', label: 'thinking' },
+        { kind: 'thinking', text: 'c' },
+        { kind: 'thinking', text: 'd' },
+      ],
+    });
+
+    const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
+    expect(lines[2].blocks).toEqual([
+      { type: 'thinking', thinking: 'ab' },
+      { type: 'thinking', thinking: 'cd' },
+    ]);
   });
 });
