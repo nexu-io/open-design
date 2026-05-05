@@ -1,5 +1,22 @@
 // @ts-nocheck
-import { afterEach, describe, expect, it } from 'vitest';
+// Persisted event shape under test is `PersistedAgentEvent` from
+// packages/contracts/src/api/chat.ts (the discriminator is `kind`, the
+// thinking field is `text`). The daemon's claude-stream emits a different
+// `type:`-shaped wire format — those events are translated to the persisted
+// `kind:` shape by the web client before being PUT back for storage.
+//
+// All seeded events here mirror the canonical persisted shape, exactly as
+// they appear in `messages.events_json` in production databases.
+//
+// Note on fs imports: both this file and `transcript-export.ts` use
+// `import fs from 'node:fs'` (default import — the CJS module exports
+// object) so that `vi.spyOn(fs, '<fn>')` in the failure-injection tests can
+// actually redefine properties. ESM namespace imports of `node:fs` (`import
+// * as fs from 'node:fs'`) produce a frozen Module Namespace Object that
+// `vi.spyOn` cannot mutate; default-import sidesteps that restriction
+// because it returns the underlying CJS `module.exports` object.
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +27,10 @@ import {
   openDatabase,
   upsertMessage,
 } from '../src/db.js';
-import { exportProjectTranscript } from '../src/transcript-export.js';
+import {
+  exportProjectTranscript,
+  TranscriptExportLockedError,
+} from '../src/transcript-export.js';
 
 const PROJECT_ID = 'project-1';
 const FIXED_NOW = () => new Date('2026-05-04T12:00:00.000Z');
@@ -20,12 +40,13 @@ let projectsRoot: string | null = null;
 
 afterEach(() => {
   closeDatabase();
+  vi.restoreAllMocks();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
   projectsRoot = null;
 });
 
-function setup(): { db: any; projectsRoot: string } {
+function setup(opts: { skipMkdir?: boolean } = {}): { db: any; projectsRoot: string } {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-tx-'));
   const db = openDatabase(tempDir);
   insertProject(db, {
@@ -35,7 +56,9 @@ function setup(): { db: any; projectsRoot: string } {
     updatedAt: 1,
   });
   projectsRoot = path.join(tempDir, 'projects');
-  fs.mkdirSync(path.join(projectsRoot, PROJECT_ID), { recursive: true });
+  if (!opts.skipMkdir) {
+    fs.mkdirSync(path.join(projectsRoot, PROJECT_ID), { recursive: true });
+  }
   return { db, projectsRoot };
 }
 
@@ -61,13 +84,22 @@ function seedConversation(db: any, opts: { id: string; createdAt: number; update
 function seedMessage(
   db: any,
   conversationId: string,
-  m: { id: string; role: 'user' | 'assistant'; content?: string; events?: any[] },
+  m: {
+    id: string;
+    role: 'user' | 'assistant';
+    content?: string;
+    events?: any[];
+    attachments?: any[];
+    commentAttachments?: any[];
+  },
 ) {
   upsertMessage(db, conversationId, {
     id: m.id,
     role: m.role,
     content: m.content ?? '',
     events: m.events,
+    attachments: m.attachments,
+    commentAttachments: m.commentAttachments,
   });
 }
 
@@ -85,11 +117,14 @@ describe('exportProjectTranscript', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toEqual({
       kind: 'header',
-      schemaVersion: 1,
+      schemaVersion: 2,
       projectId: PROJECT_ID,
       exportedAt: '2026-05-04T12:00:00.000Z',
       conversationCount: 0,
       messageCount: 0,
+      attachmentCount: 0,
+      commentAttachmentCount: 0,
+      attachmentsInlined: false,
     });
   });
 
@@ -99,12 +134,12 @@ describe('exportProjectTranscript', () => {
     seedMessage(db, 'c1', {
       id: 'm1',
       role: 'user',
-      events: [{ type: 'text_delta', delta: 'hello' }],
+      events: [{ kind: 'text', text: 'hello' }],
     });
     seedMessage(db, 'c1', {
       id: 'm2',
       role: 'assistant',
-      events: [{ type: 'text_delta', delta: 'world' }],
+      events: [{ kind: 'text', text: 'world' }],
     });
 
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
@@ -112,6 +147,7 @@ describe('exportProjectTranscript', () => {
 
     expect(lines).toHaveLength(4);
     expect(lines[0].kind).toBe('header');
+    expect(lines[0].schemaVersion).toBe(2);
     expect(lines[0].conversationCount).toBe(1);
     expect(lines[0].messageCount).toBe(2);
     expect(lines[1]).toEqual({
@@ -132,16 +168,16 @@ describe('exportProjectTranscript', () => {
     expect(lines[3].blocks).toEqual([{ type: 'text', text: 'world' }]);
   });
 
-  it('coalesces adjacent text_delta chunks into a single text block', () => {
+  it('coalesces adjacent text events into a single text block', () => {
     const { db, projectsRoot } = setup();
     seedConversation(db, { id: 'c1', createdAt: 100 });
     seedMessage(db, 'c1', {
       id: 'm1',
       role: 'assistant',
       events: [
-        { type: 'text_delta', delta: 'hel' },
-        { type: 'text_delta', delta: 'lo' },
-        { type: 'text_delta', delta: ' world' },
+        { kind: 'text', text: 'hel' },
+        { kind: 'text', text: 'lo' },
+        { kind: 'text', text: ' world' },
       ],
     });
 
@@ -157,10 +193,10 @@ describe('exportProjectTranscript', () => {
       id: 'm1',
       role: 'assistant',
       events: [
-        { type: 'text_delta', delta: 'I will read.' },
-        { type: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/x' } },
-        { type: 'tool_result', toolUseId: 'tu_1', content: 'file contents', isError: false },
-        { type: 'text_delta', delta: ' Done.' },
+        { kind: 'text', text: 'I will read.' },
+        { kind: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/x' } },
+        { kind: 'tool_result', toolUseId: 'tu_1', content: 'file contents', isError: false },
+        { kind: 'text', text: ' Done.' },
       ],
     });
 
@@ -180,11 +216,11 @@ describe('exportProjectTranscript', () => {
       id: 'm1',
       role: 'assistant',
       events: [
-        { type: 'status', label: 'streaming' },
-        { type: 'thinking_delta', delta: 'reasoning' },
-        { type: 'usage', usage: { input_tokens: 5 } },
-        { type: 'text_delta', delta: 'answer' },
-        { type: 'raw', line: '??' },
+        { kind: 'status', label: 'streaming' },
+        { kind: 'thinking', text: 'reasoning' },
+        { kind: 'usage', inputTokens: 5 },
+        { kind: 'text', text: 'answer' },
+        { kind: 'raw', line: '??' },
       ],
     });
 
@@ -202,9 +238,9 @@ describe('exportProjectTranscript', () => {
       id: 'm1',
       role: 'assistant',
       events: [
-        { type: 'thinking_delta', delta: 'plan' },
-        { type: 'text_delta', delta: 'ok' },
-        { type: 'tool_use', id: 't', name: 'X', input: {} },
+        { kind: 'thinking', text: 'plan' },
+        { kind: 'text', text: 'ok' },
+        { kind: 'tool_use', id: 't', name: 'X', input: {} },
       ],
     });
 
@@ -223,9 +259,9 @@ describe('exportProjectTranscript', () => {
       id: 'm1',
       role: 'assistant',
       events: [
-        { type: 'text_delta', delta: 'pre' },
-        { type: 'thinking_delta', delta: 'mid' },
-        { type: 'text_delta', delta: 'post' },
+        { kind: 'text', text: 'pre' },
+        { kind: 'thinking', text: 'mid' },
+        { kind: 'text', text: 'post' },
       ],
     });
 
@@ -237,25 +273,26 @@ describe('exportProjectTranscript', () => {
     ]);
   });
 
-  it('treats thinking_start as a flush trigger so multi-block thinking survives', () => {
+  it('coalesces consecutive thinking events into one thinking block', () => {
+    // The persisted shape does not carry a separate thinking_start signal —
+    // a continuous thinking run produces one block. Adjacent thinking-only
+    // runs merge harmlessly for an LLM consumer (acceptable today).
     const { db, projectsRoot } = setup();
     seedConversation(db, { id: 'c1', createdAt: 100 });
     seedMessage(db, 'c1', {
       id: 'm1',
       role: 'assistant',
       events: [
-        { type: 'thinking_start' },
-        { type: 'thinking_delta', delta: 'first' },
-        { type: 'thinking_start' },
-        { type: 'thinking_delta', delta: 'second' },
-        { type: 'text_delta', delta: 'visible' },
+        { kind: 'thinking', text: 'first ' },
+        { kind: 'thinking', text: 'second ' },
+        { kind: 'thinking', text: 'third' },
+        { kind: 'text', text: 'visible' },
       ],
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
     expect(lines[2].blocks).toEqual([
-      { type: 'thinking', thinking: 'first' },
-      { type: 'thinking', thinking: 'second' },
+      { type: 'thinking', thinking: 'first second third' },
       { type: 'text', text: 'visible' },
     ]);
   });
@@ -264,8 +301,8 @@ describe('exportProjectTranscript', () => {
     const { db, projectsRoot } = setup();
     seedConversation(db, { id: 'older', createdAt: 100, updatedAt: 999, title: 'Older' });
     seedConversation(db, { id: 'newer', createdAt: 200, updatedAt: 200, title: 'Newer' });
-    seedMessage(db, 'older', { id: 'm-older', role: 'user', events: [{ type: 'text_delta', delta: 'a' }] });
-    seedMessage(db, 'newer', { id: 'm-newer', role: 'user', events: [{ type: 'text_delta', delta: 'b' }] });
+    seedMessage(db, 'older', { id: 'm-older', role: 'user', events: [{ kind: 'text', text: 'a' }] });
+    seedMessage(db, 'newer', { id: 'm-newer', role: 'user', events: [{ kind: 'text', text: 'b' }] });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
     const conversationLines = lines.filter((l) => l.kind === 'conversation');
@@ -275,7 +312,7 @@ describe('exportProjectTranscript', () => {
   it('atomic write: leaves no .tmp file at success and does not disturb unrelated tmp files', () => {
     const { db, projectsRoot } = setup();
     seedConversation(db, { id: 'c1', createdAt: 100 });
-    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ type: 'text_delta', delta: 'x' }] });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
 
     // Pre-existing orphan tmp file from a hypothetical prior failed run.
     const orphan = path.join(projectsRoot, PROJECT_ID, '.transcript.jsonl.tmp.99999.deadbeef');
@@ -319,9 +356,9 @@ describe('exportProjectTranscript', () => {
       role: 'assistant',
       content: 'final coalesced text',
       events: [
-        { type: 'text_delta', delta: 'final ' },
-        { type: 'text_delta', delta: 'coalesced text' },
-        { type: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/x' } },
+        { kind: 'text', text: 'final ' },
+        { kind: 'text', text: 'coalesced text' },
+        { kind: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/x' } },
       ],
     });
 
@@ -341,6 +378,9 @@ describe('exportProjectTranscript', () => {
        VALUES ('mbad', 'c1', 'assistant', '', 'not json', 0, ${Date.now()})`,
     ).run();
 
+    // Suppress the now-emitted warning so test output stays clean.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
     const lines = readLines(result.path);
     expect(lines).toHaveLength(3); // header + conversation + 1 message
@@ -353,5 +393,265 @@ describe('exportProjectTranscript', () => {
     expect(() =>
       exportProjectTranscript(db, projectsRoot, '../etc', { now: FIXED_NOW }),
     ).toThrow(/invalid project id/);
+  });
+
+  // ---------- §1.8 atomic-write failure injection (tests #15-#17) ----------
+
+  it('cleans up tmp file when writeFileSync throws', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
+
+    const realWrite = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((p: any, ...rest: any[]) => {
+      // Fail only on the transcript tmp write. Other writes (e.g. test
+      // fixtures) must continue to work.
+      if (typeof p === 'string' && p.includes('.transcript.jsonl.tmp.')) {
+        throw new Error('disk full');
+      }
+      return (realWrite as any)(p, ...rest);
+    });
+
+    expect(() =>
+      exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }),
+    ).toThrow(/disk full/);
+
+    const dirEntries = fs.readdirSync(path.join(projectsRoot, PROJECT_ID));
+    expect(dirEntries.filter((n) => n.startsWith('.transcript.jsonl.tmp.'))).toEqual([]);
+    expect(dirEntries).not.toContain('.transcript.jsonl');
+    // Lock should also have been released.
+    expect(dirEntries).not.toContain('.transcript.lock');
+  });
+
+  it('cleans up tmp file when fsyncSync throws', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
+
+    vi.spyOn(fs, 'fsyncSync').mockImplementation(() => {
+      throw new Error('fsync failed');
+    });
+
+    expect(() =>
+      exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }),
+    ).toThrow(/fsync failed/);
+
+    const dirEntries = fs.readdirSync(path.join(projectsRoot, PROJECT_ID));
+    expect(dirEntries.filter((n) => n.startsWith('.transcript.jsonl.tmp.'))).toEqual([]);
+    expect(dirEntries).not.toContain('.transcript.jsonl');
+    expect(dirEntries).not.toContain('.transcript.lock');
+  });
+
+  it('cleans up tmp file when renameSync throws', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
+
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('rename failed');
+    });
+
+    expect(() =>
+      exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }),
+    ).toThrow(/rename failed/);
+
+    const dirEntries = fs.readdirSync(path.join(projectsRoot, PROJECT_ID));
+    expect(dirEntries.filter((n) => n.startsWith('.transcript.jsonl.tmp.'))).toEqual([]);
+    expect(dirEntries).not.toContain('.transcript.jsonl');
+    expect(dirEntries).not.toContain('.transcript.lock');
+  });
+
+  // ---------- §1.8 existing-file replacement (test #18) ----------
+
+  it('replaces existing transcript file on second export', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
+
+    // First export.
+    const result1 = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+    const finalPath = result1.path;
+
+    // Inject a sentinel — a downstream consumer / older transcript.
+    fs.writeFileSync(finalPath, '{"sentinel":true}\n');
+    expect(fs.readFileSync(finalPath, 'utf8')).toContain('sentinel');
+
+    // Second export should atomically replace the sentinel.
+    exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+
+    const after = fs.readFileSync(finalPath, 'utf8');
+    expect(after).not.toContain('sentinel');
+    const lines = after.split('\n').filter((l) => l.length > 0).map((l) => JSON.parse(l));
+    expect(lines[0].kind).toBe('header');
+    expect(lines[2].id).toBe('m1');
+  });
+
+  // ---------- §1.5 lock contention (test #19, advisor-redesigned) ----------
+
+  it('throws TranscriptExportLockedError when lock held; succeeds after unlink', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
+
+    const lockPath = path.join(projectsRoot, PROJECT_ID, '.transcript.lock');
+    const finalPath = path.join(projectsRoot, PROJECT_ID, '.transcript.jsonl');
+
+    // Pre-create the lock to simulate a concurrent export in flight.
+    fs.writeFileSync(lockPath, '');
+
+    expect(() =>
+      exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }),
+    ).toThrow(TranscriptExportLockedError);
+    // No transcript should have been written while the lock was held.
+    expect(fs.existsSync(finalPath)).toBe(false);
+
+    // Release the lock — a subsequent export must succeed.
+    fs.unlinkSync(lockPath);
+
+    const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+    expect(result.path).toBe(finalPath);
+    expect(fs.existsSync(finalPath)).toBe(true);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  // ---------- §1.3 parse-warning surface (tests #20-#21) ----------
+
+  it('warns when events_json is malformed JSON and falls back to content', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    db.prepare(
+      `INSERT INTO messages (id, conversation_id, role, content, events_json, position, created_at)
+       VALUES ('mmal', 'c1', 'assistant', 'fallback content', '{not valid', 0, ${Date.now()})`,
+    ).run();
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('mmal');
+    expect(warn.mock.calls[0][0]).toContain(PROJECT_ID);
+    expect(warn.mock.calls[0][0]).toContain('malformed');
+
+    const lines = readLines(result.path);
+    expect(lines[2].id).toBe('mmal');
+    expect(lines[2].blocks).toEqual([{ type: 'text', text: 'fallback content' }]);
+  });
+
+  it('warns when events_json is JSON but not an array', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    db.prepare(
+      `INSERT INTO messages (id, conversation_id, role, content, events_json, position, created_at)
+       VALUES ('mobj', 'c1', 'assistant', 'fallback content', '{"foo":1}', 0, ${Date.now()})`,
+    ).run();
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('mobj');
+    expect(warn.mock.calls[0][0]).toContain('not_array');
+
+    const lines = readLines(result.path);
+    expect(lines[2].blocks).toEqual([{ type: 'text', text: 'fallback content' }]);
+  });
+
+  // ---------- §1.6 attachments (tests #22-#23) ----------
+
+  it('header carries attachmentCount + commentAttachmentCount totals', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', {
+      id: 'm1',
+      role: 'user',
+      events: [{ kind: 'text', text: 'a' }],
+      attachments: [
+        { path: 'a.png', name: 'a.png', kind: 'image', size: 100 },
+        { path: 'b.png', name: 'b.png', kind: 'image', size: 200 },
+      ],
+      commentAttachments: [
+        {
+          id: 'ca1',
+          order: 0,
+          filePath: 'p.html',
+          elementId: 'e1',
+          selector: '#x',
+          label: 'L',
+          comment: 'C',
+          currentText: '',
+          pagePosition: { x: 0, y: 0 },
+          htmlHint: '',
+        },
+      ],
+    });
+    seedMessage(db, 'c1', {
+      id: 'm2',
+      role: 'user',
+      events: [{ kind: 'text', text: 'b' }],
+      attachments: [{ path: 'c.png', name: 'c.png', kind: 'image' }],
+    });
+
+    const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+    const lines = readLines(result.path);
+    expect(lines[0].attachmentCount).toBe(3);
+    expect(lines[0].commentAttachmentCount).toBe(1);
+    expect(lines[0].attachmentsInlined).toBe(false);
+  });
+
+  it('per-message line carries attachments / commentAttachments only when present', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', {
+      id: 'm-with',
+      role: 'user',
+      events: [{ kind: 'text', text: 'q' }],
+      attachments: [{ path: 'a.png', name: 'a.png', kind: 'image', size: 99 }],
+      commentAttachments: [
+        {
+          id: 'ca1',
+          order: 0,
+          filePath: 'p.html',
+          elementId: 'e1',
+          selector: '#x',
+          label: 'Lab',
+          comment: 'Cmt',
+          currentText: '',
+          pagePosition: { x: 1, y: 2 },
+          htmlHint: '',
+        },
+      ],
+    });
+    seedMessage(db, 'c1', {
+      id: 'm-bare',
+      role: 'user',
+      events: [{ kind: 'text', text: 'r' }],
+    });
+
+    const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
+    const withAtt = lines.find((l) => l.id === 'm-with');
+    const bare = lines.find((l) => l.id === 'm-bare');
+
+    expect(withAtt.attachments).toEqual([
+      { path: 'a.png', name: 'a.png', kind: 'image', size: 99 },
+    ]);
+    expect(withAtt.commentAttachments).toEqual([
+      { id: 'ca1', filePath: 'p.html', label: 'Lab', comment: 'Cmt' },
+    ]);
+    expect(bare.attachments).toBeUndefined();
+    expect(bare.commentAttachments).toBeUndefined();
+  });
+
+  // ---------- §1.7 missing project directory (test #24) ----------
+
+  it('creates project directory if it does not exist on disk', () => {
+    const { db, projectsRoot } = setup({ skipMkdir: true });
+    expect(fs.existsSync(path.join(projectsRoot, PROJECT_ID))).toBe(false);
+
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', { id: 'm1', role: 'user', events: [{ kind: 'text', text: 'x' }] });
+
+    const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
+    expect(fs.existsSync(result.path)).toBe(true);
+    const lines = readLines(result.path);
+    expect(lines[0].kind).toBe('header');
+    expect(lines[2].id).toBe('m1');
   });
 });
