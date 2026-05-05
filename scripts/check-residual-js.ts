@@ -40,6 +40,12 @@ const allowedExactPaths = new Set([
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
+  // Vendored pdf.js web worker bundle, served same-origin from
+  // apps/web/public so the slide preview's pdfjs canvas renderer can
+  // load it without bundler url-import gymnastics. The file is the
+  // upstream pdfjs-dist build/pdf.worker.min.mjs verbatim — converting
+  // it to TypeScript is not meaningful (it is a built worker bundle).
+  "apps/web/public/pdf.worker.min.mjs",
 ]);
 
 const allowedPathPrefixes = [
