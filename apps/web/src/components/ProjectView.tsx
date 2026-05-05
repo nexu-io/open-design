@@ -619,15 +619,19 @@ export function ProjectView({
   const patchAttachedStatuses = useCallback(
     async (attachments: ChatCommentAttachment[], status: PreviewComment['status']) => {
       if (!activeConversationId || attachments.length === 0) return;
+      const persistedAttachments = attachments.filter(
+        (attachment) => attachment.source !== 'board-batch',
+      );
+      if (persistedAttachments.length === 0) return;
       setPreviewComments((current) =>
         current.map((comment) =>
-          attachments.some((attachment) => attachment.id === comment.id)
+          persistedAttachments.some((attachment) => attachment.id === comment.id)
             ? { ...comment, status }
             : comment,
         ),
       );
       await Promise.all(
-        attachments.map((attachment) =>
+        persistedAttachments.map((attachment) =>
           patchPreviewCommentStatus(project.id, activeConversationId, attachment.id, status),
         ),
       );
@@ -1184,6 +1188,14 @@ export function ProjectView({
     ],
   );
 
+  const handleSendBoardCommentAttachments = useCallback(
+    async (commentAttachments: ChatCommentAttachment[]) => {
+      if (commentAttachments.length === 0) return;
+      await handleSend('', [], commentAttachments);
+    },
+    [handleSend],
+  );
+
   const persistArtifact = useCallback(
     async (art: Artifact) => {
       const baseName = (art.identifier || art.title || 'artifact')
@@ -1531,6 +1543,7 @@ export function ProjectView({
           previewComments={previewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
+          onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
         />
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildBoardCommentAttachments,
   commentsToAttachments,
   historyWithCommentAttachmentContext,
   liveSnapshotForComment,
@@ -38,6 +39,99 @@ describe('preview comment attachment helpers', () => {
       { id: 'c1', order: 1, elementId: 'hero-title', comment: 'Shorten this title' },
       { id: 'c2', order: 2, elementId: 'chart', comment: 'Make it feel real' },
     ]);
+  });
+
+  it('builds grouped board payloads for pod selections', () => {
+    const attachments = buildBoardCommentAttachments({
+      target: {
+        filePath: 'atlas.html',
+        elementId: 'pod-1',
+        selector: '[data-od-id="hero"], [data-od-id="chart"]',
+        label: 'Hero and chart',
+        text: 'Hero title Chart value',
+        position: { x: 10, y: 20, width: 300, height: 200 },
+        htmlHint: '<section data-od-id="hero">',
+        selectionKind: 'pod',
+        memberCount: 2,
+        podMembers: [
+          {
+            elementId: 'hero',
+            selector: '[data-od-id="hero"]',
+            label: 'section.hero',
+            text: 'Hero title',
+            position: { x: 10, y: 20, width: 200, height: 100 },
+            htmlHint: '<section data-od-id="hero">',
+          },
+          {
+            elementId: 'chart',
+            selector: '[data-od-id="chart"]',
+            label: 'section.chart',
+            text: 'Chart value',
+            position: { x: 120, y: 80, width: 190, height: 120 },
+            htmlHint: '<section data-od-id="chart">',
+          },
+        ],
+      },
+      notes: ['Tighten the hierarchy', 'Make the chart feel premium'],
+    });
+
+    expect(attachments).toHaveLength(2);
+    expect(attachments[0]).toMatchObject({
+      selectionKind: 'pod',
+      memberCount: 2,
+      source: 'board-batch',
+      comment: 'Tighten the hierarchy',
+    });
+    expect(messageContentWithCommentAttachments('', attachments)).toContain('memberCount: 2');
+  });
+
+  it('keeps large queued board-note batches ordered in one send payload', () => {
+    const notes = Array.from({ length: 8 }, (_, index) => `Note ${index + 1}`);
+    const attachments = buildBoardCommentAttachments({
+      target: {
+        filePath: 'atlas.html',
+        elementId: 'pod-2',
+        selector: '[data-od-id="card"]',
+        label: 'Card pod',
+        text: 'Heading Body CTA',
+        position: { x: 20, y: 30, width: 240, height: 160 },
+        htmlHint: '<section data-od-id="card">',
+        selectionKind: 'pod',
+        memberCount: 3,
+        podMembers: [
+          {
+            elementId: 'card-heading',
+            selector: '[data-od-id="card-heading"]',
+            label: 'h2.card-heading',
+            text: 'Heading',
+            position: { x: 24, y: 34, width: 100, height: 32 },
+            htmlHint: '<h2 data-od-id="card-heading">',
+          },
+          {
+            elementId: 'card-body',
+            selector: '[data-od-id="card-body"]',
+            label: 'p.card-body',
+            text: 'Body',
+            position: { x: 24, y: 72, width: 180, height: 48 },
+            htmlHint: '<p data-od-id="card-body">',
+          },
+          {
+            elementId: 'card-cta',
+            selector: '[data-od-id="card-cta"]',
+            label: 'button.card-cta',
+            text: 'CTA',
+            position: { x: 24, y: 128, width: 96, height: 32 },
+            htmlHint: '<button data-od-id="card-cta">',
+          },
+        ],
+      },
+      notes,
+    });
+
+    expect(attachments).toHaveLength(8);
+    expect(attachments.map((attachment) => attachment.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(attachments.map((attachment) => attachment.comment)).toEqual(notes);
+    expect(messageContentWithCommentAttachments('', attachments)).toContain('8. pod-2');
   });
 
   it('updates and removes attached comments by saved comment id', () => {

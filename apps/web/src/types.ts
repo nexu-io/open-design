@@ -24,6 +24,8 @@ import type {
   ProjectDeploymentsResponse,
   PersistedAgentEvent,
   Project,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -42,6 +44,8 @@ import type {
   SkillSummary,
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
+
+export type { PreviewCommentMember, PreviewCommentSelectionKind } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
 export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';

@@ -125,6 +125,42 @@ describe('preview comment agent payload', () => {
     expect(hint).toContain('selector: [data-od-id="hero-title"]');
     expect(hint).toContain('comment: Make the headline shorter');
   });
+
+  it('renders pod attachments with grouped member context', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'pod-1',
+        selectionKind: 'pod',
+        memberCount: 2,
+        selector: '[data-od-id="hero"], [data-od-id="chart"]',
+        label: 'Hero and chart',
+        podMembers: [
+          {
+            elementId: 'hero',
+            selector: '[data-od-id="hero"]',
+            label: 'section.hero',
+            text: 'Hero title',
+            position: { x: 10, y: 20, width: 200, height: 100 },
+            htmlHint: '<section data-od-id="hero">',
+          },
+          {
+            elementId: 'chart',
+            selector: '[data-od-id="chart"]',
+            label: 'section.chart',
+            text: 'Chart value',
+            position: { x: 120, y: 80, width: 190, height: 120 },
+            htmlHint: '<section data-od-id="chart">',
+          },
+        ],
+      }),
+    ]);
+
+    const hint = renderCommentAttachmentHint(normalized);
+
+    expect(hint).toContain('targetKind: pod');
+    expect(hint).toContain('memberCount: 2');
+    expect(hint).toContain('member.1: hero | section.hero | [data-od-id="hero"]');
+  });
 });
 
 function seededDb() {
