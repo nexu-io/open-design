@@ -327,6 +327,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'arc',
   'artistic',
   'bento',
+  'bmw-m',
   'bold',
   'brutalism',
   'cafe',
