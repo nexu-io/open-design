@@ -1,4 +1,4 @@
-import type { JsonPrimitive } from '../common';
+import type { JsonPrimitive } from '../common.js';
 export type BoundedJsonValue = JsonPrimitive | BoundedJsonValue[] | {
     [key: string]: BoundedJsonValue;
 };

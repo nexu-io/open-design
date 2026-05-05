@@ -1,4 +1,4 @@
-import type { SseErrorPayload } from '../errors';
+import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
 export type LiveArtifactSseAction = 'created' | 'updated' | 'deleted';

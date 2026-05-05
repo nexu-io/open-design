@@ -1,4 +1,4 @@
-import type { JsonValue } from '../common';
+import type { JsonValue } from '../common.js';
 export type ArtifactKind = 'html' | 'deck' | 'react-component' | 'markdown-document' | 'svg' | 'diagram' | 'code-snippet' | 'mini-app' | 'design-system';
 export type ArtifactRendererId = 'html' | 'deck-html' | 'react-component' | 'markdown' | 'svg' | 'diagram' | 'code' | 'mini-app' | 'design-system';
 export type ArtifactExportKind = 'html' | 'pdf' | 'zip' | 'pptx' | 'jsx' | 'md' | 'svg' | 'txt';

@@ -1,4 +1,4 @@
-import type { OkResponse } from '../common';
+import type { OkResponse } from '../common.js';
 export type PreviewCommentStatus = 'open' | 'attached' | 'applying' | 'needs_review' | 'resolved' | 'failed';
 export interface PreviewCommentPosition {
     x: number;

@@ -1,4 +1,4 @@
-import type { OkResponse } from '../common';
+import type { OkResponse } from '../common.js';
 import type { ArtifactKind, ArtifactManifest } from './artifacts.js';
 
 export type ProjectFileKind =
