@@ -14,14 +14,14 @@
       --accent: #{{ACCENT_HEX}};
       --deco: #{{DECO_HEX}};
       --deco-stripe: #{{STRIPE_HEX}};
-      --input-border: #{{BORDER_HEX}};
+      --input-border: {{BORDER_EXPRESSION}};
       --success: #{{SUCCESS_HEX}};
-      --btn-label: #{{BTN_LABEL_HEX}};
-      --ticker-bg: #{{TICKER_BG_HEX}};
-      --ticker-fg: #{{TICKER_FG_HEX}};
-      --deco-stroke: #{{DECO_STROKE_HEX}};
-      --font-body: '{{BODY_FONT_CSS}}', sans-serif;
-      --font-display: '{{DISPLAY_FONT_CSS}}', serif;
+      --btn-label: {{BTN_LABEL_EXPRESSION}};
+      --ticker-bg: {{TICKER_BG_EXPRESSION}};
+      --ticker-fg: {{TICKER_FG_EXPRESSION}};
+      --deco-stroke: {{DECO_STROKE_EXPRESSION}};
+      --font-body: {{BODY_FONT_CSS}}, sans-serif;
+      --font-display: {{DISPLAY_FONT_CSS}}, serif;
     }
 
     *, *::before, *::after {

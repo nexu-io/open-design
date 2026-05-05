@@ -28,13 +28,57 @@ od:
     - name: tagline
       type: string
       required: true
+    - name: bg_hex
+      type: string
+      pattern: "^[0-9A-Fa-f]{6}$"
+      required: true
+    - name: fg_hex
+      type: string
+      pattern: "^[0-9A-Fa-f]{6}$"
+      required: true
+    - name: accent_hex
+      type: string
+      pattern: "^[0-9A-Fa-f]{6}$"
+      required: true
+    - name: deco_hex
+      type: string
+      pattern: "^[0-9A-Fa-f]{6}$"
+      required: true
+    - name: stripe_hex
+      type: string
+      pattern: "^[0-9A-Fa-f]{6}$"
+      required: true
+    - name: border_expression
+      type: string
+      description: "CSS color expression for input borders (e.g., 'rgba(100,50,30,0.38)' or 'color-mix(in srgb, var(--fg) 38%, transparent)'). Must be valid CSS."
+      required: true
+    - name: success_hex
+      type: string
+      pattern: "^[0-9A-Fa-f]{6}$"
+      required: true
+    - name: btn_label_expression
+      type: string
+      description: "CSS color expression for button label text (e.g., 'rgba(255,255,255,1)' or '#fff'). Ensure WCAG AA contrast."
+      required: true
+    - name: ticker_bg_expression
+      type: string
+      description: "CSS color expression for ticker background (e.g., 'rgba(0,0,0,0.9)'). Must be valid CSS."
+      required: true
+    - name: ticker_fg_expression
+      type: string
+      description: "CSS color expression for ticker text (e.g., 'rgba(255,255,255,0.9)'). Ensure contrast."
+      required: true
+    - name: deco_stroke_expression
+      type: string
+      description: "CSS color expression for SVG strokes (e.g., 'rgba(0,0,0,0.12)'). Typically a muted foreground or neutral."
+      required: true
     - name: display_font_url
       type: string
       description: "Display font name with spaces encoded as '+' (e.g., 'Syne', 'DM+Sans'). Used in Google Fonts URL."
       required: true
     - name: display_font_css
       type: string
-      description: "Display font name as it appears in CSS (e.g., 'Syne', 'DM Sans'). Used in CSS font-family."
+      description: "Display font name as it appears in CSS (e.g., 'Syne', 'DM Sans'). Already quoted if needed; no extra quotes in template."
       required: true
     - name: body_font_url
       type: string
@@ -42,7 +86,7 @@ od:
       required: true
     - name: body_font_css
       type: string
-      description: "Body font name as it appears in CSS (e.g., 'DM Sans', 'IBM Plex Serif'). Used in CSS font-family."
+      description: "Body font name as it appears in CSS (e.g., 'DM Sans', 'IBM Plex Serif'). Already quoted if needed; no extra quotes in template."
       required: true
   outputs:
     primary: index.html
@@ -69,25 +113,23 @@ Pre-launch pages are your first handshake with future users. This skill builds a
    - Simple geometric pattern: perspective grid, radiating lines, or subtle lattice (suggests depth, forward momentum)
    - Animated ticker at the bottom—repeating text like "COMING SOON" + markers (✦). Subtle, behind-the-scenes energy.
    - All colors from DESIGN.md; no invented hex values.
-   - **Token mapping rules** — when the template requires tokens not present in DESIGN.md, derive them rather than inventing values:
-     - `--btn-label` / `BTN_LABEL_HEX`: use an explicit button/control text token from DESIGN.md if present; otherwise derive from foreground with sufficient contrast (e.g., `#fff` on dark --fg, darkened --fg on light backgrounds). Validate WCAG AA contrast.
-     - `--ticker-bg` / `TICKER_BG_HEX`: a dark neutral or shade (if DESIGN.md defines a neutral palette) or derived from background at high darkness; typically `#1A1A1A` or a desaturated dark from the brand.
-     - `--ticker-fg` / `TICKER_FG_HEX`: a light neutral (typically `#F5F5F5` or lighter) ensuring readable contrast against --ticker-bg; validate WCAG AA.
-     - `--deco-stroke` / `DECO_STROKE_HEX`: a muted foreground or secondary accent, typically rendered at 12–15% opacity on SVG strokes (e.g., `rgba(0, 0, 0, 0.12)` on light backgrounds, or derive from brand neutrals).
-     - `--input-border` / `BORDER_HEX`: foreground color at 35–40% opacity (`color-mix(in srgb, var(--fg) 38%, transparent)`).
-     - `--success` / `SUCCESS_HEX`: use an explicit semantic success token from DESIGN.md if present; otherwise `#2D6A4F` is the allowed fallback (it is the only hardcoded hex permitted in a generated page).
-     - `--deco-stripe` / `STRIPE_HEX`: a secondary brand accent from DESIGN.md; if only one accent exists, use it at full opacity.
-     - `--deco` / `DECO_HEX`: a tint/shade of the primary accent or background from DESIGN.md.
+   - **Token mapping rules** — Color tokens in the template are full CSS expressions (not simple hex values):
+     - `--bg`, `--fg`, `--accent`, `--deco`, `--deco-stripe` / `{{*_HEX}}`: simple six-digit hex colors from DESIGN.md (e.g., `#{{BG_HEX}}` becomes `#FDE8DF`).
+     - `--input-border` / `{{BORDER_EXPRESSION}}`: full CSS expression for input border color, typically `rgba(...)` or `color-mix(...)` with opacity to soften the foreground (e.g., `rgba(196, 169, 154, 0.38)` or `color-mix(in srgb, var(--fg) 38%, transparent)`). Must be valid CSS; no `#` prefix.
+     - `--success` / `{{SUCCESS_HEX}}`: an explicit semantic success token from DESIGN.md if present; otherwise `#2D6A4F` is the allowed fallback (only hardcoded hex exception).
+     - `--btn-label` / `{{BTN_LABEL_EXPRESSION}}`: full CSS expression for button text color (e.g., `#1A1410` or `rgba(255,255,255,1)`). Validate WCAG AA contrast against button background.
+     - `--ticker-bg` / `{{TICKER_BG_EXPRESSION}}`: full CSS expression for ticker background (e.g., `rgba(0, 0, 0, 0.9)`). Must be valid CSS.
+     - `--ticker-fg` / `{{TICKER_FG_EXPRESSION}}`: full CSS expression for ticker text (e.g., `rgba(255, 255, 255, 0.9)`). Validate WCAG AA contrast.
+     - `--deco-stroke` / `{{DECO_STROKE_EXPRESSION}}`: full CSS expression for SVG decoration strokes (e.g., `rgba(0, 0, 0, 0.12)`). Typically muted foreground or neutral with opacity 12–15%.
      - Never ask the user for hex values when derivation is possible.
 8. **Responsive scaling**. Test at 375px, 768px, 1440px. Mobile: form stacks to single column, logo shrinks to 40px, decoration compresses. No horizontal scrolling. All text remains readable. Desktop: centered layout, comfortable whitespace.
 9. **Emit clean HTML**. Single file, CSS inlined, SVG for graphics. Use semantic tags. Mark interactive elements with `data-od-id` (headline, form, logo, ticker, grid, etc.) so agents can customize without parsing.
    - **Token escaping rules** — apply before inserting any user-supplied value:
      - Text tokens (`{{PRODUCT_NAME}}`, `{{TAGLINE}}`): HTML-escape `<`, `>`, `&`, `"`, `'` before inserting into HTML text nodes or attribute values.
-     - CSS variable tokens (`BG_HEX`, `FG_HEX`, etc.): validate each matches `/^[0-9A-Fa-f]{6}$/`; reject and ask the user if they don't match.
-     - Font name tokens: two variants per font family for correct encoding:
-       - `{{BODY_FONT_URL}}` / `{{DISPLAY_FONT_URL}}`: used in the Google Fonts `href`—spaces must be encoded as `+` (e.g., `DM+Sans`, `IBM+Plex+Serif`). Provide the URL-safe form only.
-       - `{{BODY_FONT_CSS}}` / `{{DISPLAY_FONT_CSS}}`: used in CSS `font-family` declarations—spaces remain literal and names with spaces are quoted (e.g., `'DM Sans'`, `'IBM Plex Serif'`). Provide the CSS-safe form only.
-       - Do not use a single token for both; they require different encoding. Always require both variants from the user.
+     - Hex color tokens (`{{*_HEX}}`): validate each matches `/^[0-9A-Fa-f]{6}$/`; reject and ask the user if they don't match.
+     - CSS expression tokens (`{{BORDER_EXPRESSION}}`, `{{BTN_LABEL_EXPRESSION}}`, `{{TICKER_BG_EXPRESSION}}`, `{{TICKER_FG_EXPRESSION}}`, `{{DECO_STROKE_EXPRESSION}}`): validate they are valid CSS values (no bare strings, no unescaped quotes); do not wrap in `#` or extra quotes.
+     - Font name tokens (`{{DISPLAY_FONT_CSS}}`, `{{BODY_FONT_CSS}}`): these should be CSS font-family values, already quoted if they contain spaces (e.g., `'DM Sans'`, `Syne`). Do NOT add extra quotes in the template—they are inserted as-is into the `font-family` declaration.
+     - Font URL tokens (`{{DISPLAY_FONT_URL}}`, `{{BODY_FONT_URL}}`): spaces must be encoded as `+` for the Google Fonts URL (e.g., `DM+Sans`); validate the URL is well-formed before insertion.
      - Never reflect raw user input into `<script>` blocks or event-handler attributes.
 
 ## Quality gates

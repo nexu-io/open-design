@@ -16,8 +16,12 @@
       --deco: #E8835A;
       --deco-logo: #E8522A;
       --deco-stripe: #F5A623;
-      --input-border: #C4A99A;
+      --input-border: rgba(196, 169, 154, 0.38);
       --success: #2D6A4F;
+      --btn-label: #1A1410;
+      --ticker-bg: rgba(0, 0, 0, 0.9);
+      --ticker-fg: rgba(255, 255, 255, 0.9);
+      --deco-stroke: rgba(0, 0, 0, 0.12);
       --font-body: 'DM Sans', sans-serif;
       --font-display: 'Syne', sans-serif;
     }
@@ -44,12 +48,12 @@
       height: 48px;
       flex-shrink: 0;
       border-radius: 50%;
-      background: linear-gradient(135deg, var(--deco-logo) 0%, #D1632B 100%);
+      background: linear-gradient(135deg, var(--deco-logo) 0%, var(--deco) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     }
     .logo-svg {
       width: 100%;
@@ -111,7 +115,7 @@
       font-size: clamp(15px, 1.5vw, 18px);
       font-weight: 400;
       line-height: 1.6;
-      color: #5C4033;
+      color: var(--fg);
       max-width: 420px;
       margin-bottom: 44px;
     }
@@ -136,10 +140,10 @@
       transition: border-color 0.2s;
     }
     .form-row input::placeholder {
-      color: #A08878;
+      color: var(--input-border);
     }
     .form-row input:focus {
-      border-color: #1A1108;
+      border-color: var(--input-border);
       outline: none;
     }
     .form-row button {
@@ -232,7 +236,7 @@
       margin-right: -12px;
     }
     .ticker-star {
-      color: #F5A623;
+      color: var(--deco-stripe);
       margin-right: 4px;
     }
     @keyframes ticker-scroll {
@@ -278,7 +282,7 @@
   <div class="logo">
     <div class="logo-container">
       <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="50" cy="50" r="48" fill="#E8522A"/>
+        <circle cx="50" cy="50" r="48" fill="var(--deco-logo)"/>
         <text x="50" y="60" font-family="'DM Sans', sans-serif" font-size="42" font-weight="700" text-anchor="middle" fill="white" letter-spacing="-1">Md</text>
       </svg>
     </div>
@@ -303,7 +307,7 @@
   <div class="deco-section">
 
     <svg class="coil-row" viewBox="0 0 1440 60" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      <g fill="none" stroke="rgba(50,40,30,0.35)" stroke-width="1.5">
+      <g fill="none" style="stroke: var(--deco-stroke);" stroke-width="1.5">
         <path d="M 9,60 A 41,30 0 0 1 91,60"/>
         <path d="M 94,60 A 41,30 0 0 1 176,60"/>
         <path d="M 179,60 A 41,30 0 0 1 261,60"/>
@@ -328,7 +332,7 @@
 
     <div class="grid-floor">
       <svg class="grid-svg" viewBox="0 0 1280 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-        <g stroke="rgba(0,0,0,0.18)" stroke-width="1" fill="none">
+        <g style="stroke: var(--deco-stroke);" stroke-width="1" fill="none">
           <line x1="640" y1="0" x2="0"    y2="400"/>
           <line x1="640" y1="0" x2="128"  y2="400"/>
           <line x1="640" y1="0" x2="256"  y2="400"/>
