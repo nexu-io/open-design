@@ -167,20 +167,32 @@ export function EntryView({
     }
   }, [sidebarWidth]);
 
-  // Keep the sidebar width within the viewport. The user-stored width
-  // persists across sessions, but on a narrower laptop / split-screen
-  // window we cap it so the design grid retains room. The CSS media
-  // queries handle the actual stack-vertical layout below 980px; here
-  // we just clamp the inline style so it stops competing with the
-  // breakpoint rules.
+  // Keep the sidebar width within a viewport-appropriate range. The
+  // CSS media queries handle the stacked layout below 980px; here we
+  // just clamp the inline style to a band that shrinks on tighter
+  // laptops and grows on wider monitors so the lockup ("Wix Japan
+  // Slide Generator") doesn't wrap to three lines, and the design
+  // grid keeps room for cards.
   useEffect(() => {
     function clampToViewport() {
       const w = window.innerWidth;
-      let cap = SIDEBAR_MAX;
-      if (w <= 980) cap = w; // stacked layout takes over
-      else if (w <= 1280) cap = 320;
-      else if (w <= 1440) cap = 380;
-      setSidebarWidth((prev) => Math.min(prev, cap));
+      let min = 280;
+      let max = SIDEBAR_MAX;
+      if (w <= 980) {
+        // Stacked layout takes over via CSS — don't fight it.
+        return;
+      }
+      if (w <= 1280) {
+        min = 280;
+        max = 320;
+      } else if (w <= 1599) {
+        min = 320;
+        max = 380;
+      } else {
+        min = 340;
+        max = 420;
+      }
+      setSidebarWidth((prev) => Math.min(max, Math.max(min, prev)));
     }
     clampToViewport();
     window.addEventListener('resize', clampToViewport);

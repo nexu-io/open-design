@@ -2638,6 +2638,11 @@ code {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* Belt-and-suspenders: a runaway flex card or accidentally wide
+     embed should never push a horizontal scrollbar onto the entry
+     view. The grid track reserves only 1fr of the .entry grid, so
+     this clip is safe. */
+  overflow-x: hidden;
 }
 .entry-header {
   display: flex;
@@ -2830,6 +2835,11 @@ code {
   flex-direction: column;
   overflow: hidden;
   min-height: 168px;
+  /* min-width: 0 lets flex actually shrink the card below its
+     content's intrinsic min-width when the row gets crowded —
+     otherwise long unbroken titles can lock the card width and push
+     the last card past the viewport. */
+  min-width: 0;
 }
 .design-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .design-card-thumb {
