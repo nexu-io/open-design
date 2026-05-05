@@ -22,6 +22,7 @@
   <a href="#coding-agents-pris-en-charge"><img alt="Agents" src="https://img.shields.io/badge/agents-CLI%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-catalogue-orange?style=flat-square" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-catalogue-teal?style=flat-square" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-rejoindre-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.fr.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
