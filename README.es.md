@@ -63,7 +63,7 @@ OD se apoya en cuatro hombros open source:
 | **Persistencia** | SQLite en `.od/app.sqlite`: projects · conversations · messages · tabs · saved templates. Reabre mañana y la tarjeta de todo y los archivos abiertos estarán exactamente donde los dejaste. |
 | **Lifecycle** | Un punto de entrada: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check): arranca daemon + web (+ desktop) bajo sidecar stamps tipados |
 | **Desktop** | Shell Electron opcional con renderer sandboxed + sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN) — impulsa `tools-dev inspect desktop screenshot` para E2E |
-| **Desplegable en** | Local (`pnpm tools-dev`) · capa web en Vercel · aplicación de escritorio empaquetada para macOS Apple Silicon y Windows x64, descargable desde open-design.ai o desde la última release de GitHub |
+| **Desplegable en** | Local (`pnpm tools-dev`) · capa web en Vercel · Electron empaquetado (placeholder, en curso) |
 | **Licencia** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
