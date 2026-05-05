@@ -60,4 +60,34 @@ describe('resolveRetryTarget — issue #475', () => {
     ];
     expect(resolveRetryTarget(messages, 'a2')).toBeNull();
   });
+
+  it('preserves attachments on the reused user turn so retry can replay them', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        content: 'render this',
+        attachments: [{ path: '/p/img.png', name: 'img.png', kind: 'image' }],
+      },
+      assistant('a1', 'failed'),
+    ];
+
+    const target = resolveRetryTarget(messages, 'a1');
+    expect(target).not.toBeNull();
+    expect(target!.userMsg.attachments).toEqual([
+      { path: '/p/img.png', name: 'img.png', kind: 'image' },
+    ]);
+    // Mirrors the daemon-stream call site: `(userMsg.attachments ?? []).map(...)`
+    // must not throw whether attachments is present, undefined, or empty.
+    const paths = (target!.userMsg.attachments ?? []).map((a) => a.path);
+    expect(paths).toEqual(['/p/img.png']);
+  });
+
+  it('tolerates a reused user turn with no attachments without throwing', () => {
+    const messages = [user('u1', 'plain'), assistant('a1', 'failed')];
+    const target = resolveRetryTarget(messages, 'a1');
+    expect(target).not.toBeNull();
+    expect(target!.userMsg.attachments).toBeUndefined();
+    expect(() => (target!.userMsg.attachments ?? []).map((a) => a.path)).not.toThrow();
+  });
 });
