@@ -1,0 +1,20 @@
+import type { ChatRequest } from './api/chat';
+import type { ConnectorDetail } from './api/connectors';
+import type { ProjectFile } from './api/files';
+import type { LiveArtifact, LiveArtifactCreateInput, LiveArtifactUpdateInput } from './api/live-artifacts';
+import type { HealthResponse } from './api/registry';
+import type { ApiErrorResponse } from './errors';
+import type { ChatSseEvent } from './sse/chat';
+import type { ProxySseEvent } from './sse/proxy';
+export declare const exampleChatRequest: ChatRequest;
+export declare const exampleProjectFile: ProjectFile;
+export declare const exampleChatSseEvents: ChatSseEvent[];
+export declare const exampleProxySseEvents: ProxySseEvent[];
+export declare const exampleApiErrorResponse: ApiErrorResponse;
+export declare const exampleLiveArtifactValidationErrorResponse: ApiErrorResponse;
+export declare const exampleHealthResponse: HealthResponse;
+export declare const exampleLiveArtifact: LiveArtifact;
+export declare const exampleLiveArtifactCreateInput: LiveArtifactCreateInput;
+export declare const exampleLiveArtifactUpdateInput: LiveArtifactUpdateInput;
+export declare const exampleConnectorDetail: ConnectorDetail;
+//# sourceMappingURL=examples.d.ts.map
