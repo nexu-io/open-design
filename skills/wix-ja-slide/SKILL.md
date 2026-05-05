@@ -280,7 +280,7 @@ scenario タグから直接 canonical を引けるなら採用:
 | outline セクションタイプ | canonical（[image:] 無し前提） |
 |---|---|
 | Cover | **T+SUB or T-ONLY**（COVER? は使うな）|
-| 3 点ハイライト | T+3B (P53)。`[image:]` 有 → T+IMG (P31) |
+| 3 点ハイライト | T+3B (P53)。`[image:]` 有 → T+IMG (P31)。**Round 13 注**: P53 の title placeholder は中下に位置（顶部にない）、3 箭頭が視覚的支配。title を強調したい section（cover-style headline / 1 行 takeaway）には T+SUB / T-ONLY を選ぶ |
 | KPI 集約 | T+3B（各 metric 1 bullet）— **T-LONG は引用用、KPI に使うな**。`[image:]` 有 → **T+IMG (P31) を強制**（Round 10 で T+3B を選んで image が drop された regression。image-marker > scenario hint） |
 | 画像付きイベント振り返り | T+IMG (P31) |
 | 製品ローンチ | T+IMG (hero) or T+SUB (text 多)。`[image:]` 有 → T+IMG 強制 |
@@ -673,6 +673,23 @@ curl -X POST http://localhost:<daemon_port>/api/google/slides/copy \
 
 コピー直後は 130 page（template 全体）が deck に存在する。各 page の objectId と各 placeholder の objectId は **layouts.json の値と一致**（Drive copy は ID を保持する）。
 
+#### 8.1.1 deckId / deckUrl を project metadata に書き戻す（**Round 13 で発見、必須**）
+
+`copy` のレスポンスを受け取ったら**直ちに**`PATCH /api/projects/:projectId` を呼んで `metadata.deckId` と `metadata.deckUrl` を保存する。これをやらないと web UI の以下機能が全部 404 になる:
+
+- `/api/projects/:id/thumbnails` — slide 縮略图（gallery viewer の主要 render path）
+- `/api/projects/:id/deck-pdf` — 自動 PDF export
+- `/api/projects/:id/page-ids` — page 順序
+- `/api/projects/:id/page-image` — full-resolution PNG
+
+```bash
+curl -X PATCH http://localhost:<daemon_port>/api/projects/<projectId> \
+  -H "Content-Type: application/json" \
+  -d '{"metadata": {"deckId": "<copied_deck_id>", "deckUrl": "<deckUrl>"}}'
+```
+
+`projectId` は agent spawn 時の cwd 末尾から取れる（`.od/projects/<projectId>/`）。**忘れると user は preview pane で「Thumbnails unavailable: status 404」を見る** — Round 13 で実際に発生したバグ。
+
 #### 8.2 Canonical 再利用が必要なら duplicate-slide で複製
 
 ある canonical を deck 内で N 回使う場合、**最初の使用は元 page のまま、2 回目以降は duplicate**。
@@ -835,6 +852,8 @@ Read tool に PDF パスと `pages: "<page_number>"` を渡して各 populate pa
 | **不自然な折り返し** | 助詞・複合語の途中で改行 | "8,0\n00 名" / "<newsletter-project> V\nol.001" |
 | **title wrap (Round 12 追加)** | title placeholder の text が 2 行以上に折り返している | "<brand-project> JA — Phase 1" が "<brand-project> JA — \nPhase 1" になる |
 | **title under-fill (Round 12 追加)** | placeholder が想定 N 行のところ title が 1 行で残り N-1 行が白く余る | T+SUB の 3 行 placeholder に「KPI」だけ入って残り 2 行空白 |
+| **lone particle at line start (Round 13 追加)** | 行頭に **1 mora の助詞**（て / を / が / は / の / と / に / で / も / や）が単独で残っている | 「Wix Japan を使い始めて、初め / **て**『海外…」← 「て」だけ次の行に押し出されている |
+| **paragraph-style title leak in T+IMG (Round 13 追加)** | T+IMG (P31) の title placeholder に明示 \\n を入れると line 2+ が paragraph style に降格する | "<brand-project> JA Phase 1\\nドラフト" → 「ドラフト」が title style ではなく本文サイズで出る |
 | **font size 過大** | 1 行の文字が overflow 起因で sub-1pt まで縮む / 2 行に gap | "Strategy Framework 完成"が 14pt → 5pt に縮小 |
 | **layout 崩壊** | bullet 数 mismatch / 並び崩れ | T+3B に 4 bullet 入って 4th が消失 |
 | **placeholder filler 残存** | "Lorem ipsum" / "Click here to" / "Headline first slide" 等が残る | bleed 副作用の見落とし |
@@ -860,6 +879,23 @@ T+IMG / T+IMG×N layout で title が右側 image と縦に並ぶレイアウト
 ```
 
 判断基準: PDF 視覚 check で「title が image 隣の placeholder で 2 行 wrap している」を見つけたら、応答テキストを `\n` 入りに書き直して再 apply。意味境界（助詞後 / 単語後）で改行を入れる。
+
+**⚠️ Round 13 注意: T+IMG (P31) の title placeholder で `\n` 挿入は line 2+ を paragraph style に降格させる**
+
+P31 placeholder は「title 1 行 + 自由文 N 行」想定の単一 placeholder で、line 1 のみ title style、line 2+ は paragraph style として render される。Round 13 P7 で「<brand-project> JA Phase 1\\nドラフト」と書いたら「ドラフト」が本文 size で出てしまった。
+
+→ 対応の優先順:
+
+1. **title を 1 行に収まる長さに書き直す** が第一選択。「Phase 1 ドラフト完了」のようにステータスを title 内に収めるか、「Phase 1」だけにして status は body に書く。
+2. それでも収まらない場合のみ `\n` 挿入。**line 2 が paragraph style になることをユーザーに userActions で伝える**（Slides UI で手動で title style 再適用してもらう）。
+3. T+IMG ではなく T+SUB に切り替えれば title placeholder と subtitle placeholder が別なので両方 title style を保てる — title 強調が最重要なら canonical 変更を優先。
+
+**lone-particle wrap 検出時の修法**:
+
+T-LONG quote / 長 paragraph で「行頭に 1 mora の助詞」が出た場合（例「初め / **て**」）、agent は次のいずれかで対応:
+
+- **outline 段階に push back**: 文を ~80 cells 以下に圧縮、または意味境界が長い句で終わるよう書き直す（「〜と感じた」など clause 末で締める）
+- T-LONG title placeholder には `\n` を挿入しない（quote block 扱いで paragraph break が出る）。`\n` 入れるなら quote 全体を分割した上で「By 〜」の分離専用
 
 **段階 2: テキスト圧縮で収まらない → canonical を変更（**字号は触るな**）**
 

@@ -111,6 +111,11 @@
         "max": 48,
         "lines": 1,
         "note": "48 cells × 1 line verified"
+      },
+      "title_position": {
+        "vertical": "mid-bottom",
+        "horizontal": "left",
+        "warning_round_13": "P53 title placeholder is positioned mid-bottom (above the 3 arrow row), NOT top-left. The visual hierarchy reads body-heavy: 3 arrows + body labels dominate, title looks like a caption. Avoid T+3B for sections where the title MUST be the dominant visual anchor (e.g. cover-style headlines, 1-line key takeaways). Use T+SUB or T-ONLY for those instead. T+3B is correct only when the 3 bullets ARE the content and the title is a subdued label."
       }
     },
     "T+2B": {
@@ -325,7 +330,8 @@
         "max": 180,
         "lines": 5,
         "note": "quote / paragraph, large area"
-      }
+      },
+      "lone_particle_warning_round_13": "T-LONG renders the quote at very large font, so each line wraps to ~12-15 cells. Slides auto-wrap is greedy and often leaves a single-mora particle (て / を / が / は / の / と) alone at the start of the next line — visually unpleasant in JP. Mitigations: (a) keep the JP quote ≤80 cells so it fits 4 lines without forced wrap, (b) write the quote so its natural meaning-breaks land on multi-mora boundaries (e.g. 「〜と感じた」 ends a clause), (c) at visual self-check, scan each line: if line N starts with a 1-character hiragana that is a particle in §3 of prompt-rules, rewrite the prior line so the particle stays on it. Do NOT inject explicit \\n in T-LONG title — the placeholder is treated as a quote block and \\n will produce odd paragraph-style breaks."
     },
     "T+SUB": {
       "canonical_slide_n": 28,
