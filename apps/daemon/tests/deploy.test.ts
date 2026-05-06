@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -13,6 +13,7 @@ import {
   DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES,
   DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
   deploymentUrlCandidates,
+  deployConfigPath,
   extractCssReferences,
   extractHtmlReferences,
   extractInlineCssReferences,
@@ -20,10 +21,15 @@ import {
   isVercelProtectedResponse,
   normalizeDeployHookScriptUrl,
   prepareDeployPreflight,
+  publicDeployConfig,
+  readVercelConfig,
   resolveReferencedPath,
   rewriteCssReferences,
   rewriteEntryHtmlReferences,
+  SAVED_TOKEN_MASK,
+  VERCEL_PROVIDER_ID,
   waitForReachableDeploymentUrl,
+  writeVercelConfig,
 } from '../src/deploy.js';
 import { ensureProject } from '../src/projects.js';
 
@@ -33,6 +39,67 @@ async function setupProject() {
   const dir = await ensureProject(path.join(root, 'projects'), projectId);
   return { projectsRoot: path.join(root, 'projects'), projectId, dir };
 }
+
+describe('deploy config', () => {
+  it('stores Vercel credentials in vercel.json and returns only the public mask', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const saved = await writeVercelConfig({
+        token: 'vercel-token-secret',
+        teamId: 'team_123',
+        teamSlug: 'design-team',
+      });
+
+      expect(path.basename(deployConfigPath())).toBe('vercel.json');
+      expect(saved).toEqual({
+        providerId: VERCEL_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_TOKEN_MASK,
+        teamId: 'team_123',
+        teamSlug: 'design-team',
+        target: 'preview',
+      });
+      expect(JSON.parse(await readFile(deployConfigPath(), 'utf8'))).toEqual({
+        token: 'vercel-token-secret',
+        teamId: 'team_123',
+        teamSlug: 'design-team',
+      });
+
+      const maskedUpdate = await writeVercelConfig({
+        token: SAVED_TOKEN_MASK,
+        teamSlug: 'renamed-team',
+      });
+
+      expect(maskedUpdate.tokenMask).toBe(SAVED_TOKEN_MASK);
+      expect(await readVercelConfig()).toEqual({
+        token: 'vercel-token-secret',
+        teamId: 'team_123',
+        teamSlug: 'renamed-team',
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps Vercel public config provider metadata stable', () => {
+    expect(publicDeployConfig({
+      token: 'vercel-token-secret',
+      teamId: '',
+      teamSlug: '',
+    })).toEqual({
+      providerId: VERCEL_PROVIDER_ID,
+      configured: true,
+      tokenMask: SAVED_TOKEN_MASK,
+      teamId: '',
+      teamSlug: '',
+      target: 'preview',
+    });
+  });
+});
 
 describe('deploy file set', () => {
   it('deploys a single html file as index.html', async () => {
