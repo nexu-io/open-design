@@ -7,6 +7,9 @@ export function appendErrorStatusEvent(message: ChatMessage, detail: string): Ch
   if (last?.kind === 'status' && last.label === 'error' && last.detail === detail) {
     return message;
   }
+  if (!detail?.trim()) {
+    return message;
+  }
   return {
     ...message,
     events: [...events, { kind: 'status', label: 'error', detail }],
