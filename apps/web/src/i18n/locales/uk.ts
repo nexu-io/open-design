@@ -165,8 +165,6 @@ export const uk: Dict = {
   'promptTemplates.openFullscreen': 'Відкрити попередній перегляд у повноекранному режимі',
   'promptTemplates.closeFullscreen': 'Закрити попередній перегляд у повноекранному режимі',
   'promptTemplates.retry': 'Повторити',
-  'promptTemplates.allSources': 'Усі джерела',
-  'promptTemplates.sourceFilterAria': 'Фільтр за джерелом',
 
   'connectors.title': 'Конектори',
   'connectors.subtitle': 'Локальні та майбутні джерела даних, які можуть живити live-артефакти.',
