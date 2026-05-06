@@ -14,6 +14,7 @@ import {
   renderCodexImagegenOverride,
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
+import { expandHomePrefix } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -668,26 +669,15 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
 );
 export function resolveDataDir(raw, projectRoot) {
   if (!raw) return path.join(projectRoot, '.od');
+  // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
+  // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
   // Some launchers (systemd unit files, NixOS modules, certain Docker
   // entrypoints, Windows scheduled tasks) pass OD_DATA_DIR with literal
-  // $HOME or ${HOME} because the variable is never expanded by a shell.
-  // Without explicit handling here those resolve against PROJECT_ROOT and
-  // produce nonsense paths like /opt/open-design/$HOME/.open-design.
-  // Expand the unambiguous shorthands (~/, $HOME, ${HOME}) before
-  // resolving so the env var works the way operators expect across all
-  // launch surfaces. Both forward (/) and backslash (\) separators are
-  // accepted in the prefix so a Windows launcher passing
-  // $HOME\.open-design behaves the same as a Unix launcher passing
-  // $HOME/.open-design. We rebuild via path.join so the platform
-  // separator is correct in the result regardless of which the input used.
-  const home = os.homedir();
-  let expanded = raw;
-  if (expanded === '~' || expanded === '$HOME' || expanded === '${HOME}') {
-    expanded = home;
-  } else {
-    const homePrefix = /^(~|\$\{HOME\}|\$HOME)[/\\](.*)$/.exec(expanded);
-    if (homePrefix) expanded = path.join(home, homePrefix[2]);
-  }
+  // $HOME or ${HOME} because the variable is never expanded by a shell;
+  // expandHomePrefix turns those (and the ~ shorthand, with both / and \
+  // separators) into os.homedir() before path.resolve runs so launch
+  // surfaces stay consistent.
+  const expanded = expandHomePrefix(raw);
   const resolved = path.isAbsolute(expanded)
     ? expanded
     : path.resolve(projectRoot, expanded);

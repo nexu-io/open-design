@@ -39,6 +39,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
+import { expandHomePrefix } from './home-expansion.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 
@@ -83,9 +84,14 @@ const ENV_KEYS = {
 // is a normal "no config yet" condition handled by readStored(); the
 // write path's mkdir(recursive) creates the directory on first use.
 function resolveOverrideDir(raw, projectRoot) {
-  const expanded = raw.startsWith('~/')
-    ? path.join(homedir(), raw.slice(2))
-    : raw;
+  // Share expandHomePrefix with resolveDataDir (server.ts) so OD_DATA_DIR
+  // and OD_MEDIA_CONFIG_DIR cannot split state under a $HOME-style value.
+  // A launcher passing OD_DATA_DIR=$HOME/.open-design without a shell to
+  // expand it would otherwise route SQLite/projects/artifacts to the
+  // expanded path while media-config.json stayed under
+  // <projectRoot>/$HOME/.open-design, leaving stored credentials
+  // unreachable on the next read.
+  const expanded = expandHomePrefix(raw);
   return path.isAbsolute(expanded)
     ? expanded
     : path.resolve(projectRoot, expanded);
