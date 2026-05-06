@@ -2768,37 +2768,24 @@ function HtmlViewer({
     setDeployError(null);
     setCopiedDeployLink(false);
     setDeployPhase('idle');
-    const [config, deployments] = await Promise.all([
-      fetchDeployConfig(),
-      fetchProjectDeployments(projectId),
-    ]);
-    if (config) {
-      setDeployConfig(config);
-      setVercelToken(config.tokenMask || '');
-      setTeamId(config.teamId || '');
-      setTeamSlug(config.teamSlug || '');
-    }
-    const current = deployments.find(
-      (item) => item.fileName === file.name && item.providerId === 'vercel-self',
+    const deploymentsPromise = fetchProjectDeployments(projectId);
+    const currentDeployment = findDeploymentForProvider(
+      await deploymentsPromise,
+      deployProviderId,
     );
-    setDeployment(current ?? null);
-    setDeployResult(current ?? null);
+    const config = await fetchDeployConfig(deployProviderId);
+    syncDeployFormFromConfig(currentDeployment?.providerId ?? deployProviderId, config);
+    setDeployment(currentDeployment ?? null);
+    setDeployResult(currentDeployment ?? null);
   }
 
   async function saveDeployConfig() {
     setSavingDeployConfig(true);
     setDeployError(null);
     try {
-      const config = await updateDeployConfig({
-        token: vercelToken,
-        teamId,
-        teamSlug,
-      });
+      const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
       if (!config) throw new Error(t('fileViewer.deployConfigSaveFailed'));
-      setDeployConfig(config);
-      setVercelToken(config.tokenMask || '');
-      setTeamId(config.teamId || '');
-      setTeamSlug(config.teamSlug || '');
+      syncDeployFormFromConfig(deployProviderId, config);
       return config;
     } catch (err) {
       setDeployError(err instanceof Error ? err.message : t('fileViewer.deployConfigSaveFailed'));
@@ -2808,31 +2795,35 @@ function HtmlViewer({
     }
   }
 
-  async function deployToVercel() {
+  async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
     setCopiedDeployLink(false);
     try {
-      const typedToken = vercelToken.trim();
+      const typedToken = deployToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
       const needsConfigSave =
         hasNewToken ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
+        cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
+        cloudflareProjectName.trim() !== (deployConfig?.projectName || '') ||
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
         if (!nextConfig?.configured) {
-          throw new Error(t('fileViewer.vercelTokenRequired'));
+          const option = getDeployProviderOption(deployProviderId);
+          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name);
+      const next = await deployProjectFile(projectId, file.name, deployProviderId);
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployFailed'));
+      const option = getDeployProviderOption(deployProviderId);
+      setDeployError(err instanceof Error ? err.message : t(option.deployFailedKey, { provider: t(option.labelKey) }));
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
