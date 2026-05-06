@@ -196,25 +196,45 @@ function stagePayload(legacyDir: string, stagingDir: string): string[] {
 /**
  * Move staged payload entries into the final dataDir. Each entry is
  * moved with renameSync (atomic on the same filesystem); if rename
- * fails (cross-device, etc.) we fall back to copy + remove. Errors
- * propagate so the caller can clean up the staging dir.
+ * fails (cross-device, etc.) we fall back to copy + remove.
+ *
+ * Promotion is rollback-safe: we track every entry that was moved
+ * into dataDir, and on any failure mid-loop we remove those promoted
+ * entries before rethrowing. Without the rollback, a failure after
+ * app.sqlite was already promoted (ENOSPC, permissions, etc.) would
+ * leave the real dataDir with app.sqlite but no marker, and the next
+ * boot would refuse the retry under data_dir_not_empty, stranding
+ * the user mid-migration.
  */
-function promoteStaged(stagingDir: string, dataDir: string, entries: readonly string[]): void {
+export function promoteStaged(
+  stagingDir: string,
+  dataDir: string,
+  entries: readonly string[],
+): void {
   fs.mkdirSync(dataDir, { recursive: true });
-  for (const entry of entries) {
-    const src = path.join(stagingDir, entry);
-    const dst = path.join(dataDir, entry);
-    try {
-      fs.renameSync(src, dst);
-    } catch {
-      // EXDEV (cross-device) or similar: fall back to copy + remove.
-      fs.cpSync(src, dst, {
-        recursive: true,
-        force: true,
-        errorOnExist: false,
-      });
-      fs.rmSync(src, { recursive: true, force: true });
+  const promoted: string[] = [];
+  try {
+    for (const entry of entries) {
+      const src = path.join(stagingDir, entry);
+      const dst = path.join(dataDir, entry);
+      try {
+        fs.renameSync(src, dst);
+      } catch {
+        // EXDEV (cross-device) or similar: fall back to copy + remove.
+        fs.cpSync(src, dst, {
+          recursive: true,
+          force: true,
+          errorOnExist: false,
+        });
+        fs.rmSync(src, { recursive: true, force: true });
+      }
+      promoted.push(entry);
     }
+  } catch (err) {
+    for (const entry of promoted) {
+      fs.rmSync(path.join(dataDir, entry), { recursive: true, force: true });
+    }
+    throw err;
   }
 }
 

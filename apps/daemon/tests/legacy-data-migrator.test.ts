@@ -24,6 +24,7 @@ import {
   dataDirIsEmptyOrFresh,
   legacyDirHasPayload,
   migrateLegacyDataDirSync,
+  promoteStaged,
 } from '../src/legacy-data-migrator.js';
 
 interface SilentLogger {
@@ -306,6 +307,49 @@ describe('migrateLegacyDataDirSync', () => {
     expect(leftovers).toEqual([]);
 
     fs.rmSync(escapeTarget, { recursive: true, force: true });
+  });
+
+  it('rolls back already-promoted entries when promotion fails mid-loop', () => {
+    // Drives promoteStaged directly so we can inject a real filesystem
+    // failure mid-loop without mocking the frozen node:fs namespace.
+    // Without the rollback, the next boot would see a lone app.sqlite,
+    // dataDirHasExistingPayload would return ['app.sqlite'], and the
+    // migrator would refuse the retry under data_dir_not_empty, stranding
+    // the user mid-migration.
+    const stagingDir = path.join(
+      path.dirname(dataDir),
+      `${path.basename(dataDir)}.od-migrate-rollback-test`,
+    );
+    fs.mkdirSync(stagingDir, { recursive: true });
+    writeFile(path.join(stagingDir, 'app.sqlite'), 'staged-sqlite');
+    writeFile(path.join(stagingDir, 'app-config.json'), 'staged-config');
+
+    // Pre-create dataDir/app-config.json as a non-empty directory.
+    // renameSync of a regular file onto a non-empty directory fails
+    // with EISDIR/ENOTEMPTY on POSIX and EPERM on Windows; the cpSync
+    // fallback (file -> existing dir) likewise refuses to overlay.
+    // That is a real failure injection, not a mock.
+    fs.mkdirSync(path.join(dataDir, 'app-config.json'), { recursive: true });
+    writeFile(path.join(dataDir, 'app-config.json', 'block.txt'), 'occupied');
+
+    let captured: unknown;
+    try {
+      promoteStaged(stagingDir, dataDir, ['app.sqlite', 'app-config.json']);
+    } catch (err) {
+      captured = err;
+    }
+    expect(captured).toBeInstanceOf(Error);
+
+    // app.sqlite was promoted on the first iteration. The rollback
+    // must have removed it before rethrowing, so the user's retry
+    // does not get blocked under data_dir_not_empty.
+    expect(fs.existsSync(path.join(dataDir, 'app.sqlite'))).toBe(false);
+
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    fs.rmSync(path.join(dataDir, 'app-config.json'), {
+      recursive: true,
+      force: true,
+    });
   });
 });
 

@@ -385,12 +385,36 @@ The daemon refuses, with a visible startup error, when:
 
 A `.migrated-from` marker is written on success so subsequent boots no-op.
 
+Quit the Desktop app first, then re-launch with this env set. The launcher must put the variable into the *app process* environment, not just the shell that runs `open` / `xdg-open`.
+
+**macOS** (LaunchServices does not inherit shell env, so use the direct binary):
+
 ```bash
-# Quit the Desktop app first, then re-launch with this env set.
-# macOS/Linux:
-OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" open "/Applications/Open Design.app"
-# Windows (PowerShell):
-$env:OD_LEGACY_DATA_DIR="C:\path\to\old\repo\.od"; & "$env:LOCALAPPDATA\Programs\Open Design\Open Design.exe"
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" \
+  "/Applications/Open Design.app/Contents/MacOS/Open Design"
+```
+
+If you prefer the Dock launcher, set the variable in `launchctl` first, open the app, then unset it:
+
+```bash
+launchctl setenv OD_LEGACY_DATA_DIR "/path/to/old/repo/.od"
+open "/Applications/Open Design.app"
+# After the migration log line appears:
+launchctl unsetenv OD_LEGACY_DATA_DIR
+```
+
+**Linux** (run the binary directly so the env var actually reaches it):
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" /path/to/open-design
+# (e.g. the AppImage you launched, or the unpacked binary under /opt)
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:OD_LEGACY_DATA_DIR="C:\path\to\old\repo\.od"
+& "$env:LOCALAPPDATA\Programs\Open Design\Open Design.exe"
 ```
 
 The daemon log records `[od-migrate] migration complete: copied N entries (...)`. After the first launch you can clear the env variable; the marker prevents re-migration even on subsequent runs.
