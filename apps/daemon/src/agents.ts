@@ -940,6 +940,7 @@ export function buildLiveArtifactsMcpServersForAgent(def, { enabled = true, comm
       name: 'open-design-live-artifacts',
       command,
       args: [...argsPrefix, 'mcp', 'live-artifacts'],
+      env: [],
     },
   ];
 }
