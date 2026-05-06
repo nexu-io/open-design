@@ -166,6 +166,40 @@ test('qoder stream parser maps result usage and preserves modelUsage', () => {
   ]);
 });
 
+test('qoder stream parser maps result is_error to a fatal error event', () => {
+  const usage = {
+    input_tokens: 10,
+    output_tokens: 2,
+  };
+  const line = JSON.stringify({
+    type: 'result',
+    subtype: 'error',
+    duration_ms: 10864,
+    is_error: true,
+    stop_reason: 'tool_use_failed',
+    total_cost_usd: 0,
+    usage,
+  });
+  const events = parseLines([line]);
+
+  assert.deepEqual(events, [
+    {
+      type: 'usage',
+      usage,
+      modelUsage: undefined,
+      costUsd: 0,
+      durationMs: 10864,
+      stopReason: 'tool_use_failed',
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Qoder run failed: tool_use_failed',
+      raw: line,
+    },
+  ]);
+});
+
 test('qoder stream parser forwards unknown and malformed lines as raw events', () => {
   const events = parseLines([
     '{"type":"unknown","value":1}',

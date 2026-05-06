@@ -125,6 +125,57 @@ describe('/api/chat', () => {
     expect(eventsBody).not.toContain('event: agent\\ndata: {"type":"error"');
     expect(statusBody.status).toBe('failed');
   });
+
+  it('fails Qoder runs when the result reports is_error with exit code 0', async () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'od-qoder-bin-'));
+    tempDirs.push(binDir);
+    const qoderBin = join(binDir, 'qodercli');
+    const qoderResultLine = JSON.stringify({
+      type: 'result',
+      subtype: 'error',
+      duration_ms: 17,
+      is_error: true,
+      stop_reason: 'tool_use_failed',
+      total_cost_usd: 0,
+      usage: {
+        input_tokens: 3,
+        output_tokens: 1,
+      },
+    });
+    writeFileSync(
+      qoderBin,
+      `#!/bin/sh\nprintf '%s\\n' '${qoderResultLine}'\nexit 0\n`,
+      'utf8',
+    );
+    chmodSync(qoderBin, 0o755);
+    process.env.PATH = binDir;
+
+    const createResponse = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'qoder',
+        message: 'hello',
+      }),
+    });
+    expect(createResponse.status).toBe(202);
+    const { runId } = await createResponse.json() as { runId: string };
+
+    const eventsController = new AbortController();
+    const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+      signal: eventsController.signal,
+    });
+    const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+    eventsController.abort();
+    const statusBody = await waitForRunStatus(baseUrl, runId);
+
+    expect(eventsBody).toContain('event: agent');
+    expect(eventsBody).toContain('"type":"usage"');
+    expect(eventsBody).toContain('"isError":true');
+    expect(eventsBody).toContain('event: error');
+    expect(eventsBody).toContain('Qoder run failed: tool_use_failed');
+    expect(statusBody.status).toBe('failed');
+  });
 });
 
 async function readSseUntil(response: Response, marker: string): Promise<string> {

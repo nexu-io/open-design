@@ -31,6 +31,25 @@ function messageFromError(error) {
   return 'Unknown Qoder error';
 }
 
+function messageFromResult(obj) {
+  if (typeof obj.error === 'string' && obj.error.length > 0) return obj.error;
+  if (
+    obj.error &&
+    typeof obj.error === 'object' &&
+    typeof obj.error.message === 'string' &&
+    obj.error.message.length > 0
+  ) {
+    return obj.error.message;
+  }
+  if (typeof obj.message === 'string' && obj.message.length > 0) {
+    return obj.message;
+  }
+  if (typeof obj.stop_reason === 'string' && obj.stop_reason.length > 0) {
+    return `Qoder run failed: ${obj.stop_reason}`;
+  }
+  return 'Qoder run failed';
+}
+
 export function createQoderStreamHandler(onEvent) {
   let buffer = '';
   let emittedThinkingStart = false;
@@ -93,6 +112,7 @@ export function createQoderStreamHandler(onEvent) {
     }
 
     if (obj.type === 'result') {
+      const isError = Boolean(obj.is_error);
       onEvent({
         type: 'usage',
         usage: obj.usage ?? null,
@@ -100,8 +120,15 @@ export function createQoderStreamHandler(onEvent) {
         costUsd: obj.total_cost_usd ?? null,
         durationMs: typeof obj.duration_ms === 'number' ? obj.duration_ms : null,
         stopReason: obj.stop_reason ?? null,
-        isError: Boolean(obj.is_error),
+        isError,
       });
+      if (isError) {
+        onEvent({
+          type: 'error',
+          message: messageFromResult(obj),
+          raw: rawLine,
+        });
+      }
       return;
     }
 
