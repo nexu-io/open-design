@@ -374,7 +374,14 @@ If you ran the repo first and only later installed the packaged Desktop app, the
 
 ##### Option A: one-shot auto-migration via `OD_LEGACY_DATA_DIR`
 
-If your Desktop app's `data/` is still empty (typical after the upgrade that surfaced [#710](https://github.com/nexu-io/open-design/issues/710)), point the daemon at your old `.od/` once and let it copy the payload across on first boot. The daemon refuses to overwrite a `data/` that already has `app.sqlite`, and writes a `.migrated-from` marker so subsequent boots are no-ops.
+Use this when the Desktop app's `data/` is still empty, which is the typical state right after the upgrade that surfaced [#710](https://github.com/nexu-io/open-design/issues/710). Quit the Desktop app first (so its daemon is not holding `app.sqlite`), then re-launch with `OD_LEGACY_DATA_DIR` pointed at your old repo `.od/`. The daemon stages your payload into a sibling tmp directory and only promotes it into `data/` on success; on any failure the staging directory is removed so the next boot retries cleanly.
+
+The daemon refuses, with a visible startup error, when:
+
+- the path in `OD_LEGACY_DATA_DIR` does not contain `app.sqlite` (typo, deleted source, wrong path), or
+- the Desktop's `data/` already contains any of `app.sqlite`, `projects/`, `artifacts/`, `media-config.json`, etc. SQLite/WAL pairs and project trees cannot be safely interleaved, so the daemon refuses to merge instead of silently corrupting either side. If the Desktop has already booted and seeded its own `data/`, use Option B and decide explicitly which side wins.
+
+A `.migrated-from` marker is written on success so subsequent boots no-op.
 
 ```bash
 # Quit the Desktop app first, then re-launch with this env set.
@@ -388,26 +395,28 @@ The daemon log records `[od-migrate] migration complete: copied N entries (...)`
 
 ##### Option B: manual copy
 
-To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
+To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app, when Option A is not viable (Desktop already has its own data and you want to replace it explicitly).
+
+**macOS / Linux (bash):**
 
 ```bash
 set -euo pipefail
 # 1. Stop both writers so the source and target are quiescent.
-#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Windows/Linux).
+#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Linux).
 #    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
 # 2. Set REPO and APP_DATA to your actual paths; the example below is macOS + beta.
 REPO="/path/to/open-design"
 APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
 
 # 3. Preflight: see what (if anything) the Desktop app already has.
-ls "$APP_DATA/projects" 2>/dev/null && echo "↑ Desktop already has projects — confirm this is a replace, not a merge."
+ls "$APP_DATA/projects" 2>/dev/null && echo "Desktop already has projects, confirm this is a replace, not a merge."
 
 # 4. Stage into a sibling first, then atomically swap into place. `set -e` plus
 #    the explicit rsync exit check guarantee a non-zero copy aborts before any
 #    `mv` runs, so the Desktop data dir cannot end up half-populated.
 STAGE="${APP_DATA}.staged-$(date +%F-%H%M)"
 mkdir -p "$STAGE"
-rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed — aborting before swap"; exit 1; }
+rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed, aborting before swap"; exit 1; }
 
 # 5. Backup the Desktop's current data, then promote the staged copy.
 mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F-%H%M)"
@@ -416,7 +425,38 @@ mv "$STAGE" "$APP_DATA"
 # 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
 ```
 
-If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` and renaming the `.fresh-baseline-*` directory back into place.
+**Windows (PowerShell):**
+
+```powershell
+$ErrorActionPreference = 'Stop'
+# 1. Stop both writers so the source and target are quiescent.
+#    - Quit the Desktop app (File > Exit).
+#    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
+# 2. Set $Repo and $AppData to your actual paths; the example below is stable channel.
+$Repo    = 'C:\path\to\open-design'
+$AppData = Join-Path $env:APPDATA 'Open Design\namespaces\release-stable-win\data'
+
+# 3. Preflight: see what (if anything) the Desktop app already has.
+if (Test-Path (Join-Path $AppData 'projects')) {
+  Write-Host 'Desktop already has projects, confirm this is a replace, not a merge.'
+}
+
+# 4. Stage into a sibling first. Robocopy /MIR mirrors source to staging, and
+#    its exit codes >= 8 are real errors (0..7 are success/info), so we guard
+#    explicitly before promoting.
+$Stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
+$Stage = "$AppData.staged-$Stamp"
+robocopy "$Repo\.od" $Stage /MIR /XD 'backup-*' | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed (exit $LASTEXITCODE), aborting before swap" }
+
+# 5. Backup the Desktop's current data, then promote the staged copy.
+if (Test-Path $AppData) { Rename-Item $AppData "$AppData.fresh-baseline-$Stamp" }
+Rename-Item $Stage $AppData
+
+# 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
+```
+
+If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` (or `$AppData` on Windows) and renaming the `.fresh-baseline-*` directory back into place.
 
 > **⚠️ Schema migrations are forward-only.** The daemon applies `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` changes on boot; there is no version guard. After migrating, **do not** open the same data dir with an older repo checkout — unsupported columns or behavior mismatches can leave the workspace inconsistent. Back up `app.sqlite*` before the first launch with the new app.
 

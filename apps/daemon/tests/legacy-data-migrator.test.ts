@@ -3,6 +3,11 @@
  * each test runs against a fresh pair of mkdtemp() directories so no
  * test ever touches a real OD install.
  *
+ * The migrator's contract is "loud or correct": when OD_LEGACY_DATA_DIR
+ * is set, either the daemon migrates cleanly or it throws a
+ * LegacyMigrationError the launcher can surface. Silently launching
+ * empty was the original #710 footgun.
+ *
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
@@ -14,9 +19,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  migrateLegacyDataDirSync,
+  LegacyMigrationError,
+  dataDirHasExistingPayload,
   dataDirIsEmptyOrFresh,
   legacyDirHasPayload,
+  migrateLegacyDataDirSync,
 } from '../src/legacy-data-migrator.js';
 
 interface SilentLogger {
@@ -48,6 +55,20 @@ function seedLegacyDir(legacyDir: string): void {
   writeFile(path.join(legacyDir, 'projects', 'p1', 'index.html'), '<html>1</html>');
   writeFile(path.join(legacyDir, 'projects', 'p2', 'page.html'), '<html>2</html>');
   writeFile(path.join(legacyDir, 'artifacts', 'a1', 'final.html'), '<html>a</html>');
+}
+
+/**
+ * Symlinks need elevated permission on stock Windows. Skip the test
+ * cleanly there rather than failing the suite for an unrelated OS
+ * limitation.
+ */
+function trySymlink(target: string, linkPath: string, type: 'dir' | 'file'): boolean {
+  try {
+    fs.symlinkSync(target, linkPath, type === 'dir' ? 'junction' : 'file');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe('migrateLegacyDataDirSync', () => {
@@ -84,29 +105,60 @@ describe('migrateLegacyDataDirSync', () => {
     ).toMatchObject({ status: 'noop' });
   });
 
-  it('skips with warn when legacyDir has no app.sqlite', () => {
-    // Create the dir but leave it empty (or with non-OD junk).
+  it('throws LegacyMigrationError when legacyDir has no app.sqlite', () => {
+    // Failing loud here is the point of the contract: a typo in the env
+    // var or a stale path used to silently skip and then drop the user
+    // into an empty workspace, which is exactly the #710 footgun.
     writeFile(path.join(legacyDir, 'README.txt'), 'unrelated');
-    const log = makeLogger();
-    const result = migrateLegacyDataDirSync({ legacyDir, dataDir, logger: log });
-    expect(result.status).toBe('skipped');
-    expect(result.reason).toMatch(/no app\.sqlite/);
-    expect(log.entries.some((e) => e.level === 'warn')).toBe(true);
+    expect(() =>
+      migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() }),
+    ).toThrowError(LegacyMigrationError);
+
+    try {
+      migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() });
+    } catch (err) {
+      expect(err).toBeInstanceOf(LegacyMigrationError);
+      expect((err as LegacyMigrationError).code).toBe('legacy_dir_invalid');
+    }
   });
 
-  it('skips when dataDir already has app.sqlite (never overwrites real data)', () => {
+  it('throws LegacyMigrationError when dataDir already has app.sqlite', () => {
     seedLegacyDir(legacyDir);
     writeFile(path.join(dataDir, 'app.sqlite'), 'NEW-DATA-DO-NOT-OVERWRITE');
 
-    const result = migrateLegacyDataDirSync({
-      legacyDir,
-      dataDir,
-      logger: makeLogger(),
-    });
-    expect(result.status).toBe('skipped');
+    let captured: unknown;
+    try {
+      migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() });
+    } catch (err) {
+      captured = err;
+    }
+    expect(captured).toBeInstanceOf(LegacyMigrationError);
+    expect((captured as LegacyMigrationError).code).toBe('data_dir_not_empty');
+
+    // The existing payload must be untouched.
     expect(fs.readFileSync(path.join(dataDir, 'app.sqlite'), 'utf8')).toBe(
       'NEW-DATA-DO-NOT-OVERWRITE',
     );
+  });
+
+  it('throws when dataDir already has a payload entry other than app.sqlite', () => {
+    // A half-overlaid project tree is worse than no migration: cpSync
+    // would merge directory contents and SQLite/WAL pairs cannot be
+    // safely interleaved with foreign WAL pages.
+    seedLegacyDir(legacyDir);
+    writeFile(path.join(dataDir, 'projects', 'preexisting', 'index.html'), '<html/>');
+
+    let captured: unknown;
+    try {
+      migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() });
+    } catch (err) {
+      captured = err;
+    }
+    expect(captured).toBeInstanceOf(LegacyMigrationError);
+    expect((captured as LegacyMigrationError).code).toBe('data_dir_not_empty');
+    expect(
+      fs.existsSync(path.join(dataDir, 'projects', 'preexisting', 'index.html')),
+    ).toBe(true);
   });
 
   it('migrates payload to a fresh dataDir', () => {
@@ -193,6 +245,68 @@ describe('migrateLegacyDataDirSync', () => {
     expect(result.copied).not.toContain('media-config.json');
     expect(result.copied).not.toContain('artifacts');
   });
+
+  it('refuses to migrate when a symlink is anywhere inside the legacy payload', () => {
+    // Without this guard, fs.cpSync would preserve the link and
+    // downstream readers (projects.ts) would follow it, escaping the
+    // data root via a crafted .od/ tree.
+    seedLegacyDir(legacyDir);
+
+    const escapeTarget = mkdtempSync(path.join(os.tmpdir(), 'od-escape-'));
+    writeFile(path.join(escapeTarget, 'secret.txt'), 'should not be reachable');
+    const linkPath = path.join(legacyDir, 'projects', 'evil-link');
+
+    if (!trySymlink(escapeTarget, linkPath, 'dir')) {
+      // Stock Windows without elevation rejects symlink creation; skip
+      // the assertion rather than failing for an unrelated reason.
+      return;
+    }
+
+    let captured: unknown;
+    try {
+      migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() });
+    } catch (err) {
+      captured = err;
+    }
+    expect(captured).toBeInstanceOf(LegacyMigrationError);
+    expect((captured as LegacyMigrationError).code).toBe('symlink_in_payload');
+
+    // dataDir must remain pristine so a follow-up cleanup-then-retry
+    // works.
+    expect(fs.existsSync(path.join(dataDir, '.migrated-from'))).toBe(false);
+    expect(fs.existsSync(path.join(dataDir, 'app.sqlite'))).toBe(false);
+
+    fs.rmSync(escapeTarget, { recursive: true, force: true });
+  });
+
+  it('cleans up the staging dir on staging failure (no half-copied state in dataDir)', () => {
+    // Legacy dir has SQLite plus a symlink under projects/. Staging
+    // copies SQLite first, then walks projects/ and rejects the symlink.
+    // The staging dir must be removed so a retry does not see leftover
+    // partial copies.
+    seedLegacyDir(legacyDir);
+
+    const escapeTarget = mkdtempSync(path.join(os.tmpdir(), 'od-stage-cleanup-'));
+    const linkPath = path.join(legacyDir, 'projects', 'late-link');
+    if (!trySymlink(escapeTarget, linkPath, 'dir')) {
+      fs.rmSync(escapeTarget, { recursive: true, force: true });
+      return;
+    }
+
+    expect(() =>
+      migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() }),
+    ).toThrowError(LegacyMigrationError);
+
+    // No .od-migrate-* sibling left behind.
+    const parent = path.dirname(dataDir);
+    const base = path.basename(dataDir);
+    const leftovers = fs
+      .readdirSync(parent)
+      .filter((entry) => entry.startsWith(`${base}.od-migrate-`));
+    expect(leftovers).toEqual([]);
+
+    fs.rmSync(escapeTarget, { recursive: true, force: true });
+  });
 });
 
 describe('dataDirIsEmptyOrFresh', () => {
@@ -246,5 +360,47 @@ describe('legacyDirHasPayload', () => {
   it('returns true when the directory contains app.sqlite', () => {
     writeFile(path.join(legacyDir, 'app.sqlite'), 'real');
     expect(legacyDirHasPayload(legacyDir)).toBe(true);
+  });
+});
+
+describe('dataDirHasExistingPayload', () => {
+  let dataDir: string;
+  beforeEach(() => {
+    dataDir = mkdtempSync(path.join(os.tmpdir(), 'od-payload-probe-'));
+  });
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('returns an empty list when the directory is missing', async () => {
+    await rm(dataDir, { recursive: true, force: true });
+    expect(dataDirHasExistingPayload(dataDir)).toEqual([]);
+  });
+
+  it('returns an empty list when the directory holds only foreign files', () => {
+    writeFile(path.join(dataDir, 'unrelated.log'), 'logs');
+    writeFile(path.join(dataDir, '.DS_Store'), '');
+    expect(dataDirHasExistingPayload(dataDir)).toEqual([]);
+  });
+
+  it('detects app.sqlite alone', () => {
+    writeFile(path.join(dataDir, 'app.sqlite'), 'real');
+    expect(dataDirHasExistingPayload(dataDir)).toEqual(['app.sqlite']);
+  });
+
+  it('detects projects/ alone (a payload entry can be a directory)', () => {
+    writeFile(path.join(dataDir, 'projects', 'p1', 'index.html'), '<x/>');
+    expect(dataDirHasExistingPayload(dataDir)).toEqual(['projects']);
+  });
+
+  it('returns every payload entry that exists, in declared order', () => {
+    writeFile(path.join(dataDir, 'app.sqlite'), 'real');
+    writeFile(path.join(dataDir, 'media-config.json'), '{"providers":{}}');
+    writeFile(path.join(dataDir, 'artifacts', 'a1', 'final.html'), '<x/>');
+    expect(dataDirHasExistingPayload(dataDir)).toEqual([
+      'app.sqlite',
+      'media-config.json',
+      'artifacts',
+    ]);
   });
 });

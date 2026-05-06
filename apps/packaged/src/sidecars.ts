@@ -267,6 +267,15 @@ export async function startPackagedSidecars(
         // Electron userData, bundle names, or ports.
         ...createPackagedDaemonManagedPathEnv(paths),
         ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+        // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
+        // upgrading from 0.3.x .od/ layouts. The daemon's startup
+        // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
+        // for packaged children would otherwise drop it. Forward only
+        // when set so we do not invent an empty string and trigger the
+        // daemon's "env set but path invalid" error path.
+        ...(process.env.OD_LEGACY_DATA_DIR == null || process.env.OD_LEGACY_DATA_DIR.length === 0
+          ? {}
+          : { OD_LEGACY_DATA_DIR: process.env.OD_LEGACY_DATA_DIR }),
       },
       nodeCommand: options.nodeCommand,
       paths,

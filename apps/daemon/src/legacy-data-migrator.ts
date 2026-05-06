@@ -14,12 +14,23 @@
  * way to know about it. See https://github.com/nexu-io/open-design/issues/710.
  *
  * This module gives operators a recovery path. When `OD_LEGACY_DATA_DIR`
- * is set, the daemon checks on boot whether the new data root is empty
- * AND whether the legacy directory contains a real OD payload (a
- * `app.sqlite` is the proof). If both hold, content is copied across.
- * The migration writes a `.migrated-from` marker so subsequent boots
- * skip the work even if the user clears the new directory; if they
- * really want to re-migrate they can delete the marker.
+ * is set on daemon boot, the migrator:
+ *
+ *   1. Refuses if the legacy dir doesn't have `app.sqlite` (typo / wrong
+ *      path: throws so the daemon surfaces a visible error rather than
+ *      silently launching into an empty workspace).
+ *   2. Refuses if the new dataDir already has any payload entry
+ *      (`app.sqlite`, `projects/`, `artifacts/`, ...): we never merge
+ *      old and new state, since SQLite/WAL pairs and project trees are
+ *      not safely interleavable.
+ *   3. Refuses if a `.migrated-from` marker is already present
+ *      (idempotent re-runs).
+ *   4. Walks the legacy payload, rejecting any symlink (avoids escape
+ *      out of the data root via crafted .od/ symlinks).
+ *   5. Copies into a sibling staging directory first, then renames each
+ *      payload entry into place atomically. On any error the staging
+ *      directory is removed and no `.migrated-from` marker is written,
+ *      so the next boot retries cleanly.
  *
  * Sync by design: this runs at module import time in server.ts, before
  * `openDatabase` opens SQLite. Doing it async would race the DB open
@@ -43,10 +54,28 @@ export interface MigrateLegacyDataDirOptions {
   };
 }
 
+export type MigrateStatus = 'noop' | 'migrated' | 'skipped';
+
 export interface MigrateLegacyDataDirResult {
-  status: 'noop' | 'migrated' | 'skipped';
+  status: MigrateStatus;
   reason: string;
   copied?: readonly string[];
+}
+
+/**
+ * Daemon startup throws this when OD_LEGACY_DATA_DIR is explicitly set
+ * but the path is not a usable legacy data dir, or the new dataDir is
+ * already populated and would be merged into. Failing loud here is the
+ * point: silent skips trained users to assume migration ran when it
+ * didn't (#710 again).
+ */
+export class LegacyMigrationError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = 'LegacyMigrationError';
+  }
 }
 
 const MARKER_FILE = '.migrated-from';
@@ -107,29 +136,86 @@ export function legacyDirHasPayload(legacyDir: string): boolean {
 }
 
 /**
- * Copy each known OD payload entry from `legacyDir` to `dataDir`. Missing
- * entries are skipped silently (e.g. an install that never ran the media
- * surface won't have `media-config.json`). Returns the list of entries
- * that were actually copied.
+ * Returns the list of payload entries that already exist under `dataDir`.
+ * We refuse to merge on top of any of them: SQLite/WAL pairs and project
+ * trees are not safely interleavable, and a partial overlay would yield
+ * a hybrid state SQLite cannot reason about.
  */
-function copyPayload(legacyDir: string, dataDir: string): string[] {
-  fs.mkdirSync(dataDir, { recursive: true });
+export function dataDirHasExistingPayload(dataDir: string): string[] {
+  if (!isExistingDir(dataDir)) return [];
+  const present: string[] = [];
+  for (const entry of PAYLOAD_ENTRIES) {
+    if (fs.existsSync(path.join(dataDir, entry))) present.push(entry);
+  }
+  return present;
+}
+
+/**
+ * Walk a payload subtree and refuse to copy if any node is a symlink.
+ * fs.cpSync would otherwise preserve the link and downstream readers
+ * (projects.ts) would follow it, escaping the data root.
+ */
+function assertNoSymlinks(srcRoot: string, displayPath = srcRoot): void {
+  const stat = fs.lstatSync(srcRoot);
+  if (stat.isSymbolicLink()) {
+    throw new LegacyMigrationError(
+      'symlink_in_payload',
+      `legacy payload contains a symlink at "${displayPath}"; refusing to migrate`,
+    );
+  }
+  if (!stat.isDirectory()) return;
+  for (const child of fs.readdirSync(srcRoot)) {
+    assertNoSymlinks(path.join(srcRoot, child), path.join(displayPath, child));
+  }
+}
+
+/**
+ * Stage every present payload entry into `stagingDir`. Returns the list
+ * of entries that were copied. We use cpSync with verbatimSymlinks not
+ * set; the lstat walk above already rejected any symlink, so a non-link
+ * tree is what cpSync sees.
+ */
+function stagePayload(legacyDir: string, stagingDir: string): string[] {
+  fs.mkdirSync(stagingDir, { recursive: true });
   const copied: string[] = [];
   for (const entry of PAYLOAD_ENTRIES) {
     const src = path.join(legacyDir, entry);
     if (!fs.existsSync(src)) continue;
-    const dst = path.join(dataDir, entry);
-    // cpSync recursively copies directories; for plain files it copies
-    // the byte contents. errorOnExist=false because re-running over a
-    // partially populated dataDir should still succeed.
+    assertNoSymlinks(src);
+    const dst = path.join(stagingDir, entry);
     fs.cpSync(src, dst, {
       recursive: true,
-      force: false,
+      force: true,
       errorOnExist: false,
     });
     copied.push(entry);
   }
   return copied;
+}
+
+/**
+ * Move staged payload entries into the final dataDir. Each entry is
+ * moved with renameSync (atomic on the same filesystem); if rename
+ * fails (cross-device, etc.) we fall back to copy + remove. Errors
+ * propagate so the caller can clean up the staging dir.
+ */
+function promoteStaged(stagingDir: string, dataDir: string, entries: readonly string[]): void {
+  fs.mkdirSync(dataDir, { recursive: true });
+  for (const entry of entries) {
+    const src = path.join(stagingDir, entry);
+    const dst = path.join(dataDir, entry);
+    try {
+      fs.renameSync(src, dst);
+    } catch {
+      // EXDEV (cross-device) or similar: fall back to copy + remove.
+      fs.cpSync(src, dst, {
+        recursive: true,
+        force: true,
+        errorOnExist: false,
+      });
+      fs.rmSync(src, { recursive: true, force: true });
+    }
+  }
 }
 
 function writeMarker(dataDir: string, legacyDir: string): void {
@@ -143,7 +229,9 @@ function writeMarker(dataDir: string, legacyDir: string): void {
 
 /**
  * One-shot, idempotent legacy data migrator. Synchronous so it can run
- * at module import time before SQLite opens.
+ * at module import time before SQLite opens. Throws LegacyMigrationError
+ * on operator-actionable failures (env set but path invalid; dataDir
+ * already populated; symlink in payload).
  */
 export function migrateLegacyDataDirSync(
   options: MigrateLegacyDataDirOptions,
@@ -165,17 +253,14 @@ export function migrateLegacyDataDirSync(
   }
 
   if (!legacyDirHasPayload(legacyDir)) {
-    log.warn(
-      `OD_LEGACY_DATA_DIR="${legacyDir}" does not contain app.sqlite; skipping migration`,
+    // Loud: env was set but the path doesn't look like an OD data dir.
+    // The user typo'd, deleted the source, or pointed at the wrong
+    // directory; silently launching empty trained users to think the
+    // migration ran when it hadn't (this is the original #710 footgun).
+    throw new LegacyMigrationError(
+      'legacy_dir_invalid',
+      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Design, fix the path, and relaunch.`,
     );
-    return { status: 'skipped', reason: 'legacy dir has no app.sqlite' };
-  }
-
-  if (!dataDirIsEmptyOrFresh(dataDir)) {
-    return {
-      status: 'skipped',
-      reason: 'dataDir already has app.sqlite, not overwriting',
-    };
   }
 
   const markerPath = path.join(dataDir, MARKER_FILE);
@@ -183,9 +268,42 @@ export function migrateLegacyDataDirSync(
     return { status: 'skipped', reason: 'migration marker already present' };
   }
 
+  // Refuse to merge on top of any existing payload entry. SQLite/WAL
+  // pairs cannot be safely interleaved with foreign WAL pages, and a
+  // half-overlaid project tree is worse than no migration.
+  const existing = dataDirHasExistingPayload(dataDir);
+  if (existing.length > 0) {
+    throw new LegacyMigrationError(
+      'data_dir_not_empty',
+      `OD_DATA_DIR="${dataDir}" already contains payload entries (${existing.join(', ')}); refusing to merge legacy data on top. Move the existing data aside or pick a fresh data root before re-running with OD_LEGACY_DATA_DIR.`,
+    );
+  }
+
   log.info(`migrating legacy data from "${legacyDir}" to "${dataDir}"`);
-  const copied = copyPayload(legacyDir, dataDir);
-  writeMarker(dataDir, legacyDir);
+
+  // Stage into a sibling tmp dir first, then promote with renameSync.
+  // sibling-not-child so a partial copy never sits inside dataDir on
+  // any error path. Random suffix avoids collisions on retry.
+  fs.mkdirSync(path.dirname(dataDir), { recursive: true });
+  const stagingDir = path.join(
+    path.dirname(dataDir),
+    `${path.basename(dataDir)}.od-migrate-${process.pid}-${Date.now()}`,
+  );
+
+  let copied: string[];
+  try {
+    copied = stagePayload(legacyDir, stagingDir);
+    promoteStaged(stagingDir, dataDir, copied);
+    writeMarker(dataDir, legacyDir);
+  } catch (err) {
+    // Best-effort cleanup of the staging dir so the user can retry.
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    throw err;
+  }
+  // Whatever might be left of staging (already-promoted entries leave
+  // empty parents): drop it.
+  fs.rmSync(stagingDir, { recursive: true, force: true });
+
   log.info(
     `migration complete: copied ${copied.length} entr${copied.length === 1 ? 'y' : 'ies'} (${copied.join(', ')})`,
   );
