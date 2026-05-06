@@ -383,6 +383,35 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  // PR #614 review (mrcfps): npm's own resolution order is env > .npmrc
+  // > default, so when the user has explicitly configured a prefix via
+  // $NPM_CONFIG_PREFIX, that location holds the *current* `npm i -g`
+  // installs and should outrank the conventional guesses. Conventional
+  // ~/.npm-global / ~/.npm-packages frequently retain *stale* binaries
+  // from an older prefix.
+  it("places $NPM_CONFIG_PREFIX/bin before the conventional ~/.npm-global and ~/.npm-packages guesses", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-order-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-order-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      const explicitIdx = dirs.indexOf(join(customPrefix, "bin"));
+      const npmGlobalIdx = dirs.indexOf(join(home, ".npm-global", "bin"));
+      const npmPackagesIdx = dirs.indexOf(join(home, ".npm-packages", "bin"));
+      expect(explicitIdx).toBeGreaterThanOrEqual(0);
+      expect(npmGlobalIdx).toBeGreaterThanOrEqual(0);
+      expect(npmPackagesIdx).toBeGreaterThanOrEqual(0);
+      expect(explicitIdx).toBeLessThan(npmGlobalIdx);
+      expect(explicitIdx).toBeLessThan(npmPackagesIdx);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
   it("ignores whitespace-only npm prefix values rather than emitting a `/bin` entry", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-whitespace-prefix-"));
     try {
