@@ -18,10 +18,11 @@
 // apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
 // the Home Manager / NixOS modules) get media-config there too without
 // any extra plumbing. Both env values are resolved with the same
-// semantics as OD_DATA_DIR in server.ts:resolveDataDir() — `~/` expands
-// to the user's home, and relative paths anchor to <projectRoot> (NOT
-// process.cwd, which is unrelated to the workspace when systemd or
-// launchd starts the daemon).
+// semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared
+// expandHomePrefix() helper handles `~`, `$HOME`, and `${HOME}` (with
+// either `/` or `\` separator), then relative paths anchor to
+// <projectRoot> (NOT process.cwd, which is unrelated to the workspace
+// when systemd or launchd starts the daemon).
 //
 // Migration note: a workspace install that sets a custom OD_DATA_DIR
 // AND has a pre-existing `<projectRoot>/.od/media-config.json` will
@@ -75,10 +76,11 @@ const ENV_KEYS = {
 };
 
 // Resolve an `OD_*_DIR` env override using the same semantics as
-// `resolveDataDir()` in server.ts: leading `~/` expands to the user's
-// home, and relative paths anchor to <projectRoot> (NOT process.cwd —
+// `resolveDataDir()` in server.ts: expandHomePrefix() handles the `~`,
+// `$HOME`, and `${HOME}` shorthands (with either `/` or `\` separator),
+// then relative paths anchor to <projectRoot>, not process.cwd, since
 // the daemon is often launched from a directory that has nothing to do
-// with the workspace, e.g. systemd's `/`). The writability check that
+// with the workspace, e.g. systemd's `/`. The writability check that
 // resolveDataDir does on startup is intentionally NOT replicated here:
 // configFile() is on the read path and a missing/unwritable directory
 // is a normal "no config yet" condition handled by readStored(); the
