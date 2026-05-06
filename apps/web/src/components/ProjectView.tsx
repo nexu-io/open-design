@@ -31,6 +31,7 @@ import {
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
+import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 import {
   createConversation,
@@ -569,6 +570,18 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
+  const appendAssistantErrorEvent = useCallback(
+    (messageId: string, message: string) => {
+      if (!message) return;
+      updateMessageById(
+        messageId,
+        (prev) => appendErrorStatusEvent(prev, message),
+        true,
+      );
+    },
+    [updateMessageById],
+  );
+
   const refreshPreviewComments = useCallback(async () => {
     if (!activeConversationId) return;
     const next = await fetchPreviewComments(project.id, activeConversationId);
@@ -763,6 +776,7 @@ export function ProjectView({
               textBuffer.cancel();
               unregisterTextBuffer();
               setError(err.message);
+              appendAssistantErrorEvent(message.id, err.message);
               updateMessageById(
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
@@ -808,7 +822,14 @@ export function ProjectView({
         })
           .catch((err) => {
             if ((err as Error).name !== 'AbortError') {
-              setError(err instanceof Error ? err.message : String(err));
+              const msg = err instanceof Error ? err.message : String(err);
+              setError(msg);
+              appendAssistantErrorEvent(message.id, msg);
+              updateMessageById(
+                message.id,
+                (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+                true,
+              );
             }
           })
           .finally(() => {
@@ -1091,6 +1112,7 @@ export function ProjectView({
           textBuffer.cancel();
           cancelSendTextBuffer();
           setError(err.message);
+          appendAssistantErrorEvent(assistantId, err.message);
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
