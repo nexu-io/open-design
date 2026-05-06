@@ -1077,7 +1077,36 @@ export type LinuxHeadlessStartResult = {
   logPath: string;
   namespace: string;
   pid: number;
+  status: WebRootIdentity | null;
 };
+
+type WebRootIdentity = {
+  namespace: string;
+  pid: number;
+  url: string;
+  startedAt: string;
+  version: 1;
+};
+
+function webIdentityPath(config: ToolPackConfig): string {
+  return join(config.roots.runtime.namespaceRoot, "runtime", "web-root.json");
+}
+
+async function waitForWebIdentity(config: ToolPackConfig, timeoutMs: number): Promise<WebRootIdentity | null> {
+  const path = webIdentityPath(config);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const content = await readFile(path, "utf8");
+      const identity = JSON.parse(content) as WebRootIdentity;
+      if (identity.url != null) return identity;
+    } catch {
+      // File doesn't exist yet
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
 
 export async function installPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessInstallResult> {
   const paths = resolveLinuxPaths(config);
@@ -1166,11 +1195,14 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
     throw new Error(`headless identity marker not written within 35s at ${markerPath}`);
   }
 
+  const webIdentity = await waitForWebIdentity(config, 60_000);
+
   return {
     launcherPath: headlessLauncherPath(config),
     logPath,
     namespace: config.namespace,
     pid: child.pid,
+    status: webIdentity,
   };
 }
 

@@ -14,7 +14,7 @@ import {
 import { bootstrapSidecarRuntime, resolveAppIpcPath } from "@open-design/sidecar";
 
 import type { PackagedConfig } from "./config.js";
-import { writePackagedDesktopIdentity } from "./identity.js";
+import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { startPackagedSidecars } from "./sidecars.js";
 
@@ -104,9 +104,15 @@ async function main(): Promise<void> {
     webOutputMode: config.webOutputMode,
   });
 
-  const webUrl = sidecars.web.url ?? "";
+const webUrl = sidecars.web.url ?? "";
 
-  process.stdout.write(`\n  Open Design is running\n\n`);
+  await writePackagedWebIdentity({
+    paths,
+    pid: process.pid,
+    url: webUrl,
+  });
+
+  process.stdout.write(`\n Open Design is running\n\n`);
   process.stdout.write(`  ➜  ${colorize(webUrl)}\n\n`);
   process.stdout.write(`  Press Ctrl+C to stop\n\n`);
 
