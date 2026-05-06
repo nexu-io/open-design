@@ -25,7 +25,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit 触发本 skill：用户只连了 GitHub（或显式把简报范围限定在 GitHub），从用户已认证的 GitHub 连接拉过去 24h 的 PR / review / issue / CI / merge，渲染成 GitHub Notifications + PR diff 风格的简报：顶部黑色 nav bar + 左侧 All / Unread / Mentions / Review requests + 右侧按类别分组的事件流（Review requests / CI / Issues / Activity），状态用 GitHub pill badge（open 绿 / merged 紫 / closed 红 / CI fail 红卡）。"
+  example_prompt: "Orbit pipeline invokes this skill: GitHub is the user's only connected connector (or the briefing is explicitly scoped to GitHub). Pull the past 24h of PRs / review requests / issues / CI runs / merges from the user's authenticated GitHub connection and render a GitHub Notifications + PR-diff style briefing: black top nav bar + left rail (All / Unread / Mentions / Review requests) + main pane grouped by category (Review requests / CI / Issues / Activity). Use GitHub pill badges for state (open green / merged purple / closed red / CI fail red card)."
 ---
 
 # Orbit · GitHub Briefing

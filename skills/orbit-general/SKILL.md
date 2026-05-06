@@ -29,7 +29,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit 触发本 skill：用户已连多个 connector，从所有已连源（GitHub / Figma / Linear / Notion / 飞书 / Calendar / …）拉过去 24h 的与我相关的变更，渲染成一份 editorial bento dashboard。Hero 早安 + 5 KPI + 今日时间轴 + Top 3 + 12–16 个 connector 模块（每个按数据特性自由选 UI 形式：列表 / 头像栈 / 状态环 / 热力图 / 文件网格 / 警报卡 …）+ People waiting + Footer。米白底 + 衬线 KPI + 强调橙。"
+  example_prompt: "Orbit pipeline invokes this skill: the user has multiple connectors connected. Pull the past 24h of activity relevant to me from every authenticated source (GitHub / Linear / Notion / Slack / 飞书 / Calendar / Gmail / Drive / Sentry / Vercel / …) and render an editorial bento dashboard. Hero greeting + 5 KPI numbers + today's timeline + Top 3 priorities + 12–16 connector modules (each picks its own UI form by data shape: list / avatar stack / status ring / heatmap / file grid / alert card / …) + People waiting on you + Footer. Off-white canvas, serif KPI numerals, accent orange."
 ---
 
 # Orbit General Briefing

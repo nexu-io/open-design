@@ -26,7 +26,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit 触发本 skill：用户只连了 Gmail（或显式把简报范围限定在 Gmail），从用户已认证的 Gmail 连接拉过去 24h 的邮件（等回复 / @ cc / 自动归类），把简报渲染成一封 Daily Digest 邮件，置顶在 Gmail 三栏布局里——左侧 nav（含 Compose 红圆按钮 + 主要/社交/推广 tab）+ 中栏邮件列表（顶部那封是 Orbit Daily Digest）+ 右栏邮件正文（按类别分组）。Roboto / Google Sans，Gmail 红 #D93025 强调色。"
+  example_prompt: "Orbit pipeline invokes this skill: Gmail is the user's only connected connector (or the briefing is explicitly scoped to Gmail). Pull the past 24h of mail (awaiting reply / mentions / cc / auto-categorized) from the user's authenticated Gmail connection and render the briefing as a Daily Digest email pinned to the top of a Gmail three-pane layout — left nav (Compose red round button + Primary / Social / Promotions tabs) + middle list (the Orbit Daily Digest email is pinned at the top) + right reading pane (digest body grouped by category). Roboto / Google Sans, Gmail red #D93025 accent."
 ---
 
 # Orbit · Gmail Briefing

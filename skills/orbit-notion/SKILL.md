@@ -25,7 +25,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit 触发本 skill：用户只连了 Notion（或显式把简报范围限定在 Notion），从用户已认证的 Notion 连接拉过去 24h 的文档编辑 / 评论 / @ 提及 / 数据库行变更，把简报渲染成一个原生 Notion 页面——顶部面包屑「Open Orbit / 早安简报 / 5 月 6 日」、emoji cover、Heading 2 分区（文档变更 / 评论与 @ 提及 / 数据库变更），至少包含一个 callout block + 一个 toggle 块 + 一个数据库表格 view（带 Notion 风圆角 cell + colored tag 状态）。Inter，Notion 黑 #37352F + 灰阶。"
+  example_prompt: "Orbit pipeline invokes this skill: Notion is the user's only connected connector (or the briefing is explicitly scoped to Notion). Pull the past 24h of document edits / comments / @ mentions / database row changes from the user's authenticated Notion connection and render the briefing as a native Notion page: top breadcrumb (Open Orbit / Daily Briefing / May 6), emoji cover, Heading 2 sections (Document edits / Comments & mentions / Database changes). Include at least one callout block + one toggle block + one database table view (Notion rounded cells + colored status tags). Inter, Notion ink #37352F + grayscale."
 ---
 
 # Orbit · Notion Briefing

@@ -25,7 +25,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit 触发本 skill：用户只连了 Linear（或显式把简报范围限定在 Linear），从用户已认证的 Linear 连接拉过去 24h 的 issue / cycle / 状态变更 / 分配，渲染成 Linear 深色界面风格的简报——顶部窄 toolbar + 三栏布局（左 nav: Inbox / My issues / Active / Backlog；中: issue 列表按状态分组；右: 选中 issue 预览面板）。Inter 字体，深色 #0E0E10 背景，状态彩色圆点（Backlog 灰 / Todo 黄 / In Progress 蓝 / In Review 紫 / Done 绿），顶部右侧带 Cycle 进度条。"
+  example_prompt: "Orbit pipeline invokes this skill: Linear is the user's only connected connector (or the briefing is explicitly scoped to Linear). Pull the past 24h of issue movement / cycle progress / status changes / assignments from the user's authenticated Linear connection and render in Linear's native dark UI: narrow top toolbar + three-pane layout (left nav: Inbox / My issues / Active / Backlog; middle: issue list grouped by status; right: selected-issue preview pane). Inter typography, dark #0E0E10 canvas, colored status dots (Backlog gray / Todo yellow / In Progress blue / In Review purple / Done green). Cycle progress strip in the top-right corner."
 ---
 
 # Orbit · Linear Briefing
