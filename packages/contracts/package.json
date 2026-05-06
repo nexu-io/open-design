@@ -15,8 +15,8 @@
       "default": "./dist/index.mjs"
     },
     "./api/connectionTest": {
-      "types": "./src/api/connectionTest.ts",
-      "default": "./src/api/connectionTest.ts"
+      "types": "./dist/api/connectionTest.d.ts",
+      "default": "./dist/api/connectionTest.mjs"
     },
     "./critique": {
       "types": "./dist/critique.d.ts",
