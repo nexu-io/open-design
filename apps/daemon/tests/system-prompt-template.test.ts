@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { composeSystemPrompt } from '../src/prompts/system.js';
+import {
+  composeSystemPrompt,
+  renderCodexImagegenOverride,
+  resolveCodexImagegenModelId,
+} from '../src/prompts/system.js';
 
 // These tests pin the rendering of metadata.promptTemplate inside the
 // composed system prompt. The composer is the trust boundary between the
@@ -201,9 +205,21 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('use Codex\'s built-in image generation capability');
     expect(out).toContain('intentional exception to the media generation contract');
     expect(out).toContain('Do not require, request, or mention `OPENAI_API_KEY`');
-    expect(out).toContain('`$imagegen` system skill / built-in');
+    expect(out).toContain('Generate the image with Codex built-in imagegen');
+    expect(out).toMatch(
+      /actual\s+output path returned by the built-in imagegen result/,
+    );
+    expect(out).toContain('${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png');
+    expect(out).toContain('verify the exact destination file exists under');
+    expect(out).toMatch(
+      /report the exact source path, destination path, and access\/copy\s+error/,
+    );
+    expect(out).toContain('Do not claim success, silently fall back, or ask about OpenAI/Azure');
+    expect(out).toMatch(
+      /unless the user explicitly chooses fallback in a later\s+turn/,
+    );
     expect(out).toContain('$OD_PROJECT_DIR');
-    expect(out).toContain('ask the user for one-time confirmation');
+    expect(out).toMatch(/ask the user for one-time\s+confirmation/);
     expect(out).toContain('"$OD_NODE_BIN" "$OD_BIN"');
     expect(out).toContain('media generate --surface image --model gpt-image-2');
     expect(out).toContain('Do not silently fall');
@@ -243,6 +259,22 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('use Codex\'s built-in image generation capability');
   });
 
+  it('can omit the Codex imagegen override so live chat appends it after the client system prompt', () => {
+    const out = composeSystemPrompt({
+      agentId: 'codex',
+      includeCodexImagegenOverride: false,
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary },
+      },
+    });
+
+    expect(out).toContain('## Media generation contract');
+    expect(out).not.toContain('## Codex built-in imagegen override');
+  });
+
   it('does not add the Codex imagegen override for non-gpt-image models', () => {
     const out = composeSystemPrompt({
       agentId: 'codex',
@@ -256,5 +288,36 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
 
     expect(out).toContain('## Media generation contract');
     expect(out).not.toContain('## Codex built-in imagegen override');
+  });
+
+  it('does not render a Codex override for unrecognized gpt-image-like request metadata', () => {
+    const override = renderCodexImagegenOverride('codex', {
+      kind: 'image',
+      imageModel: 'gpt-image-2-preview-not-whitelisted',
+      imageAspect: '1:1',
+    });
+
+    expect(override).toBe('');
+  });
+
+  it('resolves only known OpenAI gpt-image model ids for the Codex override', () => {
+    expect(
+      resolveCodexImagegenModelId({
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+      }),
+    ).toBe('gpt-image-2');
+    expect(
+      resolveCodexImagegenModelId({
+        kind: 'image',
+        imageModel: 'dall-e-3',
+      }),
+    ).toBe('');
+    expect(
+      resolveCodexImagegenModelId({
+        kind: 'image',
+        imageModel: 'gpt-image-2-preview-not-whitelisted',
+      }),
+    ).toBe('');
   });
 });

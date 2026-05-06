@@ -44,10 +44,11 @@ const agentCapabilities = new Map();
 // user's local CLI config wins.
 //
 // `extraAllowedDirs` is a list of absolute directories the agent must be
-// permitted to read files from (skill seeds, design-system specs) that live
-// outside the project cwd. Currently only Claude Code wires this through
-// (`--add-dir`); other agents either inherit broader access or run with cwd
-// boundaries we can't widen via flags.
+// permitted to read files from (skill seeds, design-system specs, narrowly
+// scoped tool output dirs) that live outside the project cwd. Agents with a
+// documented access-widening flag wire this through (`--add-dir`); the rest
+// either inherit broader access or run with cwd boundaries we can't widen via
+// flags.
 //
 // `streamFormat` hints to the daemon how to interpret stdout:
 //   - 'claude-stream-json' : line-delimited JSON emitted by Claude Code's
@@ -214,7 +215,7 @@ export const AGENT_DEFS = [
     buildArgs: (
       _prompt,
       _imagePaths,
-      _extra,
+      extraAllowedDirs = [],
       options = {},
       runtimeContext = {},
     ) => {
@@ -232,6 +233,12 @@ export const AGENT_DEFS = [
       }
       if (runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && d.length > 0,
+      );
+      for (const d of dirs) {
+        args.push('--add-dir', d);
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);

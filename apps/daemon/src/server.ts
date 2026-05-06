@@ -9,7 +9,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { composeSystemPrompt } from './prompts/system.js';
+import {
+  composeSystemPrompt,
+  renderCodexImagegenOverride,
+  shouldRenderCodexImagegenOverride,
+} from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -163,6 +167,47 @@ export function resolveDaemonCliPath(): string {
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+export function composeLiveInstructionPrompt({
+  daemonSystemPrompt,
+  runtimeToolPrompt,
+  clientSystemPrompt,
+  finalPromptOverride,
+}) {
+  const override =
+    typeof finalPromptOverride === 'string'
+      ? finalPromptOverride.trim()
+      : '';
+  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
+    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+    .map((part) =>
+      override && part.includes(override)
+        ? part.split(override).join('').trim()
+        : part,
+    )
+    .filter(Boolean);
+  if (override) {
+    parts.push(override);
+  }
+  return parts.join('\n\n---\n\n');
+}
+
+export function resolveCodexGeneratedImagesDir(
+  agentId,
+  metadata,
+  env = process.env,
+  homeDir = os.homedir(),
+) {
+  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
+  const rawCodexHome =
+    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
+      ? env.CODEX_HOME.trim()
+      : path.join(homeDir, '.codex');
+  const codexHome = rawCodexHome.startsWith('~/')
+    ? path.join(homeDir, rawCodexHome.slice(2))
+    : rawCodexHome;
+  return path.resolve(codexHome, 'generated_images');
+}
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -3303,6 +3348,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const prompt = composeSystemPrompt({
       agentId,
+      includeCodexImagegenOverride: false,
       skillBody,
       skillName,
       skillMode,
@@ -3468,10 +3514,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId,
         designSystemId,
       });
-    const instructionPrompt = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
-      .map((part) => (typeof part === 'string' ? part.trim() : ''))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
+    const codexImagegenOverride = renderCodexImagegenOverride(
+      agentId,
+      projectRecord?.metadata,
+    );
+    const instructionPrompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt,
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+      finalPromptOverride: codexImagegenOverride,
+    });
     const composed = [
       instructionPrompt
         ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
@@ -3498,9 +3550,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     //      the staged directory is a true write barrier — agents cannot
     //      mutate the shipped repo resource through their cwd.
     //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
-    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
-    //      path in the preamble is reachable when staging fails (e.g. the
-    //      project has no on-disk cwd, or fs.cp errored).
+    //      `DESIGN_SYSTEMS_DIR` to agents that support it so the absolute
+    //      fallback path in the preamble is reachable when staging fails
+    //      (e.g. the project has no on-disk cwd, or fs.cp errored). For
+    //      Codex gpt-image image projects, also allow only the narrow
+    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder.
     //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
     //      `cwd: PROJECT_ROOT` — there the absolute path is already an
     //      in-cwd path, so neither (1) nor (2) is required for it to
@@ -3531,11 +3585,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
-    const extraAllowedDirs = [
+    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
+      agentId,
+      projectRecord?.metadata,
+    );
+    if (codexGeneratedImagesDir) {
+      try {
+        fs.mkdirSync(codexGeneratedImagesDir, { recursive: true });
+        if (!fs.statSync(codexGeneratedImagesDir).isDirectory()) {
+          console.warn(
+            `[od] codex generated_images allowlist skipped: ${codexGeneratedImagesDir} is not a directory`,
+          );
+          codexGeneratedImagesDir = null;
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        console.warn(
+          `[od] codex generated_images allowlist mkdir failed: ${message}`,
+        );
+        codexGeneratedImagesDir = null;
+      }
+    }
+    const extraAllowedDirs = Array.from(new Set([
       SKILLS_DIR,
       DESIGN_SYSTEMS_DIR,
       ...linkedDirs,
-    ].filter((d) => fs.existsSync(d));
+      ...(codexGeneratedImagesDir ? [codexGeneratedImagesDir] : []),
+    ].filter((d) => fs.existsSync(d))));
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a

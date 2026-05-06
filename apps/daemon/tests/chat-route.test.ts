@@ -3,7 +3,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { startServer } from '../src/server.js';
+import {
+  composeLiveInstructionPrompt,
+  resolveCodexGeneratedImagesDir,
+  startServer,
+} from '../src/server.js';
+import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 describe('/api/chat', () => {
   let server: http.Server;
@@ -60,5 +65,59 @@ describe('/api/chat', () => {
     expect(response.ok).toBe(true);
     expect(body).not.toContain('res is not defined');
     expect(body).toContain('AGENT_UNAVAILABLE');
+  });
+});
+
+describe('chat prompt helpers', () => {
+  it('appends the validated Codex override after the client system prompt and removes earlier duplicates', () => {
+    const override = renderCodexImagegenOverride('codex', {
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+      imageAspect: '1:1',
+    });
+    const clientMediaContract =
+      '## Media generation contract\nclient contract wins unless a later override says otherwise';
+
+    const prompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt: `daemon prompt\n${override}`,
+      runtimeToolPrompt: 'runtime tools',
+      clientSystemPrompt: clientMediaContract,
+      finalPromptOverride: override,
+    });
+
+    const clientIdx = prompt.indexOf(clientMediaContract);
+    const overrideIdx = prompt.indexOf('## Codex built-in imagegen override');
+    expect(clientIdx).toBeGreaterThan(-1);
+    expect(overrideIdx).toBeGreaterThan(clientIdx);
+    expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
+  });
+
+  it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {
+    expect(
+      resolveCodexGeneratedImagesDir(
+        'codex',
+        { kind: 'image', imageModel: 'gpt-image-2' },
+        { CODEX_HOME: '/tmp/custom-codex-home' },
+        '/home/tester',
+      ),
+    ).toBe('/tmp/custom-codex-home/generated_images');
+
+    expect(
+      resolveCodexGeneratedImagesDir(
+        'codex',
+        { kind: 'image', imageModel: 'gpt-image-2-preview' },
+        { CODEX_HOME: '/tmp/custom-codex-home' },
+        '/home/tester',
+      ),
+    ).toBeNull();
+
+    expect(
+      resolveCodexGeneratedImagesDir(
+        'claude',
+        { kind: 'image', imageModel: 'gpt-image-2' },
+        { CODEX_HOME: '/tmp/custom-codex-home' },
+        '/home/tester',
+      ),
+    ).toBeNull();
   });
 });
