@@ -25,19 +25,9 @@ export class DeployError extends Error {
   }
 }
 
-export function resolveDeployProviderId(providerId = VERCEL_PROVIDER_ID) {
-  if (!providerId || providerId === VERCEL_PROVIDER_ID) return VERCEL_PROVIDER_ID;
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return CLOUDFLARE_PAGES_PROVIDER_ID;
-  throw new DeployError('unsupported deploy provider', 400);
-}
-
 export function deployConfigPath(providerId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  const resolved = resolveDeployProviderId(providerId);
-  return path.join(
-    base,
-    resolved === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json',
-  );
+  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
 }
 
 export async function readVercelConfig() {
@@ -65,9 +55,7 @@ export async function readCloudflarePagesConfig() {
       projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
     };
   } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      return { token: '', accountId: '', projectName: '' };
-    }
+    if (err && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '' };
     throw err;
   }
 }
@@ -114,54 +102,6 @@ async function writeDeployConfigFile(file, config) {
   }
 }
 
-export async function writeCloudflarePagesConfig(input) {
-  const current = await readCloudflarePagesConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const next = {
-    token:
-      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    accountId:
-      typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
-    projectName:
-      typeof input?.projectName === 'string' ? input.projectName.trim() : current.projectName,
-  };
-  const file = deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID);
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
-  }
-  return publicCloudflarePagesDeployConfig(next);
-}
-
-export async function writeCloudflarePagesConfig(input) {
-  const current = await readCloudflarePagesConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const next = {
-    token:
-      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    accountId:
-      typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
-    projectName:
-      typeof input?.projectName === 'string' ? input.projectName.trim() : current.projectName,
-  };
-  const file = deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID);
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
-  }
-  return publicCloudflarePagesDeployConfig(next);
-}
-
 export function publicDeployConfig(config) {
   return {
     providerId: VERCEL_PROVIDER_ID,
@@ -173,10 +113,10 @@ export function publicDeployConfig(config) {
   };
 }
 
-export function publicCloudflarePagesDeployConfig(config) {
+export function publicCloudflarePagesConfig(config) {
   return {
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    configured: Boolean(config?.token),
+    configured: Boolean(config?.token && config?.accountId && config?.projectName),
     tokenMask: config?.token ? SAVED_CLOUDFLARE_TOKEN_MASK : '',
     teamId: '',
     teamSlug: '',
@@ -186,20 +126,23 @@ export function publicCloudflarePagesDeployConfig(config) {
   };
 }
 
-export async function readPublicDeployConfig(providerId = VERCEL_PROVIDER_ID) {
-  const resolved = resolveDeployProviderId(providerId);
-  if (resolved === CLOUDFLARE_PAGES_PROVIDER_ID) {
-    return publicCloudflarePagesDeployConfig(await readCloudflarePagesConfig());
-  }
-  return publicDeployConfig(await readVercelConfig());
+export async function readDeployConfig(providerId = VERCEL_PROVIDER_ID) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  return readVercelConfig();
 }
 
-export async function writeProviderDeployConfig(input) {
-  const providerId = resolveDeployProviderId(input?.providerId);
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
-    return writeCloudflarePagesConfig(input);
-  }
+export async function writeDeployConfig(providerId = VERCEL_PROVIDER_ID, input = {}) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
   return writeVercelConfig(input);
+}
+
+export function publicDeployConfigForProvider(providerId = VERCEL_PROVIDER_ID, config = {}) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  return publicDeployConfig(config);
+}
+
+export function isDeployProviderId(value) {
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
 }
 
 // Walk the entry HTML and any referenced CSS, producing the full set of
@@ -359,15 +302,22 @@ export async function deployToVercel({ config, files, projectId }) {
   };
 }
 
-export function buildCloudflarePagesDeploymentForm(
-  files: any[],
-): { form: FormData; manifest: Record<string, string> } {
+export async function deployToCloudflarePages({ config, files }) {
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name is required.', 400);
+
+  await ensureCloudflarePagesProject(config);
+
   const form = new FormData();
-  const manifest: Record<string, string> = {};
-  for (const file of files || []) {
-    const data = Buffer.from(file.data || '');
+  const manifest = {};
+  const uploadedHashes = new Set();
+  for (const file of files) {
+    const data = Buffer.from(file.data);
     const hash = createHash('sha256').update(data).digest('hex');
     manifest[file.file] = hash;
+    if (uploadedHashes.has(hash)) continue;
+    uploadedHashes.add(hash);
     form.append(
       hash,
       new Blob([data], { type: file.contentType || 'application/octet-stream' }),
@@ -376,46 +326,55 @@ export function buildCloudflarePagesDeploymentForm(
   }
   form.append('manifest', JSON.stringify(manifest));
   form.append('pages_build_output_dir', '.');
-  return { form, manifest };
-}
 
-export async function deployToCloudflarePages({ config, files, projectId }) {
-  if (!config?.token) {
-    throw new DeployError('Cloudflare API token is required.', 400);
+  const deployResp = await fetch(cloudflarePagesProjectUrl(config, 'deployments'), {
+    method: 'POST',
+    headers: cloudflareHeaders(config),
+    body: form,
+  });
+  const deployed = await readCloudflareJson(deployResp);
+  if (!deployResp.ok || deployed?.success === false) {
+    throw cloudflareError(deployed, deployResp.status, 'Cloudflare Pages deployment failed.');
   }
-  if (!config?.accountId) {
-    throw new DeployError('Cloudflare account ID is required.', 400);
-  }
 
-  const projectName = safeCloudflarePagesProjectName(
-    config.projectName || `od-${projectId}`,
-  );
-  await ensureCloudflarePagesProject(config, projectName);
+  const deployment = deployed?.result ?? deployed;
+  const candidates = deploymentUrlCandidates(deployment);
+  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [deployment?.url]);
 
-  const { form } = buildCloudflarePagesDeploymentForm(files);
-  const uploadResp = await fetch(
-    `${CLOUDFLARE_API}/accounts/${encodeURIComponent(config.accountId)}/pages/projects/${encodeURIComponent(projectName)}/deployments`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.token}`,
-      },
-      body: form,
-    },
-  );
-  const uploaded = await readCloudflareJson(uploadResp);
-  if (!uploadResp.ok) throw cloudflareError(uploaded, uploadResp.status);
-
-  const deployment = cloudflareResult(uploaded);
-  const url = cloudflarePagesDeploymentUrl(deployment, projectName);
   return {
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    url,
-    deploymentId: deployment?.id || deployment?.deployment_id || '',
+    url: link.url || deploymentUrl(deployment),
+    deploymentId: deployment?.id,
     target: 'preview',
-    status: 'link-delayed',
-    statusMessage: 'Cloudflare Pages accepted the upload; the public link may take a moment to finish building.',
+    status: link.status,
+    statusMessage: link.statusMessage,
+    reachableAt: link.reachableAt,
   };
+}
+
+async function ensureCloudflarePagesProject(config) {
+  const getResp = await fetch(cloudflarePagesProjectUrl(config), {
+    headers: cloudflareHeaders(config),
+  });
+  const found = await readCloudflareJson(getResp);
+  if (getResp.ok && found?.success !== false) return found?.result ?? found;
+  if (getResp.status !== 404) {
+    throw cloudflareError(found, getResp.status, 'Cloudflare Pages project lookup failed.');
+  }
+
+  const createResp = await fetch(cloudflareAccountPagesProjectsUrl(config), {
+    method: 'POST',
+    headers: cloudflareHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      name: config.projectName,
+      production_branch: 'main',
+    }),
+  });
+  const created = await readCloudflareJson(createResp);
+  if (!createResp.ok || created?.success === false) {
+    throw cloudflareError(created, createResp.status, 'Cloudflare Pages project creation failed.');
+  }
+  return created?.result ?? created;
 }
 
 export function extractHtmlReferences(html) {
@@ -718,11 +677,10 @@ function formatMib(bytes) {
 // One-shot orchestrator: build the file plan, run the analyzer, and
 // return the typed preflight payload exposed by the daemon.
 export async function prepareDeployPreflight(projectsRoot, projectId, entryName, options = {}) {
-  const providerId = resolveDeployProviderId(options.providerId);
   const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
   const { warnings, totalBytes, totalFiles } = analyzeDeployPlan(plan);
   return {
-    providerId,
+    providerId: options.providerId || VERCEL_PROVIDER_ID,
     entry: plan.entryPath,
     files: plan.files.map((f) => ({
       path: f.file,
@@ -897,72 +855,6 @@ function referenceSuffix(raw) {
   const suffixIdx =
     queryIdx === -1 ? hashIdx : hashIdx === -1 ? queryIdx : Math.min(queryIdx, hashIdx);
   return suffixIdx === -1 ? '' : raw.slice(suffixIdx);
-}
-
-async function ensureCloudflarePagesProject(config, projectName) {
-  const base =
-    `${CLOUDFLARE_API}/accounts/${encodeURIComponent(config.accountId)}/pages/projects`;
-  const lookupResp = await fetch(`${base}/${encodeURIComponent(projectName)}`, {
-    headers: { Authorization: `Bearer ${config.token}` },
-  });
-  const lookup = await readCloudflareJson(lookupResp);
-  if (lookupResp.ok && lookup?.success !== false) return cloudflareResult(lookup);
-  if (lookupResp.status !== 404) throw cloudflareError(lookup, lookupResp.status);
-
-  const createResp = await fetch(base, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: projectName,
-      production_branch: 'main',
-    }),
-  });
-  const created = await readCloudflareJson(createResp);
-  if (!createResp.ok || created?.success === false) {
-    throw cloudflareError(created, createResp.status);
-  }
-  return cloudflareResult(created);
-}
-
-async function readCloudflareJson(resp) {
-  try {
-    return await resp.json();
-  } catch {
-    return {};
-  }
-}
-
-function cloudflareResult(json) {
-  return json?.result ?? json ?? {};
-}
-
-function cloudflareError(json, status) {
-  const errors = Array.isArray(json?.errors) ? json.errors : [];
-  const first = errors.find((item) => item?.message);
-  const message =
-    first?.message ||
-    json?.error?.message ||
-    json?.message ||
-    `Cloudflare Pages request failed (${status}).`;
-  if (/permission|forbidden|unauthori[sz]ed/i.test(message)) {
-    return new DeployError("You don't have permission to deploy this Cloudflare Pages project.", status, json);
-  }
-  return new DeployError(message, status, json);
-}
-
-function cloudflarePagesDeploymentUrl(deployment, projectName) {
-  const candidates = [
-    deployment?.url,
-    deployment?.deployment_url,
-    deployment?.preview_url,
-    deployment?.pages_project?.subdomain,
-  ].filter(Boolean);
-  const first = candidates[0] || '';
-  if (first) return normalizeDeploymentUrl(first);
-  return `https://${projectName}.pages.dev`;
 }
 
 async function pollVercelDeployment(config, id) {
@@ -1191,12 +1083,4 @@ function safeVercelProjectName(raw) {
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80) || `od-${randomUUID().slice(0, 8)}`;
-}
-
-function safeCloudflarePagesProjectName(raw) {
-  return String(raw)
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 58) || `od-${randomUUID().slice(0, 8)}`;
 }

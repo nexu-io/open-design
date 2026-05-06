@@ -147,12 +147,10 @@ import {
   deployToVercel,
   isDeployProviderId,
   prepareDeployPreflight,
-  readCloudflarePagesConfig,
-  readPublicDeployConfig,
-  resolveDeployProviderId,
-  readVercelConfig,
+  publicDeployConfigForProvider,
+  readDeployConfig,
   VERCEL_PROVIDER_ID,
-  writeProviderDeployConfig,
+  writeDeployConfig,
 } from './deploy.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
@@ -2776,18 +2774,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/deploy/config', async (req, res) => {
     try {
-      const providerId = resolveDeployProviderId(req.query?.providerId);
+      const providerId =
+        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await readPublicDeployConfig(providerId);
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
     } catch (err) {
-      const status = err instanceof DeployError ? err.status : 500;
-      sendApiError(
-        res,
-        status,
-        status === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
-        String(err?.message || err),
-      );
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
     }
   });
 
@@ -2800,7 +2796,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
       }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeProviderDeployConfig(req.body || {});
+      const body = await writeDeployConfig(providerId, input);
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -2819,8 +2815,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId: rawProviderId = VERCEL_PROVIDER_ID } = req.body || {};
-      const providerId = resolveDeployProviderId(rawProviderId);
+      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'unsupported deploy provider',
+        );
+      }
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
@@ -2831,18 +2834,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         req.params.id,
         fileName,
       );
-      const result =
-        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-          ? await deployToCloudflarePages({
-              config: await readCloudflarePagesConfig(),
-              files,
-              projectId: req.params.id,
-            })
-          : await deployToVercel({
-              config: await readVercelConfig(),
-              files,
-              projectId: req.params.id,
-            });
+      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? await deployToCloudflarePages({
+            config: await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          })
+        : await deployToVercel({
+            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -2879,8 +2881,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
     try {
-      const { fileName, providerId: rawProviderId = VERCEL_PROVIDER_ID } = req.body || {};
-      const providerId = resolveDeployProviderId(rawProviderId);
+      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'unsupported deploy provider',
+        );
+      }
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
@@ -2936,7 +2945,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           statusMessage: result.reachable
             ? 'Public link is ready.'
             : result.statusMessage ||
-              'Provider is still preparing the public link.',
+              'Vercel is still preparing the public link.',
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });

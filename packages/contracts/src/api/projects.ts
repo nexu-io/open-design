@@ -173,10 +173,8 @@ export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
   tokenMask: string;
-  // Vercel-specific team routing. Empty for personal-account deploys.
-  teamId?: string;
-  teamSlug?: string;
-  // Cloudflare Pages-specific project routing.
+  teamId: string;
+  teamSlug: string;
   accountId?: string;
   projectName?: string;
   target: 'preview';
@@ -185,10 +183,8 @@ export interface DeployConfigResponse {
 export interface UpdateDeployConfigRequest {
   providerId?: DeployProviderId;
   token?: string;
-  // Vercel-specific team routing.
   teamId?: string;
   teamSlug?: string;
-  // Cloudflare Pages-specific project routing.
   accountId?: string;
   projectName?: string;
 }
