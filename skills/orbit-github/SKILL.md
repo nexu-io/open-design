@@ -25,31 +25,96 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit pipeline invokes this skill: GitHub is the user's only connected connector (or the briefing is explicitly scoped to GitHub). Pull the past 24h of PRs / review requests / issues / CI runs / merges from the user's authenticated GitHub connection and render a GitHub Notifications + PR-diff style briefing: black top nav bar + left rail (All / Unread / Mentions / Review requests) + main pane grouped by category (Review requests / CI / Issues / Activity). Use GitHub pill badges for state (open green / merged purple / closed red / CI fail red card)."
+  example_prompt: "Generate today's Open Orbit GitHub briefing. GitHub is my only connected connector — pull yesterday's PRs, review requests, issues, CI runs, and merges and render them as a GitHub Notifications + PR-diff page."
 ---
 
 # Orbit · GitHub Briefing
 
-Single-connector Orbit template scoped to GitHub. Renders the day's
-review requests, CI failures, assigned issues, and merged PRs in a
-layout that mirrors the GitHub Notifications + PR-diff visual language.
+Single-connector Orbit template scoped to GitHub. The shipped
+`example.html` in this folder is the source-of-truth design — match
+GitHub's native Primer chrome down to the spacing and pill colors.
 
-## Layout
+## Canvas tokens (use these exact values)
 
-- Top: GitHub black nav bar (octocat logo + search + notifications bell with count)
-- Left rail: All / Unread / Participating / Mentions / Review requests
-- Right pane: event stream grouped by type
-  - **Review requests waiting on you** — yellow-highlighted block
-  - **CI / Checks** — red border for failed runs
-  - **Issues assigned to you**
-  - **Activity** (merges, closes)
+```
+page bg:           #f6f8fa
+card bg:           #ffffff
+nav bar:           #24292f  /* GitHub black header */
+nav text:          #ffffff
+ink:               #1f2328
+muted:             #59636e
+border:            #d0d7de
+hairline:          rgba(208,215,222,0.32)
 
-## Style
+state · open:      #1a7f37
+state · merged:    #8250df
+state · closed:    #cf222e
+state · draft:     #6e7781
 
-- Light theme: `#FFFFFF` bg / `#F6F8FA` panels
-- Type stack: `-apple-system, "Segoe UI", sans-serif`
-- PR state pills: open `#1A7F37`, merged `#8250DF`, closed `#CF222E`
-- CI fail: red `✗` icon + `#FFEBE9` cell background
-- Avatars: round, with reviewer status dots (✓ green / ⏳ yellow / ○ gray)
-- Labels: GitHub rounded pills with their own colors
-- Footer: `Open Orbit · auto-generated 06:42`
+attention bg:      #fff8c5  /* yellow review-request block */
+attention border:  #d4a72c
+ci-fail bg:        #ffebe9
+ci-fail border:    #cf222e
+```
+
+Type stack:
+- `-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif`
+- Sizes: nav 14px, headings 16/20px, body 14px, meta 12px
+
+## Page sections
+
+1. **Top nav bar** — full-width, dark (`#24292f`), 60px tall.
+   Left: octocat SVG logo (white, 32px) + search input
+   (`rgba(255,255,255,0.08)` background, white placeholder ghosted).
+   Right: `+` plus dropdown, notifications bell with red dot if
+   unread > 0, round avatar.
+
+2. **Header row** — light bar under the nav, 56px.
+   Left: page breadcrumb `Inbox · Daily Digest · May 6`.
+   Right: filter dropdown chips (`Type ▾  Date ▾  Status ▾`).
+
+3. **Two-pane main**:
+   - **Left rail** (240px): vertical filter list. Items:
+     `Inbox · Saved · Done · All` then divider then
+     `Participating · Mentions · Review requests · Assigned · Comments`.
+     Active item: light gray pill background.
+   - **Main pane** (flex 1): event stream grouped by category.
+
+4. **Category groups in main pane** (in this order):
+   - **Review requests waiting on you** — yellow attention block
+     (bg `#fff8c5`, 1px border `#d4a72c`). Each row: avatar + repo
+     path + PR title + reviewer-state row of small dots
+     (✓ green / ⏳ yellow / ○ gray) + "X of Y reviewers" + age.
+   - **CI / Checks** — each failed run is a red-bordered card
+     (border-color `#cf222e`, bg `#ffebe9`) with a `✗` red glyph,
+     run name, branch name (mono), commit message, age.
+   - **Issues assigned to you** — plain rows, status circle (open
+     green / closed red), title, repo path, age, label pills.
+   - **Activity** — quieter rows for merges/closes; muted text,
+     small `merged` purple pill or `closed` red pill.
+
+5. **Optional PR-diff preview** — inline under one PR row, show
+   2–3 lines of mock code in a 12px monospace block with red `−` /
+   green `+` prefixed lines and `#ffebe9` / `#dafbe1` row tints.
+
+6. **Footer** — single line, 12px muted:
+   `Open Orbit · auto-generated 06:42 · GitHub only`.
+
+## Pill / chip rules
+
+- State pills: pill shape (border-radius 2em), 12px medium, 4×8 padding.
+  Foreground white, background by state color above.
+- Labels (`bug`, `p1`, `frontend` …): GitHub label rounded pill, each
+  with its own arbitrary color. Use varied real-world label hues.
+- Reviewer dots: 8px filled circles, 2px gap, with `✓ ⏳ ○` glyphs only
+  if you can keep them visually subtle.
+
+## Forbidden
+
+- Light/dark theme mixing (stay light)
+- Any non-GitHub typography
+- Rounded squares for avatars (always circles)
+- Drop shadows / gradients / glows
+- lorem ipsum
+- Treating CI failure as a normal row (must have red border)
+- Treating review requests as a normal row (must sit in yellow block)

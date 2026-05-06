@@ -3,15 +3,15 @@ name: orbit-general
 description: |
   Open Orbit briefing skill — selected by the Orbit pipeline when the
   user has two or more connectors connected. Pulls the past 24 hours of
-  activity from every authenticated connector (GitHub, Figma, Linear,
-  Notion, Slack, 飞书, Calendar, Gmail, Drive, Sentry, Vercel, …) and
-  renders a single adaptive bento-grid dashboard at the top of "我的
-  设计". Each connector module picks its own UI form (list, avatar
-  stack, status ring, heatmap, file grid, alert card, …) based on the
-  data shape it returns, so the layout scales as Orbit's connector
-  ecosystem grows. This skill should not be triggered manually — it is
-  invoked by Orbit's daily-digest scheduler against the user's live
-  connector data.
+  activity from every authenticated connector (GitHub, Linear, Notion,
+  Slack, 飞书, Calendar, Gmail, Drive, Sentry, Vercel, …) and renders a
+  single adaptive bento-grid dashboard at the top of "我的设计". Each
+  connector module picks its own UI form (list, avatar stack, status
+  ring, heatmap, file grid, alert card, …) based on the data shape it
+  returns, so the layout scales as Orbit's connector ecosystem grows.
+  This skill should not be triggered manually — it is invoked by
+  Orbit's daily-digest scheduler against the user's live connector
+  data.
 triggers:
   - "orbit"
   - "daily digest"
@@ -29,54 +29,108 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Orbit pipeline invokes this skill: the user has multiple connectors connected. Pull the past 24h of activity relevant to me from every authenticated source (GitHub / Linear / Notion / Slack / 飞书 / Calendar / Gmail / Drive / Sentry / Vercel / …) and render an editorial bento dashboard. Hero greeting + 5 KPI numbers + today's timeline + Top 3 priorities + 12–16 connector modules (each picks its own UI form by data shape: list / avatar stack / status ring / heatmap / file grid / alert card / …) + People waiting on you + Footer. Off-white canvas, serif KPI numerals, accent orange."
+  example_prompt: "Generate today's Open Orbit morning briefing. I have ~10 connectors connected (GitHub, Linear, Notion, Calendar, 飞书, Sentry, Vercel, Slack, Gmail, Drive). Pull yesterday's activity from each and render the editorial bento dashboard."
 ---
 
 # Orbit General Briefing
 
-Cross-connector morning briefing for Open Orbit. Sits at the top of
-"我的设计" once a day; aggregates the past 24h of activity from every
-connected connector into one bento surface.
+Cross-connector morning briefing that lives at the top of "我的设计".
+Pulls the past 24 hours of activity from every authenticated connector
+and lays them out as one editorial bento dashboard.
 
-## Connector → UI mapping
+The shipped `example.html` in this folder is the source-of-truth design.
+Reproduce its visual language faithfully — same canvas, same typography,
+same module shapes, same copy register.
 
-| Family        | Examples                       | UI                                    |
-|---------------|--------------------------------|---------------------------------------|
-| Code collab   | GitHub, GitLab                 | List + status pills + diff preview    |
-| Design collab | Figma, Sketch                  | Thumbnail + comment quote card        |
-| Task mgmt     | Linear, Jira, Asana            | Status dot list + cycle ring          |
-| Comms         | Gmail, Slack, 飞书 IM          | Avatar + quote summary                |
-| Knowledge     | Notion, Confluence, 飞书 Doc   | Doc card + paragraph snippet          |
-| Time          | Calendar                       | Horizontal timeline                   |
-| Alerts        | Sentry, Datadog                | Big red number + 7-day heatmap        |
-| Status        | Vercel, GitHub Actions         | Status indicator + recent builds      |
-| Files         | Drive, Dropbox                 | Filename list + thumbnails            |
-| Board         | Trello, Miro                   | Compact kanban + card chips           |
+## Canvas tokens (use these exact values)
 
-Unknown connectors fall into the closest family by data shape.
+```
+--bg:        #FAF7F2     /* off-white page */
+--surface:   #FFFFFF     /* card */
+--fg:        #1A1816     /* ink */
+--muted:     #6B6660     /* secondary text */
+--border:    #EAE5DD     /* 1px hairline only */
+--orange:    #D86A47     /* accent (CTAs, hero highlight, meeting blocks) */
+--green:     #2E7D5B     /* ok / done */
+--yellow:    #C9982E     /* waiting */
+--red:       #C0473A     /* alert / fail */
+--radius-l:  24px        /* outer container */
+--radius-m:  16px        /* bento cards */
+--radius-s:  12px        /* inner blocks */
+```
 
-## Required scaffolding
+Type stack:
+- Display serif: `'Cormorant', Georgia, serif` — KPI numerals, Hero h1,
+  Top 3 serial numbers, italic comment quotes
+- Body sans: `'Inter', -apple-system, system-ui, sans-serif`
+- Numbers: always `font-variant-numeric: tabular-nums`
 
-1. Hero — `☀ 早安, {name} · YYYY 年 M 月 D 日 · 星期X`
-2. KPI strip — five big serif numbers
-3. Today's timeline — 09:00→19:00 with meeting blocks + deep-work hints
-4. Top 3 priorities — three equal tiles with 96px serial numerals
-5. Connector modules — adaptive Bento, varies in size and form
-6. People waiting on you — overlapping circular avatars
-7. Footer — `Open Orbit · auto-generated 06:42 · N connectors`
+No shadows. No gradients. No emoji as primary visuals.
+Connector icons must be monochrome line SVG (1.5 stroke).
 
-## Style
+## Page sections (top to bottom)
 
-- 1440px wide, off-white `#FAF7F2` canvas, white cards
-- 1px `#EAE5DD` borders, no shadows, no gradients
-- Cormorant Garamond (KPI / numerals / hero) + Inter (body)
-- `#1A1816` ink, `#6B6660` muted, `#D86A47` accent
-- `#2E7D5B` ok / `#C9982E` waiting / `#C0473A` alert
-- Connector icons: monochrome line SVG. Never emoji.
+1. **Hero** — single row, ~80px tall.
+   Left: `☀ 早安, Eli` (Cormorant 38px, with `,` in `--orange`).
+   Right of name: `· 2026 年 5 月 6 日 · 星期三` (muted, 18px).
+   Far right: round avatar (40px) + small ⚙ + ✕ icons.
+
+2. **KPI strip** — single row, ~120px tall, 5 columns equal width.
+   Each cell: serif number (Cormorant 64px, `--fg`) over a muted
+   uppercase tracking label (Inter 11px, letter-spacing 0.06em).
+   Optional ▲/▼ delta tag in `--green`/`--red` next to the number.
+   Suggested labels: `待办 / 待 review / 会议 / @ 我 / agent 跑完`.
+
+3. **Today's timeline** — full width, ~140px tall.
+   Horizontal time axis from 09:00 → 19:00, hour ticks below.
+   Meeting blocks: filled `--orange` rounded rectangles spanning their
+   start/end, with the meeting name + attendee count inside.
+   Deep-work suggestions: pale-green translucent bands behind the axis.
+   "Now" indicator: a 1px vertical `--red` line with a pulsing dot
+   (`@keyframes pulse 2s ease-in-out infinite`) and a tiny `现在` label.
+
+4. **Top 3** — 3 equal cards, ~220px tall.
+   Each card: huge serif numeral 1 / 2 / 3 (Cormorant 96px, in `--fg`)
+   left-aligned; one-sentence task headline (Inter 18px medium); a
+   meta row at the bottom with the connector source label + line-icon
+   + `等待 Xh` waiting time. Cards have `--border` 1px outline only.
+
+5. **Connector modules** — adaptive bento, the heart of the briefing.
+   Render 10–16 modules. Sizes vary: data-rich connectors take a
+   2-column or 2-row span, simple ones stay 1×1. **No two modules
+   should look identical.** Pick UI per the data family below.
+
+6. **People waiting on you** — full-width strip ~110px tall.
+   Title left: `5 人在等你 · 最久 22h` (serif 24px).
+   Right: 5 overlapping circular avatars (44px, ~8px overlap), each
+   with the person's name + waiting reason underneath in 12px muted.
+
+7. **Footer** — single line, ~52px.
+   Left: `Open Orbit · auto-generated 06:42 · N connectors`.
+   Right: `由 Nexu Labs 出品`.
+   Border-top 1px, all text 12px muted.
+
+## Connector → UI mapping (pick the matching family)
+
+| Family        | Examples                       | UI form                                              |
+|---------------|--------------------------------|------------------------------------------------------|
+| Code collab   | GitHub, GitLab                 | Status-dot list (open/merged/closed/CI fail) + reviewer count, optional 2–3 line diff preview |
+| Task mgmt     | Linear, Jira, Asana            | Issue list with colored status dot + priority bars; for cycle, add a small ring or progress strip |
+| Comms         | Gmail, Slack, 飞书 IM          | Round avatar + one-line quote, accent color for "awaiting reply" |
+| Knowledge     | Notion, Confluence, 飞书 Doc   | Doc title + 2-line excerpt block; comment quote in italic serif |
+| Time          | Calendar                       | Already lives in the global timeline; module form: agenda list with start time gutter |
+| Alerts        | Sentry, Datadog, PagerDuty     | Big red Cormorant number (e.g. `4`), 7 small squares as 7-day heatmap, plus 1 latest error line |
+| Status        | Vercel, GH Actions, Netlify    | Colored status dot per recent build/deploy + branch + duration |
+| Files         | Drive, Dropbox                 | Filename list with tiny thumbnail squares + "edited by" attribution |
+| Board         | Trello, Miro                   | 3 compact kanban columns with rounded card chips |
+| Voice/Misc    | unknown connector              | Fall into closest family by data shape; default to status-dot list |
 
 ## Forbidden
 
-- Modules all looking identical
-- Lorem ipsum
-- Alert connectors rendered as plain lists
-- Time connectors rendered as plain text
+- All modules in identical card form
+- Lorem ipsum or filler copy
+- Rendering Sentry/PagerDuty as a plain list (must look alert-y)
+- Rendering Calendar as plain text (must visualize time)
+- Mixing emoji and SVG icons inconsistently
+- Rounded-square avatars (must be circles)
+- Drop shadows, gradients, glows
