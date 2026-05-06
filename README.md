@@ -481,7 +481,12 @@ inputs.open-design.url = "github:nexu-io/open-design";
 
 ```bash
 nix run github:nexu-io/open-design       # boot the daemon (`od`) without installing
-nix develop github:nexu-io/open-design   # dev shell pinned to Node 24 + pnpm 10.33
+```
+
+For developers, a Nix dev shell is available and can be used with `direnv` too:
+
+```bash
+nix develop   # dev shell with required dependencies to work on Open Design
 ```
 
 
