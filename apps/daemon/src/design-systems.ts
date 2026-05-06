@@ -111,8 +111,11 @@ function extractSwatches(raw) {
     seen.add(key);
     colors.push({ name: cleanName, value: v });
   }
-  // Form A: "- **Background:** `#FAFAFA`"
-  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*\**\s*[:：]\s*`?(#[0-9a-fA-F]{3,8})/gm;
+  // Form A: "- **Background:** `#FAFAFA`" — the colon may sit inside the
+  // bold markers (`**Name:**`) or outside them (`**Name**:`). Both variants
+  // are common in hand-authored DESIGN.md files, so we allow the colon in
+  // either position around the closing `**`.
+  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
   let m;
   while ((m = reA.exec(raw)) !== null) push(m[1], m[2]);
   // Form B: "**Stripe Purple** (`#533afd`)"

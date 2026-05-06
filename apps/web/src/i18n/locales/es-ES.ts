@@ -282,6 +282,7 @@ export const esES: Dict = {
   'examples.modePrototypeMobile': 'Prototipos · Móvil',
   'examples.modeDeck': 'Diapositivas',
   'examples.modeDocument': 'Documentos y plantillas',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': 'General',
   'examples.scenarioEngineering': 'Ingeniería',
   'examples.scenarioProduct': 'Producto',

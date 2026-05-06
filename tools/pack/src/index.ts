@@ -27,10 +27,13 @@ import {
 import {
   cleanupPackedLinuxNamespace,
   installPackedLinuxApp,
+  installPackedLinuxHeadless,
   packLinux,
   readPackedLinuxLogs,
   startPackedLinuxApp,
+  startPackedLinuxHeadless,
   stopPackedLinuxApp,
+  stopPackedLinuxHeadless,
   uninstallPackedLinuxApp,
 } from "./linux.js";
 
@@ -179,6 +182,7 @@ addWinLifecycleOptions(
 
 addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "linux")
   .option("--containerized", "build inside electronuserland/builder Docker for distro-agnostic glibc compat")
+  .option("--headless", "install/start/stop the headless (no-Electron) entry instead of the full desktop app")
   .action(async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("linux", options);
     switch (action) {
@@ -186,13 +190,13 @@ addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging 
         printJson(await packLinux(config));
         return;
       case "install":
-        printJson(await installPackedLinuxApp(config));
+        printJson(await (options.headless ? installPackedLinuxHeadless(config) : installPackedLinuxApp(config)));
         return;
       case "start":
-        printJson(await startPackedLinuxApp(config));
+        printJson(await (options.headless ? startPackedLinuxHeadless(config) : startPackedLinuxApp(config)));
         return;
       case "stop":
-        printJson(await stopPackedLinuxApp(config));
+        printJson(await (options.headless ? stopPackedLinuxHeadless(config) : stopPackedLinuxApp(config)));
         return;
       case "logs":
         printLogs(await readPackedLinuxLogs(config), options);

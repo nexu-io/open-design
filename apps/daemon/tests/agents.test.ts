@@ -43,6 +43,7 @@ const originalHome = process.env.HOME;
 const originalAgentHome = process.env.OD_AGENT_HOME;
 const originalDaemonUrl = process.env.OD_DAEMON_URL;
 const originalToolToken = process.env.OD_TOOL_TOKEN;
+const originalNpmConfigPrefix = process.env.NPM_CONFIG_PREFIX;
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -71,6 +72,11 @@ afterEach(() => {
     delete process.env.OD_TOOL_TOKEN;
   } else {
     process.env.OD_TOOL_TOKEN = originalToolToken;
+  }
+  if (originalNpmConfigPrefix == null) {
+    delete process.env.NPM_CONFIG_PREFIX;
+  } else {
+    process.env.NPM_CONFIG_PREFIX = originalNpmConfigPrefix;
   }
   globalThis.fetch = originalFetch;
 });
@@ -922,6 +928,100 @@ fsTest(
       assert.equal(resolved, join(dir, 'codex'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+// Issue #442: GUI-launched daemons (Finder/Dock on macOS, .desktop on Linux)
+// inherit a stripped PATH that doesn't include the user's npm global prefix.
+// Most third-party "fix npm EACCES without sudo" tutorials configure
+// `~/.npm-global` as the prefix, so any CLI installed via `npm i -g <cli>`
+// lives at `~/.npm-global/bin/<cli>`. The daemon must search there even when
+// the inherited PATH only carries `/usr/bin:/bin:...`.
+fsTest(
+  'resolveAgentExecutable searches ~/.npm-global/bin under a minimal GUI-launched PATH (issue #442)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-npm-global-'));
+    try {
+      const dir = join(home, '.npm-global', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'gemini'), '');
+      chmodSync(join(dir, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      // Mirror the launchd default a `.app` actually inherits — no
+      // `~/.npm-global/bin`, no `/opt/homebrew/bin`, nothing user-side.
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      assert.equal(resolved, join(dir, 'gemini'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+// Same root cause as #442 but for the second-most-common alternative
+// non-canonical npm prefix shipped in older "fix sudo-free npm" guides.
+fsTest(
+  'resolveAgentExecutable also searches ~/.npm-packages/bin (alt npm prefix)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-npm-packages-'));
+    try {
+      const dir = join(home, '.npm-packages', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'gemini'), '');
+      chmodSync(join(dir, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      assert.equal(resolved, join(dir, 'gemini'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+// Test isolation: when OD_AGENT_HOME points at a sandbox, an exported
+// $NPM_CONFIG_PREFIX / $npm_config_prefix on the developer's or CI
+// runner's environment must not leak a real <prefix>/bin into the
+// sandboxed search list. Otherwise an agent installed by the host
+// machine could satisfy a "not on PATH" assertion in the sandbox and
+// make detection tests environment-dependent. Raised in PR review on
+// #442 (review comment by @mrcfps on apps/daemon/src/agents.ts:742).
+fsTest(
+  'OD_AGENT_HOME isolates resolution from $NPM_CONFIG_PREFIX leakage',
+  () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-sandbox-'));
+    const realPrefix = mkdtempSync(join(tmpdir(), 'od-agents-real-prefix-'));
+    const realPrefixBin = join(realPrefix, 'bin');
+    try {
+      // Sandbox is empty — gemini does not exist under OD_AGENT_HOME.
+      // Real prefix has a gemini, simulating the developer's /opt/...
+      // or ~/.npm-global install. NPM_CONFIG_PREFIX points at it.
+      mkdirSync(realPrefixBin, { recursive: true });
+      writeFileSync(join(realPrefixBin, 'gemini'), '');
+      chmodSync(join(realPrefixBin, 'gemini'), 0o755);
+
+      process.env.OD_AGENT_HOME = sandbox;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.NPM_CONFIG_PREFIX = realPrefix;
+
+      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      assert.equal(
+        resolved,
+        null,
+        `OD_AGENT_HOME sandbox must not see the real $NPM_CONFIG_PREFIX bin; ` +
+          `got ${resolved}`,
+      );
+    } finally {
+      // afterEach restores NPM_CONFIG_PREFIX to its pre-test value (or
+      // deletes it when it was unset), so do not unconditionally
+      // `delete` it here — that would clobber an export the developer
+      // / CI runner had already set, leaking into the next test in the
+      // same Vitest worker.
+      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(realPrefix, { recursive: true, force: true });
     }
   },
 );

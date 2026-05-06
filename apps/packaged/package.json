@@ -10,6 +10,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./headless": {
+      "default": "./dist/headless.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [

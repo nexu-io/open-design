@@ -222,7 +222,7 @@
 
 ### 1 · لا نشحن وكيلاً، وكيلك كافٍ
 
-الـ daemon يمسح `PATH` بحثاً عن [`claude`](https://docs.anthropic.com/en/docs/claude-code) و [`codex`](https://github.com/openai/codex) و `devin` و [`cursor-agent`](https://www.cursor.com/cli) و [`gemini`](https://github.com/google-gemini/gemini-cli) و [`opencode`](https://opencode.ai/) و [`qwen`](https://github.com/QwenLM/qwen-code) و `qodercli` و [`copilot`](https://github.com/features/copilot/cli) و `hermes` و `kimi` و [`pi`](https://github.com/mariozechner/pi-ai) و [`kiro-cli`](https://kiro.dev) و [`vibe-acp`](https://github.com/mistralai/mistral-vibe) عند الإقلاع. ما يجده يصبح محرّك تصميم مرشّحاً — يُشغَّل عبر stdio بـ adapter لكل CLI، قابل للتبديل من الـ model picker. الإلهام من [`multica`](https://github.com/multica-ai/multica) و [`cc-switch`](https://github.com/farion1231/cc-switch). لا CLI مثبتة؟ وضع API هو نفس خط الأنابيب بدون spawn — اختر Anthropic أو متوافق مع OpenAI أو Azure OpenAI أو Google Gemini ويُعيد الـ daemon توجيه قطع SSE المُطبَّعة، مع رفض loopback / link-local / RFC1918 عند الحدّ.
+الـ daemon يمسح `PATH` بحثاً عن [`claude`](https://docs.anthropic.com/en/docs/claude-code) و [`codex`](https://github.com/openai/codex) و `devin` و [`cursor-agent`](https://www.cursor.com/cli) و [`gemini`](https://github.com/google-gemini/gemini-cli) و [`opencode`](https://opencode.ai/) و [`qwen`](https://github.com/QwenLM/qwen-code) و `qodercli` و [`copilot`](https://github.com/features/copilot/cli) و `hermes` و `kimi` و [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) و [`kiro-cli`](https://kiro.dev) و [`vibe-acp`](https://github.com/mistralai/mistral-vibe) عند الإقلاع. ما يجده يصبح محرّك تصميم مرشّحاً — يُشغَّل عبر stdio بـ adapter لكل CLI، قابل للتبديل من الـ model picker. الإلهام من [`multica`](https://github.com/multica-ai/multica) و [`cc-switch`](https://github.com/farion1231/cc-switch). لا CLI مثبتة؟ وضع API هو نفس خط الأنابيب بدون spawn — اختر Anthropic أو متوافق مع OpenAI أو Azure OpenAI أو Google Gemini ويُعيد الـ daemon توجيه قطع SSE المُطبَّعة، مع رفض loopback / link-local / RFC1918 عند الحدّ.
 
 ### 2 · الـ Skills ملفات، لا plugins
 
@@ -321,6 +321,8 @@ pnpm install
 pnpm tools-dev run web
 # open the web URL printed by tools-dev
 ```
+
+مشغّل Windows: ابنِ `OpenDesign.exe` بنفسك باتباع التعليمات في `tools/launcher/README.md`، أو نزّله من GitHub Releases. بعد ذلك ضعه في جذر المستودع وانقر عليه مرتين ليشغّل `pnpm install` عند الحاجة ثم يبدأ Open Design عبر `pnpm tools-dev`.
 
 متطلّبات البيئة: Node `~24` و pnpm `10.33.x`. أدوات `nvm`/`fnm` اختيارية فقط؛ إن استخدمت إحداها فشغّل `nvm install 24 && nvm use 24` أو `fnm install 24 && fnm use 24` قبل `pnpm install`.
 
@@ -694,7 +696,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -720,7 +722,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (البرومبت يُرسل كأمر RPC `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (البرومبت يُرسل كأمر RPC `prompt`) |
 | **BYOK متعدّد المزوّدين** | n/a | تطبيع SSE | `POST /api/proxy/{provider}/stream` → Anthropic / متوافق OpenAI / Azure OpenAI / Gemini؛ محمي SSRF ضد loopback / link-local / RFC1918 |
 
 إضافة CLI جديدة = مدخل واحد في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). صيغة البثّ واحدة من `claude-stream-json` أو `qoder-stream-json` أو `copilot-stream-json` أو `json-event-stream` (مع `eventParser` لكل CLI) أو `acp-json-rpc` أو `pi-rpc` أو `plain`.

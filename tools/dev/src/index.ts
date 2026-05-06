@@ -607,8 +607,10 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
       status,
     };
   } catch (error) {
+    const logPath = config.apps.web.latestLogPath;
+    const lines = await readLogTail(logPath, 80).catch(() => []);
     await stopApp(config, APP_KEYS.WEB).catch(() => undefined);
-    throw error;
+    throw appendStartupLogDiagnostics(error, APP_KEYS.WEB, createStartupLogDiagnostics(logPath, lines));
   }
 }
 
