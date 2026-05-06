@@ -249,14 +249,16 @@
     background: #E8E4DE;
     border-radius: var(--radius-s);
     margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     position: relative;
     overflow: hidden;
   }
-  .figma-hero-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
+  .figma-hero-thumb .placeholder-label {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
   }
   .figma-comment {
     font-family: var(--font-display);
@@ -905,7 +907,7 @@
       <div class="bento-body" style="display:flex;gap:20px;">
         <div style="flex:1;">
           <div class="figma-hero-thumb">
-            <img src="https://images.unsplash.com/photo-1559028012-481c04fa702d?w=900&q=80&auto=format&fit=crop" alt="Onboarding Flow v3" loading="lazy" />
+            <span class="placeholder-label">Onboarding Flow v3</span>
           </div>
           <div class="figma-comment">"v3 的转化路径比 v2 短了一步，节奏更顺——周三前能出 hi-fi 让我们跑一轮用户测试吗？"</div>
           <div class="figma-comment-author">Yuki · 2 小时前</div>

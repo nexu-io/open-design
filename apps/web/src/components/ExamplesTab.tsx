@@ -361,7 +361,41 @@ function ExampleCard({
   const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [intersected, setIntersected] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  // Eagerly request the preview HTML once the card scrolls near the viewport.
+  // The 800px bottom rootMargin prefetches cards that are about to be
+  // scrolled into view so the iframe is ready by the time the user reaches
+  // it. Hover (below) is kept as a fallback for environments that lack
+  // IntersectionObserver or for cards already visible on first paint that
+  // somehow miss the initial observation.
+  useEffect(() => {
+    if (intersected) return;
+    const node = cardRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIntersected(true);
+      onLoad();
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setIntersected(true);
+            onLoad();
+            obs.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '0px 0px 800px 0px' },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [intersected, onLoad]);
 
   useEffect(() => {
     if (!shareOpen) return;
@@ -388,6 +422,7 @@ function ExampleCard({
 
   return (
     <div
+      ref={cardRef}
       className="example-card"
       data-testid={`example-card-${skill.id}`}
       onMouseEnter={() => {
@@ -423,7 +458,7 @@ function ExampleCard({
           </>
         ) : (
           <div className="example-preview-placeholder">
-            {hovered
+            {hovered || intersected
               ? t('examples.loadingPreview')
               : t('examples.hoverPreview')}
           </div>
