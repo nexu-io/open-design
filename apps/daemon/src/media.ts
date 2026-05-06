@@ -58,6 +58,9 @@ import {
 } from './projects.js';
 
 const execFile = promisify(execFileCb);
+const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
+const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -361,6 +364,11 @@ export async function generateMedia(args) {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'grok' && surface === 'video') {
       const result = await renderGrokVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'nanobanana' && surface === 'image') {
+      const result = await renderNanoBananaImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1034,6 +1042,83 @@ async function renderGrokImage(ctx, credentials) {
     providerNote: `grok/${ctx.model} · ${aspectRatio} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
+}
+
+async function renderNanoBananaImage(ctx, credentials) {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || NANOBANANA_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireModel = (credentials.model || ctx.model || NANOBANANA_DEFAULT_MODEL).trim();
+  const body = {
+    contents: [{
+      parts: [{
+        text: ctx.prompt || 'A high-quality reference image.',
+      }],
+    }],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+      imageConfig: {
+        aspectRatio: nanoBananaAspectFor(ctx.aspect),
+        imageSize: NANOBANANA_DEFAULT_IMAGE_SIZE,
+      },
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`nano-banana image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`nano-banana image non-JSON: ${truncate(text, 200)}`);
+  }
+  const bytes = inlineImageBytesFromGenerateContent(data);
+  return {
+    bytes,
+    providerNote: `nano-banana/${wireModel} · ${nanoBananaAspectFor(ctx.aspect)} · ${NANOBANANA_DEFAULT_IMAGE_SIZE} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function nanoBananaAspectFor(aspect) {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+function inlineImageBytesFromGenerateContent(data) {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    for (const part of parts) {
+      const inline = part?.inlineData;
+      if (typeof inline?.data === 'string' && inline.data) {
+        return Buffer.from(inline.data, 'base64');
+      }
+    }
+  }
+  throw new Error('nano-banana image response missing candidates[].content.parts[].inlineData.data');
 }
 
 function sniffImageExt(bytes) {

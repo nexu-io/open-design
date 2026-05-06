@@ -1168,13 +1168,13 @@ function MediaProvidersSection({
     });
   const updateProvider = (
     provider: MediaProvider,
-    patch: { apiKey?: string; baseUrl?: string },
+    patch: { apiKey?: string; baseUrl?: string; model?: string },
   ) => {
     setCfg((curr) => {
-      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '' };
+      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
       const map = { ...(curr.mediaProviders ?? {}) };
-      if (!next.apiKey.trim() && !next.baseUrl.trim()) {
+      if (!next.apiKey.trim() && !next.baseUrl.trim() && !next.model?.trim()) {
         delete map[provider.id];
       } else {
         map[provider.id] = next;
@@ -1193,9 +1193,11 @@ function MediaProvidersSection({
       </div>
       <div className="media-provider-list">
         {providers.map((provider) => {
-          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '' };
+          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
           const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
           const disabled = !provider.integrated;
+          const supportsCustomModel = provider.id === 'nanobanana';
+          const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
@@ -1230,11 +1232,20 @@ function MediaProvidersSection({
                   disabled={disabled}
                   onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
                 />
+                {supportsCustomModel ? (
+                  <input
+                    value={entry.model ?? ''}
+                    placeholder="gemini-3.1-flash-image-preview"
+                    aria-label={`${provider.label} model`}
+                    disabled={disabled}
+                    onChange={(e) => updateProvider(provider, { model: e.target.value })}
+                  />
+                ) : null}
                 <button
                   type="button"
                   className="ghost"
-                  disabled={!configured}
-                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '' })}
+                  disabled={!clearable}
+                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '', model: '' })}
                 >
                   {t('settings.mediaProviderClear')}
                 </button>
