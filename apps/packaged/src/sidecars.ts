@@ -74,10 +74,32 @@ async function openLog(path: string): Promise<FileHandle> {
   return await open(path, "w");
 }
 
+const DAEMON_STATUS_TIMEOUT_MS = 35_000;
+const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Daemon status wait budget. The default 35s is fine for normal cold
+ * boots, but the OD_LEGACY_DATA_DIR one-shot recovery flow can synch-
+ * copy a multi-GB legacy `.od/` payload before SQLite even opens, and
+ * killing the child mid-migration can leave dataDir half-promoted.
+ * When the env var is set, use a 30-minute budget so the parent will
+ * not tear the daemon down before the migration can complete.
+ *
+ * @see apps/daemon/src/legacy-data-migrator.ts
+ * @see https://github.com/nexu-io/open-design/issues/710
+ */
+export function resolveDaemonStatusTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.OD_LEGACY_DATA_DIR;
+  if (raw != null && raw.length > 0) return DAEMON_MIGRATION_STATUS_TIMEOUT_MS;
+  return DAEMON_STATUS_TIMEOUT_MS;
+}
+
 async function waitForStatus<T>(
   ipcPath: string,
   isReady: (status: T) => boolean,
-  timeoutMs = 35_000,
+  timeoutMs = DAEMON_STATUS_TIMEOUT_MS,
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
@@ -262,6 +284,7 @@ export async function startPackagedSidecars(
     const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
       daemon.ipcPath,
       (status) => status.url != null,
+      resolveDaemonStatusTimeoutMs(),
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
 

@@ -52,6 +52,15 @@ export interface MigrateLegacyDataDirOptions {
     info(message: string): void;
     warn(message: string): void;
   };
+  /**
+   * Test seam. The default writes the JSON `.migrated-from` marker
+   * with fs.writeFileSync; tests inject a function that throws so the
+   * rollback path (which removes already-promoted payload entries) can
+   * be exercised without contriving real ENOSPC / read-only conditions.
+   * Production callers should never pass this.
+   * @internal
+   */
+  writeMarker?: (dataDir: string, legacyDir: string) => void;
 }
 
 export type MigrateStatus = 'noop' | 'migrated' | 'skipped';
@@ -198,19 +207,28 @@ function stagePayload(legacyDir: string, stagingDir: string): string[] {
  * moved with renameSync (atomic on the same filesystem); if rename
  * fails (cross-device, etc.) we fall back to copy + remove.
  *
- * Promotion is rollback-safe: we track every entry that was moved
- * into dataDir, and on any failure mid-loop we remove those promoted
- * entries before rethrowing. Without the rollback, a failure after
- * app.sqlite was already promoted (ENOSPC, permissions, etc.) would
- * leave the real dataDir with app.sqlite but no marker, and the next
- * boot would refuse the retry under data_dir_not_empty, stranding
- * the user mid-migration.
+ * Promotion is rollback-safe in two layers:
+ *
+ *   1. The cpSync fallback is wrapped in its own try/catch and removes
+ *      whatever was partially written at dst before bubbling up. Without
+ *      this, a partial dst would survive the outer rollback because the
+ *      entry never makes it into the `promoted` array.
+ *   2. The outer try/catch tracks every entry that has been fully moved
+ *      into dataDir and removes them all before rethrowing. Without it,
+ *      a mid-loop failure after app.sqlite was already promoted would
+ *      leave the real dataDir with app.sqlite but no marker, and the
+ *      next boot would refuse the retry under data_dir_not_empty,
+ *      stranding the user mid-migration.
+ *
+ * Returns the list of entries that were placed into dataDir so the
+ * caller can roll them back if a *subsequent* step (e.g. writing the
+ * .migrated-from marker) fails after promotion has already succeeded.
  */
 export function promoteStaged(
   stagingDir: string,
   dataDir: string,
   entries: readonly string[],
-): void {
+): readonly string[] {
   fs.mkdirSync(dataDir, { recursive: true });
   const promoted: string[] = [];
   try {
@@ -221,20 +239,34 @@ export function promoteStaged(
         fs.renameSync(src, dst);
       } catch {
         // EXDEV (cross-device) or similar: fall back to copy + remove.
-        fs.cpSync(src, dst, {
-          recursive: true,
-          force: true,
-          errorOnExist: false,
-        });
-        fs.rmSync(src, { recursive: true, force: true });
+        // The fallback is its own protected unit so a partial dst
+        // (cpSync started writing then failed on ENOSPC, permissions,
+        // an interrupted handle, etc.) does not survive into dataDir
+        // unrecorded.
+        try {
+          fs.cpSync(src, dst, {
+            recursive: true,
+            force: true,
+            errorOnExist: false,
+          });
+          fs.rmSync(src, { recursive: true, force: true });
+        } catch (cpErr) {
+          fs.rmSync(dst, { recursive: true, force: true });
+          throw cpErr;
+        }
       }
       promoted.push(entry);
     }
   } catch (err) {
-    for (const entry of promoted) {
-      fs.rmSync(path.join(dataDir, entry), { recursive: true, force: true });
-    }
+    rollbackPromoted(dataDir, promoted);
     throw err;
+  }
+  return promoted;
+}
+
+function rollbackPromoted(dataDir: string, promoted: readonly string[]): void {
+  for (const entry of promoted) {
+    fs.rmSync(path.join(dataDir, entry), { recursive: true, force: true });
   }
 }
 
@@ -311,12 +343,19 @@ export function migrateLegacyDataDirSync(
   );
 
   let copied: string[];
+  let promoted: readonly string[] = [];
   try {
     copied = stagePayload(legacyDir, stagingDir);
-    promoteStaged(stagingDir, dataDir, copied);
-    writeMarker(dataDir, legacyDir);
+    promoted = promoteStaged(stagingDir, dataDir, copied);
+    // writeMarker is the last step that can fail (ENOSPC, read-only
+    // dataDir, permissions). If it does, the payload entries are
+    // already in dataDir but no marker was written; the next boot
+    // would hit dataDirHasExistingPayload() and throw data_dir_not_empty,
+    // making the migration un-retryable. Rolling back the promoted
+    // entries here keeps the failure as a unit with promotion.
+    (options.writeMarker ?? writeMarker)(dataDir, legacyDir);
   } catch (err) {
-    // Best-effort cleanup of the staging dir so the user can retry.
+    rollbackPromoted(dataDir, promoted);
     fs.rmSync(stagingDir, { recursive: true, force: true });
     throw err;
   }

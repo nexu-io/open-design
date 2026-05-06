@@ -342,14 +342,59 @@ describe('migrateLegacyDataDirSync', () => {
 
     // app.sqlite was promoted on the first iteration. The rollback
     // must have removed it before rethrowing, so the user's retry
-    // does not get blocked under data_dir_not_empty.
-    expect(fs.existsSync(path.join(dataDir, 'app.sqlite'))).toBe(false);
+    // does not get blocked under data_dir_not_empty. Stronger check:
+    // dataDir is free of *every* payload entry, which also catches
+    // the cpSync-fallback partial-write scenario (rename throws,
+    // cpSync starts writing dst, fails; the dst-cleanup inside
+    // promoteStaged plus the outer rollback together must leave a
+    // clean dataDir).
+    expect(dataDirHasExistingPayload(dataDir)).toEqual([]);
 
     fs.rmSync(stagingDir, { recursive: true, force: true });
-    fs.rmSync(path.join(dataDir, 'app-config.json'), {
-      recursive: true,
-      force: true,
+  });
+
+  it('rolls back promoted payload when writeMarker fails after promotion', () => {
+    // mrcfps round-4: writeMarker is the last step that can fail
+    // (ENOSPC, read-only target, permissions). If it does, payload
+    // entries are already in dataDir but no marker was written; the
+    // next boot would hit dataDirHasExistingPayload and throw
+    // data_dir_not_empty, making the migration un-retryable.
+    seedLegacyDir(legacyDir);
+
+    let captured: unknown;
+    try {
+      migrateLegacyDataDirSync({
+        legacyDir,
+        dataDir,
+        logger: makeLogger(),
+        writeMarker: () => {
+          const e = new Error('synthetic ENOSPC writing marker') as NodeJS.ErrnoException;
+          e.code = 'ENOSPC';
+          throw e;
+        },
+      });
+    } catch (err) {
+      captured = err;
+    }
+    expect(captured).toBeInstanceOf(Error);
+
+    // Every payload entry that promoteStaged placed into dataDir must
+    // be gone so the next boot is not refused under data_dir_not_empty.
+    expect(dataDirHasExistingPayload(dataDir)).toEqual([]);
+    // And no real marker was written, so the idempotency check on the
+    // next boot does not falsely short-circuit.
+    expect(fs.existsSync(path.join(dataDir, '.migrated-from'))).toBe(false);
+
+    // Once the underlying disk/permissions issue is fixed, a clean
+    // retry without the failure injection actually succeeds.
+    const result = migrateLegacyDataDirSync({
+      legacyDir,
+      dataDir,
+      logger: makeLogger(),
     });
+    expect(result.status).toBe('migrated');
+    expect(fs.existsSync(path.join(dataDir, 'app.sqlite'))).toBe(true);
+    expect(fs.existsSync(path.join(dataDir, '.migrated-from'))).toBe(true);
   });
 });
 
