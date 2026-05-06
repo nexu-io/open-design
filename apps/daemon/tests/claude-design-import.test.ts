@@ -99,12 +99,20 @@ describe('importClaudeDesignZip', () => {
     }
   });
 
-  it('handles entries whose central directory advertises uncompressedSize=0', async () => {
+  it('preserves the real payload when the central directory under-reports size to 0', async () => {
+    // Streaming zips (data descriptor, flag bit 3) legitimately leave central
+    // uncompressedSize = 0 while the payload carries real bytes. Earlier
+    // attempts to "fast-path" those entries silently truncated valid files;
+    // verify the actual deflated content is decoded and written through.
+    const realBody = Buffer.from(
+      '# streamed entry\n\n' + 'x'.repeat(4096) + '\n',
+      'utf8',
+    );
     const zip = buildZip([
       { name: 'index.html', body: Buffer.from('<html></html>') },
       {
         name: 'docs/streamed.md',
-        body: Buffer.alloc(0),
+        body: realBody,
         falsifyCentralUncompressed: true,
       },
     ]);
@@ -115,6 +123,32 @@ describe('importClaudeDesignZip', () => {
     try {
       const result = await importClaudeDesignZip(zipPath, projectDir);
       expect(result.files).toContain('docs/streamed.md');
+      const written = readFileSync(path.join(projectDir, 'docs/streamed.md'));
+      expect(written.equals(realBody)).toBe(true);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects entries that decode larger than MAX_FILE_BYTES even when central size is 0', async () => {
+    // The central directory cannot be trusted to enforce the per-file ceiling
+    // for streaming zips. Build a fixture whose decoded payload is just barely
+    // beyond the limit and confirm we still fail closed.
+    const oversized = Buffer.alloc(25 * 1024 * 1024 + 1, 0x61);
+    const zip = buildZip([
+      { name: 'index.html', body: Buffer.from('<html></html>') },
+      {
+        name: 'docs/oversize.bin',
+        body: oversized,
+        falsifyCentralUncompressed: true,
+      },
+    ]);
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'cd-import-'));
+    const zipPath = path.join(tmp, 'in.zip');
+    const projectDir = path.join(tmp, 'proj');
+    writeFileSync(zipPath, zip);
+    try {
+      await expect(importClaudeDesignZip(zipPath, projectDir)).rejects.toThrow();
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
