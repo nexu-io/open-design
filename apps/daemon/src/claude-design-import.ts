@@ -102,6 +102,7 @@ function findEndOfCentralDirectory(zip) {
 }
 
 function readEntryBody(zip, entry) {
+  if (entry.uncompressedSize === 0) return Buffer.alloc(0);
   const offset = entry.localOffset;
   if (zip.readUInt32LE(offset) !== LOCAL_SIG) {
     throw new Error(`invalid zip local header: ${entry.name}`);
