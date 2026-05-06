@@ -16,6 +16,7 @@ import {
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
+  detectAgents,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
@@ -35,6 +36,7 @@ const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
 const pi = AGENT_DEFS.find((agent) => agent.id === 'pi');
 const deepseek = AGENT_DEFS.find((agent) => agent.id === 'deepseek');
 const gemini = AGENT_DEFS.find((agent) => agent.id === 'gemini');
+const qoder = AGENT_DEFS.find((agent) => agent.id === 'qoder');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
@@ -437,6 +439,88 @@ test('gemini args preserve custom model selection', () => {
     '--model',
     'gemini-2.5-pro',
   ]);
+});
+
+test('qoder entry uses qodercli with stream-json stdin delivery and tier model hints', () => {
+  assert.equal(qoder.name, 'Qoder CLI');
+  assert.equal(qoder.bin, 'qodercli');
+  assert.deepEqual(qoder.versionArgs, ['--version']);
+  assert.equal(qoder.promptViaStdin, true);
+  assert.equal(qoder.streamFormat, 'qoder-stream-json');
+  assert.deepEqual(qoder.fallbackModels.map((m) => m.id), [
+    'default',
+    'lite',
+    'efficient',
+    'auto',
+    'performance',
+    'ultimate',
+  ]);
+});
+
+test('qoder args use non-interactive print mode with cwd, model, and add-dir', () => {
+  const args = qoder.buildArgs(
+    'prompt must not appear in argv',
+    [],
+    ['/repo/skills', '', null, '/repo/design-systems'],
+    { model: 'performance' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(args, [
+    '-p',
+    '--output-format',
+    'stream-json',
+    '--permission-mode',
+    'bypass_permissions',
+    '--cwd',
+    '/tmp/od-project',
+    '--model',
+    'performance',
+    '--add-dir',
+    '/repo/skills',
+    '--add-dir',
+    '/repo/design-systems',
+  ]);
+  assert.equal(args.includes('prompt must not appear in argv'), false);
+});
+
+test('qoder args omit default model and cwd when absent', () => {
+  const args = qoder.buildArgs('', [], [], { model: 'default' }, {});
+
+  assert.deepEqual(args, [
+    '-p',
+    '--output-format',
+    'stream-json',
+    '--permission-mode',
+    'bypass_permissions',
+  ]);
+  assert.equal(args.includes('--model'), false);
+  assert.equal(args.includes('--cwd'), false);
+});
+
+test('detectAgents keeps qoder unavailable with fallback metadata when qodercli is missing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-empty-'));
+  try {
+    process.env.OD_AGENT_HOME = dir;
+    process.env.PATH = dir;
+
+    const agents = await detectAgents();
+    const detected = agents.find((agent) => agent.id === 'qoder');
+
+    assert.ok(detected);
+    assert.equal(detected.available, false);
+    assert.equal(detected.bin, 'qodercli');
+    assert.deepEqual(detected.models.map((m) => m.id), [
+      'default',
+      'lite',
+      'efficient',
+      'auto',
+      'performance',
+      'ultimate',
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {

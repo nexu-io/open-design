@@ -2,7 +2,7 @@
 
 # Open Design
 
-> **البديل مفتوح المصدر لـ [Claude Design][cd].** يعمل محلياً أولاً، قابل للنشر على Vercel، ويدعم BYOK في كل طبقة — **13 أداة CLI لوكلاء البرمجة** يكتشفها تلقائياً من `PATH` (Claude Code، Codex، Devin for Terminal، Cursor Agent، Gemini CLI، OpenCode، Qwen، GitHub Copilot CLI، Hermes، Kimi، Pi، Kiro، Mistral Vibe) لتصبح هي محرّك التصميم، مدفوعةً بـ **31 Skill قابلة للتركيب** و**72 نظام تصميم بمستوى الهوية البصرية**. لا توجد لديك CLI؟ بروكسي BYOK متوافق مع OpenAI يقدّم نفس الحلقة بدون عملية الـ spawn.
+> **البديل مفتوح المصدر لـ [Claude Design][cd].** يعمل محلياً أولاً، قابل للنشر على Vercel، ويدعم BYOK في كل طبقة — **14 أداة CLI لوكلاء البرمجة** يكتشفها تلقائياً من `PATH` (Claude Code، Codex، Devin for Terminal، Cursor Agent، Gemini CLI، OpenCode، Qwen، Qoder CLI، GitHub Copilot CLI، Hermes، Kimi، Pi، Kiro، Mistral Vibe) لتصبح هي محرّك التصميم، مدفوعةً بـ **31 Skill قابلة للتركيب** و**72 نظام تصميم بمستوى الهوية البصرية**. لا توجد لديك CLI؟ بروكسي BYOK متوافق مع OpenAI يقدّم نفس الحلقة بدون عملية الـ spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — غلاف افتتاحي: صمّم مع الوكيل على حاسوبك المحمول" width="100%" />
@@ -22,7 +22,7 @@
   <a href="https://open-design.ai/"><img alt="تنزيل" src="https://img.shields.io/badge/%D8%AA%D9%86%D8%B2%D9%8A%D9%84-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#الوكلاء-المدعومون"><img alt="Agents" src="https://img.shields.io/badge/agents-12%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#الوكلاء-المدعومون"><img alt="Agents" src="https://img.shields.io/badge/agents-14%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#أنظمة-التصميم"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#الـ-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-انضم-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -54,7 +54,7 @@
 
 | | ما تحصل عليه |
 |---|---|
-| **أدوات CLI لوكلاء البرمجة (13)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — يكتشفها تلقائياً من `PATH`، وتبدّل بينها بنقرة واحدة |
+| **أدوات CLI لوكلاء البرمجة (14)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — يكتشفها تلقائياً من `PATH`، وتبدّل بينها بنقرة واحدة |
 | **بديل BYOK** | بروكسي API خاص بكل بروتوكول على `/api/proxy/{anthropic,openai,azure,google}/stream` — الصق `baseUrl` + `apiKey` + `model`، اختر Anthropic / OpenAI / Azure OpenAI / Google Gemini، ويُطبّع الـ daemon أحداث SSE إلى نفس chat stream. يتمّ صدّ عناوين IP الداخلية وثغرات SSRF عند حدود الـ daemon. |
 | **أنظمة تصميم مدمجة** | **129** — 2 starters مكتوبة يدوياً + 70 نظاماً للمنتجات (Linear، Stripe، Vercel، Airbnb، Tesla، Notion، Anthropic، Apple، Cursor، Supabase، Figma، Xiaohongshu، …) من [`awesome-design-md`][acd2]، إضافة إلى 57 design skill من [`awesome-design-skills`][ads] أُضيفت مباشرة تحت `design-systems/` |
 | **Skills مدمجة** | **31** — 27 في وضع `prototype` (web-prototype، saas-landing، dashboard، mobile-app، gamified-app، social-carousel، magazine-poster، dating-web، sprite-animation، motion-frames، critique، tweaks، wireframe-sketch، pm-spec، eng-runbook، finance-report، hr-onboarding، invoice، kanban-board، team-okrs، …) + 4 في وضع `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). مُجمَّعة في الـ picker حسب `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -222,7 +222,7 @@
 
 ### 1 · لا نشحن وكيلاً، وكيلك كافٍ
 
-الـ daemon يمسح `PATH` بحثاً عن [`claude`](https://docs.anthropic.com/en/docs/claude-code) و [`codex`](https://github.com/openai/codex) و `devin` و [`cursor-agent`](https://www.cursor.com/cli) و [`gemini`](https://github.com/google-gemini/gemini-cli) و [`opencode`](https://opencode.ai/) و [`qwen`](https://github.com/QwenLM/qwen-code) و [`copilot`](https://github.com/features/copilot/cli) و `hermes` و `kimi` و [`pi`](https://github.com/mariozechner/pi-ai) و [`kiro-cli`](https://kiro.dev) و [`vibe-acp`](https://github.com/mistralai/mistral-vibe) عند الإقلاع. ما يجده يصبح محرّك تصميم مرشّحاً — يُشغَّل عبر stdio بـ adapter لكل CLI، قابل للتبديل من الـ model picker. الإلهام من [`multica`](https://github.com/multica-ai/multica) و [`cc-switch`](https://github.com/farion1231/cc-switch). لا CLI مثبتة؟ وضع API هو نفس خط الأنابيب بدون spawn — اختر Anthropic أو متوافق مع OpenAI أو Azure OpenAI أو Google Gemini ويُعيد الـ daemon توجيه قطع SSE المُطبَّعة، مع رفض loopback / link-local / RFC1918 عند الحدّ.
+الـ daemon يمسح `PATH` بحثاً عن [`claude`](https://docs.anthropic.com/en/docs/claude-code) و [`codex`](https://github.com/openai/codex) و `devin` و [`cursor-agent`](https://www.cursor.com/cli) و [`gemini`](https://github.com/google-gemini/gemini-cli) و [`opencode`](https://opencode.ai/) و [`qwen`](https://github.com/QwenLM/qwen-code) و `qodercli` و [`copilot`](https://github.com/features/copilot/cli) و `hermes` و `kimi` و [`pi`](https://github.com/mariozechner/pi-ai) و [`kiro-cli`](https://kiro.dev) و [`vibe-acp`](https://github.com/mistralai/mistral-vibe) عند الإقلاع. ما يجده يصبح محرّك تصميم مرشّحاً — يُشغَّل عبر stdio بـ adapter لكل CLI، قابل للتبديل من الـ model picker. الإلهام من [`multica`](https://github.com/multica-ai/multica) و [`cc-switch`](https://github.com/farion1231/cc-switch). لا CLI مثبتة؟ وضع API هو نفس خط الأنابيب بدون spawn — اختر Anthropic أو متوافق مع OpenAI أو Azure OpenAI أو Google Gemini ويُعيد الـ daemon توجيه قطع SSE المُطبَّعة، مع رفض loopback / link-local / RFC1918 عند الحدّ.
 
 ### 2 · الـ Skills ملفات، لا plugins
 
@@ -284,7 +284,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · devin (ACP) · gemini · opencode · cursor-agent │
-   │  qwen · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)     │
+   │  qwen · qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)     │
    │  reads SKILL.md + DESIGN.md, writes artifacts to disk            │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -293,7 +293,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
 |---|---|
 | الواجهة الأمامية | Next.js 16 App Router + React 18 + TypeScript، قابل للنشر على Vercel |
 | Daemon | Node 24 · Express · بثّ SSE · `better-sqlite3`؛ الجداول: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| نقل الوكلاء | `child_process.spawn`؛ بمحلّلات أحداث مكتوبة لـ `claude-stream-json` (Claude Code)، `copilot-stream-json` (Copilot)، محلّلات `json-event-stream` لكل CLI (Codex / Gemini / OpenCode / Cursor Agent)، `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe عبر Agent Client Protocol)، `pi-rpc` (Pi عبر stdio JSON-RPC)، `plain` (Qwen Code) |
+| نقل الوكلاء | `child_process.spawn`؛ بمحلّلات أحداث مكتوبة لـ `claude-stream-json` (Claude Code)، `qoder-stream-json` (Qoder CLI)، `copilot-stream-json` (Copilot)، محلّلات `json-event-stream` لكل CLI (Codex / Gemini / OpenCode / Cursor Agent)، `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe عبر Agent Client Protocol)، `pi-rpc` (Pi عبر stdio JSON-RPC)، `plain` (Qwen Code) |
 | BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → APIs أعلى التيار خاصة بكل provider، SSE مُطبَّعة `delta/end/error`؛ يرفض loopback / link-local / RFC1918 عند حدّ الـ daemon |
 | التخزين | ملفات عادية في `.od/projects/<id>/` + SQLite في `.od/app.sqlite` + اعتمادات في `.od/media-config.json` (في gitignore، تُنشأ تلقائياً). `OD_DATA_DIR=<dir>` ينقل كل بيانات الـ daemon (تُستخدم لعزل الاختبارات وإعدادات التثبيت للقراءة فقط)؛ `OD_MEDIA_CONFIG_DIR=<dir>` يضيّق التجاوز إلى `media-config.json` فقط لإبقاء مفاتيح API في موقع منفصل |
 | المعاينة | iframe معزولة عبر `srcdoc` + محلّل `<artifact>` لكل skill ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -652,7 +652,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 - **حفظ الـ tabs.** كل مشروع يتذكّر ملفاته المفتوحة والتبويب النشط في جدول `tabs`. أعد فتح المشروع غداً، تجد مساحة العمل كما تركتها بالضبط.
 - **API لفحص الـ artifact.** `POST /api/artifacts/lint` يُجري فحوصات بنيوية على artifact مولَّد (كسر إطار `<artifact>`، ملفات side files مفقودة، tokens لوحة قديمة) ويعيد نتائج يمكن للوكيل قراءتها في الجولة التالية. التقييم الذاتي خماسي الأبعاد يستخدم هذا ليؤسّس درجته على دليل حقيقي، لا انطباع.
 - **بروتوكول sidecar + أتمتة سطح المكتب.** عمليات الـ daemon والويب وسطح المكتب تحمل stamps خماسية الحقول (`app · mode · namespace · ipc · source`) وتعرض قناة JSON-RPC IPC على `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` يقود تلك القناة، فيعمل E2E بدون رأس على غلاف Electron حقيقي بدون harnesses خاصة ([`packages/sidecar-proto/`](packages/sidecar-proto/)، [`apps/desktop/src/main/`](apps/desktop/src/main/)).
-- **spawn ودود لـ Windows.** كل adapter قد ينفجر `CreateProcess` عند حدّ ~32 KB لـ argv ببرومبتات طويلة (Codex، Gemini، OpenCode، Cursor Agent، Qwen، Pi) يُمرَّر له البرومبت عبر stdin بدلاً من ذلك. Claude Code و Copilot يحتفظان بـ `-p`؛ ويتراجع الـ daemon إلى ملف برومبت مؤقت إن تجاوز ذلك أيضاً.
+- **spawn ودود لـ Windows.** كل adapter قد ينفجر `CreateProcess` عند حدّ ~32 KB لـ argv ببرومبتات طويلة (Codex، Gemini، OpenCode، Cursor Agent، Qwen، Qoder CLI، Pi) يُمرَّر له البرومبت عبر stdin بدلاً من ذلك. Claude Code و Copilot يحتفظان بـ `-p`؛ ويتراجع الـ daemon إلى ملف برومبت مؤقت إن تجاوز ذلك أيضاً.
 - **بيانات runtime لكل namespace.** `OD_DATA_DIR` و`--namespace` يمنحانك أشجار `.od/`-style معزولة تماماً، فلا تتشارك Playwright وقنوات beta ومشاريعك الفعلية ملف SQLite واحد.
 
 ## ميكانيكا مكافحة AI-slop
@@ -676,7 +676,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | Agent runtime | مُضمَّن (Opus 4.7) | مُضمَّن ([`pi-ai`][piai]) | **مفوَّض إلى CLI الموجودة لدى المستخدم** |
 | Skills | خاصّة | 12 وحدة TS مخصّصة + `SKILL.md` | **31 حزمة [`SKILL.md`][skill] قابلة للسحب والإفلات** |
 | نظام التصميم | خاصّ | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 129 نظاماً مشحوناً** |
-| مرونة المزوّد | Anthropic فقط | 7+ عبر [`pi-ai`][piai] | **12 CLI adapter + بروكسي BYOK متوافق OpenAI** |
+| مرونة المزوّد | Anthropic فقط | 7+ عبر [`pi-ai`][piai] | **14 CLI adapter + بروكسي BYOK متوافق OpenAI** |
 | نموذج أسئلة الإقلاع | ❌ | ❌ | **✅ قاعدة صارمة، الجولة 1** |
 | منتقي الاتجاه | ❌ | ❌ | **✅ 5 اتجاهات حتميّة** |
 | تقدّم todo حيّ + بثّ الأدوات | ❌ | ✅ | **✅** (نمط UX من open-codesign) |
@@ -712,6 +712,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + محلّل `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` (البرومبت على stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + محلّل `cursor-agent` | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -` (البرومبت على stdin) |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain` (قطع stdout خام) | `qwen --yolo [--model …] -` (البرومبت على stdin) |
+| Qoder CLI | `qodercli` | `qoder-stream-json` (أحداث مكتوبة) | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]` (البرومبت على stdin) |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json` (أحداث مكتوبة) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
@@ -720,7 +721,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (البرومبت يُرسل كأمر RPC `prompt`) |
 | **BYOK متعدّد المزوّدين** | n/a | تطبيع SSE | `POST /api/proxy/{provider}/stream` → Anthropic / متوافق OpenAI / Azure OpenAI / Gemini؛ محمي SSRF ضد loopback / link-local / RFC1918 |
 
-إضافة CLI جديدة = مدخل واحد في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). صيغة البثّ واحدة من `claude-stream-json` أو `copilot-stream-json` أو `json-event-stream` (مع `eventParser` لكل CLI) أو `acp-json-rpc` أو `pi-rpc` أو `plain`.
+إضافة CLI جديدة = مدخل واحد في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). صيغة البثّ واحدة من `claude-stream-json` أو `qoder-stream-json` أو `copilot-stream-json` أو `json-event-stream` (مع `eventParser` لكل CLI) أو `acp-json-rpc` أو `pi-rpc` أو `plain`.
 
 ## المراجع والنسب
 
@@ -742,7 +743,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 
 ## Roadmap
 
-- [x] Daemon + اكتشاف الوكلاء (12 CLI adapter) + سجلّ skills + كتالوج أنظمة التصميم
+- [x] Daemon + اكتشاف الوكلاء (14 CLI adapter) + سجلّ skills + كتالوج أنظمة التصميم
 - [x] تطبيق ويب + chat + نموذج أسئلة + منتقي 5 اتجاهات + تقدّم todo + معاينة معزولة
 - [x] 31 skill + 72 نظام تصميم + 5 اتجاهات بصرية + 5 إطارات أجهزة
 - [x] مشاريع · محادثات · رسائل · tabs · قوالب مدعومة بـ SQLite

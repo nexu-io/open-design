@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **10 種類の coding-agent CLI**（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI、Hermes、Kimi、Pi）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
+> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **11 種類の coding-agent CLI**（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、Qoder CLI、GitHub Copilot CLI、Hermes、Kimi、Pi）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — ノートパソコン上のエージェントとデザインする" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="ダウンロード" src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-11%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
   <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
@@ -53,7 +53,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 
 | | 提供される機能 |
 |---|---|
-| **Coding-agent CLI（10 種類）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）— `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
+| **Coding-agent CLI（11 種類）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）— `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
 | **BYOK フォールバック** | OpenAI 互換プロキシ `/api/proxy/stream` — `baseUrl` + `apiKey` + `model` を貼れば、任意のベンダー（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、セルフホスト vLLM、その他の OpenAI 互換プロバイダ）がエンジンになります。daemon 側で loopback / link-local / RFC1918 を拒否し SSRF を防御。 |
 | **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
@@ -220,7 +220,7 @@ Skill の追加はフォルダ 1 つで完了します。拡張 frontmatter の�
 
 ### 1 · エージェントは同梱しない — あなたのもので十分
 
-Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/mariozechner/pi-ai) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
+Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/mariozechner/pi-ai) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
 
 ### 2 · Skill はファイルであり、プラグインではない
 
@@ -282,7 +282,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · gemini · opencode · cursor-agent · qwen        │
-   │  copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
+   │  qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
    │  SKILL.md + DESIGN.md を読み、artifact をディスクに書き出す         │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -291,7 +291,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
 |---|---|
 | フロントエンド | Next.js 16 App Router + React 18 + TypeScript、Vercel デプロイ可能 |
 | Daemon | Node 24 · Express · SSE ストリーミング · `better-sqlite3`；テーブル：`projects` · `conversations` · `messages` · `tabs` · `templates` |
-| エージェント転送 | `child_process.spawn`；Claude Code は `claude-stream-json`、Copilot は `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent は `json-event-stream`（CLI ごとのパーサー）、Hermes / Kimi は `acp-json-rpc`（Agent Client Protocol）、Pi は `pi-rpc`（stdio JSON-RPC）、Qwen Code は `plain` |
+| エージェント転送 | `child_process.spawn`；Claude Code は `claude-stream-json`、Qoder CLI は `qoder-stream-json`、Copilot は `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent は `json-event-stream`（CLI ごとのパーサー）、Hermes / Kimi は `acp-json-rpc`（Agent Client Protocol）、Pi は `pi-rpc`（stdio JSON-RPC）、Qwen Code は `plain` |
 | BYOK プロキシ | `POST /api/proxy/stream` → OpenAI 互換 `/v1/chat/completions` SSE パススルー；daemon エッジで loopback / link-local / RFC1918 を拒否 |
 | ストレージ | プレーンファイル `.od/projects/<id>/` + SQLite `.od/app.sqlite`（gitignore 済み、daemon 起動時に自動作成）。`OD_DATA_DIR` でルートを変更可能（テスト分離用） |
 | プレビュー | サンドボックス iframe（`srcdoc`）+ Skill ごとの `<artifact>` パーサー（[`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)） |
@@ -576,7 +576,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 - **タブ永続化。** 各プロジェクトは開いているファイルとアクティブタブを `tabs` テーブルに記録。翌日開いてもワークスペースは昨日の状態そのまま。
 - **Artifact lint API。** `POST /api/artifacts/lint` は生成された artifact に対して構造チェックを実行（`<artifact>` フレーミングの破損、必須副ファイルの欠落、古いパレットトークン）し、エージェントが次のターンで読み返せる findings を返します。五次元セルフ評価はこれを使ってスコアを vibes ではなくエビデンスに基づかせます。
 - **Sidecar プロトコル + デスクトップ自動化。** Daemon、web、desktop プロセスは型付き 5 フィールドスタンプ（`app · mode · namespace · ipc · source`）を持ち、`/tmp/open-design/ipc/<namespace>/<app>.sock` に JSON-RPC IPC チャネルを公開。`tools-dev inspect desktop status \| eval \| screenshot` はこのチャネル上で動作するため、ヘッドレス E2E テストが実際の Electron シェルに対して、カスタムハーネスなしで実行可能（[`packages/sidecar-proto/`](packages/sidecar-proto/)、[`apps/desktop/src/main/`](apps/desktop/src/main/)）。
-- **Windows フレンドリーな spawn。** 長いプロンプトで `CreateProcess` の約 32 KB argv 上限に達する adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Pi）はすべて stdin 経由でプロンプトを渡します。Claude Code と Copilot は `-p` を維持。stdin でも溢れる場合、daemon は一時 prompt ファイルにフォールバック。
+- **Windows フレンドリーな spawn。** 長いプロンプトで `CreateProcess` の約 32 KB argv 上限に達する adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Qoder CLI、Pi）はすべて stdin 経由でプロンプトを渡します。Claude Code と Copilot は `-p` を維持。stdin でも溢れる場合、daemon は一時 prompt ファイルにフォールバック。
 - **ネームスペースごとのランタイムデータ分離。** `OD_DATA_DIR` + `--namespace` で完全に分離された `.od/` スタイルのディレクトリツリーを提供。Playwright、beta チャネル、本番プロジェクトが同一 SQLite ファイルを共有することはありません。
 
 ## anti-AI-slop 機構
@@ -600,7 +600,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 | エージェントランタイム | 同梱 (Opus 4.7) | 同梱 ([`pi-ai`][piai]) | **ユーザーの既存 CLI に委任** |
 | Skill | プロプライエタリ | 12 個のカスタム TS モジュール + `SKILL.md` | **31 個のファイルベース [`SKILL.md`][skill] バンドル、ドロップイン** |
 | Design System | プロプライエタリ | `DESIGN.md`（v0.2 ロードマップ） | **`DESIGN.md` × 72 種、すぐに利用可能** |
-| プロバイダ柔軟性 | Anthropic のみ | 7+（[`pi-ai`][piai]） | **10 種の CLI adapter + OpenAI 互換 BYOK プロキシ** |
+| プロバイダ柔軟性 | Anthropic のみ | 7+（[`pi-ai`][piai]） | **11 種の CLI adapter + OpenAI 互換 BYOK プロキシ** |
 | 初期化質問フォーム | ❌ | ❌ | **✅ ハードルール、turn 1** |
 | ディレクションピッカー | ❌ | ❌ | **✅ 5 つの決定論的ディレクション** |
 | ライブ todo 進捗 + tool ストリーム | ❌ | ✅ | **✅**（UX パターンは open-codesign 由来） |
@@ -635,13 +635,14 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` パーサー | `opencode run --format json --dangerously-skip-permissions [--model …] -`（プロンプトは stdin） |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` パーサー | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`（プロンプトは stdin） |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain`（生 stdout チャンク） | `qwen --yolo [--model …] -`（プロンプトは stdin） |
+| Qoder CLI | `qodercli` | `qoder-stream-json`（型付きイベント） | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]`（プロンプトは stdin） |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型付きイベント） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
 | **OpenAI 互換 BYOK** | n/a | SSE パススルー | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；loopback / link-local / RFC1918 を拒否 |
 
-新しい CLI の追加 = [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。ストリーム形式は `claude-stream-json` / `copilot-stream-json` / `json-event-stream`（CLI ごとの `eventParser` 付き）/ `acp-json-rpc` / `pi-rpc` / `plain` から選択。
+新しい CLI の追加 = [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。ストリーム形式は `claude-stream-json` / `qoder-stream-json` / `copilot-stream-json` / `json-event-stream`（CLI ごとの `eventParser` 付き）/ `acp-json-rpc` / `pi-rpc` / `plain` から選択。
 
 ## 参考文献 & 系譜
 
@@ -662,7 +663,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 
 ## ロードマップ
 
-- [x] Daemon + エージェント検出（10 種 CLI adapter）+ Skill レジストリ + Design System カタログ
+- [x] Daemon + エージェント検出（11 種 CLI adapter）+ Skill レジストリ + Design System カタログ
 - [x] Web アプリ + チャット + 質問フォーム + 5 つのディレクションピッカー + todo 進捗 + サンドボックスプレビュー
 - [x] 31 個の Skill + 72 種の Design System + 5 つのビジュアルディレクション + 5 つのデバイスフレーム
 - [x] SQLite バックドの projects · conversations · messages · tabs · templates

@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] 的開源替代品。** 本地優先、可部署到 Vercel、每一層都 BYOK —— **10 套 coding-agent CLI** 在 `PATH` 上自動檢測（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI、Hermes、Kimi、Pi）就是設計引擎，由 **31 個可組合 Skills** 和 **72 套品牌級 Design System** 驅動。一個都沒裝？還有 OpenAI 相容的 BYOK 代理 `/api/proxy/stream` 備援，同一條 loop，少一次 spawn 而已。
+> **[Claude Design][cd] 的開源替代品。** 本地優先、可部署到 Vercel、每一層都 BYOK —— **11 套 coding-agent CLI** 在 `PATH` 上自動檢測（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、Qoder CLI、GitHub Copilot CLI、Hermes、Kimi、Pi）就是設計引擎，由 **31 個可組合 Skills** 和 **72 套品牌級 Design System** 驅動。一個都沒裝？還有 OpenAI 相容的 BYOK 代理 `/api/proxy/stream` 備援，同一條 loop，少一次 spawn 而已。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design 封面：與本地 AI 智慧體共同設計" width="100%" />
@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://open-design.ai/"><img alt="下載客戶端" src="https://img.shields.io/badge/%E4%B8%8B%E8%BC%89-%E5%AE%A2%E6%88%B6%E7%AB%AF-ff6b35?style=flat-square" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#支援的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#支援的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-11%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#內建-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-加入-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -51,7 +51,7 @@ OD 站在四個開源專案的肩膀上：
 
 | | 你拿到的 |
 |---|---|
-| **Coding-agent CLI（10 套）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）—— 在 `PATH` 上自動檢測，picker 一鍵切換 |
+| **Coding-agent CLI（11 套）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）—— 在 `PATH` 上自動檢測，picker 一鍵切換 |
 | **BYOK 備援** | OpenAI 相容代理 `/api/proxy/stream` —— 填 `baseUrl` + `apiKey` + `model`，任意 vendor（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、自託管 vLLM，或任何 OpenAI 相容的 provider）都能直接當引擎用。daemon 邊界拒絕 loopback / link-local / RFC1918 防 SSRF。 |
 | **內建 design system** | **72 套** —— 2 套手寫起手 + 70 套從 [`awesome-design-md`][acd2] 匯入的產品系統（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **內建 skill** | **31 個** —— 27 個 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 個 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分組：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
@@ -217,7 +217,7 @@ OD 站在四個開源專案的肩膀上：
 
 ### 1 · 我們不帶 agent，你的就夠好
 
-Daemon 啟動時掃 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/mariozechner/pi-ai)。能找到的都成為候選設計引擎 —— 走 stdio，每個 CLI 一個 adapter，model picker 一鍵切換。靈感來自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一個 CLI 都沒裝？`POST /api/proxy/stream` 就是同一條管線減去 spawn —— 填任意 OpenAI 相容 `baseUrl` + `apiKey`，daemon 把 SSE 轉發回瀏覽器，loopback / link-local / RFC1918 在邊界直接拒絕。
+Daemon 啟動時掃 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/mariozechner/pi-ai)。能找到的都成為候選設計引擎 —— 走 stdio，每個 CLI 一個 adapter，model picker 一鍵切換。靈感來自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一個 CLI 都沒裝？`POST /api/proxy/stream` 就是同一條管線減去 spawn —— 填任意 OpenAI 相容 `baseUrl` + `apiKey`，daemon 把 SSE 轉發回瀏覽器，loopback / link-local / RFC1918 在邊界直接拒絕。
 
 ### 2 · Skill 是檔案，不是外掛
 
@@ -279,7 +279,7 @@ DISCOVERY 指令         （turn-1 表單、turn-2 品牌分支、TodoWrite、�
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · gemini · opencode · cursor-agent · qwen        │
-   │  copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
+   │  qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
    │  讀 SKILL.md + DESIGN.md，把 artifact 寫到磁碟                   │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -288,7 +288,7 @@ DISCOVERY 指令         （turn-1 表單、turn-2 品牌分支、TodoWrite、�
 |---|---|
 | 前端 | Next.js 16 App Router + React 18 + TypeScript，可部署到 Vercel |
 | Daemon | Node 24 · Express · SSE 流 · `better-sqlite3`；表：`projects` · `conversations` · `messages` · `tabs` · `templates` |
-| Agent 傳輸層 | `child_process.spawn`，Claude Code 走 `claude-stream-json`、Copilot 走 `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent 走 `json-event-stream`（每個 CLI 一個 parser）、Hermes / Kimi 走 `acp-json-rpc`（Agent Client Protocol）、Pi 走 `pi-rpc`（stdio JSON-RPC）、Qwen Code 走 `plain` |
+| Agent 傳輸層 | `child_process.spawn`，Claude Code 走 `claude-stream-json`、Qoder CLI 走 `qoder-stream-json`、Copilot 走 `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent 走 `json-event-stream`（每個 CLI 一個 parser）、Hermes / Kimi 走 `acp-json-rpc`（Agent Client Protocol）、Pi 走 `pi-rpc`（stdio JSON-RPC）、Qwen Code 走 `plain` |
 | BYOK 代理 | `POST /api/proxy/stream` → OpenAI 相容 `/v1/chat/completions` 透傳 SSE；daemon 邊界拒絕 loopback / link-local / RFC1918 |
 | 儲存 | 純檔案 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 啟動自建）。`OD_DATA_DIR` 可改根目錄用於測試隔離 |
 | 預覽 | 沙盒 iframe（`srcdoc`）+ 每個 skill 的 `<artifact>` parser（[`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)） |
@@ -501,7 +501,7 @@ Chat / artifact 迴圈最顯眼，但這套倉庫裡還有幾個能力被埋得�
 - **Tab 持久化。** 每個專案記得自己開啟的檔案和當前 tab，存在 `tabs` 表裡。明天再開啟，工作區還是你昨天離開時的樣子。
 - **Artifact lint API。** `POST /api/artifacts/lint` 對生成的 artifact 跑結構性檢查（`<artifact>` 框架是否破損、必需的副檔案是否缺失、palette token 是否過期），返回 agent 下一回合可以讀回去的 findings。五維自評審就是用它把分數落到證據上而不是 vibe。
 - **Sidecar 協議 + 桌面版自動化。** Daemon、web、desktop 程序都帶型別化的 5 欄位 stamp（`app · mode · namespace · ipc · source`），並把 JSON-RPC IPC 通道暴露在 `/tmp/open-design/ipc/<namespace>/<app>.sock`。`tools-dev inspect desktop status \| eval \| screenshot` 就跑在這條通道上，所以 headless E2E 直接打到真實 Electron 殼，不用造定製夾具（[`packages/sidecar-proto/`](packages/sidecar-proto/)、[`apps/desktop/src/main/`](apps/desktop/src/main/)）。
-- **Windows 友好的 spawn。** 任何在長 prompt 上會撞 `CreateProcess` 32 KB argv 上限的 adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Pi）都改走 stdin。Claude Code 和 Copilot 保留 `-p`；連 stdin 都裝不下時 daemon 退回臨時 prompt 檔案。
+- **Windows 友好的 spawn。** 任何在長 prompt 上會撞 `CreateProcess` 32 KB argv 上限的 adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Qoder CLI、Pi）都改走 stdin。Claude Code 和 Copilot 保留 `-p`；連 stdin 都裝不下時 daemon 退回臨時 prompt 檔案。
 - **按 namespace 隔離的 runtime data。** `OD_DATA_DIR` 加 `--namespace` 給你完全隔離的 `.od/`-style 目錄樹，Playwright、beta channel、你正經的專案永遠不會共用同一個 SQLite 檔案。
 
 ## 反 AI Slop 機制
@@ -525,7 +525,7 @@ Chat / artifact 迴圈最顯眼，但這套倉庫裡還有幾個能力被埋得�
 | Agent 執行時 | 內建 (Opus 4.7) | 內建 ([`pi-ai`][piai]) | **委託給使用者已裝好的 CLI** |
 | Skill | 私有 | 12 套自定義 TS 模組 + `SKILL.md` | **31 套基於檔案的 [`SKILL.md`][skill]，可丟入** |
 | Design system | 私有 | `DESIGN.md`（v0.2 路線圖） | **`DESIGN.md` × 72 套，開箱即有** |
-| Provider 靈活度 | 僅 Anthropic | 7+（[`pi-ai`][piai]） | **10 套 CLI adapter + OpenAI 相容 BYOK 代理** |
+| Provider 靈活度 | 僅 Anthropic | 7+（[`pi-ai`][piai]） | **11 套 CLI adapter + OpenAI 相容 BYOK 代理** |
 | 初始化問題表單 | ❌ | ❌ | **✅ 硬規則 turn 1** |
 | 方向選擇器 | ❌ | ❌ | **✅ 5 套確定性方向** |
 | 即時 todo 進度 + tool 流 | ❌ | ✅ | **✅**（UX 模式來自 open-codesign） |
@@ -560,13 +560,14 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` parser | `opencode run --format json --dangerously-skip-permissions [--model …] -`（prompt 走 stdin） |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` parser | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`（prompt 走 stdin） |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain`（原始 stdout chunk） | `qwen --yolo [--model …] -`（prompt 走 stdin） |
+| Qoder CLI | `qodercli` | `qoder-stream-json`（型別化事件） | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]`（prompt 走 stdin） |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型別化事件） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（prompt 走 RPC `prompt` 命令） |
 | **OpenAI 相容 BYOK** | n/a | SSE 透傳 | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；拒絕 loopback / link-local / RFC1918 |
 
-加一個新 CLI = 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一項。流式格式從 `claude-stream-json` / `copilot-stream-json` / `json-event-stream`（搭配每 CLI 的 `eventParser`）/ `acp-json-rpc` / `pi-rpc` / `plain` 中選一個。
+加一個新 CLI = 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一項。流式格式從 `claude-stream-json` / `qoder-stream-json` / `copilot-stream-json` / `json-event-stream`（搭配每 CLI 的 `eventParser`）/ `acp-json-rpc` / `pi-rpc` / `plain` 中選一個。
 
 ## 引用與師承
 
@@ -587,7 +588,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 ## Roadmap
 
-- [x] Daemon + agent 檢測（10 套 CLI adapter）+ skill registry + design-system 目錄
+- [x] Daemon + agent 檢測（11 套 CLI adapter）+ skill registry + design-system 目錄
 - [x] Web 應用 + 對話 + question form + 5 套方向選擇器 + todo progress + 沙盒預覽
 - [x] 31 個 skill + 72 套 design system + 5 套視覺方向 + 5 個裝置外殼
 - [x] SQLite 後端的 projects · conversations · messages · tabs · templates

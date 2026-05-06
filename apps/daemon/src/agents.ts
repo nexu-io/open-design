@@ -53,6 +53,9 @@ const agentCapabilities = new Map();
 //   - 'claude-stream-json' : line-delimited JSON emitted by Claude Code's
 //     `--output-format stream-json`. Daemon parses it into typed events
 //     (text / thinking / tool_use / tool_result / status) for the UI.
+//   - 'qoder-stream-json' : line-delimited JSON emitted by Qoder CLI's
+//     `--output-format stream-json`. Daemon parses Qoder's wrappers into
+//     typed events while preserving Qoder-specific result metadata.
 //   - 'acp-json-rpc'       : ACP JSON-RPC over stdio. Daemon drives the
 //     initialize/session/new/session/prompt lifecycle and maps updates into
 //     typed UI events.
@@ -483,6 +486,51 @@ export const AGENT_DEFS = [
     },
     promptViaStdin: true,
     streamFormat: 'plain',
+  },
+  {
+    id: 'qoder',
+    name: 'Qoder CLI',
+    bin: 'qodercli',
+    versionArgs: ['--version'],
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'lite', label: 'Lite' },
+      { id: 'efficient', label: 'Efficient' },
+      { id: 'auto', label: 'Auto' },
+      { id: 'performance', label: 'Performance' },
+      { id: 'ultimate', label: 'Ultimate' },
+    ],
+    // Qoder print mode is non-interactive and exits after the turn. Deliver
+    // the composed prompt via stdin to avoid argv length limits, while using
+    // stream-json so the daemon can surface text and usage incrementally.
+    buildArgs: (
+      _prompt,
+      _imagePaths,
+      extraAllowedDirs = [],
+      options = {},
+      runtimeContext = {},
+    ) => {
+      const args = [
+        '-p',
+        '--output-format',
+        'stream-json',
+        '--permission-mode',
+        'bypass_permissions',
+      ];
+      if (runtimeContext.cwd) {
+        args.push('--cwd', runtimeContext.cwd);
+      }
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && d.length > 0,
+      );
+      for (const d of dirs) args.push('--add-dir', d);
+      return args;
+    },
+    promptViaStdin: true,
+    streamFormat: 'qoder-stream-json',
   },
   {
     id: 'copilot',

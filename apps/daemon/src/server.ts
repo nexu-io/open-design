@@ -36,6 +36,7 @@ import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
@@ -3764,7 +3765,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
     // Adapters that emit structured wrappers (claude-stream-json,
-    // copilot-stream-json, json-event-stream, acp-json-rpc, pi-rpc) fall
+    // qoder-stream-json, copilot-stream-json, json-event-stream,
+    // acp-json-rpc, pi-rpc) fall
     // through to the legacy single-pass code path below with a one-time
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
@@ -3850,6 +3852,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'qoder-stream-json') {
+      const qoder = createQoderStreamHandler((ev) => send('agent', ev));
+      child.stdout.on('data', (chunk) => qoder.feed(chunk));
+      child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
