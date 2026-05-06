@@ -812,6 +812,46 @@ fsTest(
   },
 );
 
+// Test isolation: when OD_AGENT_HOME points at a sandbox, an exported
+// $NPM_CONFIG_PREFIX / $npm_config_prefix on the developer's or CI
+// runner's environment must not leak a real <prefix>/bin into the
+// sandboxed search list. Otherwise an agent installed by the host
+// machine could satisfy a "not on PATH" assertion in the sandbox and
+// make detection tests environment-dependent. Raised in PR review on
+// #442 (review comment by @mrcfps on apps/daemon/src/agents.ts:742).
+fsTest(
+  'OD_AGENT_HOME isolates resolution from $NPM_CONFIG_PREFIX leakage',
+  () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-sandbox-'));
+    const realPrefix = mkdtempSync(join(tmpdir(), 'od-agents-real-prefix-'));
+    const realPrefixBin = join(realPrefix, 'bin');
+    try {
+      // Sandbox is empty — gemini does not exist under OD_AGENT_HOME.
+      // Real prefix has a gemini, simulating the developer's /opt/...
+      // or ~/.npm-global install. NPM_CONFIG_PREFIX points at it.
+      mkdirSync(realPrefixBin, { recursive: true });
+      writeFileSync(join(realPrefixBin, 'gemini'), '');
+      chmodSync(join(realPrefixBin, 'gemini'), 0o755);
+
+      process.env.OD_AGENT_HOME = sandbox;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.NPM_CONFIG_PREFIX = realPrefix;
+
+      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      assert.equal(
+        resolved,
+        null,
+        `OD_AGENT_HOME sandbox must not see the real $NPM_CONFIG_PREFIX bin; ` +
+          `got ${resolved}`,
+      );
+    } finally {
+      delete process.env.NPM_CONFIG_PREFIX;
+      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
 // DeepSeek TUI's exec subcommand requires the prompt as a positional
 // argument (no `-` stdin sentinel; clap declares `prompt: String` as a
 // required field). `--auto` enables agentic mode with auto-approval —

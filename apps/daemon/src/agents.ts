@@ -715,9 +715,10 @@ export const AGENT_DEFS = [
 
 // Toolchain dir computation lives in @open-design/platform so the daemon
 // resolver and the packaged sidecar PATH builder can never drift again
-// (issue #442). The wrapper here just preserves the OD_AGENT_HOME test
-// hook and the per-home cache that reduces filesystem scans on every
-// resolveOnPath() call.
+// (issue #442). See @open-design/platform's wellKnownUserToolchainBins
+// for the canonical search list. The wrapper here just preserves the
+// OD_AGENT_HOME test hook and the per-home cache that reduces
+// filesystem scans on every resolveOnPath() call.
 const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
 let cachedToolchainHome = null;
 let cachedToolchainDirs = null;
@@ -736,12 +737,16 @@ function userToolchainDirs() {
   }
   cachedToolchainHome = home;
   cachedToolchainDirsAt = now;
-  // Skip Homebrew / /usr/local bins when running under OD_AGENT_HOME so
-  // tests that scope detection to a temp home don't pick up the real
-  // machine's CLIs.
+  // When OD_AGENT_HOME is set, scope the search strictly to the override
+  // home: skip Homebrew / /usr/local *and* pass an empty env so that a
+  // developer or CI runner with NPM_CONFIG_PREFIX / npm_config_prefix
+  // exported can't leak the real machine's <prefix>/bin into a sandboxed
+  // detection run. Without this the agents.test.ts cases that build a
+  // tmp home would be machine-environment-dependent.
   cachedToolchainDirs = wellKnownUserToolchainBins({
     home,
     includeSystemBins: process.platform !== 'win32' && !homeOverride,
+    env: homeOverride ? {} : process.env,
   });
   return cachedToolchainDirs;
 }

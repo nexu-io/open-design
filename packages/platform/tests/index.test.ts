@@ -383,6 +383,25 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("ignores whitespace-only npm prefix values rather than emitting a `/bin` entry", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-whitespace-prefix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: "   " },
+        includeSystemBins: false,
+      });
+      // Whitespace-only must not produce a bogus `<whitespace>/bin` entry
+      // nor a bare `/bin` (the join("   ", "bin") shape).
+      for (const dir of dirs) {
+        expect(dir.trim()).not.toBe("/bin");
+        expect(dir).not.toMatch(/^\s+\/bin$/);
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("includes /opt/homebrew/bin and /usr/local/bin when includeSystemBins is true", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-sys-"));
     try {

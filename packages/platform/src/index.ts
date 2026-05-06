@@ -465,9 +465,15 @@ export function wellKnownUserToolchainBins(
   // Honour an explicit npm prefix override regardless of where the user
   // pointed it. Covers setups that don't match either of the conventions
   // above (e.g. corporate provisioning that exports a custom prefix).
-  const npmPrefix = env.NPM_CONFIG_PREFIX ?? env.npm_config_prefix;
-  if (typeof npmPrefix === "string" && npmPrefix.length > 0) {
-    dirs.push(join(npmPrefix, "bin"));
+  // Trim before length-checking so accidental whitespace-only values
+  // (`NPM_CONFIG_PREFIX=" "`) do not produce a `/bin`-suffixed garbage
+  // entry.
+  const npmPrefixRaw = env.NPM_CONFIG_PREFIX ?? env.npm_config_prefix;
+  if (typeof npmPrefixRaw === "string") {
+    const npmPrefix = npmPrefixRaw.trim();
+    if (npmPrefix.length > 0) {
+      dirs.push(join(npmPrefix, "bin"));
+    }
   }
   if (includeSystemBins) {
     dirs.push("/opt/homebrew/bin", "/usr/local/bin");
