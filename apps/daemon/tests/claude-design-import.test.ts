@@ -154,4 +154,31 @@ describe('importClaudeDesignZip', () => {
       );
     });
   });
+
+  it('rejects a 0-byte entry whose local header has an invalid signature', async () => {
+    // Regression: the 0-byte early-return must NOT run before LOCAL_SIG validation.
+    // A malformed archive with a bad localOffset for a 0-byte entry must still be rejected.
+    await withTmpDir(async (dir) => {
+      const valid = buildZip([
+        { name: 'index.html', method: 0, data: Buffer.from('<html></html>', 'utf8') },
+        { name: 'empty.css', method: 8, data: Buffer.alloc(0) },
+      ]);
+      // Corrupt the local-file-header signature of the second entry (empty.css).
+      // The central directory says localOffset points to that header; overwrite
+      // the 4-byte signature with 0x00000000 so LOCAL_SIG check fails.
+      const corrupt = Buffer.from(valid);
+      // Find the second local header: first entry is at offset 0, its local header
+      // is 30 + len("index.html")=10 bytes + data bytes. Signature starts at that offset.
+      const firstLocalSize = 30 + 'index.html'.length + '<html></html>'.length;
+      corrupt.writeUInt32LE(0x00000000, firstLocalSize); // overwrite LOCAL_SIG of entry 2
+
+      const zipPath = path.join(dir, 'corrupt.zip');
+      const outDir = path.join(dir, 'out');
+      await writeFile(zipPath, corrupt);
+
+      await expect(importClaudeDesignZip(zipPath, outDir)).rejects.toThrow(
+        'invalid zip local header',
+      );
+    });
+  });
 });

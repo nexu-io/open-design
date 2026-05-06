@@ -102,7 +102,6 @@ function findEndOfCentralDirectory(zip) {
 }
 
 function readEntryBody(zip, entry) {
-  if (entry.uncompressedSize === 0) return Buffer.alloc(0);
   const offset = entry.localOffset;
   if (zip.readUInt32LE(offset) !== LOCAL_SIG) {
     throw new Error(`invalid zip local header: ${entry.name}`);
@@ -112,6 +111,10 @@ function readEntryBody(zip, entry) {
   const bodyStart = offset + 30 + nameLen + extraLen;
   const bodyEnd = bodyStart + entry.compressedSize;
   if (bodyEnd > zip.length) throw new Error(`zip entry exceeds archive: ${entry.name}`);
+  // inflateRawSync throws RangeError when uncompressedSize is 0 (maxOutputLength:0
+  // is invalid) and on an empty deflate stream. Return early after header and bounds
+  // checks so the local-header signature and offset are still validated.
+  if (entry.uncompressedSize === 0) return Buffer.alloc(0);
   const compressed = zip.slice(bodyStart, bodyEnd);
   if (entry.method === 0) return Buffer.from(compressed);
   return inflateRawSync(compressed, { maxOutputLength: entry.uncompressedSize });
