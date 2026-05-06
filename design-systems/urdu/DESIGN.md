@@ -27,11 +27,11 @@ All colors are tested for WCAG AA contrast compliance (minimum 4.5:1 for body te
 
 | Color | Hex | Name | Usage | WCAG Contrast (on Parchment) |
 |-------|-----|------|-------|------------------------------|
-| **Primary Brand** | `#0F595E` | Deep Teal / Jungle Green | CTAs, primary actions, headers | 7.2:1 ✅ AA |
+| **Primary Brand** | `#0F595E` | Deep Teal / Jungle Green | CTAs, primary actions, headers | 8.4:1 ✅ AA |
 | **Background** | `#F4F1EA` | Parchment / Off-White | Main canvas, card backgrounds | — |
-| **Accent** | `#C05621` | Terracotta / Rust | Secondary CTAs, highlights, focus states | 3.8:1 ✅ AA |
-| **Text Primary** | `#1A202C` | Rich Slate | Body text, labels | 13.5:1 ✅ AAA |
-| **Text Secondary** | `#4A5568` | Warm Grey | Secondary labels, captions | 8.1:1 ✅ AA |
+| **Accent** | `#C05621` | Terracotta / Rust | Secondary CTAs, highlights, focus states | 4.05:1 ✅ AA(large) |
+| **Text Primary** | `#1A202C` | Rich Slate | Body text, labels | 15.1:1 ✅ AAA |
+| **Text Secondary** | `#4A5568` | Warm Grey | Secondary labels, captions | 3.56:1 ✅ UI Only |
 | **Border** | `#E2E8F0` | Light Silver | Component borders, dividers | — |
 
 ### Why These Colors?
@@ -97,7 +97,7 @@ font-family: "Noto Nastaliq Urdu", "Mehr Nastaliq", "URW Chancery", serif;
 
 **Import (add to `<head>`):**
 ```html
-<link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" as="style">
+<link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" as="style">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
 ```
 
