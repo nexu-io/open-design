@@ -4154,6 +4154,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
     let agentStreamError = null;
+    // Tracks whether any stream the run is using actually emitted user-
+    // visible content. Only the streams routed through `sendAgentEvent`
+    // contribute to this flag; ACP sessions and plain stdout streams are
+    // covered by their own success/failure paths and the empty-output
+    // guard below skips them via `trackingSubstantiveOutput`.
+    let agentProducedOutput = false;
+    let trackingSubstantiveOutput = false;
+    // Event types that count as "the agent actually produced something the
+    // user can see." Lifecycle markers (`status`) and meter readings
+    // (`usage`) deliberately do NOT count — a model can emit token-usage
+    // numbers for an empty completion (issue #691), and a `status:running`
+    // banner without any follow-up is exactly the silent-failure shape we
+    // want to surface as failed instead of succeeded.
+    const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
+      'text_delta',
+      'thinking_delta',
+      'tool_use',
+      'tool_result',
+      'artifact',
+    ]);
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
@@ -4164,6 +4184,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         }));
         return;
       }
+      if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
+        agentProducedOutput = true;
+      }
       send('agent', ev);
     };
 
@@ -4172,6 +4195,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
+      trackingSubstantiveOutput = true;
       const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
@@ -4197,9 +4221,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         send,
       });
     } else if (def.streamFormat === 'json-event-stream') {
+      // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
+      // (now emitted as a real error event by json-event-stream.ts after
+      // #691) actually triggers `agentStreamError` instead of being
+      // forwarded as a no-op `agent` SSE event. This also wires the
+      // substantive-output tracking the close handler reads below.
+      trackingSubstantiveOutput = true;
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        (ev) => send('agent', ev),
+        sendAgentEvent,
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
@@ -4225,6 +4255,28 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
       if (agentStreamError) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      // Empty-output guard: a clean `code === 0` exit on a stream we are
+      // tracking, with no error frame and no substantive event, means the
+      // run silently finished without producing anything visible. That used
+      // to be marked `succeeded` and rendered as an empty assistant turn —
+      // see issue #691, where OpenCode runs were ending in ~3s with no
+      // chat content and no error banner. Surface an explicit failure
+      // instead so the chat shows a clear reason. ACP sessions and plain
+      // stdout streams are gated out via `trackingSubstantiveOutput`;
+      // their success/failure determination lives elsewhere.
+      if (
+        code === 0 &&
+        !run.cancelRequested &&
+        trackingSubstantiveOutput &&
+        !agentProducedOutput
+      ) {
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code, signal);
       }
       const status = run.cancelRequested
         ? 'canceled'
