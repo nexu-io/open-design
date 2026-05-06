@@ -73,8 +73,8 @@ jobs:
       # `scripts/postinstall.mjs` auto-builds `packages/*` and `tools/*`, but
       # `apps/daemon` and `apps/desktop` are not in that list. On a fresh clone
       # (every CI run), workspace typecheck fails because:
-      #   - `e2e/scripts/runtime-adapter.e2e.live.test.ts` imports types from
-      #     `apps/daemon/dist/*.js`
+      #   - packaged/runtime consumers resolve the daemon package export through
+      #     generated `apps/daemon/dist/*.d.ts`
       #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
       #     which resolves to `apps/desktop/dist/main/index.d.ts`
       # Build them explicitly here. Keeps the root `typecheck` script untouched.
@@ -297,6 +297,10 @@ jobs:
   build_linux:
     name: Build stable linux x64
     needs: [metadata, verify]
+    # Linux AppImage packaging is temporarily excluded from stable releases.
+    # Keep the job definition in place so the Linux lane can be re-enabled once
+    # the containerized pnpm bootstrap is fixed and reviewed.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -372,7 +376,6 @@ jobs:
       - verify
       - build_mac
       - build_win
-      - build_linux
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -406,12 +409,6 @@ jobs:
           name: open-design-stable-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
-      - name: Download linux release bundle
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-stable-linux-release-assets
-          path: ${{ runner.temp }}/release-assets/linux
-
       - name: Write release notes shell
         id: notes
         run: |
@@ -428,7 +425,7 @@ jobs:
 
           See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${{ needs.metadata.outputs.version_tag }}/CHANGELOG.md) for the full release notes.
 
-          This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, Linux x64 AppImage (no auto-update yet), checksums, and updater feed files.
+          This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, checksums, and updater feed files. Linux AppImage packaging is temporarily deferred from the stable release lane.
           EOF
           echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
 
@@ -452,7 +449,6 @@ jobs:
           mkdir -p "$all_release_dir"
           cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
           cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
-          cp "$RUNNER_TEMP/release-assets/linux"/* "$all_release_dir/"
           gh release upload "${{ needs.metadata.outputs.version_tag }}" "$all_release_dir"/*
 
       - name: Promote draft to published latest
@@ -482,6 +478,6 @@ jobs:
             echo "- windows signed: false"
             echo "- mac assets: open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
             echo "- win assets: open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe.blockmap"
-            echo "- linux assets: open-design-${{ needs.metadata.outputs.stable_version }}-linux-x64.AppImage"
-            echo "- Feeds: latest-mac.yml, latest.yml (no latest-linux.yml; AppImage updater not yet wired)"
+            echo "- linux assets: deferred from this stable release"
+            echo "- Feeds: latest-mac.yml, latest.yml"
           } >> "$GITHUB_STEP_SUMMARY"

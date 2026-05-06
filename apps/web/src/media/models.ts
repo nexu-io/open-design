@@ -32,6 +32,7 @@ export type MediaProviderId =
   | 'volcengine'
   | 'grok'
   | 'hyperframes'
+  | 'nanobanana'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -61,6 +62,8 @@ export interface MediaProvider {
   defaultBaseUrl?: string;
   /** Documentation URL for getting an API key. */
   docsUrl?: string;
+  /** Whether Settings should expose a custom model override field. */
+  supportsCustomModel?: boolean;
 }
 
 /**
@@ -102,6 +105,15 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     credentialsRequired: false,
     settingsVisible: false,
     docsUrl: 'https://hyperframes.heygen.com',
+  },
+  {
+    id: 'nanobanana',
+    label: 'Nano Banana',
+    hint: 'Google official by default; custom gateway configurable',
+    integrated: true,
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com',
+    docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',
+    supportsCustomModel: true,
   },
   {
     id: 'bfl',
@@ -280,6 +292,15 @@ export const IMAGE_MODELS: MediaModel[] = [
     label: 'grok-imagine-image',
     hint: 'xAI · 2K text-to-image',
     provider: 'grok',
+    caps: ['t2i'],
+  },
+
+  // Nano Banana — Google-compatible generateContent image path.
+  {
+    id: 'gemini-3.1-flash-image-preview',
+    label: 'nano-banana-2',
+    hint: 'Nano Banana · text-to-image',
+    provider: 'nanobanana',
     caps: ['t2i'],
   },
 

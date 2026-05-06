@@ -61,6 +61,8 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
+  const MENU_ESTIMATED_HEIGHT = 115;
+  const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
   const [isSectionExpansionPending, startSectionExpansion] = useTransition();
@@ -379,10 +381,30 @@ export function DesignFilesPanel({
                             const rect = (e.target as HTMLElement)
                               .closest('.df-row-menu')
                               ?.getBoundingClientRect();
+                            if (!rect) return;
+                            
+                            const viewportHeight = window.innerHeight;
+                            const spaceBelow = viewportHeight - rect.bottom;
+                            const spaceAbove = rect.top;
+                            
+                            let top: number;
+                            if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+                              top = rect.bottom + 4;
+                            } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+                              top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
+                            } else {
+                              top = Math.max(
+                                MENU_SAFE_PADDING,
+                                viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
+                              );
+                            }
+                            
+                            const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
+                            
                             setMenuPos({
                               name: f.name,
-                              top: (rect?.bottom ?? 0) + 4,
-                              left: (rect?.right ?? 0) - 160,
+                              top,
+                              left,
                             });
                           }}
                         >

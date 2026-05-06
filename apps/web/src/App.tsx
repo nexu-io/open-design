@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { PetOverlay } from './components/pet/PetOverlay';
@@ -23,6 +23,7 @@ import {
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
+  mergeDaemonConfig,
   saveConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
@@ -159,30 +160,9 @@ export function App() {
       setAppVersionInfo(versionInfo);
 
       setConfig((prev) => {
-        const next = { ...prev };
-
         // Merge daemon-persisted config — daemon values win for the fields
         // it tracks so that the choice survives origin/storage resets.
-        if (daemonConfig) {
-          if (daemonConfig.onboardingCompleted != null) {
-            next.onboardingCompleted = daemonConfig.onboardingCompleted;
-          }
-          if (daemonConfig.agentId !== undefined) {
-            next.agentId = daemonConfig.agentId;
-          }
-          if (daemonConfig.skillId !== undefined) {
-            next.skillId = daemonConfig.skillId;
-          }
-          if (daemonConfig.designSystemId !== undefined) {
-            next.designSystemId = daemonConfig.designSystemId;
-          }
-          if (daemonConfig.agentModels) {
-            next.agentModels = {
-              ...(next.agentModels ?? {}),
-              ...daemonConfig.agentModels,
-            };
-          }
-        }
+        const next = mergeDaemonConfig(prev, daemonConfig);
 
         if (alive) {
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
@@ -331,12 +311,18 @@ export function App() {
   );
 
   const refreshAgents = useCallback(
-    async (options?: { throwOnError?: boolean }) => {
-      const next = await fetchAgents(options);
+    async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
+      if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
+        const nextConfig = { ...config, agentCliEnv: options.agentCliEnv ?? {} };
+        saveConfig(nextConfig);
+        await syncConfigToDaemon(nextConfig);
+        setConfig(nextConfig);
+      }
+      const next = await fetchAgents({ throwOnError: options?.throwOnError });
       setAgents(next);
       return next;
     },
-    [],
+    [config],
   );
 
   const handleCreateProject = useCallback(
@@ -520,6 +506,18 @@ export function App() {
     void refreshTemplates();
   }, [route.kind, refreshTemplates]);
 
+  const enabledSkills = useMemo(
+    () => skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id)),
+    [skills, config.disabledSkills],
+  );
+  const enabledDS = useMemo(
+    () =>
+      designSystems.filter(
+        (d) => !(config.disabledDesignSystems ?? []).includes(d.id),
+      ),
+    [designSystems, config.disabledDesignSystems],
+  );
+
   return (
     <>
       {activeProject ? (
@@ -548,8 +546,8 @@ export function App() {
         />
       ) : (
         <EntryView
-          skills={skills}
-          designSystems={designSystems}
+          skills={enabledSkills}
+          designSystems={enabledDS}
           projects={projects}
           templates={templates}
           promptTemplates={promptTemplates}

@@ -19,6 +19,7 @@ import type { AgentInfo, ApiProtocol, ApiProtocolConfig, AppConfig, AppTheme, Ap
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
+import { LibrarySection } from './LibrarySection';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import {
   FAILURE_SOUNDS,
@@ -38,6 +39,7 @@ export type SettingsSection =
   | 'appearance'
   | 'notifications'
   | 'pet'
+  | 'library'
   | 'about';
 
 interface Props {
@@ -50,8 +52,13 @@ interface Props {
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
   onRefreshAgents: (
-    options?: { throwOnError?: boolean },
+    options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+}
+
+export interface AgentRefreshOptions {
+  throwOnError?: boolean;
+  agentCliEnv?: AppConfig['agentCliEnv'];
 }
 
 const SUGGESTED_MODELS_BY_PROTOCOL = {
@@ -129,6 +136,21 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
 type RescanNotice =
   | { kind: 'success'; count: number }
   | { kind: 'error' };
+
+const AGENT_CLI_ENV_FIELDS = [
+  {
+    agentId: 'claude',
+    envKey: 'CLAUDE_CONFIG_DIR',
+    labelKey: 'settings.cliEnvClaudeConfigDir',
+    placeholder: '~/.claude-2',
+  },
+  {
+    agentId: 'codex',
+    envKey: 'CODEX_HOME',
+    labelKey: 'settings.cliEnvCodexHome',
+    placeholder: '~/.codex-alt',
+  },
+] as const;
 
 function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
@@ -212,6 +234,40 @@ export function updateCurrentApiProtocolConfig(
     protocol,
     nextApiConfig,
   );
+}
+
+export function updateAgentCliEnvValue(
+  config: AppConfig,
+  agentId: string,
+  envKey: string,
+  rawValue: string,
+): AppConfig {
+  const value = rawValue.trim();
+  const agentCliEnv = { ...(config.agentCliEnv ?? {}) };
+  const nextAgentEnv = { ...(agentCliEnv[agentId] ?? {}) };
+  if (value) {
+    nextAgentEnv[envKey] = value;
+  } else {
+    delete nextAgentEnv[envKey];
+  }
+
+  if (Object.keys(nextAgentEnv).length > 0) {
+    agentCliEnv[agentId] = nextAgentEnv;
+  } else {
+    delete agentCliEnv[agentId];
+  }
+
+  return {
+    ...config,
+    agentCliEnv: Object.keys(agentCliEnv).length > 0 ? agentCliEnv : {},
+  };
+}
+
+export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOptions {
+  return {
+    throwOnError: true,
+    agentCliEnv: cfg.agentCliEnv ?? {},
+  };
 }
 
 export function switchApiProtocolConfig(
@@ -326,7 +382,7 @@ export function SettingsDialog({
     setAgentRescanRunning(true);
     setAgentRescanNotice(null);
     try {
-      const refreshed = await onRefreshAgents({ throwOnError: true });
+      const refreshed = await onRefreshAgents(agentRefreshOptionsForConfig(cfg));
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       setAgentRescanNotice({
         kind: 'success',
@@ -505,6 +561,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('pet.navTitle')}</strong>
                 <small>{t('pet.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'library' ? ' active' : ''}`}
+              onClick={() => setActiveSection('library')}
+            >
+              <Icon name="grid" size={18} />
+              <span>
+                <strong>{t('settings.library')}</strong>
+                <small>{t('settings.libraryHint')}</small>
               </span>
             </button>
             <button
@@ -777,6 +844,35 @@ export function SettingsDialog({
                   </div>
                 );
               })()}
+              <div className="agent-cli-env">
+                <div className="agent-cli-env-head">
+                  <h4>{t('settings.cliEnvTitle')}</h4>
+                  <p className="hint">{t('settings.cliEnvHint')}</p>
+                </div>
+                <div className="agent-cli-env-grid">
+                  {AGENT_CLI_ENV_FIELDS.map((field) => (
+                    <label className="field" key={`${field.agentId}:${field.envKey}`}>
+                      <span className="field-label">{t(field.labelKey)}</span>
+                      <input
+                        type="text"
+                        value={cfg.agentCliEnv?.[field.agentId]?.[field.envKey] ?? ''}
+                        placeholder={field.placeholder}
+                        spellCheck={false}
+                        onChange={(e) =>
+                          setCfg((c) =>
+                            updateAgentCliEnvValue(
+                              c,
+                              field.agentId,
+                              field.envKey,
+                              e.target.value,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
             </section>
           ) : (
             <section className="settings-section">
@@ -1011,6 +1107,10 @@ export function SettingsDialog({
             <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
+          {activeSection === 'library' ? (
+            <LibrarySection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
           {activeSection === 'about' ? (
             <section className="settings-section">
               <div className="section-head">
@@ -1168,13 +1268,13 @@ function MediaProvidersSection({
     });
   const updateProvider = (
     provider: MediaProvider,
-    patch: { apiKey?: string; baseUrl?: string },
+    patch: { apiKey?: string; baseUrl?: string; model?: string },
   ) => {
     setCfg((curr) => {
-      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '' };
+      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
       const map = { ...(curr.mediaProviders ?? {}) };
-      if (!next.apiKey.trim() && !next.baseUrl.trim()) {
+      if (!next.apiKey.trim() && !next.baseUrl.trim() && !next.model?.trim()) {
         delete map[provider.id];
       } else {
         map[provider.id] = next;
@@ -1193,9 +1293,11 @@ function MediaProvidersSection({
       </div>
       <div className="media-provider-list">
         {providers.map((provider) => {
-          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '' };
+          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
           const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
           const disabled = !provider.integrated;
+          const supportsCustomModel = provider.supportsCustomModel === true;
+          const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
@@ -1230,11 +1332,20 @@ function MediaProvidersSection({
                   disabled={disabled}
                   onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
                 />
+                {supportsCustomModel ? (
+                  <input
+                    value={entry.model ?? ''}
+                    placeholder="gemini-3.1-flash-image-preview"
+                    aria-label={`${provider.label} model`}
+                    disabled={disabled}
+                    onChange={(e) => updateProvider(provider, { model: e.target.value })}
+                  />
+                ) : null}
                 <button
                   type="button"
                   className="ghost"
-                  disabled={!configured}
-                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '' })}
+                  disabled={!clearable}
+                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '', model: '' })}
                 >
                   {t('settings.mediaProviderClear')}
                 </button>

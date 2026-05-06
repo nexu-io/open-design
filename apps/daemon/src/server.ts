@@ -9,7 +9,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { composeSystemPrompt } from './prompts/system.js';
+import {
+  composeSystemPrompt,
+  renderCodexImagegenOverride,
+  shouldRenderCodexImagegenOverride,
+} from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -36,6 +40,7 @@ import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
@@ -57,7 +62,7 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
-import { readAppConfig, writeAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -163,6 +168,267 @@ export function resolveDaemonCliPath(): string {
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+export function composeLiveInstructionPrompt({
+  daemonSystemPrompt,
+  runtimeToolPrompt,
+  clientSystemPrompt,
+  finalPromptOverride,
+}) {
+  const override =
+    typeof finalPromptOverride === 'string'
+      ? finalPromptOverride.trim()
+      : '';
+  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
+    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+    .map((part) =>
+      override && part.includes(override)
+        ? part.split(override).join('').trim()
+        : part,
+    )
+    .filter(Boolean);
+  if (override) {
+    parts.push(override);
+  }
+  return parts.join('\n\n---\n\n');
+}
+
+export function resolveCodexGeneratedImagesDir(
+  agentId,
+  metadata,
+  env = process.env,
+  homeDir = os.homedir(),
+) {
+  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
+  const rawCodexHome =
+    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
+      ? env.CODEX_HOME.trim()
+      : path.join(homeDir, '.codex');
+  const codexHome = rawCodexHome.startsWith('~/')
+    ? path.join(homeDir, rawCodexHome.slice(2))
+    : rawCodexHome;
+  return path.resolve(codexHome, 'generated_images');
+}
+
+type DirectoryStat = {
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+};
+
+type CodexGeneratedImagesDirValidationOptions = {
+  protectedDirs?: Array<string | null | undefined>;
+  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
+  lstatSync?: (target: string) => DirectoryStat;
+  statSync?: (target: string) => DirectoryStat;
+  realpathSync?: (target: string) => string;
+  warn?: (message: string) => void;
+};
+
+function isMissingPathError(err: unknown): boolean {
+  return (
+    err &&
+    typeof err === 'object' &&
+    'code' in err &&
+    err.code === 'ENOENT'
+  );
+}
+
+function collectProtectedDirRoots(
+  protectedDirs: Array<string | null | undefined>,
+  {
+    realpathSync,
+    statSync,
+  }: {
+    realpathSync: (target: string) => string;
+    statSync: (target: string) => DirectoryStat;
+  },
+): string[] {
+  const roots = [];
+  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
+    const resolved = path.resolve(raw);
+    roots.push(resolved);
+    try {
+      const canonical = realpathSync(resolved);
+      try {
+        if (statSync(canonical).isDirectory()) roots.push(canonical);
+      } catch {
+        roots.push(canonical);
+      }
+    } catch {
+      // A missing protected root cannot be the canonical target of a symlink.
+    }
+  }
+  return Array.from(new Set(roots));
+}
+
+function findContainingProtectedRoot(
+  candidate: string,
+  protectedRoots: string[],
+): string | null {
+  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
+}
+
+export function validateCodexGeneratedImagesDir(
+  codexGeneratedImagesDir: string | null | undefined,
+  {
+    protectedDirs = [],
+    mkdirSync = fs.mkdirSync,
+    lstatSync = fs.lstatSync,
+    statSync = fs.statSync,
+    realpathSync = fs.realpathSync.native,
+    warn = console.warn,
+  }: CodexGeneratedImagesDirValidationOptions = {},
+): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.trim().length === 0
+  ) {
+    return null;
+  }
+
+  const resolved = path.resolve(codexGeneratedImagesDir);
+  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
+    realpathSync,
+    statSync,
+  });
+  const warnSkipped = (reason: string) =>
+    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
+
+  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
+  if (protectedRoot) {
+    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
+    return null;
+  }
+
+  try {
+    let existingTargetStat = null;
+    try {
+      existingTargetStat = lstatSync(resolved);
+    } catch (err) {
+      if (!isMissingPathError(err)) throw err;
+    }
+    if (existingTargetStat?.isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (existingTargetStat && !existingTargetStat.isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+
+    const parent = path.dirname(resolved);
+    const protectedParentRoot = findContainingProtectedRoot(
+      parent,
+      protectedRoots,
+    );
+    if (protectedParentRoot) {
+      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
+      return null;
+    }
+
+    mkdirSync(parent, { recursive: true });
+    const canonicalParent = realpathSync(parent);
+    const canonicalCandidate = path.join(
+      canonicalParent,
+      path.basename(resolved),
+    );
+    const protectedCanonicalParentRoot = findContainingProtectedRoot(
+      canonicalCandidate,
+      protectedRoots,
+    );
+    if (protectedCanonicalParentRoot) {
+      warnSkipped(
+        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
+      );
+      return null;
+    }
+
+    mkdirSync(resolved, { recursive: true });
+    if (lstatSync(resolved).isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (!statSync(resolved).isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+    const canonicalDir = realpathSync(resolved);
+    const protectedCanonicalRoot = findContainingProtectedRoot(
+      canonicalDir,
+      protectedRoots,
+    );
+    if (protectedCanonicalRoot) {
+      warnSkipped(
+        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
+      );
+      return null;
+    }
+
+    return canonicalDir;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : String(err ?? 'unknown error');
+    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
+    return null;
+  }
+}
+
+export function resolveChatExtraAllowedDirs({
+  agentId,
+  skillsDir,
+  designSystemsDir,
+  linkedDirs = [],
+  codexGeneratedImagesDir,
+  existsSync = fs.existsSync,
+}: {
+  agentId?: string | null;
+  skillsDir?: string | null;
+  designSystemsDir?: string | null;
+  linkedDirs?: Array<string | null | undefined>;
+  codexGeneratedImagesDir?: string | null;
+  existsSync?: (path: string) => boolean;
+}): string[] {
+  const isCodex =
+    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
+  const candidates = isCodex
+    ? [codexGeneratedImagesDir]
+    : [
+        skillsDir,
+        designSystemsDir,
+        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
+      ];
+  return Array.from(
+    new Set(
+      candidates.filter(
+        (d) =>
+          typeof d === 'string' && d.length > 0 && existsSync(d),
+      ),
+    ),
+  );
+}
+
+export function resolveGrantedCodexImagegenOverride({
+  agentId,
+  metadata,
+  codexGeneratedImagesDir,
+  extraAllowedDirs = [],
+}: {
+  agentId?: string | null;
+  metadata?: unknown;
+  codexGeneratedImagesDir?: string | null;
+  extraAllowedDirs?: string[];
+}): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.length === 0 ||
+    !Array.isArray(extraAllowedDirs) ||
+    !extraAllowedDirs.includes(codexGeneratedImagesDir)
+  ) {
+    return null;
+  }
+  return renderCodexImagegenOverride(agentId, metadata);
+}
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -1130,7 +1396,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
-  void detectAgents().catch(() => {});
+  void readAppConfig(RUNTIME_DATA_DIR)
+    .then((config) => detectAgents(config.agentCliEnv ?? {}))
+    .catch(() => detectAgents().catch(() => {}));
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -1823,7 +2091,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/agents', async (_req, res) => {
     try {
-      const list = await detectAgents();
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const list = await detectAgents(config.agentCliEnv ?? {});
       res.json({ agents: list });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -3238,6 +3507,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   };
 
   const composeDaemonSystemPrompt = async ({
+    agentId,
     projectId,
     skillId,
     designSystemId,
@@ -3301,6 +3571,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : undefined;
 
     const prompt = composeSystemPrompt({
+      agentId,
+      includeCodexImagegenOverride: false,
       skillBody,
       skillName,
       skillMode,
@@ -3461,27 +3733,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
     const { prompt: daemonSystemPrompt, activeSkillDir } =
       await composeDaemonSystemPrompt({
+        agentId,
         projectId,
         skillId,
         designSystemId,
       });
-    const instructionPrompt = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
-      .map((part) => (typeof part === 'string' ? part.trim() : ''))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-    const composed = [
-      instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
-        : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
-          : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
-            : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
-      safeImages.length
-        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
-        : '',
-    ].join('');
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -3494,10 +3750,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     //      path inside its working directory. We copy (not symlink) so
     //      the staged directory is a true write barrier — agents cannot
     //      mutate the shipped repo resource through their cwd.
-    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
-    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
-    //      path in the preamble is reachable when staging fails (e.g. the
-    //      project has no on-disk cwd, or fs.cp errored).
+    //   2. `--add-dir` allowlist. For non-Codex agents, pass `SKILLS_DIR`
+    //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
+    //      preamble is reachable when staging fails (e.g. the project has
+    //      no on-disk cwd, or fs.cp errored). Codex treats `--add-dir`
+    //      entries as writable, so Codex receives only the narrow
+    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder
+    //      for allowlisted gpt-image image projects.
     //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
     //      `cwd: PROJECT_ROOT` — there the absolute path is already an
     //      in-cwd path, so neither (1) nor (2) is required for it to
@@ -3528,11 +3787,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
-    const extraAllowedDirs = [
-      SKILLS_DIR,
-      DESIGN_SYSTEMS_DIR,
-      ...linkedDirs,
-    ].filter((d) => fs.existsSync(d));
+    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
+      agentId,
+      projectRecord?.metadata,
+    );
+    if (codexGeneratedImagesDir) {
+      codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
+        codexGeneratedImagesDir,
+        {
+          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
+        },
+      );
+    }
+    const extraAllowedDirs = resolveChatExtraAllowedDirs({
+      agentId,
+      skillsDir: SKILLS_DIR,
+      designSystemsDir: DESIGN_SYSTEMS_DIR,
+      linkedDirs,
+      codexGeneratedImagesDir,
+    });
+    const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
+      agentId,
+      metadata: projectRecord?.metadata,
+      codexGeneratedImagesDir,
+      extraAllowedDirs,
+    });
+    const instructionPrompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt,
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+      finalPromptOverride: codexImagegenOverride,
+    });
+    const composed = [
+      instructionPrompt
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        : cwdHint
+          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          : linkedDirsHint
+            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            : '',
+      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      safeImages.length
+        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
+        : '',
+    ].join('');
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -3676,6 +3974,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
 
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       revokeToolToken('child_exit');
@@ -3713,6 +4018,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
             ...(def.env || {}),
           },
+          configuredAgentEnv,
         ),
         ...odMediaEnv,
       };
@@ -3764,7 +4070,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
     // Adapters that emit structured wrappers (claude-stream-json,
-    // copilot-stream-json, json-event-stream, acp-json-rpc, pi-rpc) fall
+    // qoder-stream-json, copilot-stream-json, json-event-stream,
+    // acp-json-rpc, pi-rpc) fall
     // through to the legacy single-pass code path below with a one-time
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
@@ -3846,10 +4153,28 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // parser that turns stream_event objects into UI-friendly events. For
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
+    let agentStreamError = null;
+    const sendAgentEvent = (ev) => {
+      if (ev?.type === 'error') {
+        if (agentStreamError) return;
+        agentStreamError = String(ev.message || 'Agent stream error');
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
+          details: ev.raw ? { raw: ev.raw } : undefined,
+          retryable: false,
+        }));
+        return;
+      }
+      send('agent', ev);
+    };
+
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'qoder-stream-json') {
+      const qoder = createQoderStreamHandler(sendAgentEvent);
+      child.stdout.on('data', (chunk) => qoder.feed(chunk));
+      child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
@@ -3881,6 +4206,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
+    // Wire the acpSession onto the run so cancel() can call abort()
+    // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
+    run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
@@ -3893,6 +4221,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      if (agentStreamError) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       const status = run.cancelRequested

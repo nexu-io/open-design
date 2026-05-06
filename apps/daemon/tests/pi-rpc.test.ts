@@ -1,7 +1,9 @@
 // @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parsePiModels, mapPiRpcEvent } from '../src/pi-rpc.js';
+import { parsePiModels, mapPiRpcEvent, attachPiRpcSession } from '../src/pi-rpc.js';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 
 // ─── parsePiModels ─────────────────────────────────────────────────────────
 
@@ -446,4 +448,185 @@ test('pi RPC: no duplicate usage when both message_end and turn_end carry usage'
   const usageEvents = events.filter((e) => e.type === 'usage');
   assert.equal(usageEvents.length, 1, 'should emit exactly one usage event per turn');
   assert.equal(usageEvents[0].usage.input_tokens, 100);
+});
+
+// ─── attachPiRpcSession integration tests ──────────────────────────────────
+//
+// These exercise the real attachPiRpcSession against a mock child process
+// so regressions in the actual function (wrong events, missing model
+// normalization, abort not writing to stdin, etc.) are caught.
+
+function createMockChild() {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.killed = false;
+  child.kill = (signal) => {
+    child.killed = true;
+    child.emit('close', null, signal);
+  };
+  return child;
+}
+
+function createSession(childOpts = {}) {
+  const events = [];
+  const send = (channel, payload) => events.push({ channel, ...payload });
+  const model = childOpts.model ?? null;
+  const child = createMockChild();
+
+  const session = attachPiRpcSession({
+    child,
+    prompt: 'test prompt',
+    cwd: '/tmp',
+    model,
+    send,
+  });
+
+  return { child, session, events, send };
+}
+
+function feedStdoutLines(child, lines) {
+  const input = lines.map((l) => JSON.stringify(l)).join('\n') + '\n';
+  child.stdout.write(input);
+}
+
+function closeStdout(child) {
+  child.stdout.end();
+  child.stdin.end();
+}
+
+test('attachPiRpcSession emits status:initializing with model name', () => {
+  const { events } = createSession({ model: 'anthropic/claude-sonnet-4-5' });
+
+  const init = events.find(
+    (e) => e.channel === 'agent' && e.type === 'status' && e.label === 'initializing',
+  );
+  assert.ok(init, 'should emit status:initializing');
+  assert.equal(init.model, 'anthropic/claude-sonnet-4-5');
+});
+
+test('attachPiRpcSession emits status:initializing with null model when model is null', () => {
+  const { events } = createSession({ model: null });
+
+  const init = events.find(
+    (e) => e.channel === 'agent' && e.type === 'status' && e.label === 'initializing',
+  );
+  assert.ok(init, 'should emit status:initializing');
+  assert.equal(init.model, null);
+});
+
+test('attachPiRpcSession sends prompt command on stdin', () => {
+  const { child } = createSession();
+
+  // Read what was written to stdin — the first line should be a prompt command.
+  const chunks = [];
+  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  // stdin already received the prompt write; PassThrough buffers it.
+  const buffered = child.stdin.read();
+  if (buffered) chunks.push(buffered.toString());
+
+  const lines = chunks.join('').trim().split('\n');
+  const promptLine = lines.find((l) => {
+    try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+  });
+  assert.ok(promptLine, 'should send a prompt command on stdin');
+  const parsed = JSON.parse(promptLine);
+  assert.equal(parsed.type, 'prompt');
+  assert.equal(parsed.message, 'test prompt');
+});
+
+test('attachPiRpcSession abort() writes well-formed abort command to stdin', () => {
+  const { child, session } = createSession();
+
+  // Drain any buffered stdin data (the prompt command) before abort.
+  child.stdin.read();
+
+  const chunks = [];
+  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+
+  session.abort();
+
+  // Read the abort command from stdin buffer.
+  const buffered = child.stdin.read();
+  if (buffered) chunks.push(buffered.toString());
+
+  const lines = chunks.join('').trim().split('\n');
+  const abortLine = lines.find((l) => {
+    try { return JSON.parse(l).type === 'abort'; } catch { return false; }
+  });
+  assert.ok(abortLine, 'should send an abort command on stdin');
+  const parsed = JSON.parse(abortLine);
+  assert.equal(parsed.type, 'abort');
+  assert.equal(typeof parsed.id, 'number');
+});
+
+test('attachPiRpcSession abort() is idempotent and no-op after stdin close', () => {
+  const { child, session } = createSession();
+
+  // Drain buffered data.
+  child.stdin.read();
+
+  // Close stdin (simulates pi process exiting).
+  child.stdin.end();
+  child.stdin.emit('close');
+
+  const chunks = [];
+  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+
+  // abort() should be a no-op because finished is already true or stdin is closed.
+  session.abort();
+  session.abort(); // idempotent
+
+  const buffered = child.stdin.read();
+  assert.equal(buffered, null, 'no bytes should be written after abort on closed stdin');
+});
+
+test('attachPiRpcSession: no agent events emitted after abort()', () => {
+  const { child, events, session } = createSession();
+
+  // Feed normal session events.
+  feedStdoutLines(child, [
+    { type: 'agent_start' },
+    { type: 'turn_start' },
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Thinking...' },
+    },
+  ]);
+
+  const beforeCount = events.length;
+  assert.ok(beforeCount > 0, 'should have events before abort');
+
+  // Abort — sets finished = true, gates further stdout events.
+  session.abort();
+
+  // Feed more agent events that arrive during the abort grace window.
+  feedStdoutLines(child, [
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Should not appear' },
+    },
+    { type: 'tool_execution_start', toolCallId: 'tc-1', toolName: 'bash', args: { command: 'ls' } },
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'More text' },
+    },
+    {
+      type: 'turn_end',
+      message: {
+        role: 'assistant',
+        usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15 },
+      },
+    },
+    { type: 'agent_end' },
+  ]);
+  closeStdout(child);
+
+  // No new agent events should have been emitted after abort.
+  assert.equal(events.length, beforeCount, 'no events should be emitted after abort');
+  assert.ok(
+    events.every((e) => e.delta !== 'Should not appear' && e.delta !== 'More text'),
+    'post-abort text must not appear in events',
+  );
 });

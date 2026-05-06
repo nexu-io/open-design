@@ -9,6 +9,8 @@ import {
   writeConfig,
 } from '../src/media-config.js';
 
+const TEST_NANOBANANA_BASE_URL = 'https://nano-banana-gateway.example.test';
+
 const OPENAI_ENV_KEYS = [
   'OD_OPENAI_API_KEY',
   'OPENAI_API_KEY',
@@ -146,6 +148,38 @@ describe('media-config OpenAI OAuth fallback', () => {
       apiKeyTail: '-key',
       baseUrl: 'https://example.test/v1',
     });
+  });
+
+  it('resolves Nano Banana env and stored model overrides', async () => {
+    process.env.OD_NANOBANANA_API_KEY = 'env-nano-key';
+    await writeStoredMediaConfig({
+      providers: {
+        nanobanana: {
+          apiKey: 'stored-nano-key',
+          baseUrl: TEST_NANOBANANA_BASE_URL,
+          model: 'gemini-3.1-flash-image-preview-custom',
+        },
+      },
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'nanobanana');
+    const masked = await readMaskedConfig(projectRoot);
+    const provider = (masked.providers as Record<string, unknown>).nanobanana;
+
+    expect(resolved).toEqual({
+      apiKey: 'env-nano-key',
+      baseUrl: TEST_NANOBANANA_BASE_URL,
+      model: 'gemini-3.1-flash-image-preview-custom',
+    });
+    expect(provider).toMatchObject({
+      configured: true,
+      source: 'env',
+      apiKeyTail: '-key',
+      baseUrl: TEST_NANOBANANA_BASE_URL,
+      model: 'gemini-3.1-flash-image-preview-custom',
+    });
+
+    delete process.env.OD_NANOBANANA_API_KEY;
   });
 
   describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {

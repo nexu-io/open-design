@@ -7,13 +7,21 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
 
 export function buildAcpSessionNewParams(cwd, { mcpServers } = {}) {
+  const servers = Array.isArray(mcpServers) ? mcpServers : [];
   return {
     cwd: path.resolve(cwd),
     // MCP is an optional compatibility layer. Default to no MCP servers so ACP
     // agents can run through the skill + CLI path without MCP support. Do not
     // auto-install or mutate user/global MCP config; callers must pass an
     // explicit per-session MCP descriptor when a compatible agent supports it.
-    mcpServers: Array.isArray(mcpServers) ? mcpServers : [],
+    // Normalize to the ACP stdio server shape expected by Kimi/Hermes.
+    mcpServers: servers.map((s) => ({
+      type: typeof s?.type === 'string' ? s.type : 'stdio',
+      name: typeof s?.name === 'string' ? s.name : '',
+      command: typeof s?.command === 'string' ? s.command : '',
+      args: Array.isArray(s?.args) ? s.args : [],
+      env: Array.isArray(s?.env) ? s.env : [],
+    })),
   };
 }
 
@@ -122,6 +130,7 @@ export async function detectAcpModels({
   bin,
   args,
   cwd = process.cwd(),
+  env = process.env,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   clientName = 'open-design-detect',
   clientVersion = 'runtime-adapter',
@@ -131,7 +140,7 @@ export async function detectAcpModels({
     const child = spawn(bin, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...env },
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -314,12 +323,20 @@ export function attachAcpSession({
       // After response completion, any late-arriving errors from the agent
       // (pipe-broken, cleanup race conditions, etc.) are safe to ignore.
       if (finished) return;
-      // JSON-RPC -32603 "Internal error" handling:
-      // Unexpected-id -32603 errors are cleanup noise — suppress them.
-      // Expected-id -32603 errors for session/set_model fall through to the
-      // recovery block below. All other expected-id -32603 errors (initialize,
-      // session/new, session/prompt) are real failures — call fail().
+      // JSON-RPC error handling:
+      // -32603 "Internal error": unexpected-id errors are cleanup noise — suppress.
+      //   Expected-id errors for session/set_model fall through to the recovery
+      //   block. All others (initialize, session/new, session/prompt) are real
+      //   failures — call fail().
+      // -32602 "Invalid params": these are real validation failures. Only
+      //   suppress when they match setModelRequestId so the recovery block handles
+      //   them. Any other -32602 (unexpected-id or non-set_model expected-id) is
+      //   a genuine protocol error — call fail().
       if (raw.error?.code === -32603 && raw.id !== expectedId) {
+        return;
+      }
+      if (raw.error?.code === -32602 && raw.id !== setModelRequestId) {
+        fail(rpcErr);
         return;
       }
       if (raw.error?.code === -32603 && raw.id === expectedId) {
@@ -329,9 +346,9 @@ export function attachAcpSession({
           fail(rpcErr);
           return;
         }
-      } else {
-        fail(rpcErr);
-        return;
+      }
+      if (raw.error?.code === -32602 && raw.id === setModelRequestId) {
+        // Fall through — the recovery block will handle this
       }
     }
     if (raw.method === 'session/request_permission') {
@@ -368,12 +385,14 @@ export function attachAcpSession({
       }
       return;
     }
-    // Recovery: if session/set_model failed with -32603, fall back to
+    // Recovery: if session/set_model failed with -32603 or -32602, fall back to
     // sending the prompt with the default (already-active) model.
+    // -32603: agent doesn't support set_model at all (internal error).
+    // -32602: agent rejects the model ID or set_model params (invalid params).
     // This is scoped to the exact set_model request id to avoid
     // triggering on prompt or other request failures.
     if (
-      raw.error?.code === -32603 &&
+      (raw.error?.code === -32603 || raw.error?.code === -32602) &&
       raw.id === setModelRequestId &&
       promptRequestId === null
     ) {

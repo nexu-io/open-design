@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -24,12 +24,12 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json",
+    "build": "tsc -p tsconfig.json",
     "daemon": "pnpm run build && node dist/cli.js --no-open",
     "dev": "pnpm run build && node dist/cli.js --no-open",
     "start": "pnpm run build && node dist/cli.js",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

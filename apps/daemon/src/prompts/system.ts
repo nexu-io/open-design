@@ -33,6 +33,7 @@ import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { IMAGE_MODELS } from '../media-models.js';
 
 type ProjectMetadata = {
   kind?: string;
@@ -76,6 +77,8 @@ type ProjectTemplate = { name: string; description?: string | null; files: Array
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
 export interface ComposeInput {
+  agentId?: string | null | undefined;
+  includeCodexImagegenOverride?: boolean | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -108,6 +111,8 @@ export interface ComposeInput {
 }
 
 export function composeSystemPrompt({
+  agentId,
+  includeCodexImagegenOverride = true,
   skillBody,
   skillName,
   skillMode,
@@ -188,7 +193,98 @@ export function composeSystemPrompt({
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
+  if (includeCodexImagegenOverride) {
+    const codexImagegenOverride = renderCodexImagegenOverride(
+      agentId,
+      metadata,
+    );
+    if (codexImagegenOverride) {
+      parts.push(codexImagegenOverride);
+    }
+  }
+
   return parts.join('');
+}
+
+const CODEX_IMAGEGEN_MODEL_IDS = new Set(
+  IMAGE_MODELS.filter(
+    (model) =>
+      model?.provider === 'openai' &&
+      typeof model?.id === 'string' &&
+      model.id.startsWith('gpt-image-'),
+  ).map((model) => model.id),
+);
+
+export function resolveCodexImagegenModelId(
+  metadata: ProjectMetadata | undefined,
+): string {
+  const imageModel =
+    typeof metadata?.imageModel === 'string' ? metadata.imageModel.trim() : '';
+  return CODEX_IMAGEGEN_MODEL_IDS.has(imageModel) ? imageModel : '';
+}
+
+export function shouldRenderCodexImagegenOverride(
+  agentId: string | null | undefined,
+  metadata: ProjectMetadata | undefined,
+): boolean {
+  const normalizedAgentId =
+    typeof agentId === 'string' ? agentId.trim().toLowerCase() : '';
+  return (
+    normalizedAgentId === 'codex' &&
+    metadata?.kind === 'image' &&
+    resolveCodexImagegenModelId(metadata).length > 0
+  );
+}
+
+export function renderCodexImagegenOverride(
+  agentId: string | null | undefined,
+  metadata: ProjectMetadata | undefined,
+): string {
+  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) {
+    return '';
+  }
+  const imageModel = resolveCodexImagegenModelId(metadata);
+
+  return `
+
+---
+
+## Codex built-in imagegen override (load-bearing — Codex only)
+
+The active agent is Codex and this image project selected \`${imageModel}\`.
+For this specific case, use Codex's built-in image generation capability
+instead of \`"$OD_NODE_BIN" "$OD_BIN" media generate\` for the first generation
+attempt. This is an intentional exception to the media generation contract and
+the active image skill's dispatcher wording.
+
+Do not require, request, or mention \`OPENAI_API_KEY\` before trying the
+built-in path. Reuse the project metadata, reference prompt template, aspect
+ratio, style notes, and the user's current brief to form the final image
+prompt. Generate the image with Codex built-in imagegen, then use the actual
+output path returned by the built-in imagegen result as the source file first.
+Only if the built-in result does not return a usable path should you search
+\`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
+source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
+
+Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
+descriptive filename, then verify the exact destination file exists under
+\`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
+creating the destination directory, copying/moving, or verifying the copied
+asset fails, report the exact source path, destination path, and access/copy
+error. Do not claim success, silently fall back, or ask about OpenAI/Azure
+fallback after a generated image exists but the project copy fails; stop after
+reporting the failure unless the user explicitly chooses fallback in a later
+turn, because fallback may create a different image.
+
+After the file exists under \`$OD_PROJECT_DIR\`, reply with the project-local
+filename and a short summary of the prompt used. Do not emit an \`<artifact>\`
+block for media.
+
+If Codex built-in imagegen is unavailable or generation fails before producing
+an image, surface the actual failure message and ask the user for one-time
+confirmation before falling back to the existing OpenAI/Azure API-key provider
+path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
+Do not silently fall back.`;
 }
 
 function renderMetadataBlock(
