@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../..');
 const skillsRoot = path.join(repoRoot, 'skills');
 const liveArtifactRoot = path.join(skillsRoot, 'live-artifact');
+const alipayPaymentIntegrationRoot = path.join(skillsRoot, 'alipay-payment-integration');
 
 function fresh(): string {
   return mkdtempSync(path.join(tmpdir(), 'od-skills-'));
@@ -72,6 +73,27 @@ describe('listSkills', () => {
     expect(skill.body).toContain('notion.notion_search');
     expect(skill.body).toContain('`OD_DAEMON_URL`');
     expect(skill.body).toContain('`OD_TOOL_TOKEN`');
+  });
+
+  it('includes the built-in alipay-payment-integration skill catalog entry', async () => {
+    const skills = await listSkills(skillsRoot);
+    const skill = skills.find((entry: { id: string }) => entry.id === 'alipay-payment-integration');
+
+    expect(skill).toBeTruthy();
+    expect(skill).toMatchObject({
+      id: 'alipay-payment-integration',
+      name: 'alipay-payment-integration',
+      mode: 'prototype',
+      previewType: 'markdown',
+    });
+    expect(skill.triggers.length).toBeGreaterThan(0);
+    expect(skill.body).toContain(`> **Skill root (absolute fallback):** \`${alipayPaymentIntegrationRoot}\``);
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/alipay-payment-integration/`);
+    expect(skill.body).toContain('references/product-decision.md');
+    expect(skill.body).toContain('references/sandbox-setup-guide.md');
+    expect(skill.body).toContain('references/sdk-config-examples.md');
+    expect(skill.body).toContain('references/general-interface-guide.md');
+    expect(skill.body).toContain('references/scripts/sandbox-check.sh');
   });
 });
 

@@ -313,6 +313,7 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 };
 
 export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
+  'alipay-payment-integration',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
   'web-prototype-taste-brutalist',
