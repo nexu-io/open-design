@@ -722,10 +722,10 @@ export const tr: Dict = {
   'fileViewer.deployResultLabel': 'Yayınlanmış URL',
   'fileViewer.deployLinkPreparingLabel': 'Herkese açık link bekleniyor',
   'fileViewer.deployLinkDelayed':
-    'Siteniz yayınlandı. Vercel hala herkese açık linki hazırlıyor.',
-  'fileViewer.deployLinkProtectedLabel': 'Vercel koruması açıldı',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Siteniz yayınlandı, Ancak Vercel bu linki önizlemek için doğrulama gerektiriyor. Yayınlama Korumasını devre dışı bırakın veya özel bir domain kullanın.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Şimdi yeniden dene',
 
   'questionForm.submit': 'Gönder',

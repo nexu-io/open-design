@@ -761,10 +761,10 @@ export const ptBR: Dict = {
   'fileViewer.deployResultLabel': 'Deployed URL',
   'fileViewer.deployLinkPreparingLabel': 'Public link pending',
   'fileViewer.deployLinkDelayed':
-    'Your site is deployed. Vercel is still preparing the public link.',
-  'fileViewer.deployLinkProtectedLabel': 'Vercel protection enabled',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Your site deployed, but Vercel is requiring authentication for this preview link. Disable Deployment Protection or use a custom domain.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Retry now',
 
   'questionForm.submit': 'Enviar',

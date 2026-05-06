@@ -718,8 +718,8 @@ export const zhCN: Dict = {
   'fileViewer.preparingPublicLink': '正在准备公开链接…',
   'fileViewer.copyDeployLink': '复制链接',
   'fileViewer.deployModalTitle': '部署到 Vercel',
-  'fileViewer.deployModalSubtitle': '使用你自己的 Vercel 账号部署此 HTML 作品预览。',
-  'fileViewer.vercelToken': 'Vercel token',
+  'fileViewer.deployModalSubtitle':
+    'Use the selected provider account to deploy this HTML preview.',
   'fileViewer.vercelTokenGetLink': '获取 Vercel token',
   'fileViewer.vercelTokenPlaceholder': '粘贴你的 Vercel token',
   'fileViewer.vercelTokenReuseHint': '将使用已保存的 token。输入新 token 可替换。',
@@ -745,10 +745,10 @@ export const zhCN: Dict = {
   'fileViewer.deployProviderFailed': '{provider} deploy failed. Check settings and try again.',
   'fileViewer.deployResultLabel': '部署链接',
   'fileViewer.deployLinkPreparingLabel': '公开链接准备中',
-  'fileViewer.deployLinkDelayed': '站点已经部署，Vercel 仍在准备公开链接。',
-  'fileViewer.deployLinkProtectedLabel': 'Vercel 访问保护已开启',
+  'fileViewer.deployLinkDelayed':
+    'Your site is deployed. The public link is still being prepared.',
   'fileViewer.deployLinkProtected':
-    '站点已部署，但 Vercel 要求登录后才能访问此预览链接。请关闭 Deployment Protection 或使用自定义域名。',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': '立即重试',
 
   'questionForm.submit': '提交',

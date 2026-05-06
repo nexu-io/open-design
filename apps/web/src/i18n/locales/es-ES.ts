@@ -686,10 +686,10 @@ export const esES: Dict = {
   'fileViewer.deployResultLabel': 'URL desplegada',
   'fileViewer.deployLinkPreparingLabel': 'Enlace público pendiente',
   'fileViewer.deployLinkDelayed':
-    'Tu sitio está desplegado. Vercel todavía está preparando el enlace público.',
-  'fileViewer.deployLinkProtectedLabel': 'Protección de Vercel activada',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Tu sitio se desplegó, pero Vercel exige autenticación para este enlace de preview. Desactiva Deployment Protection o usa un dominio personalizado.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Reintentar ahora',
 
   'questionForm.submit': 'Enviar',

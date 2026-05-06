@@ -729,10 +729,10 @@ export const fr: Dict = {
   'fileViewer.deployResultLabel': 'URL déployée',
   'fileViewer.deployLinkPreparingLabel': 'Lien public en attente',
   'fileViewer.deployLinkDelayed':
-    'Votre site est déployé. Vercel prépare encore le lien public.',
-  'fileViewer.deployLinkProtectedLabel': 'Protection Vercel activée',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Votre site est déployé, mais Vercel exige une authentification pour ce lien de prévisualisation. Désactivez la protection de déploiement ou utilisez un domaine personnalisé.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Réessayer maintenant',
 
   'questionForm.submit': 'Envoyer',

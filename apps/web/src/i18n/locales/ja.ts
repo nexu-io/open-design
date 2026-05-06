@@ -684,10 +684,10 @@ export const ja: Dict = {
   'fileViewer.deployResultLabel': 'デプロイ URL',
   'fileViewer.deployLinkPreparingLabel': '公開リンク準備中',
   'fileViewer.deployLinkDelayed':
-    'サイトはデプロイされました。Vercel が公開リンクを準備中です。',
-  'fileViewer.deployLinkProtectedLabel': 'Vercel の保護が有効',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'サイトはデプロイされましたが、Vercel がこのプレビューリンクに認証を要求しています。デプロイ保護を無効にするかカスタムドメインを使用してください。',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': '今すぐ再試行',
 
   'questionForm.submit': '送信',

@@ -731,10 +731,10 @@ export const hu: Dict = {
   'fileViewer.deployResultLabel': 'Telepített URL',
   'fileViewer.deployLinkPreparingLabel': 'Nyilvános link várólistán',
   'fileViewer.deployLinkDelayed':
-    'Az oldal telepítve. A Vercel még készíti a nyilvános linket.',
-  'fileViewer.deployLinkProtectedLabel': 'Vercel-védelem aktív',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Az oldal telepítve, de a Vercel hitelesítést kér ehhez az előnézeti linkhez. Kapcsold ki a Deployment Protection-t, vagy használj egyedi domaint.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Újra most',
 
   'questionForm.submit': 'Beküldés',

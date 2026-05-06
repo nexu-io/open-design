@@ -702,7 +702,7 @@ export const pl: Dict = {
   'fileViewer.copyDeployLink': 'Kopiuj link',
   'fileViewer.deployModalTitle': 'Wdróż na Vercel',
   'fileViewer.deployModalSubtitle':
-      'Wdróż ten artefakt HTML jako podgląd Vercel (Preview) przy użyciu własnego konta.',
+    'Use the selected provider account to deploy this HTML preview.',
   'fileViewer.vercelToken': 'Token Vercel',
   'fileViewer.vercelTokenGetLink': 'Pobierz token Vercel',
   'fileViewer.vercelTokenPlaceholder': 'Wklej swój token Vercel',
@@ -731,10 +731,10 @@ export const pl: Dict = {
   'fileViewer.deployResultLabel': 'Wdrożony URL',
   'fileViewer.deployLinkPreparingLabel': 'Oczekiwanie na link publiczny',
   'fileViewer.deployLinkDelayed':
-      'Strona została wdrożona. Vercel wciąż przygotowuje link publiczny.',
-  'fileViewer.deployLinkProtectedLabel': 'Ochrona Vercel włączona',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-      'Strona została wdrożona, ale Vercel wymaga uwierzytelnienia dla tego linku podglądu. Wyłącz Deployment Protection lub użyj własnej domeny.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Ponów teraz',
 
   'questionForm.submit': 'Wyślij',

@@ -731,10 +731,10 @@ export const ko: Dict = {
   'fileViewer.deployResultLabel': '배포된 URL',
   'fileViewer.deployLinkPreparingLabel': '공개 링크 보류 중',
   'fileViewer.deployLinkDelayed':
-    '사이트 배포는 완료되었으나, Vercel 측에서 공개 링크를 준비 중입니다.',
-  'fileViewer.deployLinkProtectedLabel': 'Vercel 보호 설정 됨',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    '배포는 완료되었지만, Vercel 계정 설정에 의해 이 링크가 보호되어 있습니다. Vercel Deployment Protection을 비활성화하거나 커스텀 도메인을 사용하세요.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': '지금 다시 시도',
 
   'questionForm.submit': '제출',

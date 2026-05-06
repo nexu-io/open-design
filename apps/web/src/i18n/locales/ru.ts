@@ -761,10 +761,10 @@ export const ru: Dict = {
   'fileViewer.deployResultLabel': 'URL развёрнутого сайта',
   'fileViewer.deployLinkPreparingLabel': 'Публичная ссылка готовится',
   'fileViewer.deployLinkDelayed':
-    'Сайт уже развернут. Vercel ещё подготавливает публичную ссылку.',
-  'fileViewer.deployLinkProtectedLabel': 'Включена защита Vercel',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Сайт развернут, но Vercel требует аутентификацию для этой preview-ссылки. Отключите Deployment Protection или используйте собственный домен.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Повторить',
 
   'questionForm.submit': 'Отправить',

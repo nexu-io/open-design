@@ -729,10 +729,10 @@ export const ar: Dict = {
   'fileViewer.deployResultLabel': 'رابط النشر',
   'fileViewer.deployLinkPreparingLabel': 'الرابط العام معلق',
   'fileViewer.deployLinkDelayed':
-    'تم نشر موقعك. Vercel لا يزال يحضر الرابط العام.',
-  'fileViewer.deployLinkProtectedLabel': 'حماية Vercel مفعلة',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'تم نشر موقعك، لكن Vercel يتطلب المصادقة لهذا الرابط. عطل حماية النشر أو استخدم دومين مخصص.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'إعادة المحاولة الآن',
 
   'questionForm.submit': 'إرسال',

@@ -762,10 +762,10 @@ export const uk: Dict = {
   'fileViewer.deployResultLabel': 'URL розгортання',
   'fileViewer.deployLinkPreparingLabel': 'Публічне посилання очікує',
   'fileViewer.deployLinkDelayed':
-    'Ваш сайт розгорнуто. Vercel все ще готує публічне посилання.',
-  'fileViewer.deployLinkProtectedLabel': 'Увімкнено захист Vercel',
+    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
-    'Ваш сайт розгорнуто, але Vercel вимагає автентифікацію для цього посилання попереднього перегляду. Вимкніть захист розгортання або використовуйте користувацький домен.',
+    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': 'Повторити зараз',
 
   'questionForm.submit': 'Надіслати',
