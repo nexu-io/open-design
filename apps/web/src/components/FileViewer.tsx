@@ -145,7 +145,7 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
 ];
 
 function getDeployProviderOption(providerId: WebDeployProviderId): DeployProviderOption {
-  return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0];
+  return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0]!;
 }
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -3702,22 +3702,6 @@ function HtmlViewer({
                 }}
               >
                 {deployButtonLabel}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function baseDirFor(fileName: string): string {
-  const idx = fileName.lastIndexOf('/');
-  return idx >= 0 ? fileName.slice(0, idx + 1) : '';
-}
-*** End Patch
-                    ? t('fileViewer.preparingPublicLink')
-                    : t('fileViewer.deployToVercel')}
               </button>
             </div>
           </div>

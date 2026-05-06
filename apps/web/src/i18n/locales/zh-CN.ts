@@ -724,6 +724,7 @@ export const zhCN: Dict = {
   'fileViewer.vercelTokenPlaceholder': '粘贴你的 Vercel token',
   'fileViewer.vercelTokenReuseHint': '将使用已保存的 token。输入新 token 可替换。',
   'fileViewer.vercelTokenRequired': '请先输入并保存 Vercel token。',
+  'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.cloudflareApiToken': 'Cloudflare API token',
   'fileViewer.cloudflareApiTokenGetLink': 'Get Cloudflare API token',
   'fileViewer.cloudflareApiTokenPlaceholder': 'Paste your Cloudflare API token',
@@ -747,6 +748,7 @@ export const zhCN: Dict = {
   'fileViewer.deployLinkPreparingLabel': '公开链接准备中',
   'fileViewer.deployLinkDelayed':
     'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkProtectedLabel': '已启用部署保护',
   'fileViewer.deployLinkProtected':
     'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': '立即重试',
