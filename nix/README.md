@@ -43,7 +43,6 @@ default module:
             enable = true;
             autoStart = true;            # systemd --user / launchd agent
             webFrontend.enable = true;   # also run the static SPA on :5174
-            agents = [ "claude" "codex" ];
           };
         }
       ];

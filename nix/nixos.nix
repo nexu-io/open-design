@@ -41,7 +41,7 @@
       persist_config off
     }
 
-    :${toString cfg.webFrontend.port} {
+    ${cfg.webFrontend.host}:${toString cfg.webFrontend.port} {
       handle /api/* {
         reverse_proxy 127.0.0.1:${toString cfg.port} {
           flush_interval -1
@@ -134,6 +134,13 @@ in {
         description = ''
           Open the daemon `port` in the system firewall, plus
           `webFrontend.port` when the bundled web service is enabled.
+
+          Note: by default both the daemon and the bundled web frontend
+          bind to loopback only, so opening the firewall has no effect
+          until you also widen the bind address — set
+          `services.open-design.webFrontend.host = "0.0.0.0"` (and pass
+          `--host 0.0.0.0` to the daemon if you need its API exposed)
+          to actually accept inbound LAN traffic.
         '';
       };
     };

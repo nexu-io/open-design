@@ -59,9 +59,14 @@
         default = daemon;
       };
 
+      # Wrap `od` with `--no-open` for `nix run`: the daemon package
+      # builds the daemon workspace only, not `apps/web/out/`, so the
+      # browser would otherwise auto-open onto an empty static dir.
       apps.default = {
         type = "app";
-        program = "${daemon}/bin/od";
+        program = "${pkgs.writeShellScript "od-nix-run" ''
+          exec ${daemon}/bin/od --no-open "$@"
+        ''}";
         meta.description = "Open Design local daemon (`od`)";
       };
 

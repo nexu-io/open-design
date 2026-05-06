@@ -15,18 +15,6 @@
   flake,
   defaultDataDir,
 }: let
-  # Agent CLIs the daemon scans for on PATH (apps/daemon/src/agents.ts).
-  # Keep this list in sync with that file.
-  supportedAgents = [
-    "claude"
-    "codex"
-    "gemini"
-    "opencode"
-    "cursor-agent"
-    "qwen"
-    "copilot"
-  ];
-
   # `pkgs.system` is a legacy alias removed when consumers set
   # `nixpkgs.config.allowAliases = false`. Use the canonical attribute
   # path so the module evaluates under both default and strict configs.
@@ -136,21 +124,6 @@ in {
     example = lib.literalExpression ''[ "/opt/agents/bin" ]'';
   };
 
-  agents = lib.mkOption {
-    type = lib.types.listOf (lib.types.enum supportedAgents);
-    default = [];
-    description = ''
-      Declarative record of which code-agent CLIs the user intends to
-      have on PATH for the daemon to detect. This option is documentary
-      — Open Design discovers agents by scanning PATH at runtime. Listing
-      them here makes the intent explicit so configuration reviewers can
-      tell what the user expects without grepping shell history.
-
-      Supported names: ${lib.concatStringsSep ", " supportedAgents}.
-    '';
-    example = ["claude" "codex"];
-  };
-
   webFrontend = {
     # The Open Design web frontend is a static SPA built by
     # `apps/web` → `apps/web/out/`. The daemon is a separate Express
@@ -184,6 +157,22 @@ in {
         TCP port the static file server binds to. The bundled SPA will
         call the daemon at `OD_DAEMON_URL` (which the service unit sets
         to `http://localhost:''${toString cfg.port}`).
+      '';
+    };
+
+    host = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1";
+      description = ''
+        Interface address the static file server binds to. Defaults to
+        loopback so enabling `webFrontend` does not expose the bundled
+        proxy (which forwards `/api/*`, `/artifacts/*`, and `/frames/*`
+        to the local daemon) to other hosts on the network.
+
+        Set to `"0.0.0.0"` (or a specific interface address) for shared
+        deployments. On NixOS you must additionally set
+        `services.open-design.openFirewall = true` for inbound traffic
+        to reach the listener.
       '';
     };
 
