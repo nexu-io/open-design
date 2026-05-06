@@ -1433,24 +1433,13 @@ function CommentTargetOverlay({
               className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}`}
               style={overlayStyle}
               data-testid="comment-target-overlay"
-            >
-              {index === 0 ? (
-                <div className="comment-target-tooltip">
-                  <strong>{snapshot.elementId}</strong>
-                  <span>{selectionKindLabel(snapshot.selectionKind, snapshot.memberCount)}</span>
-                  <span>{displayMembers.length} visible</span>
-                  <span>{width} × {height}</span>
-                </div>
-              ) : null}
-            </div>
+            />
           );
         })}
       </>
     );
   }
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
-  const width = Math.round(snapshot.position.width);
-  const height = Math.round(snapshot.position.height);
   return (
     <div
       className={`comment-target-overlay${selected ? ' selected' : ''}`}
@@ -1461,14 +1450,7 @@ function CommentTargetOverlay({
         height: bounds.height,
       }}
       data-testid="comment-target-overlay"
-    >
-      <div className="comment-target-tooltip">
-        <strong>{snapshot.elementId}</strong>
-        <span>{snapshot.label}</span>
-        <span>{selectionKindLabel(snapshot.selectionKind, snapshot.memberCount)}</span>
-        <span>{width} × {height}</span>
-      </div>
-    </div>
+    />
   );
 }
 
