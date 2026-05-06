@@ -65,6 +65,7 @@ describe('nano-banana media generation', () => {
         authorization: 'Bearer nano-test-key',
         'content-type': 'application/json',
       });
+      expect(init?.headers).not.toHaveProperty('x-goog-api-key');
       expect(JSON.parse(String(init?.body))).toEqual({
         contents: [{ parts: [{ text: 'A watercolor shiba inu under cherry blossoms' }] }],
         generationConfig: {
@@ -112,6 +113,47 @@ describe('nano-banana media generation', () => {
 
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'nano.png'));
     expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('uses x-goog-api-key for the official Gemini endpoint', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent');
+      expect(init?.headers).toMatchObject({
+        'content-type': 'application/json',
+        'x-goog-api-key': 'nano-test-key',
+      });
+      expect(init?.headers).not.toHaveProperty('authorization');
+      return new Response(JSON.stringify({
+        candidates: [{
+          content: {
+            parts: [{
+              inlineData: {
+                mimeType: 'image/png',
+                data: PNG_BASE64,
+              },
+            }],
+          },
+        }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gemini-3.1-flash-image-preview',
+      prompt: 'A studio photo of a yellow banana on white seamless paper',
+      aspect: '1:1',
+      output: 'official.png',
+    });
+
+    expect(result.providerId).toBe('nanobanana');
+    expect(result.name).toBe('official.png');
   });
 
   it('surfaces upstream Nano Banana errors', async () => {

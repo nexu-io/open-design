@@ -1070,10 +1070,7 @@ async function renderNanoBananaImage(ctx, credentials) {
 
   const resp = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${credentials.apiKey}`,
-      'content-type': 'application/json',
-    },
+    headers: nanoBananaHeaders(baseUrl, credentials.apiKey),
     body: JSON.stringify(body),
   });
   const text = await resp.text();
@@ -1092,6 +1089,27 @@ async function renderNanoBananaImage(ctx, credentials) {
     providerNote: `nano-banana/${wireModel} · ${nanoBananaAspectFor(ctx.aspect)} · ${NANOBANANA_DEFAULT_IMAGE_SIZE} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
+}
+
+function nanoBananaHeaders(baseUrl, apiKey) {
+  const headers = {
+    'content-type': 'application/json',
+  };
+  if (usesOfficialGoogleApiKeyHeader(baseUrl)) {
+    headers['x-goog-api-key'] = apiKey;
+    return headers;
+  }
+  headers.authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
+function usesOfficialGoogleApiKeyHeader(baseUrl) {
+  try {
+    const url = new URL(baseUrl);
+    return url.hostname === 'generativelanguage.googleapis.com';
+  } catch {
+    return false;
+  }
 }
 
 function nanoBananaAspectFor(aspect) {
