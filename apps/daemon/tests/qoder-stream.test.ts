@@ -55,6 +55,54 @@ test('qoder stream parser maps assistant text content blocks to text deltas', ()
   ]);
 });
 
+test('qoder stream parser maps assistant errors without text to error events', () => {
+  const line = JSON.stringify({
+    type: 'assistant',
+    message: { content: [] },
+    error: { message: 'Qoder authentication expired' },
+  });
+  const events = parseLines([line]);
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Qoder authentication expired',
+      raw: line,
+    },
+  ]);
+});
+
+test('qoder stream parser uses a fallback message for assistant errors without detail', () => {
+  const line = JSON.stringify({
+    type: 'assistant',
+    message: { content: [] },
+    error: { code: 'E_QODER' },
+  });
+  const events = parseLines([line]);
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Unknown Qoder error',
+      raw: line,
+    },
+  ]);
+});
+
+test('qoder stream parser preserves text from assistant records that also include errors', () => {
+  const events = parseLines([
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'Partial answer' }],
+      },
+      error: { message: 'Trailing Qoder warning' },
+    }),
+  ]);
+
+  assert.deepEqual(events, [{ type: 'text_delta', delta: 'Partial answer' }]);
+});
+
 test('qoder stream parser maps thinking content blocks to thinking events', () => {
   const events = parseLines([
     JSON.stringify({

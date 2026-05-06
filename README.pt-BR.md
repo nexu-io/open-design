@@ -1,6 +1,6 @@
 # Open Design
 
-> **A alternativa open-source ao [Claude Design][cd].** Local-first, deployável via web, BYOK em toda camada — **14 CLIs de agentes de código** detectados automaticamente no seu `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Mistral Vibe) viram a engine de design, dirigidos por **31 Skills compositáveis** e **72 Design Systems de qualidade de marca**. Sem CLI? Um proxy BYOK compatível com OpenAI é o mesmo loop, só sem o spawn.
+> **A alternativa open-source ao [Claude Design][cd].** Local-first, deployável via web, BYOK em toda camada — **16 CLIs de agentes de código** detectados automaticamente no seu `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) viram a engine de design, dirigidos por **31 Skills compositáveis** e **72 Design Systems de qualidade de marca**. Sem CLI? Um proxy BYOK compatível com OpenAI é o mesmo loop, só sem o spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — capa editorial: design com o agente no seu laptop" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="Baixar" src="https://img.shields.io/badge/baixar-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#agentes-de-código-suportados"><img alt="Agents" src="https://img.shields.io/badge/agents-14%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#agentes-de-código-suportados"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-entrar-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -52,7 +52,7 @@ OD se apoia em quatro ombros open-source:
 
 | | O que você ganha |
 |---|---|
-| **CLIs de agente (14)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — detectados automaticamente no `PATH`, troca em um clique |
+| **CLIs de agente (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — detectados automaticamente no `PATH`, troca em um clique |
 | **Fallback BYOK** | Proxy de API por protocolo em `/api/proxy/{anthropic,openai,azure,google}/stream` — cole `baseUrl` + `apiKey` + `model`, escolha Anthropic / OpenAI / Azure OpenAI / Google Gemini, e o daemon normaliza o SSE de volta para o mesmo stream de chat. IPs internos / SSRF bloqueados na borda do daemon. |
 | **Design systems built-in** | **129** — 2 starters escritos à mão + 70 sistemas de produto (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) de [`awesome-design-md`][acd2], mais 57 design skills de [`awesome-design-skills`][ads] adicionados direto em `design-systems/` |
 | **Skills built-in** | **31** — 27 em modo `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 em modo `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Agrupadas no picker por `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -291,7 +291,7 @@ Toda camada é compositável. Toda camada é um arquivo que dá pra editar. Leia
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, deployável na Vercel |
 | Daemon | Node 24 · Express · streaming SSE · `better-sqlite3`; tabelas: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| Transporte do agente | `child_process.spawn`; parsers de eventos tipados para `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), parsers `json-event-stream` por CLI (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe via Agent Client Protocol), `pi-rpc` (Pi via stdio JSON-RPC), `plain` (Qwen Code) |
+| Transporte do agente | `child_process.spawn`; parsers de eventos tipados para `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), parsers `json-event-stream` por CLI (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe via Agent Client Protocol), `pi-rpc` (Pi via stdio JSON-RPC), `plain` (Qwen Code / DeepSeek TUI) |
 | Proxy BYOK | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → APIs upstream específicas por provider, SSE normalizado em `delta/end/error`; rejeita hosts loopback / link-local / RFC1918 na borda do daemon |
 | Storage | Arquivos planos em `.od/projects/<id>/` + SQLite em `.od/app.sqlite` + credenciais em `.od/media-config.json` (gitignored, autocriado). `OD_DATA_DIR=<dir>` realoca todos os dados do daemon (usado para isolamento de teste e setups com instalação read-only); `OD_MEDIA_CONFIG_DIR=<dir>` afunila o override apenas para `media-config.json`, em setups que querem manter chaves de API fora do diretório de dados |
 | Preview | Iframe sandboxed via `srcdoc` + parser `<artifact>` por skill ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -647,7 +647,9 @@ Detectados automaticamente do `PATH` no boot do daemon. Sem config necessária. 
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt enviado como comando RPC `prompt`) |
 | **BYOK multi-provider** | n/a | Normalização SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini; com guarda SSRF contra loopback / link-local / RFC1918 |
 

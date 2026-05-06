@@ -461,7 +461,14 @@ test('qoder args use non-interactive print mode with cwd, model, and add-dir', (
   const args = qoder.buildArgs(
     'prompt must not appear in argv',
     [],
-    ['/repo/skills', '', null, '/repo/design-systems'],
+    [
+      '/repo/skills',
+      '',
+      null,
+      './relative-skills',
+      'relative-design-systems',
+      '/repo/design-systems',
+    ],
     { model: 'performance' },
     { cwd: '/tmp/od-project' },
   );
@@ -482,6 +489,8 @@ test('qoder args use non-interactive print mode with cwd, model, and add-dir', (
     '/repo/design-systems',
   ]);
   assert.equal(args.includes('prompt must not appear in argv'), false);
+  assert.equal(args.includes('./relative-skills'), false);
+  assert.equal(args.includes('relative-design-systems'), false);
 });
 
 test('qoder args omit default model and cwd when absent', () => {
@@ -496,6 +505,19 @@ test('qoder args omit default model and cwd when absent', () => {
   ]);
   assert.equal(args.includes('--model'), false);
   assert.equal(args.includes('--cwd'), false);
+});
+
+test('qoder args omit empty, non-string, and relative add-dir entries', () => {
+  const args = qoder.buildArgs('', [], [
+    '',
+    null,
+    undefined,
+    42,
+    './skills',
+    'design-systems',
+  ]);
+
+  assert.equal(args.includes('--add-dir'), false);
 });
 
 test('detectAgents keeps qoder unavailable with fallback metadata when qodercli is missing', async () => {

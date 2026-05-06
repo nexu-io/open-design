@@ -2,7 +2,7 @@
 
 # Open Design
 
-> **البديل مفتوح المصدر لـ [Claude Design][cd].** يعمل محلياً أولاً، قابل للنشر على Vercel، ويدعم BYOK في كل طبقة — **14 أداة CLI لوكلاء البرمجة** يكتشفها تلقائياً من `PATH` (Claude Code، Codex، Devin for Terminal، Cursor Agent، Gemini CLI، OpenCode، Qwen، Qoder CLI، GitHub Copilot CLI، Hermes، Kimi، Pi، Kiro، Mistral Vibe) لتصبح هي محرّك التصميم، مدفوعةً بـ **31 Skill قابلة للتركيب** و**72 نظام تصميم بمستوى الهوية البصرية**. لا توجد لديك CLI؟ بروكسي BYOK متوافق مع OpenAI يقدّم نفس الحلقة بدون عملية الـ spawn.
+> **البديل مفتوح المصدر لـ [Claude Design][cd].** يعمل محلياً أولاً، قابل للنشر على Vercel، ويدعم BYOK في كل طبقة — **16 أداة CLI لوكلاء البرمجة** يكتشفها تلقائياً من `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) لتصبح هي محرّك التصميم، مدفوعةً بـ **31 Skill قابلة للتركيب** و**72 نظام تصميم بمستوى الهوية البصرية**. لا توجد لديك CLI؟ بروكسي BYOK متوافق مع OpenAI يقدّم نفس الحلقة بدون عملية الـ spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — غلاف افتتاحي: صمّم مع الوكيل على حاسوبك المحمول" width="100%" />
@@ -22,7 +22,7 @@
   <a href="https://open-design.ai/"><img alt="تنزيل" src="https://img.shields.io/badge/%D8%AA%D9%86%D8%B2%D9%8A%D9%84-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#الوكلاء-المدعومون"><img alt="Agents" src="https://img.shields.io/badge/agents-14%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#الوكلاء-المدعومون"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#أنظمة-التصميم"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#الـ-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-انضم-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -54,7 +54,7 @@
 
 | | ما تحصل عليه |
 |---|---|
-| **أدوات CLI لوكلاء البرمجة (14)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — يكتشفها تلقائياً من `PATH`، وتبدّل بينها بنقرة واحدة |
+| **أدوات CLI لوكلاء البرمجة (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — يكتشفها تلقائياً من `PATH`، وتبدّل بينها بنقرة واحدة |
 | **بديل BYOK** | بروكسي API خاص بكل بروتوكول على `/api/proxy/{anthropic,openai,azure,google}/stream` — الصق `baseUrl` + `apiKey` + `model`، اختر Anthropic / OpenAI / Azure OpenAI / Google Gemini، ويُطبّع الـ daemon أحداث SSE إلى نفس chat stream. يتمّ صدّ عناوين IP الداخلية وثغرات SSRF عند حدود الـ daemon. |
 | **أنظمة تصميم مدمجة** | **129** — 2 starters مكتوبة يدوياً + 70 نظاماً للمنتجات (Linear، Stripe، Vercel، Airbnb، Tesla، Notion، Anthropic، Apple، Cursor، Supabase، Figma، Xiaohongshu، …) من [`awesome-design-md`][acd2]، إضافة إلى 57 design skill من [`awesome-design-skills`][ads] أُضيفت مباشرة تحت `design-systems/` |
 | **Skills مدمجة** | **31** — 27 في وضع `prototype` (web-prototype، saas-landing، dashboard، mobile-app، gamified-app، social-carousel، magazine-poster، dating-web، sprite-animation، motion-frames، critique، tweaks، wireframe-sketch، pm-spec، eng-runbook، finance-report، hr-onboarding، invoice، kanban-board، team-okrs، …) + 4 في وضع `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). مُجمَّعة في الـ picker حسب `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -293,7 +293,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
 |---|---|
 | الواجهة الأمامية | Next.js 16 App Router + React 18 + TypeScript، قابل للنشر على Vercel |
 | Daemon | Node 24 · Express · بثّ SSE · `better-sqlite3`؛ الجداول: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| نقل الوكلاء | `child_process.spawn`؛ بمحلّلات أحداث مكتوبة لـ `claude-stream-json` (Claude Code)، `qoder-stream-json` (Qoder CLI)، `copilot-stream-json` (Copilot)، محلّلات `json-event-stream` لكل CLI (Codex / Gemini / OpenCode / Cursor Agent)، `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe عبر Agent Client Protocol)، `pi-rpc` (Pi عبر stdio JSON-RPC)، `plain` (Qwen Code) |
+| نقل الوكلاء | `child_process.spawn`؛ بمحلّلات أحداث مكتوبة لـ `claude-stream-json` (Claude Code)، `qoder-stream-json` (Qoder CLI)، `copilot-stream-json` (Copilot)، محلّلات `json-event-stream` لكل CLI (Codex / Gemini / OpenCode / Cursor Agent)، `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe عبر Agent Client Protocol)، `pi-rpc` (Pi عبر stdio JSON-RPC)، `plain` (Qwen Code / DeepSeek TUI) |
 | BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → APIs أعلى التيار خاصة بكل provider، SSE مُطبَّعة `delta/end/error`؛ يرفض loopback / link-local / RFC1918 عند حدّ الـ daemon |
 | التخزين | ملفات عادية في `.od/projects/<id>/` + SQLite في `.od/app.sqlite` + اعتمادات في `.od/media-config.json` (في gitignore، تُنشأ تلقائياً). `OD_DATA_DIR=<dir>` ينقل كل بيانات الـ daemon (تُستخدم لعزل الاختبارات وإعدادات التثبيت للقراءة فقط)؛ `OD_MEDIA_CONFIG_DIR=<dir>` يضيّق التجاوز إلى `media-config.json` فقط لإبقاء مفاتيح API في موقع منفصل |
 | المعاينة | iframe معزولة عبر `srcdoc` + محلّل `<artifact>` لكل skill ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -676,7 +676,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | Agent runtime | مُضمَّن (Opus 4.7) | مُضمَّن ([`pi-ai`][piai]) | **مفوَّض إلى CLI الموجودة لدى المستخدم** |
 | Skills | خاصّة | 12 وحدة TS مخصّصة + `SKILL.md` | **31 حزمة [`SKILL.md`][skill] قابلة للسحب والإفلات** |
 | نظام التصميم | خاصّ | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 129 نظاماً مشحوناً** |
-| مرونة المزوّد | Anthropic فقط | 7+ عبر [`pi-ai`][piai] | **14 CLI adapter + بروكسي BYOK متوافق OpenAI** |
+| مرونة المزوّد | Anthropic فقط | 7+ عبر [`pi-ai`][piai] | **16 CLI adapter + بروكسي BYOK متوافق OpenAI** |
 | نموذج أسئلة الإقلاع | ❌ | ❌ | **✅ قاعدة صارمة، الجولة 1** |
 | منتقي الاتجاه | ❌ | ❌ | **✅ 5 اتجاهات حتميّة** |
 | تقدّم todo حيّ + بثّ الأدوات | ❌ | ✅ | **✅** (نمط UX من open-codesign) |
@@ -717,7 +717,9 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (البرومبت يُرسل كأمر RPC `prompt`) |
 | **BYOK متعدّد المزوّدين** | n/a | تطبيع SSE | `POST /api/proxy/{provider}/stream` → Anthropic / متوافق OpenAI / Azure OpenAI / Gemini؛ محمي SSRF ضد loopback / link-local / RFC1918 |
 
@@ -743,7 +745,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 
 ## Roadmap
 
-- [x] Daemon + اكتشاف الوكلاء (14 CLI adapter) + سجلّ skills + كتالوج أنظمة التصميم
+- [x] Daemon + اكتشاف الوكلاء (16 CLI adapter) + سجلّ skills + كتالوج أنظمة التصميم
 - [x] تطبيق ويب + chat + نموذج أسئلة + منتقي 5 اتجاهات + تقدّم todo + معاينة معزولة
 - [x] 31 skill + 72 نظام تصميم + 5 اتجاهات بصرية + 5 إطارات أجهزة
 - [x] مشاريع · محادثات · رسائل · tabs · قوالب مدعومة بـ SQLite

@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **11 種類の coding-agent CLI**（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、Qoder CLI、GitHub Copilot CLI、Hermes、Kimi、Pi）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
+> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — ノートパソコン上のエージェントとデザインする" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="ダウンロード" src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-11%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
   <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
@@ -53,7 +53,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 
 | | 提供される機能 |
 |---|---|
-| **Coding-agent CLI（11 種類）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）— `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
+| **Coding-agent CLI（16 種類）** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
 | **BYOK フォールバック** | OpenAI 互換プロキシ `/api/proxy/stream` — `baseUrl` + `apiKey` + `model` を貼れば、任意のベンダー（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、セルフホスト vLLM、その他の OpenAI 互換プロバイダ）がエンジンになります。daemon 側で loopback / link-local / RFC1918 を拒否し SSRF を防御。 |
 | **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
@@ -291,7 +291,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
 |---|---|
 | フロントエンド | Next.js 16 App Router + React 18 + TypeScript、Vercel デプロイ可能 |
 | Daemon | Node 24 · Express · SSE ストリーミング · `better-sqlite3`；テーブル：`projects` · `conversations` · `messages` · `tabs` · `templates` |
-| エージェント転送 | `child_process.spawn`；Claude Code は `claude-stream-json`、Qoder CLI は `qoder-stream-json`、Copilot は `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent は `json-event-stream`（CLI ごとのパーサー）、Hermes / Kimi は `acp-json-rpc`（Agent Client Protocol）、Pi は `pi-rpc`（stdio JSON-RPC）、Qwen Code は `plain` |
+| エージェント転送 | `child_process.spawn`；Claude Code は `claude-stream-json`、Qoder CLI は `qoder-stream-json`、Copilot は `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent は `json-event-stream`（CLI ごとのパーサー）、Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe は `acp-json-rpc`（Agent Client Protocol）、Pi は `pi-rpc`（stdio JSON-RPC）、Qwen Code / DeepSeek TUI は `plain` |
 | BYOK プロキシ | `POST /api/proxy/stream` → OpenAI 互換 `/v1/chat/completions` SSE パススルー；daemon エッジで loopback / link-local / RFC1918 を拒否 |
 | ストレージ | プレーンファイル `.od/projects/<id>/` + SQLite `.od/app.sqlite`（gitignore 済み、daemon 起動時に自動作成）。`OD_DATA_DIR` でルートを変更可能（テスト分離用） |
 | プレビュー | サンドボックス iframe（`srcdoc`）+ Skill ごとの `<artifact>` パーサー（[`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)） |
@@ -631,6 +631,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json`（型付きイベント） | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` パーサー | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]`（プロンプトは stdin） |
+| Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` パーサー | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]`（プロンプトは stdin） |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` パーサー | `opencode run --format json --dangerously-skip-permissions [--model …] -`（プロンプトは stdin） |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` パーサー | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`（プロンプトは stdin） |
@@ -640,6 +641,10 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
+| [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain`（生 stdout チャンク） | `deepseek exec --auto [--model …] <prompt>` |
 | **OpenAI 互換 BYOK** | n/a | SSE パススルー | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；loopback / link-local / RFC1918 を拒否 |
 
 新しい CLI の追加 = [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。ストリーム形式は `claude-stream-json` / `qoder-stream-json` / `copilot-stream-json` / `json-event-stream`（CLI ごとの `eventParser` 付き）/ `acp-json-rpc` / `pi-rpc` / `plain` から選択。

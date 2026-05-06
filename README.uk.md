@@ -1,6 +1,6 @@
 # Open Design
 
-> **Альтернатива з відкритим кодом до [Claude Design][cd].** Локально-перший, розгортується в web, BYOK на кожному рівні — **14 CLI агентів для кодування** автоматично виявляються у вашому `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Mistral Vibe) стають механізмом дизайну, керуються **31 компонуваною навичкою** та **72 системами дизайну комерційного класу**. Немає CLI? OpenAI-сумісний BYOK проксі — це той же цикл без spawn.
+> **Альтернатива з відкритим кодом до [Claude Design][cd].** Локально-перший, розгортується в web, BYOK на кожному рівні — **16 CLI агентів для кодування** автоматично виявляються у вашому `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) стають механізмом дизайну, керуються **31 компонуваною навичкою** та **72 системами дизайну комерційного класу**. Немає CLI? OpenAI-сумісний BYOK проксі — це той же цикл без spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="Завантажити" src="https://img.shields.io/badge/%D0%B7%D0%B0%D0%B2%D0%B0%D0%BD%D1%82%D0%B0%D0%B6%D0%B8%D1%82%D0%B8-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#підтримувані-агенти-для-кодування"><img alt="Agents" src="https://img.shields.io/badge/agents-14%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#підтримувані-агенти-для-кодування"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#системи-дизайну"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#навички"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-приєднатись-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -52,7 +52,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 
 | | Що ви отримуєте |
 |---|---|
-| **CLI агентів для кодування (14)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — автоматично виявляються на `PATH`, одночисельний swap |
+| **CLI агентів для кодування (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — автоматично виявляються на `PATH`, одночисельний swap |
 | **BYOK fallback** | Специфічний для протоколу API проксі за адресою `/api/proxy/{anthropic,openai,azure,google}/stream` — вставте `baseUrl` + `apiKey` + `model`, виберіть Anthropic / OpenAI / Azure OpenAI / Google Gemini, і демон нормалізує SSE назад у той самий потік чату. Внутрішні IP/SSRF заблоковані на краю демона. |
 | **Системи дизайну вбудовані** | **129** — 2 hand-authored starter + 70 систем продукту (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) з [`awesome-design-md`][acd2], плюс 57 навичок дизайну з [`awesome-design-skills`][ads] додано безпосередньо під `design-systems/` |
 | **Навички вбудовані** | **31** — 27 у режимі `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 у режимі `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Згруповані у picker за `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -291,7 +291,7 @@ DISCOVERY directives  (форма 1-го ходу, бранч бренду 2-г�
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, розгортається на Vercel |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3`; таблиці: `projects`, `conversations`, `messages`, `tabs`, `templates` |
-| Транспорт агента | `child_process.spawn`; типізовані парсери для `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), `json-event-stream` (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe), `pi-rpc` (Pi), `plain` (Qwen Code) |
+| Транспорт агента | `child_process.spawn`; типізовані парсери для `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), `json-event-stream` (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe), `pi-rpc` (Pi), `plain` (Qwen Code / DeepSeek TUI) |
 | BYOK проксі | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → специфічні API провайдерів, нормалізований SSE `delta/end/error`; блокує loopback / RFC1918 на краю демона |
 | Сховище | Звичайні файли в `.od/projects/<id>/` + SQLite у `.od/app.sqlite` (ігнорується git, автоматично створюється). Перевизначте корінь через `OD_DATA_DIR` для ізоляції тестів |
 | Попередній перегляд | Ізольований iframe через `srcdoc` + парсер `<artifact>` для кожної навички ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -605,7 +605,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | Рантайм агента | Вбудований (Opus 4.7) | Вбудований ([`pi-ai`][piai]) | **Делеговано наявному CLI користувача** |
 | Навички | Пропрієтарні | 12 кастомних TS-модулів + `SKILL.md` | **31 файлових [`SKILL.md`][skill] комплектів, що додаються перетягуванням** |
 | Система дизайну | Пропрієтарна | `DESIGN.md` (дорожня карта v0.2) | **`DESIGN.md` × 129 систем поставлено** |
-| Гнучкість провайдерів | Лише Anthropic | 7+ через [`pi-ai`][piai] | **14 CLI-адаптерів + OpenAI-сумісний BYOK проксі** |
+| Гнучкість провайдерів | Лише Anthropic | 7+ через [`pi-ai`][piai] | **16 CLI-адаптерів + OpenAI-сумісний BYOK проксі** |
 | Початкова форма запитань | ❌ | ❌ | **✅ Жорстке правило, хід 1** |
 | Вибір напрямку | ❌ | ❌ | **✅ 5 детермінованих напрямків** |
 | Живий прогрес todo + потік інструментів | ❌ | ✅ | **✅** (UX-патерн з open-codesign) |
@@ -646,7 +646,9 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
 | **Багатопровайдерний BYOK** | н/д | Нормалізація SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-сумісний / Azure OpenAI / Gemini; захист від SSRF проти loopback / link-local / RFC1918 |
 
@@ -672,7 +674,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 
 ## Дорожня карта
 
-- [x] Демон + виявлення агентів (14 CLI-адаптерів) + реєстр навичок + каталог систем дизайну
+- [x] Демон + виявлення агентів (16 CLI-адаптерів) + реєстр навичок + каталог систем дизайну
 - [x] Веб-додаток + чат + форма запитань + вибір з 5 напрямків + прогрес todo + прев'ю в пісочниці
 - [x] 31 навичка + 72 системи дизайну + 5 візуальних напрямків + 5 кадрів пристроїв
 - [x] Проекти · розмови · повідомлення · вкладки · шаблони на SQLite

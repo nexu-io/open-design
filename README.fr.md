@@ -52,7 +52,7 @@ OD s’appuie sur quatre projets open source :
 
 | | Ce que vous obtenez |
 |---|---|
-| **CLI de coding agents** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP), détectées automatiquement dans `PATH`, interchangeables en un clic |
+| **CLI de coding agents (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI, détectées automatiquement dans `PATH`, interchangeables en un clic |
 | **BYOK fallback** | Proxy API par protocole sur `/api/proxy/{anthropic,openai,azure,google}/stream` : collez `baseUrl` + `apiKey` + `model`, choisissez Anthropic / OpenAI / Azure OpenAI / Google Gemini, et le daemon normalise le SSE vers le même chat stream. Les destinations internal IP / SSRF sont bloquées côté daemon. |
 | **Design Systems intégrés** | Le menu déroulant charge les Design Systems depuis `design-systems/*/DESIGN.md` : starters écrits à la main, product systems importés depuis [`awesome-design-md`][acd2] et design skills normalisés depuis [`awesome-design-skills`][ads]. |
 | **Skills intégrés** | Le picker charge les Skills depuis `skills/*/SKILL.md` et les regroupe par `mode` / `scenario` : prototype, deck, image, video, audio, Design System, utility, puis notamment design / marketing / operations / engineering / product / finance / hr / sales / personal. |
@@ -650,7 +650,9 @@ Auto-détectés depuis `PATH` au boot du daemon. Aucune config nécessaire. Le d
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` | `pi --mode rpc [--model …] [--thinking …]` |
 | **BYOK multi-provider** | n/a | SSE normalisé | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini ; protégé contre loopback / link-local / RFC1918 |
 

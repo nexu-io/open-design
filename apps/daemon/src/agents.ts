@@ -524,7 +524,7 @@ export const AGENT_DEFS = [
         args.push('--model', options.model);
       }
       const dirs = (extraAllowedDirs || []).filter(
-        (d) => typeof d === 'string' && d.length > 0,
+        (d) => typeof d === 'string' && path.isAbsolute(d),
       );
       for (const d of dirs) args.push('--add-dir', d);
       return args;

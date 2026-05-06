@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd]의 오픈소스 대안.** 로컬 우선, 웹 배포 가능, 모든 레이어에서 BYOK — `PATH`에서 자동 감지되는 **11개의 코딩 에이전트 CLI**(Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi)가 **31개의 조합 가능한 Skill**과 **72개의 브랜드급 디자인 시스템**으로 구동되는 디자인 엔진이 됩니다. CLI가 하나도 없다? OpenAI 호환 BYOK 프록시가 spawn만 빠진 동일한 루프를 돌립니다.
+> **[Claude Design][cd]의 오픈소스 대안.** 로컬 우선, 웹 배포 가능, 모든 레이어에서 BYOK — `PATH`에서 자동 감지되는 **16개의 코딩 에이전트 CLI**(Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI)가 **31개의 조합 가능한 Skill**과 **72개의 브랜드급 디자인 시스템**으로 구동되는 디자인 엔진이 됩니다. CLI가 하나도 없다? OpenAI 호환 BYOK 프록시가 spawn만 빠진 동일한 루프를 돌립니다.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — 노트북 위의 에이전트와 함께 설계하는 표지" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="다운로드" src="https://img.shields.io/badge/%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-11%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#디자인-시스템"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#내장-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -52,7 +52,7 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 
 | | 제공 내용 |
 |---|---|
-| **코딩 에이전트 CLI(11개)** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes(ACP) · Kimi CLI(ACP) · Pi(RPC) — `PATH`에서 자동 감지, 한 번의 클릭으로 전환 |
+| **코딩 에이전트 CLI(16개)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH`에서 자동 감지, 한 번의 클릭으로 전환 |
 | **BYOK 폴백** | OpenAI 호환 프록시 `/api/proxy/stream` — `baseUrl` + `apiKey` + `model`만 붙여 넣으면 어떤 벤더(Anthropic-via-OpenAI 어댑터, DeepSeek, Groq, MiMo, OpenRouter, 자체 호스팅 vLLM, 또는 OpenAI 호환 프로바이더 무엇이든)든 엔진이 됩니다. daemon 경계에서 내부 IP / SSRF를 차단합니다. |
 | **내장 디자인 시스템** | **72개** — 2개의 수작업 스타터 + [`awesome-design-md`][acd2]에서 가져온 70개의 제품 시스템(Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu …) |
 | **내장 Skill** | **31개** — `prototype` 모드 27개(web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs …) + `deck` 모드 4개(`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). picker에서 `scenario`로 그룹화: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -290,7 +290,7 @@ DISCOVERY 지시문    (turn-1 폼, turn-2 브랜드 분기, TodoWrite, 5차원 
 |---|---|
 | 프론트엔드 | Next.js 16 App Router + React 18 + TypeScript, Vercel 배포 가능 |
 | Daemon | Node 24 · Express · SSE 스트리밍 · `better-sqlite3`; 테이블: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| 에이전트 전송 | `child_process.spawn`; 타입 이벤트 파서: `claude-stream-json`(Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json`(Copilot), `json-event-stream` + 각 CLI 파서(Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc`(Hermes / Kimi via Agent Client Protocol), `pi-rpc`(Pi via stdio JSON-RPC), `plain`(Qwen Code) |
+| 에이전트 전송 | `child_process.spawn`; 타입 이벤트 파서: `claude-stream-json`(Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json`(Copilot), `json-event-stream` + 각 CLI 파서(Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc`(Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe via Agent Client Protocol), `pi-rpc`(Pi via stdio JSON-RPC), `plain`(Qwen Code / DeepSeek TUI) |
 | BYOK 프록시 | `POST /api/proxy/stream` → OpenAI 호환 `/v1/chat/completions`, SSE 통과; daemon 경계에서 loopback / link-local / RFC1918 호스트 거부 |
 | 저장소 | `.od/projects/<id>/`의 평문 파일 + `.od/app.sqlite`의 SQLite(gitignore됨, 자동 생성). 테스트 격리를 위해 `OD_DATA_DIR`로 루트 변경 가능 |
 | 미리보기 | `srcdoc`를 통한 샌드박스 iframe + 스킬별 `<artifact>` 파서([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -632,6 +632,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json`(타입 이벤트) | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` 파서 | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]`(prompt는 stdin) |
+| Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` 파서 | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]`(prompt는 stdin) |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` 파서 | `opencode run --format json --dangerously-skip-permissions [--model …] -`(prompt는 stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` 파서 | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`(prompt는 stdin) |
@@ -641,6 +642,10 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`(Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`(stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]`(prompt는 RPC `prompt` 명령으로 전송) |
+| [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain`(원시 stdout 청크) | `deepseek exec --auto [--model …] <prompt>` |
 | **OpenAI 호환 BYOK** | n/a | SSE 통과 | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`; loopback / link-local / RFC1918에 대한 SSRF 차단 |
 
 새 CLI 추가는 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts)에 항목 하나 추가하는 것입니다. 스트리밍 형식은 `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream`(CLI별 `eventParser`와 함께), `acp-json-rpc`, `pi-rpc`, `plain` 중 하나입니다.

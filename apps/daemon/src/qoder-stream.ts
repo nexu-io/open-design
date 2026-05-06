@@ -23,6 +23,14 @@ function textFromContentBlock(block) {
   return '';
 }
 
+function messageFromError(error) {
+  if (error && typeof error === 'object' && typeof error.message === 'string') {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.length > 0) return error;
+  return 'Unknown Qoder error';
+}
+
 export function createQoderStreamHandler(onEvent) {
   let buffer = '';
   let emittedThinkingStart = false;
@@ -75,7 +83,11 @@ export function createQoderStreamHandler(onEvent) {
         emittedText = true;
       }
       if (obj.error && !emittedText) {
-        onEvent({ type: 'raw', line: rawLine });
+        onEvent({
+          type: 'error',
+          message: messageFromError(obj.error),
+          raw: rawLine,
+        });
       }
       return;
     }
