@@ -96,14 +96,22 @@ export function buildDockerArgs(
   // None of these values can contain shell metacharacters, so direct
   // interpolation into the inner command string is safe.
   //
-  // We invoke pnpm via `corepack pnpm` instead of `corepack enable && pnpm ...`
-  // because the container runs as the host's non-root uid (--user above) and
-  // `corepack enable` writes shims next to the system Node binary, which is
-  // owned by root in electronuserland/builder:base and not writable by the
-  // unprivileged container user. `corepack pnpm` resolves and executes the
-  // pinned packageManager from package.json directly, no shims required.
+  // We can't rely on `corepack pnpm` here: although Node 16.10+ ships corepack,
+  // the `electronuserland/builder:base` image strips the corepack binary, so
+  // the inner `bash -lc` fails with `corepack: command not found`. We also
+  // can't `corepack enable` ourselves — the container runs as the host's
+  // non-root uid (--user above) and corepack would try to write shims next
+  // to the system Node binary, which is owned by root in this image.
+  //
+  // Use `npx --yes pnpm@<version>` instead: `npx` ships with npm (always
+  // present in the image), `--yes` skips the install confirmation, and the
+  // package gets cached under `$HOME/.npm/_npx`, which is writable by the
+  // unprivileged user. The pinned version matches the `packageManager`
+  // field in the root package.json so reproducibility is preserved.
+  const PNPM_VERSION = "10.33.2";
+  const pnpmCmd = `npx --yes pnpm@${PNPM_VERSION}`;
   const innerArgs = [
-    "corepack pnpm tools-pack linux build",
+    `${pnpmCmd} tools-pack linux build`,
     `--to ${config.to}`,
     `--namespace ${config.namespace}`,
     "--dir /tools-pack",
@@ -111,7 +119,7 @@ export function buildDockerArgs(
   if (config.portable) {
     innerArgs.push("--portable");
   }
-  const innerCommand = "corepack pnpm install --frozen-lockfile && " + innerArgs.join(" ");
+  const innerCommand = `${pnpmCmd} install --frozen-lockfile && ` + innerArgs.join(" ");
 
   return [
     "run",
@@ -269,6 +277,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
+  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);

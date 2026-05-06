@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
@@ -83,16 +87,33 @@ describe("buildDockerArgs", () => {
   it("re-invokes pnpm tools-pack linux build inside the container without --containerized", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    expect(last).toMatch(/corepack pnpm install --frozen-lockfile/);
-    expect(last).toMatch(/corepack pnpm tools-pack linux build --to all --namespace default/);
+    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ install --frozen-lockfile/);
+    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ tools-pack linux build --to all --namespace default/);
     expect(last).not.toMatch(/--containerized/);
   });
 
-  it("invokes pnpm via `corepack pnpm` rather than `corepack enable` (non-root container can't write Node shim dir)", () => {
+  it("invokes pnpm via `npx --yes pnpm@<version>` (electronuserland/builder:base strips corepack, and the non-root container can't write Node shim dir)", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    expect(last).not.toMatch(/corepack enable/);
-    expect(last).toMatch(/corepack pnpm/);
+    expect(last).not.toMatch(/corepack/);
+    expect(last).toMatch(/npx --yes pnpm@/);
+  });
+
+  it("hardcoded pnpm version stays in lockstep with root package.json `packageManager`", () => {
+    // Guard against silent drift: if someone bumps packageManager in the
+    // root package.json but forgets to update PNPM_VERSION in linux.ts,
+    // the Linux container build would silently keep using the old pnpm.
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+    const rootPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf-8")) as {
+      packageManager?: string;
+    };
+    const match = String(rootPkg.packageManager ?? "").match(/^pnpm@(\d+\.\d+\.\d+)$/);
+    expect(match, `expected root packageManager "pnpm@x.y.z", got ${rootPkg.packageManager}`).not.toBeNull();
+    const expectedVersion = match![1];
+
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toContain(`npx --yes pnpm@${expectedVersion}`);
   });
 
   it("forwards --dir /tools-pack so inner build output lands under the mounted host dir", () => {

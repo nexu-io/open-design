@@ -5,7 +5,7 @@
  * claude-stream.js / copilot-stream.js / acp.js emit).
  *
  * Lifecycle:
- *   1. Daemon spawns `pi --mode rpc [--no-session] [--model ...]`
+ *   1. Daemon spawns `pi --mode rpc [--model ...]`
  *   2. This module sends `prompt` on stdin
  *   3. pi streams events on stdout (agent_start, message_update, …)
  *   4. We translate them to: status, text_delta, thinking_delta,

@@ -22,6 +22,7 @@ import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { PasteTextDialog } from './PasteTextDialog';
+import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor, type SketchDocument, type SketchItem } from './SketchEditor';
 
 interface Props {
@@ -82,7 +83,9 @@ export function FileWorkspace({
   const [showPasteDialog, setShowPasteDialog] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -229,6 +232,41 @@ export function FileWorkspace({
     };
   }, []);
 
+  useEffect(() => {
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+
+    const onWheel = (event: globalThis.WheelEvent) => {
+      scrollWorkspaceTabsWithWheel(tabBar, event);
+    };
+    tabBar.addEventListener('wheel', onWheel, { passive: false });
+    return () => tabBar.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
+  // so we beat the browser's default print dialog. Platform-gated so on
+  // macOS we don't steal Ctrl+P from native readline ("previous line") in
+  // text fields, and on win/linux we don't steal Cmd+P (rare but possible
+  // on remapped keyboards).
+  useEffect(() => {
+    const isMac =
+      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        if (e.isComposing) return;
+        e.preventDefault();
+        setQuickSwitcherOpen((open) => !open);
+      } else if (e.key === 'Escape' && quickSwitcherOpen) {
+        // The palette handles Esc itself, but also catch it here for the
+        // case where focus has drifted off the palette input.
+        setQuickSwitcherOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [quickSwitcherOpen]);
+
   async function handleDelete(name: string) {
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
     const ok = await deleteProjectFile(projectId, name);
@@ -368,7 +406,12 @@ export function FileWorkspace({
 
   return (
     <div className="workspace" data-testid="file-workspace">
-      <div className="ws-tabs-bar" role="tablist" aria-label={t('workspace.designFiles')}>
+      <div
+        ref={tabsBarRef}
+        className="ws-tabs-bar"
+        role="tablist"
+        aria-label={t('workspace.designFiles')}
+      >
         <button
           type="button"
           className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
@@ -495,6 +538,17 @@ export function FileWorkspace({
           }}
         />
       ) : null}
+      {quickSwitcherOpen ? (
+        <QuickSwitcher
+          projectId={projectId}
+          files={visibleFiles}
+          onOpenFile={(name) => {
+            openFile(name);
+            setQuickSwitcherOpen(false);
+          }}
+          onClose={() => setQuickSwitcherOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -561,6 +615,30 @@ function Tab({
       ) : null}
     </div>
   );
+}
+
+export function scrollWorkspaceTabsWithWheel(
+  tabBar: Pick<HTMLDivElement, 'clientWidth' | 'scrollLeft' | 'scrollWidth'>,
+  event: Pick<globalThis.WheelEvent, 'ctrlKey' | 'deltaMode' | 'deltaX' | 'deltaY' | 'preventDefault'>,
+) {
+  if (event.ctrlKey) return;
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  if (tabBar.scrollWidth <= tabBar.clientWidth) return;
+
+  const before = tabBar.scrollLeft;
+  tabBar.scrollLeft += wheelDeltaToPixels(event.deltaY, event.deltaMode);
+  if (tabBar.scrollLeft === before) return;
+
+  event.preventDefault();
+}
+
+function wheelDeltaToPixels(delta: number, deltaMode: number): number {
+  const WHEEL_DELTA_LINE = 1;
+  const WHEEL_DELTA_PAGE = 2;
+
+  if (deltaMode === WHEEL_DELTA_LINE) return delta * 16;
+  if (deltaMode === WHEEL_DELTA_PAGE) return delta * 160;
+  return delta;
 }
 
 function kindIconName(

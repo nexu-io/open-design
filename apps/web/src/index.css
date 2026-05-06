@@ -580,17 +580,57 @@ code {
 /* -------- Split / panes -------------------------------------------- */
 .split {
   display: grid;
-  grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
+  grid-template-columns: 460px 8px minmax(400px, 1fr);
   min-height: 0;
+  min-width: 0;
+}
+.split.is-resizing-chat {
+  cursor: col-resize;
+  user-select: none;
+}
+.split.is-resizing-chat iframe {
+  pointer-events: none;
 }
 .pane {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--border);
   background: var(--bg-panel);
 }
-.pane:last-child { border-right: none; }
+.split-resize-handle {
+  width: 8px;
+  min-width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 3px,
+      var(--border) 3px,
+      var(--border) 5px,
+      transparent 5px
+    );
+  transition: background 120ms ease;
+  touch-action: none;
+}
+.split-resize-handle:hover,
+.split-resize-handle:focus-visible,
+.split.is-resizing-chat .split-resize-handle {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent) 16%, transparent) 0,
+      color-mix(in srgb, var(--accent) 16%, transparent) 3px,
+      var(--accent) 3px,
+      var(--accent) 5px,
+      color-mix(in srgb, var(--accent) 16%, transparent) 5px
+    );
+}
+.split-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 /* -------- Chat sticky header --------------------------------------- */
 .chat-header {
@@ -6613,31 +6653,51 @@ button.connector-action.is-loading {
 .op-todo .todo-list {
   list-style: none;
   margin: 0;
-  padding: 4px 12px 10px;
+  padding: 6px 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   font-size: 12px;
 }
 .todo-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 2px 0;
-  line-height: 1.4;
+  gap: 10px;
+  padding: 5px 8px;
+  line-height: 1.45;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 .todo-check {
   width: 16px;
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-soft);
   font-family: var(--mono);
   text-align: center;
+  line-height: 1.45;
 }
+.todo-text { color: var(--text); }
+
+/* Pending — quietly waiting */
+.todo-pending .todo-check { color: var(--text-faint); }
 .todo-pending .todo-text { color: var(--text-muted); }
+
+/* In progress — the only row that should pop */
+.todo-in_progress {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
 .todo-in_progress .todo-check { color: var(--accent); }
-.todo-in_progress .todo-text { color: var(--text); font-weight: 500; }
+.todo-in_progress .todo-text { color: var(--text-strong); font-weight: 600; }
+
+/* Completed — settled, but still readable */
 .todo-completed .todo-check { color: var(--green); }
-.todo-completed .todo-text { text-decoration: line-through; color: var(--text-muted); }
+.todo-completed .todo-text {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  color: var(--text-muted);
+}
 
 /* Composer extras */
 .composer.drag-active {
@@ -7204,27 +7264,27 @@ button.connector-action.is-loading {
 /* op-todo card variant (the .op-todo .todo-list rule already exists above) */
 .op-todo {
   border-color: var(--accent-soft);
-  background: linear-gradient(180deg, #fff8f3 0%, var(--bg-panel) 60%);
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 60%);
 }
 .op-todo .op-card-head {
-  border-bottom: 1px solid var(--accent-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-soft) 70%, transparent);
   background: transparent;
 }
 .op-todo .op-icon {
   background: var(--accent-soft);
-  color: var(--accent-hover);
+  color: var(--accent);
 }
 .op-todo .op-title {
   letter-spacing: 0.02em;
   text-transform: uppercase;
   font-size: 11px;
-  color: var(--accent-hover);
+  color: var(--text-strong);
 }
 .op-todo .op-meta {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--accent-hover);
+  color: var(--text-strong);
 }
 
 /* Question form — interactive form a planning agent can post into chat */
@@ -10213,6 +10273,115 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 [dir="rtl"] .title,
 [dir="rtl"] .meta {
   text-align: right;
+}
+
+/* ============================================================
+   Quick Switcher (Cmd/Ctrl+P file palette)
+   ============================================================ */
+.qs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 12, 10, 0.32);
+  /* Sits in the modal tier (alongside prompt-template-modal-overlay) so
+   * the palette renders above any open context menus or popovers. */
+  z-index: 1500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.qs-palette {
+  width: min(560px, 92vw);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text);
+}
+.qs-input {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+}
+.qs-input::placeholder {
+  color: var(--text-faint);
+}
+.qs-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.qs-empty {
+  padding: 20px 16px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.qs-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.qs-row-active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.qs-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qs-path {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.qs-kind {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.qs-row-active .qs-kind {
+  color: var(--accent-strong);
+}
+.qs-footer {
+  display: flex;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.qs-footer kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 2px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 /* Library section (Skills & Design Systems management) */

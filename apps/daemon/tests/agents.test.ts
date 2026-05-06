@@ -32,6 +32,7 @@ const kilo = AGENT_DEFS.find((agent) => agent.id === 'kilo');
 const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
+const pi = AGENT_DEFS.find((agent) => agent.id === 'pi');
 const deepseek = AGENT_DEFS.find((agent) => agent.id === 'deepseek');
 const gemini = AGENT_DEFS.find((agent) => agent.id === 'gemini');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
@@ -391,6 +392,31 @@ test('devin args use acp subcommand for json-rpc streaming', () => {
     'acp',
   ]);
   assert.equal(devin.streamFormat, 'acp-json-rpc');
+});
+
+test('pi args use rpc mode without --no-session and append model/thinking options', () => {
+  const baseArgs = pi.buildArgs('', [], [], {}, {});
+
+  assert.deepEqual(baseArgs, ['--mode', 'rpc']);
+  assert.ok(!baseArgs.includes('--no-session'), 'pi must not pass --no-session');
+  assert.equal(pi.promptViaStdin, true);
+  assert.equal(pi.streamFormat, 'pi-rpc');
+
+  const withModel = pi.buildArgs('', [], [], { model: 'anthropic/claude-sonnet-4-5' }, {});
+  assert.deepEqual(withModel, [
+    '--mode',
+    'rpc',
+    '--model',
+    'anthropic/claude-sonnet-4-5',
+  ]);
+
+  const withThinking = pi.buildArgs('', [], [], { reasoning: 'high' }, {});
+  assert.deepEqual(withThinking, [
+    '--mode',
+    'rpc',
+    '--thinking',
+    'high',
+  ]);
 });
 
 test('gemini args avoid version-fragile trust flags', () => {

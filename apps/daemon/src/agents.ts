@@ -592,7 +592,7 @@ export const AGENT_DEFS = [
       options = {},
       runtimeContext = {},
     ) => {
-      const args = ['--mode', 'rpc', '--no-session'];
+      const args = ['--mode', 'rpc'];
       if (options.model && options.model !== 'default') {
         // pi --model accepts patterns ("sonnet", "anthropic/claude-sonnet-4-5",
         // "openai/gpt-5:high") so we pass the value through as-is.
