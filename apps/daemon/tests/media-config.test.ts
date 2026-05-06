@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   readMaskedConfig,
@@ -152,6 +152,7 @@ describe('media-config OpenAI OAuth fallback', () => {
     let overrideRoot: string;
     let originalMediaConfigDir: string | undefined;
     let originalDataDir: string | undefined;
+    let homedirSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(async () => {
       overrideRoot = await mkdtemp(path.join(tmpdir(), 'od-media-override-'));
@@ -159,6 +160,13 @@ describe('media-config OpenAI OAuth fallback', () => {
       originalDataDir = process.env.OD_DATA_DIR;
       delete process.env.OD_MEDIA_CONFIG_DIR;
       delete process.env.OD_DATA_DIR;
+      // Stub os.homedir() to point at the per-test fake home so the
+      // ~/, $HOME, ${HOME} expansion in resolveOverrideDir lands inside
+      // homeDir on every platform. Without this the production path
+      // (which now goes through expandHomePrefix -> os.homedir()) would
+      // expand to USERPROFILE on Windows while the fixture is written
+      // under homeDir, and the assertion would fail platform-specifically.
+      homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
     });
 
     afterEach(async () => {
@@ -172,6 +180,7 @@ describe('media-config OpenAI OAuth fallback', () => {
       } else {
         process.env.OD_DATA_DIR = originalDataDir;
       }
+      homedirSpy.mockRestore();
       await rm(overrideRoot, { recursive: true, force: true });
     });
 
