@@ -9,6 +9,8 @@ import {
   writeConfig,
 } from '../src/media-config.js';
 
+const TEST_NANOBANANA_BASE_URL = 'https://nano-banana-gateway.example.test';
+
 const OPENAI_ENV_KEYS = [
   'OD_OPENAI_API_KEY',
   'OPENAI_API_KEY',
@@ -23,6 +25,8 @@ describe('media-config OpenAI OAuth fallback', () => {
   const originalEnv = Object.fromEntries(
     OPENAI_ENV_KEYS.map((key) => [key, process.env[key]]),
   );
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
 
   beforeEach(async () => {
     homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-home-'));
@@ -31,6 +35,8 @@ describe('media-config OpenAI OAuth fallback', () => {
     for (const key of OPENAI_ENV_KEYS) {
       delete process.env[key];
     }
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
   });
 
   afterEach(async () => {
@@ -45,6 +51,16 @@ describe('media-config OpenAI OAuth fallback', () => {
       } else {
         process.env[key] = originalEnv[key];
       }
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
     }
     await rm(homeDir, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
@@ -132,6 +148,38 @@ describe('media-config OpenAI OAuth fallback', () => {
       apiKeyTail: '-key',
       baseUrl: 'https://example.test/v1',
     });
+  });
+
+  it('resolves Nano Banana env and stored model overrides', async () => {
+    process.env.OD_NANOBANANA_API_KEY = 'env-nano-key';
+    await writeStoredMediaConfig({
+      providers: {
+        nanobanana: {
+          apiKey: 'stored-nano-key',
+          baseUrl: TEST_NANOBANANA_BASE_URL,
+          model: 'gemini-3.1-flash-image-preview-custom',
+        },
+      },
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'nanobanana');
+    const masked = await readMaskedConfig(projectRoot);
+    const provider = (masked.providers as Record<string, unknown>).nanobanana;
+
+    expect(resolved).toEqual({
+      apiKey: 'env-nano-key',
+      baseUrl: TEST_NANOBANANA_BASE_URL,
+      model: 'gemini-3.1-flash-image-preview-custom',
+    });
+    expect(provider).toMatchObject({
+      configured: true,
+      source: 'env',
+      apiKeyTail: '-key',
+      baseUrl: TEST_NANOBANANA_BASE_URL,
+      model: 'gemini-3.1-flash-image-preview-custom',
+    });
+
+    delete process.env.OD_NANOBANANA_API_KEY;
   });
 
   describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {

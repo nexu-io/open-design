@@ -55,6 +55,7 @@ export interface PromptTemplateMetadata {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
@@ -78,6 +79,8 @@ export interface ProjectMetadata {
   // New Project panel. Treated by the system-prompt composer as a stylistic
   // and structural reference for the generation request.
   promptTemplate?: PromptTemplateMetadata;
+  // Absolute paths to local code folders the agent can read via --add-dir.
+  linkedDirs?: string[];
 }
 
 export interface Project {

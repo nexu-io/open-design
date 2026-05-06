@@ -17,6 +17,7 @@ import {
 } from './artifact-manifest.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
+const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
@@ -394,15 +395,27 @@ export function validateProjectPath(raw) {
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new Error('invalid file name');
   }
-  if (raw.includes('\0') || /^[A-Za-z]:/.test(raw) || raw.startsWith('/')) {
+  const normalized = raw.replace(/\\/g, '/');
+  if (raw.includes('\0') || /^[A-Za-z]:/.test(normalized) || normalized.startsWith('/')) {
     throw new Error('invalid file name');
   }
-  const normalized = raw.replace(/\\/g, '/');
   const parts = normalized.split('/').filter(Boolean);
   if (parts.length === 0 || parts.some((p) => FORBIDDEN_SEGMENT.test(p))) {
     throw new Error('invalid file name');
   }
+  if (parts.some((part) => RESERVED_PROJECT_FILE_SEGMENTS.has(part))) {
+    throw new Error('reserved project path');
+  }
   return parts.join('/');
+}
+
+export function isReservedProjectFilePath(raw) {
+  try {
+    const normalized = String(raw ?? '').replace(/\\/g, '/');
+    return normalized.split('/').filter(Boolean).some((part) => RESERVED_PROJECT_FILE_SEGMENTS.has(part));
+  } catch {
+    return false;
+  }
 }
 
 // Keep Unicode letters/digits as-is; replace path separators, control

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
@@ -13,13 +22,14 @@ import {
   deletePreviewComment,
   fetchPreviewComments,
   fetchDesignSystem,
+  fetchLiveArtifacts,
   fetchProjectFiles,
   fetchSkill,
   patchPreviewCommentStatus,
   upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
-import { useProjectFileEvents } from '../providers/project-events';
+import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
@@ -30,6 +40,8 @@ import {
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
+import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -58,6 +70,8 @@ import type {
   PreviewCommentTarget,
   ProjectFile,
   ProjectTemplate,
+  LiveArtifactEventItem,
+  LiveArtifactSummary,
   SkillSummary,
 } from '../types';
 import {
@@ -71,6 +85,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
+import { CenteredLoader } from './Loading';
 
 interface Props {
   project: Project;
@@ -100,6 +115,101 @@ interface Props {
   onProjectsRefresh: () => void;
 }
 
+let liveArtifactEventSequence = 0;
+const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
+const DEFAULT_CHAT_PANEL_WIDTH = 460;
+const MIN_CHAT_PANEL_WIDTH = 320;
+const MAX_CHAT_PANEL_WIDTH = 720;
+const MIN_WORKSPACE_PANEL_WIDTH = 400;
+const SPLIT_RESIZE_HANDLE_WIDTH = 8;
+const CHAT_PANEL_KEYBOARD_STEP = 16;
+const MIN_NORMAL_SPLIT_WIDTH =
+  MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
+
+function workspacePanelMinWidthForSplit(splitWidth: number): number {
+  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MIN_WORKSPACE_PANEL_WIDTH;
+  return splitWidth < MIN_NORMAL_SPLIT_WIDTH ? 0 : MIN_WORKSPACE_PANEL_WIDTH;
+}
+
+function maxChatPanelWidthForSplit(splitWidth: number): number {
+  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MAX_CHAT_PANEL_WIDTH;
+  const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
+  const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
+  return Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(viewportAwareMax)));
+}
+
+function clampPreferredChatPanelWidth(width: number): number {
+  return Math.min(MAX_CHAT_PANEL_WIDTH, Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width)));
+}
+
+function clampChatPanelWidth(width: number, maxWidth = MAX_CHAT_PANEL_WIDTH): number {
+  const effectiveMax = Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(maxWidth)));
+  const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
+  return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
+}
+
+function readSavedChatPanelWidth(): number {
+  if (typeof window === 'undefined') return DEFAULT_CHAT_PANEL_WIDTH;
+  try {
+    const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
+    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+    return Number.isFinite(parsed)
+      ? clampPreferredChatPanelWidth(parsed)
+      : DEFAULT_CHAT_PANEL_WIDTH;
+  } catch {
+    return DEFAULT_CHAT_PANEL_WIDTH;
+  }
+}
+
+function saveChatPanelWidth(width: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      CHAT_PANEL_WIDTH_STORAGE_KEY,
+      String(clampPreferredChatPanelWidth(width)),
+    );
+  } catch {
+    // localStorage can be unavailable in hardened browser contexts.
+  }
+}
+
+function appendLiveArtifactEventItem(
+  prev: LiveArtifactEventItem[],
+  event: LiveArtifactEventItem['event'],
+): LiveArtifactEventItem[] {
+  liveArtifactEventSequence += 1;
+  const next = [...prev, { id: liveArtifactEventSequence, event }];
+  return next.length > 50 ? next.slice(next.length - 50) : next;
+}
+
+export function projectSplitClassName(workspaceFocused: boolean): string {
+  return workspaceFocused ? 'split split-focus' : 'split';
+}
+
+function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
+  if (evt.type === 'file-changed') return null;
+  if (evt.type === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: evt.action,
+      projectId: evt.projectId,
+      artifactId: evt.artifactId,
+      title: evt.title,
+      refreshStatus: evt.refreshStatus,
+    };
+  }
+  return {
+    kind: 'live_artifact_refresh',
+    phase: evt.phase,
+    projectId: evt.projectId,
+    artifactId: evt.artifactId,
+    refreshId: evt.refreshId,
+    title: evt.title,
+    refreshedSourceCount: evt.refreshedSourceCount,
+    error: evt.error,
+  };
+}
+
 export function ProjectView({
   project,
   routeFileName,
@@ -127,6 +237,7 @@ export function ProjectView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
+  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
@@ -135,6 +246,27 @@ export function ProjectView({
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
+  const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
+  const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
+  const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
+  const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
+  const [resizingChatPanel, setResizingChatPanel] = useState(false);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const chatPanelWidthRef = useRef(chatPanelWidth);
+  const preferredChatPanelWidthRef = useRef(chatPanelWidth);
+  const resizeStartPreferredWidthRef = useRef(chatPanelWidth);
+  const chatPanelMaxWidthRef = useRef(chatPanelMaxWidth);
+  const resizeStateRef = useRef<{
+    startClientX: number;
+    startWidth: number;
+    isRtl: boolean;
+    hasMoved: boolean;
+  } | null>(null);
+  const pointerCleanupRef = useRef<(() => void) | null>(null);
+  const pointerFrameRef = useRef<number | null>(null);
+  const pendingPointerClientXRef = useRef<number | null>(null);
   // The persisted set of open tabs + active tab. Persisted via PUT on every
   // change; loaded once when the project mounts.
   const [openTabsState, setOpenTabsState] = useState<OpenTabsState>({
@@ -174,24 +306,40 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
+    setConversationLoadError(null);
     (async () => {
-      const list = await listConversations(project.id);
-      if (cancelled) return;
-      if (list.length === 0) {
-        const fresh = await createConversation(project.id);
+      try {
+        const list = await listConversations(project.id);
         if (cancelled) return;
-        if (fresh) {
-          setConversations([fresh]);
-          setActiveConversationId(fresh.id);
+        if (list.length === 0) {
+          const fresh = await createConversation(project.id);
+          if (cancelled) return;
+          if (fresh) {
+            setConversations([fresh]);
+            setActiveConversationId(fresh.id);
+          } else {
+            throw new Error('Could not create a conversation for this project.');
+          }
+        } else {
+          setConversations(list);
+          setActiveConversationId(list[0]!.id);
         }
-      } else {
-        setConversations(list);
-        setActiveConversationId(list[0]!.id);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Could not load conversations for this project.';
+        setConversations([]);
+        setActiveConversationId(null);
+        setConversationLoadError(message);
+        setError(message);
       }
     })();
     return () => {
       cancelled = true;
     };
+  }, [project.id]);
+
+  useEffect(() => {
+    setWorkspaceFocused(false);
   }, [project.id]);
 
   // Load messages whenever the active conversation changes. This happens
@@ -338,6 +486,17 @@ export function ProjectView({
     return next;
   }, [project.id]);
 
+  const refreshLiveArtifacts = useCallback(async (): Promise<LiveArtifactSummary[]> => {
+    const next = await fetchLiveArtifacts(project.id);
+    setLiveArtifacts(next);
+    return next;
+  }, [project.id]);
+
+  const refreshWorkspaceItems = useCallback(async (): Promise<ProjectFile[]> => {
+    const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
+    return nextFiles;
+  }, [refreshLiveArtifacts, refreshProjectFiles]);
+
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
@@ -361,17 +520,25 @@ export function ProjectView({
   // agent has written anything still see the user's pasted images.
   useEffect(() => {
     if (!daemonLive) return;
-    void refreshProjectFiles();
-  }, [daemonLive, refreshProjectFiles, filesRefresh]);
+    void refreshWorkspaceItems();
+  }, [daemonLive, refreshWorkspaceItems, filesRefresh]);
 
   // Live-reload: when the daemon's chokidar watcher reports a file change,
   // bump filesRefresh so the file list refetches with new mtimes — which
   // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
   // cache-bust, triggering an automatic preview reload without a click.
-  const handleProjectFileChange = useCallback(() => {
-    setFilesRefresh((n) => n + 1);
-  }, []);
-  useProjectFileEvents(project.id, daemonLive, handleProjectFileChange);
+  const handleProjectEvent = useCallback((evt: ProjectEvent) => {
+    if (evt.type === 'file-changed') {
+      setFilesRefresh((n) => n + 1);
+      return;
+    }
+    const agentEvent = projectEventToAgentEvent(evt);
+    if (!agentEvent) return;
+    setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
+    void refreshLiveArtifacts();
+    onProjectsRefresh();
+  }, [onProjectsRefresh, refreshLiveArtifacts]);
+  useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
@@ -386,7 +553,9 @@ export function ProjectView({
   // history stack doesn't fill with every tab click.
   const lastSyncedFileRef = useRef<string | null>(null);
   useEffect(() => {
-    const target = openTabsState.active && projectFileNames.has(openTabsState.active)
+    const target = openTabsState.active && (
+      projectFileNames.has(openTabsState.active) || isLiveArtifactTabId(openTabsState.active)
+    )
       ? openTabsState.active
       : null;
     if (target === lastSyncedFileRef.current) return;
@@ -507,6 +676,18 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
+  const appendAssistantErrorEvent = useCallback(
+    (messageId: string, message: string) => {
+      if (!message) return;
+      updateMessageById(
+        messageId,
+        (prev) => appendErrorStatusEvent(prev, message),
+        true,
+      );
+    },
+    [updateMessageById],
+  );
+
   const refreshPreviewComments = useCallback(async () => {
     if (!activeConversationId) return;
     const next = await fetchPreviewComments(project.id, activeConversationId);
@@ -557,15 +738,19 @@ export function ProjectView({
   const patchAttachedStatuses = useCallback(
     async (attachments: ChatCommentAttachment[], status: PreviewComment['status']) => {
       if (!activeConversationId || attachments.length === 0) return;
+      const persistedAttachments = attachments.filter(
+        (attachment) => attachment.source !== 'board-batch',
+      );
+      if (persistedAttachments.length === 0) return;
       setPreviewComments((current) =>
         current.map((comment) =>
-          attachments.some((attachment) => attachment.id === comment.id)
+          persistedAttachments.some((attachment) => attachment.id === comment.id)
             ? { ...comment, status }
             : comment,
         ),
       );
       await Promise.all(
-        attachments.map((attachment) =>
+        persistedAttachments.map((attachment) =>
           patchPreviewCommentStatus(project.id, activeConversationId, attachment.id, status),
         ),
       );
@@ -697,6 +882,7 @@ export function ProjectView({
               textBuffer.cancel();
               unregisterTextBuffer();
               setError(err.message);
+              appendAssistantErrorEvent(message.id, err.message);
               updateMessageById(
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
@@ -742,7 +928,14 @@ export function ProjectView({
         })
           .catch((err) => {
             if ((err as Error).name !== 'AbortError') {
-              setError(err instanceof Error ? err.message : String(err));
+              const msg = err instanceof Error ? err.message : String(err);
+              setError(msg);
+              appendAssistantErrorEvent(message.id, msg);
+              updateMessageById(
+                message.id,
+                (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+                true,
+              );
             }
           })
           .finally(() => {
@@ -781,6 +974,7 @@ export function ProjectView({
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
     ) => {
       if (!activeConversationId) return;
+      if (streaming) return;
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
@@ -875,6 +1069,21 @@ export function ProjectView({
       const pushEvent = (ev: AgentEvent) => {
         textBuffer.flush();
         updateAssistant((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
+        if (ev.kind === 'live_artifact') {
+          setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
+          void refreshLiveArtifacts().then(() => {
+            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId));
+          });
+          onProjectsRefresh();
+          return;
+        }
+        if (ev.kind === 'live_artifact_refresh') {
+          setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
+          void refreshLiveArtifacts();
+          onProjectsRefresh();
+          return;
+        }
+        persistAssistantSoon();
         persistAssistantSoon();
         // Track Write tool invocations so we can auto-open the destination
         // file the moment the agent finishes writing it. The file-creating
@@ -1009,6 +1218,7 @@ export function ProjectView({
           textBuffer.cancel();
           cancelSendTextBuffer();
           setError(err.message);
+          appendAssistantErrorEvent(assistantId, err.message);
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
@@ -1089,6 +1299,7 @@ export function ProjectView({
     [
       attachedComments,
       activeConversationId,
+      streaming,
       messages,
       config,
       agentsById,
@@ -1097,12 +1308,22 @@ export function ProjectView({
       project.id,
       projectFiles,
       refreshProjectFiles,
+      refreshLiveArtifacts,
+      requestOpenFile,
       persistMessage,
       persistMessageById,
       patchAttachedStatuses,
       updateMessageById,
       onProjectsRefresh,
     ],
+  );
+
+  const handleSendBoardCommentAttachments = useCallback(
+    async (commentAttachments: ChatCommentAttachment[]) => {
+      if (streaming || commentAttachments.length === 0) return;
+      await handleSend('', [], commentAttachments);
+    },
+    [handleSend, streaming],
   );
 
   const persistArtifact = useCallback(
@@ -1266,10 +1487,18 @@ export function ProjectView({
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
-    const fresh = await createConversation(project.id);
-    if (!fresh) return;
-    setConversations((curr) => [fresh, ...curr]);
-    setActiveConversationId(fresh.id);
+    setConversationLoadError(null);
+    try {
+      const fresh = await createConversation(project.id);
+      if (!fresh) throw new Error('Could not create a conversation for this project.');
+      setConversations((curr) => [fresh, ...curr]);
+      setActiveConversationId(fresh.id);
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
+      setConversationLoadError(message);
+      setError(message);
+    }
   }, [project.id]);
 
   const handleSelectConversation = useCallback((id: string) => {
@@ -1332,6 +1561,175 @@ export function ProjectView({
     () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
     [skills, project.skillId],
   );
+  const chatResizeLabel = t('project.resizeChatPanel');
+  const workspacePanelTrack =
+    workspacePanelMinWidth === 0
+      ? 'minmax(0, 1fr)'
+      : `minmax(${workspacePanelMinWidth}px, 1fr)`;
+  const chatPanelAriaMinWidth = Math.min(MIN_CHAT_PANEL_WIDTH, chatPanelMaxWidth);
+
+  const renderPreferredChatPanelWidth = useCallback((
+    preferredWidth: number,
+    maxWidth = chatPanelMaxWidthRef.current,
+  ): number => {
+    const next = clampChatPanelWidth(preferredWidth, maxWidth);
+    chatPanelWidthRef.current = next;
+    setChatPanelWidth(next);
+    return next;
+  }, []);
+
+  const applyChatPanelWidth = useCallback((width: number): number => {
+    const nextPreferred = clampPreferredChatPanelWidth(
+      clampChatPanelWidth(width, chatPanelMaxWidthRef.current),
+    );
+    preferredChatPanelWidthRef.current = nextPreferred;
+    return renderPreferredChatPanelWidth(nextPreferred);
+  }, [renderPreferredChatPanelWidth]);
+
+  const finishChatPanelResize = useCallback((saveFinalWidth = true) => {
+    pointerCleanupRef.current?.();
+    pointerCleanupRef.current = null;
+    if (pointerFrameRef.current !== null) {
+      cancelAnimationFrame(pointerFrameRef.current);
+      pointerFrameRef.current = null;
+    }
+    pendingPointerClientXRef.current = null;
+    resizeStateRef.current = null;
+    setResizingChatPanel(false);
+    if (saveFinalWidth) saveChatPanelWidth(preferredChatPanelWidthRef.current);
+  }, []);
+
+  useEffect(() => {
+    chatPanelWidthRef.current = chatPanelWidth;
+  }, [chatPanelWidth]);
+
+  useEffect(() => {
+    chatPanelMaxWidthRef.current = chatPanelMaxWidth;
+  }, [chatPanelMaxWidth]);
+
+  useLayoutEffect(() => {
+    const split = splitRef.current;
+    if (!split) return undefined;
+
+    const updateAllowedWidth = () => {
+      const splitWidth = split.clientWidth;
+      const nextWorkspaceMin = workspacePanelMinWidthForSplit(splitWidth);
+      const nextMax = maxChatPanelWidthForSplit(splitWidth);
+      chatPanelMaxWidthRef.current = nextMax;
+      setWorkspacePanelMinWidth(nextWorkspaceMin);
+      setChatPanelMaxWidth(nextMax);
+      renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current, nextMax);
+    };
+
+    updateAllowedWidth();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateAllowedWidth);
+      observer.observe(split);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', updateAllowedWidth);
+    return () => window.removeEventListener('resize', updateAllowedWidth);
+  }, [renderPreferredChatPanelWidth]);
+
+  useEffect(() => () => finishChatPanelResize(false), [finishChatPanelResize]);
+
+  const handleChatResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const split = splitRef.current;
+    if (!split) return;
+    event.preventDefault();
+    event.currentTarget.focus();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerCleanupRef.current?.();
+    setResizingChatPanel(true);
+    resizeStartPreferredWidthRef.current = preferredChatPanelWidthRef.current;
+
+    const updateWidthFromClientX = (clientX: number) => {
+      const state = resizeStateRef.current;
+      if (!state) return;
+      const delta = clientX - state.startClientX;
+      if (delta === 0 && !state.hasMoved) return;
+      state.hasMoved = true;
+      const rawWidth = state.startWidth + (state.isRtl ? -delta : delta);
+      applyChatPanelWidth(rawWidth);
+    };
+
+    const flushPendingPointerMove = () => {
+      if (pointerFrameRef.current !== null) {
+        cancelAnimationFrame(pointerFrameRef.current);
+        pointerFrameRef.current = null;
+      }
+      const clientX = pendingPointerClientXRef.current;
+      pendingPointerClientXRef.current = null;
+      if (clientX !== null) updateWidthFromClientX(clientX);
+    };
+
+    resizeStateRef.current = {
+      startClientX: event.clientX,
+      startWidth: chatPanelWidthRef.current,
+      isRtl: window.getComputedStyle(split).direction === 'rtl',
+      hasMoved: false,
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      pendingPointerClientXRef.current = moveEvent.clientX;
+      if (pointerFrameRef.current !== null) return;
+      pointerFrameRef.current = requestAnimationFrame(() => {
+        pointerFrameRef.current = null;
+        flushPendingPointerMove();
+      });
+    };
+    const handlePointerEnd = () => {
+      flushPendingPointerMove();
+      finishChatPanelResize(true);
+    };
+    const handlePointerCancel = () => {
+      flushPendingPointerMove();
+      preferredChatPanelWidthRef.current = resizeStartPreferredWidthRef.current;
+      renderPreferredChatPanelWidth(resizeStartPreferredWidthRef.current);
+      finishChatPanelResize(false);
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerEnd);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('blur', handlePointerCancel);
+    };
+
+    pointerCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerEnd);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('blur', handlePointerCancel);
+  }, [applyChatPanelWidth, finishChatPanelResize, renderPreferredChatPanelWidth]);
+
+  const handleChatResizeBlur = useCallback(() => {
+    if (!pointerCleanupRef.current) return;
+    preferredChatPanelWidthRef.current = resizeStartPreferredWidthRef.current;
+    renderPreferredChatPanelWidth(resizeStartPreferredWidthRef.current);
+    finishChatPanelResize(false);
+  }, [finishChatPanelResize, renderPreferredChatPanelWidth]);
+
+  const handleChatResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextWidth: number | null = null;
+    const split = splitRef.current;
+    const isRtl = split ? window.getComputedStyle(split).direction === 'rtl' : false;
+    if (event.key === 'ArrowLeft') {
+      nextWidth = chatPanelWidthRef.current + (isRtl ? 1 : -1) * CHAT_PANEL_KEYBOARD_STEP;
+    } else if (event.key === 'ArrowRight') {
+      nextWidth = chatPanelWidthRef.current + (isRtl ? -1 : 1) * CHAT_PANEL_KEYBOARD_STEP;
+    } else if (event.key === 'Home') {
+      nextWidth = MIN_CHAT_PANEL_WIDTH;
+    } else if (event.key === 'End') {
+      nextWidth = chatPanelMaxWidthRef.current;
+    }
+    if (nextWidth === null) return;
+    event.preventDefault();
+    const next = applyChatPanelWidth(nextWidth);
+    saveChatPanelWidth(next);
+  }, [applyChatPanelWidth]);
 
   // Hand the pending prompt to ChatPane exactly once. We snapshot the value
   // into local state on mount so it survives the ChatPane remount triggered
@@ -1393,59 +1791,104 @@ export function ProjectView({
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
         </div>
       </AppChromeHeader>
-      <div className="split">
-        <ChatPane
-          // The conversation id is part of the key so switching conversations
-          // resets internal scroll/draft state inside ChatPane and ChatComposer.
-          key={activeConversationId ?? 'no-conv'}
-          messages={messages}
-          streaming={streaming}
-          error={error}
-          projectId={project.id}
-          projectFiles={projectFiles}
-          projectFileNames={projectFileNames}
-          onEnsureProject={handleEnsureProject}
-          previewComments={previewComments}
-          attachedComments={attachedComments}
-          onAttachComment={attachPreviewComment}
-          onDetachComment={detachPreviewComment}
-          onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-          onSend={handleSend}
-          onStop={handleStop}
-          onRequestOpenFile={requestOpenFile}
-          initialDraft={initialDraft}
-          onSubmitForm={(text) => {
-            if (streaming) return;
-            void handleSend(text, [], []);
-          }}
-          onContinueRemainingTasks={handleContinueRemainingTasks}
-          onNewConversation={handleNewConversation}
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
-          onOpenSettings={onOpenSettings}
-          petConfig={config.pet}
-          onAdoptPet={onAdoptPetInline}
-          onTogglePet={onTogglePet}
-          onOpenPetSettings={onOpenPetSettings}
-        />
+      <div
+        ref={splitRef}
+        className={[
+          projectSplitClassName(workspaceFocused),
+          resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
+        ].filter(Boolean).join(' ')}
+        style={workspaceFocused
+          ? undefined
+          : {
+              gridTemplateColumns:
+                `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
+            }}
+      >
+        <div className="split-chat-slot" hidden={workspaceFocused}>
+          {activeConversationId || conversationLoadError ? (
+            <ChatPane
+              // The conversation id is part of the key so switching conversations
+              // resets internal scroll/draft state inside ChatPane and ChatComposer.
+              key={activeConversationId ?? 'conversation-unavailable'}
+              messages={messages}
+              streaming={streaming}
+              error={conversationLoadError ?? error}
+              projectId={project.id}
+              projectFiles={projectFiles}
+              projectFileNames={projectFileNames}
+              onEnsureProject={handleEnsureProject}
+              previewComments={previewComments}
+              attachedComments={attachedComments}
+              onAttachComment={attachPreviewComment}
+              onDetachComment={detachPreviewComment}
+              onDeleteComment={(commentId) => void removePreviewComment(commentId)}
+              onSend={handleSend}
+              onStop={handleStop}
+              onRequestOpenFile={requestOpenFile}
+              initialDraft={initialDraft}
+              onSubmitForm={(text) => {
+                if (streaming) return;
+                void handleSend(text, [], []);
+              }}
+              onContinueRemainingTasks={handleContinueRemainingTasks}
+              onNewConversation={handleNewConversation}
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              onSelectConversation={handleSelectConversation}
+              onDeleteConversation={handleDeleteConversation}
+              onRenameConversation={handleRenameConversation}
+              onOpenSettings={onOpenSettings}
+              petConfig={config.pet}
+              onAdoptPet={onAdoptPetInline}
+              onTogglePet={onTogglePet}
+              onOpenPetSettings={onOpenPetSettings}
+              projectMetadata={project.metadata}
+              onProjectMetadataChange={(metadata) => {
+                onProjectChange({ ...project, metadata });
+              }}
+            />
+          ) : (
+            <div className="pane" data-testid="chat-pane-loading">
+              <CenteredLoader />
+            </div>
+          )}
+        </div>
+        {!workspaceFocused ? (
+          <div
+            className="split-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={chatResizeLabel}
+            aria-valuemin={chatPanelAriaMinWidth}
+            aria-valuemax={chatPanelMaxWidth}
+            aria-valuenow={chatPanelWidth}
+            tabIndex={0}
+            title={chatResizeLabel}
+            onPointerDown={handleChatResizePointerDown}
+            onKeyDown={handleChatResizeKeyDown}
+            onBlur={handleChatResizeBlur}
+          />
+        ) : null}
         <FileWorkspace
           projectId={project.id}
           files={projectFiles}
+          liveArtifacts={liveArtifacts}
           onRefreshFiles={() => {
-            void refreshProjectFiles();
+            void refreshWorkspaceItems();
           }}
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
           streaming={streaming}
           openRequest={openRequest}
+          liveArtifactEvents={liveArtifactEvents}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
           previewComments={previewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
+          onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          focusMode={workspaceFocused}
+          onFocusModeChange={setWorkspaceFocused}
         />
       </div>
     </div>

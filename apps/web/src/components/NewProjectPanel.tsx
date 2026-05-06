@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ConnectorDetail } from '@open-design/contracts';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
@@ -39,7 +40,7 @@ type PromptTemplatePick = {
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-export type CreateTab = 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other';
+export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other';
 
 export interface CreateInput {
   name: string;
@@ -57,11 +58,15 @@ interface Props {
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
+  connectors?: ConnectorDetail[];
+  connectorsLoading?: boolean;
+  onOpenConnectorsTab?: () => void;
   loading?: boolean;
 }
 
 const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   prototype: 'newproj.tabPrototype',
+  'live-artifact': 'newproj.tabLiveArtifact',
   deck: 'newproj.tabDeck',
   template: 'newproj.tabTemplate',
   image: 'newproj.surfaceImage',
@@ -69,6 +74,28 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   audio: 'newproj.surfaceAudio',
   other: 'newproj.tabOther',
 };
+
+export function defaultDesignSystemSelection(
+  defaultDesignSystemId: string | null,
+  designSystems: DesignSystemSummary[],
+): string[] {
+  if (!defaultDesignSystemId) return [];
+  return designSystems.some((d) => d.id === defaultDesignSystemId)
+    ? [defaultDesignSystemId]
+    : [];
+}
+
+export function buildDesignSystemCreateSelection(
+  showDesignSystemPicker: boolean,
+  selectedIds: string[],
+): { primary: string | null; inspirations: string[] } {
+  return showDesignSystemPicker
+    ? {
+        primary: selectedIds[0] ?? null,
+        inspirations: selectedIds.slice(1),
+      }
+    : { primary: null, inspirations: [] };
+}
 
 export function NewProjectPanel({
   skills,
@@ -79,6 +106,9 @@ export function NewProjectPanel({
   onCreate,
   onImportClaudeDesign,
   mediaProviders,
+  connectors,
+  connectorsLoading = false,
+  onOpenConnectorsTab,
   loading = false,
 }: Props) {
   const t = useT();
@@ -91,7 +121,14 @@ export function NewProjectPanel({
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
   // duplicating state. Single-select coerces to length 0/1.
-  const [selectedDsIds, setSelectedDsIds] = useState<string[]>([]);
+  const initialDefaultDsSelection = useMemo(
+    () => defaultDesignSystemSelection(defaultDesignSystemId, designSystems),
+    [defaultDesignSystemId, designSystems],
+  );
+  const [selectedDsIds, setSelectedDsIds] = useState<string[]>(
+    () => initialDefaultDsSelection,
+  );
+  const [dsSelectionTouched, setDsSelectionTouched] = useState(false);
   const [dsMulti, setDsMulti] = useState(false);
 
   // Per-tab metadata. Tracked independently so switching tabs preserves
@@ -127,11 +164,41 @@ export function NewProjectPanel({
   // media surfaces use prompt templates instead — design tokens don't map
   // onto image/video/audio generations, and the picker just adds noise
   // there. Keep this list explicit so future tabs declare their intent.
-  const showDesignSystemPicker =
+  const tabSupportsDesignSystem =
     tab === 'prototype' ||
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
+  // Some skills (e.g. the Orbit briefings) ship their own complete visual
+  // language baked into example.html and explicitly opt out of DESIGN.md
+  // injection via `od.design_system.requires: false`. When such a skill is
+  // the active default for the current tab, hide the picker entirely so
+  // the user isn't asked to attach a brand we'll then ignore.
+  const tabDefaultSkillForcesNoDs = useMemo(() => {
+    const tabSkillId = ((): string | null => {
+      if (tab === 'prototype' || tab === 'live-artifact') {
+        const list = skills.filter((s) => s.mode === 'prototype');
+        return list.find((s) => s.defaultFor.includes('prototype'))?.id
+          ?? list[0]?.id ?? null;
+      }
+      if (tab === 'deck') {
+        const list = skills.filter((s) => s.mode === 'deck');
+        return list.find((s) => s.defaultFor.includes('deck'))?.id
+          ?? list[0]?.id ?? null;
+      }
+      return null;
+    })();
+    if (!tabSkillId) return false;
+    const s = skills.find((x) => x.id === tabSkillId);
+    return s ? s.designSystemRequired === false : false;
+  }, [tab, skills]);
+  const showDesignSystemPicker =
+    tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
+
+  useEffect(() => {
+    if (dsSelectionTouched) return;
+    setSelectedDsIds(initialDefaultDsSelection);
+  }, [dsSelectionTouched, initialDefaultDsSelection]);
 
   // When entering the template tab, snap to the first user-saved template
   // if there is one (and we don't already have a valid pick). The template
@@ -157,6 +224,19 @@ export function NewProjectPanel({
       const list = skills.filter((s) => s.mode === 'prototype');
       return list.find((s) => s.defaultFor.includes('prototype'))?.id
         ?? list[0]?.id
+        ?? null;
+    }
+    if (tab === 'live-artifact') {
+      const exact = skills.find((s) => s.id === 'live-artifact' || s.name === 'live-artifact');
+      if (exact) return exact.id;
+      const hinted = skills.find((s) => {
+        const haystack = `${s.id} ${s.name} ${s.description} ${s.triggers.join(' ')}`.toLowerCase();
+        return haystack.includes('live artifact') || haystack.includes('live-artifact');
+      });
+      if (hinted) return hinted.id;
+      const prototypes = skills.filter((s) => s.mode === 'prototype');
+      return prototypes.find((s) => s.defaultFor.includes('prototype'))?.id
+        ?? prototypes[0]?.id
         ?? null;
     }
     if (tab === 'deck') {
@@ -196,6 +276,11 @@ export function NewProjectPanel({
     });
   }
 
+  function handleDesignSystemChange(ids: string[]) {
+    setDsSelectionTouched(true);
+    setSelectedDsIds(ids);
+  }
+
   useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
@@ -223,8 +308,8 @@ export function NewProjectPanel({
     // and inspiration ids to empty there so the New Project panel can't
     // accidentally bind a stale DS that the user can no longer see in the
     // form (the picker is hidden for image/video/audio).
-    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : null;
-    const inspirations = showDesignSystemPicker ? selectedDsIds.slice(1) : [];
+    const { primary: primaryDs, inspirations } =
+      buildDesignSystemCreateSelection(showDesignSystemPicker, selectedDsIds);
     const promptTemplatePick =
       tab === 'image'
         ? imagePromptTemplate
@@ -308,7 +393,15 @@ export function NewProjectPanel({
         </button>
       </div>
       <div className="newproj-body">
-        <h3 className="newproj-title">{titleForTab(tab, t)}</h3>
+        <h3 className="newproj-title">
+          <span className="newproj-title-text">{titleForTab(tab, t)}</span>
+          {tab === 'live-artifact' ? (
+            // "Beta" is an internationally adopted brand-style status marker;
+            // intentionally not run through t() (consistent with short product
+            // status pills that read the same across our supported locales).
+            <span className="newproj-title-badge" aria-label="Beta feature">Beta</span>
+          ) : null}
+        </h3>
 
         <input
           className="newproj-name"
@@ -325,7 +418,7 @@ export function NewProjectPanel({
             selectedIds={selectedDsIds}
             multi={dsMulti}
             onChangeMulti={setDsMulti}
-            onChange={setSelectedDsIds}
+            onChange={handleDesignSystemChange}
             loading={loading}
           />
         ) : null}
@@ -348,8 +441,16 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        {tab === 'prototype' ? (
+        {tab === 'prototype' || tab === 'live-artifact' ? (
           <FidelityPicker value={fidelity} onChange={setFidelity} />
+        ) : null}
+
+        {tab === 'live-artifact' ? (
+          <ConnectorsSection
+            connectors={connectors}
+            loading={connectorsLoading}
+            onOpenConnectorsTab={onOpenConnectorsTab}
+          />
         ) : null}
 
         {tab === 'deck' ? (
@@ -436,6 +537,8 @@ export function NewProjectPanel({
           <span>
             {tab === 'template'
               ? t('newproj.createFromTemplate')
+              : tab === 'live-artifact'
+                ? t('newproj.createLiveArtifact')
               : t('newproj.create')}
           </span>
         </button>
@@ -495,6 +598,108 @@ function FidelityPicker({
           variant="high-fidelity"
         />
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   Connectors section (live-artifact only).
+   - Lists configured connectors as compact chips so the user can
+     see at a glance what data sources this artifact can pull from.
+   - When no connector is configured (or the list hasn't loaded yet
+     and ended up empty), shows a guidance card that, on click, pops
+     the entry-tab-connectors tab in the main view.
+   ============================================================ */
+function ConnectorsSection({
+  connectors,
+  loading,
+  onOpenConnectorsTab,
+}: {
+  connectors?: ConnectorDetail[];
+  loading: boolean;
+  onOpenConnectorsTab?: () => void;
+}) {
+  const t = useT();
+  const configured = useMemo(
+    () => (connectors ?? []).filter((c) => c.status === 'connected'),
+    [connectors],
+  );
+  const hasConfigured = configured.length > 0;
+
+  if (loading && !connectors) {
+    return (
+      <div className="newproj-section newproj-connectors">
+        <label className="newproj-label">{t('newproj.connectorsLabel')}</label>
+        <Skeleton height={56} width="100%" radius={8} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="newproj-section newproj-connectors"
+      data-testid="new-project-connectors"
+    >
+      <div className="newproj-connectors-head">
+        <label className="newproj-label">{t('newproj.connectorsLabel')}</label>
+        {hasConfigured ? (
+          <button
+            type="button"
+            className="newproj-connectors-manage"
+            onClick={() => onOpenConnectorsTab?.()}
+            data-testid="new-project-connectors-manage"
+          >
+            {t('newproj.connectorsManage')}
+          </button>
+        ) : null}
+      </div>
+
+      {hasConfigured ? (
+        <>
+          <span className="newproj-connectors-hint">
+            {configured.length === 1
+              ? t('newproj.connectorsCountOne', { n: configured.length })
+              : t('newproj.connectorsCountMany', { n: configured.length })}
+            <span aria-hidden> · </span>
+            {t('newproj.connectorsHint')}
+          </span>
+          <ul className="newproj-connectors-list" aria-label={t('newproj.connectorsLabel')}>
+            {configured.map((c) => (
+              <li
+                key={c.id}
+                className="newproj-connector-chip"
+                title={c.name}
+              >
+                <span className="newproj-connector-dot" aria-hidden />
+                <span className="newproj-connector-name">{c.name}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="newproj-connectors-empty"
+          onClick={() => onOpenConnectorsTab?.()}
+          data-testid="new-project-connectors-empty"
+          aria-label={t('newproj.connectorsEmptyCta')}
+        >
+          <span className="newproj-connectors-empty-icon" aria-hidden>
+            <Icon name="link" size={14} />
+          </span>
+          <span className="newproj-connectors-empty-text">
+            <span className="newproj-connectors-empty-title">
+              {t('newproj.connectorsEmptyTitle')}
+            </span>
+            <span className="newproj-connectors-empty-body">
+              {t('newproj.connectorsEmptyBody')}
+            </span>
+            <span className="newproj-connectors-empty-cta">
+              {t('newproj.connectorsEmptyCta')}
+            </span>
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -1451,9 +1656,9 @@ function MediaProjectOptions(props:
   );
 }
 
-function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
+export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
     video: new Set(['volcengine', 'hyperframes', 'grok']),
     audio: new Set(['minimax', 'fishaudio']),
   };
@@ -1633,12 +1838,17 @@ function buildMetadata(input: {
   inspirationIds: string[];
   promptTemplate: PromptTemplatePick | null;
 }): ProjectMetadata {
-  const kind: ProjectKind = input.tab;
+  const kind: ProjectKind = input.tab === 'live-artifact' ? 'prototype' : input.tab;
   const inspirations = input.inspirationIds.length > 0
     ? { inspirationDesignSystemIds: input.inspirationIds }
     : {};
-  if (input.tab === 'prototype') {
-    return { kind, fidelity: input.fidelity, ...inspirations };
+  if (input.tab === 'prototype' || input.tab === 'live-artifact') {
+    return {
+      kind,
+      fidelity: input.fidelity,
+      ...(input.tab === 'live-artifact' ? { intent: 'live-artifact' as const } : {}),
+      ...inspirations,
+    };
   }
   if (input.tab === 'deck') {
     return { kind, speakerNotes: input.speakerNotes, ...inspirations };
@@ -1725,6 +1935,8 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
   switch (tab) {
     case 'prototype':
       return t('newproj.titlePrototype');
+    case 'live-artifact':
+      return t('newproj.titleLiveArtifact');
     case 'deck':
       return t('newproj.titleDeck');
     case 'template':

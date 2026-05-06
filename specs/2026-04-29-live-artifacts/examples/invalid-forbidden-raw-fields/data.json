@@ -1,0 +1,9 @@
+{
+  "title": "Invalid Raw Provider Fields",
+  "rawResponse": {
+    "status": 200,
+    "payload": {
+      "items": ["provider envelope should not be persisted"]
+    }
+  }
+}

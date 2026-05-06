@@ -33,7 +33,7 @@ corepack enable           # 使用 packageManager 固定的 pnpm
 pnpm install
 pnpm tools-dev run web    # daemon + web 前台闭环
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # 生产构建
+pnpm --filter @open-design/web build  # 需要时构建 web package
 ```
 
 要求 Node `~24` 和 pnpm `10.33.x`。`nvm` / `fnm` 是可选路径；如果你习惯用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`。macOS、Linux、WSL2 是主要路径。Windows 原生应该能跑但不是主要目标 —— 跑不起来请开 issue。

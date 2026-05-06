@@ -6,7 +6,7 @@ This doc describes the system topology, runtime modes, data flow, and file layou
 
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [acd]: https://github.com/VoltAgent/awesome-claude-design
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 
 ---

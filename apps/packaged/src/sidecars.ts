@@ -1,8 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
 import { mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -23,7 +21,12 @@ import {
   resolveAppIpcPath,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
-import { createProcessStampArgs, stopProcesses, waitForProcessExit } from "@open-design/platform";
+import {
+  createProcessStampArgs,
+  stopProcesses,
+  waitForProcessExit,
+  wellKnownUserToolchainBins,
+} from "@open-design/platform";
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -105,45 +108,19 @@ function extractPort(url: string): string {
   return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
 }
 
-function existingDirsUnder(root: string, segments: string[] = []): string[] {
-  const dirs: string[] = [];
-  try {
-    const entries = readdirSync(root, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const full = join(root, entry.name, ...segments);
-      if (existsSync(full)) dirs.push(full);
-    }
-  } catch {
-    // best-effort: directory may not exist or be unreadable
-  }
-  return dirs;
-}
-
-function collectNvmFnmBins(home: string): string[] {
-  return [
-    ...existingDirsUnder(join(home, ".nvm", "versions", "node"), ["bin"]),
-    ...existingDirsUnder(join(home, ".local", "share", "fnm", "node-versions"), ["installation", "bin"]),
-    ...existingDirsUnder(join(home, ".local", "share", "mise", "installs", "node"), ["bin"]),
-  ];
-}
+// Hardcoded POSIX system bins the packaged daemon must always be able to
+// reach even when the inherited PATH from launchd / a desktop launcher is
+// stripped down to nothing. The user-toolchain portion of the search list
+// (Homebrew, npm globals, nvm/fnm/mise, cargo, ...) lives in
+// @open-design/platform's wellKnownUserToolchainBins so the daemon
+// resolver and this PATH builder cannot drift again. See issue #442.
+const PACKAGED_POSIX_SYSTEM_BINS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
 function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
-  const home = homedir();
   const candidates = [
     ...basePath.split(delimiter),
-    join(home, ".local", "bin"),
-    join(home, ".opencode", "bin"),
-    join(home, ".cargo", "bin"),
-    join(home, ".bun", "bin"),
-    join(home, ".volta", "bin"),
-    ...collectNvmFnmBins(home),
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    "/usr/bin",
-    "/bin",
-    "/usr/sbin",
-    "/sbin",
+    ...wellKnownUserToolchainBins(),
+    ...PACKAGED_POSIX_SYSTEM_BINS,
   ];
   return [...new Set(candidates.filter((entry) => entry.length > 0))].join(delimiter);
 }

@@ -1,15 +1,22 @@
 // @ts-nocheck
 import express from 'express';
 import multer from 'multer';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { composeSystemPrompt } from './prompts/system.js';
+import net from 'node:net';
+import {
+  composeSystemPrompt,
+  renderCodexImagegenOverride,
+  shouldRenderCodexImagegenOverride,
+} from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
+  buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
@@ -21,14 +28,19 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { findSkillById, listSkills } from './skills.js';
+import { validateLinkedDirs } from './linked-dirs.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { loadCritiqueConfigFromEnv } from './critique/config.js';
+import { reconcileStaleRuns } from './critique/persistence.js';
+import { runOrchestrator } from './critique/orchestrator.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
@@ -50,7 +62,7 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
-import { readAppConfig, writeAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -100,6 +112,26 @@ import {
   upsertPreviewComment,
 } from './db.js';
 import {
+  createLiveArtifact,
+  deleteLiveArtifact,
+  ensureLiveArtifactPreview,
+  getLiveArtifact,
+  LiveArtifactRefreshLockError,
+  LiveArtifactStoreValidationError,
+  listLiveArtifacts,
+  listLiveArtifactRefreshLogEntries,
+  readLiveArtifactCode,
+  recoverStaleLiveArtifactRefreshes,
+  updateLiveArtifact,
+} from './live-artifacts/store.js';
+import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
+import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
+import { registerConnectorRoutes } from './connectors/routes.js';
+import { configureConnectorCredentialStore, ConnectorServiceError, deleteConnectorCredentialsByProvider, FileConnectorCredentialStore } from './connectors/service.js';
+import { composioConnectorProvider } from './connectors/composio.js';
+import { configureComposioConfigStore, readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './connectors/composio-config.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
+import {
   buildDeployFileSet,
   checkDeploymentUrl,
   DeployError,
@@ -121,6 +153,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
   const daemonDir =
@@ -128,8 +161,274 @@ export function resolveProjectRoot(moduleDir: string): string {
   return path.resolve(daemonDir, '../..');
 }
 
+export function resolveDaemonCliPath(): string {
+  const packageJsonPath = require.resolve('@open-design/daemon/package.json');
+  return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
+}
+
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+export function composeLiveInstructionPrompt({
+  daemonSystemPrompt,
+  runtimeToolPrompt,
+  clientSystemPrompt,
+  finalPromptOverride,
+}) {
+  const override =
+    typeof finalPromptOverride === 'string'
+      ? finalPromptOverride.trim()
+      : '';
+  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
+    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+    .map((part) =>
+      override && part.includes(override)
+        ? part.split(override).join('').trim()
+        : part,
+    )
+    .filter(Boolean);
+  if (override) {
+    parts.push(override);
+  }
+  return parts.join('\n\n---\n\n');
+}
+
+export function resolveCodexGeneratedImagesDir(
+  agentId,
+  metadata,
+  env = process.env,
+  homeDir = os.homedir(),
+) {
+  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
+  const rawCodexHome =
+    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
+      ? env.CODEX_HOME.trim()
+      : path.join(homeDir, '.codex');
+  const codexHome = rawCodexHome.startsWith('~/')
+    ? path.join(homeDir, rawCodexHome.slice(2))
+    : rawCodexHome;
+  return path.resolve(codexHome, 'generated_images');
+}
+
+type DirectoryStat = {
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+};
+
+type CodexGeneratedImagesDirValidationOptions = {
+  protectedDirs?: Array<string | null | undefined>;
+  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
+  lstatSync?: (target: string) => DirectoryStat;
+  statSync?: (target: string) => DirectoryStat;
+  realpathSync?: (target: string) => string;
+  warn?: (message: string) => void;
+};
+
+function isMissingPathError(err: unknown): boolean {
+  return (
+    err &&
+    typeof err === 'object' &&
+    'code' in err &&
+    err.code === 'ENOENT'
+  );
+}
+
+function collectProtectedDirRoots(
+  protectedDirs: Array<string | null | undefined>,
+  {
+    realpathSync,
+    statSync,
+  }: {
+    realpathSync: (target: string) => string;
+    statSync: (target: string) => DirectoryStat;
+  },
+): string[] {
+  const roots = [];
+  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
+    const resolved = path.resolve(raw);
+    roots.push(resolved);
+    try {
+      const canonical = realpathSync(resolved);
+      try {
+        if (statSync(canonical).isDirectory()) roots.push(canonical);
+      } catch {
+        roots.push(canonical);
+      }
+    } catch {
+      // A missing protected root cannot be the canonical target of a symlink.
+    }
+  }
+  return Array.from(new Set(roots));
+}
+
+function findContainingProtectedRoot(
+  candidate: string,
+  protectedRoots: string[],
+): string | null {
+  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
+}
+
+export function validateCodexGeneratedImagesDir(
+  codexGeneratedImagesDir: string | null | undefined,
+  {
+    protectedDirs = [],
+    mkdirSync = fs.mkdirSync,
+    lstatSync = fs.lstatSync,
+    statSync = fs.statSync,
+    realpathSync = fs.realpathSync.native,
+    warn = console.warn,
+  }: CodexGeneratedImagesDirValidationOptions = {},
+): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.trim().length === 0
+  ) {
+    return null;
+  }
+
+  const resolved = path.resolve(codexGeneratedImagesDir);
+  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
+    realpathSync,
+    statSync,
+  });
+  const warnSkipped = (reason: string) =>
+    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
+
+  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
+  if (protectedRoot) {
+    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
+    return null;
+  }
+
+  try {
+    let existingTargetStat = null;
+    try {
+      existingTargetStat = lstatSync(resolved);
+    } catch (err) {
+      if (!isMissingPathError(err)) throw err;
+    }
+    if (existingTargetStat?.isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (existingTargetStat && !existingTargetStat.isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+
+    const parent = path.dirname(resolved);
+    const protectedParentRoot = findContainingProtectedRoot(
+      parent,
+      protectedRoots,
+    );
+    if (protectedParentRoot) {
+      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
+      return null;
+    }
+
+    mkdirSync(parent, { recursive: true });
+    const canonicalParent = realpathSync(parent);
+    const canonicalCandidate = path.join(
+      canonicalParent,
+      path.basename(resolved),
+    );
+    const protectedCanonicalParentRoot = findContainingProtectedRoot(
+      canonicalCandidate,
+      protectedRoots,
+    );
+    if (protectedCanonicalParentRoot) {
+      warnSkipped(
+        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
+      );
+      return null;
+    }
+
+    mkdirSync(resolved, { recursive: true });
+    if (lstatSync(resolved).isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (!statSync(resolved).isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+    const canonicalDir = realpathSync(resolved);
+    const protectedCanonicalRoot = findContainingProtectedRoot(
+      canonicalDir,
+      protectedRoots,
+    );
+    if (protectedCanonicalRoot) {
+      warnSkipped(
+        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
+      );
+      return null;
+    }
+
+    return canonicalDir;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : String(err ?? 'unknown error');
+    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
+    return null;
+  }
+}
+
+export function resolveChatExtraAllowedDirs({
+  agentId,
+  skillsDir,
+  designSystemsDir,
+  linkedDirs = [],
+  codexGeneratedImagesDir,
+  existsSync = fs.existsSync,
+}: {
+  agentId?: string | null;
+  skillsDir?: string | null;
+  designSystemsDir?: string | null;
+  linkedDirs?: Array<string | null | undefined>;
+  codexGeneratedImagesDir?: string | null;
+  existsSync?: (path: string) => boolean;
+}): string[] {
+  const isCodex =
+    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
+  const candidates = isCodex
+    ? [codexGeneratedImagesDir]
+    : [
+        skillsDir,
+        designSystemsDir,
+        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
+      ];
+  return Array.from(
+    new Set(
+      candidates.filter(
+        (d) =>
+          typeof d === 'string' && d.length > 0 && existsSync(d),
+      ),
+    ),
+  );
+}
+
+export function resolveGrantedCodexImagegenOverride({
+  agentId,
+  metadata,
+  codexGeneratedImagesDir,
+  extraAllowedDirs = [],
+}: {
+  agentId?: string | null;
+  metadata?: unknown;
+  codexGeneratedImagesDir?: string | null;
+  extraAllowedDirs?: string[];
+}): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.length === 0 ||
+    !Array.isArray(extraAllowedDirs) ||
+    !extraAllowedDirs.includes(codexGeneratedImagesDir)
+  ) {
+    return null;
+  }
+  return renderCodexImagegenOverride(agentId, metadata);
+}
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -142,6 +441,16 @@ export function normalizeCommentAttachments(input) {
       const label = cleanString(raw.label);
       const comment = cleanString(raw.comment);
       if (!filePath || !elementId || !selector || !comment) return null;
+      const selectionKind = raw.selectionKind === 'pod' ? 'pod' : 'element';
+      const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
+      const memberCount =
+        selectionKind === 'pod'
+          ? (podMembers.length > 0
+              ? podMembers.length
+              : Number.isFinite(raw.memberCount)
+                ? Math.max(0, Math.round(raw.memberCount))
+                : 0)
+          : 0;
       return {
         id: cleanString(raw.id) || `comment-${index + 1}`,
         order: Number.isFinite(raw.order)
@@ -155,6 +464,10 @@ export function normalizeCommentAttachments(input) {
         currentText: compactString(raw.currentText, 160),
         pagePosition: normalizeAttachmentPosition(raw.pagePosition),
         htmlHint: compactString(raw.htmlHint, 180),
+        selectionKind,
+        memberCount,
+        podMembers,
+        source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
       };
     })
     .filter(Boolean)
@@ -167,12 +480,14 @@ export function renderCommentAttachmentHint(commentAttachments) {
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: edit the target element by default. Use the smallest necessary parent wrapper only if the target cannot satisfy the comment. Preserve stable ids and unrelated siblings.',
+    'Scope: treat each attachment as the default refinement target. For single elements, edit the target element first. For pods, coordinate the captured group as one design region and preserve unrelated areas.',
   ];
   for (const item of commentAttachments) {
+    const targetKind = item.selectionKind === 'pod' ? 'pod' : 'element';
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
+      `targetKind: ${targetKind}`,
       `file: ${item.filePath}`,
       `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
@@ -181,6 +496,14 @@ export function renderCommentAttachmentHint(commentAttachments) {
       `htmlHint: ${item.htmlHint || '(none)'}`,
       `comment: ${item.comment}`,
     );
+    if (targetKind === 'pod') {
+      lines.push(`memberCount: ${item.memberCount || item.podMembers.length || 0}`);
+      item.podMembers.slice(0, 8).forEach((member, memberIndex) => {
+        lines.push(
+          `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
+        );
+      });
+    }
   }
   lines.push('</attached-preview-comments>');
   return lines.join('\n');
@@ -203,6 +526,27 @@ function normalizeAttachmentPosition(input) {
     width: finiteAttachmentNumber(value.width),
     height: finiteAttachmentNumber(value.height),
   };
+}
+
+function normalizeAttachmentPodMembers(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((member) => {
+      if (!member || typeof member !== 'object') return null;
+      const elementId = cleanString(member.elementId);
+      const selector = cleanString(member.selector);
+      const label = cleanString(member.label);
+      if (!elementId || !selector) return null;
+      return {
+        elementId,
+        selector,
+        label,
+        text: compactString(member.text, 160),
+        position: normalizeAttachmentPosition(member.position),
+        htmlHint: compactString(member.htmlHint, 180),
+      };
+    })
+    .filter(Boolean);
 }
 
 function finiteAttachmentNumber(value) {
@@ -286,7 +630,8 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
 // when this project shipped with Vite; the daemon serves whatever the
 // frontend toolchain emits, no further config needed.
 const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
-const OD_BIN = path.join(PROJECT_ROOT, 'apps', 'daemon', 'dist', 'cli.js');
+const OD_BIN = resolveDaemonCliPath();
+const OD_NODE_BIN = process.execPath;
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -345,7 +690,117 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
+const activeChatAgentEventSinks = new Map();
+const activeProjectEventSinks = new Map();
+
+function emitChatAgentEvent(runId, payload) {
+  const sink = activeChatAgentEventSinks.get(runId);
+  if (!sink) return false;
+  return sink(payload);
+}
+
+function emitLiveArtifactEvent(grant, action, artifact) {
+  if (!artifact?.id) return false;
+  const payload = {
+    type: 'live_artifact',
+    action,
+    projectId: artifact.projectId ?? grant.projectId,
+    artifactId: artifact.id,
+    title: artifact.title ?? artifact.id,
+    refreshStatus: artifact.refreshStatus,
+  };
+  let emitted = emitProjectLiveArtifactEvent(payload.projectId, payload);
+  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
+  return emitted;
+}
+
+function emitLiveArtifactRefreshEvent(grant, payload) {
+  if (!payload?.artifactId) return false;
+  const event = {
+    type: 'live_artifact_refresh',
+    projectId: grant.projectId,
+    ...payload,
+  };
+  let emitted = emitProjectLiveArtifactEvent(grant.projectId, event);
+  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
+  return emitted;
+}
+
+function emitProjectLiveArtifactEvent(projectId, payload) {
+  const sinks = activeProjectEventSinks.get(projectId);
+  if (!sinks || sinks.size === 0) return false;
+  for (const sink of Array.from(sinks)) {
+    try {
+      sink(payload);
+    } catch {
+      sinks.delete(sink);
+    }
+  }
+  if (sinks.size === 0) activeProjectEventSinks.delete(projectId);
+  return true;
+}
+
+// Windows ENAMETOOLONG mitigation constants
+const CMD_BAT_RE = /\.(cmd|bat)$/i;
+const PROMPT_TEMP_FILE = () =>
+  '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
+const promptFileBootstrap = (fp) =>
+  `Your full instructions are stored in the file: ${fp.replace(/\\/g, '/')}. ` +
+  'Open that file first and follow every instruction in it exactly — ' +
+  'it contains the system prompt, design system, skill workflow, and user request. ' +
+  'Do not begin your response until you have read the entire file.';
+
+// Load Critique Theater config once at startup so a bad OD_CRITIQUE_* value
+// surfaces immediately as a boot-time RangeError instead of silently at
+// run time. Default: enabled=false (M0 dark launch).
+const critiqueCfg = loadCritiqueConfigFromEnv();
+// Tracks adapter streamFormat values that have already received a one-time
+// warning explaining why the Critique Theater orchestrator was bypassed.
+// Adapter denylist for orchestrator routing is implicit: anything that is
+// not the 'plain' streamFormat falls through to legacy single-pass.
+const critiqueWarnedAdapters = new Set<string>();
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
+
+export function createAgentRuntimeEnv(
+  baseEnv: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  daemonUrl: string,
+  toolTokenGrant: { token?: string } | null = null,
+  nodeBin: string = process.execPath,
+): NodeJS.ProcessEnv {
+  const env = {
+    ...baseEnv,
+    OD_DAEMON_URL: daemonUrl,
+    OD_NODE_BIN: nodeBin,
+  };
+
+  if (toolTokenGrant?.token) {
+    env.OD_TOOL_TOKEN = toolTokenGrant.token;
+  } else {
+    delete env.OD_TOOL_TOKEN;
+  }
+
+  return env;
+}
+
+export function createAgentRuntimeToolPrompt(
+  daemonUrl: string,
+  toolTokenGrant: { token?: string } | null = null,
+): string {
+  const tokenLine = toolTokenGrant?.token
+    ? '- `OD_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
+    : '- `OD_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
+
+  return [
+    '## Runtime tool environment',
+    '',
+    `- Daemon URL: \`${daemonUrl}\` (also available as \`OD_DAEMON_URL\`).`,
+    '- `OD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
+    '- `OD_BIN` is the absolute path to the Open Design CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
+    '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
+    tokenLine,
+    '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
+  ].join('\n');
+}
 
 export function normalizeProjectDisplayStatus(status) {
   return status === 'starting' || status === 'queued' ? 'running' : status;
@@ -413,6 +868,225 @@ function sanitizeArchiveFilename(raw) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
   return cleaned;
+}
+
+function sendLiveArtifactRouteError(res, err) {
+  if (err instanceof LiveArtifactStoreValidationError) {
+    return sendApiError(res, 400, 'LIVE_ARTIFACT_INVALID', err.message, {
+      details: { kind: 'validation', issues: err.issues },
+    });
+  }
+  if (err instanceof LiveArtifactRefreshLockError) {
+    return sendApiError(res, 409, 'REFRESH_LOCKED', err.message, {
+      details: { artifactId: err.artifactId },
+    });
+  }
+  if (err instanceof LiveArtifactRefreshUnavailableError) {
+    return sendApiError(res, 400, 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE', err.message);
+  }
+  if (err instanceof LiveArtifactRefreshAbortError) {
+    return sendApiError(res, err.kind === 'cancelled' ? 499 : 504, 'LIVE_ARTIFACT_REFRESH_TIMEOUT', err.message, {
+      details: { kind: err.kind, timeoutMs: err.timeoutMs ?? null, step: err.step ?? null },
+    });
+  }
+  if (err instanceof ConnectorServiceError) {
+    return sendApiError(res, err.status, err.code, err.message, err.details === undefined ? {} : { details: err.details });
+  }
+  if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+    return sendApiError(res, 404, 'LIVE_ARTIFACT_NOT_FOUND', 'live artifact not found');
+  }
+  return sendApiError(res, 500, 'LIVE_ARTIFACT_STORAGE_FAILED', String(err));
+}
+
+function normalizeLocalAuthority(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || /[\s/@]/.test(trimmed) || trimmed.includes(',')) return null;
+
+  try {
+    const parsed = new URL(`http://${trimmed}`);
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+    if (!hostname || parsed.username || parsed.password || parsed.pathname !== '/') return null;
+    return { hostname, port: parsed.port };
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname) {
+  const normalized = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (normalized === 'localhost') return true;
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
+  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
+  return false;
+}
+
+function isLoopbackPeerAddress(address) {
+  if (typeof address !== 'string') return false;
+  const normalized = address.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!normalized) return false;
+  if (normalized.startsWith('::ffff:')) return isLoopbackPeerAddress(normalized.slice('::ffff:'.length));
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
+  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
+  return false;
+}
+
+function localOriginFromHeader(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'null' || trimmed.includes(',')) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
+    if (!isLoopbackHostname(parsed.hostname)) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function validateLocalDaemonRequest(req) {
+  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) {
+    return {
+      ok: false,
+      message: 'request peer must be a loopback address',
+      details: { peer: 'remoteAddress' },
+    };
+  }
+
+  const host = normalizeLocalAuthority(req.get('host'));
+  if (!host || !isLoopbackHostname(host.hostname)) {
+    return {
+      ok: false,
+      message: 'request host must be a loopback daemon address',
+      details: { header: 'host' },
+    };
+  }
+
+  const originHeader = req.get('origin');
+  if (originHeader !== undefined && !localOriginFromHeader(originHeader)) {
+    return {
+      ok: false,
+      message: 'request origin must be a loopback daemon origin',
+      details: { header: 'origin' },
+    };
+  }
+
+  return { ok: true, origin: localOriginFromHeader(originHeader) };
+}
+
+function requireLocalDaemonRequest(req, res, next) {
+  const validation = validateLocalDaemonRequest(req);
+  if (!validation.ok) {
+    return sendApiError(res, 403, 'FORBIDDEN', validation.message, validation.details ? { details: validation.details } : {});
+  }
+
+  res.setHeader('Vary', 'Origin');
+  if (validation.origin) {
+    res.setHeader('Access-Control-Allow-Origin', validation.origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '600');
+  next();
+}
+
+function setLiveArtifactPreviewHeaders(res) {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'none'",
+      "base-uri 'none'",
+      "script-src 'none'",
+      "object-src 'none'",
+      "connect-src 'none'",
+      "form-action 'none'",
+      "frame-ancestors 'self'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "style-src 'unsafe-inline'",
+      'sandbox allow-same-origin',
+    ].join('; '),
+  );
+}
+
+function setLiveArtifactCodeHeaders(res) {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+function bearerTokenFromRequest(req) {
+  const header = req.get('authorization');
+  if (typeof header !== 'string') return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match?.[1];
+}
+
+function authorizeToolRequest(req, res, operation) {
+  const endpoint = req.path;
+  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), { endpoint, operation });
+  if (!validation.ok) {
+    const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
+    sendApiError(res, status, validation.code, validation.message, {
+      details: { endpoint, operation },
+    });
+    return null;
+  }
+  return validation.grant;
+}
+
+function requestProjectOverride(projectId, tokenProjectId) {
+  return typeof projectId === 'string' && projectId.length > 0 && projectId !== tokenProjectId;
+}
+
+function requestRunOverride(runId, tokenRunId) {
+  return typeof runId === 'string' && runId.length > 0 && runId !== tokenRunId;
+}
+
+function openNativeFolderDialog() {
+  return new Promise((resolve) => {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+      execFile(
+        'osascript',
+        ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
+        { timeout: 120_000 },
+        (err, stdout) => {
+          if (err) return resolve(null);
+          const p = stdout.trim().replace(/\/$/, '');
+          resolve(p || null);
+        },
+      );
+    } else if (platform === 'linux') {
+      execFile(
+        'zenity',
+        ['--file-selection', '--directory', '--title=Select a code folder to link'],
+        { timeout: 120_000 },
+        (err, stdout) => {
+          if (err) return resolve(null);
+          const p = stdout.trim();
+          resolve(p || null);
+        },
+      );
+    } else if (platform === 'win32') {
+      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a code folder to link'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }";
+      execFile('powershell.exe', ['-NoProfile', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
+        if (err) return resolve(null);
+        const p = stdout.trim();
+        resolve(p || null);
+      });
+    } else {
+      resolve(null);
+    }
+  });
 }
 
 /**
@@ -670,6 +1344,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Health/version remain open for monitoring probes.
   // Non-browser clients (no Origin header) are always allowed.
   app.use('/api', (req, res, next) => {
+    // Live artifact previews have stricter local-daemon validation and
+    // loopback CORS handling on the route itself. Let that middleware produce
+    // the structured error shape and preflight headers for preview embeds.
+    if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
+
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
@@ -696,6 +1375,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
+  configureComposioConfigStore(RUNTIME_DATA_DIR);
+  let daemonUrl = `http://127.0.0.1:${port}`;
+
+  // Boot reconcile: any critique_runs row left in 'running' state by a prior
+  // daemon crash gets flipped to 'interrupted' with rounds_json.recoveryReason
+  // = 'daemon_restart' so the spec's daemon-restart-mid-run failure mode is
+  // honored on every boot. staleAfterMs comes from CritiqueConfig, not a
+  // hardcoded constant.
+  const reconciledStaleRuns = reconcileStaleRuns(db, { staleAfterMs: critiqueCfg.totalTimeoutMs });
+  if (reconciledStaleRuns > 0) {
+    console.warn(`[critique] reconcileStaleRuns flipped ${reconciledStaleRuns} stale running row(s) to interrupted`);
+  }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
     console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
@@ -704,7 +1396,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
-  void detectAgents().catch(() => {});
+  void readAppConfig(RUNTIME_DATA_DIR)
+    .then((config) => detectAgents(config.agentCliEnv ?? {}))
+    .catch(() => detectAgents().catch(() => {}));
+
+  await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
+    console.warn('[od] Failed to recover stale live artifact refreshes:', error);
+  });
 
   if (fs.existsSync(STATIC_DIR)) {
     app.use(express.static(STATIC_DIR));
@@ -718,6 +1416,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  registerConnectorRoutes(app, { sendApiError, authorizeToolRequest, projectsRoot: PROJECTS_DIR, requireLocalDaemonRequest });
+
+  app.get('/api/connectors/composio/config', (_req, res) => {
+    try {
+      res.json(readPublicComposioConfig());
+    } catch (err) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.put('/api/connectors/composio/config', requireLocalDaemonRequest, (req, res) => {
+    try {
+      const before = readComposioConfig();
+      const cfg = writeComposioConfig(req.body);
+      const after = readComposioConfig();
+      composioConnectorProvider.clearDiscoveryCache();
+      if (!cfg.configured || (before.apiKey && before.apiKey !== after.apiKey)) {
+        deleteConnectorCredentialsByProvider('composio');
+      }
+      res.json(cfg);
+    } catch (err) {
+      res.status(400).json({ error: String(err && err.message ? err.message : err) });
+    }
   });
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -823,7 +1546,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const hints: string[] = [];
     if (!cliExists) {
       hints.push(
-        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` (or just `pnpm build`) and refresh.',
+        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
       );
     }
     if (!nodeExists) {
@@ -912,7 +1635,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId: skillId ?? null,
         designSystemId: designSystemId ?? null,
         pendingPrompt: pendingPrompt || null,
-        metadata: metadata && typeof metadata === 'object' ? metadata : null,
+        metadata:
+          metadata && typeof metadata === 'object'
+            ? {
+                ...metadata,
+                ...(Array.isArray(metadata.linkedDirs)
+                  ? (() => {
+                      const v = validateLinkedDirs(metadata.linkedDirs);
+                      return v.error ? {} : { linkedDirs: v.dirs };
+                    })()
+                  : {}),
+              }
+            : null,
         createdAt: now,
         updatedAt: now,
       });
@@ -1040,6 +1774,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
+      if (patch.metadata?.linkedDirs) {
+        const validated = validateLinkedDirs(patch.metadata.linkedDirs);
+        if (validated.error) {
+          return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
+        }
+        patch.metadata.linkedDirs = validated.dirs;
+      }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -1077,6 +1818,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let sub;
     try {
       const sse = createSseResponse(res);
+      const projectEventSink = (payload) => {
+        sse.send(payload.type, payload);
+      };
+      let sinks = activeProjectEventSinks.get(req.params.id);
+      if (!sinks) {
+        sinks = new Set();
+        activeProjectEventSinks.set(req.params.id, sinks);
+      }
+      sinks.add(projectEventSink);
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
       });
@@ -1087,6 +1837,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           sub = null;
           Promise.resolve(unsubscribe()).catch(() => {});
         }
+        const currentSinks = activeProjectEventSinks.get(req.params.id);
+        currentSinks?.delete(projectEventSink);
+        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
       };
       res.on('close', cleanup);
       res.on('finish', cleanup);
@@ -1338,7 +2091,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/agents', async (_req, res) => {
     try {
-      const list = await detectAgents();
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const list = await detectAgents(config.agentCliEnv ?? {});
       res.json({ agents: list });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -1685,6 +2439,310 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       });
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/live-artifacts', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const artifacts = await listLiveArtifacts({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+      });
+      res.json({ artifacts });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.options('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, (_req, res) => {
+    res.status(204).end();
+  });
+
+  app.get('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
+      if (variant === 'template' || variant === 'rendered-source') {
+        const html = await readLiveArtifactCode({
+          projectsRoot: PROJECTS_DIR,
+          projectId,
+          artifactId: req.params.artifactId,
+          variant: variant === 'template' ? 'template' : 'rendered',
+        });
+        setLiveArtifactCodeHeaders(res);
+        return res.status(200).send(html);
+      }
+      if (variant !== 'rendered') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'variant must be rendered, template, or rendered-source');
+      }
+
+      const record = await ensureLiveArtifactPreview({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      setLiveArtifactPreviewHeaders(res);
+      res.status(200).send(record.html);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const record = await getLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/live-artifacts/:artifactId/refreshes', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const refreshes = await listLiveArtifactRefreshLogEntries({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      res.json({ refreshes });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/create', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:create');
+      if (!toolGrant) return;
+      const { projectId, input, templateHtml, provenanceJson, createdByRunId } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (requestRunOverride(createdByRunId, toolGrant.runId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'createdByRunId is derived from the tool token', {
+          details: { suppliedRunId: createdByRunId },
+        });
+      }
+
+      const record = await createLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+        input: input ?? {},
+        templateHtml,
+        provenanceJson,
+        createdByRunId: toolGrant.runId,
+      });
+      emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/tools/live-artifacts/list', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:list');
+      if (!toolGrant) return;
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+
+      const artifacts = await listLiveArtifacts({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+      });
+      res.json({ artifacts });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/update', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:update');
+      if (!toolGrant) return;
+      const { projectId, artifactId, input, templateHtml, provenanceJson } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (typeof artifactId !== 'string' || artifactId.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
+      }
+
+      const record = await updateLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+        artifactId,
+        input: input ?? {},
+        templateHtml,
+        provenanceJson,
+      });
+      emitLiveArtifactEvent(toolGrant, 'updated', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/refresh', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:refresh');
+      if (!toolGrant) return;
+      const { projectId, artifactId } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (typeof artifactId !== 'string' || artifactId.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
+      }
+
+      let result;
+      try {
+        result = await refreshLiveArtifact({
+          projectsRoot: PROJECTS_DIR,
+          projectId: toolGrant.projectId,
+          artifactId,
+          onStarted: ({ refreshId }) => {
+            emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
+          },
+        });
+      } catch (refreshErr) {
+        emitLiveArtifactRefreshEvent(toolGrant, {
+          phase: 'failed',
+          artifactId,
+          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        });
+        throw refreshErr;
+      }
+      emitLiveArtifactRefreshEvent(toolGrant, {
+        phase: 'succeeded',
+        artifactId,
+        refreshId: result.refresh.id,
+        title: result.artifact.title,
+        refreshedSourceCount: result.refresh.refreshedSourceCount,
+      });
+      res.json(result);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.patch('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const record = await updateLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+        input: req.body ?? {},
+      });
+      emitLiveArtifactEvent({ projectId }, 'updated', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.delete('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const existing = await getLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      await deleteLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      updateProject(db, projectId, {});
+      emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
+      res.json({ ok: true });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.options('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, (_req, res) => {
+    res.status(204).end();
+  });
+
+  app.post('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      let result;
+      try {
+        result = await refreshLiveArtifact({
+          projectsRoot: PROJECTS_DIR,
+          projectId,
+          artifactId: req.params.artifactId,
+          onStarted: ({ refreshId }) => {
+            emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
+          },
+        });
+      } catch (refreshErr) {
+        emitLiveArtifactRefreshEvent({ projectId }, {
+          phase: 'failed',
+          artifactId: req.params.artifactId,
+          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        });
+        throw refreshErr;
+      }
+      emitLiveArtifactRefreshEvent({ projectId }, {
+        phase: 'succeeded',
+        artifactId: req.params.artifactId,
+        refreshId: result.refresh.id,
+        title: result.artifact.title,
+        refreshedSourceCount: result.refresh.refreshedSourceCount,
+      });
+      res.json(result);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
     }
   });
 
@@ -2229,6 +3287,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  // Native OS folder picker dialog. Returns { path: string | null }.
+  app.post('/api/dialog/open-folder', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const selected = await openNativeFolderDialog();
+      res.json({ path: selected });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
   app.post('/api/projects/:id/media/generate', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({
@@ -2434,6 +3507,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   };
 
   const composeDaemonSystemPrompt = async ({
+    agentId,
     projectId,
     skillId,
     designSystemId,
@@ -2497,6 +3571,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : undefined;
 
     const prompt = composeSystemPrompt({
+      agentId,
+      includeCodexImagegenOverride: false,
       skillBody,
       skillName,
       skillMode,
@@ -2559,6 +3635,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+    const runId = run.id;
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
@@ -2618,34 +3695,49 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           .map((f) => `- ${f.name}`)
           .join('\n')}`
       : '\nThis folder is empty. Choose a clear, descriptive filename for whatever you create.';
+    const projectRecord =
+      typeof projectId === 'string' && projectId
+        ? getProject(db, projectId)
+        : null;
+    const linkedDirs = (() => {
+      if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
+      const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
+      return v.dirs ?? [];
+    })();
     const cwdHint = cwd
       ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}`
+      : '';
+    const linkedDirsHint = linkedDirs.length > 0
+      ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
+          linkedDirs.map((d) => `- \`${d}\``).join('\n')
+        }`
       : '';
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
+    const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
+      ? toolTokenRegistry.mint({
+          runId,
+          projectId,
+          allowedEndpoints: CHAT_TOOL_ENDPOINTS,
+          allowedOperations: CHAT_TOOL_OPERATIONS,
+        })
+      : null;
+    let toolTokenRevoked = false;
+    const revokeToolToken = (reason) => {
+      if (toolTokenRevoked || !toolTokenGrant) return;
+      toolTokenRevoked = true;
+      toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
+    };
+    const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
     const { prompt: daemonSystemPrompt, activeSkillDir } =
       await composeDaemonSystemPrompt({
+        agentId,
         projectId,
         skillId,
         designSystemId,
       });
-    const instructionPrompt = [daemonSystemPrompt, systemPrompt]
-      .map((part) => (typeof part === 'string' ? part.trim() : ''))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-    const composed = [
-      instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}\n\n---\n`
-        : cwdHint
-          ? `# Instructions${cwdHint}\n\n---\n`
-          : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
-      safeImages.length
-        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
-        : '',
-    ].join('');
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -2658,10 +3750,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     //      path inside its working directory. We copy (not symlink) so
     //      the staged directory is a true write barrier — agents cannot
     //      mutate the shipped repo resource through their cwd.
-    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
-    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
-    //      path in the preamble is reachable when staging fails (e.g. the
-    //      project has no on-disk cwd, or fs.cp errored).
+    //   2. `--add-dir` allowlist. For non-Codex agents, pass `SKILLS_DIR`
+    //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
+    //      preamble is reachable when staging fails (e.g. the project has
+    //      no on-disk cwd, or fs.cp errored). Codex treats `--add-dir`
+    //      entries as writable, so Codex receives only the narrow
+    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder
+    //      for allowlisted gpt-image image projects.
     //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
     //      `cwd: PROJECT_ROOT` — there the absolute path is already an
     //      in-cwd path, so neither (1) nor (2) is required for it to
@@ -2692,9 +3787,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
-    const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter((d) =>
-      fs.existsSync(d),
+    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
+      agentId,
+      projectRecord?.metadata,
     );
+    if (codexGeneratedImagesDir) {
+      codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
+        codexGeneratedImagesDir,
+        {
+          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
+        },
+      );
+    }
+    const extraAllowedDirs = resolveChatExtraAllowedDirs({
+      agentId,
+      skillsDir: SKILLS_DIR,
+      designSystemsDir: DESIGN_SYSTEMS_DIR,
+      linkedDirs,
+      codexGeneratedImagesDir,
+    });
+    const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
+      agentId,
+      metadata: projectRecord?.metadata,
+      codexGeneratedImagesDir,
+      extraAllowedDirs,
+    });
+    const instructionPrompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt,
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+      finalPromptOverride: codexImagegenOverride,
+    });
+    const composed = [
+      instructionPrompt
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        : cwdHint
+          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          : linkedDirsHint
+            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            : '',
+      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      safeImages.length
+        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
+        : '',
+    ].join('');
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -2711,6 +3847,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
+      enabled: Boolean(toolTokenGrant?.token),
+      command: process.execPath,
+      argsPrefix: [OD_BIN],
+    });
 
     // Pre-flight the composed prompt against any argv-byte budget the
     // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
@@ -2734,24 +3875,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const resolvedBin = resolveAgentBin(agentId);
-
-    // If detection can't find the binary, surface a friendly SSE error
-    // pointing at /api/agents instead of silently falling back to
-    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
-    // from issue #10.
-    if (!resolvedBin) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          'AGENT_UNAVAILABLE',
-          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
-            'Install it and refresh the agent list (GET /api/agents) before retrying.',
-          { retryable: true },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
 
     const args = def.buildArgs(
       composed,
@@ -2817,10 +3940,33 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const send = (event, data) => design.runs.emit(run, event, data);
-
+    const unregisterChatAgentEventSink = () => {
+      activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
+    };
+    if (toolTokenGrant?.runId) {
+      activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) =>
+        send('agent', payload),
+      );
+    }
+    // If detection can't find the binary, surface a friendly SSE error
+    // pointing at /api/agents instead of silently falling back to
+    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
+    // from issue #10.
+    if (!resolvedBin) {
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload(
+        'AGENT_UNAVAILABLE',
+        `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+          'Install it and refresh the agent list (GET /api/agents) before retrying.',
+        { retryable: true },
+      ));
+      return design.runs.finish(run, 'failed', 1, null);
+    }
     const odMediaEnv = {
       OD_BIN,
-      OD_DAEMON_URL: `http://127.0.0.1:${resolvedPort}`,
+      OD_NODE_BIN,
+      OD_DAEMON_URL: daemonUrl,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
             OD_PROJECT_ID: projectId,
@@ -2828,13 +3974,24 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
 
-    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+    if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      return;
+    }
 
     run.status = 'running';
     run.updatedAt = Date.now();
     send('start', {
-      runId: run.id,
+      runId,
       agentId,
       bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
@@ -2842,6 +3999,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       cwd,
       model: safeModel,
       reasoning: safeReasoning,
+      toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
 
     let child;
@@ -2853,11 +4011,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = spawnEnvForAgent(def.id, {
-        ...process.env,
-        ...(def.env || {}),
+      const env = {
+        ...spawnEnvForAgent(
+          def.id,
+          {
+            ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
+            ...(def.env || {}),
+          },
+          configuredAgentEnv,
+        ),
         ...odMediaEnv,
-      });
+      };
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,
@@ -2893,28 +4057,148 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          `spawn failed: ${err.message}`,
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      design.runs.finish(run, 'failed', 1, null);
+      return;
     }
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
+    // Critique Theater branch (M0 dark launch, default disabled).
+    // Only plain-stream adapters are routed through runOrchestrator in v1.
+    // Adapters that emit structured wrappers (claude-stream-json,
+    // qoder-stream-json, copilot-stream-json, json-event-stream,
+    // acp-json-rpc, pi-rpc) fall
+    // through to the legacy single-pass code path below with a one-time
+    // stderr warning so the parser never sees wrapper bytes. Per-format
+    // decoding into the orchestrator is a v2 concern.
+    if (critiqueCfg.enabled) {
+      const adapterStreamFormat: string = def.streamFormat ?? 'plain';
+      if (adapterStreamFormat !== 'plain') {
+        if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
+          critiqueWarnedAdapters.add(adapterStreamFormat);
+          console.warn(`[critique] adapter format=${adapterStreamFormat} is not plain-stream; skipping orchestrator and falling through to legacy generation`);
+        }
+      } else {
+        const critiqueRunId = run.id;
+        // Per-run artifact directory keeps concurrent or sequential runs in the
+        // same project from overwriting each other's transcript or final HTML.
+        // Spec: artifacts/<projectId>/<runId>/transcript.ndjson(.gz).
+        const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
+        const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
+        const stdoutIterable = (async function* () {
+          for await (const chunk of child.stdout) yield String(chunk);
+        })();
+        const critiqueBus = { emit: (e) => send('agent', e) };
+
+        // Stderr forwarding and child.on('error') must be wired BEFORE the
+        // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
+        // fill the OS pipe and deadlock the run until the total timeout, and
+        // an early child error fired before the orchestrator returns has no
+        // listener. Both registrations are idempotent and the run lifecycle
+        // is owned solely by the orchestrator's awaited result below.
+        child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+        child.on('error', (err) => {
+          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
+        });
+
+        // Wrap the child's close event so the orchestrator can race child
+        // exit against parser completion, abort, and timeouts in one awaited
+        // flow. Without this the orchestrator can't tell a non-zero exit
+        // apart from a clean ship and may misclassify failures.
+        const childExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+          child.once('close', (code, signal) => resolve({ code, signal }));
+        });
+        try {
+          const orchestratorResult = await runOrchestrator({
+            runId: critiqueRunId,
+            projectId: typeof projectId === 'string' ? projectId : '',
+            conversationId: typeof conversationId === 'string' ? conversationId : null,
+            artifactId: critiqueRunId,
+            artifactDir: critiqueArtifactDir,
+            adapter: typeof agentId === 'string' ? agentId : 'unknown',
+            cfg: critiqueCfg,
+            db,
+            bus: critiqueBus,
+            stdout: stdoutIterable,
+            child,
+            childExitPromise,
+          });
+          // Map the critique terminal status to the chat run lifecycle.
+          // 'shipped' and 'below_threshold' both ran to a ship decision and
+          // finalize as 'succeeded'; every other status (timed_out,
+          // interrupted, degraded, failed, legacy) is a failure path so the
+          // run reflects the real outcome instead of a misleading success.
+          const succeeded = orchestratorResult.status === 'shipped'
+            || orchestratorResult.status === 'below_threshold';
+          if (run.cancelRequested) {
+            design.runs.finish(run, 'canceled', 1, null);
+          } else if (succeeded) {
+            design.runs.finish(run, 'succeeded', 0, null);
+          } else {
+            design.runs.finish(run, 'failed', 1, null);
+          }
+        } catch (err) {
+          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
+          design.runs.finish(run, 'failed', 1, null);
+        }
+        return;
+      }
+    }
+
     // Structured streams (Claude Code) go through a line-delimited JSON
     // parser that turns stream_event objects into UI-friendly events. For
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
+    let agentStreamError = null;
+    // Tracks whether any stream the run is using actually emitted user-
+    // visible content. Only the streams routed through `sendAgentEvent`
+    // contribute to this flag; ACP sessions and plain stdout streams are
+    // covered by their own success/failure paths and the empty-output
+    // guard below skips them via `trackingSubstantiveOutput`.
+    let agentProducedOutput = false;
+    let trackingSubstantiveOutput = false;
+    // Event types that count as "the agent actually produced something the
+    // user can see." Lifecycle markers (`status`) and meter readings
+    // (`usage`) deliberately do NOT count — a model can emit token-usage
+    // numbers for an empty completion (issue #691), and a `status:running`
+    // banner without any follow-up is exactly the silent-failure shape we
+    // want to surface as failed instead of succeeded.
+    const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
+      'text_delta',
+      'thinking_delta',
+      'tool_use',
+      'tool_result',
+      'artifact',
+    ]);
+    const sendAgentEvent = (ev) => {
+      if (ev?.type === 'error') {
+        if (agentStreamError) return;
+        agentStreamError = String(ev.message || 'Agent stream error');
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
+          details: ev.raw ? { raw: ev.raw } : undefined,
+          retryable: false,
+        }));
+        return;
+      }
+      if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
+        agentProducedOutput = true;
+      }
+      send('agent', ev);
+    };
+
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'qoder-stream-json') {
+      trackingSubstantiveOutput = true;
+      const qoder = createQoderStreamHandler(sendAgentEvent);
+      child.stdout.on('data', (chunk) => qoder.feed(chunk));
+      child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
@@ -2933,30 +4217,66 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
+        mcpServers,
         send,
       });
     } else if (def.streamFormat === 'json-event-stream') {
+      // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
+      // (now emitted as a real error event by json-event-stream.ts after
+      // #691) actually triggers `agentStreamError` instead of being
+      // forwarded as a no-op `agent` SSE event. This also wires the
+      // substantive-output tracking the close handler reads below.
+      trackingSubstantiveOutput = true;
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        (ev) => send('agent', ev),
+        sendAgentEvent,
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
+    // Wire the acpSession onto the run so cancel() can call abort()
+    // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
+    run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
-      send(
-        'error',
-        createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message),
-      );
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      if (agentStreamError) {
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      // Empty-output guard: a clean `code === 0` exit on a stream we are
+      // tracking, with no error frame and no substantive event, means the
+      // run silently finished without producing anything visible. That used
+      // to be marked `succeeded` and rendered as an empty assistant turn —
+      // see issue #691, where OpenCode runs were ending in ~3s with no
+      // chat content and no error banner. Surface an explicit failure
+      // instead so the chat shows a clear reason. ACP sessions and plain
+      // stdout streams are gated out via `trackingSubstantiveOutput`;
+      // their success/failure determination lives elsewhere.
+      if (
+        code === 0 &&
+        !run.cancelRequested &&
+        trackingSubstantiveOutput &&
+        !agentProducedOutput
+      ) {
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code, signal);
       }
       const status = run.cancelRequested
         ? 'canceled'
@@ -3065,10 +4385,23 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   const appendVersionedApiPath = (baseUrl, path) => {
     const url = new URL(baseUrl);
-    const pathname = url.pathname.replace(/\/+$/, '');
-    url.pathname = /\/v\d+$/.test(pathname)
-      ? `${pathname}${path}`
-      : `${pathname}/v1${path}`;
+    // `URL.pathname` setter normalizes an empty string back to "/", so
+    // we work in a local string to detect the no-path and no-version
+    // cases.
+    const trimmed = url.pathname.replace(/\/+$/, '');
+    // Auto-inject `/v1` whenever the supplied path doesn't already
+    // contain a `/vN` segment. This handles all four preset shapes:
+    //   bare host                            → /v1/<route>            (api.openai.com, api.anthropic.com)
+    //   ends in /vN                          → no inject              (api.openai.com/v1, /v1)
+    //   /vN sub-path                         → no inject              (api.deepinfra.com/v1/openai, openrouter.ai/api/v1)
+    //   non-versioned compat sub-path        → /v1/<route>            (api.deepseek.com/anthropic, api.minimaxi.com/anthropic)
+    // Previously the check was end-of-path only, which broke the
+    // /v1/openai sub-path case. A naive "non-empty path → respect"
+    // would break the /anthropic sub-path case. Matching `/vN` as a
+    // segment anywhere in the path threads both correctly.
+    url.pathname = /\/v\d+(\/|$)/.test(trimmed)
+      ? `${trimmed}${path}`
+      : `${trimmed}/v1${path}`;
     return url.toString();
   };
 
@@ -3588,6 +4921,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!returnServer) {
         console.log(`[od] daemon listening on ${url}`);
       }
+      daemonUrl = url;
       resolve(returnServer ? { url, server } : url);
     });
     // `app.listen` throws synchronously when the port is already in use on

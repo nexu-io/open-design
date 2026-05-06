@@ -4,8 +4,25 @@ import {
   localizePromptTemplateCategory,
   localizePromptTemplateSummary,
 } from '../i18n/content';
-import type { PromptTemplateSummary } from '../types';
+import type { PromptTemplateSource, PromptTemplateSummary } from '../types';
 import { Icon } from './Icon';
+
+// Stable, human-readable provider name used by the source filter and the
+// thumbnail badge. Anchored on `source.repo` (a small enumerated set) rather
+// than `source.author` (dozens of curators). Known upstream repos get a
+// brand-aware label; everything else falls back to the repo's last segment.
+const PROVIDER_LABELS: Record<string, string> = {
+  'heygen-com/hyperframes': 'HyperFrames',
+  'YouMind-OpenLab/awesome-seedance-2-prompts': 'Seedance 2',
+  'YouMind-OpenLab/awesome-gpt-image-2': 'GPT Image 2',
+  'nexu-io/open-design': 'Open Design',
+};
+function providerLabel(source: PromptTemplateSource): string {
+  const known = PROVIDER_LABELS[source.repo];
+  if (known) return known;
+  const repo = source.repo.split('/').pop() ?? source.repo;
+  return repo;
+}
 
 interface Props {
   surface: 'image' | 'video';
@@ -22,6 +39,7 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
   const { locale, t } = useI18n();
   const [filter, setFilter] = useState('');
   const [category, setCategory] = useState<string>('All');
+  const [source, setSource] = useState<string>('All');
 
   const surfaceScoped = useMemo(
     () => templates.filter((tpl) => tpl.surface === surface),
@@ -34,10 +52,22 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
     return ['All', ...Array.from(set).sort()];
   }, [surfaceScoped]);
 
+  const sources = useMemo(() => {
+    const set = new Set<string>();
+    for (const tpl of surfaceScoped) {
+      const label = providerLabel(tpl.source);
+      if (label) set.add(label);
+    }
+    return ['All', ...Array.from(set).sort()];
+  }, [surfaceScoped]);
+
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return surfaceScoped.filter((tpl) => {
       if (category !== 'All' && (tpl.category || 'General') !== category) {
+        return false;
+      }
+      if (source !== 'All' && providerLabel(tpl.source) !== source) {
         return false;
       }
       if (!q) return true;
@@ -50,9 +80,10 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
         || localized.summary.toLowerCase().includes(q)
         || localized.category.toLowerCase().includes(q)
         || (localized.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+        || providerLabel(tpl.source).toLowerCase().includes(q)
       );
     });
-  }, [surfaceScoped, filter, category, locale]);
+  }, [surfaceScoped, filter, category, source, locale]);
 
   if (surfaceScoped.length === 0) {
     return (
@@ -79,6 +110,19 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
             </option>
           ))}
         </select>
+        {sources.length > 2 ? (
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            aria-label={t('promptTemplates.sourceFilterAria')}
+          >
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {s === 'All' ? t('promptTemplates.allSources') : s}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <span className="prompt-templates-count">
           {t('promptTemplates.countLabel', { n: filtered.length })}
         </span>
@@ -114,6 +158,8 @@ function PromptTemplateCard({
   onPreview: () => void;
 }) {
   const t = useT();
+  const provider = providerLabel(tpl.source);
+  const isHyperFrames = tpl.source.repo === 'heygen-com/hyperframes';
   const sourceLabel = tpl.source.author
     ? `${tpl.source.author} · ${tpl.source.repo.split('/').pop()}`
     : tpl.source.repo.split('/').pop();
@@ -136,6 +182,15 @@ function PromptTemplateCard({
             <Icon name="image" size={28} />
           </span>
         )}
+        {provider ? (
+          <span
+            className={
+              `prompt-template-thumb-provider${isHyperFrames ? ' is-hyperframes' : ''}`
+            }
+          >
+            {provider}
+          </span>
+        ) : null}
         {tpl.surface === 'video' && tpl.previewVideoUrl ? (
           <span className="prompt-template-thumb-play" aria-hidden>
             ▶

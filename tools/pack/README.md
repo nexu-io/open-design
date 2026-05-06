@@ -69,8 +69,11 @@ Local lifecycle commands:
 - `tools-pack linux build --containerized` (run electron-builder inside `electronuserland/builder:base` Docker for distro-agnostic glibc compat — requires Docker)
 - `tools-pack linux build --to all --portable` (release artifacts that must not bake local tools-pack runtime paths)
 - `tools-pack linux install`
+- `tools-pack linux install --headless` (install the headless launcher script instead of the AppImage)
 - `tools-pack linux start`
+- `tools-pack linux start --headless` (start the headless entry — daemon + web, no Electron)
 - `tools-pack linux stop`
+- `tools-pack linux stop --headless` (stop a running headless process)
 - `tools-pack linux logs`
 - `tools-pack linux uninstall`
 - `tools-pack linux cleanup`
@@ -83,7 +86,19 @@ Local installs use XDG paths:
 - Menu entry: `~/.local/share/applications/open-design-<namespace>.desktop`
 - Icon: `~/.local/share/icons/hicolor/512x512/apps/open-design-<namespace>.png`
 
-The `<namespace>` suffix is unconditional so multiple developer namespaces can coexist on the same desktop. The `.desktop` file registers the `od://` scheme via `MimeType=x-scheme-handler/od;` and pre-sets `OD_NAMESPACE` on the `Exec=` line so menu launches identify the correct namespace.
+The `<namespace>` suffix is unconditional so multiple developer namespaces can coexist on the same desktop. The `.desktop` file registers the `od://` scheme via `MimeType=x-scheme-handler/od;` and pre-sets `OD_PACKAGED_NAMESPACE` on the `Exec=` line so menu launches identify the correct namespace.
+
+### Headless mode (`--headless`)
+
+Headless mode targets environments without a display (WSL2, headless servers, CI) where Electron can't run. If you have a desktop, use the AppImage; if you're SSH'd into a machine or in WSL, use headless.
+
+`--headless` makes `install`, `start`, and `stop` operate on the headless entry (`@open-design/packaged/dist/headless.mjs`) instead of the AppImage. Headless mode runs daemon + web without Electron.
+
+- `install --headless` writes a shell launcher at `~/.local/bin/open-design-headless-<namespace>` that bakes in the namespace and resource paths. The launcher is self-contained, but the assembled app directory at those paths must remain in place — don't move it after install.
+- `start --headless` spawns the headless process directly, redirects stdout/stderr to `logs/desktop/latest.log`, and waits up to 95s (35s for identity marker + 60s for web URL) before returning.
+- `stop --headless` reads the same `runtime/desktop-root.json` identity marker as the AppImage path, validates `stamp.source === PACKAGED`, sends a graceful SHUTDOWN over IPC, then terminates the process tree. It does not perform the AppImage-specific process-command check.
+
+`logs` always reads `logs/desktop/latest.log` regardless of mode, so headless output is visible via `tools-pack linux logs`.
 
 ### AppImage launch mode (FUSE caveat)
 
