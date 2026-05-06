@@ -97,6 +97,22 @@ async function saveToken(token) {
   await writeFile(TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
 }
 
+// Merge a refreshed-token payload onto the live credential snapshot.
+//
+// Google's OAuth2 client emits `tokens` events that contain only the
+// fields that changed (typically a fresh access_token + expiry, but
+// sometimes a rotated refresh_token). We merge against the live
+// credentials so:
+//   - long-lived fields like refresh_token survive a partial refresh
+//   - if the credentials were rotated since boot, we don't accidentally
+//     overwrite that rotation with a stale snapshot.
+//
+// Exported so the tests can pin the merge semantics without spinning
+// up the OAuth2 client.
+export function mergeTokenRefresh(currentCredentials, newTokens) {
+  return { ...currentCredentials, ...newTokens };
+}
+
 async function buildOAuthClient(redirectUri = DEFAULT_REDIRECT_URI) {
   const { clientId, clientSecret } = await loadCredentials();
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
@@ -121,7 +137,7 @@ export async function getAuthClient() {
     // Use the client's CURRENT credentials as the merge base (not the
     // initial-load snapshot) so a later token rotation isn't clobbered
     // by stale fields from the boot-time snapshot.
-    const merged = { ...client.credentials, ...newTokens };
+    const merged = mergeTokenRefresh(client.credentials, newTokens);
     void saveToken(merged).catch(() => {});
   });
   cachedClient = client;
@@ -149,7 +165,7 @@ export async function exchangeCode(code, redirectUri = DEFAULT_REDIRECT_URI): Pr
     // rotated after this listener is attached, the next refresh
     // should fold newTokens into the latest credentials, not into
     // the initial snapshot.
-    const merged = { ...client.credentials, ...newTokens };
+    const merged = mergeTokenRefresh(client.credentials, newTokens);
     void saveToken(merged).catch(() => {});
   });
   await saveToken(tokens);

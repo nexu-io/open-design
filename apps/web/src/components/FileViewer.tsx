@@ -58,6 +58,7 @@ import {
   openSandboxedPreviewInNewTab,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import { buildDeckEditUrl } from '../utils/deckUrl';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
@@ -4044,17 +4045,10 @@ function GoogleSlidesViewer({
   }, [projectId, result?.deckId, file.mtime]);
 
   // Derive the "Edit in Google Slides" link from the deck ID rather
-  // than trusting result.json's deckUrl verbatim. result.json comes
-  // from the agent — a malicious or buggy artifact writer could set
-  // deckUrl to javascript:... or a phishing URL, and the toolbar
-  // would surface it as a trusted action. Rebuilding from a validated
-  // deck-id pattern (`[A-Za-z0-9_-]+`, the Google Drive id alphabet)
-  // keeps the link domain-locked to docs.google.com.
-  const deckUrl = useMemo(() => {
-    const id = result?.deckId;
-    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{10,}$/.test(id)) return null;
-    return `https://docs.google.com/presentation/d/${id}/edit`;
-  }, [result?.deckId]);
+  // than trusting result.json's deckUrl verbatim. See utils/deckUrl
+  // for why — short version: result.json is agent output, and a bad
+  // manifest could set deckUrl to `javascript:` or a phishing URL.
+  const deckUrl = useMemo(() => buildDeckEditUrl(result?.deckId), [result?.deckId]);
   const hasResult = result !== null;
   const totalPages = pageIds.length || result?.totalPages || 0;
   const goPrev = useCallback(() => {
