@@ -32,7 +32,30 @@ od:
 
 Single-connector Orbit template scoped to Notion. The briefing renders
 *as a real Notion page* — same chrome, same block primitives, same
-typography. The shipped `example.html` is the source-of-truth design.
+typography.
+
+## ⚠️ Source-of-truth protocol (read this first)
+
+**Step 1.** Open and read the shipped `example.html` in this folder
+before writing any output. That file is the canonical design — your
+job is to **reproduce it**, not reinterpret it.
+
+**Step 2.** Mirror the example's structure 1:1:
+- Same DOM hierarchy and class names
+- Same H2 sections in the same order (文档变更 → 评论 / @ 提及 → 数据库变更)
+- Same bullet rows / comment cards / database table columns and rows
+- Same callout(s) and toggle block with the same copy
+- Same property chips at the top (Type / Owner / Created)
+- Same `<script>` block at the end (page-link → notion.so injection)
+
+**Step 3.** You may refresh mock values (doc titles, mentioned people,
+edit timestamps) so they read as "today", but you must **not**
+invent extra blocks: no extra H2 sections, no extra callouts, no
+extra database columns, no extra emoji decorations. If a detail is
+not in `example.html`, it does not belong in your output.
+
+The sections below are a **reference for tokens and visual language** —
+not a license to extend the page.
 
 ## Canvas tokens (use these exact values)
 

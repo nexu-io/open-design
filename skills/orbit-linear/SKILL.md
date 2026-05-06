@@ -30,9 +30,32 @@ od:
 
 # Orbit · Linear Briefing
 
-Single-connector Orbit template scoped to Linear. The shipped
-`example.html` is the source-of-truth design — match Linear's signature
-ultra-compact rows, status-dot color codes, and 4-bar priority icon.
+Single-connector Orbit template scoped to Linear.
+
+## ⚠️ Source-of-truth protocol (read this first)
+
+**Step 1.** Open and read the shipped `example.html` in this folder
+before writing any output. That file is the canonical design — your
+job is to **reproduce it**, not reinterpret it.
+
+**Step 2.** Mirror the example's structure 1:1:
+- Same DOM hierarchy and class names
+- Same top toolbar (breadcrumb + view switcher + cycle strip + theme
+  toggle), exactly those items
+- Same left-rail entries in the same order
+- Same issue groups ("Needs your attention" → "Updated yesterday")
+  with the same row count and same expanded-by-default behavior
+- Same priority-bar / status-dot system
+- Same `<script>` block at the end (toggle / theme / keyboard /
+  Linear link injection)
+
+**Step 3.** You may refresh mock values (issue identifiers, titles,
+labels, ages, assignees) so they read as "today", but you must
+**not** add extra rail entries, extra groups, extra fields in the
+preview pane, or any chrome ornaments not already in `example.html`.
+
+The sections below are a **reference for tokens and visual language** —
+not a license to extend the page.
 
 ## Canvas tokens — light theme (default to ship)
 

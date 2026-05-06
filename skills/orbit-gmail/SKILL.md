@@ -35,8 +35,32 @@ Single-connector Orbit template scoped to Gmail. The briefing arrives
 *as an email* in the user's inbox; opening it shows a structured digest
 broken into "needs reply / mentions you / auto-categorized".
 
-The shipped `example.html` is the source-of-truth design — match
-Gmail's Material chrome closely so it reads as a real Gmail screen.
+## ⚠️ Source-of-truth protocol (read this first)
+
+**Step 1.** Open and read the shipped `example.html` in this folder
+before writing any output. That file is the canonical design — your
+job is to **reproduce it**, not reinterpret it.
+
+**Step 2.** Mirror the example's structure 1:1:
+- Same DOM hierarchy and class names
+- Same left-rail items in the same order. **Do not add `已暂停 /
+  Snoozed`, extra system labels, or extra colored labels** that are
+  not in the example.
+- Same Categories tab strip (Primary / Social / Promotions only).
+- Same inbox-list rows in the same order — including the **single
+  yellow important star** on the top Orbit row only. Do **not** put
+  yellow important markers on additional rows.
+- Same digest-body sections, same priority strip, same reply bar.
+- Same `<script>` block at the end (link / reply injection).
+
+**Step 3.** You may refresh mock copy (sender names, subjects, summary
+text, times) so it reads as "today", but you must **not** invent
+extra UI: no extra labels, no extra inbox rows, no extra section
+markers, no extra chrome ornaments. If a detail is not already in
+`example.html`, it does not belong in your output.
+
+The sections below are a **reference for tokens and visual language** —
+not a license to extend the page.
 
 ## Canvas tokens (use these exact values)
 

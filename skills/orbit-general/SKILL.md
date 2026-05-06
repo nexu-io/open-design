@@ -38,9 +38,30 @@ Cross-connector morning briefing that lives at the top of "我的设计".
 Pulls the past 24 hours of activity from every authenticated connector
 and lays them out as one editorial bento dashboard.
 
-The shipped `example.html` in this folder is the source-of-truth design.
-Reproduce its visual language faithfully — same canvas, same typography,
-same module shapes, same copy register.
+## ⚠️ Source-of-truth protocol (read this first)
+
+**Step 1.** Open and read the shipped `example.html` in this folder
+before writing any output. That file is the canonical design — your
+job is to **reproduce it**, not reinterpret it.
+
+**Step 2.** Mirror the example's structure 1:1:
+- Same DOM hierarchy and class names
+- Same number and order of sections
+- Same number of bento modules in the same order
+- Same connector list (do **not** add or drop connectors)
+- Same KPI labels, same Top 3 entries, same "people waiting" set
+- Same footer string
+- Same `<script>` block at the end (link injection)
+
+**Step 3.** You may freshen mock data values (counts, names, times) so
+they read as "today" — but you must not invent new UI elements,
+sections, modules, badges, callouts, ribbons, banners, decorations or
+chrome that aren't already in `example.html`. If a detail is not in
+the example, it does not belong in your output.
+
+The body sections below are a **reference for the visual language and
+tokens** — they are not a license to add features the example doesn't
+already render.
 
 ## Canvas tokens (use these exact values)
 

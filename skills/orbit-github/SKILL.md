@@ -30,9 +30,31 @@ od:
 
 # Orbit · GitHub Briefing
 
-Single-connector Orbit template scoped to GitHub. The shipped
-`example.html` in this folder is the source-of-truth design — match
-GitHub's native Primer chrome down to the spacing and pill colors.
+Single-connector Orbit template scoped to GitHub.
+
+## ⚠️ Source-of-truth protocol (read this first)
+
+**Step 1.** Open and read the shipped `example.html` in this folder
+before writing any output. That file is the canonical design — your
+job is to **reproduce it**, not reinterpret it.
+
+**Step 2.** Mirror the example's structure 1:1:
+- Same DOM hierarchy and class names
+- Same nav-bar items (and only those)
+- Same left-rail filter list (and only those)
+- Same event groups in the same order, with the same row count
+- Same diff-preview placement, same CI-fail block, same attention block
+- Same `<script>` block at the end (filter / hover / link injection)
+
+**Step 3.** You may refresh mock values (PR numbers, titles, times,
+CI commit messages) so they read as "today", but you must **not**
+invent extra UI: no extra rail entries, no extra notifications,
+no extra event types, no extra badges, no extra chrome ornaments. If
+something is not already present in `example.html`, it does not
+belong in your output.
+
+The sections below are a **reference for tokens and visual language** —
+not a license to extend the page.
 
 ## Canvas tokens (use these exact values)
 
