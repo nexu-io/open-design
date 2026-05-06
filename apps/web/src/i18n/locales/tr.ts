@@ -338,6 +338,7 @@ export const tr: Dict = {
   'examples.modePrototypeMobile': 'Prototipler · Mobil',
   'examples.modeDeck': 'Slaytlar',
   'examples.modeDocument': 'Doküman & şablonlar',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': 'Genel',
   'examples.scenarioEngineering': 'Mühendislik',
   'examples.scenarioProduct': 'Ürün',

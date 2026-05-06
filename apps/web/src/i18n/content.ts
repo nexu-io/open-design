@@ -364,6 +364,11 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
+  'orbit-general',
+  'orbit-github',
+  'orbit-gmail',
+  'orbit-linear',
+  'orbit-notion',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',

@@ -355,6 +355,7 @@ export const en: Dict = {
   'examples.modePrototypeMobile': 'Prototypes · Mobile',
   'examples.modeDeck': 'Slides',
   'examples.modeDocument': 'Docs & templates',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': 'General',
   'examples.scenarioEngineering': 'Engineering',
   'examples.scenarioProduct': 'Product',
