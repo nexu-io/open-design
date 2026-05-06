@@ -65,10 +65,10 @@ describe("buildDockerArgs", () => {
 
   it("mounts docker home and electron caches under .tmp/tools-pack/.docker-*", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
-    expect(args).toContain("/work/.tmp/tools-pack/.docker-home:/home/builder");
-    expect(args).toContain("/work/.tmp/tools-pack/.docker-cache/electron:/home/builder/.cache/electron");
+    expect(args).toContain(`${join("/work/.tmp/tools-pack", ".docker-home")}:/home/builder`);
+    expect(args).toContain(`${join("/work/.tmp/tools-pack", ".docker-cache", "electron")}:/home/builder/.cache/electron`);
     expect(args).toContain(
-      "/work/.tmp/tools-pack/.docker-cache/electron-builder:/home/builder/.cache/electron-builder",
+      `${join("/work/.tmp/tools-pack", ".docker-cache", "electron-builder")}:/home/builder/.cache/electron-builder`,
     );
   });
 
