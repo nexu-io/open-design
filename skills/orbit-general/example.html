@@ -242,53 +242,6 @@
   .gh-pr-title { flex: 1; font-weight: 500; }
   .gh-time { color: var(--muted); font-size: 12px; white-space: nowrap; margin-left: auto; }
 
-  /* ── Figma ── */
-  .figma-hero-thumb {
-    width: 100%;
-    aspect-ratio: 16/10;
-    background: #E8E4DE;
-    border-radius: var(--radius-s);
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-  }
-  .figma-hero-thumb .placeholder-label {
-    font-size: 13px;
-    color: var(--muted);
-    font-weight: 500;
-  }
-  .figma-comment {
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 17px;
-    line-height: 1.45;
-    color: var(--fg);
-    padding: 12px 0;
-    border-top: 1px solid var(--border);
-    margin-bottom: 12px;
-  }
-  .figma-comment-author {
-    font-family: var(--font-body);
-    font-style: normal;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 16px;
-  }
-  .figma-thumbs {
-    display: flex;
-    gap: 8px;
-    overflow: hidden;
-  }
-  .figma-thumbs .thumb {
-    width: 64px; height: 48px;
-    background: #E8E4DE;
-    border-radius: 8px;
-    flex-shrink: 0;
-  }
-
   /* ── Sentry ── */
   .sentry-big {
     font-family: var(--font-display);
@@ -753,11 +706,11 @@
     <div class="top3-card">
       <div class="top3-num">2</div>
       <div class="top3-body">
-        <h3>回复 Yuki 关于 onboarding flow 的 Figma 评论</h3>
+        <h3>回复 Yuki 在《Onboarding Flow v3》文档里的评论</h3>
         <div class="top3-meta">
           <span class="source">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--muted)"><path d="M4.5 1A1.5 1.5 0 003 2.5V7h2.5A1.5 1.5 0 017 8.5V11H3v2.5A1.5 1.5 0 004.5 15h7a1.5 1.5 0 001.5-1.5v-11A1.5 1.5 0 0011.5 1h-7zM5.5 8.5V11H3V8.5A.5.5 0 013.5 8h1.5a.5.5 0 01.5.5z"/></svg>
-            Figma
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" stroke-width="1.4"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>
+            Notion
           </span>
           <span class="wait">等待 2h</span>
         </div>
@@ -887,35 +840,6 @@
             <div class="vercel-time">2h ago</div>
           </div>
           <span class="vercel-dur">fail</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── 4. Figma (B: 设计协作) — span 2 col ── -->
-    <div class="bento-card">
-      <div class="bento-header">
-        <svg class="bento-icon" viewBox="0 0 24 24" fill="none">
-          <path d="M5 5.5A3.5 3.5 0 018.5 2H12v7H8.5A3.5 3.5 0 015 5.5z" stroke="var(--fg)" stroke-width="1.5"/>
-          <path d="M12 2h3.5a3.5 3.5 0 110 7H12V2z" stroke="var(--fg)" stroke-width="1.5"/>
-          <path d="M5 12a3.5 3.5 0 013.5-3.5H12v7H8.5A3.5 3.5 0 015 12z" stroke="var(--fg)" stroke-width="1.5"/>
-          <path d="M5 18.5A3.5 3.5 0 018.5 15H12v3.5a3.5 3.5 0 11-7 0z" stroke="var(--fg)" stroke-width="1.5"/>
-          <circle cx="15.5" cy="12" r="3.5" stroke="var(--fg)" stroke-width="1.5"/>
-        </svg>
-        <div class="bento-title">Figma</div>
-        <div class="bento-badge">3 comments</div>
-      </div>
-      <div class="bento-body" style="display:flex;gap:20px;">
-        <div style="flex:1;">
-          <div class="figma-hero-thumb">
-            <span class="placeholder-label">Onboarding Flow v3</span>
-          </div>
-          <div class="figma-comment">"v3 的转化路径比 v2 短了一步，节奏更顺——周三前能出 hi-fi 让我们跑一轮用户测试吗？"</div>
-          <div class="figma-comment-author">Yuki · 2 小时前</div>
-        </div>
-        <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding-top:4px;">
-          <div style="width:80px;height:56px;background:#E8E4DE;border-radius:8px;"></div>
-          <div style="width:80px;height:56px;background:#DDD8D0;border-radius:8px;"></div>
-          <div style="width:80px;height:56px;background:#E2DDD6;border-radius:8px;"></div>
         </div>
       </div>
     </div>
