@@ -3,13 +3,16 @@ import fs from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
+export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
+export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
 
 const VERCEL_API = 'https://api.vercel.com';
+const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
 
@@ -22,14 +25,14 @@ export class DeployError extends Error {
   }
 }
 
-export function deployConfigPath() {
+export function deployConfigPath(providerId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, 'vercel.json');
+  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
 }
 
 export async function readVercelConfig() {
   try {
-    const raw = await readFile(deployConfigPath(), 'utf8');
+    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
     const parsed = JSON.parse(raw);
     return {
       token: typeof parsed.token === 'string' ? parsed.token : '',
@@ -38,6 +41,21 @@ export async function readVercelConfig() {
     };
   } catch (err) {
     if (err && err.code === 'ENOENT') return { token: '', teamId: '', teamSlug: '' };
+    throw err;
+  }
+}
+
+export async function readCloudflarePagesConfig() {
+  try {
+    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+      accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
+      projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
+    };
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '' };
     throw err;
   }
 }
@@ -54,15 +72,34 @@ export async function writeVercelConfig(input) {
     teamSlug:
       typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
   };
-  const file = deployConfigPath();
+  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
+  return publicDeployConfig(next);
+}
+
+export async function writeCloudflarePagesConfig(input) {
+  const current = await readCloudflarePagesConfig();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  const next = {
+    token:
+      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
+        ? tokenInput
+        : current.token,
+    accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
+    projectName:
+      typeof input?.projectName === 'string' ? input.projectName.trim() : current.projectName,
+  };
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
+  return publicCloudflarePagesConfig(next);
+}
+
+async function writeDeployConfigFile(file, config) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   try {
     fs.chmodSync(file, 0o600);
   } catch {
     // Best effort on filesystems that do not support chmod.
   }
-  return publicDeployConfig(next);
 }
 
 export function publicDeployConfig(config) {
@@ -74,6 +111,38 @@ export function publicDeployConfig(config) {
     teamSlug: config?.teamSlug || '',
     target: 'preview',
   };
+}
+
+export function publicCloudflarePagesConfig(config) {
+  return {
+    providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+    configured: Boolean(config?.token && config?.accountId && config?.projectName),
+    tokenMask: config?.token ? SAVED_CLOUDFLARE_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    accountId: config?.accountId || '',
+    projectName: config?.projectName || '',
+    target: 'preview',
+  };
+}
+
+export async function readDeployConfig(providerId = VERCEL_PROVIDER_ID) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  return readVercelConfig();
+}
+
+export async function writeDeployConfig(providerId = VERCEL_PROVIDER_ID, input = {}) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
+  return writeVercelConfig(input);
+}
+
+export function publicDeployConfigForProvider(providerId = VERCEL_PROVIDER_ID, config = {}) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  return publicDeployConfig(config);
+}
+
+export function isDeployProviderId(value) {
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
 }
 
 // Walk the entry HTML and any referenced CSS, producing the full set of
@@ -231,6 +300,81 @@ export async function deployToVercel({ config, files, projectId }) {
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
   };
+}
+
+export async function deployToCloudflarePages({ config, files }) {
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name is required.', 400);
+
+  await ensureCloudflarePagesProject(config);
+
+  const form = new FormData();
+  const manifest = {};
+  const uploadedHashes = new Set();
+  for (const file of files) {
+    const data = Buffer.from(file.data);
+    const hash = createHash('sha256').update(data).digest('hex');
+    manifest[file.file] = hash;
+    if (uploadedHashes.has(hash)) continue;
+    uploadedHashes.add(hash);
+    form.append(
+      hash,
+      new Blob([data], { type: file.contentType || 'application/octet-stream' }),
+      file.file,
+    );
+  }
+  form.append('manifest', JSON.stringify(manifest));
+  form.append('pages_build_output_dir', '.');
+
+  const deployResp = await fetch(cloudflarePagesProjectUrl(config, 'deployments'), {
+    method: 'POST',
+    headers: cloudflareHeaders(config),
+    body: form,
+  });
+  const deployed = await readCloudflareJson(deployResp);
+  if (!deployResp.ok || deployed?.success === false) {
+    throw cloudflareError(deployed, deployResp.status, 'Cloudflare Pages deployment failed.');
+  }
+
+  const deployment = deployed?.result ?? deployed;
+  const candidates = deploymentUrlCandidates(deployment);
+  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [deployment?.url]);
+
+  return {
+    providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+    url: link.url || deploymentUrl(deployment),
+    deploymentId: deployment?.id,
+    target: 'preview',
+    status: link.status,
+    statusMessage: link.statusMessage,
+    reachableAt: link.reachableAt,
+  };
+}
+
+async function ensureCloudflarePagesProject(config) {
+  const getResp = await fetch(cloudflarePagesProjectUrl(config), {
+    headers: cloudflareHeaders(config),
+  });
+  const found = await readCloudflareJson(getResp);
+  if (getResp.ok && found?.success !== false) return found?.result ?? found;
+  if (getResp.status !== 404) {
+    throw cloudflareError(found, getResp.status, 'Cloudflare Pages project lookup failed.');
+  }
+
+  const createResp = await fetch(cloudflareAccountPagesProjectsUrl(config), {
+    method: 'POST',
+    headers: cloudflareHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      name: config.projectName,
+      production_branch: 'main',
+    }),
+  });
+  const created = await readCloudflareJson(createResp);
+  if (!createResp.ok || created?.success === false) {
+    throw cloudflareError(created, createResp.status, 'Cloudflare Pages project creation failed.');
+  }
+  return created?.result ?? created;
 }
 
 export function extractHtmlReferences(html) {
@@ -536,7 +680,7 @@ export async function prepareDeployPreflight(projectsRoot, projectId, entryName,
   const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
   const { warnings, totalBytes, totalFiles } = analyzeDeployPlan(plan);
   return {
-    providerId: VERCEL_PROVIDER_ID,
+    providerId: options.providerId || VERCEL_PROVIDER_ID,
     entry: plan.entryPath,
     files: plan.files.map((f) => ({
       path: f.file,
@@ -739,7 +883,7 @@ export async function waitForReachableDeploymentUrl(
     return {
       status: 'link-delayed',
       url: '',
-      statusMessage: 'Vercel did not return a public deployment URL.',
+      statusMessage: 'Deployment provider did not return a public deployment URL.',
     };
   }
 
@@ -773,7 +917,7 @@ export async function waitForReachableDeploymentUrl(
     status: 'link-delayed',
     url: fallbackUrl,
     statusMessage:
-      lastMessage || 'Vercel returned a deployment URL, but it is not reachable yet.',
+      lastMessage || 'Deployment provider returned a deployment URL, but it is not reachable yet.',
   };
 }
 
@@ -876,12 +1020,46 @@ function vercelTeamQuery(config) {
   return s ? `?${s}` : '';
 }
 
+function cloudflareAccountPagesProjectsUrl(config) {
+  return `${CLOUDFLARE_API}/accounts/${encodeURIComponent(config.accountId)}/pages/projects`;
+}
+
+function cloudflarePagesProjectUrl(config, suffix = '') {
+  const base = `${cloudflareAccountPagesProjectsUrl(config)}/${encodeURIComponent(config.projectName)}`;
+  return suffix ? `${base}/${suffix}` : base;
+}
+
+function cloudflareHeaders(config, extra = {}) {
+  return {
+    Authorization: `Bearer ${config.token}`,
+    ...extra,
+  };
+}
+
+async function readCloudflareJson(resp) {
+  try {
+    return await resp.json();
+  } catch {
+    return {};
+  }
+}
+
 async function readVercelJson(resp) {
   try {
     return await resp.json();
   } catch {
     return {};
   }
+}
+
+function cloudflareError(json, status, fallback) {
+  const message =
+    json?.errors?.find?.((err) => err?.message)?.message ||
+    json?.messages?.find?.((item) => item?.message)?.message ||
+    json?.message ||
+    fallback ||
+    `Cloudflare request failed (${status}).`;
+  return new DeployError(message, status, json);
 }
 
 function vercelError(json, status) {
