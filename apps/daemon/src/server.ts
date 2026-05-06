@@ -3900,6 +3900,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
+    // Wire the acpSession onto the run so cancel() can call abort()
+    // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
+    run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
