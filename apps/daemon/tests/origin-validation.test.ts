@@ -32,12 +32,20 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    const allowedOrigins = new Set(
-      ports.flatMap((p) => [
+    // OD_EXTRA_ORIGINS: comma-separated extra browser origins to allow.
+    // Use case: serving the web UI through a local reverse proxy that
+    // rewrites the Host (e.g. portless at <name>.localhost:1355).
+    const extraOrigins = (process.env.OD_EXTRA_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const allowedOrigins = new Set([
+      ...ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
-    );
+      ...extraOrigins,
+    ]);
     if (!allowedOrigins.has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
@@ -232,6 +240,48 @@ describe('daemon origin validation middleware', () => {
       origin: `http://127.0.0.1:${port + 2000}`,
     });
     delete process.env.OD_WEB_PORT;
+    expect(res.status).toBe(403);
+  });
+
+  // --- OD_EXTRA_ORIGINS (reverse-proxy / portless support) ---
+
+  it('allows origins listed in OD_EXTRA_ORIGINS', async () => {
+    process.env.OD_EXTRA_ORIGINS = 'http://design.localhost:1355';
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://design.localhost:1355',
+    });
+    delete process.env.OD_EXTRA_ORIGINS;
+    expect(res.status).toBe(200);
+  });
+
+  it('supports multiple comma-separated origins in OD_EXTRA_ORIGINS', async () => {
+    process.env.OD_EXTRA_ORIGINS = 'http://design.localhost:1355, https://od.example.com';
+    const r1 = await request(port, 'GET', '/api/projects', {
+      origin: 'http://design.localhost:1355',
+    });
+    const r2 = await request(port, 'GET', '/api/projects', {
+      origin: 'https://od.example.com',
+    });
+    delete process.env.OD_EXTRA_ORIGINS;
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+  });
+
+  it('still blocks origins NOT listed in OD_EXTRA_ORIGINS', async () => {
+    process.env.OD_EXTRA_ORIGINS = 'http://design.localhost:1355';
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://evil.com',
+    });
+    delete process.env.OD_EXTRA_ORIGINS;
+    expect(res.status).toBe(403);
+  });
+
+  it('treats empty/blank OD_EXTRA_ORIGINS entries as no-op', async () => {
+    process.env.OD_EXTRA_ORIGINS = ',  , ';
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://design.localhost:1355',
+    });
+    delete process.env.OD_EXTRA_ORIGINS;
     expect(res.status).toBe(403);
   });
 

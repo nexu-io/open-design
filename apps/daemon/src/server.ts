@@ -1058,15 +1058,23 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
-      ports.flatMap((p) => [
+    // OD_EXTRA_ORIGINS: comma-separated extra browser origins to allow.
+    // Use case: serving the web UI through a local reverse proxy that
+    // rewrites the Host (e.g. portless at <name>.localhost:1355).
+    const extraOrigins = (process.env.OD_EXTRA_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return new Set([
+      ...ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         // When bound to a specific non-loopback address (e.g. Tailscale,
         // LAN IP, or 0.0.0.0), allow browser requests from that address
         // too so the documented --host escape hatch remains usable.
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
-    );
+      ...extraOrigins,
+    ]);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -4609,12 +4617,32 @@ export function isLocalSameOrigin(req, port) {
   if (webPort && webPort !== port) ports.push(webPort);
   const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
   const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-  const allowedHosts = new Set(
-    ports.flatMap((p) => [
+  // OD_EXTRA_ORIGINS: same env var honored by buildAllowedOrigins().
+  // Comma-separated browser origins allowed when serving through a
+  // reverse proxy that rewrites Host/Origin (e.g. portless).
+  const extraOrigins = (process.env.OD_EXTRA_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // Derive `host:port` from each extra origin so DNS-rebind protection
+  // stays intact while the proxy's Host passes through.
+  const extraHosts = extraOrigins
+    .map((o) => {
+      try {
+        const u = new URL(o);
+        return u.host;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean);
+  const allowedHosts = new Set([
+    ...ports.flatMap((p) => [
       ...loopbackHosts.map((h) => `${h}:${p}`),
       `${bindHost}:${p}`,
     ]),
-  );
+    ...extraHosts,
+  ]);
 
   // Reject unknown Host first (DNS rebinding / Host header attack)
   if (!allowedHosts.has(host)) return false;
@@ -4623,11 +4651,12 @@ export function isLocalSameOrigin(req, port) {
   if (origin == null || origin === '') return true;
 
   const schemes = ['http', 'https'];
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
+  const allowedOrigins = new Set([
+    ...ports.flatMap((p) => [
       ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
       ...schemes.map((s) => `${s}://${bindHost}:${p}`),
     ]),
-  );
+    ...extraOrigins,
+  ]);
   return allowedOrigins.has(String(origin));
 }
