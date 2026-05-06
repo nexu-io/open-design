@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 let lastChatPaneProps: any | null = null;
+const saveMessageSpy = vi.fn(async () => {});
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -69,7 +70,7 @@ vi.mock('../../apps/web/src/state/projects', () => ({
   listMessages: async () => [],
   loadTabs: async () => ({ tabs: [], active: null }),
   saveTabs: async () => {},
-  saveMessage: async () => {},
+  saveMessage: saveMessageSpy,
   patchConversation: async () => null,
   deleteConversation: async () => true,
   patchProject: async () => null,
@@ -105,7 +106,10 @@ function baseProject() {
 }
 
 describe('ProjectView daemon error persistence', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    saveMessageSpy.mockClear();
+  });
 
   it('stores daemon failure details on the assistant message events', async () => {
     lastChatPaneProps = null;
@@ -144,7 +148,7 @@ describe('ProjectView daemon error persistence', () => {
 
     await waitFor(() => {
       expect(lastChatPaneProps).not.toBeNull();
-      expect(lastChatPaneProps!.messages).toHaveLength(0);
+      expect(lastChatPaneProps!.activeConversationId).toBe('conv-1');
     });
 
     await act(async () => {
@@ -158,6 +162,144 @@ describe('ProjectView daemon error persistence', () => {
       expect(
         events.some(
           (e: any) => e.kind === 'status' && e.label === 'error' && e.detail === 'connection refused',
+        ),
+      ).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(saveMessageSpy).toHaveBeenCalled();
+    });
+  });
+
+  it('keeps prior error details after switching agents and sending again', async () => {
+    lastChatPaneProps = null;
+    const ProjectView = await loadProjectView();
+
+    const view = render(
+      <ProjectView
+        project={baseProject()}
+        routeFileName={null}
+        config={
+          {
+            mode: 'daemon',
+            agentId: 'claude',
+            skillId: null,
+            designSystemId: null,
+            disabledSkills: [],
+            disabledDesignSystems: [],
+          } as any
+        }
+        agents={
+          [
+            { id: 'claude', name: 'Claude', detected: true, version: '1.0.0', models: [] },
+            { id: 'opencode', name: 'OpenCode', detected: true, version: '1.0.0', models: [] },
+          ] as any
+        }
+        skills={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(lastChatPaneProps).not.toBeNull();
+      expect(lastChatPaneProps!.activeConversationId).toBe('conv-1');
+    });
+
+    await act(async () => {
+      await lastChatPaneProps!.onSend('first', []);
+    });
+
+    let firstAssistantId = '';
+    await waitFor(() => {
+      const assistants = (lastChatPaneProps!.messages as any[]).filter(
+        (m: any) => m.role === 'assistant',
+      );
+      expect(assistants.length).toBe(1);
+      const first = assistants[0]!;
+      firstAssistantId = first.id;
+      const events = first.events ?? [];
+      expect(
+        events.some(
+          (e: any) =>
+            e.kind === 'status' && e.label === 'error' && e.detail === 'connection refused',
+        ),
+      ).toBe(true);
+    });
+
+    // Switch agent (simulates picking a different CLI), then send again.
+    view.rerender(
+      <ProjectView
+        project={baseProject()}
+        routeFileName={null}
+        config={
+          {
+            mode: 'daemon',
+            agentId: 'opencode',
+            skillId: null,
+            designSystemId: null,
+            disabledSkills: [],
+            disabledDesignSystems: [],
+          } as any
+        }
+        agents={
+          [
+            { id: 'claude', name: 'Claude', detected: true, version: '1.0.0', models: [] },
+            { id: 'opencode', name: 'OpenCode', detected: true, version: '1.0.0', models: [] },
+          ] as any
+        }
+        skills={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(lastChatPaneProps!.activeConversationId).toBe('conv-1');
+    });
+
+    await act(async () => {
+      await lastChatPaneProps!.onSend('second', []);
+    });
+
+    await waitFor(() => {
+      const messages = lastChatPaneProps!.messages as any[];
+      const firstAssistant = messages.find((m: any) => m.id === firstAssistantId);
+      expect(firstAssistant).toBeTruthy();
+      expect(
+        (firstAssistant!.events ?? []).some(
+          (e: any) =>
+            e.kind === 'status' && e.label === 'error' && e.detail === 'connection refused',
+        ),
+      ).toBe(true);
+
+      const assistants = messages.filter((m: any) => m.role === 'assistant');
+      expect(assistants.length).toBe(2);
+      const secondAssistant = assistants[1]!;
+      expect(
+        (secondAssistant.events ?? []).some(
+          (e: any) =>
+            e.kind === 'status' && e.label === 'error' && e.detail === 'connection refused',
         ),
       ).toBe(true);
     });
