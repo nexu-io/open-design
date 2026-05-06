@@ -179,6 +179,8 @@ export const de: Dict = {
   'promptTemplates.openSource': 'Original anzeigen',
   'promptTemplates.openFullscreen': 'Vollbildvorschau öffnen',
   'promptTemplates.closeFullscreen': 'Vollbildvorschau schließen',
+  'promptTemplates.allSources': 'Alle Quellen',
+  'promptTemplates.sourceFilterAria': 'Nach Quelle filtern',
   'promptTemplates.retry': 'Erneut versuchen',
 
   'newproj.tabPrototype': 'Prototyp',

@@ -180,6 +180,8 @@ export const hu: Dict = {
   'promptTemplates.openSource': 'Eredeti megnyitása',
   'promptTemplates.openFullscreen': 'Teljes képernyős előnézet',
   'promptTemplates.closeFullscreen': 'Teljes képernyős előnézet bezárása',
+  'promptTemplates.allSources': 'Minden forrás',
+  'promptTemplates.sourceFilterAria': 'Szűrés forrás szerint',
   'promptTemplates.retry': 'Újra',
 
   'connectors.title': 'Kapcsolók',

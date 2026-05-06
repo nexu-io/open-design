@@ -237,7 +237,7 @@ Este es el **Junior-Designer mode** destilado de [`huashu-design`](https://githu
 
 ### 5 · El daemon hace que el agente se sienta en tu laptop, porque lo está.
 
-El daemon spawnea la CLI con `cwd` apuntando a la carpeta de artefactos del proyecto bajo `.od/projects/<id>/`. El agente recibe `Read`, `Write`, `Bash`, `WebFetch`: herramientas reales contra un filesystem real. Puede `Read` el `assets/template.html` de la skill, hacer `grep` de tus CSS para valores hex, escribir `brand-spec.md`, guardar imágenes generadas y producir archivos `.pptx` / `.zip` / `.pdf` que aparecen en el workspace como chips de descarga al terminar el turno. Sessions, conversations, messages y tabs persisten en SQLite local: abre el proyecto mañana y la tarjeta de todo del agente estará donde la dejaste.
+El daemon spawnea la CLI con `cwd` apuntando a la carpeta de artefactos del proyecto bajo `.od/projects/<id>/`. El agente recibe `Read`, `Write`, `Bash`, `WebFetch`: herramientas reales contra un filesystem real. Puede `Read` el `assets/template.html` de la skill, hacer `grep` de tus CSS para valores hex, escribir `brand-spec.md`, guardar imágenes generadas y producir archivos `.pptx` / `.zip` / `.pdf` que aparecen en el workspace como chips de descarga al terminar el turno. Sesiones, conversaciones, mensajes y pestañas persisten en SQLite local: abre el proyecto mañana y la tarjeta de todo del agente estará donde la dejaste.
 
 ### 6 · El prompt stack es el producto.
 
@@ -321,7 +321,7 @@ La primera carga:
 3. Muestra el diálogo de bienvenida para pegar una Anthropic key (solo necesaria para el fallback BYOK).
 4. **Auto-crea `./.od/`**: la carpeta runtime local para SQLite, artefactos por proyecto y renders guardados. No hay paso `od init`; el daemon hace `mkdir` de todo lo que necesita al arrancar.
 
-Escribe un prompt, pulsa **Send**, mira llegar el question form, complétalo, mira el todo card en stream y luego el artefacto renderizado. Haz clic en **Save to disk** o descarga como ZIP del proyecto.
+Escribe un prompt, pulsa **Enviar**, mira llegar el question form, complétalo, mira el todo card en stream y luego el artefacto renderizado. Haz clic en **Guardar en disco** o descarga como ZIP del proyecto.
 
 ### Estado de primera ejecución (`./.od/`)
 
@@ -404,7 +404,7 @@ Open Design trae un servidor MCP stdio. Conéctalo a Claude Code, Codex, Cursor,
 
 **¿Por qué MCP?** Exportar y re-adjuntar un zip en cada iteración rompe el flujo. El MCP server expone tu fuente de diseño directamente -- tokens CSS, componentes JSX, entry HTML -- como API estructurada que el agente puede consultar por nombre. El agente siempre ve el archivo vivo, no una copia obsoleta del último export.
 
-Abre **Settings → MCP server** en la app Open Design para un flujo de instalación por cliente. El panel inserta la ruta absoluta de tu binario `node` y del `cli.js` compilado del daemon en cada snippet, así funciona en un source clone nuevo donde `od` no está en tu PATH. Cursor recibe un deeplink de un clic; los demás reciben un snippet JSON copy-paste en el schema que espera su archivo de config (Claude Code incluye un one-liner `claude mcp add-json` para no editar a mano `~/.claude.json`). Reinicia o recarga tu cliente después de instalar para que el servidor aparezca.
+Abre **Ajustes → MCP server** en la app Open Design para un flujo de instalación por cliente. El panel inserta la ruta absoluta de tu binario `node` y del `cli.js` compilado del daemon en cada snippet, así funciona en un source clone nuevo donde `od` no está en tu PATH. Cursor recibe un deeplink de un clic; los demás reciben un snippet JSON copy-paste en el schema que espera su archivo de config (Claude Code incluye un one-liner `claude mcp add-json` para no editar a mano `~/.claude.json`). Reinicia o recarga tu cliente después de instalar para que el servidor aparezca.
 
 El daemon debe estar corriendo localmente para que las tool calls MCP funcionen. Si el agente se inició antes que Open Design, reinicia el agente cuando Open Design ya esté arriba para que alcance el daemon vivo. Las tool calls hechas con el daemon offline devuelven un error claro `"daemon not reachable"` en lugar de crashear.
 
@@ -568,7 +568,7 @@ Tres familias de modelos llevan la carga hoy:
 | **Video** | `seedance-2.0` | ByteDance Volcengine | t2v + i2v cinematográfico de 15s con audio: shorts narrativos, close-ups de personajes, product films, coreografía estilo MV |
 | **Video** | `hyperframes-html` | [HeyGen / OSS](https://github.com/heygen-com/hyperframes) | HTML→MP4 motion graphics: product reveals, tipografía cinética, data charts, overlays sociales, logo outros, verticales TikTok con captions karaoke |
 
-Una **galería de prompts** creciente en [`prompt-templates/`](prompt-templates/) trae **93 prompts listos para replicar**: 43 de imagen (`prompt-templates/image/*.json`), 39 Seedance (`prompt-templates/video/*.json` excluyendo `hyperframes-*`) y 11 HyperFrames (`prompt-templates/video/hyperframes-*.json`). Cada uno incluye thumbnail de preview, el cuerpo del prompt literal, el modelo objetivo, aspect ratio y un bloque `source` para licencia + atribución. El daemon los sirve en `GET /api/prompt-templates`; la web app los muestra como card grid en las pestañas **Image templates** y **Video templates** del entry view; un clic suelta el prompt en el composer con el modelo correcto preseleccionado.
+Una **galería de prompts** creciente en [`prompt-templates/`](prompt-templates/) trae **93 prompts listos para replicar**: 43 de imagen (`prompt-templates/image/*.json`), 39 Seedance (`prompt-templates/video/*.json` excluyendo `hyperframes-*`) y 11 HyperFrames (`prompt-templates/video/hyperframes-*.json`). Cada uno incluye thumbnail de preview, el cuerpo del prompt literal, el modelo objetivo, aspect ratio y un bloque `source` para licencia + atribución. El daemon los sirve en `GET /api/prompt-templates`; la web app los muestra como card grid en las pestañas **Plantillas de imagen** y **Plantillas de vídeo** del entry view; un clic suelta el prompt en el composer con el modelo correcto preseleccionado.
 
 ### gpt-image-2 — galería de imagen (muestra de 43)
 
@@ -636,7 +636,7 @@ El bucle chat / artifact se lleva el foco, pero ya hay varias capacidades menos 
 - **Import de ZIP de Claude Design.** Suelta una exportación de claude.ai en el diálogo de bienvenida. `POST /api/import/claude-design` la extrae en un `.od/projects/<id>/` real, abre el entry file como tab y prepara un prompt para continuar donde Anthropic lo dejó. Sin re-prompting, sin "pedirle al modelo que recree lo que ya teníamos". ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts): `/api/import/claude-design`)
 - **Proxy BYOK multi-provider.** `POST /api/proxy/{anthropic,openai,azure,google}/stream` recibe `{ baseUrl, apiKey, model, messages }`, construye la request upstream específica por proveedor, normaliza chunks SSE a `delta/end/error` y rechaza destinos loopback / link-local / RFC1918 para evitar SSRF. OpenAI-compatible cubre OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter y vLLM self-hosted; Azure OpenAI agrega deployment URL + `api-version`; Google usa Gemini `:streamGenerateContent`.
 - **Templates guardados por usuario.** Cuando te gusta un render, `POST /api/templates` guarda snapshot del HTML + metadata en la tabla SQLite `templates`. El siguiente proyecto lo elige desde una fila "your templates" en el selector: la misma superficie que las 31 shipped, pero tuya.
-- **Persistencia de tabs.** Cada proyecto recuerda archivos abiertos y tab activa en la tabla `tabs`. Reabre mañana y el workspace luce exactamente como lo dejaste.
+- **Persistencia de pestañas.** Cada proyecto recuerda archivos abiertos y la pestaña activa en la tabla `tabs`. Reabre mañana y el workspace luce exactamente como lo dejaste.
 - **Artifact lint API.** `POST /api/artifacts/lint` ejecuta checks estructurales sobre un artefacto generado (framing `<artifact>` roto, side files requeridos faltantes, tokens de paleta stale) y devuelve findings que el agente puede leer en su siguiente turno. La autocrítica five-dim usa esto para anclar su score en evidencia real, no vibes.
 - **Sidecar protocol + desktop automation.** Los procesos daemon, web y desktop llevan stamps tipados de cinco campos (`app · mode · namespace · ipc · source`) y exponen un canal JSON-RPC IPC en `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` usa ese canal, así E2E headless corre contra un shell Electron real sin harness bespoke ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
 - **Spawning amigable con Windows.** Todo adapter que normalmente rompería el límite de argv de `CreateProcess` (~32 KB) con prompts compuestos largos (Codex, Gemini, OpenCode, Cursor Agent, Qwen, Pi) envía el prompt por stdin. Claude Code y Copilot mantienen `-p`; el daemon cae a un prompt-file temporal cuando incluso eso se desborda.
@@ -775,7 +775,7 @@ Walkthrough completo, estándar de merge, code style y lo que no aceptamos → [
 Gracias a todas las personas que han ayudado a mover Open Design hacia adelante: con código, docs, feedback, nuevas skills, nuevos design systems o incluso un issue preciso. Toda contribución real cuenta, y el muro de abajo es la forma más simple de decirlo en voz alta.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Contribuidores de Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Contribuidores de Open Design" />
 </a>
 
 Si ya enviaste tu primer PR, bienvenido. La etiqueta [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) es el punto de entrada.
@@ -792,9 +792,9 @@ El SVG anterior se regenera diariamente mediante [`.github/workflows/metrics.yml
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
-    <img alt="Historial de estrellas de Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <img alt="Historial de estrellas de Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
   </picture>
 </a>
 
@@ -802,7 +802,7 @@ Si la curva sube, esa es la señal que buscamos. Dale ★ a este repo para impul
 
 ## Créditos
 
-La familia de skills HTML PPT Studio: la skill maestra [`skills/html-ppt/`](skills/html-ppt/) y los wrappers por template bajo [`skills/html-ppt-*/`](skills/) (15 templates full-deck, 36 themes, 31 layouts single-page, 27 animaciones CSS + 20 canvas FX, el runtime de teclado y el presenter mode de magnetic-card), está integrada desde el proyecto open source [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) (MIT). La LICENSE upstream viene en el repo en [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE) y el crédito de autoría va a [@lewislulu](https://github.com/lewislulu). Cada card Examples por template (`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post`, …) delega la guía de autoría a la skill maestra para preservar end-to-end el comportamiento prompt → output upstream cuando haces clic en **Use this prompt**.
+La familia de skills HTML PPT Studio: la skill maestra [`skills/html-ppt/`](skills/html-ppt/) y los wrappers por template bajo [`skills/html-ppt-*/`](skills/) (15 templates full-deck, 36 themes, 31 layouts single-page, 27 animaciones CSS + 20 canvas FX, el runtime de teclado y el presenter mode de magnetic-card), está integrada desde el proyecto open source [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) (MIT). La LICENSE upstream viene en el repo en [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE) y el crédito de autoría va a [@lewislulu](https://github.com/lewislulu). Cada card Examples por template (`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post`, …) delega la guía de autoría a la skill maestra para preservar end-to-end el comportamiento prompt → output upstream cuando haces clic en **Usar este prompt**.
 
 El flujo magazine / horizontal-swipe deck bajo [`skills/guizang-ppt/`](skills/guizang-ppt/) está integrado desde [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) (MIT). El crédito de autoría va a [@op7418](https://github.com/op7418).
 

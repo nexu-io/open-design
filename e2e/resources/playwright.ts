@@ -1,6 +1,6 @@
-import type { UICase } from './types';
+import type { UiScenario } from '@/playwright/resources';
 
-export const uiCases: UICase[] = [
+export const playwrightUiScenarios: UiScenario[] = [
   {
     id: 'prototype-basic',
     title: 'Prototype project creates and previews a generated artifact',
@@ -399,7 +399,3 @@ export const uiCases: UICase[] = [
     ],
   },
 ];
-
-export function automatedCases(): UICase[] {
-  return uiCases.filter((entry) => entry.automated);
-}

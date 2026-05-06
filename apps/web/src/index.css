@@ -597,6 +597,7 @@ code {
 .split-chat-slot {
   display: flex;
   min-height: 0;
+  min-width: 0;
 }
 .split-chat-slot[hidden] {
   display: none;
@@ -608,6 +609,7 @@ code {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg-panel);
 }
 .split-resize-handle {
@@ -695,6 +697,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
 }
 
 /* -------- Messages -------------------------------------------------- */
@@ -6575,6 +6578,8 @@ button.connector-action.is-loading {
   background: var(--bg-panel);
   overflow: hidden;
   box-shadow: var(--shadow-xs);
+  min-width: 0;
+  max-width: 100%;
 }
 .op-card-head {
   display: flex;
@@ -6613,7 +6618,7 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 220px;
+  max-width: min(220px, 100%);
 }
 .op-status {
   margin-left: auto;
@@ -8274,7 +8279,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ============================================================
    Scroll-to-bottom button (chat)
    ============================================================ */
-.chat-log-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.chat-log-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; }
 .chat-log-wrap .chat-log { flex: 1; }
 .chat-jump-btn {
   position: absolute;
@@ -8580,6 +8585,28 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   justify-content: center;
   letter-spacing: 0;
+}
+.prompt-template-thumb-provider {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  max-width: calc(100% - 16px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prompt-template-thumb-provider.is-hyperframes {
+  background: linear-gradient(135deg, #ff5e3a 0%, #f0c14b 100%);
+  color: #1a1410;
 }
 .prompt-template-meta {
   display: flex;

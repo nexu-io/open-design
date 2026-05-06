@@ -129,6 +129,14 @@ jobs:
             --json \
             $signed_flag
 
+      - name: Smoke beta mac packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-beta
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: pnpm test specs/mac.spec.ts
+
       - name: Prepare beta assets
         id: assets
         run: |

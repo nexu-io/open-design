@@ -181,6 +181,32 @@ describe('project-watchers (real chokidar)', () => {
     }
   }, 8_000);
 
+  it('ignores files inside Python venv and cache dirs', async () => {
+    const { root, projectId } = await makeProjectsRoot();
+    const events = [];
+    const sub = subscribe(root, projectId, (e) => events.push(e));
+    await sub.ready;
+
+    const ignoredDirs = ['.venv', 'venv', '__pycache__', '.mypy_cache', '.pytest_cache', '.tox', '.ruff_cache'];
+    try {
+      for (const dir of ignoredDirs) {
+        await mkdir(path.join(root, projectId, dir), { recursive: true });
+        await writeFile(path.join(root, projectId, dir, 'file.py'), '');
+      }
+
+      await writeFile(path.join(root, projectId, 'real.txt'), 'real');
+      await waitFor(() => events.some((e) => e.path === 'real.txt'));
+
+      const ignored = events.filter((e) =>
+        ignoredDirs.some((dir) => e.path.startsWith(`${dir}/`)),
+      );
+      expect(ignored).toEqual([]);
+    } finally {
+      await sub.unsubscribe();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 8_000);
+
   it('attaches an error listener and survives an emitted error event', async () => {
     // Regression for codex P1: chokidar's FSWatcher is an EventEmitter.
     // Without an 'error' listener, transient FS faults (ENOSPC, EPERM,

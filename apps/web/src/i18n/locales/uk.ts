@@ -164,6 +164,8 @@ export const uk: Dict = {
   'entry.tabImageTemplates': 'Шаблони зображень',
   'entry.tabVideoTemplates': 'Шаблони відеороликів',
   'promptTemplates.searchPlaceholder': 'Пошук шаблонів…',
+  'promptTemplates.allSources': 'Усі джерела',
+  'promptTemplates.sourceFilterAria': 'Фільтрувати за джерелом',
   'promptTemplates.countLabel': '{n} результатів',
   'promptTemplates.emptyImage': 'Шаблонів підказок для зображень ще не встановлено.',
   'promptTemplates.emptyVideo': 'Шаблонів підказок для відео ще не встановлено.',

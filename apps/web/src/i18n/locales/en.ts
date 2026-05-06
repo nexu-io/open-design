@@ -178,6 +178,8 @@ export const en: Dict = {
   'promptTemplates.openSource': 'View original',
   'promptTemplates.openFullscreen': 'Open fullscreen preview',
   'promptTemplates.closeFullscreen': 'Close fullscreen preview',
+  'promptTemplates.allSources': 'All sources',
+  'promptTemplates.sourceFilterAria': 'Filter by source',
   'promptTemplates.retry': 'Retry',
 
   'connectors.title': 'Connectors',

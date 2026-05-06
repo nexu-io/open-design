@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
+
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatPane } from '../../apps/web/src/components/ChatPane';
-import type { ChatMessage } from '../../apps/web/src/types';
+import { ChatPane } from '../../src/components/ChatPane';
+import type { ChatMessage } from '../../src/types';
 
 function renderChatPane(messages: ChatMessage[]) {
   return render(

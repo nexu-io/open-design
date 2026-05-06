@@ -180,6 +180,8 @@ export const ko: Dict = {
   'promptTemplates.openSource': '원본 보기',
   'promptTemplates.openFullscreen': '전체 화면 미리보기 열기',
   'promptTemplates.closeFullscreen': '전체 화면 미리보기 닫기',
+  'promptTemplates.allSources': '모든 출처',
+  'promptTemplates.sourceFilterAria': '출처별 필터',
   'promptTemplates.retry': '다시 시도',
 
   'connectors.title': '커넥터',

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { automatedCases } from '../cases';
-import type { UICase } from '../cases/types';
+import type { Dialog, Page, Request, Response } from '@playwright/test';
+import { automatedUiScenarios } from '@/playwright/resources';
+import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -23,7 +24,7 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 });
 
-for (const entry of automatedCases()) {
+for (const entry of automatedUiScenarios()) {
   test(`${entry.id}: ${entry.title}`, async ({ page }) => {
     await page.route('**/api/agents', async (route) => {
       await route.fulfill({
@@ -299,15 +300,279 @@ for (const entry of automatedCases()) {
   });
 }
 
+test('daemon error details persist between failed sends', async ({ page }) => {
+  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
+  if (!entry) throw new Error('prototype-basic scenario missing');
+
+  await page.route('**/api/agents', async (route) => {
+    await route.fulfill({
+      json: {
+        agents: [
+          {
+            id: 'mock',
+            name: 'Mock Agent',
+            bin: 'mock-agent',
+            available: true,
+            version: 'test',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    });
+  });
+
+  let runCount = 0;
+  await page.route('**/api/runs', async (route) => {
+    runCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `error-run-${runCount}` }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: error',
+      'data: {"message":"connection refused"}',
+      '',
+      '',
+    ].join('\n');
+
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, entry);
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'first failing prompt');
+  const errorPills = page.locator('.status-pill', { hasText: 'connection refused' });
+  await expect(errorPills).toHaveCount(1);
+  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(page.getByText('first failing prompt')).toBeVisible();
+
+  await sendPrompt(page, 'second failing prompt');
+  await expect(errorPills).toHaveCount(2);
+  await expect(page.getByText('first failing prompt')).toBeVisible();
+  await expect(page.getByText('second failing prompt')).toBeVisible();
+});
+
+test('manual edit mode applies content, style, attribute, HTML, source, undo, and redo patches', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Manual edit smoke');
+  await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
+  await page.goto(`/projects/${projectId}/files/manual-edit.html`);
+  await openDesignFile(page, 'manual-edit.html');
+
+  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await frame.getByRole('heading', { name: 'Original Hero' }).click();
+  await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
+
+  await page.locator('.manual-edit-modal textarea').first().fill('Edited Hero');
+  await page.getByRole('button', { name: 'Apply Content' }).click();
+  await expect(frame.getByRole('heading', { name: 'Edited Hero' })).toBeVisible();
+  await expectFileSource(page, projectId, 'manual-edit.html', ['Edited Hero']);
+
+  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Style', exact: true }).click();
+  await page.locator('.manual-edit-field').filter({ hasText: 'Font size' }).locator('input').fill('48px');
+  await page.getByRole('button', { name: 'Apply Style' }).click();
+  await expectFileSource(page, projectId, 'manual-edit.html', ['font-size: 48px']);
+
+  await page.locator('.manual-edit-layer-row').filter({ hasText: 'Primary CTA' }).click();
+  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Content', exact: true }).click();
+  const contentFields = page.locator('.manual-edit-tab-body');
+  await contentFields.locator('textarea').fill('Launch now');
+  await contentFields.locator('input').fill('/launch');
+  await page.getByRole('button', { name: 'Apply Content' }).click();
+  await expect(frame.getByRole('link', { name: 'Launch now' })).toHaveAttribute('href', /\/launch$/);
+
+  await page.locator('.manual-edit-layer-row').filter({ hasText: 'Hero image' }).click();
+  await contentFields.locator('input').first().fill('/edited.png');
+  await contentFields.locator('input').nth(1).fill('Edited alt');
+  await page.getByRole('button', { name: 'Apply Content' }).click();
+  await expectFileSource(page, projectId, 'manual-edit.html', ['/edited.png', 'Edited alt']);
+
+  await page.locator('.manual-edit-layer-row').filter({ hasText: 'Hero title' }).click();
+  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Attributes', exact: true }).click();
+  await page.locator('.manual-edit-tab-body textarea').fill('{"aria-label":"Edited headline"}');
+  await page.getByRole('button', { name: 'Apply Attributes' }).click();
+  await expectFileSource(page, projectId, 'manual-edit.html', ['aria-label="Edited headline"', 'font-size: 48px']);
+
+  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Html', exact: true }).click();
+  await page.locator('.manual-edit-tab-body textarea').fill('<h1 class="replacement">HTML Hero</h1>');
+  await page.getByRole('button', { name: 'Apply HTML' }).click();
+  await expectFileSource(page, projectId, 'manual-edit.html', ['data-od-id="hero-title"', 'HTML Hero']);
+
+  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Source', exact: true }).click();
+  await page.locator('.manual-edit-tab-body textarea').fill(manualEditHtml().replace('Original Hero', 'Full Source Hero'));
+  await page.getByRole('button', { name: 'Apply Source' }).click();
+  await expect(frame.getByRole('heading', { name: 'Full Source Hero' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(frame.getByRole('heading', { name: 'HTML Hero' })).toBeVisible();
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(frame.getByRole('heading', { name: 'Full Source Hero' })).toBeVisible();
+
+  await page.getByRole('button', { name: /Tweaks/ }).click();
+  await expect(page.getByTestId('comment-mode-toggle')).toBeVisible();
+  await frame.getByRole('heading', { name: 'Full Source Hero' }).click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+
+  await page.getByRole('button', { name: /^Share$/ }).click();
+  await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
+});
+
+test('manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Manual edit deck smoke');
+  await seedHtmlArtifact(page, projectId, 'manual-deck.html', deckHtml());
+  await page.goto(`/projects/${projectId}/files/manual-deck.html`);
+  await openDesignFile(page, 'manual-deck.html');
+
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+});
+
+async function routeMockAgents(page: Page) {
+  await page.route('**/api/agents', async (route) => {
+    await route.fulfill({
+      json: {
+        agents: [
+          {
+            id: 'mock',
+            name: 'Mock Agent',
+            bin: 'mock-agent',
+            available: true,
+            version: 'test',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    });
+  });
+}
+
+async function createEmptyProject(page: Page, name: string): Promise<string> {
+  await page.goto('/');
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await page.getByTestId('new-project-name').fill(name);
+  await page.getByTestId('create-project').click();
+  await expect(page).toHaveURL(/\/projects\//);
+  const current = new URL(page.url());
+  const [, projects, projectId] = current.pathname.split('/');
+  if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
+  return projectId;
+}
+
+async function seedHtmlArtifact(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  content: string,
+) {
+  const resp = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: {
+      name: fileName,
+      content,
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: fileName,
+        entry: fileName,
+        renderer: 'html',
+        exports: ['html'],
+      },
+    },
+  });
+  expect(resp.ok()).toBeTruthy();
+}
+
+async function openDesignFile(page: Page, fileName: string) {
+  await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
+  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+}
+
+async function expectFileSource(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  snippets: string[],
+) {
+  await expect
+    .poll(async () => {
+      const resp = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+      if (!resp.ok()) return false;
+      const source = await resp.text();
+      return snippets.every((snippet) => source.includes(snippet));
+    })
+    .toBe(true);
+}
+
+function manualEditHtml(): string {
+  return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Manual Edit</title></head>
+  <body>
+    <main>
+      <section data-od-id="hero" data-od-label="Hero section">
+        <h1 data-od-id="hero-title" data-od-label="Hero title">Original Hero</h1>
+        <a data-od-id="cta" data-od-label="Primary CTA" href="/start">Start now</a>
+        <img data-od-id="hero-image" data-od-label="Hero image" src="/hero.png" alt="Hero" style="width:64px;height:64px;">
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
+function deckHtml(): string {
+  return `<!doctype html>
+<html>
+  <body>
+    <section class="slide" data-od-id="slide-1"><h1>Slide One</h1></section>
+    <section class="slide" data-od-id="slide-2" hidden><h1>Slide Two</h1></section>
+    <script>
+      let active = 0;
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      function render() { slides.forEach((slide, index) => { slide.hidden = index !== active; }); }
+      window.addEventListener('message', (event) => {
+        if (!event.data || event.data.type !== 'od:slide') return;
+        if (event.data.action === 'next') active = Math.min(slides.length - 1, active + 1);
+        if (event.data.action === 'prev') active = Math.max(0, active - 1);
+        render();
+        window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
+      });
+      render();
+      window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
+    </script>
+  </body>
+</html>`;
+}
+
 async function createProject(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await createProjectNameOnly(page, entry);
   await page.getByTestId('create-project').click();
 }
 
-async function expectWorkspaceReady(page: Parameters<typeof test>[0]['page']) {
+async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -315,7 +580,7 @@ async function expectWorkspaceReady(page: Parameters<typeof test>[0]['page']) {
 }
 
 async function sendPrompt(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
   prompt: string,
 ) {
   const input = page.getByTestId('chat-composer-input');
@@ -327,7 +592,7 @@ async function sendPrompt(
       await expect(input).toHaveValue(prompt, { timeout: 1500 });
       await expect(sendButton).toBeEnabled({ timeout: 1500 });
       const chatResponse = page.waitForResponse(
-        (resp) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
+        (resp: Response) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
         { timeout: 2000 },
       );
       await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -342,7 +607,7 @@ async function sendPrompt(
         await expect(input).toHaveValue(prompt, { timeout: 1500 });
         await expect(sendButton).toBeEnabled({ timeout: 1500 });
         const chatResponse = page.waitForResponse(
-          (resp) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
+          (resp: Response) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
           { timeout: 2000 },
         );
         await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -356,8 +621,8 @@ async function sendPrompt(
 }
 
 async function runDesignSystemSelectionFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await createProjectNameOnly(page, entry);
   await page.getByTestId('design-system-trigger').click();
@@ -373,8 +638,8 @@ async function runDesignSystemSelectionFlow(
 }
 
 async function runExampleUsePromptFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await page.getByTestId('entry-tab-examples').click();
   await expect(page.getByTestId('example-card-warm-utility-example')).toBeVisible();
@@ -388,8 +653,8 @@ async function runExampleUsePromptFlow(
 }
 
 async function runQuestionFormSelectionLimitFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
 
@@ -425,8 +690,8 @@ async function runQuestionFormSelectionLimitFlow(
 }
 
 async function runQuestionFormSubmitPersistenceFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
 
@@ -463,8 +728,8 @@ async function runQuestionFormSubmitPersistenceFlow(
 }
 
 async function runGenerationDoesNotCreateExtraFileFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
   await expectArtifactVisible(page, entry);
@@ -482,24 +747,25 @@ async function runGenerationDoesNotCreateExtraFileFlow(
 }
 
 async function runCommentAttachmentFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
   await expectArtifactVisible(page, entry);
 
+  await page.getByTestId('board-mode-toggle').click();
   await page.getByTestId('comment-mode-toggle').click();
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await frame.locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
-  await page.getByTestId('comment-add-send').click();
+  await page.getByTestId('comment-popover').getByRole('button', { name: 'Save comment' }).click();
 
-  await expect(page.getByTestId('staged-comment-attachments')).toBeVisible();
-  await expect(page.getByTestId('staged-comment-attachments')).toContainText('hero-title');
-  await expect(page.getByTestId('staged-comment-attachments')).toContainText('Make the headline more specific.');
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
+  await expect(page.getByTestId('staged-comment-attachments')).toHaveCount(0);
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-send')).toBeDisabled();
+  await page.getByTestId('comment-popover').getByRole('button', { name: 'Close' }).click();
 
   await frame.locator('[data-od-id="hero-copy"]').hover();
   await expect(page.getByTestId('comment-target-overlay')).toBeVisible();
@@ -512,9 +778,18 @@ async function runCommentAttachmentFlow(
 
   await page.getByRole('tab', { name: 'Comments' }).click();
   await expect(page.getByTestId('comments-panel')).toBeVisible();
-  await expect(page.getByTestId('comments-panel').getByRole('heading', { name: 'Attached to chat' })).toBeVisible();
   await expect(page.getByTestId('comments-panel').getByRole('heading', { name: 'Saved comments' })).toBeVisible();
+  await page.getByTestId('comments-panel')
+    .locator('[data-testid="comment-card-hero-title"]')
+    .getByRole('button', { name: 'Add' })
+    .click();
+  await page.getByRole('tab', { name: 'Chat' }).click();
+  await expect(page.getByTestId('staged-comment-attachments')).toBeVisible();
+  await expect(page.getByTestId('staged-comment-attachments')).toContainText('hero-title');
+  await expect(page.getByTestId('staged-comment-attachments')).toContainText('Make the headline more specific.');
 
+  await page.getByRole('tab', { name: 'Comments' }).click();
+  await expect(page.getByTestId('comments-panel').getByRole('heading', { name: 'Attached to chat' })).toBeVisible();
   await page.getByTestId('comments-panel')
     .locator('[data-testid="comment-card-hero-title"]')
     .getByRole('button', { name: 'Remove' })
@@ -532,7 +807,7 @@ async function runCommentAttachmentFlow(
   await expect(page.getByTestId('staged-comment-attachments')).toContainText('hero-title');
 
   const runRequest = page.waitForRequest(
-    (request) => request.url().includes('/api/runs') && request.method() === 'POST',
+    (request: Request) => request.url().includes('/api/runs') && request.method() === 'POST',
   );
   await page.getByTestId('chat-send').click();
   const request = await runRequest;
@@ -553,8 +828,8 @@ async function runCommentAttachmentFlow(
 }
 
 async function createProjectNameOnly(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   if (entry.create.tab) {
@@ -564,7 +839,7 @@ async function createProjectNameOnly(
 }
 
 async function getCurrentProjectContext(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
 ): Promise<{ projectId: string; conversationId: string }> {
   const current = new URL(page.url());
   const [, projects, projectId, maybeConversations, conversationId] = current.pathname.split('/');
@@ -586,7 +861,7 @@ async function getCurrentProjectContext(
 }
 
 async function listProjectFilesFromApi(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
   projectId: string,
 ): Promise<Array<{ name: string; kind: string }>> {
   const response = await page.request.get(`/api/projects/${projectId}/files`);
@@ -596,8 +871,8 @@ async function listProjectFilesFromApi(
 }
 
 async function expectArtifactVisible(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   const artifact = entry.mockArtifact!;
   await expect(page.getByText(artifact.fileName, { exact: true })).toBeVisible();
@@ -607,8 +882,8 @@ async function expectArtifactVisible(
 }
 
 async function runConversationPersistenceFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
   await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
@@ -640,8 +915,8 @@ async function runConversationPersistenceFlow(
 }
 
 async function runFileMentionFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
@@ -672,8 +947,8 @@ async function runFileMentionFlow(
 }
 
 async function runDeepLinkPreviewFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
   await expectArtifactVisible(page, entry);
@@ -697,11 +972,11 @@ async function runDeepLinkPreviewFlow(
 }
 
 async function runFileUploadSendFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
   const uploadResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
     { timeout: 5000 },
   );
   await page.getByTestId('chat-file-input').setInputFiles({
@@ -723,7 +998,7 @@ async function runFileUploadSendFlow(
 }
 
 async function runDesignFilesUploadFlow(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
 ) {
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'moodboard.png',
@@ -750,9 +1025,9 @@ async function runDesignFilesUploadFlow(
 }
 
 async function runDesignFilesDeleteFlow(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
 ) {
-  page.on('dialog', async (dialog) => {
+  page.on('dialog', async (dialog: Dialog) => {
     await dialog.accept();
   });
 
@@ -803,7 +1078,7 @@ async function runDesignFilesDeleteFlow(
 }
 
 async function runDesignFilesTabPersistenceFlow(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
 ) {
   const pngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
@@ -842,10 +1117,10 @@ async function runDesignFilesTabPersistenceFlow(
 }
 
 async function runConversationDeleteRecoveryFlow(
-  page: Parameters<typeof test>[0]['page'],
-  entry: UICase,
+  page: Page,
+  entry: UiScenario,
 ) {
-  page.on('dialog', async (dialog) => {
+  page.on('dialog', async (dialog: Dialog) => {
     await dialog.accept();
   });
 

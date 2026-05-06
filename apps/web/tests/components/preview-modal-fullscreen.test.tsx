@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
+
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PreviewModal } from '../../apps/web/src/components/PreviewModal';
+import { PreviewModal } from '../../src/components/PreviewModal';
 
 // Regression coverage for nexu-io/open-design#141: pressing Esc in fullscreen
 // used to require two presses because the browser exits its native fullscreen

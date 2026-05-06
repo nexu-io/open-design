@@ -175,6 +175,8 @@ export const tr: Dict = {
   'promptTemplates.openSource': 'Orijinali görüntüle',
   'promptTemplates.openFullscreen': 'Tam ekran ön izlemeyi aç',
   'promptTemplates.closeFullscreen': 'Tam ekran ön izlemeyi kapat',
+  'promptTemplates.allSources': 'Tüm kaynaklar',
+  'promptTemplates.sourceFilterAria': 'Kaynağa göre filtrele',
   'promptTemplates.retry': 'Yeniden dene',
 
   'connectors.title': 'Bağlayıcılar',

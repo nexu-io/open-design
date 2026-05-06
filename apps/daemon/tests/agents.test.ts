@@ -170,6 +170,23 @@ test('codex args do not include the literal `-` stdin sentinel (regression of #2
   assert.equal(withDisablePlugins.includes('-'), false);
 });
 
+test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', () => {
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  const args = codex.buildArgs(
+    '',
+    [],
+    ['/repo/skills', '', null, '/tmp/codex/generated_images', undefined],
+    {},
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(
+    args.filter((arg, index) => arg === '--add-dir' || args[index - 1] === '--add-dir'),
+    ['--add-dir', '/repo/skills', '--add-dir', '/tmp/codex/generated_images'],
+  );
+});
+
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes), [
     {

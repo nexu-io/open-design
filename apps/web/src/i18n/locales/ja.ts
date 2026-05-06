@@ -179,6 +179,8 @@ export const ja: Dict = {
   'promptTemplates.openSource': 'オリジナルを表示',
   'promptTemplates.openFullscreen': 'フルスクリーンプレビューを開く',
   'promptTemplates.closeFullscreen': 'フルスクリーンプレビューを閉じる',
+  'promptTemplates.allSources': 'すべてのソース',
+  'promptTemplates.sourceFilterAria': 'ソースで絞り込む',
   'promptTemplates.retry': '再試行',
 
   'newproj.tabPrototype': 'プロトタイプ',

@@ -176,6 +176,8 @@ export const zhTW: Dict = {
   'promptTemplates.openSource': '查看原始來源',
   'promptTemplates.openFullscreen': '開啟全螢幕預覽',
   'promptTemplates.closeFullscreen': '關閉全螢幕預覽',
+  'promptTemplates.allSources': '所有來源',
+  'promptTemplates.sourceFilterAria': '依來源篩選',
   'promptTemplates.retry': '重試',
 
   'connectors.title': '連接器',

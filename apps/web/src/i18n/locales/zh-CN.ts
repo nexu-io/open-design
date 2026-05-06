@@ -176,6 +176,8 @@ export const zhCN: Dict = {
   'promptTemplates.openSource': '查看原始来源',
   'promptTemplates.openFullscreen': '打开全屏预览',
   'promptTemplates.closeFullscreen': '关闭全屏预览',
+  'promptTemplates.allSources': '所有来源',
+  'promptTemplates.sourceFilterAria': '按来源筛选',
   'promptTemplates.retry': '重试',
 
   'connectors.title': '连接器',

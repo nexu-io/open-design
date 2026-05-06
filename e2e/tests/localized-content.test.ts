@@ -1,11 +1,40 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import { parseFrontmatter } from '../../../daemon/src/frontmatter';
-import { LOCALIZED_CONTENT_IDS } from '../../src/i18n/content';
 
-const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+import { describe, expect, it } from 'vitest';
+
+declare global {
+  interface ImportMeta {
+    glob<T = unknown>(pattern: string, options: { eager: true }): Record<string, T>;
+  }
+}
+
+type LocalizedContentIds = {
+  skills: string[];
+  designSystems: string[];
+  designSystemCategories: string[];
+  promptTemplates: string[];
+  promptTemplateCategories: string[];
+  promptTemplateTags: string[];
+};
+
+type LocalizedContentModule = {
+  LOCALIZED_CONTENT_IDS: Record<string, LocalizedContentIds>;
+};
+
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+const webContentModules = import.meta.glob<LocalizedContentModule>(
+  '../../apps/web/src/i18n/content.ts',
+  { eager: true },
+);
+const localizedContentModule = Object.values(webContentModules)[0];
+
+if (localizedContentModule == null) {
+  throw new Error('Failed to load apps/web localized content ids');
+}
+
+const { LOCALIZED_CONTENT_IDS } = localizedContentModule;
 
 function sorted(values: Iterable<string>): string[] {
   return [...values].sort((a, b) => a.localeCompare(b));
@@ -22,7 +51,7 @@ async function entriesWithFile(root: string, fileName: string): Promise<string[]
         ids.push(entry.name);
       }
     } catch {
-      // Missing optional registry files are ignored, matching daemon discovery.
+      // Missing optional registry files are ignored, matching resource discovery.
     }
   }
   return sorted(ids);
@@ -34,9 +63,7 @@ async function readSkillIds(): Promise<string[]> {
   const ids = await Promise.all(
     dirs.map(async (dir) => {
       const raw = await readFile(path.join(skillsRoot, dir, 'SKILL.md'), 'utf8');
-      const { data } = parseFrontmatter(raw) as { data: { name?: unknown } };
-      const name = data.name;
-      return typeof name === 'string' && name.trim() ? name : dir;
+      return readFrontmatterName(raw) ?? dir;
     }),
   );
   return sorted(ids);
@@ -84,7 +111,28 @@ async function readPromptTemplateSummaries(): Promise<
   return summaries;
 }
 
-describe('Localized display content coverage', () => {
+function readFrontmatterName(src: string): string | null {
+  const text = src.replace(/^\uFEFF/, '');
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+  if (match == null) return null;
+  const nameMatch = /^name:\s*(.*?)\s*$/im.exec(match[1] ?? '');
+  if (nameMatch == null) return null;
+  const name = unquoteYamlScalar(nameMatch[1] ?? '').trim();
+  return name || null;
+}
+
+function unquoteYamlScalar(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+describe('localized display content coverage', () => {
   for (const [locale, ids] of Object.entries(LOCALIZED_CONTENT_IDS)) {
     it(`covers every curated skill, design system, and prompt template for ${locale}`, async () => {
       const [skillIds, designSystemIds, promptTemplateSummaries] = await Promise.all([

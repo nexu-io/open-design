@@ -180,6 +180,8 @@ export const pl: Dict = {
   'promptTemplates.openSource': 'Zobacz oryginał',
   'promptTemplates.openFullscreen': 'Podgląd pełnoekranowy',
   'promptTemplates.closeFullscreen': 'Zamknij podgląd pełnoekranowy',
+  'promptTemplates.allSources': 'Wszystkie źródła',
+  'promptTemplates.sourceFilterAria': 'Filtruj według źródła',
   'promptTemplates.retry': 'Ponów',
 
   'connectors.title': 'Konektory',
