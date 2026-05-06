@@ -96,17 +96,34 @@
     ]
     ++ cfg.extraBinPaths;
 
+  # Conservative loopback check used to gate the allowedOrigins
+  # assertion. See nix/home-manager.nix for the rationale.
+  isLoopbackHost = h:
+    h == "127.0.0.1"
+    || h == "localhost"
+    || h == "::1"
+    || h == "[::1]"
+    || lib.hasPrefix "127." h;
+
   daemonEnvironment =
     {
       OD_PORT = toString cfg.port;
       OD_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
-    // lib.optionalAttrs cfg.webFrontend.enable {
-      # See nix/home-manager.nix — the daemon's /api origin allowlist
-      # needs to know about the caddy port or it will 403 SPA writes.
-      OD_WEB_PORT = toString cfg.webFrontend.port;
-    }
+    // lib.optionalAttrs cfg.webFrontend.enable (
+      {
+        # See nix/home-manager.nix — the daemon's /api origin allowlist
+        # needs to know about the caddy port or it will 403 SPA writes.
+        OD_WEB_PORT = toString cfg.webFrontend.port;
+      }
+      // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
+        # Operator-declared external origins for the LAN-exposure
+        # escape hatch. Comma-joined; parsed by parseAllowedWebOrigins()
+        # in apps/daemon/src/server.ts.
+        OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+      }
+    )
     // cfg.extraEnv;
 
   webEnvironment = {
@@ -162,6 +179,33 @@ in {
       networking.firewall.allowedTCPPorts =
         lib.optional cfg.openFirewall cfg.port
         ++ lib.optional (cfg.openFirewall && cfg.webFrontend.enable) cfg.webFrontend.port;
+
+      # Fail-closed: if the operator widens the bundled caddy bind to
+      # a non-loopback interface but does not declare which external
+      # origins the SPA will be loaded from, the daemon's CSRF gate
+      # will silently 403 every PUT/POST. Catch that at eval time.
+      assertions = [
+        {
+          assertion =
+            !cfg.webFrontend.enable
+            || isLoopbackHost cfg.webFrontend.host
+            || cfg.webFrontend.allowedOrigins != [];
+          message = ''
+            services.open-design.webFrontend.host = "${cfg.webFrontend.host}" exposes the
+            bundled web frontend on a non-loopback interface, but
+            services.open-design.webFrontend.allowedOrigins is empty.
+
+            The daemon's same-origin allowlist would reject every API
+            write the SPA issues from that host. Either keep the
+            default loopback bind, or declare every external origin
+            the SPA will be loaded from, e.g.
+
+              services.open-design.webFrontend.allowedOrigins = [
+                "http://laptop.local:''${toString cfg.webFrontend.port}"
+              ];
+          '';
+        }
+      ];
     }
 
     (lib.mkIf cfg.autoStart {

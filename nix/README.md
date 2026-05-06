@@ -96,6 +96,46 @@ Three serving options:
 The two services are independent. `autoStart` controls the daemon;
 `webFrontend.enable` controls the static server. Mix freely.
 
+### Exposing the bundled frontend on a non-loopback host
+
+By default `webFrontend.host = "127.0.0.1"` so enabling the bundled
+caddy does not publish anything beyond loopback. To intentionally
+share with a LAN, two settings must be widened together — the
+modules assert at eval time that the second is set whenever the
+first is widened:
+
+```nix
+services.open-design.webFrontend = {
+  enable = true;
+  host = "0.0.0.0";  # caddy listener
+  # Every external origin browsers will load the SPA from. Mode-the-
+  # daemon's same-origin gate matches the browser's Origin header
+  # verbatim, so list each scheme + hostname combo you actually use.
+  allowedOrigins = [
+    "http://laptop.local:5174"
+    "https://laptop.local:5174"
+  ];
+};
+# On NixOS you also need:
+services.open-design.openFirewall = true;
+```
+
+Under the hood `allowedOrigins` is forwarded to the daemon as the
+`OD_WEB_ORIGINS` environment variable (comma-separated). If you run
+the daemon outside the modules — for example, behind your own
+nginx/caddy — set `OD_WEB_ORIGINS` directly in the daemon's
+environment with the same shape:
+
+```
+OD_WEB_ORIGINS=http://host1:port,https://host1:port,http://host2:port
+```
+
+Each entry must be a bare origin (`scheme://host[:port]`, no path,
+query, fragment, or credentials); malformed entries are dropped with
+a warning at daemon startup. The variable widens only the general
+`/api/*` same-origin gate — connector-credential and live-artifact
+preview/refresh routes stay strictly loopback-only by design.
+
 ## (4) `OD_DAEMON_URL` and the static-export build
 
 The web package is built with `OD_DAEMON_URL = ""` so the static export

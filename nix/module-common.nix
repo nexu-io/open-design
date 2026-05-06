@@ -169,11 +169,41 @@ in {
         proxy (which forwards `/api/*`, `/artifacts/*`, and `/frames/*`
         to the local daemon) to other hosts on the network.
 
-        Set to `"0.0.0.0"` (or a specific interface address) for shared
-        deployments. On NixOS you must additionally set
-        `services.open-design.openFirewall = true` for inbound traffic
-        to reach the listener.
+        For shared deployments set this to `"0.0.0.0"` (or a specific
+        interface address) AND populate `webFrontend.allowedOrigins`
+        with every external origin the SPA will be loaded from — the
+        daemon's same-origin gate is fail-closed and would otherwise
+        reject API writes proxied by caddy with a 403. On NixOS you
+        must additionally set `services.open-design.openFirewall =
+        true` for inbound traffic to reach the listener.
+
+        Note: certain sensitive routes (connector credentials, live
+        artifact preview/refresh) remain strictly loopback-only even
+        when `allowedOrigins` is set; that is intentional.
       '';
+    };
+
+    allowedOrigins = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = ''
+        Full HTTP(S) origins (`scheme://host[:port]`, no path) the
+        daemon should accept as same-site for `/api/*` requests in
+        addition to its built-in loopback set. Required whenever
+        `webFrontend.host` is non-loopback so the SPA loaded from
+        `http://<lan-host>:''${toString cfg.webFrontend.port}` can
+        actually issue PUT/POST through the bundled caddy proxy
+        without being 403'd by the daemon's CSRF-style gate.
+
+        Each entry is forwarded to the daemon via the `OD_WEB_ORIGINS`
+        env var and matched against the browser's `Origin` header
+        verbatim, so list every hostname/scheme combo a user might
+        access (LAN IP, mDNS name, Tailscale name, http and https
+        separately if both are reachable). Loopback origins are
+        already accepted unconditionally — do not bother listing
+        them here.
+      '';
+      example = ["http://laptop.local:5174" "https://laptop.local:5174"];
     };
 
     package = lib.mkOption {

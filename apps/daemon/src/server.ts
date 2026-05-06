@@ -931,6 +931,50 @@ function isLoopbackPeerAddress(address) {
   return false;
 }
 
+// Parse OD_WEB_ORIGINS — a comma-separated list of full HTTP(S) origins
+// (`scheme://host[:port]`) the daemon should treat as same-site for
+// /api/* requests. Populated by Nix module deployments where caddy
+// fronts the SPA on a non-loopback host (services.open-design.webFrontend
+// .host + .allowedOrigins). Each entry is parsed via `new URL()` and
+// normalized with `.origin` so the stored value matches the canonical
+// form browsers put on the Origin header. Malformed entries are dropped
+// with a warning rather than failing the boot — this is a defense in
+// depth allowlist, not a primary auth surface.
+//
+// Scope note: this widens only buildAllowedOrigins() and
+// isLocalSameOrigin(). It does NOT widen requireLocalDaemonRequest()
+// (credential PUTs and live-artifact preview/refresh routes), which
+// stays strictly loopback-only by design.
+function parseAllowedWebOrigins(envValue) {
+  if (typeof envValue !== 'string' || envValue.trim() === '') return [];
+  const out = [];
+  for (const raw of envValue.split(',')) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        console.warn(`[od] OD_WEB_ORIGINS: ignoring "${trimmed}" — only http/https schemes are allowed`);
+        continue;
+      }
+      if (
+        (parsed.pathname && parsed.pathname !== '/') ||
+        parsed.search ||
+        parsed.hash ||
+        parsed.username ||
+        parsed.password
+      ) {
+        console.warn(`[od] OD_WEB_ORIGINS: ignoring "${trimmed}" — must be a bare scheme://host[:port] origin`);
+        continue;
+      }
+      out.push(parsed.origin);
+    } catch {
+      console.warn(`[od] OD_WEB_ORIGINS: ignoring "${trimmed}" — failed to parse as URL`);
+    }
+  }
+  return out;
+}
+
 function localOriginFromHeader(value) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -1324,15 +1368,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
-      ports.flatMap((p) => [
+    const extraOrigins = parseAllowedWebOrigins(process.env.OD_WEB_ORIGINS);
+    return new Set([
+      ...ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         // When bound to a specific non-loopback address (e.g. Tailscale,
         // LAN IP, or 0.0.0.0), allow browser requests from that address
         // too so the documented --host escape hatch remains usable.
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
-    );
+      // Origins explicitly declared by an operator who fronts the SPA
+      // on a non-loopback host (e.g. caddy bound to 0.0.0.0 reachable
+      // via http://laptop.local:5174). Sourced from OD_WEB_ORIGINS.
+      ...extraOrigins,
+    ]);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -4954,11 +5003,13 @@ export function isLocalSameOrigin(req, port) {
   if (origin == null || origin === '') return true;
 
   const schemes = ['http', 'https'];
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
+  const extraOrigins = parseAllowedWebOrigins(process.env.OD_WEB_ORIGINS);
+  const allowedOrigins = new Set([
+    ...ports.flatMap((p) => [
       ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
       ...schemes.map((s) => `${s}://${bindHost}:${p}`),
     ]),
-  );
+    ...extraOrigins,
+  ]);
   return allowedOrigins.has(String(origin));
 }
