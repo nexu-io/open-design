@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
+import { wellKnownUserToolchainBins } from '@open-design/platform';
 import { detectAcpModels } from './acp.js';
 import { parsePiModels } from './pi-rpc.js';
 
@@ -783,22 +784,12 @@ export const AGENT_DEFS = [
   },
 ];
 
-function existingDirsUnder(root, segments = []) {
-  const dirs = [];
-  let entries = [];
-  try {
-    entries = readdirSync(root, { withFileTypes: true });
-  } catch {
-    return dirs;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const full = path.join(root, entry.name, ...segments);
-    if (existsSync(full)) dirs.push(full);
-  }
-  return dirs;
-}
-
+// Toolchain dir computation lives in @open-design/platform so the daemon
+// resolver and the packaged sidecar PATH builder can never drift again
+// (issue #442). See @open-design/platform's wellKnownUserToolchainBins
+// for the canonical search list. The wrapper here just preserves the
+// OD_AGENT_HOME test hook and the per-home cache that reduces
+// filesystem scans on every resolveOnPath() call.
 const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
 let cachedToolchainHome = null;
 let cachedToolchainDirs = null;
@@ -817,27 +808,17 @@ function userToolchainDirs() {
   }
   cachedToolchainHome = home;
   cachedToolchainDirsAt = now;
-  cachedToolchainDirs = [
-    path.join(home, '.local', 'bin'),
-    path.join(home, '.opencode', 'bin'),
-    path.join(home, '.bun', 'bin'),
-    path.join(home, '.volta', 'bin'),
-    path.join(home, '.asdf', 'shims'),
-    path.join(home, 'Library', 'pnpm'),
-    path.join(home, '.cargo', 'bin'),
-    ...(process.platform !== 'win32' && !homeOverride
-      ? ['/opt/homebrew/bin', '/usr/local/bin']
-      : []),
-    ...existingDirsUnder(
-      path.join(home, '.local', 'share', 'mise', 'installs', 'node'),
-      ['bin'],
-    ),
-    ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
-    ...existingDirsUnder(
-      path.join(home, '.local', 'share', 'fnm', 'node-versions'),
-      ['installation', 'bin'],
-    ),
-  ];
+  // When OD_AGENT_HOME is set, scope the search strictly to the override
+  // home: skip Homebrew / /usr/local *and* pass an empty env so that a
+  // developer or CI runner with NPM_CONFIG_PREFIX / npm_config_prefix
+  // exported can't leak the real machine's <prefix>/bin into a sandboxed
+  // detection run. Without this the agents.test.ts cases that build a
+  // tmp home would be machine-environment-dependent.
+  cachedToolchainDirs = wellKnownUserToolchainBins({
+    home,
+    includeSystemBins: process.platform !== 'win32' && !homeOverride,
+    env: homeOverride ? {} : process.env,
+  });
   return cachedToolchainDirs;
 }
 

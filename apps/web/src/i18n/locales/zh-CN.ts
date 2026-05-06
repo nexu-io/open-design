@@ -332,6 +332,7 @@ export const zhCN: Dict = {
   'examples.modePrototypeMobile': '原型 · 移动端',
   'examples.modeDeck': '幻灯片',
   'examples.modeDocument': '文档与模板',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': '通用',
   'examples.scenarioEngineering': '工程',
   'examples.scenarioProduct': '产品',

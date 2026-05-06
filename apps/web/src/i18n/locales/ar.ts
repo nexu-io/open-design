@@ -325,6 +325,7 @@ export const ar: Dict = {
   'examples.modePrototypeMobile': 'نماذج أولية · الجوال',
   'examples.modeDeck': 'شرائح',
   'examples.modeDocument': 'مستندات وقوالب',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': 'عام',
   'examples.scenarioEngineering': 'هندسة',
   'examples.scenarioProduct': 'منتج',
