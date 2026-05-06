@@ -156,12 +156,15 @@ Type stack:
 - Priority bars: 4 short vertical bars right of identifier, fill bars
   per level.
 
-## Forbidden
+## Implementation constraints (paired do / don't)
 
-- Drop shadows beyond the listed `shadow-card`
-- Bright colors anywhere outside the status dot palette
-- Sans-serif typography that isn't Inter
-- Wide row heights (must feel dense — under 40px per row)
-- Lorem ipsum
-- Square avatars
-- Showing dark theme (ship the light theme version)
+| Don't | Do |
+|---|---|
+| Add shadows beyond the listed `shadow-card` token | Use only `0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)` for cards |
+| Use bright colors outside the status palette | Use only the documented status hues (Backlog gray / Todo yellow / Progress blue / Review purple / Done green) and the `#5e6ad2` accent |
+| Use sans-serif typography that isn't Inter | Use `'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif` |
+| Use airy row heights | Keep rows under 40px (target ~36px) — Linear is signature-dense |
+| Use lorem ipsum | Write real-shaped Linear copy: identifiers like `ENG-148`, `DES-22`, `INF-9`; cycle names like `Cycle 12`; titles like "Auth middleware refactor" |
+| Render avatars as squares | Always circles, 18–24px |
+| Ship the dark theme | Render the light theme — `#f4f5f6` page, `#ffffff` cards |
+| Use placeholder team prefixes like `T-1` | Use real-shaped team prefixes: `ENG / DES / INF / OPS` |

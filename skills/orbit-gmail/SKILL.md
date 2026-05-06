@@ -147,15 +147,17 @@ Type stack:
 - The single yellow important star (in the subject area or as a tag)
   belongs to the Orbit digest only.
 
-## Forbidden
+## Implementation constraints (paired do / don't)
 
-- Anything that doesn't look unmistakably Gmail
-- A left rail / sidebar (Compose button, system labels, colored labels)
-- An inbox list of other emails
-- A Categories tab strip (Primary / Social / Promotions)
-- Custom typography (must be Google Sans / Roboto)
-- Drop shadows on chrome (only the very subtle Material elevation)
-- Square avatars
-- Lorem ipsum
-- Dark mode
-- Orbit branding on the Gmail chrome (it lives only inside the digest)
+| Don't | Do |
+|---|---|
+| Render a left rail (Compose / system labels / colored labels) | Skip the rail entirely; the page is single-column under the header |
+| Render an inbox list of other emails | Show only the opened Orbit Daily Digest email |
+| Render a Categories tab strip (主要 / 社交 / 推广) | Skip it; the digest occupies the reading view directly |
+| Use non-Google typography | Use `'Google Sans', 'Roboto', -apple-system, system-ui, sans-serif` |
+| Add drop shadows on the Gmail chrome | Flat surfaces; only the subtle Material 1 elevation when an element is focused |
+| Render avatars as squares | Always circles — sender 40px, card 32px, inline 28px |
+| Use lorem ipsum | Write real-shaped Gmail copy: "Q3 预算确认", "Login redesign 反馈", senders like Allen Liu / Marie / Nina Park |
+| Use dark mode | Stay on Gmail's default light theme (`#f6f8fc` page) |
+| Brand the Gmail chrome with Orbit | Orbit branding lives only inside the digest body (subject `Orbit` tag + footer micro-tag) |
+| Put yellow important stars on multiple inbox rows | Only the Orbit Daily Digest row can carry the important marker |

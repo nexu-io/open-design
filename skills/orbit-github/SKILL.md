@@ -145,12 +145,16 @@ Type stack:
 - Reviewer dots: 8px filled circles, 2px gap, with `✓ ⏳ ○` glyphs only
   if you can keep them visually subtle.
 
-## Forbidden
+## Implementation constraints (paired do / don't)
 
-- Light/dark theme mixing (stay light)
-- Any non-GitHub typography
-- Rounded squares for avatars (always circles)
-- Drop shadows / gradients / glows
-- lorem ipsum
-- Treating CI failure as a normal row (must have red border)
-- Treating review requests as a normal row (must sit in yellow block)
+| Don't | Do |
+|---|---|
+| Mix light and dark themes | Stay on the light Primer theme (`#f6f8fa` page bg, `#ffffff` cards) |
+| Use non-GitHub typography | Use `-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif` exclusively |
+| Render avatars as squares or rounded squares | Always circles, with overlap `≤ 6px` for reviewer stacks |
+| Use shadows / gradients / glows on chrome | Flat surfaces; differentiate with `#d0d7de` 1px borders |
+| Use lorem ipsum | Write real-shaped GitHub copy: PR titles like `feat: orbit briefing card`, branches like `chore/upgrade-deps`, commit subjects under 72 chars |
+| Render a CI failure as a normal row | Wrap in a red-bordered card (`#cf222e` border, `#ffebe9` bg) with a red `✗` glyph and run name |
+| Render a review request as a normal row | Sit it in the yellow attention block (`#fff8c5` bg, `#d4a72c` border) with reviewer status dots row |
+| Use placeholder repo names like `org/repo` | Use `nexu-io/open-design` (this org's actual primary repo) |
+| Pluck arbitrary label colors | Use realistic dev-team hues — `bug` red, `enhancement` blue, `documentation` light blue, `frontend` purple |

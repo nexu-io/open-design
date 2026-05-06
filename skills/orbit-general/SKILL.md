@@ -148,25 +148,49 @@ Connector icons must be monochrome line SVG (1.5 stroke).
 
 ## Connector → UI mapping (pick the matching family)
 
-| Family        | Examples                       | UI form                                              |
-|---------------|--------------------------------|------------------------------------------------------|
-| Code collab   | GitHub, GitLab                 | Status-dot list (open/merged/closed/CI fail) + reviewer count, optional 2–3 line diff preview |
-| Task mgmt     | Linear, Jira, Asana            | Issue list with colored status dot + priority bars; for cycle, add a small ring or progress strip |
-| Comms         | Gmail, Slack, 飞书 IM          | Round avatar + one-line quote, accent color for "awaiting reply" |
-| Knowledge     | Notion, Confluence, 飞书 Doc   | Doc title + 2-line excerpt block; comment quote in italic serif |
-| Time          | Calendar                       | Already lives in the global timeline; module form: agenda list with start time gutter |
-| Alerts        | Sentry, Datadog, PagerDuty     | Big red Cormorant number (e.g. `4`), 7 small squares as 7-day heatmap, plus 1 latest error line |
-| Status        | Vercel, GH Actions, Netlify    | Colored status dot per recent build/deploy + branch + duration |
-| Files         | Drive, Dropbox                 | Filename list with tiny thumbnail squares + "edited by" attribution |
-| Board         | Trello, Miro                   | 3 compact kanban columns with rounded card chips |
-| Voice/Misc    | unknown connector              | Fall into closest family by data shape; default to status-dot list |
+| Family        | Examples                              | UI form                                              |
+|---------------|---------------------------------------|------------------------------------------------------|
+| Code collab   | GitHub, GitLab, Bitbucket             | Status-dot list (open/merged/closed/CI fail) + reviewer count, optional 2–3 line diff preview |
+| Task mgmt     | Linear, Jira, Asana, ClickUp          | Issue list with colored status dot + priority bars; for cycle, add a small ring or progress strip |
+| Comms         | Gmail, Slack, 飞书 IM, Outlook        | Round avatar + one-line quote, accent color for "awaiting reply" |
+| Knowledge     | Notion, Confluence, 飞书 Doc          | Doc title + 2-line excerpt block; comment quote in italic serif |
+| Time          | Calendar                              | Already lives in the global timeline; module form: agenda list with start time gutter |
+| Alerts        | Sentry, Datadog, PagerDuty            | Big red Cormorant number (e.g. `4`), 7 small squares as 7-day heatmap, plus 1 latest error line |
+| Status        | Vercel, GH Actions, Netlify           | Colored status dot per recent build/deploy + branch + duration |
+| Files         | Drive, Dropbox, Box                   | Filename list with tiny thumbnail squares + "edited by" attribution |
+| Board         | Trello, Miro, FigJam                  | 3 compact kanban columns with rounded card chips |
+| Finance       | Stripe, PayPal, banking, Brex         | Cormorant currency number + 7-day sparkline + last 3 transactions list |
+| CRM / Sales   | Salesforce, HubSpot, Pipedrive        | 3-column deal pipeline (Open / Negotiation / Won) + 1–2 priority contact cards |
+| Support       | Zendesk, Intercom, Help Scout         | Ticket queue list with SLA timer pill (green / yellow / red) + assignee avatar |
+| Analytics     | Google Analytics, Mixpanel, Amplitude | Mini funnel chart (4 bars descending) + 1-line cohort delta (`▲ 12% W/W`) |
+| Infrastructure| AWS, GCP, Kubernetes, Docker          | Resource meters (CPU / mem / disk percent bars) + last 2 deployment lines |
+| Security      | 1Password, Auth0, Okta                | Event list with red shield for high-severity items + audit timestamp |
+| Voice/Misc    | unknown connector                     | See **Fallback heuristics** below |
 
-## Forbidden
+### Fallback heuristics (for unknown connectors)
 
-- All modules in identical card form
-- Lorem ipsum or filler copy
-- Rendering Sentry/PagerDuty as a plain list (must look alert-y)
-- Rendering Calendar as plain text (must visualize time)
-- Mixing emoji and SVG icons inconsistently
-- Rounded-square avatars (must be circles)
-- Drop shadows, gradients, glows
+When a connector doesn't match any family above, infer by the **data
+shape it returns**:
+
+- Returns numbers + a time series → treat as **Alerts** (big number + heatmap)
+- Returns rows with `status` field → treat as **Task mgmt** (status-dot list)
+- Returns rows with `from` / `subject` → treat as **Comms** (avatar + quote)
+- Returns documents / file names → treat as **Files** (list + thumbnails)
+- Returns a small set of named "states" (deploy / build / cycle) → treat as **Status**
+- Returns dated events → treat as **Time** (agenda list)
+
+If still ambiguous, fall back to a status-dot list (the safest default).
+
+## Implementation constraints (paired do / don't)
+
+| Don't | Do |
+|---|---|
+| Render every module as the same card shape | Vary by family — Alert = big red number + heatmap; Status = status-dot list; Files = thumbnail grid; Comms = avatar + quote |
+| Render Sentry / PagerDuty as a plain list | Big red Cormorant number + 7-day heatmap + latest error line (`TypeError: …`) |
+| Render Calendar as a plain text agenda | Visualize on the horizontal timeline at the top; module form is an agenda list with start-time gutter |
+| Use placeholder names like "Service A / Project X" | Infer plausible real names from the connector type — GitHub → `nexu-io/open-design`, Sentry → `frontend-prod`, Linear → `ENG / DES` cycle 24, Stripe → `Pro plan / Acme Co.` |
+| Use lorem ipsum filler | Write specific mock copy that reads as a real workday — names, numbers, errors, paths, percentages |
+| Mix emoji and SVG icons in the same module set | Use monochrome line SVGs (1.5 stroke) consistently for all connector icons; emoji are reserved for hero greeting and section anchors only |
+| Square or rounded-square avatars | Always circles; sizes 28 / 32 / 40 / 44 px depending on context |
+| Drop shadows / gradients / glows on cards | Flat surfaces only; differentiate cards with the 1px `#EAE5DD` hairline border |
+| Use brand colors from the user's design system | Use exclusively the canvas tokens above (`#FAF7F2`, `#1A1816`, `#D86A47` …) — Orbit's own editorial language |

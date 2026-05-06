@@ -165,13 +165,15 @@ column at ~720px max width with the rest as `--gray-light` rails.
   6×4 padding, 12px medium weight.
 - Avatars: 18px circles with letter + Notion-style soft pastel bg.
 
-## Forbidden
+## Implementation constraints (paired do / don't)
 
-- Anything that doesn't read as Notion (no Material chrome, no Linear
-  rows, no GitHub pills)
-- Lorem ipsum
-- Mixing serif typography (Notion is sans only)
-- Square avatars
-- Drop shadows / gradients
-- Loud accent colors outside the listed Notion palette
-- Replacing Notion's gray callout bg with a solid color
+| Don't | Do |
+|---|---|
+| Borrow chrome from another connector (Material / Linear rows / GitHub pills) | Stay 100% in Notion's block primitives — H1 / H2 / bullet / callout / toggle / database table |
+| Use lorem ipsum | Write real-shaped Notion copy: doc titles like `Q3 OKR`, `Onboarding 文档`, `团队周报`; people like Marie / Bob / Lily; comments like "这一段需要你确认" |
+| Mix serif typography in body | Notion is sans only — use the system stack with emoji fallbacks |
+| Render avatars as squares | Always circles, 18px with letter + Notion-style soft pastel bg |
+| Add shadows or gradients | Flat surfaces only; differentiate blocks with `#E3E2E0` 1px borders or `#F1F1EF` block backgrounds |
+| Use loud accent colors outside the Notion palette | Use only the documented Notion blue / green / orange / yellow tag hues |
+| Replace Notion's gray callout bg with a solid color | Callouts must use `#F1F1EF` gray bg + 24px emoji on the left |
+| Use placeholder doc names like "Document 1" | Use real-shaped Notion titles in CJK or English that read like a real workspace |
