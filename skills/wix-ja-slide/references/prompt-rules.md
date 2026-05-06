@@ -74,6 +74,26 @@ Slides の auto-wrap が起きると、行頭に **1 文字だけの助詞**（�
 3. T-LONG / 大字号 layout では特に 1 行 ~12-15 cells しか入らないので、1 文 ~80 cells 以下を目安に
 4. T-LONG title placeholder には **明示の `\n` を挿入しない**（quote block 扱いで paragraph break が出る）
 
+### 5.2 行末に助詞を残して次行を カタカナ/ラテン語 で開始するな（Round 14 追加）
+
+行末に「が / を / に / で / の」など助詞 + 直後の行頭が **カタカナ または ラテン語**（クロー、Conversion、SaaS など）になると、視覚的に「文章が宙ぶらりん」に見える。strict kinsoku 違反ではないが、文意が分断されて読み手に負荷がかかる。
+
+❌ 「9 件 **が** / **clozable** 段階」← 助詞「が」+ ラテン語 clozable で改行  
+❌ 「商談数 +40% **の** / **エンプラ** が…」← 助詞「の」+ カタカナ エンプラ  
+✅ 「9 件が clozable 段階」を 1 行に収める（圧縮で実現できなければ canonical 変更）  
+✅ 「**clozable な大型商談 9 件**」← 名詞句として再構成、助詞末尾を回避
+
+判定: visual self-check で行頭が カタカナ/ラテン文字 で始まり、前の行が 助詞 1 文字で終わっている場合は P2 として記録、できれば書き直して fix。
+
+### 5.3 T-LONG quote の line 1 を 5 cells 以下にしない（Round 14 追加）
+
+明示 `\n` を T-LONG title placeholder に入れる場合（auto-wrap が complex で救えない時）、**line 1 は最低 10 cells を確保**。
+
+❌ 「Lumina で、\n ドキュメント作業が半分になった」← line 1「Lumina で、」5 cells のみ → orphan、視覚 balance 崩れ  
+✅ 「Lumina に切り替えてから、\n ドキュメント作業が半分になった」← line 1 14 cells、両行 balance OK
+
+判定基準: quote 全体を `\n` で分割した結果、最短 segment が 10 cells 未満なら、その `\n` を削除するか、quote を書き直して長めの first clause を作る。
+
 ## 6. 字数计算的伪代码
 
 ```python

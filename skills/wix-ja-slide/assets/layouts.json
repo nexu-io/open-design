@@ -331,7 +331,8 @@
         "lines": 5,
         "note": "quote / paragraph, large area"
       },
-      "lone_particle_warning_round_13": "T-LONG renders the quote at very large font, so each line wraps to ~12-15 cells. Slides auto-wrap is greedy and often leaves a single-mora particle (て / を / が / は / の / と) alone at the start of the next line — visually unpleasant in JP. Mitigations: (a) keep the JP quote ≤80 cells so it fits 4 lines without forced wrap, (b) write the quote so its natural meaning-breaks land on multi-mora boundaries (e.g. 「〜と感じた」 ends a clause), (c) at visual self-check, scan each line: if line N starts with a 1-character hiragana that is a particle in §3 of prompt-rules, rewrite the prior line so the particle stays on it. Do NOT inject explicit \\n in T-LONG title — the placeholder is treated as a quote block and \\n will produce odd paragraph-style breaks."
+      "lone_particle_warning_round_13": "T-LONG renders the quote at very large font, so each line wraps to ~12-15 cells. Slides auto-wrap is greedy and often leaves a single-mora particle (て / を / が / は / の / と) alone at the start of the next line — visually unpleasant in JP. Mitigations: (a) keep the JP quote ≤80 cells so it fits 4 lines without forced wrap, (b) write the quote so its natural meaning-breaks land on multi-mora boundaries (e.g. 「〜と感じた」 ends a clause), (c) at visual self-check, scan each line: if line N starts with a 1-character hiragana that is a particle in §3 of prompt-rules, rewrite the prior line so the particle stays on it. Do NOT inject explicit \\n in T-LONG title — the placeholder is treated as a quote block and \\n will produce odd paragraph-style breaks.",
+      "line_balance_rule_round_14": "When agent does inject explicit \\n into T-LONG title (because auto-wrap was unsalvageable), each manual line MUST be ≥10 cells. Round 14 P8 produced 「Lumina で、」 alone on line 1 (5 cells) — visually awkward orphan. If line 1 of a forced-\\n quote is <10 cells, merge it into line 2 by removing the \\n and accepting auto-wrap, OR rewrite the quote so the natural first clause is longer. Prefer rewrite over forced break."
     },
     "T+SUB": {
       "canonical_slide_n": 28,
@@ -1895,7 +1896,9 @@
       "process_steps": "T+5B (numbered) — UNLESS [image:] marker present, then T+IMG (process visual as image)",
       "quote": "T-LONG (P26) — keep brackets. UNLESS [image:] marker present, then T+IMG (omit quote brackets, image as the visual anchor).",
       "closing": "T-ONLY (P110, kept short to fit oversized placeholder font)",
-      "two_paragraph_notes": "T+SUB (P28) — reuse same canonical as KPI summary if needed; do NOT use T+2B (P54) which has 4 arrow positions and shows 2 empty arrows when only 2 are filled. Round 4 user feedback. UNLESS [image:] marker present, then T+IMG (P31)."
+      "two_paragraph_notes": "T+SUB (P28) — reuse same canonical as KPI summary if needed; do NOT use T+2B (P54) which has 4 arrow positions and shows 2 empty arrows when only 2 are filled. Round 4 user feedback. UNLESS [image:] marker present, then T+IMG (P31).",
+      "paragraph_no_bullets": "When outline section is a single paragraph (no bullet markers in source) and has no [image:] marker → prefer **T+SUB (P28)** for short paragraph (≤80 cells body) or **T-LONG (P26)** for longer body (80-180 cells). DO NOT auto-split the paragraph into 3 bullets and use T+3B unless the source explicitly framed itself as 3 distinct items (e.g. '3 本柱', '3 つの', numbered list). Round 14 regression: agent split P10/P14 paragraphs into bullets and routed to T+3B, which positions the title mid-bottom and demotes its prominence. T+SUB / T-LONG keep the section title at the top where it reads as the slide's headline.",
+      "explicit_3_pillars": "When outline body explicitly lists 3 distinct items (numbered, '3 本柱', '3 つの', or a literal 3-bullet list) → T+3B (P53). The agent should NOT decompose a single sentence-paragraph into 3 bullets just to satisfy T+3B's slot count — that creates artificial bullets and demotes the title. Use this only when 3-ness is in the source."
     },
     "closing_text_recommendation": {
       "prefer_default": "Thank you",

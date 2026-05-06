@@ -281,6 +281,7 @@ scenario タグから直接 canonical を引けるなら採用:
 |---|---|
 | Cover | **T+SUB or T-ONLY**（COVER? は使うな）|
 | 3 点ハイライト | T+3B (P53)。`[image:]` 有 → T+IMG (P31)。**Round 13 注**: P53 の title placeholder は中下に位置（顶部にない）、3 箭頭が視覚的支配。title を強調したい section（cover-style headline / 1 行 takeaway）には T+SUB / T-ONLY を選ぶ |
+| **段落のみ（bullet マーカー無し）** | **T+SUB (P28)**（body ≤80 cells）/ **T-LONG (P26)**（body 80-180 cells）。**T+3B に分解するな**（Round 14 regression: P10/P14 が paragraph → 3 bullet 分解 → T+3B → title 中下降格）。outline source が「3 本柱」「3 つの」「番号付き 3 項目」を明示している場合のみ T+3B 化 |
 | KPI 集約 | T+3B（各 metric 1 bullet）— **T-LONG は引用用、KPI に使うな**。`[image:]` 有 → **T+IMG (P31) を強制**（Round 10 で T+3B を選んで image が drop された regression。image-marker > scenario hint） |
 | 画像付きイベント振り返り | T+IMG (P31) |
 | 製品ローンチ | T+IMG (hero) or T+SUB (text 多)。`[image:]` 有 → T+IMG 強制 |
@@ -854,6 +855,9 @@ Read tool に PDF パスと `pages: "<page_number>"` を渡して各 populate pa
 | **title under-fill (Round 12 追加)** | placeholder が想定 N 行のところ title が 1 行で残り N-1 行が白く余る | T+SUB の 3 行 placeholder に「KPI」だけ入って残り 2 行空白 |
 | **lone particle at line start (Round 13 追加)** | 行頭に **1 mora の助詞**（て / を / が / は / の / と / に / で / も / や）が単独で残っている | 「Wix Japan を使い始めて、初め / **て**『海外…」← 「て」だけ次の行に押し出されている |
 | **paragraph-style title leak in T+IMG (Round 13 追加)** | T+IMG (P31) の title placeholder に明示 \\n を入れると line 2+ が paragraph style に降格する | "<brand-project> JA Phase 1\\nドラフト" → 「ドラフト」が title style ではなく本文サイズで出る |
+| **T-LONG quote orphan first line (Round 14 追加)** | 明示 \\n を入れた quote で line 1 が **<10 cells** で孤立 | 「Lumina で、\\nドキュメント作業が…」→ line 1「Lumina で、」5 cells のみ → balance 崩れ。修法: \\n を削除して auto-wrap に戻すか、quote を書き直して自然な first clause を長くする |
+| **T+3B title 中下降格（Round 14 追加）** | outline が paragraph 1 段落のみなのに 3 bullet に分解して T+3B に入れる → title が中下に置かれ、3 箭頭が視覚支配 | P10「チーム拡張と組織体制」を T+3B 化 → title 中下 / 3 箭頭が要約箇条書き ← T+SUB に切り替えて title をトップ強調すべき |
+| **画像重複（Round 14 追加）** | 2 枚以上の slide で image が **同一画像**（hash 一致 / または明らかに同じ被写体） | R14 P2 と P4 で picsum.photos の異なる seed が同じ image を返した（外部 service hash collision）→ deck が「軽い」印象に。検出時は userActions に「P_x と P_y は同じ画像、片方を差し替え推奨」を追加 |
 | **font size 過大** | 1 行の文字が overflow 起因で sub-1pt まで縮む / 2 行に gap | "Strategy Framework 完成"が 14pt → 5pt に縮小 |
 | **layout 崩壊** | bullet 数 mismatch / 並び崩れ | T+3B に 4 bullet 入って 4th が消失 |
 | **placeholder filler 残存** | "Lorem ipsum" / "Click here to" / "Headline first slide" 等が残る | bleed 副作用の見落とし |
