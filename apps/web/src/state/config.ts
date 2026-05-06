@@ -312,14 +312,25 @@ function hasAnyDaemonManagedMediaProvider(
   providers: Record<string, MediaProviderCredentials> | null | undefined,
 ): boolean {
   if (!providers) return false;
-  return Object.values(providers).some((entry) =>
-    Boolean(
-      entry?.apiKeyConfigured
-      || entry?.apiKeyTail?.trim()
-      || entry?.baseUrl?.trim()
-      || entry?.model?.trim(),
-    ),
+  return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
+}
+
+export function isStoredMediaProviderEntryPresent(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.baseUrl?.trim()
+    || entry?.model?.trim()
+    || entry?.apiKeyConfigured
+    || entry?.apiKeyTail?.trim(),
   );
+}
+
+export function isStoredMediaProviderEntryEmpty(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return !isStoredMediaProviderEntryPresent(entry);
 }
 
 function defaultBaseUrlForProvider(providerId: string): string {
@@ -474,9 +485,7 @@ export function hasAnyConfiguredProvider(
   providers: Record<string, MediaProviderCredentials> | undefined,
 ): boolean {
   if (!providers) return false;
-  return Object.values(providers).some((entry) =>
-    Boolean(entry?.apiKey?.trim() || entry?.baseUrl?.trim()),
-  );
+  return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
 }
 
 export function shouldSyncLocalMediaProvidersToDaemon(

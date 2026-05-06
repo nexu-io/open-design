@@ -9,7 +9,11 @@ import {
   isCustomModel,
   renderModelOptions,
 } from './modelOptions';
-import { KNOWN_PROVIDERS } from '../state/config';
+import {
+  isStoredMediaProviderEntryEmpty,
+  isStoredMediaProviderEntryPresent,
+  KNOWN_PROVIDERS,
+} from '../state/config';
 import {
   MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
@@ -1277,21 +1281,27 @@ function MediaProvidersSection({
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
       const bEntry = cfg.mediaProviders?.[b.id];
-      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim() || aEntry?.apiKeyConfigured);
-      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim() || bEntry?.apiKeyConfigured);
+      const aConfigured = isStoredMediaProviderEntryPresent(aEntry);
+      const bConfigured = isStoredMediaProviderEntryPresent(bEntry);
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       if (a.integrated !== b.integrated) return a.integrated ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
   const updateProvider = (
     provider: MediaProvider,
-    patch: { apiKey?: string; baseUrl?: string; model?: string },
+    patch: {
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      apiKeyConfigured?: boolean;
+      apiKeyTail?: string;
+    },
   ) => {
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
       const map = { ...(curr.mediaProviders ?? {}) };
-      if (!next.apiKey.trim() && !next.baseUrl.trim() && !next.model?.trim()) {
+      if (isStoredMediaProviderEntryEmpty(next)) {
         delete map[provider.id];
       } else {
         map[provider.id] = next;
@@ -1348,17 +1358,10 @@ function MediaProvidersSection({
           const hasPendingEdit = Boolean(entry.apiKey.trim());
           const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
           const tail = entry.apiKeyTail?.trim();
-          const configured = Boolean(
-            entry.apiKey.trim() || entry.baseUrl.trim() || entry.apiKeyConfigured,
-          );
+          const configured = isStoredMediaProviderEntryPresent(entry);
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
-          const clearable = Boolean(
-            entry.apiKey.trim()
-            || entry.baseUrl.trim()
-            || entry.model?.trim()
-            || entry.apiKeyConfigured,
-          );
+          const clearable = isStoredMediaProviderEntryPresent(entry);
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
@@ -1411,7 +1414,13 @@ function MediaProvidersSection({
                   type="button"
                   className="ghost"
                   disabled={!clearable}
-                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '', model: '' })}
+                  onClick={() => updateProvider(provider, {
+                    apiKey: '',
+                    baseUrl: '',
+                    model: '',
+                    apiKeyConfigured: false,
+                    apiKeyTail: '',
+                  })}
                 >
                   {t('settings.mediaProviderClear')}
                 </button>

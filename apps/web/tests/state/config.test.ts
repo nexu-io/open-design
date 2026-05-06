@@ -3,6 +3,8 @@ import {
   buildMediaProvidersForDaemonSave,
   DEFAULT_CONFIG,
   fetchMediaProvidersFromDaemon,
+  isStoredMediaProviderEntryEmpty,
+  isStoredMediaProviderEntryPresent,
   loadConfig,
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
@@ -193,6 +195,39 @@ describe('mergeDaemonMediaProviders', () => {
     });
 
     expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
+  });
+});
+
+describe('media provider entry presence helpers', () => {
+  it('treat saved-marker entries as present even when visible fields are empty', () => {
+    expect(
+      isStoredMediaProviderEntryPresent({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: '',
+      }),
+    ).toBe(true);
+    expect(
+      isStoredMediaProviderEntryEmpty({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: '',
+      }),
+    ).toBe(false);
+  });
+
+  it('treats entries as empty only after clear-level fields and markers are removed', () => {
+    expect(
+      isStoredMediaProviderEntryEmpty({
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+        baseUrl: '',
+        model: '',
+      }),
+    ).toBe(true);
   });
 });
 

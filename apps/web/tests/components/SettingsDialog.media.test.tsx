@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import { DEFAULT_CONFIG } from '../../src/state/config';
-import type { AppConfig } from '../../src/types';
+import type { AgentInfo, AppConfig } from '../../src/types';
 
 describe('SettingsDialog media providers', () => {
   afterEach(() => {
@@ -69,6 +70,65 @@ describe('SettingsDialog media providers', () => {
       'https://daemon.example/v1',
     );
   });
+
+  it('preserves saved media keys when clearing only a non-secret field', () => {
+    const onSave = vi.fn();
+    renderDialog(
+      {
+        ...saveableConfig(),
+        mediaProviders: {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: 'https://custom.example/v1',
+          },
+        },
+      },
+      { onSave },
+    );
+
+    fireEvent.change(screen.getByLabelText('OpenAI Base URL'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const savedConfig = onSave.mock.calls[0]?.[0];
+    expect(savedConfig?.mediaProviders).toEqual({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: '',
+      },
+    });
+  });
+
+  it('clears saved media keys only through the explicit Clear action', () => {
+    const onSave = vi.fn();
+    renderDialog(
+      {
+        ...saveableConfig(),
+        mediaProviders: {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: 'https://custom.example/v1',
+          },
+        },
+      },
+      { onSave },
+    );
+
+    const openaiRow = screen.getByText('OpenAI').closest('.media-provider-row') as HTMLElement | null;
+    if (!openaiRow) throw new Error('Expected OpenAI media provider row');
+    fireEvent.click(within(openaiRow).getByRole('button', { name: 'Clear' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const savedConfig = onSave.mock.calls[0]?.[0];
+    expect(savedConfig?.mediaProviders).toEqual({});
+  });
 });
 
 function renderDialog(
@@ -76,20 +136,37 @@ function renderDialog(
   options?: {
     mediaProvidersNotice?: string | null;
     onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+    onSave?: (cfg: AppConfig) => void;
   },
 ) {
   return render(
     <SettingsDialog
       initial={initial}
-      agents={[]}
+      agents={SAVEABLE_AGENTS}
       daemonLive
       appVersionInfo={null}
       initialSection="media"
-      onSave={vi.fn()}
+      onSave={options?.onSave ?? vi.fn()}
       onClose={vi.fn()}
       onRefreshAgents={vi.fn()}
       mediaProvidersNotice={options?.mediaProvidersNotice}
       onReloadMediaProviders={options?.onReloadMediaProviders}
     />,
   );
+}
+
+const SAVEABLE_AGENTS: AgentInfo[] = [
+  {
+    id: 'codex',
+    name: 'Codex',
+    bin: 'codex',
+    available: true,
+  },
+];
+
+function saveableConfig(): AppConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    agentId: 'codex',
+  };
 }
