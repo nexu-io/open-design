@@ -1,0 +1,241 @@
+# Notify Discord #resolved when an issue is closed by a merged PR.
+#
+# Trigger logic:
+#   - issues.closed fires whenever an issue is closed (manually, by PR, or as not-planned)
+#   - We require state_reason == "completed" AND that the issue's most recent
+#     `closed` timeline event has a commit_id belonging to a merged PR.
+#   - Then we post a rich Discord embed with: issue title + body excerpt, issue
+#     author, the PR that resolved it, and the merger.
+#
+# Why a workflow instead of a raw repo→Discord webhook?
+#   GitHub's webhook can't tell Discord "this issue was closed *by a merged PR*" —
+#   the issues.closed payload doesn't carry that linkage. We have to walk the
+#   timeline ourselves, which a workflow does in <1s.
+#
+# Why only the `closed` + `commit_id` path (no cross-referenced fallback)?
+#   `cross-referenced` events fire on plain mentions ("related to #123"),
+#   so trusting them creates false positives — a manually closed issue mentioned
+#   by an unrelated merged PR would post to #resolved. The closed-event linkage
+#   is the only signal GitHub itself uses to display "closed by PR #N", so it's
+#   the source of truth. We accept the rare miss (e.g. a PR that closed an issue
+#   via the web UI rather than via "Fixes" keyword) in exchange for zero false
+#   positives.
+
+name: Discord · resolved
+
+on:
+  issues:
+    types: [closed]
+
+# Read-only. Discord post goes via webhook URL (a secret), not GitHub auth.
+# - contents:read       : required by repos.listPullRequestsAssociatedWithCommit
+# - issues:read         : timeline + issue body
+# - pull-requests:read  : PR metadata (merger, title)
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify:
+    # state_reason "completed" excludes "not planned" closures.
+    # We further require an actual merged-PR linkage in the script below.
+    if: github.event.issue.state_reason == 'completed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the merged PR that closed this issue
+        id: find-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+
+            const timeline = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              }
+            );
+
+            // Walk events backwards. The most recent `closed` event with a
+            // commit_id whose containing PR is merged is our resolver.
+            // We deliberately ignore `cross-referenced` events: those fire on
+            // plain mentions, not just closing-keyword links, and trusting
+            // them produces false positives. See top-of-file comment.
+            let resolvingPr = null;
+            for (let i = timeline.length - 1; i >= 0; i--) {
+              const ev = timeline[i];
+              if (ev.event !== 'closed' || !ev.commit_id) continue;
+              try {
+                const { data: prs } =
+                  await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    commit_sha: ev.commit_id,
+                  });
+                const merged = prs.find((p) => p.merged_at);
+                if (merged) {
+                  resolvingPr = merged;
+                  break;
+                }
+              } catch (e) {
+                core.warning(
+                  `listPullRequestsAssociatedWithCommit failed for ${ev.commit_id}: ${e.message}`
+                );
+              }
+            }
+
+            if (!resolvingPr) {
+              core.info(
+                'No merged PR found via closed-event linkage — skipping Discord post. ' +
+                'This is expected for manual closes or web-UI "close with comment" events.'
+              );
+              core.setOutput('skip', 'true');
+              return;
+            }
+
+            // Truncate body for the embed (Discord embed description max ~4096,
+            // but readable cards stay under ~400 chars).
+            const rawBody = (issue.body || '').trim();
+            const bodyExcerpt = rawBody.length > 380
+              ? rawBody.slice(0, 380).trim() + '…'
+              : rawBody || '_(no description)_';
+
+            core.setOutput('skip', 'false');
+            core.setOutput('issue_number', String(issue.number));
+            core.setOutput('issue_title', issue.title);
+            core.setOutput('issue_url', issue.html_url);
+            core.setOutput('issue_author', issue.user.login);
+            core.setOutput('issue_author_url', issue.user.html_url);
+            core.setOutput('issue_author_avatar', issue.user.avatar_url);
+            core.setOutput('issue_body', bodyExcerpt);
+            core.setOutput('pr_number', String(resolvingPr.number));
+            core.setOutput('pr_title', resolvingPr.title);
+            core.setOutput('pr_url', resolvingPr.html_url);
+            core.setOutput('pr_merger', resolvingPr.merged_by?.login || resolvingPr.user.login);
+            core.setOutput('pr_merger_url',
+              resolvingPr.merged_by?.html_url || resolvingPr.user.html_url);
+            core.setOutput('repo_full_name', `${context.repo.owner}/${context.repo.repo}`);
+
+      - name: Post embed to Discord
+        if: steps.find-pr.outputs.skip == 'false'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RESOLVED_WEBHOOK }}
+          ISSUE_NUMBER: ${{ steps.find-pr.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.find-pr.outputs.issue_title }}
+          ISSUE_URL: ${{ steps.find-pr.outputs.issue_url }}
+          ISSUE_AUTHOR: ${{ steps.find-pr.outputs.issue_author }}
+          ISSUE_AUTHOR_URL: ${{ steps.find-pr.outputs.issue_author_url }}
+          ISSUE_AUTHOR_AVATAR: ${{ steps.find-pr.outputs.issue_author_avatar }}
+          ISSUE_BODY: ${{ steps.find-pr.outputs.issue_body }}
+          PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
+          PR_TITLE: ${{ steps.find-pr.outputs.pr_title }}
+          PR_URL: ${{ steps.find-pr.outputs.pr_url }}
+          PR_MERGER: ${{ steps.find-pr.outputs.pr_merger }}
+          PR_MERGER_URL: ${{ steps.find-pr.outputs.pr_merger_url }}
+          REPO_FULL_NAME: ${{ steps.find-pr.outputs.repo_full_name }}
+        run: |
+          set -euo pipefail
+
+          # ── Webhook URL sanity check ────────────────────────────────────
+          # Refuse to post if the secret is missing or doesn't look like a
+          # Discord webhook URL — guards against accidentally leaking issue
+          # metadata to a misconfigured endpoint.
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "DISCORD_RESOLVED_WEBHOOK secret not configured — aborting."
+            exit 1
+          fi
+          case "$WEBHOOK" in
+            https://discord.com/api/webhooks/*) ;;
+            https://discordapp.com/api/webhooks/*) ;;
+            *)
+              echo "WEBHOOK does not look like a Discord webhook URL — aborting."
+              echo "(Expected prefix: https://discord.com/api/webhooks/...)"
+              exit 1
+              ;;
+          esac
+
+          # ── Build embed JSON via jq ─────────────────────────────────────
+          # Color 0x2eb67d (3066993) — green for "resolved".
+          # `allowed_mentions: { parse: [] }` disables @everyone/@here/role/user
+          # mentions so a malicious or accidental issue title can't ping the
+          # channel.
+          payload=$(jq -n \
+            --arg title "✅ #${ISSUE_NUMBER}: ${ISSUE_TITLE}" \
+            --arg url "$ISSUE_URL" \
+            --arg desc "$ISSUE_BODY" \
+            --arg author_name "$ISSUE_AUTHOR" \
+            --arg author_url "$ISSUE_AUTHOR_URL" \
+            --arg author_icon "$ISSUE_AUTHOR_AVATAR" \
+            --arg pr_field "[#${PR_NUMBER} ${PR_TITLE}](${PR_URL})" \
+            --arg merger_field "[@${PR_MERGER}](${PR_MERGER_URL})" \
+            --arg footer "$REPO_FULL_NAME" \
+            '{
+              username: "Issue Resolver",
+              avatar_url: "https://github.githubassets.com/images/modules/logos_page/Octocat.png",
+              allowed_mentions: { parse: [] },
+              embeds: [
+                {
+                  title: $title,
+                  url: $url,
+                  description: $desc,
+                  color: 3066993,
+                  author: {
+                    name: ("Reported by @" + $author_name),
+                    url: $author_url,
+                    icon_url: $author_icon
+                  },
+                  fields: [
+                    { name: "Resolved by PR", value: $pr_field, inline: false },
+                    { name: "Merged by",      value: $merger_field, inline: true }
+                  ],
+                  footer: { text: $footer },
+                  timestamp: now | todateiso8601
+                }
+              ]
+            }')
+
+          # ── POST with bounded retry on 429 ──────────────────────────────
+          # Discord rate-limits webhooks per-channel and may return 429 with a
+          # `retry-after` header (seconds, integer or float). We retry up to 3
+          # times honouring that header, with a sane default if the header is
+          # missing.
+          attempts=3
+          for attempt in $(seq 1 "$attempts"); do
+            : > /tmp/resp_body
+            : > /tmp/resp_headers
+            status=$(curl -sS -o /tmp/resp_body -D /tmp/resp_headers \
+              -w '%{http_code}' \
+              -H 'Content-Type: application/json' \
+              -X POST "$WEBHOOK" \
+              -d "$payload" || echo '000')
+
+            if [ "$status" = "204" ]; then
+              echo "Discord post OK (attempt $attempt)."
+              exit 0
+            fi
+
+            if [ "$status" = "429" ] && [ "$attempt" -lt "$attempts" ]; then
+              # Header is case-insensitive; tr to lowercase for matching.
+              retry_after=$(tr -d '\r' < /tmp/resp_headers \
+                | awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {print $2; exit}')
+              # Floor to integer; default to 5s if header missing/unparseable.
+              retry_after_int=$(printf '%.0f' "${retry_after:-5}" 2>/dev/null || echo 5)
+              [ "$retry_after_int" -lt 1 ] && retry_after_int=1
+              [ "$retry_after_int" -gt 60 ] && retry_after_int=60
+              echo "Rate limited (HTTP 429), retrying in ${retry_after_int}s (attempt ${attempt}/${attempts})…"
+              sleep "$retry_after_int"
+              continue
+            fi
+
+            echo "Discord webhook returned HTTP $status (attempt ${attempt}/${attempts}):"
+            cat /tmp/resp_body
+            # Non-429 errors are not retryable.
+            exit 1
+          done
+
+          echo "Discord post failed after ${attempts} attempts (last status: ${status})."
+          exit 1

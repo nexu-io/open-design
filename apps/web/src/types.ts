@@ -251,6 +251,7 @@ export interface AppConfig {
   skillId: string | null;
   designSystemId: string | null;
   theme?: AppTheme;
+  accentColor?: string;
   // True once the user has been through the welcome onboarding modal at
   // least once (saved or skipped). Bootstrap skips the auto-popup when
   // this is set so refreshing the page doesn't re-prompt.

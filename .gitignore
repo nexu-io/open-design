@@ -6,6 +6,7 @@ out/
 .tmp/
 .DS_Store
 *.log
+*.exe
 .vite
 .astro/
 .vscode

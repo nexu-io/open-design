@@ -21,7 +21,7 @@ const baseConfig: AppConfig = {
 };
 
 describe('SettingsDialog API protocol switching', () => {
-  it('stores the current custom protocol config before loading another protocol', () => {
+  it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
       apiKey: 'anthropic-key',
@@ -36,8 +36,9 @@ describe('SettingsDialog API protocol switching', () => {
       mode: 'api',
       apiProtocol: 'openai',
       apiKey: '',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      baseUrl: 'https://my-proxy.example.com',
+      model: 'my-model',
+      apiProviderBaseUrl: null,
     });
     expect(next.apiProtocolConfigs?.anthropic).toMatchObject({
       apiKey: 'anthropic-key',

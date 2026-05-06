@@ -135,11 +135,36 @@ export function NewProjectPanel({
   // media surfaces use prompt templates instead — design tokens don't map
   // onto image/video/audio generations, and the picker just adds noise
   // there. Keep this list explicit so future tabs declare their intent.
-  const showDesignSystemPicker =
+  const tabSupportsDesignSystem =
     tab === 'prototype' ||
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
+  // Some skills (e.g. the Orbit briefings) ship their own complete visual
+  // language baked into example.html and explicitly opt out of DESIGN.md
+  // injection via `od.design_system.requires: false`. When such a skill is
+  // the active default for the current tab, hide the picker entirely so
+  // the user isn't asked to attach a brand we'll then ignore.
+  const tabDefaultSkillForcesNoDs = useMemo(() => {
+    const tabSkillId = ((): string | null => {
+      if (tab === 'prototype' || tab === 'live-artifact') {
+        const list = skills.filter((s) => s.mode === 'prototype');
+        return list.find((s) => s.defaultFor.includes('prototype'))?.id
+          ?? list[0]?.id ?? null;
+      }
+      if (tab === 'deck') {
+        const list = skills.filter((s) => s.mode === 'deck');
+        return list.find((s) => s.defaultFor.includes('deck'))?.id
+          ?? list[0]?.id ?? null;
+      }
+      return null;
+    })();
+    if (!tabSkillId) return false;
+    const s = skills.find((x) => x.id === tabSkillId);
+    return s ? s.designSystemRequired === false : false;
+  }, [tab, skills]);
+  const showDesignSystemPicker =
+    tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
 
   // When entering the template tab, snap to the first user-saved template
   // if there is one (and we don't already have a valid pick). The template

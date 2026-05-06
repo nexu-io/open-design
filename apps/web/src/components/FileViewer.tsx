@@ -1434,14 +1434,7 @@ function CommentTargetOverlay({
               style={overlayStyle}
               data-testid="comment-target-overlay"
             >
-              {index === 0 ? (
-                <div className="comment-target-tooltip">
-                  <strong>{snapshot.elementId}</strong>
-                  <span>{selectionKindLabel(snapshot.selectionKind, snapshot.memberCount)}</span>
-                  <span>{displayMembers.length} visible</span>
-                  <span>{width} × {height}</span>
-                </div>
-              ) : null}
+              <span className="comment-target-overlay-label">{snapshot.elementId}</span>
             </div>
           );
         })}
@@ -1449,8 +1442,6 @@ function CommentTargetOverlay({
     );
   }
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
-  const width = Math.round(snapshot.position.width);
-  const height = Math.round(snapshot.position.height);
   return (
     <div
       className={`comment-target-overlay${selected ? ' selected' : ''}`}
@@ -1462,12 +1453,7 @@ function CommentTargetOverlay({
       }}
       data-testid="comment-target-overlay"
     >
-      <div className="comment-target-tooltip">
-        <strong>{snapshot.elementId}</strong>
-        <span>{snapshot.label}</span>
-        <span>{selectionKindLabel(snapshot.selectionKind, snapshot.memberCount)}</span>
-        <span>{width} × {height}</span>
-      </div>
+      <span className="comment-target-overlay-label">{snapshot.elementId}</span>
     </div>
   );
 }

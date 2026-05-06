@@ -29,6 +29,7 @@ import {
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
+import { applyAppearanceToDocument } from './state/appearance';
 import {
   createProject,
   deleteProject as deleteProjectApi,
@@ -90,13 +91,11 @@ export function App() {
   // live theme switch in Settings applies atomically — no 1-frame flash of
   // the old theme. Safe here because the component tree is ssr:false.
   useLayoutEffect(() => {
-    const theme = config.theme ?? 'system';
-    if (theme === 'system') {
-      document.documentElement.removeAttribute('data-theme');
-    } else {
-      document.documentElement.setAttribute('data-theme', theme);
-    }
-  }, [config.theme]);
+    applyAppearanceToDocument({
+      theme: config.theme ?? 'system',
+      accentColor: config.accentColor,
+    });
+  }, [config.theme, config.accentColor]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
