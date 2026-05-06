@@ -108,6 +108,11 @@ export const ja: Dict = {
   'settings.reasoningPicker': '推論の強さ',
   'settings.modelPickerHint':
     'CLI が `models` コマンドを公開している場合に取得されます。「デフォルト」は CLI 自身の設定に委ね、「カスタム…」は CLI が受け付ける任意のモデル ID を入力できます。',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': 'カスタム（下に入力）…',
   'settings.modelCustomLabel': 'カスタムモデル ID',
   'settings.modelCustomPlaceholder': '例: anthropic/claude-sonnet-4-6',
@@ -434,6 +439,8 @@ export const ja: Dict = {
   'misc.designSystem': 'デザインシステム',
 
   'workspace.designFiles': 'デザインファイル',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': 'タブを閉じる',
   'workspace.deleteFileConfirm': 'プロジェクトフォルダーから "{name}" を削除しますか？',
   'workspace.openFromDesignFiles': 'ファイルを開く: ',

@@ -105,6 +105,11 @@ export const zhCN: Dict = {
   'settings.reasoningPicker': '推理强度',
   'settings.modelPickerHint':
     '当 CLI 提供 `models` 命令时会自动拉取。选择「默认」则沿用 CLI 自身的配置；选择「自定义」可手动输入任何 CLI 支持的模型 id。',
+  'settings.cliEnvTitle': 'CLI 配置位置',
+  'settings.cliEnvHint':
+    '为打包版应用运行和 agent 检测设置非敏感配置目录。',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code 配置目录',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': '自定义（在下方填写）…',
   'settings.modelCustomLabel': '自定义模型 id',
   'settings.modelCustomPlaceholder': '例如 anthropic/claude-sonnet-4-6',
@@ -483,6 +488,8 @@ export const zhCN: Dict = {
   'misc.designSystem': '设计体系',
 
   'workspace.designFiles': '设计文件',
+  'workspace.focusMode': '专注工作区',
+  'workspace.showChat': '显示聊天',
   'workspace.closeTab': '关闭标签页',
   'workspace.deleteFileConfirm': '从项目文件夹中删除「{name}」？',
   'workspace.openFromDesignFiles': '请从',

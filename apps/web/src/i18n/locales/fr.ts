@@ -108,6 +108,11 @@ export const fr: Dict = {
   'settings.reasoningPicker': 'Effort de raisonnement',
   'settings.modelPickerHint':
     'Récupéré depuis le CLI lorsqu\'il expose une commande `models`. « Par défaut » laisse le choix à la configuration du CLI ; « Personnalisé… » vous permet de saisir n\'importe quel identifiant de modèle accepté par le CLI.',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': 'Personnalisé (saisir ci-dessous)…',
   'settings.modelCustomLabel': 'Identifiant du modèle personnalisé',
   'settings.modelCustomPlaceholder': 'ex. anthropic/claude-sonnet-4-6',
@@ -481,6 +486,8 @@ export const fr: Dict = {
   'misc.designSystem': 'Design system',
 
   'workspace.designFiles': 'Fichiers de design',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': 'Fermer l\'onglet',
   'workspace.deleteFileConfirm': 'Supprimer « {name} » du dossier du projet ?',
   'workspace.openFromDesignFiles': 'Ouvrir un fichier depuis',

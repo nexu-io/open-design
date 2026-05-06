@@ -106,6 +106,11 @@ export const fa: Dict = {
   'settings.reasoningPicker': 'سطح استدلال',
   'settings.modelPickerHint':
     'هنگامی که CLI یک دستور `models` را ارائه می‌دهد از آن دریافت می‌شود. «پیش‌فرض» انتخاب را به پیکربندی خود CLI واگذار می‌کند؛ «سفارشی…» به شما امکان می‌دهد هر شناسه مدلی را که CLI می‌پذیرد تایپ کنید.',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': 'سفارشی (در زیر تایپ کنید)…',
   'settings.modelCustomLabel': 'شناسه مدل سفارشی',
   'settings.modelCustomPlaceholder': 'مثلاً anthropic/claude-sonnet-4-6',
@@ -492,6 +497,8 @@ export const fa: Dict = {
   'misc.designSystem': 'سیستم طراحی',
 
   'workspace.designFiles': 'فایل‌های طراحی',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': 'بستن تب',
   'workspace.deleteFileConfirm': 'آیا «{name}» از پوشه پروژه حذف شود؟',
   'workspace.openFromDesignFiles': 'باز کردن یک فایل از',

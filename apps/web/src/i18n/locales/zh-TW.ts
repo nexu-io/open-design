@@ -105,6 +105,11 @@ export const zhTW: Dict = {
   'settings.reasoningPicker': '推理強度',
   'settings.modelPickerHint':
     '當 CLI 提供 `models` 命令時會自動拉取。選擇「預設」則沿用 CLI 自身的設定；選擇「自訂」可手動輸入任何 CLI 支援的模型 id。',
+  'settings.cliEnvTitle': 'CLI 設定位置',
+  'settings.cliEnvHint':
+    '為打包版應用執行和 agent 偵測設定非敏感設定目錄。',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code 設定目錄',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': '自訂（在下方填寫）…',
   'settings.modelCustomLabel': '自訂模型 id',
   'settings.modelCustomPlaceholder': '例如 anthropic/claude-sonnet-4-6',
@@ -483,6 +488,8 @@ export const zhTW: Dict = {
   'misc.designSystem': '設計系統',
 
   'workspace.designFiles': '設計檔案',
+  'workspace.focusMode': '專注工作區',
+  'workspace.showChat': '顯示聊天',
   'workspace.closeTab': '關閉分頁',
   'workspace.deleteFileConfirm': '從專案資料夾中刪除「{name}」？',
   'workspace.openFromDesignFiles': '請從',

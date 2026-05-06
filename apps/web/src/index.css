@@ -591,6 +591,19 @@ code {
 .split.is-resizing-chat iframe {
   pointer-events: none;
 }
+.split.split-focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+.split-chat-slot {
+  display: flex;
+  min-height: 0;
+}
+.split-chat-slot[hidden] {
+  display: none;
+}
+.split-chat-slot > .pane {
+  flex: 1 1 auto;
+}
 .pane {
   display: flex;
   flex-direction: column;
@@ -1609,6 +1622,32 @@ code {
   color: var(--text-muted);
 }
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
+.agent-cli-env {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.agent-cli-env-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agent-cli-env-head h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.agent-cli-env-head .hint { margin: 0; font-size: 11.5px; }
+.agent-cli-env-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
 .status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
@@ -4439,20 +4478,28 @@ button.connector-action.is-loading {
   background: var(--bg);
   flex: 1;
 }
-.ws-tabs-bar {
+.ws-tabs-shell {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
-  overflow-x: auto;
-  overflow-y: hidden;
-  flex-wrap: nowrap;
   height: 44px;
   position: sticky;
   top: 0;
   z-index: 4;
+}
+.ws-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
 }
 
 .ws-tab {
@@ -4523,8 +4570,30 @@ button.connector-action.is-loading {
   color: var(--text);
 }
 
-.ws-tabs-spacer { flex: 1; }
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
+.ws-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ws-focus-toggle:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.ws-focus-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .ws-tab-action {
   padding: 4px 12px;
   font-size: 12.5px;

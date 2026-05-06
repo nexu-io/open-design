@@ -106,6 +106,11 @@ export const ru: Dict = {
   'settings.reasoningPicker': 'Сложность рассуждений',
   'settings.modelPickerHint':
     'Получается из CLI, если он поддерживает команду `models`. «По умолчанию» оставляет выбор конфигурации CLI, а «Пользовательская…» позволяет ввести любой ID модели, который CLI принимает.',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': 'Пользовательская (введите ниже)…',
   'settings.modelCustomLabel': 'Пользовательский ID модели',
   'settings.modelCustomPlaceholder': 'например, anthropic/claude-sonnet-4-6',
@@ -491,6 +496,8 @@ export const ru: Dict = {
   'misc.designSystem': 'Дизайн-система',
 
   'workspace.designFiles': 'Файлы дизайна',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': 'Закрыть вкладку',
   'workspace.deleteFileConfirm': 'Удалить «{name}» из папки проекта?',
   'workspace.openFromDesignFiles': 'Открыть файл из',

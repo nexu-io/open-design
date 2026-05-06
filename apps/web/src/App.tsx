@@ -182,6 +182,12 @@ export function App() {
               ...daemonConfig.agentModels,
             };
           }
+          if (daemonConfig.agentCliEnv) {
+            next.agentCliEnv = {
+              ...(next.agentCliEnv ?? {}),
+              ...daemonConfig.agentCliEnv,
+            };
+          }
           if (daemonConfig.disabledSkills !== undefined) {
             next.disabledSkills = daemonConfig.disabledSkills;
           }

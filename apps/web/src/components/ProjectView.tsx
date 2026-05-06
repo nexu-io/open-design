@@ -180,6 +180,10 @@ function appendLiveArtifactEventItem(
   return next.length > 50 ? next.slice(next.length - 50) : next;
 }
 
+export function projectSplitClassName(workspaceFocused: boolean): string {
+  return workspaceFocused ? 'split split-focus' : 'split';
+}
+
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
   if (evt.type === 'live_artifact') {
@@ -241,6 +245,7 @@ export function ProjectView({
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
+  const [workspaceFocused, setWorkspaceFocused] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
   const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
@@ -316,6 +321,10 @@ export function ProjectView({
     return () => {
       cancelled = true;
     };
+  }, [project.id]);
+
+  useEffect(() => {
+    setWorkspaceFocused(false);
   }, [project.id]);
 
   // Load messages whenever the active conversation changes. This happens
@@ -1740,67 +1749,76 @@ export function ProjectView({
       </AppChromeHeader>
       <div
         ref={splitRef}
-        className={`split${resizingChatPanel ? ' is-resizing-chat' : ''}`}
-        style={{
-          gridTemplateColumns:
-            `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
-        }}
+        className={[
+          projectSplitClassName(workspaceFocused),
+          resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
+        ].filter(Boolean).join(' ')}
+        style={workspaceFocused
+          ? undefined
+          : {
+              gridTemplateColumns:
+                `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
+            }}
       >
-        <ChatPane
-          // The conversation id is part of the key so switching conversations
-          // resets internal scroll/draft state inside ChatPane and ChatComposer.
-          key={activeConversationId ?? 'no-conv'}
-          messages={messages}
-          streaming={streaming}
-          error={error}
-          projectId={project.id}
-          projectFiles={projectFiles}
-          projectFileNames={projectFileNames}
-          onEnsureProject={handleEnsureProject}
-          previewComments={previewComments}
-          attachedComments={attachedComments}
-          onAttachComment={attachPreviewComment}
-          onDetachComment={detachPreviewComment}
-          onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-          onSend={handleSend}
-          onStop={handleStop}
-          onRequestOpenFile={requestOpenFile}
-          initialDraft={initialDraft}
-          onSubmitForm={(text) => {
-            if (streaming) return;
-            void handleSend(text, [], []);
-          }}
-          onContinueRemainingTasks={handleContinueRemainingTasks}
-          onNewConversation={handleNewConversation}
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
-          onOpenSettings={onOpenSettings}
-          petConfig={config.pet}
-          onAdoptPet={onAdoptPetInline}
-          onTogglePet={onTogglePet}
-          onOpenPetSettings={onOpenPetSettings}
-          projectMetadata={project.metadata}
-          onProjectMetadataChange={(metadata) => {
-            onProjectChange({ ...project, metadata });
-          }}
-        />
-        <div
-          className="split-resize-handle"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={chatResizeLabel}
-          aria-valuemin={chatPanelAriaMinWidth}
-          aria-valuemax={chatPanelMaxWidth}
-          aria-valuenow={chatPanelWidth}
-          tabIndex={0}
-          title={chatResizeLabel}
-          onPointerDown={handleChatResizePointerDown}
-          onKeyDown={handleChatResizeKeyDown}
-          onBlur={handleChatResizeBlur}
-        />
+        <div className="split-chat-slot" hidden={workspaceFocused}>
+          <ChatPane
+            // The conversation id is part of the key so switching conversations
+            // resets internal scroll/draft state inside ChatPane and ChatComposer.
+            key={activeConversationId ?? 'no-conv'}
+            messages={messages}
+            streaming={streaming}
+            error={error}
+            projectId={project.id}
+            projectFiles={projectFiles}
+            projectFileNames={projectFileNames}
+            onEnsureProject={handleEnsureProject}
+            previewComments={previewComments}
+            attachedComments={attachedComments}
+            onAttachComment={attachPreviewComment}
+            onDetachComment={detachPreviewComment}
+            onDeleteComment={(commentId) => void removePreviewComment(commentId)}
+            onSend={handleSend}
+            onStop={handleStop}
+            onRequestOpenFile={requestOpenFile}
+            initialDraft={initialDraft}
+            onSubmitForm={(text) => {
+              if (streaming) return;
+              void handleSend(text, [], []);
+            }}
+            onContinueRemainingTasks={handleContinueRemainingTasks}
+            onNewConversation={handleNewConversation}
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelectConversation={handleSelectConversation}
+            onDeleteConversation={handleDeleteConversation}
+            onRenameConversation={handleRenameConversation}
+            onOpenSettings={onOpenSettings}
+            petConfig={config.pet}
+            onAdoptPet={onAdoptPetInline}
+            onTogglePet={onTogglePet}
+            onOpenPetSettings={onOpenPetSettings}
+            projectMetadata={project.metadata}
+            onProjectMetadataChange={(metadata) => {
+              onProjectChange({ ...project, metadata });
+            }}
+          />
+        </div>
+        {!workspaceFocused ? (
+          <div
+            className="split-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={chatResizeLabel}
+            aria-valuemin={chatPanelAriaMinWidth}
+            aria-valuemax={chatPanelMaxWidth}
+            aria-valuenow={chatPanelWidth}
+            tabIndex={0}
+            title={chatResizeLabel}
+            onPointerDown={handleChatResizePointerDown}
+            onKeyDown={handleChatResizeKeyDown}
+            onBlur={handleChatResizeBlur}
+          />
+        ) : null}
         <FileWorkspace
           projectId={project.id}
           files={projectFiles}
@@ -1819,6 +1837,8 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          focusMode={workspaceFocused}
+          onFocusModeChange={setWorkspaceFocused}
         />
       </div>
     </div>

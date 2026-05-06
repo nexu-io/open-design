@@ -253,7 +253,7 @@ export const AGENT_DEFS = [
     name: 'Devin for Terminal',
     bin: 'devin',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: [
@@ -263,6 +263,7 @@ export const AGENT_DEFS = [
           'false',
           'acp',
         ],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -362,10 +363,11 @@ export const AGENT_DEFS = [
     name: 'Hermes',
     bin: 'hermes',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp', '--accept-hooks'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -387,10 +389,11 @@ export const AGENT_DEFS = [
     name: 'Kimi CLI',
     bin: 'kimi',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -545,9 +548,10 @@ export const AGENT_DEFS = [
     versionArgs: ['--version'],
     // `pi --list-models` prints a TSV table to stderr (not stdout),
     // so we use a custom fetchModels that reads stderr.
-    fetchModels: async (resolvedBin) => {
+    fetchModels: async (resolvedBin, env) => {
       try {
         const { stderr } = await execFileP(resolvedBin, ['--list-models'], {
+          env,
           timeout: 20_000,
           maxBuffer: 8 * 1024 * 1024,
         });
@@ -615,10 +619,11 @@ export const AGENT_DEFS = [
     name: 'Kiro CLI',
     bin: 'kiro-cli',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -631,10 +636,11 @@ export const AGENT_DEFS = [
     name: 'Kilo',
     bin: 'kilo',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -647,10 +653,11 @@ export const AGENT_DEFS = [
     name: 'Mistral Vibe CLI',
     bin: 'vibe-acp',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: [],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -820,10 +827,10 @@ export function resolveAgentExecutable(def) {
   return null;
 }
 
-async function fetchModels(def, resolvedBin) {
+async function fetchModels(def, resolvedBin, env) {
   if (typeof def.fetchModels === 'function') {
     try {
-      const parsed = await def.fetchModels(resolvedBin);
+      const parsed = await def.fetchModels(resolvedBin, env);
       if (!parsed || parsed.length === 0) return def.fallbackModels;
       return parsed;
     } catch {
@@ -833,6 +840,7 @@ async function fetchModels(def, resolvedBin) {
   if (!def.listModels) return def.fallbackModels;
   try {
     const { stdout } = await execFileP(resolvedBin, def.listModels.args, {
+      env,
       timeout: def.listModels.timeoutMs ?? 5000,
       // Models lists from popular CLIs (e.g. opencode) easily exceed the
       // default 1MB buffer once you include every openrouter model. Bump
@@ -850,7 +858,7 @@ async function fetchModels(def, resolvedBin) {
   }
 }
 
-async function probe(def) {
+async function probe(def, configuredEnv = {}) {
   const resolved = resolveAgentExecutable(def);
   if (!resolved) {
     return {
@@ -859,9 +867,18 @@ async function probe(def) {
       available: false,
     };
   }
+  const probeEnv = spawnEnvForAgent(
+    def.id,
+    {
+      ...process.env,
+      ...(def.env || {}),
+    },
+    configuredEnv,
+  );
   let version = null;
   try {
     const { stdout } = await execFileP(resolved, def.versionArgs, {
+      env: probeEnv,
       timeout: 3000,
     });
     version = stdout.trim().split('\n')[0];
@@ -874,6 +891,7 @@ async function probe(def) {
     const caps = {};
     try {
       const { stdout } = await execFileP(resolved, def.helpArgs, {
+        env: probeEnv,
         timeout: 5000,
         maxBuffer: 4 * 1024 * 1024,
       });
@@ -886,7 +904,7 @@ async function probe(def) {
     }
     agentCapabilities.set(def.id, caps);
   }
-  const models = await fetchModels(def, resolved);
+  const models = await fetchModels(def, resolved, probeEnv);
   return {
     ...stripFns(def),
     models,
@@ -918,8 +936,10 @@ function stripFns(def) {
   return rest;
 }
 
-export async function detectAgents() {
-  const results = await Promise.all(AGENT_DEFS.map(probe));
+export async function detectAgents(configuredEnvByAgent = {}) {
+  const results = await Promise.all(
+    AGENT_DEFS.map((def) => probe(def, configuredEnvByAgent?.[def.id] ?? {})),
+  );
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,
   // including ones that only showed up after a CLI re-auth.
@@ -1182,8 +1202,8 @@ export function resolveAgentBin(id) {
 // object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
 // would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
 // the child. Iterate keys and compare case-insensitively to close that.
-export function spawnEnvForAgent(agentId, baseEnv) {
-  const env = { ...baseEnv };
+export function spawnEnvForAgent(agentId, baseEnv, configuredEnv = {}) {
+  const env = { ...baseEnv, ...expandConfiguredEnv(configuredEnv) };
   if (agentId !== 'claude') return env;
   const hasCustomBaseUrl = Object.keys(env).some(
     (k) =>
@@ -1196,6 +1216,24 @@ export function spawnEnvForAgent(agentId, baseEnv) {
     if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
   }
   return env;
+}
+
+function expandConfiguredEnv(configuredEnv) {
+  const out = {};
+  if (!configuredEnv || typeof configuredEnv !== 'object') return out;
+  for (const [key, value] of Object.entries(configuredEnv)) {
+    if (typeof value !== 'string') continue;
+    out[key] = expandHomePath(value);
+  }
+  return out;
+}
+
+function expandHomePath(value) {
+  if (value === '~') return homedir();
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(homedir(), value.slice(2));
+  }
+  return value;
 }
 
 // Daemon's /api/chat needs to validate the user's model pick against the

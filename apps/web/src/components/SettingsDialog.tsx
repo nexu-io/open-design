@@ -132,6 +132,21 @@ type RescanNotice =
   | { kind: 'success'; count: number }
   | { kind: 'error' };
 
+const AGENT_CLI_ENV_FIELDS = [
+  {
+    agentId: 'claude',
+    envKey: 'CLAUDE_CONFIG_DIR',
+    labelKey: 'settings.cliEnvClaudeConfigDir',
+    placeholder: '~/.claude-2',
+  },
+  {
+    agentId: 'codex',
+    envKey: 'CODEX_HOME',
+    labelKey: 'settings.cliEnvCodexHome',
+    placeholder: '~/.codex-alt',
+  },
+] as const;
+
 function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
   return {
@@ -214,6 +229,33 @@ export function updateCurrentApiProtocolConfig(
     protocol,
     nextApiConfig,
   );
+}
+
+export function updateAgentCliEnvValue(
+  config: AppConfig,
+  agentId: string,
+  envKey: string,
+  rawValue: string,
+): AppConfig {
+  const value = rawValue.trim();
+  const agentCliEnv = { ...(config.agentCliEnv ?? {}) };
+  const nextAgentEnv = { ...(agentCliEnv[agentId] ?? {}) };
+  if (value) {
+    nextAgentEnv[envKey] = value;
+  } else {
+    delete nextAgentEnv[envKey];
+  }
+
+  if (Object.keys(nextAgentEnv).length > 0) {
+    agentCliEnv[agentId] = nextAgentEnv;
+  } else {
+    delete agentCliEnv[agentId];
+  }
+
+  return {
+    ...config,
+    agentCliEnv: Object.keys(agentCliEnv).length > 0 ? agentCliEnv : {},
+  };
 }
 
 export function switchApiProtocolConfig(
@@ -790,6 +832,35 @@ export function SettingsDialog({
                   </div>
                 );
               })()}
+              <div className="agent-cli-env">
+                <div className="agent-cli-env-head">
+                  <h4>{t('settings.cliEnvTitle')}</h4>
+                  <p className="hint">{t('settings.cliEnvHint')}</p>
+                </div>
+                <div className="agent-cli-env-grid">
+                  {AGENT_CLI_ENV_FIELDS.map((field) => (
+                    <label className="field" key={`${field.agentId}:${field.envKey}`}>
+                      <span className="field-label">{t(field.labelKey)}</span>
+                      <input
+                        type="text"
+                        value={cfg.agentCliEnv?.[field.agentId]?.[field.envKey] ?? ''}
+                        placeholder={field.placeholder}
+                        spellCheck={false}
+                        onChange={(e) =>
+                          setCfg((c) =>
+                            updateAgentCliEnvValue(
+                              c,
+                              field.agentId,
+                              field.envKey,
+                              e.target.value,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
             </section>
           ) : (
             <section className="settings-section">

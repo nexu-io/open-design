@@ -108,6 +108,11 @@ export const hu: Dict = {
   'settings.reasoningPicker': 'Gondolkodási erőfeszítés',
   'settings.modelPickerHint':
     'A CLI-tól kérdezi le, ha az közzéteszi a `models` parancsot. Az „Alapértelmezett" a CLI saját konfigjára bízza a választást; az „Egyedi…" tetszőleges, a CLI által elfogadott modell-id-t enged megadni.',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': 'Egyedi (gépeld be alább)…',
   'settings.modelCustomLabel': 'Egyedi modell-id',
   'settings.modelCustomPlaceholder': 'pl. anthropic/claude-sonnet-4-6',
@@ -481,6 +486,8 @@ export const hu: Dict = {
   'misc.designSystem': 'Designrendszer',
 
   'workspace.designFiles': 'Designfájlok',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': 'Lap bezárása',
   'workspace.deleteFileConfirm': 'Törlöd a(z) „{name}" fájlt a projektmappából?',
   'workspace.openFromDesignFiles': 'Nyiss meg egy fájlt innen:',

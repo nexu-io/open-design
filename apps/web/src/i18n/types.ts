@@ -127,6 +127,10 @@ export interface Dict {
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
+  'settings.cliEnvTitle': string;
+  'settings.cliEnvHint': string;
+  'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvCodexHome': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
@@ -551,6 +555,8 @@ export interface Dict {
 
   // Workspace / file viewer / design files panel
   'workspace.designFiles': string;
+  'workspace.focusMode': string;
+  'workspace.showChat': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;
   'workspace.openFromDesignFiles': string;

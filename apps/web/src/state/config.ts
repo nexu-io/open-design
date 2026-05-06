@@ -61,6 +61,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   mediaProviders: {},
   composio: {},
   agentModels: {},
+  agentCliEnv: {},
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
 };
@@ -235,6 +236,7 @@ export function loadConfig(): AppConfig {
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
       composio: { ...(parsed.composio ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
+      agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
     };
@@ -351,6 +353,7 @@ export async function syncConfigToDaemon(config: AppConfig): Promise<void> {
     onboardingCompleted: config.onboardingCompleted,
     agentId: config.agentId,
     agentModels: config.agentModels,
+    agentCliEnv: config.agentCliEnv,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
     disabledSkills: config.disabledSkills,

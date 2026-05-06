@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  AgentCliEnvPrefs,
   AgentModelPrefs,
   AppVersionInfo,
   AppVersionResponse,
@@ -141,6 +142,7 @@ export interface ApiProtocolConfig {
 // other one's choice. Missing entries fall back to the agent's first
 // declared model (`'default'` — let the CLI pick).
 export type AgentModelChoice = AgentModelPrefs;
+export type AgentCliEnvConfig = AgentCliEnvPrefs;
 
 export type AppTheme = 'system' | 'light' | 'dark';
 
@@ -258,6 +260,8 @@ export interface AppConfig {
   // Pre-existing configs without this field fall through to the agent's
   // declared default.
   agentModels?: Record<string, AgentModelChoice>;
+  // Per-agent non-secret CLI config locations injected into detection and runs.
+  agentCliEnv?: AgentCliEnvConfig;
   // Caps the upstream completion length in API mode. Defaults to 8192 when
   // unset; raise it for providers (e.g. MiMo) that allow longer responses.
   maxTokens?: number;

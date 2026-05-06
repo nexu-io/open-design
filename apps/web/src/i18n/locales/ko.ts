@@ -108,6 +108,11 @@ export const ko: Dict = {
   'settings.reasoningPicker': '추론 (Reasoning)',
   'settings.modelPickerHint':
     'CLI가 `models` 명령어를 지원할 때 가져옵니다. "Default"는 CLI 자체 설정을 따르며, "직접 입력…"을 선택하면 CLI가 허용하는 모델 ID를 입력할 수 있습니다.',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': '직접 입력…',
   'settings.modelCustomLabel': '사용자 지정 모델 ID',
   'settings.modelCustomPlaceholder': '예: anthropic/claude-sonnet-4-6',
@@ -481,6 +486,8 @@ export const ko: Dict = {
   'misc.designSystem': '디자인 시스템',
 
   'workspace.designFiles': '디자인 파일',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': '탭 닫기',
   'workspace.deleteFileConfirm': '프로젝트 폴더에서 "{name}" 파일을 삭제하시겠습니까?',
   'workspace.openFromDesignFiles': '디자인 파일 열기',

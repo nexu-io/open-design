@@ -108,6 +108,11 @@ export const ar: Dict = {
   'settings.reasoningPicker': 'جهد التفكير',
   'settings.modelPickerHint':
     'يتم جلبه من CLI عندما يعرض أمر `models`. "الافتراضي" يترك الخيار لإعدادات CLI؛ "مخصص..." يسمح لك بكتابة أي معرف نموذج يقبله CLI.',
+  'settings.cliEnvTitle': 'CLI config locations',
+  'settings.cliEnvHint':
+    'Set non-secret config directories for packaged app runs and agent detection.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvCodexHome': 'Codex home',
   'settings.modelCustom': 'مخصص (اكتب أدناه)...',
   'settings.modelCustomLabel': 'معرف النموذج المخصص',
   'settings.modelCustomPlaceholder': 'مثلاً: anthropic/claude-sonnet-4-6',
@@ -481,6 +486,8 @@ export const ar: Dict = {
   'misc.designSystem': 'نظام تصميم',
 
   'workspace.designFiles': 'ملفات التصميم',
+  'workspace.focusMode': 'Focus workspace',
+  'workspace.showChat': 'Show chat',
   'workspace.closeTab': 'إغلاق علامة التبويب',
   'workspace.deleteFileConfirm': 'حذف "{name}" من مجلد المشروع؟',
   'workspace.openFromDesignFiles': 'فتح ملف من',

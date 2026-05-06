@@ -122,6 +122,7 @@ export async function detectAcpModels({
   bin,
   args,
   cwd = process.cwd(),
+  env = process.env,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   clientName = 'open-design-detect',
   clientVersion = 'runtime-adapter',
@@ -131,7 +132,7 @@ export async function detectAcpModels({
     const child = spawn(bin, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...env },
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
