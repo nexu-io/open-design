@@ -1,0 +1,193 @@
+# Notify Discord #resolved when an issue is closed by a merged PR.
+#
+# Trigger logic:
+#   - issues.closed fires whenever an issue is closed (manually, by PR, or as not-planned)
+#   - We only proceed if state_reason == "completed" AND there's a merged PR that
+#     references this issue with a closing keyword (Fixes / Closes / Resolves #N)
+#   - Then we post a rich Discord embed with: issue title + body excerpt, issue
+#     author, the PR that resolved it, and the merger.
+#
+# Why GitHub Actions instead of a raw webhook?
+#   GitHub's webhook can't tell Discord "this issue was closed *by a merged PR*" —
+#   the issues.closed event doesn't carry that linkage. We need to query the
+#   timeline / linked PRs ourselves, which a workflow can do trivially.
+
+name: Discord · resolved
+
+on:
+  issues:
+    types: [closed]
+
+# We only need read access; the Discord post goes via webhook URL secret.
+permissions:
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify:
+    # state_reason "completed" covers both "closed via PR" and manual completion.
+    # We further require an actual merged PR link below; "not planned" closures
+    # carry state_reason=not_planned and stop here.
+    if: github.event.issue.state_reason == 'completed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the merged PR that closed this issue
+        id: find-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+
+            // Pull the issue timeline and look for a "closed" event whose
+            // `commit_id` belongs to a merged PR, OR a "cross-referenced" event
+            // from a PR that was later merged. The simplest reliable signal is
+            // the closed_by association GitHub adds when "Fixes #N" merges.
+            const timeline = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              }
+            );
+
+            // Walk events backwards: the most recent "closed" with a source PR
+            // is the one we want.
+            let resolvingPr = null;
+            for (let i = timeline.length - 1; i >= 0; i--) {
+              const ev = timeline[i];
+              if (ev.event === 'closed' && ev.commit_id) {
+                // Closed by a commit — find the PR that contains that commit.
+                try {
+                  const { data: prs } =
+                    await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      commit_sha: ev.commit_id,
+                    });
+                  const merged = prs.find((p) => p.merged_at);
+                  if (merged) {
+                    resolvingPr = merged;
+                    break;
+                  }
+                } catch (e) {
+                  core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`);
+                }
+              }
+              // "cross-referenced" from a PR with closing keyword.
+              if (ev.event === 'cross-referenced' && ev.source?.issue?.pull_request) {
+                const prNum = ev.source.issue.number;
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNum,
+                });
+                if (pr.merged_at) {
+                  resolvingPr = pr;
+                  break;
+                }
+              }
+            }
+
+            if (!resolvingPr) {
+              core.info('No merged PR associated with this close — skipping Discord post.');
+              core.setOutput('skip', 'true');
+              return;
+            }
+
+            // Truncate body for the embed (Discord embed description max ~4096,
+            // but readable cards stay under ~400 chars).
+            const rawBody = (issue.body || '').trim();
+            const bodyExcerpt = rawBody.length > 380
+              ? rawBody.slice(0, 380).trim() + '…'
+              : rawBody || '_(no description)_';
+
+            core.setOutput('skip', 'false');
+            core.setOutput('issue_number', String(issue.number));
+            core.setOutput('issue_title', issue.title);
+            core.setOutput('issue_url', issue.html_url);
+            core.setOutput('issue_author', issue.user.login);
+            core.setOutput('issue_author_url', issue.user.html_url);
+            core.setOutput('issue_author_avatar', issue.user.avatar_url);
+            core.setOutput('issue_body', bodyExcerpt);
+            core.setOutput('pr_number', String(resolvingPr.number));
+            core.setOutput('pr_title', resolvingPr.title);
+            core.setOutput('pr_url', resolvingPr.html_url);
+            core.setOutput('pr_merger', resolvingPr.merged_by?.login || resolvingPr.user.login);
+            core.setOutput('pr_merger_url',
+              resolvingPr.merged_by?.html_url || resolvingPr.user.html_url);
+            core.setOutput('repo_full_name', `${context.repo.owner}/${context.repo.repo}`);
+
+      - name: Post embed to Discord
+        if: steps.find-pr.outputs.skip == 'false'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RESOLVED_WEBHOOK }}
+          ISSUE_NUMBER: ${{ steps.find-pr.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.find-pr.outputs.issue_title }}
+          ISSUE_URL: ${{ steps.find-pr.outputs.issue_url }}
+          ISSUE_AUTHOR: ${{ steps.find-pr.outputs.issue_author }}
+          ISSUE_AUTHOR_URL: ${{ steps.find-pr.outputs.issue_author_url }}
+          ISSUE_AUTHOR_AVATAR: ${{ steps.find-pr.outputs.issue_author_avatar }}
+          ISSUE_BODY: ${{ steps.find-pr.outputs.issue_body }}
+          PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
+          PR_TITLE: ${{ steps.find-pr.outputs.pr_title }}
+          PR_URL: ${{ steps.find-pr.outputs.pr_url }}
+          PR_MERGER: ${{ steps.find-pr.outputs.pr_merger }}
+          PR_MERGER_URL: ${{ steps.find-pr.outputs.pr_merger_url }}
+          REPO_FULL_NAME: ${{ steps.find-pr.outputs.repo_full_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "DISCORD_RESOLVED_WEBHOOK secret not configured — aborting."
+            exit 1
+          fi
+
+          # Build embed JSON via jq so all fields are correctly escaped.
+          # Color 0x2da44e is GitHub's "merged purple" alternative — green for "resolved".
+          payload=$(jq -n \
+            --arg title "✅ #${ISSUE_NUMBER}: ${ISSUE_TITLE}" \
+            --arg url "$ISSUE_URL" \
+            --arg desc "$ISSUE_BODY" \
+            --arg author_name "$ISSUE_AUTHOR" \
+            --arg author_url "$ISSUE_AUTHOR_URL" \
+            --arg author_icon "$ISSUE_AUTHOR_AVATAR" \
+            --arg pr_field "[#${PR_NUMBER} ${PR_TITLE}](${PR_URL})" \
+            --arg merger_field "[@${PR_MERGER}](${PR_MERGER_URL})" \
+            --arg footer "$REPO_FULL_NAME" \
+            '{
+              username: "Issue Resolver",
+              avatar_url: "https://github.githubassets.com/images/modules/logos_page/Octocat.png",
+              embeds: [
+                {
+                  title: $title,
+                  url: $url,
+                  description: $desc,
+                  color: 3066993,
+                  author: {
+                    name: ("Reported by @" + $author_name),
+                    url: $author_url,
+                    icon_url: $author_icon
+                  },
+                  fields: [
+                    { name: "Resolved by PR", value: $pr_field, inline: false },
+                    { name: "Merged by",      value: $merger_field, inline: true }
+                  ],
+                  footer: { text: $footer },
+                  timestamp: now | todateiso8601
+                }
+              ]
+            }')
+
+          # POST. Discord returns 204 on success.
+          status=$(curl -sS -o /tmp/resp -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -X POST "$WEBHOOK" \
+            -d "$payload")
+
+          if [ "$status" != "204" ]; then
+            echo "Discord webhook returned HTTP $status:"
+            cat /tmp/resp
+            exit 1
+          fi
+          echo "Discord post OK."
