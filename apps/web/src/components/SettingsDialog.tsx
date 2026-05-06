@@ -49,7 +49,7 @@ interface Props {
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   initialSection?: SettingsSection;
-  onSave: (cfg: AppConfig) => void;
+  onSave: (cfg: AppConfig, closeModal?: boolean) => Promise<{ success: boolean }> | void;
   onClose: () => void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
@@ -1162,7 +1162,7 @@ export function SettingsDialog({
             type="button"
             className="primary"
             disabled={!canSave}
-            onClick={() => onSave(cfg)}
+            onClick={() => onSave(cfg, activeSection !== 'composio')}
           >
             {welcome ? t('settings.getStarted') : t('common.save')}
           </button>
