@@ -182,4 +182,79 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain(baseSummary.prompt);
     expect(out).not.toContain('Source:');
   });
+
+  it('adds a Codex-only built-in imagegen override for gpt-image image projects', () => {
+    const out = composeSystemPrompt({
+      agentId: 'codex',
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary },
+      },
+    });
+
+    const mediaContractIdx = out.indexOf('## Media generation contract');
+    const codexOverrideIdx = out.indexOf('## Codex built-in imagegen override');
+    expect(mediaContractIdx).toBeGreaterThan(-1);
+    expect(codexOverrideIdx).toBeGreaterThan(mediaContractIdx);
+    expect(out).toContain('use Codex\'s built-in image generation capability');
+    expect(out).toContain('intentional exception to the media generation contract');
+    expect(out).toContain('Do not require, request, or mention `OPENAI_API_KEY`');
+    expect(out).toContain('`$imagegen` system skill / built-in');
+    expect(out).toContain('$OD_PROJECT_DIR');
+    expect(out).toContain('ask the user for one-time confirmation');
+    expect(out).toContain('"$OD_NODE_BIN" "$OD_BIN"');
+    expect(out).toContain('media generate --surface image --model gpt-image-2');
+    expect(out).toContain('Do not silently fall');
+  });
+
+  it('keeps non-Codex image projects on the daemon media dispatcher contract', () => {
+    const out = composeSystemPrompt({
+      agentId: 'claude',
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary },
+      },
+    });
+
+    expect(out).toContain('## Media generation contract');
+    expect(out).toContain(
+      '"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>',
+    );
+    expect(out).not.toContain('Do not require, request, or mention `OPENAI_API_KEY`');
+    expect(out).not.toContain('## Codex built-in imagegen override');
+  });
+
+  it('normalizes Codex agent selection before applying the imagegen override', () => {
+    const out = composeSystemPrompt({
+      agentId: '  CoDeX  ',
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary },
+      },
+    });
+
+    expect(out).toContain('## Codex built-in imagegen override');
+    expect(out).toContain('use Codex\'s built-in image generation capability');
+  });
+
+  it('does not add the Codex imagegen override for non-gpt-image models', () => {
+    const out = composeSystemPrompt({
+      agentId: 'codex',
+      metadata: {
+        kind: 'image',
+        imageModel: 'grok-imagine-image',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary, model: 'grok-imagine-image' },
+      },
+    });
+
+    expect(out).toContain('## Media generation contract');
+    expect(out).not.toContain('## Codex built-in imagegen override');
+  });
 });

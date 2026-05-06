@@ -76,6 +76,7 @@ type ProjectTemplate = { name: string; description?: string | null; files: Array
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
 export interface ComposeInput {
+  agentId?: string | null | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -108,6 +109,7 @@ export interface ComposeInput {
 }
 
 export function composeSystemPrompt({
+  agentId,
   skillBody,
   skillName,
   skillMode,
@@ -188,7 +190,60 @@ export function composeSystemPrompt({
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
+  const codexImagegenOverride = renderCodexImagegenOverride(agentId, metadata);
+  if (codexImagegenOverride) {
+    parts.push(codexImagegenOverride);
+  }
+
   return parts.join('');
+}
+
+function renderCodexImagegenOverride(
+  agentId: string | null | undefined,
+  metadata: ProjectMetadata | undefined,
+): string {
+  const normalizedAgentId =
+    typeof agentId === 'string' ? agentId.trim().toLowerCase() : '';
+  const imageModel =
+    typeof metadata?.imageModel === 'string' ? metadata.imageModel.trim() : '';
+  if (
+    normalizedAgentId !== 'codex' ||
+    metadata?.kind !== 'image' ||
+    !imageModel.startsWith('gpt-image-')
+  ) {
+    return '';
+  }
+
+  return `
+
+---
+
+## Codex built-in imagegen override (load-bearing — Codex only)
+
+The active agent is Codex and this image project selected \`${imageModel}\`.
+For this specific case, use Codex's built-in image generation capability
+instead of \`"$OD_NODE_BIN" "$OD_BIN" media generate\` for the first generation
+attempt. This is an intentional exception to the media generation contract and
+the active image skill's dispatcher wording.
+
+Do not require, request, or mention \`OPENAI_API_KEY\` before trying the
+built-in path. Reuse the project metadata, reference prompt template, aspect
+ratio, style notes, and the user's current brief to form the final image
+prompt. Generate the image with Codex built-in imagegen, then move or copy the
+selected output from the installed \`$imagegen\` system skill / built-in
+\`image_gen\` tool at
+\`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\`
+into \`$OD_PROJECT_DIR\` with a short descriptive filename. Never leave a
+project-referenced asset only under \`$CODEX_HOME\`.
+
+After copying the file into \`$OD_PROJECT_DIR\`, reply with the project-local
+filename and a short summary of the prompt used. Do not emit an \`<artifact>\`
+block for media.
+
+If Codex built-in imagegen is unavailable or fails, surface the actual failure
+message and ask the user for one-time confirmation before falling back to the
+existing OpenAI/Azure API-key provider path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
+Do not silently fall back.`;
 }
 
 function renderMetadataBlock(

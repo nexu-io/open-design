@@ -3238,6 +3238,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   };
 
   const composeDaemonSystemPrompt = async ({
+    agentId,
     projectId,
     skillId,
     designSystemId,
@@ -3301,6 +3302,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : undefined;
 
     const prompt = composeSystemPrompt({
+      agentId,
       skillBody,
       skillName,
       skillMode,
@@ -3461,6 +3463,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
     const { prompt: daemonSystemPrompt, activeSkillDir } =
       await composeDaemonSystemPrompt({
+        agentId,
         projectId,
         skillId,
         designSystemId,
