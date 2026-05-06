@@ -13,6 +13,8 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../..');
 const skillsRoot = path.join(repoRoot, 'skills');
 const liveArtifactRoot = path.join(skillsRoot, 'live-artifact');
+const alipayMerchantOnboardingRoot = path.join(skillsRoot, 'alipay-merchant-onboarding');
+
 
 function fresh(): string {
   return mkdtempSync(path.join(tmpdir(), 'od-skills-'));
@@ -72,6 +74,27 @@ describe('listSkills', () => {
     expect(skill.body).toContain('notion.notion_search');
     expect(skill.body).toContain('`OD_DAEMON_URL`');
     expect(skill.body).toContain('`OD_TOOL_TOKEN`');
+  });
+
+  it('includes the built-in alipay-merchant-onboarding skill catalog entry', async () => {
+    const skills = await listSkills(skillsRoot);
+    const skill = skills.find((entry: { id: string }) => entry.id === 'alipay-merchant-onboarding');
+
+    expect(skill).toBeTruthy();
+    expect(skill).toMatchObject({
+      id: 'alipay-merchant-onboarding',
+      name: 'alipay-merchant-onboarding',
+      mode: 'prototype',
+      previewType: 'markdown',
+    });
+    expect(skill.triggers.length).toBeGreaterThan(0);
+    expect(skill.body).toContain(`> **Skill root (absolute fallback):** \`${alipayMerchantOnboardingRoot}\``);
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/alipay-merchant-onboarding/`);
+    expect(skill.body).toContain('references/products.md');
+    expect(skill.body).toContain('references/flow.md');
+    expect(skill.body).toContain('references/authorization.md');
+    expect(skill.body).toContain('references/mcp-methods.md');
+    expect(skill.body).toContain('references/subskills.md');
   });
 });
 
