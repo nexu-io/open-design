@@ -314,15 +314,17 @@ export function attachAcpSession({
       // After response completion, any late-arriving errors from the agent
       // (pipe-broken, cleanup race conditions, etc.) are safe to ignore.
       if (finished) return;
-      // JSON-RPC -32603 "Internal error" handling:
-      // Unexpected-id -32603 errors are cleanup noise — suppress them.
+      // JSON-RPC -32603 "Internal error" and -32602 "Invalid params" handling:
+      // Unexpected-id errors are cleanup noise — suppress them.
       // Expected-id -32603 errors for session/set_model fall through to the
       // recovery block below. All other expected-id -32603 errors (initialize,
       // session/new, session/prompt) are real failures — call fail().
-      if (raw.error?.code === -32603 && raw.id !== expectedId) {
+      // Expected-id -32602 errors for session/set_model are treated as "method
+      // not supported / params rejected" and also fall through to recovery.
+      if ((raw.error?.code === -32603 || raw.error?.code === -32602) && raw.id !== expectedId) {
         return;
       }
-      if (raw.error?.code === -32603 && raw.id === expectedId) {
+      if ((raw.error?.code === -32603 || raw.error?.code === -32602) && raw.id === expectedId) {
         if (raw.id === setModelRequestId) {
           // Fall through — the recovery block will handle this
         } else {
@@ -368,12 +370,12 @@ export function attachAcpSession({
       }
       return;
     }
-    // Recovery: if session/set_model failed with -32603, fall back to
+    // Recovery: if session/set_model failed with -32603 or -32602, fall back to
     // sending the prompt with the default (already-active) model.
     // This is scoped to the exact set_model request id to avoid
     // triggering on prompt or other request failures.
     if (
-      raw.error?.code === -32603 &&
+      (raw.error?.code === -32603 || raw.error?.code === -32602) &&
       raw.id === setModelRequestId &&
       promptRequestId === null
     ) {
