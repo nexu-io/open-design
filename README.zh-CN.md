@@ -24,10 +24,10 @@
   <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#内置-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-加入-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
+  <a href="QUICKSTART.zh-CN.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -321,7 +321,7 @@ pnpm tools-dev run web
 
 环境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可选辅助工具，不是项目必需步骤；如果使用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再运行 `pnpm install`。
 
-桌面端/后台启动、固定端口重启，以及 media 生成派发器检查（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）见 [`QUICKSTART.md`](QUICKSTART.md)。
+桌面端/后台启动、固定端口重启，以及 media 生成派发器检查（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）见 [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
 
 第一次加载会：
 
@@ -349,7 +349,7 @@ Daemon 在仓库根下维护一个隐藏目录，里面所有内容都已 gitign
 | 完全清空，从零再来 | `pnpm tools-dev stop`，再 `rm -rf .od`，然后重新 `pnpm tools-dev run web` |
 | 换到别的位置 | 暂不支持 —— 路径是相对仓库根写死的 |
 
-完整文件地图、脚本、排错 → [`QUICKSTART.md`](QUICKSTART.md)。
+完整文件地图、脚本、排错 → [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
 
 ## 仓库结构
 
