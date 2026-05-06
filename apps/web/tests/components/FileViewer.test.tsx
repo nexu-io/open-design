@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { saveTemplateMock } = vi.hoisted(() => ({
   saveTemplateMock: vi.fn(),
@@ -24,6 +24,8 @@ import {
   SvgViewer,
 } from '../../src/components/FileViewer';
 import type { LiveArtifact, ProjectFile } from '../../src/types';
+
+afterEach(() => cleanup());
 
 function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
   return {
@@ -180,6 +182,36 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(markup).toContain('data-od-render-mode="srcdoc"');
     expect(markup).not.toContain('data-od-render-mode="url-load"');
+  });
+
+  it('shows both Vercel and Cloudflare Pages deploy entries in the share menu', () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeTruthy();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {

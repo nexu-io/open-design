@@ -2778,13 +2778,13 @@ function HtmlViewer({
     }
   }
 
-  async function openDeployModal() {
+  async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
     setShareMenuOpen(false);
     setDeployModalOpen(true);
     setDeployError(null);
     setCopiedDeployLink(false);
     setDeployPhase('idle');
-    await loadDeployProvider(deployProviderId, { fallbackToExisting: true });
+    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
@@ -2977,9 +2977,15 @@ function HtmlViewer({
   const activeDeploymentNeedsRetry = activeDeploymentDelayed || activeDeploymentProtected;
   const deployProvider = getDeployProviderOption(deployProviderId);
   const deployProviderLabel = t(deployProvider.labelKey);
-  const deployActionLabel = activeDeployedUrl
-    ? t('fileViewer.redeployToProvider', { provider: deployProviderLabel })
-    : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+  const deployActionLabelFor = (providerId: WebDeployProviderId) => {
+    const option = getDeployProviderOption(providerId);
+    const label = t(option.labelKey);
+    const hasActiveDeploymentForProvider =
+      providerId === deployProviderId && Boolean(activeDeployedUrl);
+    return hasActiveDeploymentForProvider
+      ? t('fileViewer.redeployToProvider', { provider: label })
+      : t('fileViewer.deployToProvider', { provider: label });
+  };
   const deployButtonLabel =
     deployPhase === 'deploying'
       ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
@@ -3300,17 +3306,20 @@ function HtmlViewer({
                     </span>
                   </button>
                   <div className="share-menu-divider" />
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      void openDeployModal();
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
-                    <span>{deployActionLabel}</span>
-                  </button>
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        void openDeployModal(option.id);
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
+                      <span>{deployActionLabelFor(option.id)}</span>
+                    </button>
+                  ))}
                   <button
                     type="button"
                     className="share-menu-item"
