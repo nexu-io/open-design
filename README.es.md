@@ -681,7 +681,7 @@ Todo lo siguiente es el playbook de [`huashu-design`](https://github.com/alchain
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
