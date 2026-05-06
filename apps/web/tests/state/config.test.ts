@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildMediaProvidersForDaemonSave,
   DEFAULT_CONFIG,
   fetchMediaProvidersFromDaemon,
   loadConfig,
@@ -271,6 +272,74 @@ describe('fetchMediaProvidersFromDaemon', () => {
         baseUrl: 'https://daemon.example/v1',
         model: 'gpt-image-1',
       },
+    });
+  });
+});
+
+describe('buildMediaProvidersForDaemonSave', () => {
+  it('preserves a stored key while applying daemon/default non-secret values', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+          },
+        },
+        { force: true },
+      ),
+    ).toEqual({
+      providers: {
+        openai: {
+          preserveApiKey: true,
+          baseUrl: 'https://api.openai.com/v1',
+        },
+      },
+      force: true,
+    });
+  });
+
+  it('keeps an existing stored key when only baseUrl or model changes', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          nanobanana: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '9999',
+            baseUrl: 'https://custom.gateway.example',
+            model: 'gemini-custom',
+          },
+        },
+        {
+          nanobanana: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '9999',
+            baseUrl: 'https://generativelanguage.googleapis.com',
+            model: 'gemini-3.1-flash-image-preview',
+          },
+        },
+      ),
+    ).toEqual({
+      providers: {
+        nanobanana: {
+          preserveApiKey: true,
+          baseUrl: 'https://custom.gateway.example',
+          model: 'gemini-custom',
+        },
+      },
+      force: false,
     });
   });
 });

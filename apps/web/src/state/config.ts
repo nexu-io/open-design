@@ -1,4 +1,5 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
+import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
@@ -286,6 +287,18 @@ interface PublicMediaProviderConfigResponse {
   providers?: Record<string, PublicMediaProviderConfigEntry>;
 }
 
+interface MediaProviderDaemonWriteEntry {
+  apiKey?: string;
+  preserveApiKey?: boolean;
+  baseUrl?: string;
+  model?: string;
+}
+
+interface MediaProviderDaemonWriteRequest {
+  providers: Record<string, MediaProviderDaemonWriteEntry>;
+  force: boolean;
+}
+
 function hasAnyDaemonManagedMediaProvider(
   providers: Record<string, MediaProviderCredentials> | null | undefined,
 ): boolean {
@@ -298,6 +311,42 @@ function hasAnyDaemonManagedMediaProvider(
       || entry?.model?.trim(),
     ),
   );
+}
+
+function defaultBaseUrlForProvider(providerId: string): string {
+  return MEDIA_PROVIDERS.find((provider) => provider.id === providerId)?.defaultBaseUrl ?? '';
+}
+
+export function buildMediaProvidersForDaemonSave(
+  currentProviders: Record<string, MediaProviderCredentials> | undefined,
+  daemonProviders: Record<string, MediaProviderCredentials> | null | undefined,
+  options?: { force?: boolean },
+): MediaProviderDaemonWriteRequest {
+  const providers: Record<string, MediaProviderDaemonWriteEntry> = {};
+  for (const [providerId, currentEntry] of Object.entries(currentProviders ?? {})) {
+    const daemonEntry = daemonProviders?.[providerId];
+    const apiKey = currentEntry?.apiKey?.trim() ?? '';
+    const preserveApiKey = !apiKey && Boolean(
+      currentEntry?.apiKeyConfigured
+      && (daemonEntry?.apiKeyConfigured || daemonEntry?.apiKeyTail?.trim()),
+    );
+    const baseUrl =
+      currentEntry?.baseUrl?.trim()
+      || daemonEntry?.baseUrl?.trim()
+      || defaultBaseUrlForProvider(providerId);
+    const model = currentEntry?.model?.trim() || daemonEntry?.model?.trim() || '';
+    if (!apiKey && !preserveApiKey && !baseUrl && !model) continue;
+    providers[providerId] = {
+      ...(apiKey ? { apiKey } : {}),
+      ...(preserveApiKey ? { preserveApiKey: true } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(model ? { model } : {}),
+    };
+  }
+  return {
+    providers,
+    force: Boolean(options?.force),
+  };
 }
 
 export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['composio'] | null> {
@@ -428,14 +477,22 @@ export function shouldSyncLocalMediaProvidersToDaemon(
 
 export async function syncMediaProvidersToDaemon(
   providers: Record<string, MediaProviderCredentials> | undefined,
-  options?: { force?: boolean },
+  options?: {
+    force?: boolean;
+    daemonProviders?: Record<string, MediaProviderCredentials> | null;
+  },
 ): Promise<void> {
   if (!providers) return;
   try {
+    const payload = buildMediaProvidersForDaemonSave(
+      providers,
+      options?.daemonProviders,
+      { force: options?.force },
+    );
     await fetch('/api/media/config', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ providers, force: Boolean(options?.force) }),
+      body: JSON.stringify(payload),
     });
   } catch {
     // Daemon offline; localStorage keeps the user's copy for the next save.

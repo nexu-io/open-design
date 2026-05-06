@@ -82,6 +82,9 @@ export function App() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+  const [daemonMediaProviders, setDaemonMediaProviders] = useState<
+    AppConfig['mediaProviders'] | null
+  >(null);
   // Goes false once the bootstrap effect has finished its initial round of
   // fetches. The entry view uses this to show shimmer / skeleton states
   // instead of an "empty" page that flickers before data lands.
@@ -163,6 +166,7 @@ export function App() {
       setTemplates(templateList);
       setPromptTemplates(promptTemplateList);
       setAppVersionInfo(versionInfo);
+      setDaemonMediaProviders(daemonMediaProviders);
 
       setConfig((prev) => {
         // Merge daemon-persisted config — daemon values win for the fields
@@ -192,7 +196,9 @@ export function App() {
         }
         saveConfig(next);
         if (alive && migratedLocalMediaProviders && hasAnyConfiguredProvider(next.mediaProviders)) {
-          void syncMediaProvidersToDaemon(next.mediaProviders);
+          void syncMediaProvidersToDaemon(next.mediaProviders, {
+            daemonProviders: daemonMediaProviders,
+          });
         }
         // Migrate localStorage prefs to daemon on first boot with the new
         // endpoint. If daemon already had values the merge above used them;
@@ -267,6 +273,7 @@ export function App() {
     };
     saveConfig(withOnboarding);
     void syncMediaProvidersToDaemon(withOnboarding.mediaProviders, {
+      daemonProviders: daemonMediaProviders,
       force: true,
     });
     void syncConfigToDaemon(withOnboarding);
@@ -275,7 +282,7 @@ export function App() {
     void syncComposioConfigToDaemon(next.composio);
     setConfig(withOnboarding);
     setSettingsOpen(false);
-  }, []);
+  }, [daemonMediaProviders]);
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
