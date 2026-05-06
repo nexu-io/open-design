@@ -312,6 +312,41 @@ export function saveConfig(config: AppConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
 
+export function mergeDaemonConfig(
+  localConfig: AppConfig,
+  daemonConfig: AppConfigPrefs | null,
+): AppConfig {
+  const next = { ...localConfig };
+  if (!daemonConfig) return next;
+
+  if (daemonConfig.onboardingCompleted != null) {
+    next.onboardingCompleted = daemonConfig.onboardingCompleted;
+  }
+  if (daemonConfig.agentId !== undefined) {
+    next.agentId = daemonConfig.agentId;
+  }
+  if (daemonConfig.skillId !== undefined) {
+    next.skillId = daemonConfig.skillId;
+  }
+  if (daemonConfig.designSystemId !== undefined) {
+    next.designSystemId = daemonConfig.designSystemId;
+  }
+  if (daemonConfig.agentModels) {
+    next.agentModels = {
+      ...(next.agentModels ?? {}),
+      ...daemonConfig.agentModels,
+    };
+  }
+  next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
+  if (daemonConfig.disabledSkills !== undefined) {
+    next.disabledSkills = daemonConfig.disabledSkills;
+  }
+  if (daemonConfig.disabledDesignSystems !== undefined) {
+    next.disabledDesignSystems = daemonConfig.disabledDesignSystems;
+  }
+  return next;
+}
+
 export function hasAnyConfiguredProvider(
   providers: Record<string, MediaProviderCredentials> | undefined,
 ): boolean {

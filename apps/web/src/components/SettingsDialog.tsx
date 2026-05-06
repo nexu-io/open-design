@@ -52,8 +52,13 @@ interface Props {
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
   onRefreshAgents: (
-    options?: { throwOnError?: boolean },
+    options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+}
+
+export interface AgentRefreshOptions {
+  throwOnError?: boolean;
+  agentCliEnv?: AppConfig['agentCliEnv'];
 }
 
 const SUGGESTED_MODELS_BY_PROTOCOL = {
@@ -258,6 +263,13 @@ export function updateAgentCliEnvValue(
   };
 }
 
+export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOptions {
+  return {
+    throwOnError: true,
+    agentCliEnv: cfg.agentCliEnv ?? {},
+  };
+}
+
 export function switchApiProtocolConfig(
   config: AppConfig,
   protocol: ApiProtocol,
@@ -370,7 +382,7 @@ export function SettingsDialog({
     setAgentRescanRunning(true);
     setAgentRescanNotice(null);
     try {
-      const refreshed = await onRefreshAgents({ throwOnError: true });
+      const refreshed = await onRefreshAgents(agentRefreshOptionsForConfig(cfg));
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       setAgentRescanNotice({
         kind: 'success',

@@ -205,6 +205,28 @@ describe('app-config', () => {
       });
     });
 
+    it('drops agentCliEnv entries that collide with Object.prototype keys', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          toString: {
+            CODEX_HOME: '~/.codex-prototype',
+          },
+          hasOwnProperty: {
+            CLAUDE_CONFIG_DIR: '~/.claude-prototype',
+          },
+          claude: {
+            CLAUDE_CONFIG_DIR: '~/.claude-2',
+          },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+      });
+    });
+
     it('clears agentCliEnv when null or an empty object is sent', async () => {
       await writeAppConfig(dataDir, {
         agentCliEnv: {

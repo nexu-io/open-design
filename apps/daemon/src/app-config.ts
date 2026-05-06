@@ -46,10 +46,10 @@ function configFile(dataDir: string): string {
 
 const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
 
-const AGENT_CLI_ENV_KEYS: Readonly<Record<string, ReadonlySet<string>>> = {
-  claude: new Set(['CLAUDE_CONFIG_DIR']),
-  codex: new Set(['CODEX_HOME']),
-};
+const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['claude', new Set(['CLAUDE_CONFIG_DIR'])],
+  ['codex', new Set(['CODEX_HOME'])],
+]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -82,7 +82,7 @@ function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
   const result: AgentCliEnvPrefs = Object.create(null);
   for (const [agentId, value] of Object.entries(raw as Record<string, unknown>)) {
     if (agentId === '__proto__' || agentId === 'constructor') continue;
-    const allowed = AGENT_CLI_ENV_KEYS[agentId];
+    const allowed = AGENT_CLI_ENV_KEYS.get(agentId);
     if (!allowed || typeof value !== 'object' || value === null || Array.isArray(value)) {
       continue;
     }

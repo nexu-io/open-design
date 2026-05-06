@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_CONFIG,
   loadConfig,
+  mergeDaemonConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
 } from '../../src/state/config';
@@ -92,6 +93,45 @@ describe('syncConfigToDaemon', () => {
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
         codex: { CODEX_HOME: '~/.codex-alt' },
       },
+    });
+  });
+});
+
+describe('mergeDaemonConfig', () => {
+  it('clears stale local CLI env prefs when the daemon has none', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-old' },
+        },
+      },
+      {
+        agentId: 'codex',
+      },
+    );
+
+    expect(merged.agentId).toBe('codex');
+    expect(merged.agentCliEnv).toEqual({});
+  });
+
+  it('uses daemon CLI env prefs instead of merging with stale local entries', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-old' },
+        },
+      },
+      {
+        agentCliEnv: {
+          codex: { CODEX_HOME: '~/.codex-new' },
+        },
+      },
+    );
+
+    expect(merged.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-new' },
     });
   });
 });

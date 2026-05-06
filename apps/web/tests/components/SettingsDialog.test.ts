@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentRefreshOptionsForConfig,
   isValidApiBaseUrl,
   switchApiProtocolConfig,
   updateAgentCliEnvValue,
@@ -188,6 +189,36 @@ describe('SettingsDialog agent CLI env settings', () => {
 
     expect(next.agentCliEnv).toEqual({
       codex: { CODEX_HOME: '~/.codex-alt' },
+    });
+  });
+
+  it('passes pending CLI env prefs through agent rescan options', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-pending' },
+      },
+    };
+
+    expect(agentRefreshOptionsForConfig(config)).toEqual({
+      throwOnError: true,
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-pending' },
+      },
+    });
+  });
+
+  it('passes an empty CLI env object through agent rescan after fields are cleared', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {},
+    };
+
+    expect(agentRefreshOptionsForConfig(config)).toEqual({
+      throwOnError: true,
+      agentCliEnv: {},
     });
   });
 });
