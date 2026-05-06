@@ -61,12 +61,12 @@ function formatUsage(usage) {
 
 function choosePermissionOutcome(options) {
   const list = Array.isArray(options) ? options : [];
-  const approveForSession = list.find((option) => option?.optionId === 'approve_for_session');
-  if (approveForSession) return 'approve_for_session';
-  const allowAlways = list.find((option) => option?.kind === 'allow_always');
-  if (allowAlways?.optionId) return allowAlways.optionId;
   const allowOnce = list.find((option) => option?.kind === 'allow_once');
   if (allowOnce?.optionId) return allowOnce.optionId;
+  const allowAlways = list.find((option) => option?.kind === 'allow_always');
+  if (allowAlways?.optionId) return allowAlways.optionId;
+  const approveForSession = list.find((option) => option?.optionId === 'approve_for_session');
+  if (approveForSession) return 'approve_for_session';
   return null;
 }
 
@@ -297,6 +297,11 @@ export function attachAcpSession({
       fail(`unhandled ACP permission request: ${JSON.stringify(raw)}`);
       return;
     }
+    send('agent', {
+      type: 'permission_request',
+      optionId,
+      options: raw.params?.options,
+    });
     resetStageTimer('session/request_permission');
     try {
       sendRpcResult(child.stdin, raw.id, {

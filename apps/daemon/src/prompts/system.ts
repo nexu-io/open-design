@@ -73,6 +73,15 @@ type ProjectMetadata = {
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 
+function sanitizePromptField(value: unknown): string {
+  let s = String(value ?? '');
+  s = s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  s = s.replace(/---+/g, '- - -');
+  s = s.replace(/\n#/g, '\n＃');
+  s = s.replace(/`{3,}/g, '``');
+  return s.slice(0, 500);
+}
+
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
 export interface ComposeInput {
@@ -130,14 +139,14 @@ export function composeSystemPrompt({
 
   if (designSystemBody && designSystemBody.trim().length > 0) {
     parts.push(
-      `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${designSystemBody.trim()}`,
+      `\n\n## Active design system${designSystemTitle ? ` — ${sanitizePromptField(designSystemTitle)}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${designSystemBody.trim()}`,
     );
   }
 
   if (craftBody && craftBody.trim().length > 0) {
     const sectionLabel =
       Array.isArray(craftSections) && craftSections.length > 0
-        ? ` — ${craftSections.join(', ')}`
+        ? ` — ${sanitizePromptField(craftSections.join(', '))}`
         : '';
     parts.push(
       `\n\n## Active craft references${sectionLabel}\n\nThe following craft rules are universal — they apply on top of the active design system above, regardless of brand. The DESIGN.md decides *which* tokens to use; craft rules decide *how* to use them. On any conflict between a craft rule and a brand DESIGN.md, the brand wins for token values; craft rules still apply to anything the brand does not override (letter-spacing, accent overuse caps, anti-slop patterns).\n\n${craftBody.trim()}`,
@@ -147,7 +156,7 @@ export function composeSystemPrompt({
   if (skillBody && skillBody.trim().length > 0) {
     const preflight = derivePreflight(skillBody);
     parts.push(
-      `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
+      `\n\n## Active skill${skillName ? ` — ${sanitizePromptField(skillName)}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
   }
 
@@ -202,7 +211,7 @@ function renderMetadataBlock(
     'These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.',
   );
   lines.push('');
-  lines.push(`- **kind**: ${metadata.kind}`);
+  lines.push(`- **kind**: ${sanitizePromptField(metadata.kind)}`);
   if (metadata.intent === 'live-artifact') {
     lines.push(
       '- **intent**: live-artifact — the user chose New live artifact. The first output should be a live artifact/dashboard/report, not a one-off static mockup. Prefer the `live-artifact` skill workflow when available, keep source data compact, and register through the daemon live-artifact tool path once that wrapper/tooling is available.',
@@ -214,7 +223,7 @@ function renderMetadataBlock(
 
   if (metadata.kind === 'prototype') {
     lines.push(
-      `- **fidelity**: ${metadata.fidelity ?? '(unknown — ask: wireframe vs high-fidelity)'}`,
+      `- **fidelity**: ${metadata.fidelity != null ? sanitizePromptField(metadata.fidelity) : '(unknown — ask: wireframe vs high-fidelity)'}`,
     );
   }
   if (metadata.kind === 'deck') {
@@ -232,13 +241,13 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'image') {
     lines.push(
-      `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model to use)'}`,
+      `- **imageModel**: ${metadata.imageModel != null ? sanitizePromptField(metadata.imageModel) : '(unknown — ask: which image model to use)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
+      `- **aspectRatio**: ${metadata.imageAspect != null ? sanitizePromptField(metadata.imageAspect) : '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
     );
     if (metadata.imageStyle) {
-      lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
+      lines.push(`- **styleNotes**: ${sanitizePromptField(metadata.imageStyle)}`);
     }
     if (
       metadata.promptTemplate?.title &&
@@ -254,13 +263,13 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'video') {
     lines.push(
-      `- **videoModel**: ${metadata.videoModel ?? '(unknown — ask: which video model to use)'}`,
+      `- **videoModel**: ${metadata.videoModel != null ? sanitizePromptField(metadata.videoModel) : '(unknown — ask: which video model to use)'}`,
     );
     lines.push(
       `- **lengthSeconds**: ${typeof metadata.videoLength === 'number' ? metadata.videoLength : '(unknown — ask: 3s / 5s / 10s)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown — ask: 16:9, 9:16, 1:1)'}`,
+      `- **aspectRatio**: ${metadata.videoAspect != null ? sanitizePromptField(metadata.videoAspect) : '(unknown — ask: 16:9, 9:16, 1:1)'}`,
     );
     if (
       metadata.promptTemplate?.title &&
@@ -281,16 +290,16 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'audio') {
     lines.push(
-      `- **audioKind**: ${metadata.audioKind ?? '(unknown — ask: music / speech / sfx)'}`,
+      `- **audioKind**: ${metadata.audioKind != null ? sanitizePromptField(metadata.audioKind) : '(unknown — ask: music / speech / sfx)'}`,
     );
     lines.push(
-      `- **audioModel**: ${metadata.audioModel ?? '(unknown — ask: which audio model to use)'}`,
+      `- **audioModel**: ${metadata.audioModel != null ? sanitizePromptField(metadata.audioModel) : '(unknown — ask: which audio model to use)'}`,
     );
     lines.push(
       `- **durationSeconds**: ${typeof metadata.audioDuration === 'number' ? metadata.audioDuration : '(unknown — ask: target duration)'}`,
     );
     if (metadata.voice) {
-      lines.push(`- **voice**: ${metadata.voice}`);
+      lines.push(`- **voice**: ${sanitizePromptField(metadata.voice)}`);
     } else if (metadata.audioKind === 'speech') {
       lines.push('- **voice**: (unknown — ask: voice id / accent / pacing)');
     }
@@ -319,18 +328,18 @@ function renderMetadataBlock(
   ) {
     const tpl = metadata.promptTemplate;
     lines.push('');
-    lines.push(`### Reference prompt template — "${tpl.title ?? 'untitled'}"`);
+    lines.push(`### Reference prompt template — "${sanitizePromptField(tpl.title ?? 'untitled')}"`);
     const meta = [];
-    if (tpl.category) meta.push(`category: ${tpl.category}`);
-    if (tpl.model) meta.push(`suggested model: ${tpl.model}`);
-    if (tpl.aspect) meta.push(`aspect: ${tpl.aspect}`);
+    if (tpl.category) meta.push(`category: ${sanitizePromptField(tpl.category)}`);
+    if (tpl.model) meta.push(`suggested model: ${sanitizePromptField(tpl.model)}`);
+    if (tpl.aspect) meta.push(`aspect: ${sanitizePromptField(tpl.aspect)}`);
     if (Array.isArray(tpl.tags) && tpl.tags.length > 0) {
-      meta.push(`tags: ${tpl.tags.join(', ')}`);
+      meta.push(`tags: ${sanitizePromptField(tpl.tags.join(', '))}`);
     }
     if (meta.length > 0) lines.push(meta.join(' · '));
     if (tpl.summary) {
       lines.push('');
-      lines.push(tpl.summary);
+      lines.push(sanitizePromptField(tpl.summary));
     }
     lines.push('');
     lines.push(
@@ -349,10 +358,10 @@ function renderMetadataBlock(
     lines.push(truncated);
     lines.push('```');
     if (tpl.source) {
-      const author = tpl.source.author ? ` by ${tpl.source.author}` : '';
+      const author = tpl.source.author ? ` by ${sanitizePromptField(tpl.source.author)}` : '';
       lines.push('');
       lines.push(
-        `Source: ${tpl.source.repo}${author} — license ${tpl.source.license ?? 'unspecified'}. Preserve attribution if you echo the template language directly.`,
+        `Source: ${sanitizePromptField(tpl.source.repo)}${author} — license ${tpl.source.license != null ? sanitizePromptField(tpl.source.license) : 'unspecified'}. Preserve attribution if you echo the template language directly.`,
       );
     }
   }
@@ -360,7 +369,7 @@ function renderMetadataBlock(
   if (metadata.kind === 'template' && template && template.files.length > 0) {
     lines.push('');
     lines.push(
-      `### Template reference — "${template.name}"${template.description ? ` (${template.description})` : ''}`,
+      `### Template reference — "${sanitizePromptField(template.name)}"${template.description ? ` (${sanitizePromptField(template.description)})` : ''}`,
     );
     lines.push(
       'These HTML snapshots are what the user wants to start FROM. Read them as a stylistic + structural reference. You may copy structure, palette, typography, and component patterns; you may adapt them to the new brief; do NOT ship them verbatim. The agent should still produce its own artifact, just one that visibly inherits this template\'s design language.',
@@ -373,7 +382,7 @@ function renderMetadataBlock(
           ? `${f.content.slice(0, 12000)}\n<!-- … truncated (${f.content.length - 12000} chars omitted) -->`
           : f.content;
       lines.push('');
-      lines.push(`#### \`${f.name}\``);
+      lines.push(`#### \`${sanitizePromptField(f.name)}\``);
       lines.push('```html');
       lines.push(truncated);
       lines.push('```');

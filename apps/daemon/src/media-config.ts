@@ -35,6 +35,7 @@
 // We DO mask keys when reading via the GET endpoint so the UI doesn't
 // echo secrets back into the DOM.
 
+import fs from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -111,6 +112,9 @@ async function readStored(projectRoot) {
   try {
     const raw = await readFile(configFile(projectRoot), 'utf8');
     const parsed = JSON.parse(raw);
+    // Silently tighten permissions on existing files — no-op on filesystems
+    // that don't support chmod.
+    try { fs.chmodSync(configFile(projectRoot), 0o600); } catch {}
     if (parsed && typeof parsed === 'object' && parsed.providers) {
       return parsed.providers;
     }
@@ -124,7 +128,8 @@ async function readStored(projectRoot) {
 async function writeStored(projectRoot, providers) {
   const file = configFile(projectRoot);
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify({ providers }, null, 2), 'utf8');
+  await writeFile(file, JSON.stringify({ providers }, null, 2), { encoding: 'utf8', mode: 0o600 });
+  try { fs.chmodSync(file, 0o600); } catch {}
 }
 
 function readEnvKey(providerId) {

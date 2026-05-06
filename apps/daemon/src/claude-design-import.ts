@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { validateProjectPath } from './projects.js';
@@ -20,6 +20,10 @@ export async function importClaudeDesignZip(zipPath, projectDir) {
 
   for (const entry of entries) {
     if (entry.isDirectory) continue;
+    const unixType = (entry.externalFileAttributes >>> 16) & 0xF000;
+    if (unixType === 0xA000) {
+      throw new Error(`ZIP archive contains a symlink entry: ${entry.name}`);
+    }
     if (files.length >= MAX_FILES) throw new Error('zip contains too many files');
     const relPath = sanitizeZipPath(entry.name);
     if (entry.uncompressedSize > MAX_FILE_BYTES) {
@@ -40,10 +44,20 @@ export async function importClaudeDesignZip(zipPath, projectDir) {
   if (!entryFile) throw new Error('zip does not contain an HTML file');
 
   await mkdir(projectDir, { recursive: true });
+  const extractedPaths = [];
   for (const f of files) {
     const target = safeJoin(projectDir, f.path);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, f.body);
+    extractedPaths.push(target);
+  }
+
+  for (const writtenPath of extractedPaths) {
+    const st = await lstat(writtenPath);
+    if (st.isSymbolicLink()) {
+      await unlink(writtenPath);
+      throw new Error(`Extracted path is a symlink: ${writtenPath}`);
+    }
   }
 
   return {
@@ -74,6 +88,7 @@ function readCentralDirectory(zip) {
     const nameLen = zip.readUInt16LE(offset + 28);
     const extraLen = zip.readUInt16LE(offset + 30);
     const commentLen = zip.readUInt16LE(offset + 32);
+    const externalFileAttributes = zip.readUInt32LE(offset + 38);
     const localOffset = zip.readUInt32LE(offset + 42);
     const name = zip.slice(offset + 46, offset + 46 + nameLen).toString('utf8');
     if ((flags & 1) !== 0) throw new Error('encrypted zip entries are not supported');
@@ -85,6 +100,7 @@ function readCentralDirectory(zip) {
       method,
       compressedSize,
       uncompressedSize,
+      externalFileAttributes,
       localOffset,
       isDirectory: name.endsWith('/'),
     });

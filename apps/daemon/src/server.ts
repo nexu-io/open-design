@@ -2,7 +2,7 @@
 import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -163,6 +163,9 @@ export function resolveDaemonCliPath(): string {
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+// Generate once per daemon process. Never persisted — restarts require re-auth.
+export const DAEMON_SESSION_TOKEN = randomBytes(32).toString('hex');
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -727,6 +730,15 @@ function requireLocalDaemonRequest(req, res, next) {
   next();
 }
 
+function requireSessionToken(req, res, next) {
+  const token = req.headers['x-od-session-token'];
+  if (typeof token !== 'string' || token !== DAEMON_SESSION_TOKEN) {
+    res.status(401).json({ error: 'invalid session token' });
+    return;
+  }
+  next();
+}
+
 function setLiveArtifactPreviewHeaders(res) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -1108,6 +1120,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
     next();
   });
+
+  // Enforce the session token on all /api routes except the small set of
+  // unauthenticated bootstrap / health-check endpoints that the frontend
+  // needs to call before it has obtained the token.
+  const _SESSION_TOKEN_EXEMPT_RE =
+    /^\/health$|^\/version$|^\/daemon-token$|^\/live-artifacts\/[^/]+\/preview$/;
+  app.use('/api', (req, res, next) => {
+    if (_SESSION_TOKEN_EXEMPT_RE.test(req.path)) return next();
+    requireSessionToken(req, res, next);
+  });
+
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
@@ -1148,6 +1171,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  // Unauthenticated bootstrap endpoint: lets the web frontend retrieve the
+  // session token on first load. Still localhost-restricted via
+  // requireLocalDaemonRequest (IP check), but does not require the token
+  // itself (the frontend doesn't have it yet at this point).
+  app.get('/api/daemon-token', requireLocalDaemonRequest, (req, res) => {
+    res.json({ token: DAEMON_SESSION_TOKEN });
   });
 
   registerConnectorRoutes(app, { sendApiError, authorizeToolRequest, projectsRoot: PROJECTS_DIR, requireLocalDaemonRequest });

@@ -6,6 +6,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readProjectFile, validateProjectPath } from './projects.js';
 
+const DEPLOY_HOOK_ALLOWED_HOSTS = new Set<string>([]);
+
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 
@@ -92,7 +94,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
   const entryBase = path.posix.dirname(entryPath);
   const deployHtml = injectDeployHookScript(
     rewriteEntryHtmlReferences(html, entryBase),
-    options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
+    process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
   );
   const files = new Map();
   files.set('index.html', {
@@ -570,6 +572,7 @@ export function normalizeDeployHookScriptUrl(raw) {
   try {
     const url = new URL(trimmed);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+    if (!DEPLOY_HOOK_ALLOWED_HOSTS.has(url.hostname)) return '';
     return url.toString();
   } catch {
     return '';

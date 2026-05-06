@@ -51,12 +51,12 @@ jobs:
       version_tag: ${{ steps.beta.outputs.version_tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 24
 
@@ -73,17 +73,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288  # v5
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 24
 
@@ -178,7 +178,7 @@ jobs:
           EOF
 
       - name: Upload mac release bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets
@@ -192,17 +192,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288  # v5
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 24
 
@@ -265,7 +265,7 @@ jobs:
           ) | Set-Content -Path (Join-Path $releaseDir "latest.yml")
 
       - name: Upload windows release bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: open-design-beta-win-release-assets
           path: ${{ runner.temp }}/release-assets
@@ -279,17 +279,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288  # v5
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 24
 
@@ -343,7 +343,7 @@ jobs:
           )
 
       - name: Upload linux release bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: open-design-beta-linux-release-assets
           path: ${{ runner.temp }}/release-assets
@@ -373,27 +373,27 @@ jobs:
       ENABLE_LINUX: ${{ inputs.enable_linux }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Download mac release bundle
         if: ${{ inputs.enable_mac }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
 
       - name: Download windows release bundle
         if: ${{ inputs.enable_win }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           name: open-design-beta-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
       - name: Download linux release bundle
         if: ${{ inputs.enable_linux }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           name: open-design-beta-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux

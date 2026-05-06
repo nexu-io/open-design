@@ -14,6 +14,7 @@ import { resolveCodexPetsRoot } from './codex-pets.js';
 
 const PETSHARE_BASE = 'https://ihzwckyzfcuktrljwpha.supabase.co/functions/v1/petshare';
 const HATCHERY_LIST = 'https://j20.nz/hatchery/api/pets.json';
+const MAX_SPRITESHEET_BYTES = 10 * 1024 * 1024; // 10 MiB
 
 export interface SyncOptions {
   // 'petshare' | 'hatchery' | 'all' — controls which catalogs we hit.
@@ -204,6 +205,9 @@ async function writePet(
   const bytes = await downloadBinary(task.spritesheetUrl);
   if (bytes.length < 16) {
     throw new Error(`${task.folder}: spritesheet too small (${bytes.length} bytes)`);
+  }
+  if (bytes.length > MAX_SPRITESHEET_BYTES) {
+    throw new Error(`${task.folder}: spritesheet too large (${bytes.length} bytes)`);
   }
   // Reject HTML error pages dressed as `.webp` so the UI doesn't end up
   // adopting a pet whose sprite is `<!doctype html>`.

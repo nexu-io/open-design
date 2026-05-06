@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub repository metrics
-        uses: lowlighter/metrics@latest
+        uses: lowlighter/metrics@65836723097537a54cd8eb90f61839426b4266b6  # v3.34
         with:
           # Output path; the action opens/updates a PR when this file changes.
           # Requires manual review to merge. If metrics unchanged, no PR is created.

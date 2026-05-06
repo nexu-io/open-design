@@ -1182,18 +1182,46 @@ export function resolveAgentBin(id) {
 // object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
 // would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
 // the child. Iterate keys and compare case-insensitively to close that.
+const SENSITIVE_ENV_PATTERNS = [
+  /^ANTHROPIC_API_KEY$/i,
+  /^OPENAI_API_KEY$/i,
+  /^AZURE_API_KEY$/i,
+  /^AZURE_OPENAI_API_KEY$/i,
+  /^GOOGLE_API_KEY$/i,
+  /^GEMINI_API_KEY$/i,
+  /^GH_TOKEN$/i,
+  /^GITHUB_TOKEN$/i,
+  /^GITLAB_TOKEN$/i,
+  /^AWS_SECRET_ACCESS_KEY$/i,
+  /^AWS_SESSION_TOKEN$/i,
+  /^AWS_ACCESS_KEY_ID$/i,
+  /^NPM_TOKEN$/i,
+  /^VERCEL_TOKEN$/i,
+  /^OD_[A-Z_]*_API_KEY$/i,
+  /^OD_[A-Z_]*_TOKEN$/i,
+];
+
 export function spawnEnvForAgent(agentId, baseEnv) {
   const env = { ...baseEnv };
-  if (agentId !== 'claude') return env;
-  const hasCustomBaseUrl = Object.keys(env).some(
-    (k) =>
-      k.toUpperCase() === 'ANTHROPIC_BASE_URL' &&
-      typeof env[k] === 'string' &&
-      env[k].trim() !== '',
-  );
-  if (hasCustomBaseUrl) return env;
+  // For Claude with a custom base URL, the user is routing to a non-Anthropic
+  // endpoint — preserve ANTHROPIC_API_KEY for authentication against it.
+  if (agentId === 'claude') {
+    const hasCustomBaseUrl = Object.keys(env).some(
+      (k) =>
+        k.toUpperCase() === 'ANTHROPIC_BASE_URL' &&
+        typeof env[k] === 'string' &&
+        env[k].trim() !== '',
+    );
+    if (hasCustomBaseUrl) {
+      for (const key of Object.keys(env)) {
+        if (key.toUpperCase() === 'ANTHROPIC_API_KEY') continue;
+        if (SENSITIVE_ENV_PATTERNS.some((re) => re.test(key))) delete env[key];
+      }
+      return env;
+    }
+  }
   for (const key of Object.keys(env)) {
-    if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
+    if (SENSITIVE_ENV_PATTERNS.some((re) => re.test(key))) delete env[key];
   }
   return env;
 }
