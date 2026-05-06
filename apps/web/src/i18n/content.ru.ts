@@ -320,6 +320,7 @@ export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
   'orbit-gmail',
   'orbit-linear',
   'orbit-notion',
+  'social-media-dashboard',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
@@ -388,6 +389,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'spacious',
   'storytelling',
   'tetris',
+  'totality-festival',
   'vibrant',
   'vintage',
 ] as const;
