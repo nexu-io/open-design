@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { access, chmod, cp, mkdir, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, open, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -1042,6 +1042,219 @@ export type LinuxCleanupResult = {
   skipped: boolean;
   stop: LinuxStopResult;
 };
+
+// --- Headless lifecycle ---
+
+// Paths resolved relative to the assembled app written during `tools-pack linux build`.
+// The headless entry lives at:
+//   <assembledAppRoot>/node_modules/@open-design/packaged/dist/headless.mjs
+// The bundled Node binary lives at:
+//   <namespaceRoot>/resources/open-design/bin/node  (populated by copyResourceTree)
+
+function resolveHeadlessEntryPath(paths: LinuxPaths): string {
+  return join(paths.assembledAppRoot, "node_modules", "@open-design", "packaged", "dist", "headless.mjs");
+}
+
+function resolveHeadlessBundledNodePath(paths: LinuxPaths): string {
+  return join(paths.resourceRoot, "bin", "node");
+}
+
+function headlessLauncherPath(config: ToolPackConfig): string {
+  return join(homedir(), ".local", "bin", `open-design-headless-${sanitizeNamespace(config.namespace)}`);
+}
+
+function headlessLogPath(config: ToolPackConfig): string {
+  return join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log");
+}
+
+export type LinuxHeadlessInstallResult = {
+  launcherPath: string;
+  namespace: string;
+};
+
+export type LinuxHeadlessStartResult = {
+  launcherPath: string;
+  logPath: string;
+  namespace: string;
+  pid: number;
+};
+
+export async function installPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessInstallResult> {
+  const paths = resolveLinuxPaths(config);
+  const entryPath = resolveHeadlessEntryPath(paths);
+  const nodePath = resolveHeadlessBundledNodePath(paths);
+
+  if (!(await pathExists(entryPath))) {
+    throw new Error(
+      `headless entry not found at ${entryPath}; run \`tools-pack linux build\` first`,
+    );
+  }
+  if (!(await pathExists(nodePath))) {
+    throw new Error(
+      `bundled node binary not found at ${nodePath}; run \`tools-pack linux build\` first`,
+    );
+  }
+
+  const launcherPath = headlessLauncherPath(config);
+  await mkdir(dirname(launcherPath), { recursive: true });
+
+  // Write a self-contained launcher script. The namespace is baked in so the
+  // launcher name and the runtime namespace always agree. OD_DATA_DIR and
+  // OD_RESOURCE_ROOT may still be overridden by the caller's environment.
+  const script = [
+    "#!/bin/sh",
+    `# Open Design headless launcher — namespace: ${config.namespace}`,
+    `OD_NAMESPACE=${JSON.stringify(config.namespace)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
+  ].join("\n") + "\n";
+
+  await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
+
+  return { launcherPath, namespace: config.namespace };
+}
+
+export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessStartResult> {
+  const paths = resolveLinuxPaths(config);
+  const entryPath = resolveHeadlessEntryPath(paths);
+  const nodePath = resolveHeadlessBundledNodePath(paths);
+
+  if (!(await pathExists(entryPath))) {
+    throw new Error(
+      `headless entry not found at ${entryPath}; run \`tools-pack linux build\` first`,
+    );
+  }
+
+  const nodeCommand = (await pathExists(nodePath)) ? nodePath : process.execPath;
+  const logPath = headlessLogPath(config);
+  await mkdir(dirname(logPath), { recursive: true });
+  await writeFile(logPath, "", "utf8");
+
+  // Remove stale identity marker from a previous run so waitForMarker below
+  // waits for the newly spawned process.
+  await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+
+  // Open the log file so stdout/stderr from the headless process are captured.
+  const logHandle = await open(logPath, "a");
+  let child: { pid: number };
+  try {
+    child = await spawnBackgroundProcess({
+      args: [entryPath],
+      command: nodeCommand,
+      cwd: dirname(entryPath),
+      env: {
+        ...process.env,
+        // Bake in the namespace so headless uses the same namespace as the
+        // tools-pack config regardless of the caller's environment.
+        OD_NAMESPACE: config.namespace,
+        // Point the headless data root at the tools-pack runtime directory so
+        // the identity marker is written to the path this function polls.
+        // headless.ts computes: join(OD_DATA_DIR, "namespaces") which must
+        // equal config.roots.runtime.namespaceBaseRoot.
+        OD_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
+        OD_RESOURCE_ROOT: paths.resourceRoot,
+      },
+      logFd: logHandle.fd,
+    });
+  } finally {
+    // Close the parent-side handle; the child has already inherited the fd.
+    await logHandle.close().catch(() => undefined);
+  }
+
+  const markerPath = desktopIdentityPath(config);
+  const ready = await waitForMarker(markerPath, 35_000);
+  if (!ready) {
+    await teardownOrphanedStart(child.pid).catch(() => undefined);
+    throw new Error(`headless identity marker not written within 35s at ${markerPath}`);
+  }
+
+  return {
+    launcherPath: headlessLauncherPath(config),
+    logPath,
+    namespace: config.namespace,
+    pid: child.pid,
+  };
+}
+
+export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxStopResult> {
+  const { fallback, marker } = await readDesktopRootIdentityMarker(config);
+
+  if (marker == null) {
+    return {
+      fallback,
+      gracefulRequested: false,
+      namespace: config.namespace,
+      remainingPids: [],
+      status: "not-running",
+      stoppedPids: [],
+    };
+  }
+
+  const snapshots = await listProcessSnapshots();
+  const candidate = snapshots.find((s) => s.pid === marker.pid);
+  if (candidate == null) {
+    return {
+      fallback: { ...fallback, reason: "marker-pid-not-running" },
+      gracefulRequested: false,
+      namespace: config.namespace,
+      remainingPids: [],
+      status: "not-running",
+      stoppedPids: [],
+    };
+  }
+
+  // Validate the stamp. Headless writes source=PACKAGED; skip the AppImage
+  // process-command check used by stopPackedLinuxApp since the headless entry
+  // is a plain Node process, not an AppImage.
+  const expectedIpc = resolveAppIpcPath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: config.namespace,
+  });
+  const stampOk =
+    marker.stamp.app === APP_KEYS.DESKTOP &&
+    marker.stamp.mode === SIDECAR_MODES.RUNTIME &&
+    marker.stamp.namespace === config.namespace &&
+    marker.stamp.ipc === expectedIpc &&
+    marker.stamp.source === SIDECAR_SOURCES.PACKAGED;
+
+  if (!stampOk || marker.namespaceRoot !== config.roots.runtime.namespaceRoot) {
+    return {
+      fallback: {
+        ...fallback,
+        marker: { pid: marker.pid, stamp: marker.stamp },
+        processCommand: candidate.command,
+        reason: "marker-validation-failed",
+      },
+      gracefulRequested: false,
+      namespace: config.namespace,
+      remainingPids: [marker.pid],
+      status: "unmanaged",
+      stoppedPids: [],
+    };
+  }
+
+  let gracefulRequested = false;
+  try {
+    await requestJsonIpc(marker.stamp.ipc, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1500 });
+    gracefulRequested = true;
+  } catch {
+    gracefulRequested = false;
+  }
+
+  const treePids = collectProcessTreePids(snapshots, [marker.pid]);
+  const result = await stopProcesses(treePids);
+
+  if (result.remainingPids.length === 0) {
+    await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+  }
+
+  return {
+    gracefulRequested,
+    namespace: config.namespace,
+    remainingPids: result.remainingPids,
+    status: result.remainingPids.length === 0 ? "stopped" : "partial",
+    stoppedPids: result.stoppedPids,
+  };
+}
 
 export async function cleanupPackedLinuxNamespace(config: ToolPackConfig): Promise<LinuxCleanupResult> {
   const stop = await stopPackedLinuxApp(config);
