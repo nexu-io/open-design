@@ -10,6 +10,8 @@
     "od": "./apps/daemon/dist/cli.js"
   },
   "scripts": {
+    "start": "OD_HOST=0.0.0.0 OD_BIND_HOST=0.0.0.0 pnpm tools-dev start web --prod --daemon-port 7457 --web-port 4200",
+    "stop": "pnpm tools-dev stop",
     "postinstall": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
