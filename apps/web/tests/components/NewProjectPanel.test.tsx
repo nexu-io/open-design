@@ -16,7 +16,10 @@ const skills: SkillSummary[] = [
     mode: 'prototype',
     surface: 'web',
     previewType: 'html',
-    designSystemRequired: false,
+    // The picker is hidden when the tab's default skill opts out of a
+    // design system (designSystemRequired === false), so this fixture
+    // keeps it required to exercise the rendering path the test asserts.
+    designSystemRequired: true,
     defaultFor: ['prototype'],
     triggers: [],
     upstream: null,
