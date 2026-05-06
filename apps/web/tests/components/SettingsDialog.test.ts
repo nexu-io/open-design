@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentRefreshOptionsForConfig,
   canRunProviderConnectionTest,
   isValidApiBaseUrl,
   shouldShowCustomModelInput,
   switchApiProtocolConfig,
   testStatusVariant,
+  updateAgentCliEnvValue,
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
 import type { AppConfig, ConnectionTestResponse } from '../../src/types';
@@ -224,5 +226,81 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
+  });
+});
+
+describe('SettingsDialog agent CLI env settings', () => {
+  it('updates supported per-agent CLI env values without dropping sibling agents', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'claude',
+      'CLAUDE_CONFIG_DIR',
+      '  ~/.claude-2  ',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+      codex: { CODEX_HOME: '~/.codex-alt' },
+    });
+  });
+
+  it('removes empty per-agent CLI env entries', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'claude',
+      'CLAUDE_CONFIG_DIR',
+      '',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-alt' },
+    });
+  });
+
+  it('passes pending CLI env prefs through agent rescan options', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-pending' },
+      },
+    };
+
+    expect(agentRefreshOptionsForConfig(config)).toEqual({
+      throwOnError: true,
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-pending' },
+      },
+    });
+  });
+
+  it('passes an empty CLI env object through agent rescan after fields are cleared', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {},
+    };
+
+    expect(agentRefreshOptionsForConfig(config)).toEqual({
+      throwOnError: true,
+      agentCliEnv: {},
+    });
   });
 });

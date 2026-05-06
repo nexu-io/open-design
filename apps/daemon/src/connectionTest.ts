@@ -1067,6 +1067,16 @@ export async function testAgentConnection(
       shell: false,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
+    childExit = new Promise<AgentChildExit>((resolve) => {
+      child!.once('error', (err) => {
+        childClosed = true;
+        resolve({ kind: 'spawnError', error: err });
+      });
+      child!.once('close', (code, signal) => {
+        childClosed = true;
+        resolve({ kind: 'exit', code, signal });
+      });
+    });
 
     const { acpSession } = attachAgentStreamHandlers(
       def,
@@ -1144,17 +1154,6 @@ export async function testAgentConnection(
       });
       child.stdin.end(SMOKE_PROMPT, 'utf8');
     }
-
-    childExit = new Promise<AgentChildExit>((resolve) => {
-      child!.once('error', (err) => {
-        childClosed = true;
-        resolve({ kind: 'spawnError', error: err });
-      });
-      child!.once('close', (code, signal) => {
-        childClosed = true;
-        resolve({ kind: 'exit', code, signal });
-      });
-    });
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
       timer = setTimeout(() => resolve({ kind: 'timeout' }), AGENT_TIMEOUT_MS);
       abortHandler = () => resolve({ kind: 'aborted' });

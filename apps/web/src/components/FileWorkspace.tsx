@@ -43,6 +43,8 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  focusMode?: boolean;
+  onFocusModeChange?: (next: boolean) => void;
 }
 
 interface SketchState {
@@ -71,6 +73,8 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  focusMode = false,
+  onFocusModeChange,
 }: Props) {
   const t = useT();
   // Persisted tabs come from the parent. Active tab can transiently point
@@ -406,49 +410,66 @@ export function FileWorkspace({
 
   return (
     <div className="workspace" data-testid="file-workspace">
-      <div
-        ref={tabsBarRef}
-        className="ws-tabs-bar"
-        role="tablist"
-        aria-label={t('workspace.designFiles')}
-      >
-        <button
-          type="button"
-          className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === DESIGN_FILES_TAB}
-          tabIndex={0}
-          data-testid="design-files-tab"
-          onClick={() => setActiveTab(DESIGN_FILES_TAB)}
-          title={t('workspace.designFiles')}
+      <div className="ws-tabs-shell">
+        <div
+          ref={tabsBarRef}
+          className="ws-tabs-bar"
+          role="tablist"
+          aria-label={t('workspace.designFiles')}
         >
-          <span className="tab-icon" aria-hidden>
-            <Icon name="grid" size={13} />
-          </span>
-          <span className="ws-tab-label">{t('workspace.designFiles')}</span>
-        </button>
-        {tabNames.map((name) => {
-          const sketchEntry = sketches[name];
-          const dirtyMark =
-            sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
-          const isPending = sketchEntry && !sketchEntry.persisted;
-          const onDisk = visibleFiles.find((f) => f.name === name);
-          const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
-          const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
-          return (
-            <Tab
-              key={name}
-              label={`${liveArtifact?.title ?? name}${dirtyMark}`}
-              active={activeTab === name}
-              onActivate={() =>
-                isPending ? activatePending(name) : setPersistedActive(name)
-              }
-              onClose={() => closeTab(name)}
-              kind={kind}
-              liveArtifact={liveArtifact}
-            />
-          );
-        })}
+          <button
+            type="button"
+            className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === DESIGN_FILES_TAB}
+            tabIndex={0}
+            data-testid="design-files-tab"
+            onClick={() => setActiveTab(DESIGN_FILES_TAB)}
+            title={t('workspace.designFiles')}
+          >
+            <span className="tab-icon" aria-hidden>
+              <Icon name="grid" size={13} />
+            </span>
+            <span className="ws-tab-label">{t('workspace.designFiles')}</span>
+          </button>
+          {tabNames.map((name) => {
+            const sketchEntry = sketches[name];
+            const dirtyMark =
+              sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
+            const isPending = sketchEntry && !sketchEntry.persisted;
+            const onDisk = visibleFiles.find((f) => f.name === name);
+            const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
+            const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+            return (
+              <Tab
+                key={name}
+                label={`${liveArtifact?.title ?? name}${dirtyMark}`}
+                active={activeTab === name}
+                onActivate={() =>
+                  isPending ? activatePending(name) : setPersistedActive(name)
+                }
+                onClose={() => closeTab(name)}
+                kind={kind}
+                liveArtifact={liveArtifact}
+              />
+            );
+          })}
+        </div>
+        {onFocusModeChange ? (
+          <div className="ws-tabs-actions">
+            <button
+              type="button"
+              className="ws-focus-toggle"
+              data-testid="workspace-focus-toggle"
+              aria-pressed={focusMode}
+              title={focusMode ? t('workspace.showChat') : t('workspace.focusMode')}
+              onClick={() => onFocusModeChange(!focusMode)}
+            >
+              <Icon name={focusMode ? 'comment' : 'zoom-in'} size={13} />
+              <span>{focusMode ? t('workspace.showChat') : t('workspace.focusMode')}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="ws-body">
         {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
@@ -499,6 +520,7 @@ export function FileWorkspace({
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            onFileSaved={onRefreshFiles}
           />
         ) : (
           <div className="viewer-empty">

@@ -23,6 +23,7 @@ import {
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
+  mergeDaemonConfig,
   saveConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
@@ -159,36 +160,9 @@ export function App() {
       setAppVersionInfo(versionInfo);
 
       setConfig((prev) => {
-        const next = { ...prev };
-
         // Merge daemon-persisted config — daemon values win for the fields
         // it tracks so that the choice survives origin/storage resets.
-        if (daemonConfig) {
-          if (daemonConfig.onboardingCompleted != null) {
-            next.onboardingCompleted = daemonConfig.onboardingCompleted;
-          }
-          if (daemonConfig.agentId !== undefined) {
-            next.agentId = daemonConfig.agentId;
-          }
-          if (daemonConfig.skillId !== undefined) {
-            next.skillId = daemonConfig.skillId;
-          }
-          if (daemonConfig.designSystemId !== undefined) {
-            next.designSystemId = daemonConfig.designSystemId;
-          }
-          if (daemonConfig.agentModels) {
-            next.agentModels = {
-              ...(next.agentModels ?? {}),
-              ...daemonConfig.agentModels,
-            };
-          }
-          if (daemonConfig.disabledSkills !== undefined) {
-            next.disabledSkills = daemonConfig.disabledSkills;
-          }
-          if (daemonConfig.disabledDesignSystems !== undefined) {
-            next.disabledDesignSystems = daemonConfig.disabledDesignSystems;
-          }
-        }
+        const next = mergeDaemonConfig(prev, daemonConfig);
 
         if (alive) {
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
@@ -337,12 +311,18 @@ export function App() {
   );
 
   const refreshAgents = useCallback(
-    async (options?: { throwOnError?: boolean }) => {
-      const next = await fetchAgents(options);
+    async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
+      if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
+        const nextConfig = { ...config, agentCliEnv: options.agentCliEnv ?? {} };
+        saveConfig(nextConfig);
+        await syncConfigToDaemon(nextConfig);
+        setConfig(nextConfig);
+      }
+      const next = await fetchAgents({ throwOnError: options?.throwOnError });
       setAgents(next);
       return next;
     },
-    [],
+    [config],
   );
 
   const handleCreateProject = useCallback(

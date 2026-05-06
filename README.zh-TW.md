@@ -349,6 +349,74 @@ Daemon 在倉庫根下維護一個隱藏目錄，裡面所有內容都已 gitign
 
 完整檔案地圖、指令碼、排錯 → [`QUICKSTART.md`](QUICKSTART.md)。
 
+## 跑專案
+
+Open Design 可以跑成瀏覽器裡的 web app，也可以跑成 Electron 桌面版。兩種模式共用同一套本機 daemon + web 架構。
+
+### Web / Localhost（預設）
+
+```bash
+# 前景模式 —— 生命週期指令在前景跑（log 寫進檔案）
+pnpm tools-dev run web
+
+# 看最近的 log：
+pnpm tools-dev logs
+
+# 背景模式 —— daemon + web 跑成背景行程
+pnpm tools-dev start web
+```
+
+預設 `tools-dev` 會綁到可用的暫時埠號，啟動時把實際 URL 印出來。要在停止狀態下用固定埠：
+
+```bash
+pnpm tools-dev run web --daemon-port 17456 --web-port 17573
+```
+
+如果 daemon / web 已經在跑，用 `restart` 在現有 session 裡換埠：
+
+```bash
+pnpm tools-dev restart --daemon-port 17456 --web-port 17573
+```
+
+### Desktop / Electron
+
+```bash
+# 在背景啟動 daemon + web + desktop
+pnpm tools-dev
+
+# 看桌面版狀態
+pnpm tools-dev inspect desktop status
+
+# 對桌面版截圖
+pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
+```
+
+桌面版透過 sidecar IPC 自動探得 web URL —— 不用猜埠。
+
+### 其他常用指令
+
+| 指令 | 用途 |
+|---|---|
+| `pnpm tools-dev status` | 顯示 sidecar 執行狀態 |
+| `pnpm tools-dev logs` | 看 daemon / web / desktop 的 log 尾端 |
+| `pnpm tools-dev stop` | 停掉所有 sidecar |
+| `pnpm tools-dev restart` | 全部停掉再重啟 |
+| `pnpm tools-dev check` | 狀態 + 最近 log + 常見診斷 |
+
+固定埠重啟、背景啟動、完整排錯 → [`QUICKSTART.md`](QUICKSTART.md)。
+
+## 從 coding agent 端使用 Open Design
+
+Open Design 內建一個 stdio MCP server。把它接進 Claude Code、Codex、Cursor、VS Code、Antigravity、Zed、Windsurf，或任何相容 MCP 的 client，另一個 repo 裡的 agent 就能直接讀取你本機 Open Design 專案裡的檔案。整個 export-then-attach 迴圈被取代掉。當 agent 呼叫 `search_files`、`get_file`、`get_artifact` 沒帶 project 參數時，MCP 預設指向你 Open Design 當下開著的那個專案（與檔案）—— 所以 *「在我的 app 裡蓋這個」*、*「對齊這套樣式」* 這類提示直接就能用。
+
+**為什麼選 MCP？** 每改一版設計就匯出再重附 zip，會打斷節奏。MCP server 把你的設計原始碼直接暴露成結構化 API —— 設計 token CSS、JSX 元件、入口 HTML —— agent 可以照名字查詢。Agent 永遠看到的是當下這版檔案，不是上次匯出時的舊版。
+
+在 Open Design app 裡打開 **Settings → MCP server** 就有逐 client 的安裝流程。面板會把 `node` 二進位的絕對路徑、daemon 編好的 `cli.js` 路徑，烘進每段 snippet —— 所以即使是剛 clone 下來、`od` 不在 PATH 上的環境也能用。Cursor 給一鍵 deeplink；其它 client 給可貼上的 JSON snippet（Claude Code 還附帶 `claude mcp add-json` 一行指令，不必手改 `~/.claude.json`）。裝完之後重啟或 reload 你的 client，server 才會出現。
+
+MCP 工具呼叫成功的前提是 daemon 在本機跑著。如果 agent 是在 Open Design 起來之前就啟動，等 OD 起來後請重啟 agent，它才連得上活的 daemon。Daemon 不在線時的工具呼叫會回 `"daemon not reachable"` 的明確錯誤，不會 crash。
+
+**安全性。** MCP server 是唯讀的 —— 它只暴露檔案讀取、檔案 metadata、搜尋，沒有任何寫盤或呼叫外部服務的能力。它在 coding agent 下面以子行程身份透過 stdio 跑；任何你註冊上的 MCP client 都會繼承本機 Open Design 專案的讀取權限。把它當作裝 VS Code 擴充套件那樣對待 —— 只註冊你信得過的 client。Daemon 預設綁到 `127.0.0.1`；要讓區網內的機器也能連，得明確設 `OD_BIND_HOST`。
+
 ## 倉庫結構
 
 ```
@@ -490,6 +558,79 @@ open-design/
 | Soft warm | 大方、低對比、桃色中性 | Notion 營銷頁 · Apple Health |
 
 完整 spec → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
+
+## 媒體生成
+
+OD 不只到程式碼為止。同一套產出 `<artifact>` HTML 的 chat 入口，也驅動**圖像**、**影片**、**音訊**生成 —— 模型 adapter 已經接進 daemon 的 media pipeline（[`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts)、[`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)）。每一次渲染都是真的寫入專案工作區的檔案，`.png` 或 `.mp4` 在 turn 結束時直接以下載 chip 形式出現。
+
+目前主力是三個模型族：
+
+| Surface | 模型 | 提供方 | 用來做什麼 |
+|---|---|---|---|
+| **圖像** | `gpt-image-2` | Azure / OpenAI | 海報、頭像、城市插畫地圖、資訊圖、雜誌風社群卡、老照片修復、產品爆炸圖 |
+| **影片** | `seedance-2.0` | 字節跳動 Volcengine | 15s 電影感 t2v + i2v + 音訊 —— 敘事短片、人物特寫、產品片、MV 編排 |
+| **影片** | `hyperframes-html` | [HeyGen 開源](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖形 —— 產品揭曉、動力學排版、資料圖表、社群覆蓋層、Logo 收尾、TikTok 直式配卡拉 OK 字幕 |
+
+不斷成長的 **prompt gallery** 在 [`prompt-templates/`](prompt-templates/) —— 共 **93 條可一鍵複刻 prompt**：43 條圖像（`prompt-templates/image/*.json`）、39 條 Seedance（`prompt-templates/video/*.json`，不含 `hyperframes-*`）、11 條 HyperFrames（`prompt-templates/video/hyperframes-*.json`）。每一條都帶預覽縮圖、原文 prompt、目標模型、畫面比例，以及一個用來標註授權與作者的 `source` 區塊。daemon 在 `GET /api/prompt-templates` 暴露它們；Web 入口的 **Image templates** / **Video templates** 兩個 tab 把它們渲染成卡片網格，一鍵就把 prompt 拍進 composer，並自動選好對應模型。
+
+### gpt-image-2 —— 圖像樣例（共 43 條，下面 5 張）
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D Stone Staircase Evolution" /><br/><sub><b>3D Stone Staircase Evolution Infographic</b><br/>三段式石材風資訊圖</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated City Food Map" /><br/><sub><b>Illustrated City Food Map</b><br/>編輯級手繪旅行海報</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>電梯場景的單格時尚靜畫</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>頭像 —— 霓虹臉字</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>編輯級攝影棚肖像</sub></td>
+</tr>
+</table>
+
+完整列表 → [`prompt-templates/image/`](prompt-templates/image/)。來源：多數取自 [`YouMind-OpenLab/awesome-gpt-image-prompts`](https://github.com/YouMind-OpenLab/awesome-gpt-image-prompts)（CC-BY-4.0），逐條保留作者署名。
+
+### Seedance 2.0 —— 影片樣例（共 39 條，下面 5 段）
+
+<table>
+<tr>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/thumbnails/thumbnail.jpg" alt="Music Podcast Guitar" /></a><br/><sub><b>Music Podcast & Guitar Technique</b><br/>4K 電影感錄音棚片段</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg" alt="Emotional Face" /></a><br/><sub><b>Emotional Face Close-up</b><br/>電影感微表情研究</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg" alt="Luxury Supercar" /></a><br/><sub><b>Luxury Supercar Cinematic</b><br/>敘事化產品片</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>風格化諷刺短片</sub></td>
+<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad253175a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15s Seedance 2.0 敘事短片</sub></td>
+</tr>
+</table>
+
+點任意縮圖即可播放實際渲染出的 MP4。完整列表 → [`prompt-templates/video/`](prompt-templates/video/)（`*-seedance-*` 與帶 Cinematic 標籤的條目）。來源：[`YouMind-OpenLab/awesome-seedance-2-prompts`](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts)（CC-BY-4.0），保留原推連結與作者 handle。
+
+### HyperFrames —— HTML→MP4 動態圖形（11 條可一鍵複刻樣板）
+
+[**`heygen-com/hyperframes`**](https://github.com/heygen-com/hyperframes) 是 HeyGen 開源的 agent-native 影片框架 —— 你（或 agent）寫 HTML + CSS + GSAP，HyperFrames 透過 headless Chrome + FFmpeg 確定性地渲成 MP4。Open Design 把 HyperFrames 接成一等影片模型（`hyperframes-html`），掛進 daemon dispatch；同時帶上 `skills/hyperframes/` 這個 skill，把 timeline 合約、scene transition 規則、audio-reactive 模式、字幕 / TTS、目錄元件（`npx hyperframes add <slug>`）一起教給 agent。
+
+11 條 HyperFrames prompt 放在 [`prompt-templates/video/hyperframes-*.json`](prompt-templates/video/)，每一條都是產生具體某個原型的明確 brief：
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-product-reveal-minimal.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Product reveal" /></a><br/><sub><b>5s 極簡產品揭曉</b> · 16:9 · 推近標題卡 + shader 轉場</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS promo" /></a><br/><sub><b>30s SaaS 產品片</b> · 16:9 · Linear / ClickUp 風格帶 UI 3D 揭曉</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok karaoke" /></a><br/><sub><b>TikTok 卡拉 OK 口播</b> · 9:16 · TTS + 單字對齊字幕</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Brand sizzle" /></a><br/><sub><b>30s 品牌 sizzle</b> · 16:9 · 節拍同步動力學排版、audio-reactive</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Data chart" /></a><br/><sub><b>動畫 bar-chart race</b> · 16:9 · NYT 風資料資訊圖</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Flight map" /></a><br/><sub><b>航線地圖（起 → 終）</b> · 16:9 · Apple 風電影感路徑揭曉</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo outro" /></a><br/><sub><b>4s 電影感 Logo 收尾</b> · 16:9 · 逐部件拼合 + 光暈</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Money counter" /></a><br/><sub><b>$0 → $10K 數字飆升</b> · 9:16 · Apple 風高燃綠光閃 + 鈔票四濺</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-app-showcase-three-phones.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="App showcase" /></a><br/><sub><b>3 手機 app 展示</b> · 16:9 · 懸浮三屏 + 功能旁注</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-social-overlay-stack.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Social overlay" /></a><br/><sub><b>社群卡疊加</b> · 9:16 · X · Reddit · Spotify · Instagram 依序入畫</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Website to video" /></a><br/><sub><b>網站到影片管線</b> · 16:9 · 抓 3 種視口 + 轉場串聯</sub></td>
+<td width="25%" valign="top">&nbsp;</td>
+</tr>
+</table>
+
+流程跟其它一樣：挑樣板、改 brief、送出。Agent 讀取自帶的 `skills/hyperframes/SKILL.md`（裡面帶 OD 專用的渲染流程 —— composition 原始檔落到 `.hyperframes-cache/`，避免汙染檔案工作區；daemon 替你觸發 `npx hyperframes render`，繞開 macOS sandbox-exec / Puppeteer 卡死；最終只有 `.mp4` 作為專案 chip 出現），寫完 composition、產出 MP4。目錄元件縮圖版權歸 HeyGen，由 HeyGen 的 CDN 提供；OSS 框架本身是 Apache-2.0。
+
+> **已經接好但還沒出 prompt 樣板的：** Kling 2.0 / 1.6 / 1.5、Veo 3 / Veo 2、Sora 2 / Sora 2-Pro（via Fal）、MiniMax video-01 —— 都在 `VIDEO_MODELS`（[`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)）裡。Suno v5 / v4.5、Udio v2、Lyria 2（音樂）和 gpt-4o-mini-tts、MiniMax TTS（語音）覆蓋音訊側。補全這些模型的 prompt 樣板屬於開放貢獻 —— 把 JSON 放進 `prompt-templates/video/` 或 `prompt-templates/audio/`，picker 裡就能直接看到。
 
 ## 聊天迴圈之外，還交付了什麼
 
@@ -656,6 +797,12 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 曲線往上走 —— 那就是我們想看到的訊號。點 ★ 推它一把。
 
+## 致謝 / Credits
+
+[`skills/html-ppt/`](skills/html-ppt/) 主 skill 以及 [`skills/html-ppt-*/`](skills/) 下的逐樣板子 skill —— 含 15 套 full-deck、36 套主題、31 個單頁 layout、27 個 CSS 動畫 + 20 個 canvas FX、鍵盤 runtime 與磁吸卡片演講者模式 —— 整合自開源專案 [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill)（MIT）。原始 LICENSE 保留在 [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE)，原作者歸屬 [@lewislulu](https://github.com/lewislulu)。每張逐樣板的 Examples 卡片（`html-ppt-pitch-deck`、`html-ppt-tech-sharing`、`html-ppt-presenter-mode`、`html-ppt-xhs-post` …）都把 authoring 指南委派給主 skill —— 點 **Use this prompt** 之後，沿用上游同樣的 prompt → 輸出行為。
+
+[`skills/guizang-ppt/`](skills/guizang-ppt/) 雜誌風橫向翻頁 deck 整合自 [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill)（MIT），原作者歸屬 [@op7418](https://github.com/op7418)。
+
 ## License
 
-Apache-2.0。內建的 [`skills/guizang-ppt/`](skills/guizang-ppt/) 保留它原始的 [LICENSE](skills/guizang-ppt/LICENSE)（MIT）和原作者 [op7418](https://github.com/op7418) 的歸屬。
+Apache-2.0。內建的 [`skills/guizang-ppt/`](skills/guizang-ppt/) 保留它原始的 [LICENSE](skills/guizang-ppt/LICENSE)（MIT）和原作者 [op7418](https://github.com/op7418) 的歸屬。內建的 [`skills/html-ppt/`](skills/html-ppt/) 保留它原始的 [LICENSE](skills/html-ppt/LICENSE)（MIT）和原作者 [lewislulu](https://github.com/lewislulu) 的歸屬。

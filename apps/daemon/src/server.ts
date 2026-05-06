@@ -62,7 +62,7 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
-import { readAppConfig, writeAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -1135,7 +1135,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
-  void detectAgents().catch(() => {});
+  void readAppConfig(RUNTIME_DATA_DIR)
+    .then((config) => detectAgents(config.agentCliEnv ?? {}))
+    .catch(() => detectAgents().catch(() => {}));
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -1828,7 +1830,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/agents', async (_req, res) => {
     try {
-      const list = await detectAgents();
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const list = await detectAgents(config.agentCliEnv ?? {});
       res.json({ agents: list });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -3681,6 +3684,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
 
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       revokeToolToken('child_exit');
@@ -3705,6 +3715,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     let child;
     let acpSession = null;
     let jsonStreamFatal = false;
+    let writePromptToChildStdin = false;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -3719,6 +3730,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
             ...(def.env || {}),
           },
+          configuredAgentEnv,
         ),
         ...odMediaEnv,
       };
@@ -3754,7 +3766,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             );
           }
         });
-        child.stdin.end(composed, 'utf8');
+        writePromptToChildStdin = true;
       }
     } catch (err) {
       revokeToolToken('child_exit');
@@ -3927,6 +3939,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : 'failed';
       design.runs.finish(run, status, code, signal);
     });
+    if (writePromptToChildStdin && child.stdin) {
+      child.stdin.end(composed, 'utf8');
+    }
   };
 
   app.post('/api/runs', (req, res) => {
