@@ -437,8 +437,8 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'sleek',
   'spacious',
   'storytelling',
-  'tetris',
   'totality-festival',
+  'tetris',
   'vibrant',
   'vintage',
 ] as const;
