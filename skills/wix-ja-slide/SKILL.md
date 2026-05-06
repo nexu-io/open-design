@@ -170,7 +170,40 @@ AI Step 1.5 出力（QuestionForm として返す）:
 
 `[要◯◯]` は最後の最後。**できるだけ定性表現に逃げる**。
 
-### Step 2: Deck レベル pre-pass（Gap 5 fix: 多頁一致性）
+#### 1.5.4 outline-level 字数 fit 事前評価（Round 15 polish）
+
+Step 9.5 の視覚 self-check で発見した overflow / wrap を round-trip で修正するのはコスト高い（R14 で 6 round、R15 で 5 round。各 round が ~1-2 分）。outline 段階で粗い fit estimate を作って早期に push back することで round 数を 2-3 に削減できる。
+
+各 outline section について以下を計算:
+
+```
+section_body_cells = sum over each line of body content:
+  cells(line) using JP=2 / latin=1 rule
+```
+
+候補 canonical 群（image-marker rule + scenario hint + N-bullet match で絞った後）に対し、各 placeholder 容量と比較:
+
+| canonical | 概算 body 容量（JP cells、verified=false は推定） |
+|---|---|
+| T+3B (P53, verified) | 3 × 17 = 51 cells |
+| T+5B (P42) | 5 × 14 = 70 cells（推定） |
+| T+SUB (P28) | 80 cells（subtitle 単一）|
+| T-LONG (P26) | 180 cells（quote）|
+| T+IMG (P31) | 60 cells（推定）|
+| T+IMG (P83) | 100 cells（paragraph variant）|
+
+`section_body_cells > capacity × 1.15` の場合、**Step 1.5 の Q&A 段階で同時にユーザーに通告**:
+
+```
+[警告] section "<title>" の body 約 <X> cells、選定候補 layout の容量を <Y>% 超過。
+       選択肢:
+         A) body を ~<削減目標> cells に圧縮する（おすすめ）
+         B) layout を T-LONG / T+IMG P83 (paragraph variant) に切り替える
+         C) section を 2 page に分割する
+       どれにしますか?
+```
+
+これは Step 9.5 の視覚 self-check の前段で行う「outline level 圧縮提案」。Round 15 で 4 件の overflow が事前回避できれば 1-2 round 短縮できる見込み。
 
 ページごとに生成する**前に**、deck 全体の方針を決める。これを `deck-plan.md` に書き出す。
 
@@ -526,17 +559,25 @@ outline に書かれていない情報は **絶対に生成しない**。
 
 ### Step 6: 画像処理
 
-> **テスト用 placehold.co URL の扱い（Round 3 ユーザーフィードバック）**: outline 内の image marker が `https://placehold.co/...` のようなプレースホルダー画像生成サービスを指している場合、画像は黒底白字テキストオーバーレイになる（"Wix Japan April 2026" のような）。これは**テスト用の挿入確認**で、最終 deck には不向き。result.json の `userActions` に必ず以下を追加する:
+> **テスト用プレースホルダー画像 URL の扱い（Round 3 + Round 14 ユーザーフィードバック）**: outline 内の image marker が以下のような **プレースホルダー画像サービス** の URL を指している場合、画像は本物の content ではない（テキストオーバーレイ / 風景写真ランダム / 不適切な被写体）。これは**テスト用の挿入確認**で、最終 deck には不向き。
+>
+> 自動検出すべきホスト一覧:
+>
+> - `placehold.co`、`placeholder.com`、`via.placeholder.com`、`dummyimage.com` — テキストオーバーレイ画像
+> - `picsum.photos`、`loremflickr.com`、`unsplash.com/random` — ランダム風景写真（**Round 14 で発見: 同 service の異なる seed が同じ image を返すハッシュ衝突あり**、deck 内で重複画像になる可能性）
+> - `via.placeholder.com`、`fakeimg.pl` — テキスト表示のみ
+>
+> 検出した場合、result.json の `userActions` に必ず以下を追加する:
 >
 > ```
 > "userActions": [
 >   {
 >     "priority": "high",
->     "label": "画像差し替え",
->     "detail": "outline で指定された <N> 個の placehold.co URL は本物の画像ではない。各 image marker を実画像 URL（公司 CDN / GitHub raw / 公開 imgur 等）に書き直して outline を再投入するか、Slides UI で page X / Y / Z の画像を手動差し替え。"
+>     "label": "画像差し替え（プレースホルダー検出）",
+>     "detail": "outline で指定された <N> 個の image marker が プレースホルダーサービス (placehold.co / picsum.photos 等) を指しています。本物の画像ではないため最終 deck では各 image marker を実画像 URL（公司 CDN / GitHub raw / 公開 imgur 等）に書き直して outline を再投入するか、Slides UI で page X / Y / Z の画像を手動差し替え。 picsum 等は**異なる seed でも同じ画像が返ることがあります**ので必ず PDF プレビューで重複も確認。"
 >   }
 > ]
-> ```（Gap 3 fix）
+> ```（Gap 3 fix + Round 14 拡張）
 
 画像対応 layout（`T+IMG`、`COVER?`、`FULL-IMG`、`T+IMG×N`）に対し：
 
