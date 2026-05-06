@@ -214,8 +214,16 @@ export async function streamMessageWithAgentLoop(
       handlers.onToolResult?.({ name: r.name, content: r.content, isError: r.isError });
     }
 
-    // Append tool results to history for the next API round
-    const toolResultXml = formatToolResultsAsXml(results);
+    // Append tool results to history for the next API round.
+    // Cap each result block to prevent binary-file reads or huge stderr
+    // dumps from blowing out the next API call.
+    const MAX_RESULT_CHARS = 50_000;
+    let toolResultXml = formatToolResultsAsXml(results);
+    if (toolResultXml.length > MAX_RESULT_CHARS) {
+      toolResultXml =
+        toolResultXml.slice(0, MAX_RESULT_CHARS) +
+        `\n... (tool result truncated at ${MAX_RESULT_CHARS} / ${toolResultXml.length} chars)`;
+    }
     const toolResultMsg: ChatMessage = {
       id: `tool-result-${round}-${Date.now()}`,
       role: 'user' as const,

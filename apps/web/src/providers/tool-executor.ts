@@ -12,7 +12,17 @@ export interface ToolResult {
 }
 
 const MAX_TOOL_OUTPUT_BYTES = 100_000;
+const MAX_TEXT_FILE_CHARS = 100_000;
 const MAX_LOOP_ROUNDS = 25;
+
+function fmtBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let v = bytes;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
+}
 
 let loopRound = 0;
 export function resetToolLoopCounter(): void {
@@ -37,7 +47,34 @@ async function readFile(
   if (!resp.ok) {
     throw new Error(`Read failed: ${resp.status} ${await resp.text().catch(() => '')}`);
   }
-  return resp.text();
+
+  const contentType = (resp.headers.get('content-type') || '').split(';')[0].trim();
+  const fileSize = Number(resp.headers.get('content-length') || 0);
+  const fileMeta = `[File: ${filePath}  Type: ${contentType}  Size: ${fmtBytes(fileSize)}]`;
+
+  // Only decode text/* and application/json/* as text. Everything else —
+  // PDF, images, office documents, etc. — is binary and must not be
+  // decoded with .text() or it produces megabytes of garbage that will
+  // choke the next API call.
+  const isTextual =
+    contentType.startsWith('text/') ||
+    contentType === 'application/json' ||
+    contentType === 'application/javascript' ||
+    contentType === 'application/xml' ||
+    contentType.endsWith('+json') ||
+    contentType.endsWith('+xml');
+
+  if (isTextual) {
+    const raw = await resp.text();
+    if (raw.length > MAX_TEXT_FILE_CHARS) {
+      return `${fileMeta}\n\n${raw.slice(0, MAX_TEXT_FILE_CHARS)}\n... (truncated, ${fmtBytes(raw.length)} total chars)`;
+    }
+    return `${fileMeta}\n\n${raw}`;
+  }
+
+  // Binary file: return metadata only. The model can use Bash to
+  // extract text from PDF/DOCX if the project has the right tools.
+  return `${fileMeta}\n\nBinary file — content cannot be read as text. Use Bash commands to inspect or extract content (e.g. for PDF try "pdftotext" or "python -c ..."). The file exists and is ${fmtBytes(fileSize)}.`;
 }
 
 async function writeFile(
@@ -118,6 +155,16 @@ export async function executeToolCall(
           : JSON.stringify(call.parameters);
         if (!fp) throw new Error(`${name} requires file_path`);
         content = await writeFile(baseUrl, projectId, fp, ct);
+        break;
+      }
+      case 'ListFiles': {
+        const lfResp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}/files`);
+        if (!lfResp.ok) throw new Error(`ListFiles failed: ${lfResp.status}`);
+        const lfBody = await lfResp.json() as { files?: Array<{ name: string; path?: string; size: number; mime: string; kind: string }> };
+        const lfFiles = lfBody.files ?? [];
+        content = lfFiles.length
+          ? `Files in project:\n${lfFiles.map((f) => `- ${f.name}  ${fmtBytes(f.size)}  ${f.kind}`).join('\n')}`
+          : 'No files in project directory.';
         break;
       }
       case 'Bash': {
