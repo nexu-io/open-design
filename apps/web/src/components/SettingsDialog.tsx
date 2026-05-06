@@ -1196,7 +1196,7 @@ function MediaProvidersSection({
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
           const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
           const disabled = !provider.integrated;
-          const supportsCustomModel = provider.id === 'nanobanana';
+          const supportsCustomModel = provider.supportsCustomModel === true;
           const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>

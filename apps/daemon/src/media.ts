@@ -59,6 +59,8 @@ import {
 
 const execFile = promisify(execFileCb);
 const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+// Verify the current Nano Banana / Gemini image model name against:
+// https://ai.google.dev/gemini-api/docs/models
 const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 

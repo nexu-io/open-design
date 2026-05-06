@@ -62,6 +62,8 @@ export interface MediaProvider {
   defaultBaseUrl?: string;
   /** Documentation URL for getting an API key. */
   docsUrl?: string;
+  /** Whether Settings should expose a custom model override field. */
+  supportsCustomModel?: boolean;
 }
 
 /**
@@ -111,6 +113,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://generativelanguage.googleapis.com',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',
+    supportsCustomModel: true,
   },
   {
     id: 'bfl',
