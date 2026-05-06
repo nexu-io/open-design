@@ -75,6 +75,9 @@ jobs:
       - name: Check repository layout policies
         run: pnpm guard
 
+      - name: Check i18n structure
+        run: pnpm i18n:check
+
       - name: Test
         run: |
           pnpm --filter @open-design/e2e test

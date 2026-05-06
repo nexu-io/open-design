@@ -25,10 +25,10 @@
   <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
+  <a href="QUICKSTART.ja-JP.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -322,7 +322,7 @@ pnpm tools-dev run web
 
 環境要件：Node `~24`、pnpm `10.33.x`。`nvm` / `fnm` はあくまでオプションのヘルパーです。使用する場合は `pnpm install` の前に `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。
 
-デスクトップ / バックグラウンド起動、固定ポート再起動、メディア生成ディスパッチャの確認（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）は [`QUICKSTART.md`](QUICKSTART.md) を参照。
+デスクトップ / バックグラウンド起動、固定ポート再起動、メディア生成ディスパッチャの確認（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）は [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md) を参照。
 
 初回ロード時：
 
@@ -350,7 +350,7 @@ Daemon はリポジトリルートに 1 つの隠しフォルダを管理しま�
 | 完全にリセット | `pnpm tools-dev stop` → `rm -rf .od` → `pnpm tools-dev run web` を再実行 |
 | 別の場所に移動 | 未対応 — パスはリポジトリルートからの相対パスで固定 |
 
-完全なファイルマップ、スクリプト、トラブルシューティング → [`QUICKSTART.md`](QUICKSTART.md)。
+完全なファイルマップ、スクリプト、トラブルシューティング → [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md)。
 
 ## リポジトリ構成
 
@@ -709,7 +709,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
   <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design コントリビューター" />
 </a>
 
-初めての PR を送った方 — ようこそ。[`good-first-issue`](https://github.com/nexu-io/open-design/contribute) ラベルがエントリポイントです。
+初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
 
 ## リポジトリ活動
 

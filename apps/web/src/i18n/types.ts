@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk';
+export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk'];
+export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -19,7 +19,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'pl': 'Polski',
   'hu': 'Magyar',
   'fr': 'Français',
-  'uk': 'Українська'
+  'uk': 'Українська',
+  'tr': 'Türkçe'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -127,6 +128,10 @@ export interface Dict {
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
+  'settings.cliEnvTitle': string;
+  'settings.cliEnvHint': string;
+  'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvCodexHome': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
@@ -468,6 +473,7 @@ export interface Dict {
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
+  'project.resizeChatPanel': string;
   'chat.tabChat': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
@@ -551,6 +557,8 @@ export interface Dict {
   // Workspace / file viewer / design files panel
   'workspace.designFiles': string;
   'workspace.deckPreview': string;
+  'workspace.focusMode': string;
+  'workspace.showChat': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;
   'workspace.openFromDesignFiles': string;
@@ -601,6 +609,12 @@ export interface Dict {
   'designFiles.kindSpreadsheet': string;
   'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
+  'quickSwitcher.placeholder': string;
+  'quickSwitcher.empty': string;
+  'quickSwitcher.noMatches': string;
+  'quickSwitcher.navigate': string;
+  'quickSwitcher.open': string;
+  'quickSwitcher.close': string;
   'pasteDialog.title': string;
   'pasteDialog.hint': string;
   'pasteDialog.fileNameLabel': string;
@@ -658,6 +672,47 @@ export interface Dict {
   'fileViewer.comment': string;
   'fileViewer.edit': string;
   'fileViewer.draw': string;
+  'manualEdit.layers': string;
+  'manualEdit.editableCount': string;
+  'manualEdit.title': string;
+  'manualEdit.selectLayer': string;
+  'manualEdit.empty': string;
+  'manualEdit.noClass': string;
+  'manualEdit.tabsAria': string;
+  'manualEdit.tabContent': string;
+  'manualEdit.tabStyle': string;
+  'manualEdit.tabAttributes': string;
+  'manualEdit.tabHtml': string;
+  'manualEdit.tabSource': string;
+  'manualEdit.attributesJson': string;
+  'manualEdit.selectedHtml': string;
+  'manualEdit.fullSource': string;
+  'manualEdit.applyContent': string;
+  'manualEdit.applyStyle': string;
+  'manualEdit.applyAttributes': string;
+  'manualEdit.applyHtml': string;
+  'manualEdit.applySource': string;
+  'manualEdit.invalidAttributes': string;
+  'manualEdit.changes': string;
+  'manualEdit.undo': string;
+  'manualEdit.redo': string;
+  'manualEdit.noChanges': string;
+  'manualEdit.imageUrl': string;
+  'manualEdit.altText': string;
+  'manualEdit.label': string;
+  'manualEdit.text': string;
+  'manualEdit.href': string;
+  'manualEdit.textColor': string;
+  'manualEdit.background': string;
+  'manualEdit.fontSize': string;
+  'manualEdit.weight': string;
+  'manualEdit.align': string;
+  'manualEdit.padding': string;
+  'manualEdit.margin': string;
+  'manualEdit.radius': string;
+  'manualEdit.border': string;
+  'manualEdit.width': string;
+  'manualEdit.minHeight': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;

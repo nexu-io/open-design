@@ -45,6 +45,7 @@ import {
   LiveArtifactRefreshError,
   refreshLiveArtifact,
   updateDeployConfig,
+  writeProjectTextFile,
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
@@ -87,6 +88,15 @@ import type {
   PreviewCommentMember,
   PreviewCommentTarget,
 } from '../types';
+import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import {
+  applyManualEditPatch,
+  readManualEditAttributes,
+  readManualEditFields,
+  readManualEditOuterHtml,
+  readManualEditStyles,
+} from '../edit-mode/source-patches';
+import type { ManualEditBridgeMessage, ManualEditHistoryEntry, ManualEditPatch, ManualEditTarget } from '../edit-mode/types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
@@ -198,6 +208,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onFileSaved?: () => Promise<void> | void;
 }
 
 export function FileViewer({
@@ -211,6 +222,7 @@ export function FileViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onFileSaved,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -233,6 +245,7 @@ export function FileViewer({
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onFileSaved={onFileSaved}
       />
     );
   }
@@ -2040,6 +2053,7 @@ function HtmlViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onFileSaved,
 }: {
   projectId: string;
   file: ProjectFile;
@@ -2051,6 +2065,7 @@ function HtmlViewer({
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -2079,6 +2094,15 @@ function HtmlViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
+  const [manualEditMode, setManualEditMode] = useState(false);
+  const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
+  const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
+  const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
+  const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
+  const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
+  const [manualEditError, setManualEditError] = useState<string | null>(null);
+  const [manualEditSaving, setManualEditSaving] = useState(false);
+  const manualEditSavingRef = useRef(false);
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -2160,7 +2184,7 @@ function HtmlViewer({
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
-    commentMode: boardMode,
+    commentMode: boardMode || manualEditMode,
     forceInline,
   });
   const previewSrcUrl = useMemo(
@@ -2186,9 +2210,10 @@ function HtmlViewer({
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-      commentBridge: boardMode,
+      commentBridge: boardMode && !manualEditMode,
+      editBridge: manualEditMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode],
   );
 
   useEffect(() => {
@@ -2218,10 +2243,17 @@ function HtmlViewer({
     win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
   }, [boardMode, boardTool, srcDoc]);
 
-  function syncCommentMode() {
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
+  }, [manualEditMode, srcDoc]);
+
+  function syncBridgeModes() {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
+    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
   }
 
   useEffect(() => {
@@ -2231,7 +2263,20 @@ function HtmlViewer({
     setCommentDraft('');
     setQueuedBoardNotes([]);
     setStrokePoints([]);
+    setManualEditTargets([]);
+    setSelectedManualEditTarget(null);
+    setManualEditDraft(emptyManualEditDraft());
+    setManualEditHistory([]);
+    setManualEditUndone([]);
+    setManualEditError(null);
   }, [file.name]);
+
+  useEffect(() => {
+    if (source == null) return;
+    setManualEditDraft((current) => (
+      current.fullSource === source ? current : { ...current, fullSource: source }
+    ));
+  }, [source]);
 
   useEffect(() => {
     if (!boardMode) {
@@ -2350,6 +2395,168 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [boardMode, file.name, previewComments]);
+
+  useEffect(() => {
+    if (!manualEditMode) {
+      setManualEditTargets([]);
+      setSelectedManualEditTarget(null);
+      setManualEditError(null);
+      return;
+    }
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as ManualEditBridgeMessage | null;
+      if (!data?.type) return;
+      if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
+        setManualEditTargets(data.targets);
+        setSelectedManualEditTarget((current) =>
+          current ? data.targets.find((target) => target.id === current.id) ?? null : current,
+        );
+        return;
+      }
+      if (data.type === 'od-edit-select') {
+        selectManualEditTarget(data.target);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [manualEditMode, source]);
+
+  function selectManualEditTarget(target: ManualEditTarget) {
+    const base = source ?? '';
+    const fields = readManualEditFields(base, target.id);
+    setSelectedManualEditTarget(target);
+    setManualEditDraft({
+      text: fields.text ?? target.fields.text ?? target.text,
+      href: fields.href ?? target.fields.href ?? '',
+      src: fields.src ?? target.fields.src ?? '',
+      alt: fields.alt ?? target.fields.alt ?? '',
+      styles: readManualEditStyles(base, target.id),
+      attributesText: JSON.stringify(readManualEditAttributes(base, target.id), null, 2),
+      outerHtml: readManualEditOuterHtml(base, target.id) || target.outerHtml,
+      fullSource: base,
+    });
+    setManualEditError(null);
+  }
+
+  async function applyManualEdit(patch: ManualEditPatch, label: string) {
+    if (manualEditSavingRef.current) return;
+    if (source == null) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    setManualEditError(null);
+    try {
+      const baseSource = source;
+      const result = applyManualEditPatch(baseSource, patch);
+      if (!result.ok) {
+        setManualEditError(result.error ?? 'Could not apply edit.');
+        return;
+      }
+      if (!(await confirmManualEditHistorySource(
+        baseSource,
+        'The file changed outside manual edit mode. Refreshing before applying manual edits.',
+      ))) return;
+      const saved = await writeProjectTextFile(projectId, file.name, result.source, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) {
+        setManualEditError('Could not save the edited file.');
+        return;
+      }
+      const entry: ManualEditHistoryEntry = {
+        id: `${Date.now()}-${manualEditHistory.length}`,
+        label,
+        patch,
+        beforeSource: baseSource,
+        afterSource: result.source,
+        createdAt: Date.now(),
+      };
+      setSource(result.source);
+      setInlinedSource(null);
+      setManualEditHistory((current) => [entry, ...current]);
+      setManualEditUndone([]);
+      setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      await onFileSaved?.();
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+  }
+
+  async function confirmManualEditHistorySource(expectedSource: string, message: string): Promise<boolean> {
+    const persisted = await fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      cacheBustKey: Date.now(),
+    });
+    if (persisted == null || persisted === expectedSource) return true;
+    setSource(persisted);
+    setInlinedSource(null);
+    setManualEditHistory([]);
+    setManualEditUndone([]);
+    setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
+    setManualEditError(message);
+    return false;
+  }
+
+  async function undoManualEdit() {
+    if (manualEditSavingRef.current) return;
+    const [latest, ...rest] = manualEditHistory;
+    if (!latest) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    try {
+      if (!(await confirmManualEditHistorySource(
+        latest.afterSource,
+        'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
+      ))) return;
+      const saved = await writeProjectTextFile(projectId, file.name, latest.beforeSource, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) {
+        setManualEditError('Could not save the undo result.');
+        return;
+      }
+      setSource(latest.beforeSource);
+      setInlinedSource(null);
+      setManualEditHistory(rest);
+      setManualEditUndone((current) => [latest, ...current]);
+      setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
+      await onFileSaved?.();
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+  }
+
+  async function redoManualEdit() {
+    if (manualEditSavingRef.current) return;
+    const [latest, ...rest] = manualEditUndone;
+    if (!latest) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    try {
+      if (!(await confirmManualEditHistorySource(
+        latest.beforeSource,
+        'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
+      ))) return;
+      const saved = await writeProjectTextFile(projectId, file.name, latest.afterSource, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) {
+        setManualEditError('Could not save the redo result.');
+        return;
+      }
+      setSource(latest.afterSource);
+      setInlinedSource(null);
+      setManualEditUndone(rest);
+      setManualEditHistory((current) => [latest, ...current]);
+      setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
+      await onFileSaved?.();
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+  }
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
@@ -2741,6 +2948,7 @@ function HtmlViewer({
                 clearBoardComposer();
                 return;
               }
+              setManualEditMode(false);
               activateBoard(boardTool);
             }}
           >
@@ -2794,6 +3002,24 @@ function HtmlViewer({
               </button>
             </>
           ) : null}
+          <button
+            className={`viewer-action${manualEditMode ? ' active' : ''}`}
+            type="button"
+            data-testid="manual-edit-mode-toggle"
+            title={t('fileViewer.edit')}
+            aria-pressed={manualEditMode}
+            onClick={() => {
+              if (!manualEditMode) {
+                setBoardMode(false);
+                clearBoardComposer();
+                setMode('preview');
+              }
+              setManualEditMode((value) => !value);
+            }}
+          >
+            <Icon name="edit" size={13} />
+            <span>{t('fileViewer.edit')}</span>
+          </button>
           <span className="viewer-divider" aria-hidden />
           <button
             type="button"
@@ -3010,8 +3236,35 @@ function HtmlViewer({
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
-          <div className="comment-preview-layer">
-            <div className="comment-frame-clip">
+          <div className={manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'}>
+            {manualEditMode ? (
+              <ManualEditPanel
+                targets={manualEditTargets}
+                selectedTarget={selectedManualEditTarget}
+                draft={manualEditDraft}
+                history={manualEditHistory}
+                error={manualEditError}
+                canUndo={manualEditHistory.length > 0}
+                canRedo={manualEditUndone.length > 0}
+                busy={manualEditSaving}
+                onSelectTarget={selectManualEditTarget}
+                onDraftChange={setManualEditDraft}
+                onApplyPatch={(patch, label) => {
+                  void applyManualEdit(patch, label);
+                }}
+                onError={setManualEditError}
+                onCancelDraft={() => {
+                  if (selectedManualEditTarget) selectManualEditTarget(selectedManualEditTarget);
+                }}
+                onUndo={() => {
+                  void undoManualEdit();
+                }}
+                onRedo={() => {
+                  void redoManualEdit();
+                }}
+              />
+            ) : null}
+            <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
               <div
                 style={{
                   width: `${100 / previewScale}%`,
@@ -3028,7 +3281,7 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     src={previewSrcUrl}
-                    onLoad={syncCommentMode}
+                    onLoad={syncBridgeModes}
                   />
                 ) : (
                   <iframe
@@ -3038,7 +3291,7 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     srcDoc={srcDoc}
-                    onLoad={syncCommentMode}
+                    onLoad={syncBridgeModes}
                   />
                 )}
               </div>

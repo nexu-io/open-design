@@ -14,11 +14,19 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
+import {
+  buildManualEditBridge,
+  buildManualEditBridgeStyle,
+  MANUAL_EDIT_DISCOVERY_SELECTOR,
+  MANUAL_EDIT_SOURCE_PATH_ATTR,
+} from '../edit-mode/bridge';
+
 export type SrcdocOptions = {
   deck?: boolean;
   baseHref?: string;
   initialSlideIndex?: number;
   commentBridge?: boolean;
+  editBridge?: boolean;
 };
 
 export function buildSrcdoc(
@@ -37,10 +45,60 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withBase = options.baseHref ? injectBaseHref(wrapped, options.baseHref) : wrapped;
+  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(wrapped) : wrapped;
+  const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
-  return options.commentBridge ? injectCommentBridge(withDeck) : withDeck;
+  const withComment = options.commentBridge ? injectCommentBridge(withDeck) : withDeck;
+  return options.editBridge ? injectManualEditBridge(withComment) : withComment;
+}
+
+function annotateManualEditSourcePaths(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  try {
+    const parsed = new DOMParser().parseFromString(doc, 'text/html');
+    parsed.body.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR).forEach((el) => {
+      if (el.hasAttribute('data-od-id')) return;
+      const path = sourcePathForElement(el);
+      if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
+    });
+    return serializeHtmlDocument(parsed);
+  } catch {
+    return doc;
+  }
+}
+
+function sourcePathForElement(el: Element): string {
+  const parts: number[] = [];
+  let node: Element | null = el;
+  while (node && node !== node.ownerDocument.body) {
+    const parent: Element | null = node.parentElement;
+    if (!parent) break;
+    parts.unshift(Array.prototype.indexOf.call(parent.children, node));
+    node = parent;
+  }
+  return parts.length ? `path-${parts.join('-')}` : '';
+}
+
+function serializeHtmlDocument(doc: Document): string {
+  const doctype = doc.doctype ? '<!doctype html>\n' : '';
+  return `${doctype}${doc.documentElement.outerHTML}`;
+}
+
+function injectManualEditBridge(doc: string): string {
+  const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
+  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(true));
+}
+
+function injectBeforeHeadEnd(doc: string, payload: string): string {
+  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${payload}</head>`);
+  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  return payload + doc;
+}
+
+function injectBeforeBodyEnd(doc: string, payload: string): string {
+  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${payload}</body>`);
+  return doc + payload;
 }
 
 function injectBaseHref(doc: string, baseHref: string): string {
@@ -72,7 +130,7 @@ function escapeAttr(value: string): string {
 // in-memory shim BEFORE any user script runs so those decks degrade
 // gracefully (position just doesn't persist across reloads).
 function injectSandboxShim(doc: string): string {
-  const shim = `<script>(function(){
+  const shim = `<script data-od-sandbox-shim>(function(){
   function makeStore(){
     var data = {};
     var api = {
@@ -362,7 +420,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     ? doc.replace(/<head[^>]*>/i, (m) => m + styleFix)
     : styleFix + doc;
   doc = docWithStyle;
-  const script = `<script>(function(){
+  const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
   function slides(){ return document.querySelectorAll('.slide'); }

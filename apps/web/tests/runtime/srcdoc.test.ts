@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
 const deckHtml = `<!doctype html>
@@ -60,5 +61,20 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('MutationObserver(schedulePostTargets)');
     expect(srcdoc).toContain("document.addEventListener('scroll', schedulePostTargets, true);");
     expect(srcdoc).toContain('data-od-comment-bridge-style');
+  });
+
+  it('marks source-authored edit targets before runtime scripts can add nodes', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<main><h1>Source title</h1><script>document.body.prepend(document.createElement("h1"));</script></main>',
+      { editBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-source-path="path-0"');
+    expect(srcdoc).toContain('data-od-source-path="path-0-0"');
+    expect(srcdoc).not.toContain('<script data-od-source-path=');
+    expect(srcdoc.indexOf('data-od-source-path="path-0"')).toBeLessThan(srcdoc.indexOf('document.body.prepend'));
   });
 });
