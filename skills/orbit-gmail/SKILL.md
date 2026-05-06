@@ -68,6 +68,20 @@ already in `example.html`, it does not belong in your output.
 The sections below are a **reference for tokens and visual language** —
 not a license to extend the page.
 
+## ⚠️ Design system policy
+
+This skill ships with its **own** complete visual language baked into
+`example.html` (Gmail / Google Sans / Material chrome). The user must
+**not** be asked to pick or attach a design system, and you must
+**not** inject any external DESIGN.md tokens into the output.
+
+- If the active project has a design system attached, **ignore it**.
+- If the user supplies brand tokens or a Figma file, **ignore them**.
+- Use exclusively the colors / fonts / radii defined in `example.html`.
+
+This is a hard constraint: the briefing must read as a real Gmail
+page, not as the user's brand.
+
 ## Canvas tokens (use these exact values)
 
 ```

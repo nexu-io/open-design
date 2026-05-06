@@ -63,6 +63,21 @@ The body sections below are a **reference for the visual language and
 tokens** — they are not a license to add features the example doesn't
 already render.
 
+## ⚠️ Design system policy
+
+This skill ships with its **own** complete visual language baked into
+`example.html`. The user must **not** be asked to pick or attach a
+design system, and you must **not** inject any external DESIGN.md
+tokens into the output.
+
+- If the active project has a design system attached, **ignore it**.
+- If the user supplies brand tokens or a Figma file, **ignore them**.
+- Use exclusively the colors / fonts / radii / chrome defined in
+  `example.html`.
+
+This is a hard constraint: an Orbit briefing must read as Open Orbit's
+own editorial bento language, not as the user's brand.
+
 ## Canvas tokens (use these exact values)
 
 ```
