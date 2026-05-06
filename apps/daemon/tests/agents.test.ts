@@ -175,6 +175,7 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
       name: 'open-design-live-artifacts',
       command: 'od',
       args: ['mcp', 'live-artifacts'],
+      env: [],
     },
   ]);
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kimi), [
@@ -182,6 +183,7 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
       name: 'open-design-live-artifacts',
       command: 'od',
       args: ['mcp', 'live-artifacts'],
+      env: [],
     },
   ]);
 
@@ -206,6 +208,7 @@ test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
         name: 'open-design-live-artifacts',
         command: process.execPath,
         args: ['/workspace/apps/daemon/dist/cli.js', 'mcp', 'live-artifacts'],
+        env: [],
       },
     ],
   );
