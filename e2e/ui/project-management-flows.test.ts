@@ -531,7 +531,7 @@ function skillSummary(
     platform: 'desktop',
     scenario: 'qa',
     previewType: 'html',
-    designSystemRequired: false,
+    designSystemRequired: mode !== 'image',
     defaultFor,
     upstream: null,
     featured: null,

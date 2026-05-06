@@ -5692,6 +5692,17 @@ button.connector-action.is-loading {
 .comment-target-overlay.selected {
   border-width: 2px;
 }
+.comment-target-overlay-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .comment-saved-marker {
   position: absolute;
   pointer-events: none;

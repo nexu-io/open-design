@@ -1433,7 +1433,9 @@ function CommentTargetOverlay({
               className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}`}
               style={overlayStyle}
               data-testid="comment-target-overlay"
-            />
+            >
+              <span className="comment-target-overlay-label">{snapshot.elementId}</span>
+            </div>
           );
         })}
       </>
@@ -1450,7 +1452,9 @@ function CommentTargetOverlay({
         height: bounds.height,
       }}
       data-testid="comment-target-overlay"
-    />
+    >
+      <span className="comment-target-overlay-label">{snapshot.elementId}</span>
+    </div>
   );
 }
 
