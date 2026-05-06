@@ -16,6 +16,11 @@ describe('isOpenAICompatible', () => {
     expect(isOpenAICompatible('mimo-v2.5-pro', 'https://token-plan-cn.xiaomimimo.com/v1')).toBe(true);
   });
 
+  it('routes OpenRouter through the OpenAI-compatible chat completions proxy', () => {
+    expect(isOpenAICompatible('openai/gpt-5.2', 'https://openrouter.ai/api/v1')).toBe(true);
+    expect(isOpenAICompatible('openrouter/auto', 'https://openrouter.ai/api/v1')).toBe(true);
+  });
+
   it('routes MiniMax Anthropic endpoint paths away from OpenAI-compatible chat completions', () => {
     expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimaxi.com/v1/anthropic')).toBe(false);
     expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimaxi.com/anthropic/v1')).toBe(false);
