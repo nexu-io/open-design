@@ -60,6 +60,7 @@ const ENV_KEYS = {
   // upstream env per docs.x.ai quickstart — so users who already export
   // it for the official SDK don't have to re-paste into Settings.
   grok: ['OD_GROK_API_KEY', 'XAI_API_KEY'],
+  nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
   replicate: ['OD_REPLICATE_API_TOKEN', 'REPLICATE_API_TOKEN'],
@@ -228,6 +229,9 @@ export async function resolveProviderConfig(projectRoot, providerId) {
   return {
     apiKey: envKey || entry.apiKey || oauth?.apiKey || '',
     baseUrl: entry.baseUrl || '',
+    ...(typeof entry.model === 'string' && entry.model.trim()
+      ? { model: entry.model.trim() }
+      : {}),
   };
 }
 
@@ -255,6 +259,9 @@ export async function readMaskedConfig(projectRoot) {
       // the DOM.
       apiKeyTail: hasStoredKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
+      ...(typeof entry.model === 'string' && entry.model.trim()
+        ? { model: entry.model.trim() }
+        : {}),
     };
   }
   return { providers };
@@ -287,8 +294,16 @@ export async function writeConfig(projectRoot, body) {
       typeof entry.baseUrl === 'string' && entry.baseUrl.trim()
         ? entry.baseUrl.trim()
         : '';
-    if (!apiKey && !baseUrl) continue;
-    next[id] = { apiKey, baseUrl };
+    const model =
+      typeof entry.model === 'string' && entry.model.trim()
+        ? entry.model.trim()
+        : '';
+    if (!apiKey && !baseUrl && !model) continue;
+    next[id] = {
+      apiKey,
+      baseUrl,
+      ...(model ? { model } : {}),
+    };
   }
   if (Object.keys(next).length === 0) {
     const prior = await readStored(projectRoot);

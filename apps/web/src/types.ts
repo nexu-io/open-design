@@ -133,6 +133,7 @@ export interface LiveArtifactPreviewRequest {
 export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
+  model?: string;
 }
 
 export interface ApiProtocolConfig {

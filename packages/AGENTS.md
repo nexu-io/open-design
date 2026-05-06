@@ -7,7 +7,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/contracts`: web/daemon app contract layer. Keep it pure TypeScript; it must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - `packages/sidecar-proto`: Open Design sidecar business protocol. Owns app/mode/source constants, namespace validation, stamp descriptor/fields/flags, IPC message schema, status shapes, error semantics, and default product path constants.
 - `packages/sidecar`: generic sidecar runtime primitives. Includes bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime file helpers; it must not hard-code Open Design app keys or IPC business messages.
-- `packages/platform`: generic OS process primitives. Includes stamp serialization, command parsing, and process matching/search; it must consume the `sidecar-proto` descriptor and must not hard-code `--od-stamp-*` details.
+- `packages/platform`: generic OS process primitives. Includes stamp serialization, command parsing, process matching/search, and well-known user-toolchain bin discovery; it must consume the `sidecar-proto` descriptor and must not hard-code `--od-stamp-*` details. The toolchain helper is the single source of truth shared by the daemon agent resolver (`apps/daemon/src/agents.ts`) and the packaged sidecar PATH builder (`apps/packaged/src/sidecars.ts`) so neither layer can drift the search list.
 
 ## Removed directories
 

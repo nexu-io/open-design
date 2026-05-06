@@ -9,7 +9,7 @@
 - **Node.js：** `~24`（Node 24.x）。仓库在 `package.json#engines` 中强制要求该版本。
 - **pnpm：** `10.33.x`。仓库通过 `packageManager` 固定为 `pnpm@10.33.2`；若使用 Corepack，该固定版本将被自动选中。
 - **操作系统：** 主要支持 macOS、Linux、WSL2。Windows 原生环境大部分流程也可运行，但 WSL2 是更稳定的基线。
-- **可选的本地 agent CLI：** Claude Code、Codex、Devin for Terminal、Gemini CLI、OpenCode、Cursor Agent、Qwen、GitHub Copilot CLI 等。即使未安装任何 CLI，也可在 Settings 中切换至 BYOK API 模式。
+- **可选的本地 agent CLI：** Claude Code、Codex、Devin for Terminal、Gemini CLI、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等。即使未安装任何 CLI，也可在 Settings 中切换至 BYOK API 模式。
 
 `nvm` / `fnm` 为可选的便捷工具，并非项目必要依赖。如需使用，请在执行 pnpm 之前安装并切换到 Node 24：
 
@@ -45,7 +45,7 @@ pnpm tools-dev run web # 在前台启动 daemon + web
 pnpm tools-dev # 在后台启动 daemon + web + desktop
 ```
 
-首次加载时，应用会扫描已安装的 code-agent CLI（Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen），并自动选择其中之一；默认使用 `web-prototype` skill 与 `Neutral Modern` design system。输入 prompt，点击 **Send**。Agent 将以流式方式输出至左侧面板；`<artifact>` 标签会被解析，HTML 在右侧实时渲染。运行完成后，点击 **Save to disk**，artifact 将被写入磁盘 `./.od/artifacts/<timestamp>-<slug>/index.html`。
+首次加载时，应用会扫描已安装的 code-agent CLI（Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI），并自动选择其中之一；默认使用 `web-prototype` skill 与 `Neutral Modern` design system。输入 prompt，点击 **Send**。Agent 将以流式方式输出至左侧面板；`<artifact>` 标签会被解析，HTML 在右侧实时渲染。运行完成后，点击 **Save to disk**，artifact 将被写入磁盘 `./.od/artifacts/<timestamp>-<slug>/index.html`。
 
 **Design system** 下拉框内置 **129 套 design system** —— 包含 2 套手工编写的 starter（Neutral Modern、Warm Editorial）、70 套打包的产品级系统，以及来自 [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills) 的 57 个 design skill。选择任意一套，所有原型都会应用该品牌的视觉风格。
 
@@ -160,7 +160,7 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin 入口
 │   │       ├── server.ts          # /api/* + 静态资源
-│   │       ├── agents.ts          # 扫描 PATH 中的 claude/codex/devin/gemini/opencode/cursor-agent/qwen/copilot
+│   │       ├── agents.ts          # 扫描 PATH 中的 claude/codex/devin/gemini/opencode/cursor-agent/qwen/qoder/copilot
 │   │       ├── skills.ts          # SKILL.md loader（frontmatter 解析器）
 │   │       └── design-systems.ts  # DESIGN.md loader
 │   │   ├── sidecar/           # tools-dev daemon sidecar 包装层
@@ -214,7 +214,7 @@ open-design/
 
 ## 排障
 
-- **"no agents found on PATH"** —— 安装以下 CLI 之一：`claude`、`codex`、`devin`、`gemini`、`opencode`、`cursor-agent`、`qwen`、`copilot`。或者在 Settings 中切换至 API mode，填入 provider key。
+- **"no agents found on PATH"** —— 安装以下 CLI 之一：`claude`、`codex`、`devin`、`gemini`、`opencode`、`cursor-agent`、`qwen`、`qodercli`、`copilot`。或者在 Settings 中切换至 API mode，填入 provider key。
 - **daemon 在 /api/chat 上返回 500** —— 查看 daemon 终端的 stderr 尾部；通常是 CLI 拒绝了传入的参数。不同 CLI 的 argv 结构各异；如需调整，请参阅 `apps/daemon/src/agents.ts` 中的 `buildArgs`。
 - **媒体生成报错 `OD_BIN` 缺失、或 daemon URL 为 `:0`** —— 运行上述媒体 dispatcher 排查步骤。请勿复用已有的 CLI 会话；从 Open Design 应用中重新打开 project，daemon 才会注入新的 `OD_*` 变量。
 - **Codex 加载的插件上下文过多** —— 使用 `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` 启动 Open Design，daemon 启动 Codex 时会传入 `--disable plugins`。

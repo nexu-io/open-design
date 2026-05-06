@@ -1,6 +1,6 @@
 # Open Design
 
-> **Открытая альтернатива [Claude Design][cd].** Локально-ориентированная, пригодная для web-деплоя, с BYOK на каждом уровне: **13 CLI coding-агентов** автоматически обнаруживаются в вашем `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Mistral Vibe) и превращаются в движок генерации дизайна, управляемый **31 комбинируемым навыком** и **72 дизайн-системами уровня бренда**. Нет CLI? OpenAI-совместимый BYOK-прокси даёт тот же цикл без локального запуска агента.
+> **Открытая альтернатива [Claude Design][cd].** Локально-ориентированная, пригодная для web-деплоя, с BYOK на каждом уровне: **16 CLI coding-агентов** автоматически обнаруживаются в вашем `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) и превращаются в движок генерации дизайна, управляемый **31 комбинируемым навыком** и **72 дизайн-системами уровня бренда**. Нет CLI? OpenAI-совместимый BYOK-прокси даёт тот же цикл без локального запуска агента.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — редакционная обложка: дизайн вместе с агентом на вашем ноутбуке" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="Скачать" src="https://img.shields.io/badge/%D1%81%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#поддерживаемые-coding-agent-cli"><img alt="Agents" src="https://img.shields.io/badge/agents-12%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#поддерживаемые-coding-agent-cli"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#системы-дизайна"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#навыки"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-присоединиться-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -52,7 +52,7 @@ OD стоит на плечах четырёх open-source проектов:
 
 | | Что вы получаете |
 |---|---|
-| **Coding-agent CLI (13)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — автоматически обнаруживаются в `PATH`, переключаются одним кликом |
+| **Coding-agent CLI (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — автоматически обнаруживаются в `PATH`, переключаются одним кликом |
 | **BYOK fallback** | OpenAI-совместимый прокси на `/api/proxy/stream` — вставьте `baseUrl` + `apiKey` + `model`, и любой вендор (Anthropic-via-OpenAI, DeepSeek, Groq, MiMo, OpenRouter, self-hosted vLLM или любой другой OpenAI-compatible provider) станет движком. На границе демона заблокированы internal IP / SSRF. |
 | **Design systems built-in** | **129** — 2 вручную написанных стартера + 70 продуктовых систем (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) из [`awesome-design-md`][acd2], плюс 57 design skills из [`awesome-design-skills`][ads], добавленных напрямую в `design-systems/` |
 | **Skills built-in** | **31** — 27 в режиме `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 в режиме `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). В picker группируются по `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -220,7 +220,7 @@ OD стоит на плечах четырёх open-source проектов:
 
 ### 1 · Мы не поставляем своего агента. Ваш уже достаточно хорош.
 
-На старте демон сканирует `PATH` в поисках [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) и [`vibe-acp`](https://github.com/mistralai/mistral-vibe). Всё найденное становится кандидатами на роль design engine — каждый работает через свой stdio-adapter и может переключаться из picker’а модели. CLI не установлен? `POST /api/proxy/stream` даёт тот же pipeline, только без spawn: вставьте любой OpenAI-compatible `baseUrl` + `apiKey`, и демон будет форвардить SSE chunks назад, при этом loopback / link-local / RFC1918 назначения отсекаются на границе.
+На старте демон сканирует `PATH` в поисках [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) и [`vibe-acp`](https://github.com/mistralai/mistral-vibe). Всё найденное становится кандидатами на роль design engine — каждый работает через свой stdio-adapter и может переключаться из picker’а модели. CLI не установлен? `POST /api/proxy/stream` даёт тот же pipeline, только без spawn: вставьте любой OpenAI-compatible `baseUrl` + `apiKey`, и демон будет форвардить SSE chunks назад, при этом loopback / link-local / RFC1918 назначения отсекаются на границе.
 
 ### 2 · Skills — это файлы, а не плагины.
 
@@ -282,7 +282,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · devin (ACP) · gemini · opencode · cursor-agent │
-   │  qwen · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)     │
+   │  qwen · qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)     │
    │  reads SKILL.md + DESIGN.md, writes artifacts to disk            │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -291,7 +291,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, готово к деплою на Vercel |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3`; таблицы: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| Agent transport | `child_process.spawn`; typed-event parsers для `claude-stream-json` (Claude Code), `copilot-stream-json` (Copilot), `json-event-stream`-парсеры на каждый CLI (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe через Agent Client Protocol), `pi-rpc` (Pi через stdio JSON-RPC), `plain` (Qwen Code) |
+| Agent transport | `child_process.spawn`; typed-event parsers для `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), `json-event-stream`-парсеры на каждый CLI (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe через Agent Client Protocol), `pi-rpc` (Pi через stdio JSON-RPC), `plain` (Qwen Code / DeepSeek TUI) |
 | BYOK proxy | `POST /api/proxy/stream` → OpenAI-compatible `/v1/chat/completions`, SSE pass-through; отвергает loopback / link-local / RFC1918 hosts на границе демона |
 | Storage | Обычные файлы в `.od/projects/<id>/` + SQLite в `.od/app.sqlite` (в `.gitignore`, создаётся автоматически). Для изоляции тестов можно переопределить корень через `OD_DATA_DIR` |
 | Preview | Sandboxed iframe через `srcdoc` + parser `<artifact>` для каждого skill ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -581,7 +581,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 - **Сохранение вкладок.** Каждый проект помнит открытые файлы и активную вкладку в таблице `tabs`. Откройте проект завтра — и workspace будет выглядеть ровно так, как вы его оставили.
 - **Artifact lint API.** `POST /api/artifacts/lint` запускает структурные проверки над сгенерированным артефактом (сломанная рамка `<artifact>`, отсутствие обязательных side files, устаревшие palette tokens) и возвращает findings, которые агент может использовать в следующем ходе. Пятимерная самокритика использует этот API, чтобы опираться на реальные сигналы, а не на интуицию.
 - **Sidecar protocol + desktop automation.** Процессы daemon, web и desktop получают типизированные пятикомпонентные stamps (`app · mode · namespace · ipc · source`) и открывают JSON-RPC IPC-канал по адресу `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` управляет именно этим каналом, благодаря чему headless E2E работает поверх реальной Electron-shell, без особых harness’ов ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
-- **Дружественный к Windows spawning.** Каждый адаптер, который иначе упёрся бы в лимит `CreateProcess` примерно в 32 KB по argv на длинных composition prompt’ах (Codex, Gemini, OpenCode, Cursor Agent, Qwen, Pi), вместо этого отправляет prompt через stdin. Claude Code и Copilot сохраняют `-p`; если даже этого мало, демон переходит на временный prompt-file.
+- **Дружественный к Windows spawning.** Каждый адаптер, который иначе упёрся бы в лимит `CreateProcess` примерно в 32 KB по argv на длинных composition prompt’ах (Codex, Gemini, OpenCode, Cursor Agent, Qwen, Qoder CLI, Pi), вместо этого отправляет prompt через stdin. Claude Code и Copilot сохраняют `-p`; если даже этого мало, демон переходит на временный prompt-file.
 - **Runtime data по namespace’ам.** `OD_DATA_DIR` и `--namespace` дают полностью изолированные деревья в духе `.od/`, так что Playwright, beta-каналы и ваши реальные проекты не делят одну SQLite-базу.
 
 ## Механика против AI-slop
@@ -605,7 +605,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 | Agent runtime | Bundled (Opus 4.7) | Bundled ([`pi-ai`][piai]) | **Delegated to user's existing CLI** |
 | Skills | Proprietary | 12 custom TS modules + `SKILL.md` | **31 file-based [`SKILL.md`][skill] bundles, можно просто положить в папку** |
 | Design system | Proprietary | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 129 поставляемых систем** |
-| Provider flexibility | Anthropic only | 7+ via [`pi-ai`][piai] | **12 CLI-адаптеров + OpenAI-compatible BYOK proxy** |
+| Provider flexibility | Anthropic only | 7+ via [`pi-ai`][piai] | **16 CLI-адаптеров + OpenAI-compatible BYOK proxy** |
 | Init question form | ❌ | ❌ | **✅ Жёсткое правило, ход 1** |
 | Direction picker | ❌ | ❌ | **✅ 5 детерминированных направлений** |
 | Live todo progress + tool stream | ❌ | ✅ | **✅** (UX-паттерн из open-codesign) |
@@ -641,15 +641,18 @@ OD не заканчивается на коде. Тот же чатовый sur
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + parser `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` (prompt через stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + parser `cursor-agent` | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -` (prompt через stdin) |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain` (сырые stdout chunks) | `qwen --yolo [--model …] -` (prompt через stdin) |
+| Qoder CLI | `qodercli` | `qoder-stream-json` (типизированные события) | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]` (prompt через stdin) |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json` (typed events) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt отправляется как RPC-команда `prompt`) |
 | **OpenAI-compatible BYOK** | n/a | SSE pass-through | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`; SSRF-защита от loopback / link-local / RFC1918 |
 
-Добавить новый CLI — это одна запись в [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат стрима выбирается из `claude-stream-json`, `copilot-stream-json`, `json-event-stream` (с отдельным `eventParser` на CLI), `acp-json-rpc`, `pi-rpc` или `plain`.
+Добавить новый CLI — это одна запись в [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат стрима выбирается из `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (с отдельным `eventParser` на CLI), `acp-json-rpc`, `pi-rpc` или `plain`.
 
 ## Источники и происхождение
 
@@ -671,7 +674,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 
 ## Дорожная карта
 
-- [x] Daemon + detection агентов (12 CLI adapters) + registry skills + catalog design systems
+- [x] Daemon + detection агентов (13 CLI adapters) + registry skills + catalog design systems
 - [x] Web app + chat + question form + picker из 5 направлений + todo progress + sandboxed preview
 - [x] 31 skill + 72 design systems + 5 visual directions + 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates

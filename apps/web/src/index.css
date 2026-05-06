@@ -271,7 +271,9 @@ code {
   --app-chrome-traffic-space: 0px;
   display: flex;
   align-items: center;
+  height: 40px;
   min-height: 40px;
+  max-height: 40px;
   padding: 4px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
@@ -340,6 +342,7 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
+  overflow: hidden;
 }
 .app-chrome-drag {
   min-width: 24px;
@@ -357,10 +360,13 @@ code {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  max-height: 31px;
+  overflow: hidden;
 }
 .app-project-title .title {
   color: var(--text-strong);
   font-size: 13.5px;
+  line-height: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -370,6 +376,7 @@ code {
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
+  line-height: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1112,7 +1119,7 @@ code {
   .modal-settings { max-height: 90vh; }
 }
 .modal-settings .modal-body {
-  overflow-y: auto;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -1165,6 +1172,9 @@ code {
   padding: 22px 12px;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .settings-nav-item {
   width: 100%;
@@ -1214,8 +1224,10 @@ code {
 }
 .settings-content {
   min-width: 0;
+  min-height: 0;
   padding: 22px var(--modal-padding);
   overflow: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -1230,6 +1242,7 @@ code {
   .settings-sidebar {
     flex-direction: row;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     padding: 10px 12px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
@@ -4485,8 +4498,8 @@ button.connector-action.is-loading {
 @media (max-width: 900px) {
   .entry {
     grid-template-columns: 1fr !important;
-    height: auto;
-    min-height: 100vh;
+    height: 100%;
+    min-height: 0;
   }
   .entry-side {
     width: 100% !important;

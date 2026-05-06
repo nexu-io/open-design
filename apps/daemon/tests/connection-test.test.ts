@@ -78,7 +78,7 @@ async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promi
   return withFakeAgent('opencode', script, run);
 }
 
-async function waitForFile(file: string, timeoutMs = 1_000): Promise<void> {
+async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {

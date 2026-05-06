@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd]의 오픈소스 대안.** 로컬 우선, 웹 배포 가능, 모든 레이어에서 BYOK — `PATH`에서 자동 감지되는 **15개의 코딩 에이전트 CLI**(Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI)가 **31가지 조합 가능한 Skill**과 **72가지 브랜드급 디자인 시스템**으로 구동되는 디자인 엔진이 됩니다. CLI가 하나도 없다? OpenAI 호환 BYOK 프록시가 spawn만 빠진 동일한 루프를 돌립니다.
+> **[Claude Design][cd]의 오픈소스 대안.** 로컬 우선, 웹 배포 가능, 모든 레이어에서 BYOK — `PATH`에서 자동 감지되는 **16개의 코딩 에이전트 CLI**(Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI)가 **31가지 조합 가능한 Skill**과 **72가지 브랜드급 디자인 시스템**으로 구동되는 디자인 엔진이 됩니다. CLI가 하나도 없다? OpenAI 호환 BYOK 프록시가 spawn만 빠진 동일한 루프를 돌립니다.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — 노트북 위의 에이전트와 함께 설계하는 표지" width="100%" />
@@ -20,7 +20,7 @@
   <a href="https://open-design.ai/"><img alt="다운로드" src="https://img.shields.io/badge/%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-15%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#지원하는-코딩-에이전트"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#디자인-시스템"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#내장-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
@@ -52,7 +52,7 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 
 | | 제공 내용 |
 |---|---|
-| **코딩 에이전트 CLI(15개)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes(ACP) · Kimi CLI(ACP) · Pi(RPC) · Kiro CLI(ACP) · Kilo(ACP) · Mistral Vibe CLI(ACP) · DeepSeek TUI — `PATH`에서 자동 감지, 한 번의 클릭으로 전환 |
+| **코딩 에이전트 CLI(16개)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH`에서 자동 감지, 한 번의 클릭으로 전환 |
 | **BYOK 폴백** | OpenAI 호환 프록시 `/api/proxy/stream` — `baseUrl` + `apiKey` + `model`만 붙여 넣으면 어떤 벤더(Anthropic-via-OpenAI 어댑터, DeepSeek, Groq, MiMo, OpenRouter, 자체 호스팅 vLLM, 또는 OpenAI 호환 프로바이더 무엇이든)든 엔진이 됩니다. daemon 경계에서 내부 IP / SSRF를 차단합니다. |
 | **내장 디자인 시스템** | **72개** — 2개의 수작업 스타터 + [`awesome-design-md`][acd2]에서 가져온 70개의 제품 시스템(Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu …) |
 | **내장 Skill** | **31개** — `prototype` 모드 27개(web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs …) + `deck` 모드 4개(`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). picker에서 `scenario`로 그룹화: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -219,7 +219,7 @@ skill 추가는 폴더 하나면 됩니다. [`docs/skills-protocol.md`](docs/ski
 
 ### 1 · 에이전트를 제공하지 않습니다. 여러분의 것으로 충분합니다.
 
-Daemon은 시작 시 `PATH`에서 [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai)를 스캔합니다. 찾은 것들 모두가 후보 디자인 엔진이 됩니다 — stdio를 통해 구동되며 CLI당 하나의 어댑터, 모델 picker에서 즉시 전환 가능. [`multica`](https://github.com/multica-ai/multica)와 [`cc-switch`](https://github.com/farion1231/cc-switch)에서 영감을 받았습니다. CLI가 하나도 설치되어 있지 않다면? `POST /api/proxy/stream`이 spawn만 없는 동일한 파이프라인입니다 — 임의의 OpenAI 호환 `baseUrl` + `apiKey`만 붙여 넣으면 daemon이 SSE 청크를 브라우저로 그대로 전달하며, loopback / link-local / RFC1918 목적지는 경계에서 거부됩니다.
+Daemon은 시작 시 `PATH`에서 [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai)를 스캔합니다. 찾은 것들 모두가 후보 디자인 엔진이 됩니다 — stdio를 통해 구동되며 CLI당 하나의 어댑터, 모델 picker에서 즉시 전환 가능. [`multica`](https://github.com/multica-ai/multica)와 [`cc-switch`](https://github.com/farion1231/cc-switch)에서 영감을 받았습니다. CLI가 하나도 설치되어 있지 않다면? `POST /api/proxy/stream`이 spawn만 없는 동일한 파이프라인입니다 — 임의의 OpenAI 호환 `baseUrl` + `apiKey`만 붙여 넣으면 daemon이 SSE 청크를 브라우저로 그대로 전달하며, loopback / link-local / RFC1918 목적지는 경계에서 거부됩니다.
 
 ### 2 · Skill은 파일이지 플러그인이 아닙니다.
 
@@ -281,7 +281,7 @@ DISCOVERY 지시문    (turn-1 폼, turn-2 브랜드 분기, TodoWrite, 5차원 
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · gemini · opencode · cursor-agent · qwen        │
-   │  copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
+   │  qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
    │  SKILL.md + DESIGN.md 읽기, 디스크에 아티팩트 쓰기               │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -290,7 +290,7 @@ DISCOVERY 지시문    (turn-1 폼, turn-2 브랜드 분기, TodoWrite, 5차원 
 |---|---|
 | 프론트엔드 | Next.js 16 App Router + React 18 + TypeScript, Vercel 배포 가능 |
 | Daemon | Node 24 · Express · SSE 스트리밍 · `better-sqlite3`; 테이블: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| 에이전트 전송 | `child_process.spawn`; 타입 이벤트 파서: `claude-stream-json`(Claude Code), `copilot-stream-json`(Copilot), `json-event-stream` + 각 CLI 파서(Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc`(Hermes / Kimi via Agent Client Protocol), `pi-rpc`(Pi via stdio JSON-RPC), `plain`(Qwen Code) |
+| 에이전트 전송 | `child_process.spawn`; 타입 이벤트 파서: `claude-stream-json`(Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json`(Copilot), `json-event-stream` + 각 CLI 파서(Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc`(Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe via Agent Client Protocol), `pi-rpc`(Pi via stdio JSON-RPC), `plain`(Qwen Code / DeepSeek TUI) |
 | BYOK 프록시 | `POST /api/proxy/stream` → OpenAI 호환 `/v1/chat/completions`, SSE 통과; daemon 경계에서 loopback / link-local / RFC1918 호스트 거부 |
 | 저장소 | `.od/projects/<id>/`의 평문 파일 + `.od/app.sqlite`의 SQLite(gitignore됨, 자동 생성). 테스트 격리를 위해 `OD_DATA_DIR`로 루트 변경 가능 |
 | 미리보기 | `srcdoc`를 통한 샌드박스 iframe + 스킬별 `<artifact>` 파서([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -577,7 +577,7 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 - **탭 영속성.** 모든 프로젝트는 `tabs` 테이블에 자기가 연 파일들과 활성 탭을 기억합니다. 내일 다시 열어도 워크스페이스는 어제 떠난 그 모습 그대로.
 - **Artifact lint API.** `POST /api/artifacts/lint`는 생성된 아티팩트에 대해 구조 검사(파괴된 `<artifact>` 프레임, 누락된 필수 사이드 파일, 오래된 팔레트 토큰)를 실행하고, 에이전트가 다음 턴에 다시 읽어들일 수 있는 findings를 반환합니다. 5차원 자기 검토는 이걸로 점수를 vibe가 아닌 실제 증거에 묶어둡니다.
 - **Sidecar 프로토콜 + 데스크탑 자동화.** Daemon, web, desktop 프로세스 모두 타입화된 5필드 스탬프(`app · mode · namespace · ipc · source`)를 들고 다니며, JSON-RPC IPC 채널을 `/tmp/open-design/ipc/<namespace>/<app>.sock`에 노출합니다. `tools-dev inspect desktop status \| eval \| screenshot`이 그 채널 위에서 동작하므로, 헤드리스 E2E가 진짜 Electron 셸을 상대로 자체 하네스 없이 동작합니다([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
-- **Windows 친화적 spawn.** 긴 합성 prompt에서 `CreateProcess`의 약 32 KB argv 한계를 넘을 만한 모든 어댑터(Codex, Gemini, OpenCode, Cursor Agent, Qwen, Pi)는 prompt를 stdin으로 보냅니다. Claude Code와 Copilot은 `-p`를 유지하고, 그것마저 넘치면 daemon은 임시 prompt 파일로 폴백합니다.
+- **Windows 친화적 spawn.** 긴 합성 prompt에서 `CreateProcess`의 약 32 KB argv 한계를 넘을 만한 모든 어댑터(Codex, Gemini, OpenCode, Cursor Agent, Qwen, Qoder CLI, Pi)는 prompt를 stdin으로 보냅니다. Claude Code와 Copilot은 `-p`를 유지하고, 그것마저 넘치면 daemon은 임시 prompt 파일로 폴백합니다.
 - **네임스페이스별 런타임 데이터.** `OD_DATA_DIR`과 `--namespace`로 완전히 격리된 `.od/`-스타일 트리를 받습니다. Playwright, 베타 채널, 실제 작업 프로젝트가 SQLite 파일을 공유하는 일은 절대 없습니다.
 
 ## Anti-AI-slop 메커니즘
@@ -601,7 +601,7 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 | 에이전트 런타임 | 번들됨(Opus 4.7) | 번들됨([`pi-ai`][piai]) | **사용자 기존 CLI에 위임** |
 | Skill | 독점 | 12개 커스텀 TS 모듈 + `SKILL.md` | **31개 파일 기반 [`SKILL.md`][skill] 번들, 드롭 가능** |
 | 디자인 시스템 | 독점 | `DESIGN.md`(v0.2 로드맵) | **`DESIGN.md` × 72개 시스템 기본 제공** |
-| 프로바이더 유연성 | Anthropic 전용 | [`pi-ai`][piai]를 통해 7+ | **15개 CLI 어댑터 + OpenAI 호환 BYOK 프록시** |
+| 프로바이더 유연성 | Anthropic 전용 | [`pi-ai`][piai]를 통해 7+ | **16개 CLI 어댑터 + OpenAI 호환 BYOK 프록시** |
 | 초기화 질문 폼 | ❌ | ❌ | **✅ 하드 규칙, turn 1** |
 | 방향 선택기 | ❌ | ❌ | **✅ 5가지 결정론적 방향** |
 | 실시간 할 일 진행 + 도구 스트림 | ❌ | ✅ | **✅** (open-codesign의 UX 패턴) |
@@ -637,6 +637,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` 파서 | `opencode run --format json --dangerously-skip-permissions [--model …] -`(prompt는 stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` 파서 | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`(prompt는 stdin) |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain`(원시 stdout 청크) | `qwen --yolo [--model …] -`(prompt는 stdin) |
+| Qoder CLI | `qodercli` | `qoder-stream-json`(타입 이벤트) | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]`(prompt는 stdin) |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`(타입 이벤트) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`(Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
@@ -647,7 +648,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 | DeepSeek TUI | `deepseek` | `plain`(원시 stdout 청크) | `deepseek exec --auto [--model …] <prompt>`(prompt는 위치 인수) |
 | **멀티 프로바이더 BYOK** | n/a | SSE 정규화 | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → Anthropic / OpenAI 호환 / Azure OpenAI / Gemini; loopback / link-local / RFC1918에 대한 SSRF 차단 |
 
-새 CLI 추가는 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts)에 항목 하나 추가하는 것입니다. 스트리밍 형식은 `claude-stream-json`, `copilot-stream-json`, `json-event-stream`(CLI별 `eventParser`와 함께), `acp-json-rpc`, `pi-rpc`, `plain` 중 하나입니다.
+새 CLI 추가는 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts)에 항목 하나 추가하는 것입니다. 스트리밍 형식은 `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream`(CLI별 `eventParser`와 함께), `acp-json-rpc`, `pi-rpc`, `plain` 중 하나입니다.
 
 ## 참조 및 계보
 
@@ -668,7 +669,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 
 ## 로드맵
 
-- [x] Daemon + 에이전트 감지(15개 CLI 어댑터) + skill 레지스트리 + 디자인 시스템 카탈로그
+- [x] Daemon + 에이전트 감지(16개 CLI 어댑터) + skill 레지스트리 + 디자인 시스템 카탈로그
 - [x] 웹앱 + 채팅 + 질문 폼 + 5가지 방향 선택기 + 할 일 진행 + 샌드박스 미리보기
 - [x] 31개 skill + 72개 디자인 시스템 + 5가지 시각적 방향 + 5개 기기 프레임
 - [x] SQLite 기반 projects · conversations · messages · tabs · templates

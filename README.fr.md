@@ -52,7 +52,7 @@ OD s’appuie sur quatre projets open source :
 
 | | Ce que vous obtenez |
 |---|---|
-| **CLI de coding agents** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP), détectées automatiquement dans `PATH`, interchangeables en un clic |
+| **CLI de coding agents (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI, détectées automatiquement dans `PATH`, interchangeables en un clic |
 | **BYOK fallback** | Proxy API par protocole sur `/api/proxy/{anthropic,openai,azure,google}/stream` : collez `baseUrl` + `apiKey` + `model`, choisissez Anthropic / OpenAI / Azure OpenAI / Google Gemini, et le daemon normalise le SSE vers le même chat stream. Les destinations internal IP / SSRF sont bloquées côté daemon. |
 | **Design Systems intégrés** | Le menu déroulant charge les Design Systems depuis `design-systems/*/DESIGN.md` : starters écrits à la main, product systems importés depuis [`awesome-design-md`][acd2] et design skills normalisés depuis [`awesome-design-skills`][ads]. |
 | **Skills intégrés** | Le picker charge les Skills depuis `skills/*/SKILL.md` et les regroupe par `mode` / `scenario` : prototype, deck, image, video, audio, Design System, utility, puis notamment design / marketing / operations / engineering / product / finance / hr / sales / personal. |
@@ -220,7 +220,7 @@ Ajouter un Skill revient à ajouter un dossier. Lisez [`docs/skills-protocol.md`
 
 ### 1 · Nous ne livrons pas d’agent. Le vôtre suffit.
 
-Au démarrage, le daemon scanne votre `PATH` avec les définitions de [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) : Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro CLI, Mistral Vibe CLI et les adapters ajoutés plus tard. Ceux qu’il trouve deviennent des design engines candidats, pilotés via stdio avec un adapter par CLI et interchangeables depuis le model picker. Inspiré par [`multica`](https://github.com/multica-ai/multica) et [`cc-switch`](https://github.com/farion1231/cc-switch). Aucune CLI installée ? Le mode API suit la même pipeline, sans spawn local : choisissez Anthropic, OpenAI-compatible, Azure OpenAI ou Google Gemini, et le daemon renvoie les chunks SSE normalisés, avec rejet des destinations loopback / link-local / RFC1918.
+Au démarrage, le daemon scanne votre `PATH` avec les définitions de [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) : Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro CLI, Mistral Vibe CLI et les adapters ajoutés plus tard. Ceux qu’il trouve deviennent des design engines candidats, pilotés via stdio avec un adapter par CLI et interchangeables depuis le model picker. Inspiré par [`multica`](https://github.com/multica-ai/multica) et [`cc-switch`](https://github.com/farion1231/cc-switch). Aucune CLI installée ? Le mode API suit la même pipeline, sans spawn local : choisissez Anthropic, OpenAI-compatible, Azure OpenAI ou Google Gemini, et le daemon renvoie les chunks SSE normalisés, avec rejet des destinations loopback / link-local / RFC1918.
 
 ### 2 · Les Skills sont des fichiers, pas des plugins.
 
@@ -282,7 +282,7 @@ Chaque couche est composable. Chaque couche est un fichier éditable. Lisez [`ap
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · devin (ACP) · gemini · opencode · cursor-agent │
-   │  qwen · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro · vibe (ACP) │
+   │  qwen · qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro · vibe (ACP) │
    │  reads SKILL.md + DESIGN.md, writes artifacts to disk            │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -291,7 +291,7 @@ Chaque couche est composable. Chaque couche est un fichier éditable. Lisez [`ap
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, déployable sur Vercel |
 | Daemon | Node 24 · Express · streaming SSE · `better-sqlite3`; tables `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| Transport agent | `child_process.spawn`; parseurs typed-event pour `claude-stream-json`, `copilot-stream-json`, `json-event-stream`, `acp-json-rpc`, `pi-rpc`, `plain` |
+| Transport agent | `child_process.spawn`; parseurs typed-event pour `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream`, `acp-json-rpc`, `pi-rpc`, `plain` |
 | Proxy BYOK | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → APIs provider-specific, SSE normalisé `delta/end/error` ; rejet loopback / link-local / RFC1918 au bord du daemon |
 | Stockage | Fichiers simples dans `.od/projects/<id>/` + SQLite dans `.od/app.sqlite` (gitignored, auto-créé). `OD_DATA_DIR` permet l’isolation des tests |
 | Aperçu | Iframe sandboxée via `srcdoc` + parser `<artifact>` par Skill ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -645,15 +645,18 @@ Auto-détectés depuis `PATH` au boot du daemon. Aucune config nécessaire. Le d
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + parseur `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + parseur `cursor-agent` | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …]` (prompt sur stdin) |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain` | `qwen --yolo [--model …] -` |
+| Qoder CLI | `qodercli` | `qoder-stream-json` | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]` (prompt sur stdin) |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json` | `copilot -p - --allow-all-tools --output-format json [--model …] [--add-dir …]` (prompt sur stdin) |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` | `pi --mode rpc [--model …] [--thinking …]` |
 | **BYOK multi-provider** | n/a | SSE normalisé | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini ; protégé contre loopback / link-local / RFC1918 |
 
-Ajouter une nouvelle CLI revient à ajouter une entrée dans [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Le format de stream est l’un de `claude-stream-json`, `copilot-stream-json`, `json-event-stream`, `acp-json-rpc`, `pi-rpc` ou `plain`.
+Ajouter une nouvelle CLI revient à ajouter une entrée dans [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Le format de stream est l’un de `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream`, `acp-json-rpc`, `pi-rpc` ou `plain`.
 
 ## Références & lignée
 
