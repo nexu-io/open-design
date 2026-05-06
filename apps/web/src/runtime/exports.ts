@@ -237,9 +237,12 @@ export function exportAsPdf(
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const win = window.open(url, '_blank', sandboxedPreview ? 'noopener,noreferrer' : undefined);
-  if (!win) {
-    // Popup blocked — at least the tab navigation may have happened above.
-    // Nothing else we can do without a fresh user gesture.
+  if (!win && !sandboxedPreview) {
+    if (typeof alert !== 'undefined') {
+      alert('Popup blocked! Please allow popups for this site to export as PDF.');
+    }
+    URL.revokeObjectURL(url);
+    return;
   }
   // Revoke later — the loaded document keeps a reference until the tab
   // closes; revoking the URL string only removes the lookup name.
