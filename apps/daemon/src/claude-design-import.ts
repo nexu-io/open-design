@@ -8,7 +8,7 @@ const EOCD_SIG = 0x06054b50;
 const CENTRAL_SIG = 0x02014b50;
 const LOCAL_SIG = 0x04034b50;
 
-const MAX_FILES = 500;
+const MAX_FILES = 5000;
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -113,6 +113,7 @@ function readEntryBody(zip, entry) {
   if (bodyEnd > zip.length) throw new Error(`zip entry exceeds archive: ${entry.name}`);
   const compressed = zip.slice(bodyStart, bodyEnd);
   if (entry.method === 0) return Buffer.from(compressed);
+  if (entry.uncompressedSize === 0) return Buffer.alloc(0);
   return inflateRawSync(compressed, { maxOutputLength: entry.uncompressedSize });
 }
 
