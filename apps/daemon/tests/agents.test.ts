@@ -544,6 +544,22 @@ test('qoder args omit empty, non-string, and relative image attachment entries',
   assert.equal(args.includes('uploads/hero.png'), false);
 });
 
+test('qoder adapter inherits QODER_PERSONAL_ACCESS_TOKEN from daemon env', () => {
+  const env = spawnEnvForAgent('qoder', {
+    QODER_PERSONAL_ACCESS_TOKEN: 'qoder-pat',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal(env.QODER_PERSONAL_ACCESS_TOKEN, 'qoder-pat');
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+});
+
+test('qoder adapter does not define static secret env', () => {
+  assert.equal(qoder.env?.QODER_PERSONAL_ACCESS_TOKEN, undefined);
+});
+
 test('detectAgents keeps qoder unavailable with fallback metadata when qodercli is missing', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-empty-'));
   try {

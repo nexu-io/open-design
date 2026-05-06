@@ -503,6 +503,11 @@ export const AGENT_DEFS = [
     // Qoder print mode is non-interactive and exits after the turn. Deliver
     // the composed prompt via stdin to avoid argv length limits, while using
     // stream-json so the daemon can surface text and usage incrementally.
+    // Authentication remains Qoder CLI-owned: users can rely on persisted
+    // `qodercli login` state, or launch the daemon with
+    // QODER_PERSONAL_ACCESS_TOKEN for automation. Do not add that token to
+    // static adapter env; unlike Gemini's workspace trust flag it is a user
+    // secret and already flows through the inherited process environment.
     buildArgs: (
       _prompt,
       imagePaths,
