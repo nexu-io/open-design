@@ -57,4 +57,7 @@ EXPOSE 7456
 
 ENV OD_BIND_HOST=0.0.0.0
 
-CMD ["node", "apps/daemon/dist/cli.js", "--no-open", "--host", "0.0.0.0"]
+# Bind host is controlled by OD_BIND_HOST env var (default 0.0.0.0).
+# Do NOT add --host here — the CLI flag overrides the env, preventing
+# Compose users from changing OD_BIND_HOST without also replacing CMD.
+CMD ["node", "apps/daemon/dist/cli.js", "--no-open"]

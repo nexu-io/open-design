@@ -2,18 +2,18 @@ services:
   open-design:
     build: .
     container_name: open-design
-    ports:
-      # Bind only to loopback by default — the daemon is local-first
-      # with no auth. To expose beyond localhost, you must use a
-      # reverse proxy (nginx, caddy) that rewrites the Origin header,
-      # set OD_BIND_HOST to the actual interface IP, and add auth.
-      - "127.0.0.1:7456:7456"
+    # Host networking preserves loopback for local-only daemon routes
+    # (live artifact preview, connectors) that reject non-loopback peer
+    # addresses. On Linux this works natively. On macOS, Docker Desktop
+    # 4.34+ supports host networking; older versions fall back to the
+    # VM's network which may break those routes.
+    network_mode: host
     volumes:
       - od_data:/app/.od
     restart: unless-stopped
     environment:
       - OD_PORT=7456
-      - OD_BIND_HOST=0.0.0.0
+      - OD_BIND_HOST=127.0.0.1
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:7456/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
       interval: 30s
