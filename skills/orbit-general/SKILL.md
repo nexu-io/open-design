@@ -1,15 +1,17 @@
 ---
 name: orbit-general
 description: |
-  An adaptive morning briefing dashboard for Open Orbit — aggregates
-  yesterday's activity across any number of connected connectors
-  (GitHub, Figma, Linear, Notion, Slack, 飞书, Calendar, Gmail, Drive,
-  Sentry, Vercel, …) into one editorial bento-grid surface. Each
-  connector module picks its own UI form (list, avatar stack, status
-  ring, heatmap, file grid, alert card, …) based on the data it
-  produces, instead of forcing all tiles into the same shape. Use when
-  the brief asks for a "morning briefing", "daily digest", "Orbit
-  dashboard", or any cross-tool activity summary.
+  Open Orbit briefing skill — selected by the Orbit pipeline when the
+  user has two or more connectors connected. Pulls the past 24 hours of
+  activity from every authenticated connector (GitHub, Figma, Linear,
+  Notion, Slack, 飞书, Calendar, Gmail, Drive, Sentry, Vercel, …) and
+  renders a single adaptive bento-grid dashboard at the top of "我的
+  设计". Each connector module picks its own UI form (list, avatar
+  stack, status ring, heatmap, file grid, alert card, …) based on the
+  data shape it returns, so the layout scales as Orbit's connector
+  ecosystem grows. This skill should not be triggered manually — it is
+  invoked by Orbit's daily-digest scheduler against the user's live
+  connector data.
 triggers:
   - "orbit"
   - "daily digest"
@@ -27,7 +29,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Open Orbit 早安简报：editorial bento dashboard 风。Hero 早安 + 5 个 KPI 大数字 + 今日时间轴 + Top 3 优先事项 + 12–16 个 connector 模块（每个根据数据特性自由选 UI 形式：列表 / 头像栈 / 状态环 / 热力图 / 文件网格 / 警报卡 …）+ People waiting + Footer。米白底 + 衬线 KPI + 强调橙。"
+  example_prompt: "Orbit 触发本 skill：用户已连多个 connector，从所有已连源（GitHub / Figma / Linear / Notion / 飞书 / Calendar / …）拉过去 24h 的与我相关的变更，渲染成一份 editorial bento dashboard。Hero 早安 + 5 KPI + 今日时间轴 + Top 3 + 12–16 个 connector 模块（每个按数据特性自由选 UI 形式：列表 / 头像栈 / 状态环 / 热力图 / 文件网格 / 警报卡 …）+ People waiting + Footer。米白底 + 衬线 KPI + 强调橙。"
 ---
 
 # Orbit General Briefing

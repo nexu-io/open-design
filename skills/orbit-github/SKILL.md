@@ -1,12 +1,14 @@
 ---
 name: orbit-github
 description: |
-  A GitHub-flavored morning briefing for Open Orbit — when the user has
-  only connected GitHub, render the day's PRs, reviews, issues, CI
-  status, and commits in a layout that feels like a native GitHub
-  Notifications + PR-diff hybrid page. Use when the brief asks for a
-  "GitHub briefing", "PR digest", "code activity dashboard", or a daily
-  summary scoped to a single GitHub source.
+  Open Orbit briefing skill — selected by the Orbit pipeline when
+  GitHub is the user's only connected connector, or when the user
+  explicitly scopes their daily digest to GitHub. Pulls the past 24
+  hours of PRs, review requests, issues, CI runs, and merges from the
+  user's authenticated GitHub connection and renders them in a layout
+  that mirrors GitHub's native Notifications + PR-diff visual language.
+  This skill should not be triggered manually — it is invoked by
+  Orbit's daily-digest scheduler against live GitHub data.
 triggers:
   - "github briefing"
   - "github digest"
@@ -23,7 +25,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "GitHub 风格的 Orbit 早安简报：模拟 GitHub Notifications 页 + PR diff 预览。顶部黑色 nav bar + 左侧 All / Unread / Mentions / Review requests + 右侧按类别分组的事件流（Review requests / CI / Issues / Activity）。PR 状态用 GitHub pill badge（open 绿 / merged 紫 / closed 红 / CI fail 红卡）。"
+  example_prompt: "Orbit 触发本 skill：用户只连了 GitHub（或显式把简报范围限定在 GitHub），从用户已认证的 GitHub 连接拉过去 24h 的 PR / review / issue / CI / merge，渲染成 GitHub Notifications + PR diff 风格的简报：顶部黑色 nav bar + 左侧 All / Unread / Mentions / Review requests + 右侧按类别分组的事件流（Review requests / CI / Issues / Activity），状态用 GitHub pill badge（open 绿 / merged 紫 / closed 红 / CI fail 红卡）。"
 ---
 
 # Orbit · GitHub Briefing

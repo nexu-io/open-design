@@ -1,12 +1,14 @@
 ---
 name: orbit-linear
 description: |
-  A Linear-flavored morning briefing for Open Orbit — when the user has
-  only connected Linear, render the day's issue / cycle / project
-  changes in a layout that feels like Linear's native Inbox or My
-  Issues view. Use when the brief asks for a "Linear briefing", "issue
-  digest", "cycle summary", or any daily summary scoped to a single
-  Linear source.
+  Open Orbit briefing skill — selected by the Orbit pipeline when
+  Linear is the user's only connected connector, or when the user
+  explicitly scopes their daily digest to Linear. Pulls the past 24
+  hours of issue movement, status changes, assignments, and cycle
+  progress from the user's authenticated Linear connection and renders
+  the digest in Linear's native Inbox + cycle-progress dark visual
+  language. This skill should not be triggered manually — it is invoked
+  by Orbit's daily-digest scheduler against live Linear data.
 triggers:
   - "linear briefing"
   - "linear digest"
@@ -23,7 +25,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Linear 风格的 Orbit 早安简报：还原 Linear 深色界面——顶部窄 toolbar + 三栏布局（左 nav: Inbox / My issues / Active / Backlog；中: issue 列表按状态分组；右: 选中 issue 的预览面板）。Inter 字体，深色 #0E0E10 背景，状态用彩色圆点（Backlog 灰 / Todo 黄 / In Progress 蓝 / In Review 紫 / Done 绿）。顶部右侧带 Cycle 进度条。"
+  example_prompt: "Orbit 触发本 skill：用户只连了 Linear（或显式把简报范围限定在 Linear），从用户已认证的 Linear 连接拉过去 24h 的 issue / cycle / 状态变更 / 分配，渲染成 Linear 深色界面风格的简报——顶部窄 toolbar + 三栏布局（左 nav: Inbox / My issues / Active / Backlog；中: issue 列表按状态分组；右: 选中 issue 预览面板）。Inter 字体，深色 #0E0E10 背景，状态彩色圆点（Backlog 灰 / Todo 黄 / In Progress 蓝 / In Review 紫 / Done 绿），顶部右侧带 Cycle 进度条。"
 ---
 
 # Orbit · Linear Briefing

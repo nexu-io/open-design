@@ -1,12 +1,15 @@
 ---
 name: orbit-gmail
 description: |
-  A Gmail-flavored morning briefing for Open Orbit — when the user has
-  only connected Gmail, render the day's mail in a layout that mimics
-  Gmail's three-pane desktop UI, with the briefing itself appearing as
-  a "Daily Digest" message at the top of the inbox. Use when the brief
-  asks for a "Gmail briefing", "inbox digest", "email summary", or any
-  daily summary scoped to a single Gmail source.
+  Open Orbit briefing skill — selected by the Orbit pipeline when
+  Gmail is the user's only connected connector, or when the user
+  explicitly scopes their daily digest to Gmail. Pulls the past 24
+  hours of inbox activity (replies awaited, mentions, cc, auto-
+  categorized bulk) from the user's authenticated Gmail connection
+  and renders the digest as a Daily Digest email at the top of a
+  Gmail-style three-pane inbox. This skill should not be triggered
+  manually — it is invoked by Orbit's daily-digest scheduler against
+  live Gmail data.
 triggers:
   - "gmail briefing"
   - "inbox digest"
@@ -23,7 +26,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Gmail 风格的 Orbit 早安简报：还原 Gmail 桌面三栏布局——左侧 nav（含 Compose 红圆按钮 + 主要/社交/推广 tab）+ 中栏邮件列表（顶部那封是 Orbit Daily Digest）+ 右栏邮件正文（按类别分组：等你回复 / @ 或 cc / 自动归类）。Roboto / Google Sans，Gmail 红 #D93025 强调色。"
+  example_prompt: "Orbit 触发本 skill：用户只连了 Gmail（或显式把简报范围限定在 Gmail），从用户已认证的 Gmail 连接拉过去 24h 的邮件（等回复 / @ cc / 自动归类），把简报渲染成一封 Daily Digest 邮件，置顶在 Gmail 三栏布局里——左侧 nav（含 Compose 红圆按钮 + 主要/社交/推广 tab）+ 中栏邮件列表（顶部那封是 Orbit Daily Digest）+ 右栏邮件正文（按类别分组）。Roboto / Google Sans，Gmail 红 #D93025 强调色。"
 ---
 
 # Orbit · Gmail Briefing

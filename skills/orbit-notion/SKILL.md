@@ -1,12 +1,14 @@
 ---
 name: orbit-notion
 description: |
-  A Notion-flavored morning briefing for Open Orbit — when the user has
-  only connected Notion, render the day's document edits, comments,
-  mentions, and database changes in a layout that feels like a Notion
-  page Notion itself wrote. Use when the brief asks for a "Notion
-  briefing", "doc digest", "knowledge base summary", or any daily
-  summary scoped to a single Notion source.
+  Open Orbit briefing skill — selected by the Orbit pipeline when
+  Notion is the user's only connected connector, or when the user
+  explicitly scopes their daily digest to Notion. Pulls the past 24
+  hours of document edits, comments, mentions, and database row changes
+  from the user's authenticated Notion connection and renders the
+  digest as a native Notion page (callout / toggle / database table
+  primitives). This skill should not be triggered manually — it is
+  invoked by Orbit's daily-digest scheduler against live Notion data.
 triggers:
   - "notion briefing"
   - "notion digest"
@@ -23,7 +25,7 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Notion 风格的 Orbit 早安简报：100% 还原 Notion 页面——顶部面包屑「Open Orbit / 早安简报 / 5 月 6 日」、emoji cover、标题 + 副标题、Heading 2 分区（文档变更 / 评论与 @ 提及 / 数据库变更）。包含至少一个 callout block（灰底 + 左侧 emoji）+ 一个 toggle 块 + 一个数据库表格 view（带 Notion 风圆角 cell + colored tag 状态）。Inter，Notion 黑 #37352F + 灰阶。"
+  example_prompt: "Orbit 触发本 skill：用户只连了 Notion（或显式把简报范围限定在 Notion），从用户已认证的 Notion 连接拉过去 24h 的文档编辑 / 评论 / @ 提及 / 数据库行变更，把简报渲染成一个原生 Notion 页面——顶部面包屑「Open Orbit / 早安简报 / 5 月 6 日」、emoji cover、Heading 2 分区（文档变更 / 评论与 @ 提及 / 数据库变更），至少包含一个 callout block + 一个 toggle 块 + 一个数据库表格 view（带 Notion 风圆角 cell + colored tag 状态）。Inter，Notion 黑 #37352F + 灰阶。"
 ---
 
 # Orbit · Notion Briefing
