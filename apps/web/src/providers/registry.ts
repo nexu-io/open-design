@@ -35,6 +35,43 @@ import type {
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
 
+export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
+export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const DEPLOY_PROVIDER_IDS = [
+  DEFAULT_DEPLOY_PROVIDER_ID,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+] as const;
+
+export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
+
+export type WebDeployConfigResponse = Omit<DeployConfigResponse, 'providerId'> & {
+  providerId: WebDeployProviderId;
+  accountId?: string;
+  projectName?: string;
+};
+
+export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest & {
+  providerId?: WebDeployProviderId;
+  accountId?: string;
+  projectName?: string;
+};
+
+export type WebDeploymentInfo = Omit<ProjectDeploymentsResponse['deployments'][number], 'providerId'> & {
+  providerId: WebDeployProviderId;
+};
+
+export type WebDeployProjectFileResponse = Omit<DeployProjectFileResponse, 'providerId'> & {
+  providerId: WebDeployProviderId;
+};
+
+export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
+  return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+function deployProviderQuery(providerId?: WebDeployProviderId): string {
+  return providerId ? `?providerId=${encodeURIComponent(providerId)}` : '';
+}
+
 export async function fetchAgents(options?: { throwOnError?: boolean }): Promise<AgentInfo[]> {
   try {
     const resp = await fetch('/api/agents');
@@ -337,19 +374,21 @@ export async function fetchSkillExample(id: string): Promise<string | null> {
   }
 }
 
-export async function fetchDeployConfig(): Promise<DeployConfigResponse | null> {
+export async function fetchDeployConfig(
+  providerId?: WebDeployProviderId,
+): Promise<WebDeployConfigResponse | null> {
   try {
-    const resp = await fetch('/api/deploy/config');
+    const resp = await fetch(`/api/deploy/config${deployProviderQuery(providerId)}`);
     if (!resp.ok) return null;
-    return (await resp.json()) as DeployConfigResponse;
+    return (await resp.json()) as WebDeployConfigResponse;
   } catch {
     return null;
   }
 }
 
 export async function updateDeployConfig(
-  input: UpdateDeployConfigRequest,
-): Promise<DeployConfigResponse | null> {
+  input: WebUpdateDeployConfigRequest,
+): Promise<WebDeployConfigResponse | null> {
   try {
     const resp = await fetch('/api/deploy/config', {
       method: 'PUT',
@@ -357,7 +396,7 @@ export async function updateDeployConfig(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
-    return (await resp.json()) as DeployConfigResponse;
+    return (await resp.json()) as WebDeployConfigResponse;
   } catch {
     return null;
   }
@@ -365,12 +404,12 @@ export async function updateDeployConfig(
 
 export async function fetchProjectDeployments(
   projectId: string,
-): Promise<ProjectDeploymentsResponse['deployments']> {
+): Promise<WebDeploymentInfo[]> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deployments`);
     if (!resp.ok) return [];
     const json = (await resp.json()) as ProjectDeploymentsResponse;
-    return json.deployments ?? [];
+    return (json.deployments ?? []) as WebDeploymentInfo[];
   } catch {
     return [];
   }
@@ -379,11 +418,12 @@ export async function fetchProjectDeployments(
 export async function deployProjectFile(
   projectId: string,
   fileName: string,
-): Promise<DeployProjectFileResponse> {
+  providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
+): Promise<WebDeployProjectFileResponse> {
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName, providerId: 'vercel-self' }),
+    body: JSON.stringify({ fileName, providerId }),
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
@@ -391,13 +431,13 @@ export async function deployProjectFile(
       | null;
     throw new Error(payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`);
   }
-  return (await resp.json()) as DeployProjectFileResponse;
+  return (await resp.json()) as WebDeployProjectFileResponse;
 }
 
 export async function checkDeploymentLink(
   projectId: string,
   deploymentId: string,
-): Promise<DeployProjectFileResponse> {
+): Promise<WebDeployProjectFileResponse> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/deployments/${encodeURIComponent(deploymentId)}/check-link`,
     { method: 'POST' },
@@ -408,7 +448,7 @@ export async function checkDeploymentLink(
       | null;
     throw new Error(payload?.error?.message || payload?.message || `Link check failed (${resp.status})`);
   }
-  return (await resp.json()) as DeployProjectFileResponse;
+  return (await resp.json()) as WebDeployProjectFileResponse;
 }
 
 // Project files — all paths are scoped under .od/projects/<id>/ on disk.

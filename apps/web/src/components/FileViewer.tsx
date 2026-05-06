@@ -8,6 +8,8 @@ import {
   fetchLiveArtifactCode,
   fetchLiveArtifactRefreshes,
   checkDeploymentLink,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
   fetchDeployConfig,
   fetchProjectDeployments,
@@ -19,6 +21,10 @@ import {
   LiveArtifactRefreshError,
   refreshLiveArtifact,
   updateDeployConfig,
+  type WebDeployConfigResponse,
+  type WebDeployProjectFileResponse,
+  type WebDeployProviderId,
+  type WebUpdateDeployConfigRequest,
   writeProjectTextFile,
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
@@ -38,8 +44,6 @@ import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
-  DeployConfigResponse,
-  DeployProjectFileResponse,
   LiveArtifact,
   LiveArtifactRefreshLogEntry,
   LiveArtifactViewerTab,
@@ -75,6 +79,29 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
+type DeployProviderOption = {
+  id: WebDeployProviderId;
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  tokenLink: string;
+  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenPlaceholderKey:
+    | 'fileViewer.vercelTokenPlaceholder'
+    | 'fileViewer.cloudflareApiTokenPlaceholder';
+  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
+  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+  configSaveFailedKey:
+    | 'fileViewer.deployConfigSaveFailed'
+    | 'fileViewer.cloudflareDeployConfigSaveFailed';
+  deployFailedKey: 'fileViewer.deployFailed' | 'fileViewer.cloudflareDeployFailed';
+  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
+  tokenLabelKey:
+    | 'fileViewer.vercelToken'
+    | 'fileViewer.cloudflareApiToken';
+  accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
+  projectNameLabelKey?: 'fileViewer.cloudflareProjectName';
+  accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
+  projectNameHintKey?: 'fileViewer.cloudflareProjectNameHint';
+};
 const MAX_BRIDGE_COORDINATE = 1_000_000;
 
 const MAX_CACHED_SLIDE_STATES = 64;
@@ -83,6 +110,43 @@ const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
 const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
 const MARKDOWN_COPY_TOAST_CLASS = 'markdown-code-toast';
+
+const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
+  {
+    id: DEFAULT_DEPLOY_PROVIDER_ID,
+    labelKey: 'fileViewer.vercelProvider',
+    tokenLink: 'https://vercel.com/account/settings/tokens',
+    tokenLinkKey: 'fileViewer.vercelTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.vercelTokenRequired',
+    configSaveFailedKey: 'fileViewer.deployConfigSaveFailed',
+    deployFailedKey: 'fileViewer.deployFailed',
+    previewHintKey: 'fileViewer.vercelPreviewOnly',
+    tokenLabelKey: 'fileViewer.vercelToken',
+  },
+  {
+    id: CLOUDFLARE_PAGES_PROVIDER_ID,
+    labelKey: 'fileViewer.cloudflarePagesProvider',
+    tokenLink: 'https://dash.cloudflare.com/?to=/:account/pages',
+    tokenLinkKey: 'fileViewer.cloudflareApiTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
+    configSaveFailedKey: 'fileViewer.cloudflareDeployConfigSaveFailed',
+    deployFailedKey: 'fileViewer.cloudflareDeployFailed',
+    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
+    tokenLabelKey: 'fileViewer.cloudflareApiToken',
+    accountIdLabelKey: 'fileViewer.cloudflareAccountId',
+    projectNameLabelKey: 'fileViewer.cloudflareProjectName',
+    accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+    projectNameHintKey: 'fileViewer.cloudflareProjectNameHint',
+  },
+];
+
+function getDeployProviderOption(providerId: WebDeployProviderId): DeployProviderOption {
+  return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0];
+}
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
@@ -2038,18 +2102,21 @@ function HtmlViewer({
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
-  const [deployment, setDeployment] = useState<DeployProjectFileResponse | null>(null);
+  const [deployment, setDeployment] = useState<WebDeployProjectFileResponse | null>(null);
   const [deployModalOpen, setDeployModalOpen] = useState(false);
-  const [deployConfig, setDeployConfig] = useState<DeployConfigResponse | null>(null);
+  const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
-  const [deployResult, setDeployResult] = useState<DeployProjectFileResponse | null>(null);
+  const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState(false);
-  const [vercelToken, setVercelToken] = useState('');
+  const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
+  const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
+  const [cloudflareAccountId, setCloudflareAccountId] = useState('');
+  const [cloudflareProjectName, setCloudflareProjectName] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
@@ -2082,6 +2149,49 @@ function HtmlViewer({
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
+
+  function findDeploymentForProvider(
+    items: WebDeployProjectFileResponse[],
+    providerId: WebDeployProviderId,
+  ): WebDeployProjectFileResponse | null {
+    return (
+      items.find((item) => item.fileName === file.name && item.providerId === providerId) ??
+      items.find((item) => item.fileName === file.name) ??
+      null
+    );
+  }
+
+  function syncDeployFormFromConfig(
+    providerId: WebDeployProviderId,
+    config: WebDeployConfigResponse | null,
+  ) {
+    setDeployProviderId(config?.providerId ?? providerId);
+    setDeployConfig(config);
+    setDeployToken(config?.tokenMask || '');
+    setTeamId(config?.teamId || '');
+    setTeamSlug(config?.teamSlug || '');
+    setCloudflareAccountId(config?.accountId || '');
+    setCloudflareProjectName(config?.projectName || '');
+  }
+
+  function buildDeployConfigRequest(providerId: WebDeployProviderId): WebUpdateDeployConfigRequest {
+    const token = deployToken.trim();
+    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+      return {
+        providerId,
+        token,
+        accountId: cloudflareAccountId.trim(),
+        projectName: cloudflareProjectName.trim(),
+      };
+    }
+    return {
+      providerId,
+      token,
+      teamId: teamId.trim(),
+      teamSlug: teamSlug.trim(),
+    };
+  }
+
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
   // controls in the toolbar and reflects the count beside them.
@@ -2119,16 +2229,14 @@ function HtmlViewer({
     setDeployPhase('idle');
     void fetchProjectDeployments(projectId).then((items) => {
       if (cancelled) return;
-      const current = items.find(
-        (item) => item.fileName === file.name && item.providerId === 'vercel-self',
-      );
+      const current = findDeploymentForProvider(items, deployProviderId);
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name]);
+  }, [projectId, file.name, deployProviderId]);
 
   // Detect deck-shaped HTML even when the project's skill didn't declare
   // `mode: deck`. Freeform projects often produce a deck because the user
