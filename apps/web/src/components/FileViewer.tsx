@@ -2192,6 +2192,18 @@ function HtmlViewer({
     };
   }
 
+  async function loadDeployProvider(providerId: WebDeployProviderId) {
+    const [config, deployments] = await Promise.all([
+      fetchDeployConfig(providerId),
+      fetchProjectDeployments(projectId),
+    ]);
+    const currentDeployment = findDeploymentForProvider(deployments, providerId);
+    syncDeployFormFromConfig(providerId, config);
+    setDeployment(currentDeployment ?? null);
+    setDeployResult(currentDeployment ?? null);
+    return { config, currentDeployment };
+  }
+
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
   // controls in the toolbar and reflects the count beside them.
@@ -2768,15 +2780,14 @@ function HtmlViewer({
     setDeployError(null);
     setCopiedDeployLink(false);
     setDeployPhase('idle');
-    const deploymentsPromise = fetchProjectDeployments(projectId);
-    const currentDeployment = findDeploymentForProvider(
-      await deploymentsPromise,
-      deployProviderId,
-    );
-    const config = await fetchDeployConfig(deployProviderId);
-    syncDeployFormFromConfig(currentDeployment?.providerId ?? deployProviderId, config);
-    setDeployment(currentDeployment ?? null);
-    setDeployResult(currentDeployment ?? null);
+    await loadDeployProvider(deployProviderId);
+  }
+
+  async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
+    if (nextProviderId === deployProviderId) return;
+    setDeployError(null);
+    setDeployPhase('idle');
+    await loadDeployProvider(nextProviderId);
   }
 
   async function saveDeployConfig() {
@@ -2784,11 +2795,13 @@ function HtmlViewer({
     setDeployError(null);
     try {
       const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
-      if (!config) throw new Error(t('fileViewer.deployConfigSaveFailed'));
+      if (!config) {
+        throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
+      }
       syncDeployFormFromConfig(deployProviderId, config);
       return config;
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployConfigSaveFailed'));
+      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       return null;
     } finally {
       setSavingDeployConfig(false);
@@ -2823,7 +2836,9 @@ function HtmlViewer({
       setDeployResult(next);
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
-      setDeployError(err instanceof Error ? err.message : t(option.deployFailedKey, { provider: t(option.labelKey) }));
+      setDeployError(
+        err instanceof Error ? err.message : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) }),
+      );
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -2955,6 +2970,17 @@ function HtmlViewer({
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
   const activeDeploymentNeedsRetry = activeDeploymentDelayed || activeDeploymentProtected;
+  const deployProvider = getDeployProviderOption(deployProviderId);
+  const deployProviderLabel = t(deployProvider.labelKey);
+  const deployActionLabel = activeDeployedUrl
+    ? t('fileViewer.redeployToProvider', { provider: deployProviderLabel })
+    : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+  const deployButtonLabel =
+    deployPhase === 'deploying'
+      ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
+      : deployPhase === 'preparing-link'
+        ? t('fileViewer.preparingPublicLink')
+        : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
   const copyDeployLabel = copiedDeployLink
     ? t('fileViewer.copied')
     : t('fileViewer.copyDeployLink');
@@ -3278,11 +3304,7 @@ function HtmlViewer({
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
-                    <span>
-                      {activeDeployedUrl
-                        ? t('fileViewer.redeployToVercel')
-                        : t('fileViewer.deployToVercel')}
-                    </span>
+                    <span>{deployActionLabel}</span>
                   </button>
                   <button
                     type="button"
@@ -3506,27 +3528,42 @@ function HtmlViewer({
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div className="kicker">VERCEL</div>
-              <h2>{t('fileViewer.deployModalTitle')}</h2>
+              <div className="kicker">{deployProviderLabel}</div>
+              <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
               <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
             </div>
             <div className="deploy-form">
+              <label className="deploy-provider-field">
+                <span>{t('fileViewer.deployProviderLabel')}</span>
+                <select
+                  value={deployProviderId}
+                  onChange={(e) => {
+                    void changeDeployProvider(e.target.value as WebDeployProviderId);
+                  }}
+                >
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {t(option.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="field-label-row">
-                <label htmlFor="vercel-token">{t('fileViewer.vercelToken')}</label>
+                <label htmlFor="deploy-token">{t(deployProvider.tokenLabelKey)}</label>
                 <a
-                  href="https://vercel.com/account/settings/tokens"
+                  href={deployProvider.tokenLink}
                   target="_blank"
                   rel="noreferrer noopener"
                 >
-                  {t('fileViewer.vercelTokenGetLink')}
+                  {t(deployProvider.tokenLinkKey)}
                 </a>
               </div>
               <input
-                id="vercel-token"
+                id="deploy-token"
                 type="password"
-                value={vercelToken}
-                placeholder={t('fileViewer.vercelTokenPlaceholder')}
-                onChange={(e) => setVercelToken(e.target.value)}
+                value={deployToken}
+                placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                onChange={(e) => setDeployToken(e.target.value)}
               />
               <div className="deploy-config-actions">
                 <button
@@ -3541,27 +3578,50 @@ function HtmlViewer({
                 </button>
               </div>
               {deployConfig?.configured ? (
-                <p className="hint">{t('fileViewer.vercelTokenReuseHint')}</p>
+                <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
               ) : null}
-              <div className="deploy-field-grid">
-                <label>
-                  <span>{t('fileViewer.vercelTeamId')}</span>
-                  <input
-                    value={teamId}
-                    placeholder={t('fileViewer.optional')}
-                    onChange={(e) => setTeamId(e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>{t('fileViewer.vercelTeamSlug')}</span>
-                  <input
-                    value={teamSlug}
-                    placeholder={t('fileViewer.optional')}
-                    onChange={(e) => setTeamSlug(e.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="hint">{t('fileViewer.vercelPreviewOnly')}</p>
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <div className="deploy-field-grid">
+                  <label>
+                    <span>{t('fileViewer.cloudflareAccountId')}</span>
+                    <input
+                      value={cloudflareAccountId}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setCloudflareAccountId(e.target.value)}
+                    />
+                    <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
+                  </label>
+                  <label>
+                    <span>{t('fileViewer.cloudflareProjectName')}</span>
+                    <input
+                      value={cloudflareProjectName}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setCloudflareProjectName(e.target.value)}
+                    />
+                    <span className="field-hint">{t('fileViewer.cloudflareProjectNameHint')}</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="deploy-field-grid">
+                  <label>
+                    <span>{t('fileViewer.vercelTeamId')}</span>
+                    <input
+                      value={teamId}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setTeamId(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>{t('fileViewer.vercelTeamSlug')}</span>
+                    <input
+                      value={teamSlug}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setTeamSlug(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+              <p className="hint">{t(deployProvider.previewHintKey)}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {activeDeployedUrl ? (
                 <div
@@ -3638,12 +3698,24 @@ function HtmlViewer({
                 className="viewer-action primary"
                 disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
-                  void deployToVercel();
+                  void deployToSelectedProvider();
                 }}
               >
-                {deployPhase === 'deploying'
-                  ? t('fileViewer.deployingToVercel')
-                  : deployPhase === 'preparing-link'
+                {deployButtonLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function baseDirFor(fileName: string): string {
+  const idx = fileName.lastIndexOf('/');
+  return idx >= 0 ? fileName.slice(0, idx + 1) : '';
+}
+*** End Patch
                     ? t('fileViewer.preparingPublicLink')
                     : t('fileViewer.deployToVercel')}
               </button>

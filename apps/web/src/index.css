@@ -6889,6 +6889,11 @@ button.connector-action.is-loading {
   gap: 14px;
   margin-top: 18px;
 }
+.deploy-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .field-label-row {
   display: flex;
   align-items: baseline;
@@ -6940,7 +6945,8 @@ button.connector-action.is-loading {
   border: 1px solid color-mix(in srgb, #1f9d55 28%, var(--border));
   font-variant-numeric: tabular-nums;
 }
-.deploy-form input {
+.deploy-form input,
+.deploy-form select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--border);
@@ -6963,6 +6969,11 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .deploy-error {
   margin: 0;
