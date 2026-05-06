@@ -1,6 +1,6 @@
 # Schnellstart
 
-<p align="center"><a href="QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <b>Deutsch</b> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a></p>
+<p align="center"><a href="QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <b>Deutsch</b> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
 Führen Sie das vollständige Produkt lokal aus.
 
@@ -69,7 +69,7 @@ pnpm tools-dev logs            # daemon/web/desktop logs anzeigen
 pnpm tools-dev check           # status + aktuelle logs + gängige Diagnosen
 pnpm tools-dev stop            # verwaltete Runtimes stoppen
 pnpm --filter @open-design/daemon build  # apps/daemon/dist/cli.js für `od` bauen
-pnpm build                     # Production Build + static export nach apps/web/out/
+pnpm --filter @open-design/web build     # Web-Paket bei Bedarf bauen
 pnpm typecheck                 # Workspace-Typecheck
 ```
 

@@ -341,3 +341,75 @@ describe('parseCritiqueStream -- v1 envelope and shape invariants (mrcfps review
     ).rejects.toBeInstanceOf(MalformedBlockError);
   });
 });
+
+describe('parseCritiqueStream -- Defects 3+5 regressions', () => {
+  async function* oneChunk(s: string): AsyncGenerator<string> { yield s; }
+
+  it('SHIP before any ROUND_END throws MalformedBlockError (Defect 5)', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <SHIP round="1" composite="9" status="shipped">
+        <ARTIFACT mime="text/html"><![CDATA[<p>x</p>]]></ARTIFACT>
+        <SUMMARY>skipped rounds</SUMMARY>
+      </SHIP>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(MalformedBlockError);
+  });
+
+  it('SHIP without inner <ARTIFACT> throws MissingArtifactError (Defect 5)', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>v1</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+        <PANELIST role="critic" score="9"><DIM name="h" score="9">ok</DIM></PANELIST>
+        <PANELIST role="brand" score="9"><DIM name="v" score="9">ok</DIM></PANELIST>
+        <PANELIST role="a11y" score="9"><DIM name="c" score="9">ok</DIM></PANELIST>
+        <PANELIST role="copy" score="9"><DIM name="cl" score="9">ok</DIM></PANELIST>
+        <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="1" composite="9" status="shipped">
+        <SUMMARY>no artifact block here</SUMMARY>
+      </SHIP>
+    </CRITIQUE_RUN>`;
+    await expect(
+      collect(parseCritiqueStream(oneChunk(stream), {
+        runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      })),
+    ).rejects.toBeInstanceOf(MissingArtifactError);
+  });
+
+  it('artifactRef is populated from parser options projectId+artifactId (Defect 3)', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer">
+          <NOTES>v1</NOTES>
+          <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+        </PANELIST>
+        <PANELIST role="critic" score="9"><DIM name="h" score="9">ok</DIM></PANELIST>
+        <PANELIST role="brand" score="9"><DIM name="v" score="9">ok</DIM></PANELIST>
+        <PANELIST role="a11y" score="9"><DIM name="c" score="9">ok</DIM></PANELIST>
+        <PANELIST role="copy" score="9"><DIM name="cl" score="9">ok</DIM></PANELIST>
+        <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="1" composite="9" status="shipped">
+        <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>
+        <SUMMARY>done</SUMMARY>
+      </SHIP>
+    </CRITIQUE_RUN>`;
+    const events = await collect(parseCritiqueStream(oneChunk(stream), {
+      runId: 't', adapter: 'test', parserMaxBlockBytes: 262_144,
+      projectId: 'p1', artifactId: 'a1',
+    }));
+    const ship = events.find(e => e.type === 'ship');
+    expect(ship).toBeDefined();
+    if (ship && ship.type === 'ship') {
+      expect(ship.artifactRef.projectId).toBe('p1');
+      expect(ship.artifactRef.artifactId).toBe('a1');
+    }
+  });
+});

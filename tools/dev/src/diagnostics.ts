@@ -11,13 +11,14 @@ export type StartupLogDiagnostics = {
 
 const NATIVE_ADDON_ABI_MISMATCH_PATTERN = /was compiled against a different Node\.js version[\s\S]*?NODE_MODULE_VERSION\s+\d+[\s\S]*?requires\s+NODE_MODULE_VERSION\s+\d+/i;
 const NODE_MODULE_VERSION_PATTERN = /NODE_MODULE_VERSION\s+\d+[\s\S]*?NODE_MODULE_VERSION\s+\d+/i;
+const NEXT_PACKAGE_RESOLUTION_PATTERN = /couldn't find the Next\.js package.*from the project directory:/i;
 
 export function detectLogDiagnostics(lines: readonly string[]): LogDiagnostic[] {
   const logText = lines.join("\n");
-  if (!NATIVE_ADDON_ABI_MISMATCH_PATTERN.test(logText) && !NODE_MODULE_VERSION_PATTERN.test(logText)) return [];
+  const diagnostics: LogDiagnostic[] = [];
 
-  return [
-    {
+  if (NATIVE_ADDON_ABI_MISMATCH_PATTERN.test(logText) || NODE_MODULE_VERSION_PATTERN.test(logText)) {
+    diagnostics.push({
       message: "Detected a native Node addon ABI mismatch in the daemon log.",
       recommendation: [
         "Rebuild native daemon dependencies for the active Node version:",
@@ -25,8 +26,23 @@ export function detectLogDiagnostics(lines: readonly string[]): LogDiagnostic[] 
         "or refresh the workspace install:",
         "  pnpm install",
       ].join("\n"),
-    },
-  ];
+    });
+  }
+
+  if (NEXT_PACKAGE_RESOLUTION_PATTERN.test(logText)) {
+    diagnostics.push({
+      message: "Detected that the Next.js package is not resolvable during web startup.",
+      recommendation: [
+        "Refresh the workspace install so apps/web/node_modules/next points at the pnpm-managed Next.js package:",
+        "  pnpm install --frozen-lockfile",
+        "If it still fails, inspect the package link:",
+        "  ls -la apps/web/node_modules/next",
+        "  node -p \"require.resolve('next/package.json', { paths: [process.cwd() + '/apps/web/app'] })\"",
+      ].join("\n"),
+    });
+  }
+
+  return diagnostics;
 }
 
 export function formatLogDiagnostics(diagnostics: readonly LogDiagnostic[]): string | null {

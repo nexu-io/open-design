@@ -4,10 +4,10 @@
 > needs evolve. Contributions welcome.
 
 For general contribution flow, see [CONTRIBUTING.md](CONTRIBUTING.md). The
-"Localization maintenance" section there documents what gets translated
-(UI chrome, core docs, display metadata) and what does **not** (skills,
-design systems, prompt bodies). This file covers **how** to add and
-maintain a locale.
+"Localization maintenance" section there documents the boundary between
+translated surfaces and agent-facing source material. This file covers
+**how** to add and maintain a locale across the surfaces contributors
+touch most often: UI chrome, root READMEs, core docs, and display metadata.
 
 > **Why a separate file?** i18n contributors usually only need this surface
 > — keeping locale workflow out of the main contribution guide isolates
@@ -16,37 +16,42 @@ maintain a locale.
 
 ## Maintained locales
 
-UI dictionary lives in [`apps/web/src/i18n/locales/`](apps/web/src/i18n/locales/).
-README translations live at the repo root. The `LOCALES` array in
-[`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts) is the
-authoritative list for the **UI dict**; the language switcher in the
-READMEs covers any locale that has a translated README, dict or no dict.
+UI dictionaries live in [`apps/web/src/i18n/locales/`](apps/web/src/i18n/locales/).
+Root README translations live beside [`README.md`](README.md). Core doc
+translations live beside [`QUICKSTART.md`](QUICKSTART.md) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Display metadata translations live in
+`apps/web/src/i18n/content*.ts`.
 
-| Code    | Language             | UI dict                | README              | Status |
-| ------- | -------------------- | ---------------------- | ------------------- | ------ |
-| `en`    | English              | `en.ts` (source)       | `README.md`         | active |
-| `ar`    | العربية              | `ar.ts`                | —                   | active |
-| `de`    | Deutsch              | `de.ts`                | `README.de.md`      | active |
-| `es-ES` | Español (España)     | `es-ES.ts`             | —                   | active |
-| `fa`    | فارسی                | `fa.ts`                | —                   | active |
-| `hu`    | Magyar               | `hu.ts`                | —                   | active |
-| `ja`    | 日本語               | `ja.ts`                | `README.ja-JP.md`   | active |
-| `ko`    | 한국어               | `ko.ts`                | `README.ko.md`      | active |
-| `pl`    | Polski               | `pl.ts`                | —                   | active |
-| `pt-BR` | Português (Brasil)   | `pt-BR.ts`             | —                   | active |
-| `ru`    | Русский              | `ru.ts`                | `README.ru.md`      | active |
-| `zh-CN` | 简体中文             | `zh-CN.ts`             | `README.zh-CN.md`   | active |
-| `zh-TW` | 繁體中文             | `zh-TW.ts`             | `README.zh-TW.md`   | active |
-| `fr`    | Français             | `fr.ts`                | `README.fr.md`      | active |
-| `uk`    | Українська           | `uk.ts`                | `README.uk.md`      | active |
+The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts)
+is the authoritative list for the **UI dict**. Root README language
+switchers cover every locale that has a root README; this set can differ
+from `LOCALES`.
 
-> A locale may ship a UI dict, a README, or both. The two surfaces are
-> independent — adding one without the other is a normal contribution.
-> The English locale is the source of truth; missing UI keys fall back
-> to English at runtime.
-> Locales may also add translated core docs or display-only metadata in
-> `apps/web/src/i18n/content*.ts`; keep those companion surfaces aligned
-> with the locale's active scope.
+| Code    | Language             | UI dict                | Root README         | Core docs | Display metadata | Status |
+| ------- | -------------------- | ---------------------- | ------------------- | --------- | ---------------- | ------ |
+| `en`    | English              | `en.ts` (source)       | `README.md`         | source    | `content.ts`     | active |
+| `ar`    | العربية              | `ar.ts`                | `README.ar.md`      | —         | —                | active |
+| `de`    | Deutsch              | `de.ts`                | `README.de.md`      | yes       | —                | active |
+| `es-ES` | Español (España)     | `es-ES.ts`             | `README.es.md`      | —         | —                | active |
+| `fa`    | فارسی                | `fa.ts`                | —                   | —         | —                | active |
+| `hu`    | Magyar               | `hu.ts`                | —                   | —         | —                | active |
+| `ja`    | 日本語               | `ja.ts`                | `README.ja-JP.md`   | yes       | —                | active |
+| `ko`    | 한국어               | `ko.ts`                | `README.ko.md`      | —         | —                | active |
+| `pl`    | Polski               | `pl.ts`                | —                   | —         | —                | active |
+| `pt-BR` | Português (Brasil)   | `pt-BR.ts`             | `README.pt-BR.md`   | yes       | —                | active |
+| `ru`    | Русский              | `ru.ts`                | `README.ru.md`      | —         | `content.ru.ts`  | active |
+| `zh-CN` | 简体中文             | `zh-CN.ts`             | `README.zh-CN.md`   | yes       | —                | active |
+| `zh-TW` | 繁體中文             | `zh-TW.ts`             | `README.zh-TW.md`   | —         | —                | active |
+| `fr`    | Français             | `fr.ts`                | `README.fr.md`      | yes       | `content.fr.ts`  | active |
+| `uk`    | Українська           | `uk.ts`                | `README.uk.md`      | —         | —                | active |
+| `tr`    | Türkçe               | `tr.ts`                | —                   | —         | —                | active |
+
+> A locale may ship a UI dict, a root README, core docs, display metadata,
+> or any subset of those surfaces. The English locale is the source of
+> truth. Runtime lookup falls back to English for missing UI keys, while
+> TypeScript requires registered dictionaries to satisfy the full `Dict`
+> shape. Partial dictionaries can use `...en` plus translated overrides,
+> and reviewers should treat remaining English strings as drift.
 
 ## Adding a new locale
 
@@ -77,18 +82,58 @@ READMEs covers any locale that has a translated README, dict or no dict.
    };
    ```
 
-5. **(Optional) Translate the README** — copy `README.md` to
-   `README.<code>.md`. Use OpenCC `s2twp.json` for zh-CN ↔ zh-TW; use
-   your judgment elsewhere.
-6. **Update the language switcher in every existing README**
-   (line ~27 of each `README*.md`). Match the order used in the existing
-   switcher line and append your new locale at the end. The set of
-   switcher links is the union of UI-dict locales and README-only
-   locales — it is **not** identical to `LOCALES`. The constraint is
-   simply that every switcher across all READMEs must list the same
-   set in the same order, otherwise readers hit dead ends when jumping
-   between languages.
-7. **Run `pnpm typecheck`** to confirm the union and `DICTS` map agree.
+5. **(Optional) Translate the root README** — copy `README.md` to
+   `README.<code>.md`. Repository precedent may use a documentation-region
+   code that differs from the UI dict code when that is the familiar docs
+   filename, such as `README.ja-JP.md` with UI locale `ja`, or
+   `README.es.md` with UI locale `es-ES`. Use OpenCC `s2twp.json` for
+   zh-CN ↔ zh-TW; use your judgment elsewhere.
+6. **Update the language switcher in every root README**
+   (line ~30 of each root `README*.md`). Match the order used in the
+   English README and include the same set everywhere. The switcher set is
+   the set of root README translations, so it may differ from `LOCALES`.
+7. **(Optional) Translate core docs** — copy `QUICKSTART.md` and/or
+   `CONTRIBUTING.md` to the matching docs filename, following existing
+   examples such as `QUICKSTART.fr.md`, `CONTRIBUTING.pt-BR.md`, and
+   `CONTRIBUTING.ja-JP.md`. Update links from the translated README to the
+   translated core docs that exist for that locale.
+8. **(Optional) Translate display metadata** in
+   `apps/web/src/i18n/content*.ts`. Keep this to display-only metadata for
+   examples, gallery cards, and localized content chrome. Agent-executed
+   prompts, skill instructions, design systems, and prompt bodies stay in
+   their source language so prompt QA remains centralized.
+9. **Run checks:** `pnpm typecheck` confirms the locale union and `DICTS`
+   map agree. `pnpm --filter @open-design/web test` covers locale/content
+   drift tests for the web package.
+
+## Maintaining existing translations
+
+When a PR changes English copy, check which surface changed and update the
+matching translated surfaces deliberately:
+
+- **UI chrome:** update `apps/web/src/i18n/locales/en.ts` first, then add
+  translated values to active locale dictionaries when the PR owns that
+  refresh. Partial dictionaries may inherit from English with `...en`.
+- **Root README:** keep root README language switchers in sync across all
+  root `README*.md` files. Check badge counts, Quickstart links, supported
+  agent lists, and release/download links against `README.md` during a
+  refresh.
+- **Core docs:** keep translated `QUICKSTART.*.md` and
+  `CONTRIBUTING.*.md` aligned with their English source when the locale owns
+  those docs.
+- **Display metadata:** update `apps/web/src/i18n/content*.ts` alongside
+  `content.ts` when that locale maintains display metadata.
+
+Automated P0 check:
+
+- `pnpm i18n:check` enforces UI locale registration, root README switcher
+  consistency, and root README links to translated core docs. CI runs this
+  as a hard-fail check because these are structural issues.
+
+Known current drift to clean up in focused PRs:
+
+- Several translated READMEs lag behind current English badge counts,
+  supported agent lists, and Quickstart/download links.
 
 ## Backport policy
 
@@ -216,6 +261,17 @@ on them now, with rough triggers for revisiting:
 - **Translation memory tooling** (Crowdin / Weblate / Lingui). Re-evaluate
   once the project hits ~12-15 active locales **or** when contributors
   start visibly duplicating effort across PRs.
+- **README template-driven generation** (e.g. [NRG](https://github.com/nanolaba/readme-generator),
+  custom `.src.md` build scripts, All Contributors-style tooling).
+  Re-evaluate once the project hits ≥15 locales **or** README structural
+  edits become more frequent than monthly. Discussion in
+  [#195](https://github.com/nexu-io/open-design/issues/195): template-driven
+  generation solves the "update line 27 in 10 README variants" brittleness,
+  but forces a shared structure that today's locale variants intentionally
+  diverge from (e.g. `README.zh-TW.md`'s "上手體驗" section, the pt-BR /
+  pt-PT precedent for content-level — not just translation-level —
+  differences). Worth revisiting once locale voice is more settled or
+  the manual-update cost grows.
 
 ## Open questions
 

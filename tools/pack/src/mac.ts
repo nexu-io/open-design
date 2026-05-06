@@ -11,6 +11,8 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  type DesktopEvalResult,
+  type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
@@ -91,6 +93,12 @@ export type MacStartResult = {
   namespace: string;
   pid: number;
   source: MacStartSource;
+  status: DesktopStatusSnapshot | null;
+};
+
+export type MacInspectResult = {
+  eval?: DesktopEvalResult;
+  screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
 };
 
@@ -388,6 +396,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
+  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
@@ -1195,6 +1204,33 @@ export async function readPackedMacLogs(config: ToolPackConfig) {
   return {
     logs: Object.fromEntries(entries),
     namespace: config.namespace,
+  };
+}
+
+export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string }): Promise<MacInspectResult> {
+  const stamp = desktopStamp(config);
+  const status = await requestJsonIpc<DesktopStatusSnapshot>(
+    stamp.ipc,
+    { type: SIDECAR_MESSAGES.STATUS },
+    { timeoutMs: 2000 },
+  ).catch(() => null);
+
+  return {
+    ...(options.expr == null ? {} : {
+      eval: await requestJsonIpc<DesktopEvalResult>(
+        stamp.ipc,
+        { input: { expression: options.expr }, type: SIDECAR_MESSAGES.EVAL },
+        { timeoutMs: 5000 },
+      ),
+    }),
+    ...(options.path == null ? {} : {
+      screenshot: await requestJsonIpc<DesktopScreenshotResult>(
+        stamp.ipc,
+        { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
+        { timeoutMs: 10000 },
+      ),
+    }),
+    status,
   };
 }
 

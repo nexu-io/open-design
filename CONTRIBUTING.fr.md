@@ -41,7 +41,7 @@ corepack enable           # sélectionne la version de pnpm définie par package
 pnpm install
 pnpm tools-dev run web    # boucle daemon + web au premier plan
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # build production
+pnpm --filter @open-design/web build  # build du paquet web si nécessaire
 ```
 
 Node `~24` et pnpm `10.33.x` sont requis. `nvm` / `fnm` sont optionnels ;

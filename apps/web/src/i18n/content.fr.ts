@@ -120,6 +120,10 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Créez un Kanban board pour une équipe growth de 5 personnes en plein sprint — Backlog, Doing, Review, Done.',
   },
+  'live-artifact': {
+    examplePrompt:
+      'Créez un artefact live interactif avec des cartes de statut, un tableau de données et un panneau de détail qui réagit aux changements de sélection.',
+  },
   'magazine-poster': {
     examplePrompt:
       'Concevez un poster éditorial style magazine — “You don’t need a designer to ship your first draft anymore.” Papier journal, six sections numérotées.',
@@ -311,6 +315,12 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
+  'orbit-general',
+  'orbit-github',
+  'orbit-gmail',
+  'orbit-linear',
+  'orbit-notion',
+  'social-media-dashboard',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
@@ -378,6 +388,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'sleek',
   'spacious',
   'storytelling',
+  'totality-festival',
   'tetris',
   'vibrant',
   'vintage',

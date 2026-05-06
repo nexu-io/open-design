@@ -25,6 +25,8 @@ od:
   design_system:
     requires: true
     sections: [color, typography, layout, components]
+  craft:
+    requires: [rtl-and-bidi]
 ---
 
 # Blog Post Skill
@@ -44,7 +46,7 @@ Produce a single long-form article page — editorial layout, no chrome.
    - **Hero image** — a 16:9 placeholder block using a DS-tinted gradient or
      solid fill (no external images). Add a 1-line caption underneath.
    - **Body** — alternating prose paragraphs with at least:
-     - 1 pull quote (large display type, accent rule on the left).
+     - 1 pull quote (large display type, accent rule on the inline-start edge so the layout flips correctly under `dir="rtl"`).
      - 1 figure (image placeholder + caption).
      - 1 list (numbered or bulleted).
      - 1 inline blockquote.

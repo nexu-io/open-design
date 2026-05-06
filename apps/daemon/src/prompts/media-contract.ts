@@ -41,7 +41,7 @@ export const MEDIA_GENERATION_CONTRACT = `
 
 This project is a **non-web** surface (image / video / audio). The unifying
 contract is: skill workflow + project metadata tell you WHAT to make; one
-shell command — \`od media generate\` — is HOW you actually produce bytes.
+shell command through \`OD_NODE_BIN\` + \`OD_BIN\` is HOW you actually produce bytes.
 Do not try to embed binary content inside \`<artifact>\` tags, and do not
 write image/video/audio bytes by hand. Always call out to the dispatcher.
 
@@ -59,14 +59,15 @@ prompt and the narration.
 
 The daemon spawns you with these env vars set (verify with \`echo\`):
 
-- \`OD_BIN\`         — absolute path to the \`od\` CLI script. Run with \`node "$OD_BIN" …\`.
+- \`OD_NODE_BIN\`    — absolute path to the Node-compatible runtime that started the daemon. Packaged desktop installs provide this even when the user has no system \`node\` on PATH.
+- \`OD_BIN\`         — absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" …\`.
 - \`OD_PROJECT_ID\`  — the active project's id. Pass it as \`--project "$OD_PROJECT_ID"\`.
 - \`OD_PROJECT_DIR\` — the project's files folder (your cwd). Generated files land here.
 - \`OD_DAEMON_URL\`  — base URL of the local daemon, e.g. \`http://127.0.0.1:7456\`.
 
 If any of these are unset, the user is running you outside the OD daemon —
 ask them to relaunch from the OD app (or pass the values explicitly).
-TODO (post-v1): teach \`od media generate\` to auto-spawn a transient
+TODO (post-v1): teach the media dispatcher to auto-spawn a transient
 daemon when invoked outside the OD app, so a user running \`claude\`
 directly in the project dir doesn't have to relaunch.
 
@@ -75,7 +76,7 @@ directly in the project dir doesn't have to relaunch.
 Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
 
 \`\`\`bash
-node "$OD_BIN" media generate \\
+"$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface <image|video|audio> \\
   --model <model-id> \\
@@ -103,14 +104,14 @@ Save the \`file.name\` and reference it in your reply ("I generated
 
 ### Allowed execution paths
 
-For media projects, \`node "$OD_BIN" media generate …\` is the **only**
+For media projects, \`"$OD_NODE_BIN" "$OD_BIN" media generate …\` is the **only**
 approved execution path **except for the \`hyperframes-html\` video
 model** — see the carve-out below. Do not replace the dispatcher with
 ad-hoc \`curl\` requests, direct imports of daemon modules, home-grown
 wrappers, or "equivalent" scripts. Do not probe the daemon with
 \`curl\`, \`lsof\`, \`netstat\`, or speculative environment debugging
-before the first generate attempt. Treat \`OD_BIN\`, \`OD_PROJECT_ID\`,
-and \`OD_DAEMON_URL\` as the source of truth and try the dispatcher
+before the first generate attempt. Treat \`OD_NODE_BIN\`, \`OD_BIN\`,
+\`OD_PROJECT_ID\`, and \`OD_DAEMON_URL\` as the source of truth and try the dispatcher
 first.
 
 #### Carve-out: \`hyperframes-html\` is agent-authored, daemon-rendered
@@ -145,7 +146,7 @@ npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
 # dark canvas, one warm + one cool accent, restrained motion unless
 # the user explicitly asked for something else.
 
-node "$OD_BIN" media generate \\
+"$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface video \\
   --model hyperframes-html \\
@@ -179,9 +180,9 @@ the same turn.
 
 ### Long-running renders (Volcengine i2v, hyperframes-html): generate → wait loop
 
-\`od media generate\` no longer blocks for the full render. It dispatches
+\`media generate\` no longer blocks for the full render. It dispatches
 the task daemon-side and returns within ~1s with a \`{taskId}\`. You then
-drive the render to completion by calling \`od media wait <taskId>\` in
+drive the render to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\` in
 a loop — each call long-polls the daemon for up to 25s, well below your
 shell tool's default 30s timeout. The wait subcommand exits with a
 distinct code per outcome:
@@ -190,14 +191,14 @@ distinct code per outcome:
 - \`exit 5\` — terminal **failed**. Stderr carries the upstream error.
 - \`exit 2\` — still **running**. Final stdout line is
   \`{"taskId":"…","status":"running","nextSince":<n>}\`. Re-run
-  \`od media wait <taskId> --since <n>\` to continue from where you left
+  \`"$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <n>\` to continue from where you left
   off (\`--since\` skips already-seen progress lines so you don't see the
   same chatter twice).
 
 The pattern in your shell tool:
 
 \`\`\`bash
-out=$(node "$OD_BIN" media generate --surface video --model … --image …)
+out=$("$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model … --image …)
 ec=$?
 if [ "$ec" -ne 0 ] && [ "$ec" -ne 2 ]; then
   echo "$out" >&2; exit "$ec"
@@ -205,7 +206,7 @@ fi
 task_id=$(printf '%s\\n' "$out" | tail -1 | jq -r '.taskId // empty')
 since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // 0')
 while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
-  out=$(node "$OD_BIN" media wait "$task_id" --since "$since")
+  out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
   since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
 done
@@ -238,7 +239,7 @@ showed it crashed).
   (\`doubao-seedance-2-0-260128\`, \`doubao-seedance-2-0-fast-260128\`,
   \`doubao-seedance-1-0-pro-250528\`, \`doubao-seedance-1-0-lite-i2v-250428\`)
   accepts a reference image as the first frame. Pass it via
-  \`--image <project-relative-path>\` to \`od media generate\`. The
+  \`--image <project-relative-path>\` to \`"$OD_NODE_BIN" "$OD_BIN" media generate\`. The
   daemon reads the file from the project, base64-encodes it, and
   forwards it as the model's \`image_url\` input. Path traversal
   outside the project is rejected.
@@ -271,16 +272,16 @@ substitution. Do not silently fall back.
    you start authoring. Once the user answers, write the composition
    files into \`.hyperframes-cache/\` and run \`npx hyperframes render\`
    immediately — do not add a second "plan" or "environment check"
-   message first, and do not call \`od media generate\` (that path is
+   message first, and do not call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` (that path is
    intentionally rejected for this model).
 3. **Generate by shell, narrate in chat.** When you actually invoke
-   \`od media generate\`, do it inside a clearly-labelled tool call. After
+   \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call. After
    it returns, write a short reply: what was produced, the filename,
    and any notes (model substitutions, retries, follow-up suggestions).
    If it fails, quote the real stderr / exit code and stop there.
    Never say "I dispatched the render" / "the generation has started"
    unless the shell command has already been executed.
-4. **Iterate by re-running.** To revise, call \`od media generate\` again
+4. **Iterate by re-running.** To revise, call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` again
    with a new \`--output\` filename (or omit \`--output\` to auto-name).
    Don't try to "edit" generated bytes by hand — re-generate and let the
    user pick which version to keep.
@@ -308,7 +309,7 @@ do **not** narrate a stub as if it were the final result.
    models without a real renderer, and the CLI prints the daemon's
    error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`od media generate\` and \`od media wait\` exit:
+2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` and \`"$OD_NODE_BIN" "$OD_BIN" media wait\` exit:
    \`0\` on real success, \`2\` when the task is **still running** and
    needs another \`wait\` call (see "Long-running renders" above), \`5\`
    when the daemon accepted the request but the provider call failed

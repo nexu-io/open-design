@@ -83,11 +83,22 @@ function handleOpenCodeEvent(obj, onEvent, state) {
   }
 
   if (obj.type === 'error') {
+    // OpenCode emits structured error frames on stdout (e.g. provider auth
+    // failures, network errors, schema mismatches) and still exits 0. Surface
+    // them as proper `error` events so server.ts's `sendAgentEvent` wrapper
+    // can flip the run to `failed` and forward a visible SSE error to the
+    // chat UI. Previously we downgraded these to `type:'raw'`, which is not
+    // rendered as an assistant message — the run looked like a fast clean
+    // success while the user actually got nothing back. See issue #691.
+    //
+    // Shape mirrors the qoder-stream contract (`{type, message, raw}`) so
+    // the daemon's existing error-handling path (server.ts:4156-4168)
+    // recognises it without further wiring.
     const message =
       (obj.error && typeof obj.error === 'object' && obj.error.data?.message) ||
       (obj.error && typeof obj.error === 'object' && obj.error.name) ||
       'OpenCode error';
-    onEvent({ type: 'raw', line: stringifyContent({ type: 'error', message }) });
+    onEvent({ type: 'error', message, raw: stringifyContent(obj) });
     return true;
   }
 

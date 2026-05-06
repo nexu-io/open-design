@@ -7,6 +7,7 @@ import type {
   NotificationsConfig,
   PetConfig,
 } from '../types';
+import { normalizeAccentColor } from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
   DEFAULT_SUCCESS_SOUND_ID,
@@ -59,7 +60,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   onboardingCompleted: false,
   theme: 'system',
   mediaProviders: {},
+  composio: {},
   agentModels: {},
+  agentCliEnv: {},
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
 };
@@ -232,7 +235,10 @@ export function loadConfig(): AppConfig {
       ...parsed,
       apiProtocolConfigs: { ...(parsed.apiProtocolConfigs ?? {}) },
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
+      composio: { ...(parsed.composio ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
+      agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
+      accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
     };
@@ -266,8 +272,81 @@ export function loadConfig(): AppConfig {
   }
 }
 
+interface PublicComposioConfigResponse {
+  configured?: boolean;
+  apiKeyTail?: string;
+}
+
+export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['composio'] | null> {
+  try {
+    const response = await fetch('/api/connectors/composio/config');
+    if (!response.ok) return null;
+    const payload = await response.json() as PublicComposioConfigResponse;
+    return {
+      apiKey: '',
+      apiKeyConfigured: Boolean(payload.configured),
+      apiKeyTail: payload.apiKeyTail ?? '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function syncComposioConfigToDaemon(
+  config: AppConfig['composio'] | undefined,
+): Promise<void> {
+  const apiKey = config?.apiKey ?? '';
+  const payload = {
+    ...(apiKey.trim() || !config?.apiKeyConfigured ? { apiKey } : {}),
+  };
+  try {
+    await fetch('/api/connectors/composio/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // Daemon offline; localStorage keeps the user's copy for the next save.
+  }
+}
+
 export function saveConfig(config: AppConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export function mergeDaemonConfig(
+  localConfig: AppConfig,
+  daemonConfig: AppConfigPrefs | null,
+): AppConfig {
+  const next = { ...localConfig };
+  if (!daemonConfig) return next;
+
+  if (daemonConfig.onboardingCompleted != null) {
+    next.onboardingCompleted = daemonConfig.onboardingCompleted;
+  }
+  if (daemonConfig.agentId !== undefined) {
+    next.agentId = daemonConfig.agentId;
+  }
+  if (daemonConfig.skillId !== undefined) {
+    next.skillId = daemonConfig.skillId;
+  }
+  if (daemonConfig.designSystemId !== undefined) {
+    next.designSystemId = daemonConfig.designSystemId;
+  }
+  if (daemonConfig.agentModels) {
+    next.agentModels = {
+      ...(next.agentModels ?? {}),
+      ...daemonConfig.agentModels,
+    };
+  }
+  next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
+  if (daemonConfig.disabledSkills !== undefined) {
+    next.disabledSkills = daemonConfig.disabledSkills;
+  }
+  if (daemonConfig.disabledDesignSystems !== undefined) {
+    next.disabledDesignSystems = daemonConfig.disabledDesignSystems;
+  }
+  return next;
 }
 
 export function hasAnyConfiguredProvider(
@@ -311,8 +390,11 @@ export async function syncConfigToDaemon(config: AppConfig): Promise<void> {
     onboardingCompleted: config.onboardingCompleted,
     agentId: config.agentId,
     agentModels: config.agentModels,
+    agentCliEnv: config.agentCliEnv,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
+    disabledSkills: config.disabledSkills,
+    disabledDesignSystems: config.disabledDesignSystems,
   };
   try {
     await fetch('/api/app-config', {

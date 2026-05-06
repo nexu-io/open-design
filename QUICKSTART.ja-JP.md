@@ -1,6 +1,6 @@
 # クイックスタート
 
-<p align="center"><a href="QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <b>日本語</b></p>
+<p align="center"><a href="QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <b>日本語</b> · <a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
 製品全体をローカルで実行します。
 
@@ -69,7 +69,7 @@ pnpm tools-dev logs            # daemon/web/desktop のログを表示
 pnpm tools-dev check           # status + 最近のログ + 一般的な診断
 pnpm tools-dev stop            # 管理対象ランタイムを停止
 pnpm --filter @open-design/daemon build  # `od` 用に apps/daemon/dist/cli.js をビルド
-pnpm build                     # 本番ビルド + apps/web/out/ への静的エクスポート
+pnpm --filter @open-design/web build     # 必要に応じて web パッケージをビルド
 pnpm typecheck                 # workspace の typecheck
 ```
 
