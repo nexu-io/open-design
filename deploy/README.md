@@ -14,14 +14,19 @@ OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose up -d --n
 
 Defaults:
 
-- Host port: `7456` (`OPEN_DESIGN_PORT=8080` to override)
+- Host port: `127.0.0.1:7456` (`OPEN_DESIGN_PORT=8080` to publish on `127.0.0.1:8080`)
 - Runtime data volume: `open_design_data` mounted at `/app/.od`
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 
-When exposing the service through a public IP, domain, or reverse proxy, set
-`OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be allowed to
-call `/api`:
+Do not publish the daemon directly on a public or shared LAN interface. The API is
+unauthenticated for non-browser clients, so remote deployments should keep Compose
+bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
+front of it.
+
+When exposing the service through an authenticated public IP, domain, or reverse
+proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be
+allowed to call `/api`:
 
 ```bash
 OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build

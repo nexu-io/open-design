@@ -14,8 +14,9 @@ services:
       OD_BIND_HOST: 0.0.0.0
       OD_ALLOWED_ORIGINS: ${OPEN_DESIGN_ALLOWED_ORIGINS:-}
       OD_PORT: 7456
+      OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
     ports:
-      - "${OPEN_DESIGN_PORT:-7456}:7456"
+      - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"
     volumes:
       - open_design_data:/app/.od
     read_only: true
