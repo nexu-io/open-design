@@ -37,6 +37,11 @@ function extractErrorMessage(value, fallback) {
     if (value.error && typeof value.error === 'object') {
       return extractErrorMessage(value.error, fallback);
     }
+    if (value.data && typeof value.data === 'object') {
+      const dataMessage = extractErrorMessage(value.data, '');
+      if (dataMessage) return dataMessage;
+    }
+    if (typeof value.name === 'string' && value.name) return value.name;
   }
   return fallback;
 }
@@ -104,10 +109,10 @@ function handleOpenCodeEvent(obj, onEvent, state) {
   }
 
   if (obj.type === 'error') {
-    const message =
-      (obj.error && typeof obj.error === 'object' && obj.error.data?.message) ||
-      (obj.error && typeof obj.error === 'object' && obj.error.name) ||
-      'OpenCode error';
+    const message = extractErrorMessage(
+      obj.error ?? obj.message,
+      'OpenCode error',
+    );
     onEvent({ type: 'error', message });
     return true;
   }

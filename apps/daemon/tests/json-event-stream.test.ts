@@ -71,6 +71,38 @@ test('opencode json stream emits structured errors as error events', () => {
   ]);
 });
 
+test('opencode json stream preserves nested error messages', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      error: { message: 'model not found: openai/nope' },
+    }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'error', message: 'model not found: openai/nope' },
+  ]);
+});
+
+test('opencode json stream falls back to error name when data has no message', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      error: { name: 'AuthError', data: {} },
+    }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'error', message: 'AuthError' },
+  ]);
+});
+
 test('unknown json stream lines become raw events', () => {
   const events = [];
   const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));

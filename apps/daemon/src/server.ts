@@ -3704,6 +3704,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     let child;
     let acpSession = null;
+    let jsonStreamFatal = false;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -3881,6 +3882,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         def.eventParser || def.id,
         (ev) => {
           if (ev?.type === 'error') {
+            jsonStreamFatal = true;
             send(
               'error',
               createSseErrorPayload(
@@ -3909,6 +3911,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     child.on('close', (code, signal) => {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      if (jsonStreamFatal) {
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
       if (acpSession?.hasFatalError()) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
