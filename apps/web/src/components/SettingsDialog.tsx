@@ -1260,8 +1260,8 @@ function MediaProvidersSection({
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
       const bEntry = cfg.mediaProviders?.[b.id];
-      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim());
-      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim());
+      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim() || aEntry?.apiKeyConfigured);
+      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim() || bEntry?.apiKeyConfigured);
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       if (a.integrated !== b.integrated) return a.integrated ? -1 : 1;
       return a.label.localeCompare(b.label);
@@ -1294,10 +1294,17 @@ function MediaProvidersSection({
       <div className="media-provider-list">
         {providers.map((provider) => {
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
-          const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
+          const configured = Boolean(
+            entry.apiKey.trim() || entry.baseUrl.trim() || entry.apiKeyConfigured,
+          );
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
-          const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
+          const clearable = Boolean(
+            entry.apiKey.trim()
+            || entry.baseUrl.trim()
+            || entry.model?.trim()
+            || entry.apiKeyConfigured,
+          );
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">

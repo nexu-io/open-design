@@ -20,11 +20,14 @@ import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
+  fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
   mergeDaemonConfig,
+  mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -135,6 +138,7 @@ export function App() {
         versionInfo,
         daemonConfig,
         daemonComposioConfig,
+        daemonMediaProviders,
       ] = await Promise.all([
         alive ? fetchAgents() : Promise.resolve([] as AgentInfo[]),
         alive ? fetchSkills() : Promise.resolve([] as SkillSummary[]),
@@ -149,6 +153,7 @@ export function App() {
         alive ? fetchAppVersionInfo() : Promise.resolve(null),
         alive ? fetchDaemonConfig() : Promise.resolve(null),
         alive ? fetchComposioConfigFromDaemon() : Promise.resolve(null),
+        alive ? fetchMediaProvidersFromDaemon() : Promise.resolve(null),
       ]);
       if (cancelled) return;
       setAgents(agentList);
@@ -162,7 +167,14 @@ export function App() {
       setConfig((prev) => {
         // Merge daemon-persisted config — daemon values win for the fields
         // it tracks so that the choice survives origin/storage resets.
-        const next = mergeDaemonConfig(prev, daemonConfig);
+        const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
+          prev.mediaProviders,
+          daemonMediaProviders,
+        );
+        const next = mergeDaemonMediaProviders(
+          mergeDaemonConfig(prev, daemonConfig),
+          daemonMediaProviders,
+        );
 
         if (alive) {
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
@@ -170,16 +182,16 @@ export function App() {
             next.composio = daemonComposioConfig;
           }
           if (!next.agentId) {
-            const firstAvailable = agentList.find((a) => a.available);
+            const firstAvailable = agentList.find((a: AgentInfo) => a.available);
             if (firstAvailable) next.agentId = firstAvailable.id;
           }
           if (!next.designSystemId && dsList.length > 0) {
             next.designSystemId =
-              dsList.find((d) => d.id === 'default')?.id ?? dsList[0]!.id;
+              dsList.find((d: DesignSystemSummary) => d.id === 'default')?.id ?? dsList[0]!.id;
           }
         }
         saveConfig(next);
-        if (alive && hasAnyConfiguredProvider(next.mediaProviders)) {
+        if (alive && migratedLocalMediaProviders && hasAnyConfiguredProvider(next.mediaProviders)) {
           void syncMediaProvidersToDaemon(next.mediaProviders);
         }
         // Migrate localStorage prefs to daemon on first boot with the new

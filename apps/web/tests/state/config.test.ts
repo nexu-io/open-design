@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_CONFIG,
+  fetchMediaProvidersFromDaemon,
   loadConfig,
   mergeDaemonConfig,
+  mergeDaemonMediaProviders,
+  shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
 } from '../../src/state/config';
@@ -132,6 +135,142 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.agentCliEnv).toEqual({
       codex: { CODEX_HOME: '~/.codex-new' },
+    });
+  });
+});
+
+describe('mergeDaemonMediaProviders', () => {
+  it('prefers daemon-backed media provider state when present', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+      },
+      {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://daemon.example/v1',
+        },
+      },
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: 'https://daemon.example/v1',
+      },
+    });
+  });
+
+  it('keeps local media providers when daemon has no stored state yet', () => {
+    const localConfig = {
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        openai: {
+          apiKey: 'sk-local',
+          baseUrl: 'https://local.example/v1',
+        },
+      },
+    };
+
+    const merged = mergeDaemonMediaProviders(localConfig, {
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+        baseUrl: '',
+      },
+    });
+
+    expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
+  });
+});
+
+describe('shouldSyncLocalMediaProvidersToDaemon', () => {
+  it('returns true when local providers exist and daemon has none yet', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: false,
+            apiKeyTail: '',
+            baseUrl: '',
+          },
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false when daemon already has persisted media provider state', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+          },
+        },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('fetchMediaProvidersFromDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('maps daemon media config into masked local config state', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          providers: {
+            openai: {
+              configured: true,
+              apiKeyTail: '1234',
+              baseUrl: 'https://daemon.example/v1',
+              model: 'gpt-image-1',
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: 'https://daemon.example/v1',
+        model: 'gpt-image-1',
+      },
     });
   });
 });

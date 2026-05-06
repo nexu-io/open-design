@@ -275,6 +275,31 @@ interface PublicComposioConfigResponse {
   apiKeyTail?: string;
 }
 
+interface PublicMediaProviderConfigEntry {
+  configured?: boolean;
+  apiKeyTail?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
+interface PublicMediaProviderConfigResponse {
+  providers?: Record<string, PublicMediaProviderConfigEntry>;
+}
+
+function hasAnyDaemonManagedMediaProvider(
+  providers: Record<string, MediaProviderCredentials> | null | undefined,
+): boolean {
+  if (!providers) return false;
+  return Object.values(providers).some((entry) =>
+    Boolean(
+      entry?.apiKeyConfigured
+      || entry?.apiKeyTail?.trim()
+      || entry?.baseUrl?.trim()
+      || entry?.model?.trim(),
+    ),
+  );
+}
+
 export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['composio'] | null> {
   try {
     const response = await fetch('/api/connectors/composio/config');
@@ -285,6 +310,30 @@ export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['compos
       apiKeyConfigured: Boolean(payload.configured),
       apiKeyTail: payload.apiKeyTail ?? '',
     };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchMediaProvidersFromDaemon(): Promise<AppConfig['mediaProviders'] | null> {
+  try {
+    const response = await fetch('/api/media/config');
+    if (!response.ok) return null;
+    const payload = await response.json() as PublicMediaProviderConfigResponse;
+    const rawProviders = payload.providers ?? {};
+    const providers: AppConfig['mediaProviders'] = {};
+    for (const [providerId, entry] of Object.entries(rawProviders)) {
+      providers[providerId] = {
+        apiKey: '',
+        apiKeyConfigured: Boolean(entry?.configured),
+        apiKeyTail: entry?.apiKeyTail ?? '',
+        baseUrl: entry?.baseUrl ?? '',
+        ...(typeof entry?.model === 'string' && entry.model.trim()
+          ? { model: entry.model.trim() }
+          : {}),
+      };
+    }
+    return providers;
   } catch {
     return null;
   }
@@ -347,6 +396,19 @@ export function mergeDaemonConfig(
   return next;
 }
 
+export function mergeDaemonMediaProviders(
+  localConfig: AppConfig,
+  daemonProviders: AppConfig['mediaProviders'] | null,
+): AppConfig {
+  if (!hasAnyDaemonManagedMediaProvider(daemonProviders)) {
+    return { ...localConfig };
+  }
+  return {
+    ...localConfig,
+    mediaProviders: { ...(daemonProviders ?? {}) },
+  };
+}
+
 export function hasAnyConfiguredProvider(
   providers: Record<string, MediaProviderCredentials> | undefined,
 ): boolean {
@@ -354,6 +416,14 @@ export function hasAnyConfiguredProvider(
   return Object.values(providers).some((entry) =>
     Boolean(entry?.apiKey?.trim() || entry?.baseUrl?.trim()),
   );
+}
+
+export function shouldSyncLocalMediaProvidersToDaemon(
+  localProviders: Record<string, MediaProviderCredentials> | undefined,
+  daemonProviders: Record<string, MediaProviderCredentials> | null,
+): boolean {
+  return hasAnyConfiguredProvider(localProviders)
+    && !hasAnyDaemonManagedMediaProvider(daemonProviders);
 }
 
 export async function syncMediaProvidersToDaemon(
