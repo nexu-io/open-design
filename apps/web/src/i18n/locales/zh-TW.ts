@@ -332,6 +332,7 @@ export const zhTW: Dict = {
   'examples.modePrototypeMobile': '原型 · 行動版',
   'examples.modeDeck': '投影片',
   'examples.modeDocument': '文件與範本',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': '通用',
   'examples.scenarioEngineering': '工程',
   'examples.scenarioProduct': '產品',

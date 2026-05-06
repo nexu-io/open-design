@@ -19,7 +19,7 @@ interface Props {
   onUsePrompt: (skill: SkillSummary) => void;
 }
 
-type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document';
+type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document' | 'orbit';
 type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
 
@@ -37,6 +37,7 @@ const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'prototype-mobile', labelKey: 'examples.modePrototypeMobile' },
   { value: 'deck', labelKey: 'examples.modeDeck' },
   { value: 'document', labelKey: 'examples.modeDocument' },
+  { value: 'orbit', labelKey: 'examples.modeOrbit' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {
@@ -85,6 +86,7 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
   if (filter === 'prototype-mobile')
     return skill.mode === 'prototype' && skill.platform === 'mobile';
   if (filter === 'document') return skill.mode === 'template';
+  if (filter === 'orbit') return skill.scenario === 'orbit';
   return true;
 }
 
@@ -147,12 +149,14 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       'prototype-mobile': 0,
       deck: 0,
       document: 0,
+      orbit: 0,
     };
     for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
       if (matchesMode(s, 'prototype-mobile')) c['prototype-mobile']++;
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
+      if (matchesMode(s, 'orbit')) c.orbit++;
     }
     return c;
   }, [skills, surfaceFilter]);
@@ -357,7 +361,41 @@ function ExampleCard({
   const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [intersected, setIntersected] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  // Eagerly request the preview HTML once the card scrolls near the viewport.
+  // The 800px bottom rootMargin prefetches cards that are about to be
+  // scrolled into view so the iframe is ready by the time the user reaches
+  // it. Hover (below) is kept as a fallback for environments that lack
+  // IntersectionObserver or for cards already visible on first paint that
+  // somehow miss the initial observation.
+  useEffect(() => {
+    if (intersected) return;
+    const node = cardRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIntersected(true);
+      onLoad();
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setIntersected(true);
+            onLoad();
+            obs.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '0px 0px 800px 0px' },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [intersected, onLoad]);
 
   useEffect(() => {
     if (!shareOpen) return;
@@ -384,6 +422,7 @@ function ExampleCard({
 
   return (
     <div
+      ref={cardRef}
       className="example-card"
       data-testid={`example-card-${skill.id}`}
       onMouseEnter={() => {
@@ -419,7 +458,7 @@ function ExampleCard({
           </>
         ) : (
           <div className="example-preview-placeholder">
-            {hovered
+            {hovered || intersected
               ? t('examples.loadingPreview')
               : t('examples.hoverPreview')}
           </div>

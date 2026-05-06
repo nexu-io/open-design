@@ -83,7 +83,7 @@ Local installs use XDG paths:
 - Menu entry: `~/.local/share/applications/open-design-<namespace>.desktop`
 - Icon: `~/.local/share/icons/hicolor/512x512/apps/open-design-<namespace>.png`
 
-The `<namespace>` suffix is unconditional so multiple developer namespaces can coexist on the same desktop. The `.desktop` file registers the `od://` scheme via `MimeType=x-scheme-handler/od;` and pre-sets `OD_NAMESPACE` on the `Exec=` line so menu launches identify the correct namespace.
+The `<namespace>` suffix is unconditional so multiple developer namespaces can coexist on the same desktop. The `.desktop` file registers the `od://` scheme via `MimeType=x-scheme-handler/od;` and pre-sets `OD_PACKAGED_NAMESPACE` on the `Exec=` line so menu launches identify the correct namespace.
 
 ### AppImage launch mode (FUSE caveat)
 

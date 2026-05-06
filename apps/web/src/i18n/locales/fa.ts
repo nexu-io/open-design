@@ -338,6 +338,7 @@ export const fa: Dict = {
   'examples.modePrototypeMobile': 'نمونه اولیه · موبایل',
   'examples.modeDeck': 'اسلایدها',
   'examples.modeDocument': 'اسناد و قالب‌ها',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': 'عمومی',
   'examples.scenarioEngineering': 'مهندسی',
   'examples.scenarioProduct': 'محصول',

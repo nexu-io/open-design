@@ -1119,7 +1119,7 @@ code {
   .modal-settings { max-height: 90vh; }
 }
 .modal-settings .modal-body {
-  overflow-y: auto;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -1172,6 +1172,9 @@ code {
   padding: 22px 12px;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .settings-nav-item {
   width: 100%;
@@ -1221,8 +1224,10 @@ code {
 }
 .settings-content {
   min-width: 0;
+  min-height: 0;
   padding: 22px var(--modal-padding);
   overflow: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -1237,6 +1242,7 @@ code {
   .settings-sidebar {
     flex-direction: row;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     padding: 10px 12px;
     border-right: 0;
     border-bottom: 1px solid var(--border);

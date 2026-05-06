@@ -398,6 +398,7 @@ export interface Dict {
   'examples.modePrototypeMobile': string;
   'examples.modeDeck': string;
   'examples.modeDocument': string;
+  'examples.modeOrbit': string;
   'examples.scenarioGeneral': string;
   'examples.scenarioEngineering': string;
   'examples.scenarioProduct': string;
