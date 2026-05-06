@@ -4,8 +4,9 @@ services:
     container_name: open-design
     ports:
       # Bind only to loopback by default — the daemon is local-first
-      # with no auth. To expose on a LAN, replace 127.0.0.1 with the
-      # desired interface IP and put a reverse proxy / auth layer in front.
+      # with no auth. To expose beyond localhost, you must use a
+      # reverse proxy (nginx, caddy) that rewrites the Origin header,
+      # set OD_BIND_HOST to the actual interface IP, and add auth.
       - "127.0.0.1:7456:7456"
     volumes:
       - od_data:/app/.od
