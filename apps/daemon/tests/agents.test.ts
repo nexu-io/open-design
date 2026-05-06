@@ -41,6 +41,7 @@ const originalHome = process.env.HOME;
 const originalAgentHome = process.env.OD_AGENT_HOME;
 const originalDaemonUrl = process.env.OD_DAEMON_URL;
 const originalToolToken = process.env.OD_TOOL_TOKEN;
+const originalNpmConfigPrefix = process.env.NPM_CONFIG_PREFIX;
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -69,6 +70,11 @@ afterEach(() => {
     delete process.env.OD_TOOL_TOKEN;
   } else {
     process.env.OD_TOOL_TOKEN = originalToolToken;
+  }
+  if (originalNpmConfigPrefix == null) {
+    delete process.env.NPM_CONFIG_PREFIX;
+  } else {
+    process.env.NPM_CONFIG_PREFIX = originalNpmConfigPrefix;
   }
   globalThis.fetch = originalFetch;
 });
@@ -845,7 +851,11 @@ fsTest(
           `got ${resolved}`,
       );
     } finally {
-      delete process.env.NPM_CONFIG_PREFIX;
+      // afterEach restores NPM_CONFIG_PREFIX to its pre-test value (or
+      // deletes it when it was unset), so do not unconditionally
+      // `delete` it here — that would clobber an export the developer
+      // / CI runner had already set, leaking into the next test in the
+      // same Vitest worker.
       rmSync(sandbox, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
     }
