@@ -79,12 +79,12 @@ describe('resolveDataDir', () => {
     expect(resolveDataDir('${HOME}', projectRoot)).toBe(fakeHome);
   });
 
-  it('passes absolute paths through unchanged', () => {
+  it('passes absolute paths through unchanged', async () => {
     const abs = mkdtempSync(path.join(os.tmpdir(), 'rdd-abs-'));
     try {
       expect(resolveDataDir(abs, projectRoot)).toBe(abs);
     } finally {
-      void rm(abs, { recursive: true, force: true });
+      await rm(abs, { recursive: true, force: true });
     }
   });
 
