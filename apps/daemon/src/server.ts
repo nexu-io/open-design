@@ -209,6 +209,170 @@ export function resolveCodexGeneratedImagesDir(
   return path.resolve(codexHome, 'generated_images');
 }
 
+type DirectoryStat = {
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+};
+
+type CodexGeneratedImagesDirValidationOptions = {
+  protectedDirs?: Array<string | null | undefined>;
+  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
+  lstatSync?: (target: string) => DirectoryStat;
+  statSync?: (target: string) => DirectoryStat;
+  realpathSync?: (target: string) => string;
+  warn?: (message: string) => void;
+};
+
+function isMissingPathError(err: unknown): boolean {
+  return (
+    err &&
+    typeof err === 'object' &&
+    'code' in err &&
+    err.code === 'ENOENT'
+  );
+}
+
+function collectProtectedDirRoots(
+  protectedDirs: Array<string | null | undefined>,
+  {
+    realpathSync,
+    statSync,
+  }: {
+    realpathSync: (target: string) => string;
+    statSync: (target: string) => DirectoryStat;
+  },
+): string[] {
+  const roots = [];
+  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
+    const resolved = path.resolve(raw);
+    roots.push(resolved);
+    try {
+      const canonical = realpathSync(resolved);
+      try {
+        if (statSync(canonical).isDirectory()) roots.push(canonical);
+      } catch {
+        roots.push(canonical);
+      }
+    } catch {
+      // A missing protected root cannot be the canonical target of a symlink.
+    }
+  }
+  return Array.from(new Set(roots));
+}
+
+function findContainingProtectedRoot(
+  candidate: string,
+  protectedRoots: string[],
+): string | null {
+  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
+}
+
+export function validateCodexGeneratedImagesDir(
+  codexGeneratedImagesDir: string | null | undefined,
+  {
+    protectedDirs = [],
+    mkdirSync = fs.mkdirSync,
+    lstatSync = fs.lstatSync,
+    statSync = fs.statSync,
+    realpathSync = fs.realpathSync.native,
+    warn = console.warn,
+  }: CodexGeneratedImagesDirValidationOptions = {},
+): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.trim().length === 0
+  ) {
+    return null;
+  }
+
+  const resolved = path.resolve(codexGeneratedImagesDir);
+  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
+    realpathSync,
+    statSync,
+  });
+  const warnSkipped = (reason: string) =>
+    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
+
+  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
+  if (protectedRoot) {
+    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
+    return null;
+  }
+
+  try {
+    let existingTargetStat = null;
+    try {
+      existingTargetStat = lstatSync(resolved);
+    } catch (err) {
+      if (!isMissingPathError(err)) throw err;
+    }
+    if (existingTargetStat?.isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (existingTargetStat && !existingTargetStat.isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+
+    const parent = path.dirname(resolved);
+    const protectedParentRoot = findContainingProtectedRoot(
+      parent,
+      protectedRoots,
+    );
+    if (protectedParentRoot) {
+      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
+      return null;
+    }
+
+    mkdirSync(parent, { recursive: true });
+    const canonicalParent = realpathSync(parent);
+    const canonicalCandidate = path.join(
+      canonicalParent,
+      path.basename(resolved),
+    );
+    const protectedCanonicalParentRoot = findContainingProtectedRoot(
+      canonicalCandidate,
+      protectedRoots,
+    );
+    if (protectedCanonicalParentRoot) {
+      warnSkipped(
+        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
+      );
+      return null;
+    }
+
+    mkdirSync(resolved, { recursive: true });
+    if (lstatSync(resolved).isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (!statSync(resolved).isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+    const canonicalDir = realpathSync(resolved);
+    const protectedCanonicalRoot = findContainingProtectedRoot(
+      canonicalDir,
+      protectedRoots,
+    );
+    if (protectedCanonicalRoot) {
+      warnSkipped(
+        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
+      );
+      return null;
+    }
+
+    return canonicalDir;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : String(err ?? 'unknown error');
+    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
+    return null;
+  }
+}
+
 export function resolveChatExtraAllowedDirs({
   agentId,
   skillsDir,
@@ -241,6 +405,28 @@ export function resolveChatExtraAllowedDirs({
       ),
     ),
   );
+}
+
+export function resolveGrantedCodexImagegenOverride({
+  agentId,
+  metadata,
+  codexGeneratedImagesDir,
+  extraAllowedDirs = [],
+}: {
+  agentId?: string | null;
+  metadata?: unknown;
+  codexGeneratedImagesDir?: string | null;
+  extraAllowedDirs?: string[];
+}): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.length === 0 ||
+    !Array.isArray(extraAllowedDirs) ||
+    !extraAllowedDirs.includes(codexGeneratedImagesDir)
+  ) {
+    return null;
+  }
+  return renderCodexImagegenOverride(agentId, metadata);
 }
 
 export function normalizeCommentAttachments(input) {
@@ -3548,29 +3734,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId,
         designSystemId,
       });
-    const codexImagegenOverride = renderCodexImagegenOverride(
-      agentId,
-      projectRecord?.metadata,
-    );
-    const instructionPrompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt,
-      runtimeToolPrompt,
-      clientSystemPrompt: systemPrompt,
-      finalPromptOverride: codexImagegenOverride,
-    });
-    const composed = [
-      instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
-        : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
-          : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
-            : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
-      safeImages.length
-        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
-        : '',
-    ].join('');
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -3625,22 +3788,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       projectRecord?.metadata,
     );
     if (codexGeneratedImagesDir) {
-      try {
-        fs.mkdirSync(codexGeneratedImagesDir, { recursive: true });
-        if (!fs.statSync(codexGeneratedImagesDir).isDirectory()) {
-          console.warn(
-            `[od] codex generated_images allowlist skipped: ${codexGeneratedImagesDir} is not a directory`,
-          );
-          codexGeneratedImagesDir = null;
-        }
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : String(err ?? 'unknown error');
-        console.warn(
-          `[od] codex generated_images allowlist mkdir failed: ${message}`,
-        );
-        codexGeneratedImagesDir = null;
-      }
+      codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
+        codexGeneratedImagesDir,
+        {
+          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
+        },
+      );
     }
     const extraAllowedDirs = resolveChatExtraAllowedDirs({
       agentId,
@@ -3649,6 +3802,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       linkedDirs,
       codexGeneratedImagesDir,
     });
+    const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
+      agentId,
+      metadata: projectRecord?.metadata,
+      codexGeneratedImagesDir,
+      extraAllowedDirs,
+    });
+    const instructionPrompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt,
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+      finalPromptOverride: codexImagegenOverride,
+    });
+    const composed = [
+      instructionPrompt
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        : cwdHint
+          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          : linkedDirsHint
+            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            : '',
+      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      safeImages.length
+        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
+        : '',
+    ].join('');
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
