@@ -1092,16 +1092,32 @@ function webIdentityPath(config: ToolPackConfig): string {
   return join(config.roots.runtime.namespaceRoot, "runtime", "web-root.json");
 }
 
-async function waitForWebIdentity(config: ToolPackConfig, timeoutMs: number): Promise<WebRootIdentity | null> {
+function isValidWebIdentity(
+  identity: unknown,
+  namespace: string,
+  pid: number,
+): identity is WebRootIdentity {
+  if (typeof identity !== "object" || identity == null) return false;
+  const obj = identity as Record<string, unknown>;
+  return (
+    obj.version === 1 &&
+    obj.namespace === namespace &&
+    obj.pid === pid &&
+    typeof obj.url === "string" &&
+    obj.url.length > 0
+  );
+}
+
+async function waitForWebIdentity(config: ToolPackConfig, childPid: number, timeoutMs: number): Promise<WebRootIdentity | null> {
   const path = webIdentityPath(config);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const content = await readFile(path, "utf8");
-      const identity = JSON.parse(content) as WebRootIdentity;
-      if (identity.url != null) return identity;
+      const identity = JSON.parse(content);
+      if (isValidWebIdentity(identity, config.namespace, childPid)) return identity;
     } catch {
-      // File doesn't exist yet
+      // File doesn't exist yet or invalid JSON
     }
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -1129,12 +1145,14 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
 
   // Write a self-contained launcher script. The namespace is baked in so the
   // launcher name and the runtime namespace always agree. namespace is
-  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. OD_DATA_DIR and
-  // OD_RESOURCE_ROOT may still be overridden by the caller's environment.
+  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. OD_DATA_DIR is baked
+  // so the headless process writes its runtime data under the same paths that
+  // tools-pack stop/logs expect.
+  const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
   const script = [
     "#!/bin/sh",
     `# Open Design headless launcher — namespace: ${config.namespace}`,
-    `OD_NAMESPACE=${JSON.stringify(config.namespace)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
+    `OD_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 
   await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
@@ -1160,9 +1178,10 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
 
-  // Remove stale identity marker from a previous run so waitForMarker below
-  // waits for the newly spawned process.
+  // Remove stale identity markers from a previous run so waitForMarker and
+  // waitForWebIdentity below wait for the newly spawned process.
   await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+  await rm(webIdentityPath(config), { force: true }).catch(() => undefined);
 
   // Open the log file so stdout/stderr from the headless process are captured.
   const logHandle = await open(logPath, "a");
@@ -1198,7 +1217,7 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
     throw new Error(`headless identity marker not written within 35s at ${markerPath}`);
   }
 
-  const webIdentity = await waitForWebIdentity(config, 60_000);
+  const webIdentity = await waitForWebIdentity(config, child.pid, 60_000);
   if (webIdentity == null) {
     await teardownOrphanedStart(child.pid).catch(() => undefined);
     throw new Error(`web-root.json not written within 60s at ${webIdentityPath(config)}`);
@@ -1284,6 +1303,7 @@ export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<L
 
   if (result.remainingPids.length === 0) {
     await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+    await rm(webIdentityPath(config), { force: true }).catch(() => undefined);
   }
 
   return {

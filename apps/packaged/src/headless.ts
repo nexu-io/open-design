@@ -7,11 +7,13 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
+  SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  normalizeDesktopSidecarMessage,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime, resolveAppIpcPath } from "@open-design/sidecar";
+import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
 
 import type { PackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
@@ -37,8 +39,8 @@ function resolveHeadlessConfig(): PackagedConfig {
   const namespace =
     OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
       process.env.OD_NAMESPACE ??
-        process.env.OD_SIDECAR_NAMESPACE ??
-        SIDECAR_DEFAULTS.namespace,
+      process.env.OD_SIDECAR_NAMESPACE ??
+      SIDECAR_DEFAULTS.namespace,
     );
 
   const namespaceBaseRoot = resolveHeadlessNamespaceBaseRoot();
@@ -104,7 +106,7 @@ async function main(): Promise<void> {
     webOutputMode: config.webOutputMode,
   });
 
-const webUrl = sidecars.web.url;
+  const webUrl = sidecars.web.url;
   if (!webUrl) {
     await sidecars.close().catch(() => undefined);
     await identity.close().catch(() => undefined);
@@ -118,15 +120,32 @@ const webUrl = sidecars.web.url;
   });
 
   process.stdout.write(`\n Open Design is running\n\n`);
-  process.stdout.write(`  ➜  ${colorize(webUrl)}\n\n`);
-  process.stdout.write(`  Press Ctrl+C to stop\n\n`);
+  process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
+  process.stdout.write(` Press Ctrl+C to stop\n\n`);
 
   const shutdown = async (): Promise<void> => {
-    process.stdout.write("\n  Shutting down Open Design...\n");
+    process.stdout.write("\n Shutting down Open Design...\n");
+    await ipcServer.close().catch(() => undefined);
     await sidecars.close().catch(() => undefined);
     await identity.close().catch(() => undefined);
     process.exit(0);
   };
+
+  const ipcServer = await createJsonIpcServer({
+    socketPath: stamp.ipc,
+    handler: async (message: unknown) => {
+      const request = normalizeDesktopSidecarMessage(message);
+      switch (request.type) {
+        case SIDECAR_MESSAGES.STATUS:
+          return { pid: process.pid, state: "running", url: webUrl, updatedAt: new Date().toISOString() };
+        case SIDECAR_MESSAGES.SHUTDOWN:
+          setImmediate(() => {
+            void shutdown().finally(() => process.exit(0));
+          });
+          return { accepted: true };
+      }
+    },
+  });
 
   process.on("SIGINT", () => {
     void shutdown();
