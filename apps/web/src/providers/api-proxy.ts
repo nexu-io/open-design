@@ -73,6 +73,14 @@ export async function streamProxyEndpoint(
         }
 
         if (parsed.event === 'end') {
+          const sr = parsed.data?.stopReason;
+          if (sr === 'max_tokens' || sr === 'length') {
+            handlers.onError(new Error(
+              `Response truncated (stop_reason=${sr}). The output hit the token limit. ` +
+              `Try increasing max_tokens in Settings or reducing the prompt length.`
+            ));
+            return;
+          }
           handlers.onDone(acc);
           return;
         }

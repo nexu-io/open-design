@@ -1,5 +1,15 @@
 # Open Design
 
+> **Fix branch — 2026-05-06** · [Fix logs →](docs/fixlogs/)
+>
+> This branch contains 4 rounds of fixes for the API-mode agent conversation flow:
+> - **fix_0**: Daemon `stop_reason` check, frontend event gating, transcript tool context
+> - **fix_1**: Anti-loop guard in discovery prompt (Quick Brief Phase 1/2/3 + irreversibility)
+> - **fix_2**: `max_tokens` default 8192→16384 + truncation detection across all streaming paths
+> - **fix_3**: API-mode tool call execution loop (XML parser + executor + agent loop) + token usage visualization
+>
+> See [docs/fixlogs/](docs/fixlogs/) for detailed plans and test reports.
+
 > **The open-source alternative to [Claude Design][cd].** Local-first, web-deployable, BYOK at every layer — **15 coding-agent CLIs** auto-detected on your `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) become the design engine, driven by **31 composable Skills** and **72 brand-grade Design Systems**. No CLI? An OpenAI-compatible BYOK proxy is the same loop minus the spawn.
 
 <p align="center">

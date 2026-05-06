@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
-import { streamMessage } from '../providers/anthropic';
+import { streamMessage, streamMessageWithAgentLoop } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
   listActiveChatRuns,
@@ -741,7 +741,7 @@ export function ProjectView({
               unregisterTextBuffer();
               updateMessageById(
                 message.id,
-                (prev) => ({ ...prev, runStatus: 'succeeded', endedAt: prev.endedAt ?? Date.now() }),
+                (prev) => ({ ...prev, endedAt: prev.endedAt ?? Date.now() }),
                 true,
               );
               completedReattachRunsRef.current.add(runId);
@@ -1045,7 +1045,7 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
+            runStatus: config.mode === 'api' ? 'succeeded' : prev.runStatus,
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
@@ -1153,14 +1153,40 @@ export function ProjectView({
         const systemPrompt = await composedSystemPrompt();
         const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
-        void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
-          onDelta: (delta) => {
-            handlers.onDelta(delta);
-            handlers.onAgentEvent({ kind: 'text', text: delta });
+        void streamMessageWithAgentLoop(
+          config,
+          systemPrompt,
+          apiHistory,
+          controller.signal,
+          {
+            onDelta: (delta) => {
+              handlers.onDelta(delta);
+              handlers.onAgentEvent({ kind: 'text', text: delta });
+            },
+            onDone: handlers.onDone,
+            onError: handlers.onError,
+            onToolCall: (call) => {
+              pushEvent({
+                kind: 'tool_use',
+                id: `${call.name}-${Date.now()}`,
+                name: call.name,
+                input: call.parameters,
+              });
+            },
+            onToolResult: (result) => {
+              pushEvent({
+                kind: 'tool_result',
+                toolUseId: `${result.name}-recent`,
+                content: result.content.slice(0, 500),
+                isError: result.isError,
+              });
+            },
           },
-          onDone: handlers.onDone,
-          onError: handlers.onError,
-        });
+          {
+            projectId: project.id,
+            baseUrl: window.location.origin,
+          },
+        );
       }
     },
     [

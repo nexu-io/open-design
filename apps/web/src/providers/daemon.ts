@@ -95,10 +95,39 @@ export async function streamViaDaemon({
   onRunEventId,
 }: DaemonStreamOptions): Promise<void> {
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
-  // chat into one string. If this becomes too noisy for long histories, the
-  // fix is to only include the final user turn.
+  // chat into one string.
   const transcript = history
-    .map((m) => `## ${m.role}\n${m.content.trim()}`)
+    .map((m) => {
+      let block = `## ${m.role}\n${m.content.trim()}`;
+      // Inline tool calls from previous assistant messages so the fresh agent
+      // process knows what file operations already happened in prior turns.
+      if (
+        m.role === 'assistant' &&
+        Array.isArray(m.events) &&
+        m.events.length > 0
+      ) {
+        const toolLines = [];
+        for (const ev of m.events) {
+          if (ev.kind === 'tool_use') {
+            const name = ev.name ?? 'unknown_tool';
+            const input =
+              ev.input != null ? JSON.stringify(ev.input) : '{}';
+            toolLines.push(`[Tool Call: ${name} ${input}]`);
+          } else if (ev.kind === 'tool_result') {
+            const label = ev.isError ? ' [ERROR]' : '';
+            const preview =
+              typeof ev.content === 'string'
+                ? ev.content.slice(0, 200)
+                : JSON.stringify(ev.content ?? '').slice(0, 200);
+            toolLines.push(`[Tool Result${label}: ${preview}]`);
+          }
+        }
+        if (toolLines.length > 0) {
+          block += '\n' + toolLines.join('\n');
+        }
+      }
+      return block;
+    })
     .join('\n\n');
   const request: ChatRequest = {
     agentId,
@@ -301,7 +330,7 @@ async function consumeDaemonRun({
           if (event.event === 'end') {
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
-            endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
+            endStatus = isChatRunStatus(event.data.status) ? event.data.status : null;
             onRunStatus?.(endStatus);
           }
         }
@@ -331,7 +360,9 @@ async function consumeDaemonRun({
       );
       return;
     }
-    handlers.onDone(acc);
+    if (endStatus === 'succeeded') {
+      handlers.onDone(acc);
+    }
   } finally {
     cancelSignal?.removeEventListener('abort', cancelRun);
   }
