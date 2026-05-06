@@ -29,6 +29,7 @@ import {
 } from './agents.js';
 import { findSkillById, listSkills } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
+import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
@@ -1077,28 +1078,9 @@ function openNativeFolderDialog() {
         },
       );
     } else if (platform === 'win32') {
-      const ps = [
-        'Add-Type -AssemblyName System.Windows.Forms;',
-        '$owner = New-Object System.Windows.Forms.Form;',
-        "$owner.Text = 'Open Design';",
-        '$owner.TopMost = $true;',
-        '$owner.ShowInTaskbar = $true;',
-        "$owner.StartPosition = 'CenterScreen';",
-        '$owner.Width = 1;',
-        '$owner.Height = 1;',
-        '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog;',
-        "$dialog.Description = 'Select a code folder to link';",
-        '$dialog.ShowNewFolderButton = $false;',
-        'try {',
-        '  if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }',
-        '} finally {',
-        '  $owner.Dispose();',
-        '}',
-      ].join(' ');
-      execFile('powershell.exe', ['-NoProfile', '-Sta', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
-        if (err) return resolve(null);
-        const p = stdout.trim();
-        resolve(p || null);
+      const command = buildWindowsFolderDialogCommand();
+      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
+        resolve(parseFolderDialogStdout(err, stdout));
       });
     } else {
       resolve(null);
