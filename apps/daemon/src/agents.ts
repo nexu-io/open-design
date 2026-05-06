@@ -500,9 +500,10 @@ export const AGENT_DEFS = [
       { id: 'performance', label: 'Performance' },
       { id: 'ultimate', label: 'Ultimate' },
     ],
-    // Qoder print mode is non-interactive and exits after the turn. Deliver
-    // the composed prompt via stdin to avoid argv length limits, while using
-    // stream-json so the daemon can surface text and usage incrementally.
+    // Qoder print mode exits after the turn. Deliver the composed prompt via
+    // stdin to avoid argv length limits, while using stream-json so the daemon
+    // can surface text and usage incrementally. `--yolo` is Qoder's documented
+    // non-interactive approval flag, and `-w` selects the workspace.
     // Authentication remains Qoder CLI-owned: users can rely on persisted
     // `qodercli login` state, or launch the daemon with
     // QODER_PERSONAL_ACCESS_TOKEN for automation. Do not add that token to
@@ -519,11 +520,10 @@ export const AGENT_DEFS = [
         '-p',
         '--output-format',
         'stream-json',
-        '--permission-mode',
-        'bypass_permissions',
+        '--yolo',
       ];
       if (runtimeContext.cwd) {
-        args.push('--cwd', runtimeContext.cwd);
+        args.push('-w', runtimeContext.cwd);
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);

@@ -477,9 +477,8 @@ test('qoder args use non-interactive print mode with cwd, model, and add-dir', (
     '-p',
     '--output-format',
     'stream-json',
-    '--permission-mode',
-    'bypass_permissions',
-    '--cwd',
+    '--yolo',
+    '-w',
     '/tmp/od-project',
     '--model',
     'performance',
@@ -504,11 +503,10 @@ test('qoder args omit default model and cwd when absent', () => {
     '-p',
     '--output-format',
     'stream-json',
-    '--permission-mode',
-    'bypass_permissions',
+    '--yolo',
   ]);
   assert.equal(args.includes('--model'), false);
-  assert.equal(args.includes('--cwd'), false);
+  assert.equal(args.includes('-w'), false);
 });
 
 test('qoder args omit empty, non-string, and relative add-dir entries', () => {

@@ -3848,12 +3848,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // parser that turns stream_event objects into UI-friendly events. For
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
+    let agentStreamError = null;
+    const sendAgentEvent = (ev) => {
+      if (ev?.type === 'error') {
+        if (agentStreamError) return;
+        agentStreamError = String(ev.message || 'Agent stream error');
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
+          details: ev.raw ? { raw: ev.raw } : undefined,
+          retryable: false,
+        }));
+        return;
+      }
+      send('agent', ev);
+    };
+
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
-      const qoder = createQoderStreamHandler((ev) => send('agent', ev));
+      const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
@@ -3902,6 +3916,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      if (agentStreamError) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       const status = run.cancelRequested
