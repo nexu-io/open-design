@@ -25,6 +25,10 @@ e2e/reports/test-results
 e2e/reports/results.json
 e2e/reports/junit.xml
 e2e/reports/latest.md
+e2e/ui/.od-data
+e2e/ui/reports
+e2e/ui/test-results
+apps/web/playwright/
 
 # Legacy folder name from before the rename; keep ignored so existing
 # clones don't accidentally stage stale runtime data.

@@ -5,13 +5,14 @@ export const MEDIA_GENERATION_CONTRACT = `
 
 This project is a **non-web** surface (image / video / audio). The unifying
 contract is: skill workflow + project metadata tell you WHAT to make; one
-shell command - \`od media generate\` - is HOW you actually produce bytes.
+shell command through \`OD_NODE_BIN\` + \`OD_BIN\` is HOW you actually produce bytes.
 Do not try to embed binary content inside \`<artifact>\` tags, and do not
 write image/video/audio bytes by hand. Always call out to the dispatcher.
 
 The daemon injects these environment variables for agent sessions:
 
-- \`OD_BIN\` - absolute path to the OD CLI script. Run with \`node "$OD_BIN" ...\`.
+- \`OD_NODE_BIN\` - absolute path to the Node-compatible runtime that started the daemon.
+- \`OD_BIN\` - absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" ...\`.
 - \`OD_PROJECT_ID\` - active project id. Pass it as \`--project "$OD_PROJECT_ID"\`.
 - \`OD_PROJECT_DIR\` - active project files directory.
 - \`OD_DAEMON_URL\` - base URL of the local daemon.
@@ -19,7 +20,7 @@ The daemon injects these environment variables for agent sessions:
 Run media generation through the dispatcher:
 
 \`\`\`bash
-node "$OD_BIN" media generate \\
+"$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface <image|video|audio> \\
   --model <model-id> \\
@@ -39,7 +40,7 @@ command line. The command returns JSON containing either a final
 For long-running renders, continue with:
 
 \`\`\`bash
-node "$OD_BIN" media wait <taskId> --since <nextSince>
+"$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <nextSince>
 \`\`\`
 
 \`media wait\` exits \`0\` when done, \`2\` when still running, and \`5\`

@@ -44,15 +44,19 @@ const agentCapabilities = new Map();
 // user's local CLI config wins.
 //
 // `extraAllowedDirs` is a list of absolute directories the agent must be
-// permitted to read files from (skill seeds, design-system specs) that live
-// outside the project cwd. Currently only Claude Code wires this through
-// (`--add-dir`); other agents either inherit broader access or run with cwd
-// boundaries we can't widen via flags.
+// permitted to read files from (skill seeds, design-system specs, narrowly
+// scoped tool output dirs) that live outside the project cwd. Agents with a
+// documented access-widening flag wire this through (`--add-dir`); the rest
+// either inherit broader access or run with cwd boundaries we can't widen via
+// flags.
 //
 // `streamFormat` hints to the daemon how to interpret stdout:
 //   - 'claude-stream-json' : line-delimited JSON emitted by Claude Code's
 //     `--output-format stream-json`. Daemon parses it into typed events
 //     (text / thinking / tool_use / tool_result / status) for the UI.
+//   - 'qoder-stream-json' : line-delimited JSON emitted by Qoder CLI's
+//     `--output-format stream-json`. Daemon parses Qoder's wrappers into
+//     typed events while preserving Qoder-specific result metadata.
 //   - 'acp-json-rpc'       : ACP JSON-RPC over stdio. Daemon drives the
 //     initialize/session/new/session/prompt lifecycle and maps updates into
 //     typed UI events.
@@ -214,7 +218,7 @@ export const AGENT_DEFS = [
     buildArgs: (
       _prompt,
       _imagePaths,
-      _extra,
+      extraAllowedDirs = [],
       options = {},
       runtimeContext = {},
     ) => {
@@ -232,6 +236,12 @@ export const AGENT_DEFS = [
       }
       if (runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && d.length > 0,
+      );
+      for (const d of dirs) {
+        args.push('--add-dir', d);
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
@@ -253,7 +263,7 @@ export const AGENT_DEFS = [
     name: 'Devin for Terminal',
     bin: 'devin',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: [
@@ -263,6 +273,7 @@ export const AGENT_DEFS = [
           'false',
           'acp',
         ],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -362,10 +373,11 @@ export const AGENT_DEFS = [
     name: 'Hermes',
     bin: 'hermes',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp', '--accept-hooks'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -380,16 +392,18 @@ export const AGENT_DEFS = [
     ],
     buildArgs: () => ['acp', '--accept-hooks'],
     streamFormat: 'acp-json-rpc',
+    mcpDiscovery: 'mature-acp',
   },
   {
     id: 'kimi',
     name: 'Kimi CLI',
     bin: 'kimi',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -401,6 +415,7 @@ export const AGENT_DEFS = [
     ],
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
+    mcpDiscovery: 'mature-acp',
   },
   {
     id: 'cursor-agent',
@@ -483,6 +498,60 @@ export const AGENT_DEFS = [
     streamFormat: 'plain',
   },
   {
+    id: 'qoder',
+    name: 'Qoder CLI',
+    bin: 'qodercli',
+    versionArgs: ['--version'],
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'lite', label: 'Lite' },
+      { id: 'efficient', label: 'Efficient' },
+      { id: 'auto', label: 'Auto' },
+      { id: 'performance', label: 'Performance' },
+      { id: 'ultimate', label: 'Ultimate' },
+    ],
+    // Qoder print mode exits after the turn. Deliver the composed prompt via
+    // stdin to avoid argv length limits, while using stream-json so the daemon
+    // can surface text and usage incrementally. `--yolo` is Qoder's documented
+    // non-interactive approval flag, and `-w` selects the workspace.
+    // Authentication remains Qoder CLI-owned: users can rely on persisted
+    // `qodercli login` state, or launch the daemon with
+    // QODER_PERSONAL_ACCESS_TOKEN for automation. Do not add that token to
+    // static adapter env; unlike Gemini's workspace trust flag it is a user
+    // secret and already flows through the inherited process environment.
+    buildArgs: (
+      _prompt,
+      imagePaths,
+      extraAllowedDirs = [],
+      options = {},
+      runtimeContext = {},
+    ) => {
+      const args = [
+        '-p',
+        '--output-format',
+        'stream-json',
+        '--yolo',
+      ];
+      if (runtimeContext.cwd) {
+        args.push('-w', runtimeContext.cwd);
+      }
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && path.isAbsolute(d),
+      );
+      const attachments = (imagePaths || []).filter(
+        (p) => typeof p === 'string' && path.isAbsolute(p),
+      );
+      for (const d of dirs) args.push('--add-dir', d);
+      for (const p of attachments) args.push('--attachment', p);
+      return args;
+    },
+    promptViaStdin: true,
+    streamFormat: 'qoder-stream-json',
+  },
+  {
     id: 'copilot',
     name: 'GitHub Copilot CLI',
     bin: 'copilot',
@@ -543,9 +612,10 @@ export const AGENT_DEFS = [
     versionArgs: ['--version'],
     // `pi --list-models` prints a TSV table to stderr (not stdout),
     // so we use a custom fetchModels that reads stderr.
-    fetchModels: async (resolvedBin) => {
+    fetchModels: async (resolvedBin, env) => {
       try {
         const { stderr } = await execFileP(resolvedBin, ['--list-models'], {
+          env,
           timeout: 20_000,
           maxBuffer: 8 * 1024 * 1024,
         });
@@ -590,7 +660,7 @@ export const AGENT_DEFS = [
       options = {},
       runtimeContext = {},
     ) => {
-      const args = ['--mode', 'rpc', '--no-session'];
+      const args = ['--mode', 'rpc'];
       if (options.model && options.model !== 'default') {
         // pi --model accepts patterns ("sonnet", "anthropic/claude-sonnet-4-5",
         // "openai/gpt-5:high") so we pass the value through as-is.
@@ -613,10 +683,11 @@ export const AGENT_DEFS = [
     name: 'Kiro CLI',
     bin: 'kiro-cli',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -629,10 +700,11 @@ export const AGENT_DEFS = [
     name: 'Kilo',
     bin: 'kilo',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: ['acp'],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -645,10 +717,11 @@ export const AGENT_DEFS = [
     name: 'Mistral Vibe CLI',
     bin: 'vibe-acp',
     versionArgs: ['--version'],
-    fetchModels: async (resolvedBin) =>
+    fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
         args: [],
+        env,
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
@@ -818,10 +891,10 @@ export function resolveAgentExecutable(def) {
   return null;
 }
 
-async function fetchModels(def, resolvedBin) {
+async function fetchModels(def, resolvedBin, env) {
   if (typeof def.fetchModels === 'function') {
     try {
-      const parsed = await def.fetchModels(resolvedBin);
+      const parsed = await def.fetchModels(resolvedBin, env);
       if (!parsed || parsed.length === 0) return def.fallbackModels;
       return parsed;
     } catch {
@@ -831,6 +904,7 @@ async function fetchModels(def, resolvedBin) {
   if (!def.listModels) return def.fallbackModels;
   try {
     const { stdout } = await execFileP(resolvedBin, def.listModels.args, {
+      env,
       timeout: def.listModels.timeoutMs ?? 5000,
       // Models lists from popular CLIs (e.g. opencode) easily exceed the
       // default 1MB buffer once you include every openrouter model. Bump
@@ -848,7 +922,7 @@ async function fetchModels(def, resolvedBin) {
   }
 }
 
-async function probe(def) {
+async function probe(def, configuredEnv = {}) {
   const resolved = resolveAgentExecutable(def);
   if (!resolved) {
     return {
@@ -857,9 +931,18 @@ async function probe(def) {
       available: false,
     };
   }
+  const probeEnv = spawnEnvForAgent(
+    def.id,
+    {
+      ...process.env,
+      ...(def.env || {}),
+    },
+    configuredEnv,
+  );
   let version = null;
   try {
     const { stdout } = await execFileP(resolved, def.versionArgs, {
+      env: probeEnv,
       timeout: 3000,
     });
     version = stdout.trim().split('\n')[0];
@@ -872,6 +955,7 @@ async function probe(def) {
     const caps = {};
     try {
       const { stdout } = await execFileP(resolved, def.helpArgs, {
+        env: probeEnv,
         timeout: 5000,
         maxBuffer: 4 * 1024 * 1024,
       });
@@ -884,7 +968,7 @@ async function probe(def) {
     }
     agentCapabilities.set(def.id, caps);
   }
-  const models = await fetchModels(def, resolved);
+  const models = await fetchModels(def, resolved, probeEnv);
   return {
     ...stripFns(def),
     models,
@@ -916,8 +1000,10 @@ function stripFns(def) {
   return rest;
 }
 
-export async function detectAgents() {
-  const results = await Promise.all(AGENT_DEFS.map(probe));
+export async function detectAgents(configuredEnvByAgent = {}) {
+  const results = await Promise.all(
+    AGENT_DEFS.map((def) => probe(def, configuredEnvByAgent?.[def.id] ?? {})),
+  );
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,
   // including ones that only showed up after a CLI re-auth.
@@ -929,6 +1015,18 @@ export async function detectAgents() {
 
 export function getAgentDef(id) {
   return AGENT_DEFS.find((a) => a.id === id) || null;
+}
+
+export function buildLiveArtifactsMcpServersForAgent(def, { enabled = true, command = 'od', argsPrefix = [] } = {}) {
+  if (!enabled || def?.mcpDiscovery !== 'mature-acp') return [];
+  return [
+    {
+      name: 'open-design-live-artifacts',
+      command,
+      args: [...argsPrefix, 'mcp', 'live-artifacts'],
+      env: [],
+    },
+  ];
 }
 
 // Adapters that ship the prompt as a positional argv arg (no stdin
@@ -1159,18 +1257,48 @@ export function resolveAgentBin(id) {
 // launched from a shell that exported the key for SDK or scripting use.
 // See issue #398.
 //
+// However, when ANTHROPIC_BASE_URL is set the user is intentionally
+// routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
+// In that case claude login is meaningless, so preserve the API key so
+// the child can authenticate against the custom base URL.
+//
 // Windows env-var names are case-insensitive at the kernel level
 // (`GetEnvironmentVariable`), but spreading `process.env` into a plain
 // object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
 // would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
 // the child. Iterate keys and compare case-insensitively to close that.
-export function spawnEnvForAgent(agentId, baseEnv) {
-  const env = { ...baseEnv };
+export function spawnEnvForAgent(agentId, baseEnv, configuredEnv = {}) {
+  const env = { ...baseEnv, ...expandConfiguredEnv(configuredEnv) };
   if (agentId !== 'claude') return env;
+  const hasCustomBaseUrl = Object.keys(env).some(
+    (k) =>
+      k.toUpperCase() === 'ANTHROPIC_BASE_URL' &&
+      typeof env[k] === 'string' &&
+      env[k].trim() !== '',
+  );
+  if (hasCustomBaseUrl) return env;
   for (const key of Object.keys(env)) {
     if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
   }
   return env;
+}
+
+function expandConfiguredEnv(configuredEnv) {
+  const out = {};
+  if (!configuredEnv || typeof configuredEnv !== 'object') return out;
+  for (const [key, value] of Object.entries(configuredEnv)) {
+    if (typeof value !== 'string') continue;
+    out[key] = expandHomePath(value);
+  }
+  return out;
+}
+
+function expandHomePath(value) {
+  if (value === '~') return homedir();
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(homedir(), value.slice(2));
+  }
+  return value;
 }
 
 // Daemon's /api/chat needs to validate the user's model pick against the

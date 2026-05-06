@@ -23,6 +23,8 @@ describe('media-config OpenAI OAuth fallback', () => {
   const originalEnv = Object.fromEntries(
     OPENAI_ENV_KEYS.map((key) => [key, process.env[key]]),
   );
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
 
   beforeEach(async () => {
     homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-home-'));
@@ -31,6 +33,8 @@ describe('media-config OpenAI OAuth fallback', () => {
     for (const key of OPENAI_ENV_KEYS) {
       delete process.env[key];
     }
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
   });
 
   afterEach(async () => {
@@ -45,6 +49,16 @@ describe('media-config OpenAI OAuth fallback', () => {
       } else {
         process.env[key] = originalEnv[key];
       }
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
     }
     await rm(homeDir, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });

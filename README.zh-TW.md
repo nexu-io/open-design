@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] 的開源替代品。** 本地優先、可部署到 Vercel、每一層都 BYOK —— **10 套 coding-agent CLI** 在 `PATH` 上自動檢測（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI、Hermes、Kimi、Pi）就是設計引擎，由 **31 個可組合 Skills** 和 **72 套品牌級 Design System** 驅動。一個都沒裝？還有 OpenAI 相容的 BYOK 代理 `/api/proxy/stream` 備援，同一條 loop，少一次 spawn 而已。
+> **[Claude Design][cd] 的開源替代品。** 本地優先、可部署到 Vercel、每一層都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自動檢測（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是設計引擎，由 **31 個可組合 Skills** 和 **72 套品牌級 Design System** 驅動。一個都沒裝？還有 OpenAI 相容的 BYOK 代理 `/api/proxy/stream` 備援，同一條 loop，少一次 spawn 而已。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design 封面：與本地 AI 智慧體共同設計" width="100%" />
@@ -17,14 +17,16 @@
 </p>
 
 <p align="center">
+  <a href="https://open-design.ai/"><img alt="下載客戶端" src="https://img.shields.io/badge/%E4%B8%8B%E8%BC%89-%E5%AE%A2%E6%88%B6%E7%AB%AF-ff6b35?style=flat-square" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#支援的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#支援的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#內建-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-加入-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <b>繁體中文</b> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <b>繁體中文</b> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
 
 ---
 
@@ -49,7 +51,7 @@ OD 站在四個開源專案的肩膀上：
 
 | | 你拿到的 |
 |---|---|
-| **Coding-agent CLI（10 套）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）—— 在 `PATH` 上自動檢測，picker 一鍵切換 |
+| **Coding-agent CLI（16 套）** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI —— 在 `PATH` 上自動檢測，picker 一鍵切換 |
 | **BYOK 備援** | OpenAI 相容代理 `/api/proxy/stream` —— 填 `baseUrl` + `apiKey` + `model`，任意 vendor（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、自託管 vLLM，或任何 OpenAI 相容的 provider）都能直接當引擎用。daemon 邊界拒絕 loopback / link-local / RFC1918 防 SSRF。 |
 | **內建 design system** | **72 套** —— 2 套手寫起手 + 70 套從 [`awesome-design-md`][acd2] 匯入的產品系統（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **內建 skill** | **31 個** —— 27 個 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 個 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分組：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
@@ -60,7 +62,7 @@ OD 站在四個開源專案的肩膀上：
 | **持久化** | SQLite 在 `.od/app.sqlite`：projects · conversations · messages · tabs · 使用者 templates。明天再開，todo 卡片和開啟的檔案都還在原位。 |
 | **生命週期** | 唯一入口 `pnpm tools-dev`（start / stop / run / status / logs / inspect / check）—— 用型別化 sidecar stamp 啟動 daemon + web（+ desktop） |
 | **桌面版** | 可選 Electron 殼：渲染器 sandbox + sidecar IPC（STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN）—— 同一通道驅動 `tools-dev inspect desktop screenshot`，跑 E2E |
-| **部署目標** | 本地 `pnpm tools-dev` · Vercel Web 層 · 打包 Electron（`apps/packaged/` 佔位中） |
+| **部署目標** | 本地 `pnpm tools-dev` · Vercel Web 層 · 打包好的 Electron 桌面端，支援 macOS（Apple Silicon）和 Windows（x64）—— 從 [open-design.ai](https://open-design.ai/) 或 [最新 release](https://github.com/nexu-io/open-design/releases) 直接下載 |
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -215,7 +217,7 @@ OD 站在四個開源專案的肩膀上：
 
 ### 1 · 我們不帶 agent，你的就夠好
 
-Daemon 啟動時掃 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)。能找到的都成為候選設計引擎 —— 走 stdio，每個 CLI 一個 adapter，model picker 一鍵切換。靈感來自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一個 CLI 都沒裝？`POST /api/proxy/stream` 就是同一條管線減去 spawn —— 填任意 OpenAI 相容 `baseUrl` + `apiKey`，daemon 把 SSE 轉發回瀏覽器，loopback / link-local / RFC1918 在邊界直接拒絕。
+Daemon 啟動時掃 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)。能找到的都成為候選設計引擎 —— 走 stdio，每個 CLI 一個 adapter，model picker 一鍵切換。靈感來自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一個 CLI 都沒裝？`POST /api/proxy/stream` 就是同一條管線減去 spawn —— 填任意 OpenAI 相容 `baseUrl` + `apiKey`，daemon 把 SSE 轉發回瀏覽器，loopback / link-local / RFC1918 在邊界直接拒絕。
 
 ### 2 · Skill 是檔案，不是外掛
 
@@ -277,7 +279,7 @@ DISCOVERY 指令         （turn-1 表單、turn-2 品牌分支、TodoWrite、�
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · gemini · opencode · cursor-agent · qwen        │
-   │  copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
+   │  qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
    │  讀 SKILL.md + DESIGN.md，把 artifact 寫到磁碟                   │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -286,7 +288,7 @@ DISCOVERY 指令         （turn-1 表單、turn-2 品牌分支、TodoWrite、�
 |---|---|
 | 前端 | Next.js 16 App Router + React 18 + TypeScript，可部署到 Vercel |
 | Daemon | Node 24 · Express · SSE 流 · `better-sqlite3`；表：`projects` · `conversations` · `messages` · `tabs` · `templates` |
-| Agent 傳輸層 | `child_process.spawn`，Claude Code 走 `claude-stream-json`、Copilot 走 `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent 走 `json-event-stream`（每個 CLI 一個 parser）、Hermes / Kimi 走 `acp-json-rpc`（Agent Client Protocol）、Pi 走 `pi-rpc`（stdio JSON-RPC）、Qwen Code 走 `plain` |
+| Agent 傳輸層 | `child_process.spawn`，Claude Code 走 `claude-stream-json`、Qoder CLI 走 `qoder-stream-json`、Copilot 走 `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent 走 `json-event-stream`（每個 CLI 一個 parser）、Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe 走 `acp-json-rpc`（Agent Client Protocol）、Pi 走 `pi-rpc`（stdio JSON-RPC）、Qwen Code / DeepSeek TUI 走 `plain` |
 | BYOK 代理 | `POST /api/proxy/stream` → OpenAI 相容 `/v1/chat/completions` 透傳 SSE；daemon 邊界拒絕 loopback / link-local / RFC1918 |
 | 儲存 | 純檔案 `.od/projects/<id>/` + SQLite `.od/app.sqlite`（已 gitignore，daemon 啟動自建）。`OD_DATA_DIR` 可改根目錄用於測試隔離 |
 | 預覽 | 沙盒 iframe（`srcdoc`）+ 每個 skill 的 `<artifact>` parser（[`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)） |
@@ -295,6 +297,15 @@ DISCOVERY 指令         （turn-1 表單、turn-2 品牌分支、TodoWrite、�
 | 桌面版（可選） | Electron 殼 —— 透過 sidecar IPC 拿 web URL，不猜埠；同一通道（`STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN`）驅動 `tools-dev inspect desktop …` 跑 E2E |
 
 ## Quickstart
+
+### 下載桌面端（不需建置）
+
+試用 Open Design 最快的方式是直接下載預編譯的桌面端 —— 不用裝 Node、不用 pnpm、不用 clone：
+
+- **[open-design.ai](https://open-design.ai/)** —— 官方下載頁
+- **[GitHub releases](https://github.com/nexu-io/open-design/releases)**
+
+### 從原始碼執行
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -337,6 +348,74 @@ Daemon 在倉庫根下維護一個隱藏目錄，裡面所有內容都已 gitign
 | 換到別的位置 | 暫不支援 —— 路徑是相對倉庫根寫死的 |
 
 完整檔案地圖、指令碼、排錯 → [`QUICKSTART.md`](QUICKSTART.md)。
+
+## 跑專案
+
+Open Design 可以跑成瀏覽器裡的 web app，也可以跑成 Electron 桌面版。兩種模式共用同一套本機 daemon + web 架構。
+
+### Web / Localhost（預設）
+
+```bash
+# 前景模式 —— 生命週期指令在前景跑（log 寫進檔案）
+pnpm tools-dev run web
+
+# 看最近的 log：
+pnpm tools-dev logs
+
+# 背景模式 —— daemon + web 跑成背景行程
+pnpm tools-dev start web
+```
+
+預設 `tools-dev` 會綁到可用的暫時埠號，啟動時把實際 URL 印出來。要在停止狀態下用固定埠：
+
+```bash
+pnpm tools-dev run web --daemon-port 17456 --web-port 17573
+```
+
+如果 daemon / web 已經在跑，用 `restart` 在現有 session 裡換埠：
+
+```bash
+pnpm tools-dev restart --daemon-port 17456 --web-port 17573
+```
+
+### Desktop / Electron
+
+```bash
+# 在背景啟動 daemon + web + desktop
+pnpm tools-dev
+
+# 看桌面版狀態
+pnpm tools-dev inspect desktop status
+
+# 對桌面版截圖
+pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
+```
+
+桌面版透過 sidecar IPC 自動探得 web URL —— 不用猜埠。
+
+### 其他常用指令
+
+| 指令 | 用途 |
+|---|---|
+| `pnpm tools-dev status` | 顯示 sidecar 執行狀態 |
+| `pnpm tools-dev logs` | 看 daemon / web / desktop 的 log 尾端 |
+| `pnpm tools-dev stop` | 停掉所有 sidecar |
+| `pnpm tools-dev restart` | 全部停掉再重啟 |
+| `pnpm tools-dev check` | 狀態 + 最近 log + 常見診斷 |
+
+固定埠重啟、背景啟動、完整排錯 → [`QUICKSTART.md`](QUICKSTART.md)。
+
+## 從 coding agent 端使用 Open Design
+
+Open Design 內建一個 stdio MCP server。把它接進 Claude Code、Codex、Cursor、VS Code、Antigravity、Zed、Windsurf，或任何相容 MCP 的 client，另一個 repo 裡的 agent 就能直接讀取你本機 Open Design 專案裡的檔案。整個 export-then-attach 迴圈被取代掉。當 agent 呼叫 `search_files`、`get_file`、`get_artifact` 沒帶 project 參數時，MCP 預設指向你 Open Design 當下開著的那個專案（與檔案）—— 所以 *「在我的 app 裡蓋這個」*、*「對齊這套樣式」* 這類提示直接就能用。
+
+**為什麼選 MCP？** 每改一版設計就匯出再重附 zip，會打斷節奏。MCP server 把你的設計原始碼直接暴露成結構化 API —— 設計 token CSS、JSX 元件、入口 HTML —— agent 可以照名字查詢。Agent 永遠看到的是當下這版檔案，不是上次匯出時的舊版。
+
+在 Open Design app 裡打開 **Settings → MCP server** 就有逐 client 的安裝流程。面板會把 `node` 二進位的絕對路徑、daemon 編好的 `cli.js` 路徑，烘進每段 snippet —— 所以即使是剛 clone 下來、`od` 不在 PATH 上的環境也能用。Cursor 給一鍵 deeplink；其它 client 給可貼上的 JSON snippet（Claude Code 還附帶 `claude mcp add-json` 一行指令，不必手改 `~/.claude.json`）。裝完之後重啟或 reload 你的 client，server 才會出現。
+
+MCP 工具呼叫成功的前提是 daemon 在本機跑著。如果 agent 是在 Open Design 起來之前就啟動，等 OD 起來後請重啟 agent，它才連得上活的 daemon。Daemon 不在線時的工具呼叫會回 `"daemon not reachable"` 的明確錯誤，不會 crash。
+
+**安全性。** MCP server 是唯讀的 —— 它只暴露檔案讀取、檔案 metadata、搜尋，沒有任何寫盤或呼叫外部服務的能力。它在 coding agent 下面以子行程身份透過 stdio 跑；任何你註冊上的 MCP client 都會繼承本機 Open Design 專案的讀取權限。把它當作裝 VS Code 擴充套件那樣對待 —— 只註冊你信得過的 client。Daemon 預設綁到 `127.0.0.1`；要讓區網內的機器也能連，得明確設 `OD_BIND_HOST`。
 
 ## 倉庫結構
 
@@ -480,6 +559,79 @@ open-design/
 
 完整 spec → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
 
+## 媒體生成
+
+OD 不只到程式碼為止。同一套產出 `<artifact>` HTML 的 chat 入口，也驅動**圖像**、**影片**、**音訊**生成 —— 模型 adapter 已經接進 daemon 的 media pipeline（[`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts)、[`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)）。每一次渲染都是真的寫入專案工作區的檔案，`.png` 或 `.mp4` 在 turn 結束時直接以下載 chip 形式出現。
+
+目前主力是三個模型族：
+
+| Surface | 模型 | 提供方 | 用來做什麼 |
+|---|---|---|---|
+| **圖像** | `gpt-image-2` | Azure / OpenAI | 海報、頭像、城市插畫地圖、資訊圖、雜誌風社群卡、老照片修復、產品爆炸圖 |
+| **影片** | `seedance-2.0` | 字節跳動 Volcengine | 15s 電影感 t2v + i2v + 音訊 —— 敘事短片、人物特寫、產品片、MV 編排 |
+| **影片** | `hyperframes-html` | [HeyGen 開源](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖形 —— 產品揭曉、動力學排版、資料圖表、社群覆蓋層、Logo 收尾、TikTok 直式配卡拉 OK 字幕 |
+
+不斷成長的 **prompt gallery** 在 [`prompt-templates/`](prompt-templates/) —— 共 **93 條可一鍵複刻 prompt**：43 條圖像（`prompt-templates/image/*.json`）、39 條 Seedance（`prompt-templates/video/*.json`，不含 `hyperframes-*`）、11 條 HyperFrames（`prompt-templates/video/hyperframes-*.json`）。每一條都帶預覽縮圖、原文 prompt、目標模型、畫面比例，以及一個用來標註授權與作者的 `source` 區塊。daemon 在 `GET /api/prompt-templates` 暴露它們；Web 入口的 **Image templates** / **Video templates** 兩個 tab 把它們渲染成卡片網格，一鍵就把 prompt 拍進 composer，並自動選好對應模型。
+
+### gpt-image-2 —— 圖像樣例（共 43 條，下面 5 張）
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D Stone Staircase Evolution" /><br/><sub><b>3D Stone Staircase Evolution Infographic</b><br/>三段式石材風資訊圖</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated City Food Map" /><br/><sub><b>Illustrated City Food Map</b><br/>編輯級手繪旅行海報</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>電梯場景的單格時尚靜畫</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>頭像 —— 霓虹臉字</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>編輯級攝影棚肖像</sub></td>
+</tr>
+</table>
+
+完整列表 → [`prompt-templates/image/`](prompt-templates/image/)。來源：多數取自 [`YouMind-OpenLab/awesome-gpt-image-prompts`](https://github.com/YouMind-OpenLab/awesome-gpt-image-prompts)（CC-BY-4.0），逐條保留作者署名。
+
+### Seedance 2.0 —— 影片樣例（共 39 條，下面 5 段）
+
+<table>
+<tr>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/thumbnails/thumbnail.jpg" alt="Music Podcast Guitar" /></a><br/><sub><b>Music Podcast & Guitar Technique</b><br/>4K 電影感錄音棚片段</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg" alt="Emotional Face" /></a><br/><sub><b>Emotional Face Close-up</b><br/>電影感微表情研究</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg" alt="Luxury Supercar" /></a><br/><sub><b>Luxury Supercar Cinematic</b><br/>敘事化產品片</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>風格化諷刺短片</sub></td>
+<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad253175a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15s Seedance 2.0 敘事短片</sub></td>
+</tr>
+</table>
+
+點任意縮圖即可播放實際渲染出的 MP4。完整列表 → [`prompt-templates/video/`](prompt-templates/video/)（`*-seedance-*` 與帶 Cinematic 標籤的條目）。來源：[`YouMind-OpenLab/awesome-seedance-2-prompts`](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts)（CC-BY-4.0），保留原推連結與作者 handle。
+
+### HyperFrames —— HTML→MP4 動態圖形（11 條可一鍵複刻樣板）
+
+[**`heygen-com/hyperframes`**](https://github.com/heygen-com/hyperframes) 是 HeyGen 開源的 agent-native 影片框架 —— 你（或 agent）寫 HTML + CSS + GSAP，HyperFrames 透過 headless Chrome + FFmpeg 確定性地渲成 MP4。Open Design 把 HyperFrames 接成一等影片模型（`hyperframes-html`），掛進 daemon dispatch；同時帶上 `skills/hyperframes/` 這個 skill，把 timeline 合約、scene transition 規則、audio-reactive 模式、字幕 / TTS、目錄元件（`npx hyperframes add <slug>`）一起教給 agent。
+
+11 條 HyperFrames prompt 放在 [`prompt-templates/video/hyperframes-*.json`](prompt-templates/video/)，每一條都是產生具體某個原型的明確 brief：
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-product-reveal-minimal.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Product reveal" /></a><br/><sub><b>5s 極簡產品揭曉</b> · 16:9 · 推近標題卡 + shader 轉場</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS promo" /></a><br/><sub><b>30s SaaS 產品片</b> · 16:9 · Linear / ClickUp 風格帶 UI 3D 揭曉</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok karaoke" /></a><br/><sub><b>TikTok 卡拉 OK 口播</b> · 9:16 · TTS + 單字對齊字幕</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Brand sizzle" /></a><br/><sub><b>30s 品牌 sizzle</b> · 16:9 · 節拍同步動力學排版、audio-reactive</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Data chart" /></a><br/><sub><b>動畫 bar-chart race</b> · 16:9 · NYT 風資料資訊圖</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Flight map" /></a><br/><sub><b>航線地圖（起 → 終）</b> · 16:9 · Apple 風電影感路徑揭曉</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo outro" /></a><br/><sub><b>4s 電影感 Logo 收尾</b> · 16:9 · 逐部件拼合 + 光暈</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Money counter" /></a><br/><sub><b>$0 → $10K 數字飆升</b> · 9:16 · Apple 風高燃綠光閃 + 鈔票四濺</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-app-showcase-three-phones.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="App showcase" /></a><br/><sub><b>3 手機 app 展示</b> · 16:9 · 懸浮三屏 + 功能旁注</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-social-overlay-stack.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Social overlay" /></a><br/><sub><b>社群卡疊加</b> · 9:16 · X · Reddit · Spotify · Instagram 依序入畫</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Website to video" /></a><br/><sub><b>網站到影片管線</b> · 16:9 · 抓 3 種視口 + 轉場串聯</sub></td>
+<td width="25%" valign="top">&nbsp;</td>
+</tr>
+</table>
+
+流程跟其它一樣：挑樣板、改 brief、送出。Agent 讀取自帶的 `skills/hyperframes/SKILL.md`（裡面帶 OD 專用的渲染流程 —— composition 原始檔落到 `.hyperframes-cache/`，避免汙染檔案工作區；daemon 替你觸發 `npx hyperframes render`，繞開 macOS sandbox-exec / Puppeteer 卡死；最終只有 `.mp4` 作為專案 chip 出現），寫完 composition、產出 MP4。目錄元件縮圖版權歸 HeyGen，由 HeyGen 的 CDN 提供；OSS 框架本身是 Apache-2.0。
+
+> **已經接好但還沒出 prompt 樣板的：** Kling 2.0 / 1.6 / 1.5、Veo 3 / Veo 2、Sora 2 / Sora 2-Pro（via Fal）、MiniMax video-01 —— 都在 `VIDEO_MODELS`（[`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)）裡。Suno v5 / v4.5、Udio v2、Lyria 2（音樂）和 gpt-4o-mini-tts、MiniMax TTS（語音）覆蓋音訊側。補全這些模型的 prompt 樣板屬於開放貢獻 —— 把 JSON 放進 `prompt-templates/video/` 或 `prompt-templates/audio/`，picker 裡就能直接看到。
+
 ## 聊天迴圈之外，還交付了什麼
 
 Chat / artifact 迴圈最顯眼，但這套倉庫裡還有幾個能力被埋得有點深，對照其它產品做選型之前值得先掃一遍：
@@ -490,7 +642,7 @@ Chat / artifact 迴圈最顯眼，但這套倉庫裡還有幾個能力被埋得�
 - **Tab 持久化。** 每個專案記得自己開啟的檔案和當前 tab，存在 `tabs` 表裡。明天再開啟，工作區還是你昨天離開時的樣子。
 - **Artifact lint API。** `POST /api/artifacts/lint` 對生成的 artifact 跑結構性檢查（`<artifact>` 框架是否破損、必需的副檔案是否缺失、palette token 是否過期），返回 agent 下一回合可以讀回去的 findings。五維自評審就是用它把分數落到證據上而不是 vibe。
 - **Sidecar 協議 + 桌面版自動化。** Daemon、web、desktop 程序都帶型別化的 5 欄位 stamp（`app · mode · namespace · ipc · source`），並把 JSON-RPC IPC 通道暴露在 `/tmp/open-design/ipc/<namespace>/<app>.sock`。`tools-dev inspect desktop status \| eval \| screenshot` 就跑在這條通道上，所以 headless E2E 直接打到真實 Electron 殼，不用造定製夾具（[`packages/sidecar-proto/`](packages/sidecar-proto/)、[`apps/desktop/src/main/`](apps/desktop/src/main/)）。
-- **Windows 友好的 spawn。** 任何在長 prompt 上會撞 `CreateProcess` 32 KB argv 上限的 adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Pi）都改走 stdin。Claude Code 和 Copilot 保留 `-p`；連 stdin 都裝不下時 daemon 退回臨時 prompt 檔案。
+- **Windows 友好的 spawn。** 任何在長 prompt 上會撞 `CreateProcess` 32 KB argv 上限的 adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Qoder CLI、Pi）都改走 stdin。Claude Code 和 Copilot 保留 `-p`；連 stdin 都裝不下時 daemon 退回臨時 prompt 檔案。
 - **按 namespace 隔離的 runtime data。** `OD_DATA_DIR` 加 `--namespace` 給你完全隔離的 `.od/`-style 目錄樹，Playwright、beta channel、你正經的專案永遠不會共用同一個 SQLite 檔案。
 
 ## 反 AI Slop 機制
@@ -514,7 +666,7 @@ Chat / artifact 迴圈最顯眼，但這套倉庫裡還有幾個能力被埋得�
 | Agent 執行時 | 內建 (Opus 4.7) | 內建 ([`pi-ai`][piai]) | **委託給使用者已裝好的 CLI** |
 | Skill | 私有 | 12 套自定義 TS 模組 + `SKILL.md` | **31 套基於檔案的 [`SKILL.md`][skill]，可丟入** |
 | Design system | 私有 | `DESIGN.md`（v0.2 路線圖） | **`DESIGN.md` × 72 套，開箱即有** |
-| Provider 靈活度 | 僅 Anthropic | 7+（[`pi-ai`][piai]） | **10 套 CLI adapter + OpenAI 相容 BYOK 代理** |
+| Provider 靈活度 | 僅 Anthropic | 7+（[`pi-ai`][piai]） | **16 套 CLI adapter + OpenAI 相容 BYOK 代理** |
 | 初始化問題表單 | ❌ | ❌ | **✅ 硬規則 turn 1** |
 | 方向選擇器 | ❌ | ❌ | **✅ 5 套確定性方向** |
 | 即時 todo 進度 + tool 流 | ❌ | ✅ | **✅**（UX 模式來自 open-codesign） |
@@ -545,17 +697,23 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json`（型別化事件） | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` parser | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]`（prompt 走 stdin） |
+| Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` parser | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]`（prompt 走 stdin） |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` parser | `opencode run --format json --dangerously-skip-permissions [--model …] -`（prompt 走 stdin） |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` parser | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`（prompt 走 stdin） |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain`（原始 stdout chunk） | `qwen --yolo [--model …] -`（prompt 走 stdin） |
+| Qoder CLI | `qodercli` | `qoder-stream-json`（型別化事件） | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]`（prompt 走 stdin） |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型別化事件） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc --no-session [--model …] [--thinking …]`（prompt 走 RPC `prompt` 命令） |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（prompt 走 RPC `prompt` 命令） |
+| [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain`（原始 stdout chunk） | `deepseek exec --auto [--model …] <prompt>` |
 | **OpenAI 相容 BYOK** | n/a | SSE 透傳 | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；拒絕 loopback / link-local / RFC1918 |
 
-加一個新 CLI = 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一項。流式格式從 `claude-stream-json` / `copilot-stream-json` / `json-event-stream`（搭配每 CLI 的 `eventParser`）/ `acp-json-rpc` / `pi-rpc` / `plain` 中選一個。
+加一個新 CLI = 在 [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) 里加一項。流式格式從 `claude-stream-json` / `qoder-stream-json` / `copilot-stream-json` / `json-event-stream`（搭配每 CLI 的 `eventParser`）/ `acp-json-rpc` / `pi-rpc` / `plain` 中選一個。
 
 ## 引用與師承
 
@@ -572,11 +730,11 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 | [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | 跨多個 agent CLI 的 symlink 式 skill 分發靈感來源。 |
 | [Claude Code skills][skill] | `SKILL.md` 規範原樣採納 —— 任何 Claude Code skill 丟進 `skills/` 都能被 daemon 識別。 |
 
-詳盡的師承說明（每一項我們採納了什麼、刻意沒采納什麼）在 [`docs/references.md`](docs/references.md)。
+詳盡的師承說明（每一項我們採納了什麼、刻意沒採納什麼）在 [`docs/references.md`](docs/references.md)。
 
 ## Roadmap
 
-- [x] Daemon + agent 檢測（10 套 CLI adapter）+ skill registry + design-system 目錄
+- [x] Daemon + agent 檢測（16 套 CLI adapter）+ skill registry + design-system 目錄
 - [x] Web 應用 + 對話 + question form + 5 套方向選擇器 + todo progress + 沙盒預覽
 - [x] 31 個 skill + 72 套 design system + 5 套視覺方向 + 5 個裝置外殼
 - [x] SQLite 後端的 projects · conversations · messages · tabs · templates
@@ -589,7 +747,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 - [ ] Vercel + 隧道部署食譜（Topology B）
 - [ ] 一行 `npx od init` 腳手架帶 `DESIGN.md`
 - [ ] Skill 市場（`od skills install <github-repo>`）和 `od skill add | list | remove | test` CLI 表面（在 [`docs/skills-protocol.md`](docs/skills-protocol.md) 裡有草案，daemon 實現尚未跟上）
-- [ ] `apps/packaged/` 出可分發 Electron 安裝包
+- [x] `apps/packaged/` 出可分發 Electron 安裝包 —— macOS（Apple Silicon）和 Windows（x64）下載已上線 [open-design.ai](https://open-design.ai/) 和 [GitHub releases 頁面](https://github.com/nexu-io/open-design/releases)
 
 分階段交付計畫在 [`docs/roadmap.md`](docs/roadmap.md)。
 
@@ -620,10 +778,10 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 感謝每一位讓 Open Design 變得更好的朋友 —— 無論是寫程式碼、修文檔、提 issue、加 skill 還是加 design system，每一次真實貢獻都會被記住。下面這面牆是最直觀的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design 貢獻者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design 貢獻者" />
 </a>
 
-第一次提 PR？歡迎從 [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) 標籤起步。
+第一次提 PR？歡迎從 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 標籤起步。
 
 ## 倉庫活躍度
 
@@ -637,14 +795,20 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
   </picture>
 </a>
 
 曲線往上走 —— 那就是我們想看到的訊號。點 ★ 推它一把。
 
+## 致謝 / Credits
+
+[`skills/html-ppt/`](skills/html-ppt/) 主 skill 以及 [`skills/html-ppt-*/`](skills/) 下的逐樣板子 skill —— 含 15 套 full-deck、36 套主題、31 個單頁 layout、27 個 CSS 動畫 + 20 個 canvas FX、鍵盤 runtime 與磁吸卡片演講者模式 —— 整合自開源專案 [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill)（MIT）。原始 LICENSE 保留在 [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE)，原作者歸屬 [@lewislulu](https://github.com/lewislulu)。每張逐樣板的 Examples 卡片（`html-ppt-pitch-deck`、`html-ppt-tech-sharing`、`html-ppt-presenter-mode`、`html-ppt-xhs-post` …）都把 authoring 指南委派給主 skill —— 點 **Use this prompt** 之後，沿用上游同樣的 prompt → 輸出行為。
+
+[`skills/guizang-ppt/`](skills/guizang-ppt/) 雜誌風橫向翻頁 deck 整合自 [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill)（MIT），原作者歸屬 [@op7418](https://github.com/op7418)。
+
 ## License
 
-Apache-2.0。內建的 [`skills/guizang-ppt/`](skills/guizang-ppt/) 保留它原始的 [LICENSE](skills/guizang-ppt/LICENSE)（MIT）和原作者 [op7418](https://github.com/op7418) 的歸屬。
+Apache-2.0。內建的 [`skills/guizang-ppt/`](skills/guizang-ppt/) 保留它原始的 [LICENSE](skills/guizang-ppt/LICENSE)（MIT）和原作者 [op7418](https://github.com/op7418) 的歸屬。內建的 [`skills/html-ppt/`](skills/html-ppt/) 保留它原始的 [LICENSE](skills/html-ppt/LICENSE)（MIT）和原作者 [lewislulu](https://github.com/lewislulu) 的歸屬。

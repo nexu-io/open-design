@@ -30,6 +30,24 @@ afterEach(() => {
 });
 
 describe('preview comment persistence', () => {
+  it('keeps critique migration wired while adding pod columns on a fresh database', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comments-'));
+    const db = openDatabase(tempDir);
+
+    const previewColumns = db
+      .prepare(`PRAGMA table_info(preview_comments)`)
+      .all()
+      .map((column: { name: string }) => column.name);
+    const critiqueTable = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='critique_runs'`)
+      .get() as { name?: string } | undefined;
+
+    expect(previewColumns).toEqual(
+      expect.arrayContaining(['selection_kind', 'member_count', 'pod_members_json']),
+    );
+    expect(critiqueTable?.name).toBe('critique_runs');
+  });
+
   it('upserts the latest comment by conversation, file, and element', () => {
     const db = seededDb();
     const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
@@ -124,6 +142,43 @@ describe('preview comment agent payload', () => {
     expect(hint).toContain('file: index.html');
     expect(hint).toContain('selector: [data-od-id="hero-title"]');
     expect(hint).toContain('comment: Make the headline shorter');
+  });
+
+  it('renders pod attachments with grouped member context', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'pod-1',
+        selectionKind: 'pod',
+        memberCount: 99,
+        selector: '[data-od-id="hero"], [data-od-id="chart"]',
+        label: 'Hero and chart',
+        podMembers: [
+          {
+            elementId: 'hero',
+            selector: '[data-od-id="hero"]',
+            label: 'section.hero',
+            text: 'Hero title',
+            position: { x: 10, y: 20, width: 200, height: 100 },
+            htmlHint: '<section data-od-id="hero">',
+          },
+          {
+            elementId: 'chart',
+            selector: '[data-od-id="chart"]',
+            label: 'section.chart',
+            text: 'Chart value',
+            position: { x: 120, y: 80, width: 190, height: 120 },
+            htmlHint: '<section data-od-id="chart">',
+          },
+        ],
+      }),
+    ]);
+
+    const hint = renderCommentAttachmentHint(normalized);
+
+    expect(hint).toContain('targetKind: pod');
+    expect(hint).toContain('memberCount: 2');
+    expect(normalized[0]?.memberCount).toBe(2);
+    expect(hint).toContain('member.1: hero | section.hero | [data-od-id="hero"]');
   });
 });
 

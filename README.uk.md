@@ -1,6 +1,6 @@
 # Open Design
 
-> **Альтернатива з відкритим кодом до [Claude Design][cd].** Локально-перший, розгортується в web, BYOK на кожному рівні — **13 CLI агентів для кодування** автоматично виявляються у вашому `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Mistral Vibe) стають механізмом дизайну, керуються **31 компонуваною навичкою** та **72 системами дизайну комерційного класу**. Немає CLI? OpenAI-сумісний BYOK проксі — це той же цикл без spawn.
+> **Альтернатива з відкритим кодом до [Claude Design][cd].** Локально-перший, розгортується в web, BYOK на кожному рівні — **16 CLI агентів для кодування** автоматично виявляються у вашому `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) стають механізмом дизайну, керуються **31 компонуваною навичкою** та **72 системами дизайну комерційного класу**. Немає CLI? OpenAI-сумісний BYOK проксі — це той же цикл без spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
@@ -17,15 +17,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases" /></a>
+  <a href="https://open-design.ai/"><img alt="Завантажити" src="https://img.shields.io/badge/%D0%B7%D0%B0%D0%B2%D0%B0%D0%BD%D1%82%D0%B0%D0%B6%D0%B8%D1%82%D0%B8-open--design.ai-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#підтримувані-агенти-для-кодування"><img alt="Agents" src="https://img.shields.io/badge/agents-13%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#підтримувані-агенти-для-кодування"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#системи-дизайну"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#навички"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-приєднатись-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · العربية · <a href="README.ru.md">Русский</a> · <b>Українська</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <b>Українська</b></p>
 
 ---
 
@@ -50,7 +52,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 
 | | Що ви отримуєте |
 |---|---|
-| **CLI агентів для кодування (13)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Mistral Vibe CLI (ACP) — автоматично виявляються на `PATH`, одночисельний swap |
+| **CLI агентів для кодування (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — автоматично виявляються на `PATH`, одночисельний swap |
 | **BYOK fallback** | Специфічний для протоколу API проксі за адресою `/api/proxy/{anthropic,openai,azure,google}/stream` — вставте `baseUrl` + `apiKey` + `model`, виберіть Anthropic / OpenAI / Azure OpenAI / Google Gemini, і демон нормалізує SSE назад у той самий потік чату. Внутрішні IP/SSRF заблоковані на краю демона. |
 | **Системи дизайну вбудовані** | **129** — 2 hand-authored starter + 70 систем продукту (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) з [`awesome-design-md`][acd2], плюс 57 навичок дизайну з [`awesome-design-skills`][ads] додано безпосередньо під `design-systems/` |
 | **Навички вбудовані** | **31** — 27 у режимі `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 у режимі `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Згруповані у picker за `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
@@ -62,7 +64,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 | **Постійність** | SQLite за адресою `.od/app.sqlite`: projects · conversations · messages · tabs · saved templates. Пересніть завтра, todo card і відкриті файли саме там, де ви їх залишили. |
 | **Життєвий цикл** | Одна точка входу: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) — завантажує daemon + web (+ desktop) під типізованими sidecar stamps |
 | **Desktop** | Опціональна Electron shell із sandboxed renderer + sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN) — керує `tools-dev inspect desktop screenshot` для E2E |
-| **Розгортувати до** | Локально (`pnpm tools-dev`) · Vercel web layer · packaged Electron (placeholder, in-flight) |
+| **Розгортувати до** | Локально (`pnpm tools-dev`) · Vercel web layer · спакований Electron desktop-додаток для macOS (Apple Silicon) і Windows (x64) — завантаження з [open-design.ai](https://open-design.ai/) або зі [сторінки останнього релізу](https://github.com/nexu-io/open-design/releases) |
 | **Ліцензія** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
@@ -218,7 +220,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 
 ### 1 · Ми не постачаємо агента. Ваш — достатньо хороший.
 
-При запуску демон сканує ваш `PATH` на наявність [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) та [`vibe-acp`](https://github.com/mistralai/mistral-vibe) на старті. Ті, що знайдені, стають кандидатами на роль "двигуна" дизайну — вони керуються через stdio з одним адаптером на CLI, який можна змінити у виборі моделі. Натхненно [`multica`](https://github.com/multica-ai/multica) та [`cc-switch`](https://github.com/farion1231/cc-switch). Немає встановленого CLI? Режим API використовує той самий конвеєр — виберіть Anthropic, OpenAI-сумісний, Azure OpenAI або Google Gemini, і демон передаватиме нормалізовані фрагменти SSE, з блокуванням внутрішніх мереж на краю.
+При запуску демон сканує ваш `PATH` на наявність [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) та [`vibe-acp`](https://github.com/mistralai/mistral-vibe) на старті. Ті, що знайдені, стають кандидатами на роль "двигуна" дизайну — вони керуються через stdio з одним адаптером на CLI, який можна змінити у виборі моделі. Натхненно [`multica`](https://github.com/multica-ai/multica) та [`cc-switch`](https://github.com/farion1231/cc-switch). Немає встановленого CLI? Режим API використовує той самий конвеєр — виберіть Anthropic, OpenAI-сумісний, Azure OpenAI або Google Gemini, і демон передаватиме нормалізовані фрагменти SSE, з блокуванням внутрішніх мереж на краю.
 
 ### 2 · Навички — це файли, а не плагіни.
 
@@ -280,7 +282,7 @@ DISCOVERY directives  (форма 1-го ходу, бранч бренду 2-г�
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · devin (ACP) · gemini · opencode · cursor-agent │
-   │  qwen · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)   │
+   │  qwen · qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)   │
    │  читає SKILL.md + DESIGN.md, пише артефакти на диск              │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -289,7 +291,7 @@ DISCOVERY directives  (форма 1-го ходу, бранч бренду 2-г�
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, розгортається на Vercel |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3`; таблиці: `projects`, `conversations`, `messages`, `tabs`, `templates` |
-| Транспорт агента | `child_process.spawn`; типізовані парсери для `claude-stream-json` (Claude Code), `copilot-stream-json` (Copilot), `json-event-stream` (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Mistral Vibe), `pi-rpc` (Pi), `plain` (Qwen Code) |
+| Транспорт агента | `child_process.spawn`; типізовані парсери для `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), `json-event-stream` (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe), `pi-rpc` (Pi), `plain` (Qwen Code / DeepSeek TUI) |
 | BYOK проксі | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → специфічні API провайдерів, нормалізований SSE `delta/end/error`; блокує loopback / RFC1918 на краю демона |
 | Сховище | Звичайні файли в `.od/projects/<id>/` + SQLite у `.od/app.sqlite` (ігнорується git, автоматично створюється). Перевизначте корінь через `OD_DATA_DIR` для ізоляції тестів |
 | Попередній перегляд | Ізольований iframe через `srcdoc` + парсер `<artifact>` для кожної навички ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
@@ -298,6 +300,15 @@ DISCOVERY directives  (форма 1-го ходу, бранч бренду 2-г�
 | Desktop (опц) | Electron shell — виявляє URL через sidecar IPC, без вгадування портів; той самий канал `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` керує `tools-dev inspect desktop …` для E2E |
 
 ## Швидкий старт
+
+### Завантажити desktop-додаток (збірка не потрібна)
+
+Найшвидший спосіб спробувати Open Design — готовий desktop-додаток, без Node, pnpm і клонування:
+
+- **[open-design.ai](https://open-design.ai/)** — офіційна сторінка завантаження
+- **[GitHub релізи](https://github.com/nexu-io/open-design/releases)**
+
+### Запуск з вихідного коду
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git
@@ -570,7 +581,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 - **Збереження вкладок.** Кожен проект запам'ятовує свої відкриті файли та активну вкладку у таблиці `tabs`. Відкрийте проект завтра, і робочий простір виглядатиме саме так, як ви його залишили.
 - **API лінтингу артефактів.** `POST /api/artifacts/lint` запускає структурні перевірки згенерованого артефакту (пошкоджене `<artifact>` обрамлення, відсутні необхідні side-файли, застарілі токени палітри) та повертає знахідки, які агент може прочитати у свій наступний хід. П'ятивимірна self-critique використовує це для обґрунтування оцінки реальними доказами, а не враженнями.
 - **Протокол sidecar + автоматизація desktop.** Процеси демона, вебу та desktop несуть типізовані п'ятипольні штампи (`app · mode · namespace · ipc · source`) та надають JSON-RPC IPC канал за адресою `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status | eval | screenshot` керує цим каналом, тому headless E2E працює проти реальної Electron shell без спеціальних харнесів ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
-- **Windows-дружнє породження.** Кожен адаптер, який інакше перевищив би ліміт argv ~32 КБ `CreateProcess` для довгих складених промптів (Codex, Gemini, OpenCode, Cursor Agent, Qwen, Pi), подає промпт через stdin. Claude Code та Copilot зберігають `-p`; демон відкатується до тимчасового файлу промпту, коли й це переповнюється.
+- **Windows-дружнє породження.** Кожен адаптер, який інакше перевищив би ліміт argv ~32 КБ `CreateProcess` для довгих складених промптів (Codex, Gemini, OpenCode, Cursor Agent, Qwen, Qoder CLI, Pi), подає промпт через stdin. Claude Code та Copilot зберігають `-p`; демон відкатується до тимчасового файлу промпту, коли й це переповнюється.
 - **Дані виконання для кожного простору імен.** `OD_DATA_DIR` та `--namespace` дають вам повністю ізольовані `.od/`-дерева, тому Playwright, бета-канали та ваші реальні проекти ніколи не ділять файл SQLite.
 
 ## Механізм Anti-AI-slop
@@ -594,7 +605,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | Рантайм агента | Вбудований (Opus 4.7) | Вбудований ([`pi-ai`][piai]) | **Делеговано наявному CLI користувача** |
 | Навички | Пропрієтарні | 12 кастомних TS-модулів + `SKILL.md` | **31 файлових [`SKILL.md`][skill] комплектів, що додаються перетягуванням** |
 | Система дизайну | Пропрієтарна | `DESIGN.md` (дорожня карта v0.2) | **`DESIGN.md` × 129 систем поставлено** |
-| Гнучкість провайдерів | Лише Anthropic | 7+ через [`pi-ai`][piai] | **12 CLI-адаптерів + OpenAI-сумісний BYOK проксі** |
+| Гнучкість провайдерів | Лише Anthropic | 7+ через [`pi-ai`][piai] | **16 CLI-адаптерів + OpenAI-сумісний BYOK проксі** |
 | Початкова форма запитань | ❌ | ❌ | **✅ Жорстке правило, хід 1** |
 | Вибір напрямку | ❌ | ❌ | **✅ 5 детермінованих напрямків** |
 | Живий прогрес todo + потік інструментів | ❌ | ✅ | **✅** (UX-патерн з open-codesign) |
@@ -630,15 +641,18 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + парсер `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` (промпт на stdin) |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + парсер `cursor-agent` | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -` (промпт на stdin) |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain` (сирий stdout) | `qwen --yolo [--model …] -` (промпт на stdin) |
+| Qoder CLI | `qodercli` | `qoder-stream-json` (типізовані події) | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]` (промпт на stdin) |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json` (типізовані події) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
-| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc --no-session [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
+| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
 | **Багатопровайдерний BYOK** | н/д | Нормалізація SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-сумісний / Azure OpenAI / Gemini; захист від SSRF проти loopback / link-local / RFC1918 |
 
-Додавання нового CLI — це один запис у [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат потоку — один із `claude-stream-json`, `copilot-stream-json`, `json-event-stream` (з `eventParser` для кожного CLI), `acp-json-rpc`, `pi-rpc` або `plain`.
+Додавання нового CLI — це один запис у [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат потоку — один із `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (з `eventParser` для кожного CLI), `acp-json-rpc`, `pi-rpc` або `plain`.
 
 ## Посилання та лінія спадкоємності
 
@@ -660,7 +674,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 
 ## Дорожня карта
 
-- [x] Демон + виявлення агентів (12 CLI-адаптерів) + реєстр навичок + каталог систем дизайну
+- [x] Демон + виявлення агентів (16 CLI-адаптерів) + реєстр навичок + каталог систем дизайну
 - [x] Веб-додаток + чат + форма запитань + вибір з 5 напрямків + прогрес todo + прев'ю в пісочниці
 - [x] 31 навичка + 72 системи дизайну + 5 візуальних напрямків + 5 кадрів пристроїв
 - [x] Проекти · розмови · повідомлення · вкладки · шаблони на SQLite
@@ -673,7 +687,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 - [ ] Рецепт розгортання Vercel + тунель (Топологія B)
 - [ ] Одна команда `npx od init` для скаффолдингу проекту з `DESIGN.md`
 - [ ] Маркетплейс навичок (`od skills install <github-repo>`) та CLI-поверхня `od skill add | list | remove | test` (задрафтовано в [`docs/skills-protocol.md`](docs/skills-protocol.md), реалізація очікує)
-- [ ] Пакетна збірка Electron з `apps/packaged/`
+- [x] Пакетна збірка Electron з `apps/packaged/` — завантаження для macOS (Apple Silicon) і Windows (x64) на [open-design.ai](https://open-design.ai/) та на [сторінці релізів GitHub](https://github.com/nexu-io/open-design/releases)
 
 Поетапна поставка → [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -704,10 +718,10 @@ OD не зупиняється на коді. Та сама поверхня ч�
 Дякуємо всім, хто допоміг просувати Open Design — через код, документацію, зворотний зв'язок, нові навички, нові системи дизайну або навіть гостре питання. Кожен реальний внесок рахується, а стіна нижче — найпростіший спосіб сказати це вголос.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Контриб'ютори Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Контриб'ютори Open Design" />
 </a>
 
-Якщо ви злили свій перший PR — ласкаво просимо. Мітка [`good-first-issue`](https://github.com/nexu-io/open-design/contribute) — це точка входу.
+Якщо ви злили свій перший PR — ласкаво просимо. Мітка [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) — це точка входу.
 
 ## Активність репозиторію
 
@@ -721,9 +735,9 @@ SVG вище перегенерується щодня [`.github/workflows/metri
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
-    <img alt="Історія зірок Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <img alt="Історія зірок Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
   </picture>
 </a>
 

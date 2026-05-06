@@ -118,7 +118,11 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'kanban-board': {
     examplePrompt:
-      'Создайте канбан-доску для команды роста из 5 человек в разгар спринта — Backlog, Doing, Review, Done.',
+      'Создайте канбан-доску для growth-команды из 5 человек в середине спринта — Backlog, Doing, Review, Done.',
+  },
+  'live-artifact': {
+    examplePrompt:
+      'Создайте интерактивный live-артефакт с карточками статуса, таблицей данных и панелью деталей, которая реагирует на изменение выбора.',
   },
   'magazine-poster': {
     examplePrompt:

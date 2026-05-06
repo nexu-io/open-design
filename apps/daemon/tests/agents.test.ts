@@ -12,14 +12,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   AGENT_DEFS,
+  buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
+  detectAgents,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
+import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../src/mcp-live-artifacts-server.js';
 
 const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
+const hermes = AGENT_DEFS.find((agent) => agent.id === 'hermes');
+const kimi = AGENT_DEFS.find((agent) => agent.id === 'kimi');
+
 const copilot = AGENT_DEFS.find((agent) => agent.id === 'copilot');
 const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
 const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
@@ -27,12 +33,17 @@ const kilo = AGENT_DEFS.find((agent) => agent.id === 'kilo');
 const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
 const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
 const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
+const pi = AGENT_DEFS.find((agent) => agent.id === 'pi');
 const deepseek = AGENT_DEFS.find((agent) => agent.id === 'deepseek');
 const gemini = AGENT_DEFS.find((agent) => agent.id === 'gemini');
+const qoder = AGENT_DEFS.find((agent) => agent.id === 'qoder');
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
 const originalAgentHome = process.env.OD_AGENT_HOME;
+const originalDaemonUrl = process.env.OD_DAEMON_URL;
+const originalToolToken = process.env.OD_TOOL_TOKEN;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   if (originalDisablePlugins == null) {
@@ -51,6 +62,17 @@ afterEach(() => {
   } else {
     process.env.OD_AGENT_HOME = originalAgentHome;
   }
+  if (originalDaemonUrl == null) {
+    delete process.env.OD_DAEMON_URL;
+  } else {
+    process.env.OD_DAEMON_URL = originalDaemonUrl;
+  }
+  if (originalToolToken == null) {
+    delete process.env.OD_TOOL_TOKEN;
+  } else {
+    process.env.OD_TOOL_TOKEN = originalToolToken;
+  }
+  globalThis.fetch = originalFetch;
 });
 
 test('AGENT_DEFS ids are unique', () => {
@@ -147,6 +169,150 @@ test('codex args do not include the literal `-` stdin sentinel (regression of #2
     { cwd: '/tmp/od-project' },
   );
   assert.equal(withDisablePlugins.includes('-'), false);
+});
+
+test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', () => {
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  const args = codex.buildArgs(
+    '',
+    [],
+    ['/repo/skills', '', null, '/tmp/codex/generated_images', undefined],
+    {},
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(
+    args.filter((arg, index) => arg === '--add-dir' || args[index - 1] === '--add-dir'),
+    ['--add-dir', '/repo/skills', '--add-dir', '/tmp/codex/generated_images'],
+  );
+});
+
+test('live artifact MCP discovery is limited to mature ACP agents', () => {
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes), [
+    {
+      name: 'open-design-live-artifacts',
+      command: 'od',
+      args: ['mcp', 'live-artifacts'],
+      env: [],
+    },
+  ]);
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kimi), [
+    {
+      name: 'open-design-live-artifacts',
+      command: 'od',
+      args: ['mcp', 'live-artifacts'],
+      env: [],
+    },
+  ]);
+
+  for (const agent of AGENT_DEFS) {
+    if (agent.id === 'hermes' || agent.id === 'kimi') continue;
+    assert.deepEqual(buildLiveArtifactsMcpServersForAgent(agent), []);
+  }
+});
+
+test('live artifact MCP discovery is disabled when run-scoped tool auth is unavailable', () => {
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes, { enabled: false }), []);
+});
+
+test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
+  assert.deepEqual(
+    buildLiveArtifactsMcpServersForAgent(hermes, {
+      command: process.execPath,
+      argsPrefix: ['/workspace/apps/daemon/dist/cli.js'],
+    }),
+    [
+      {
+        name: 'open-design-live-artifacts',
+        command: process.execPath,
+        args: ['/workspace/apps/daemon/dist/cli.js', 'mcp', 'live-artifacts'],
+        env: [],
+      },
+    ],
+  );
+});
+
+test('MCP-capable agents can discover equivalent live artifact and connector tools', async () => {
+  const tools = createLiveArtifactsMcpTools();
+  assert.deepEqual(tools.map((tool) => tool.name), [
+    'live_artifacts_create',
+    'live_artifacts_list',
+    'live_artifacts_update',
+    'live_artifacts_refresh',
+    'connectors_list',
+    'connectors_execute',
+  ]);
+
+  for (const tool of tools) {
+    assert.equal(typeof tool.description, 'string');
+    assert.match(tool.description, /POSIX equivalent: `"\$OD_NODE_BIN" "\$OD_BIN" tools /u);
+    assert.equal(tool.inputSchema.type, 'object');
+  }
+
+  const initialized = await handleLiveArtifactsMcpRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  assert.equal(initialized.result.serverInfo.name, 'open-design-live-artifacts');
+  assert.deepEqual(initialized.result.capabilities, { tools: {} });
+
+  const listed = await handleLiveArtifactsMcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  assert.deepEqual(listed.result.tools.map((tool) => tool.name), tools.map((tool) => tool.name));
+
+  const createTool = tools.find((tool) => tool.name === 'live_artifacts_create')!;
+  const updateTool = tools.find((tool) => tool.name === 'live_artifacts_update')!;
+  const createProperties = createTool.inputSchema.properties as Record<string, unknown>;
+  const updateProperties = updateTool.inputSchema.properties as Record<string, unknown>;
+  assert.deepEqual(Object.keys(createProperties).sort(), ['input', 'provenanceJson', 'templateHtml']);
+  assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
+});
+
+test('live artifact MCP create forwards input and artifact payload fields to daemon tools', async () => {
+  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
+  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ artifact: { id: 'artifact-1' } }), { status: 200 });
+  };
+
+  const input = { title: 'Demo', preview: { type: 'html', entry: 'index.html' } };
+  const templateHtml = '<h1>{{data.title}}</h1>';
+  const provenanceJson = { source: { type: 'mcp-test' } };
+  const response = await handleLiveArtifactsMcpRequest({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: { name: 'live_artifacts_create', arguments: { input, templateHtml, provenanceJson } },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:17456/api/tools/live-artifacts/create');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { input, templateHtml, provenanceJson });
+});
+
+test('live artifact MCP update preserves nested input and artifact payload fields', async () => {
+  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
+  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ artifact: { id: 'artifact-1', title: 'Updated' } }), { status: 200 });
+  };
+
+  const input = { title: 'Updated', pinned: true };
+  const templateHtml = '<p>{{data.value}}</p>';
+  const provenanceJson = { source: { type: 'mcp-update-test' } };
+  const response = await handleLiveArtifactsMcpRequest({
+    jsonrpc: '2.0',
+    id: 4,
+    method: 'tools/call',
+    params: { name: 'live_artifacts_update', arguments: { artifactId: 'artifact-1', input, templateHtml, provenanceJson } },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:17456/api/tools/live-artifacts/update');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { artifactId: 'artifact-1', input, templateHtml, provenanceJson });
 });
 
 test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
@@ -250,6 +416,31 @@ test('devin args use acp subcommand for json-rpc streaming', () => {
   assert.equal(devin.streamFormat, 'acp-json-rpc');
 });
 
+test('pi args use rpc mode without --no-session and append model/thinking options', () => {
+  const baseArgs = pi.buildArgs('', [], [], {}, {});
+
+  assert.deepEqual(baseArgs, ['--mode', 'rpc']);
+  assert.ok(!baseArgs.includes('--no-session'), 'pi must not pass --no-session');
+  assert.equal(pi.promptViaStdin, true);
+  assert.equal(pi.streamFormat, 'pi-rpc');
+
+  const withModel = pi.buildArgs('', [], [], { model: 'anthropic/claude-sonnet-4-5' }, {});
+  assert.deepEqual(withModel, [
+    '--mode',
+    'rpc',
+    '--model',
+    'anthropic/claude-sonnet-4-5',
+  ]);
+
+  const withThinking = pi.buildArgs('', [], [], { reasoning: 'high' }, {});
+  assert.deepEqual(withThinking, [
+    '--mode',
+    'rpc',
+    '--thinking',
+    'high',
+  ]);
+});
+
 test('gemini args avoid version-fragile trust flags', () => {
   const args = gemini.buildArgs('', [], [], {});
 
@@ -268,6 +459,148 @@ test('gemini args preserve custom model selection', () => {
     '--model',
     'gemini-2.5-pro',
   ]);
+});
+
+test('qoder entry uses qodercli with stream-json stdin delivery and tier model hints', () => {
+  assert.equal(qoder.name, 'Qoder CLI');
+  assert.equal(qoder.bin, 'qodercli');
+  assert.deepEqual(qoder.versionArgs, ['--version']);
+  assert.equal(qoder.promptViaStdin, true);
+  assert.equal(qoder.streamFormat, 'qoder-stream-json');
+  assert.deepEqual(qoder.fallbackModels.map((m) => m.id), [
+    'default',
+    'lite',
+    'efficient',
+    'auto',
+    'performance',
+    'ultimate',
+  ]);
+});
+
+test('qoder args use non-interactive print mode with cwd, model, and add-dir', () => {
+  const args = qoder.buildArgs(
+    'prompt must not appear in argv',
+    ['/tmp/uploads/logo.png', '/tmp/uploads/hero concept.png'],
+    [
+      '/repo/skills',
+      '',
+      null,
+      './relative-skills',
+      'relative-design-systems',
+      '/repo/design-systems',
+    ],
+    { model: 'performance' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(args, [
+    '-p',
+    '--output-format',
+    'stream-json',
+    '--yolo',
+    '-w',
+    '/tmp/od-project',
+    '--model',
+    'performance',
+    '--add-dir',
+    '/repo/skills',
+    '--add-dir',
+    '/repo/design-systems',
+    '--attachment',
+    '/tmp/uploads/logo.png',
+    '--attachment',
+    '/tmp/uploads/hero concept.png',
+  ]);
+  assert.equal(args.includes('prompt must not appear in argv'), false);
+  assert.equal(args.includes('./relative-skills'), false);
+  assert.equal(args.includes('relative-design-systems'), false);
+});
+
+test('qoder args omit default model and cwd when absent', () => {
+  const args = qoder.buildArgs('', [], [], { model: 'default' }, {});
+
+  assert.deepEqual(args, [
+    '-p',
+    '--output-format',
+    'stream-json',
+    '--yolo',
+  ]);
+  assert.equal(args.includes('--model'), false);
+  assert.equal(args.includes('-w'), false);
+});
+
+test('qoder args omit empty, non-string, and relative add-dir entries', () => {
+  const args = qoder.buildArgs('', [], [
+    '',
+    null,
+    undefined,
+    42,
+    './skills',
+    'design-systems',
+  ]);
+
+  assert.equal(args.includes('--add-dir'), false);
+});
+
+test('qoder args omit empty, non-string, and relative image attachment entries', () => {
+  const args = qoder.buildArgs('', [
+    '',
+    null,
+    undefined,
+    42,
+    './uploads/logo.png',
+    'uploads/hero.png',
+    '/tmp/uploads/logo.png',
+  ]);
+
+  assert.deepEqual(
+    args.filter((arg) => arg === '--attachment').length,
+    1,
+  );
+  assert.ok(args.includes('/tmp/uploads/logo.png'));
+  assert.equal(args.includes('./uploads/logo.png'), false);
+  assert.equal(args.includes('uploads/hero.png'), false);
+});
+
+test('qoder adapter inherits QODER_PERSONAL_ACCESS_TOKEN from daemon env', () => {
+  const env = spawnEnvForAgent('qoder', {
+    QODER_PERSONAL_ACCESS_TOKEN: 'qoder-pat',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal(env.QODER_PERSONAL_ACCESS_TOKEN, 'qoder-pat');
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+});
+
+test('qoder adapter does not define static secret env', () => {
+  assert.equal(qoder.env?.QODER_PERSONAL_ACCESS_TOKEN, undefined);
+});
+
+test('detectAgents keeps qoder unavailable with fallback metadata when qodercli is missing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-empty-'));
+  try {
+    process.env.OD_AGENT_HOME = dir;
+    process.env.PATH = dir;
+
+    const agents = await detectAgents();
+    const detected = agents.find((agent) => agent.id === 'qoder');
+
+    assert.ok(detected);
+    assert.equal(detected.available, false);
+    assert.equal(detected.bin, 'qodercli');
+    assert.deepEqual(detected.models.map((m) => m.id), [
+      'default',
+      'lite',
+      'efficient',
+      'auto',
+      'performance',
+      'ultimate',
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {
@@ -1049,6 +1382,58 @@ test('spawnEnvForAgent strips ANTHROPIC_API_KEY for the claude adapter', () => {
   assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
 });
 
+test('spawnEnvForAgent applies configured Claude Code env before auth stripping', () => {
+  const env = spawnEnvForAgent(
+    'claude',
+    {
+      ANTHROPIC_API_KEY: 'sk-leak',
+      PATH: '/usr/bin',
+    },
+    {
+      CLAUDE_CONFIG_DIR: '/Users/test/.claude-2',
+    },
+  );
+
+  assert.equal(env.CLAUDE_CONFIG_DIR, '/Users/test/.claude-2');
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent applies configured Codex env without mutating the base env', () => {
+  const base = { PATH: '/usr/bin' };
+  const env = spawnEnvForAgent('codex', base, {
+    CODEX_HOME: '/Users/test/.codex-alt',
+  });
+
+  assert.equal(env.CODEX_HOME, '/Users/test/.codex-alt');
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal('CODEX_HOME' in base, false);
+});
+
+test('detectAgents applies configured env while probing the CLI', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-env-'));
+  try {
+    const bin = join(dir, 'claude');
+    writeFileSync(
+      bin,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "$CLAUDE_CONFIG_DIR"; exit 0; fi\nif [ "$1" = "-p" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n',
+    );
+    chmodSync(bin, 0o755);
+    process.env.PATH = dir;
+    process.env.OD_AGENT_HOME = dir;
+
+    const agents = await detectAgents({
+      claude: { CLAUDE_CONFIG_DIR: '/tmp/claude-config-probe' },
+    });
+
+    const detected = agents.find((agent) => agent.id === 'claude');
+    assert.equal(detected?.available, true);
+    assert.equal(detected?.version, '/tmp/claude-config-probe');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Windows env-var names are case-insensitive at the kernel level, but
 // spreading process.env into a plain object loses Node's case-insensitive
 // accessor — a `Anthropic_Api_Key` key would survive a literal
@@ -1079,6 +1464,40 @@ test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () 
       `expected ${agentId} to preserve ANTHROPIC_API_KEY`,
     );
   }
+});
+
+test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is set', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-kimi',
+    ANTHROPIC_BASE_URL: 'https://api.moonshot.cn/v1',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.ANTHROPIC_API_KEY, 'sk-kimi');
+  assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.moonshot.cn/v1');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is empty', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_BASE_URL: '',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is whitespace', () => {
+  const env = spawnEnvForAgent('claude', {
+    ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_BASE_URL: '   ',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
 });
 
 test('spawnEnvForAgent does not mutate the input env', () => {

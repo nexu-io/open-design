@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  AgentCliEnvPrefs,
   AgentModelPrefs,
   AppVersionInfo,
   AppVersionResponse,
@@ -12,10 +13,20 @@ import type {
   DeployProjectFileResponse,
   DesignSystemDetail,
   DesignSystemSummary,
+  LiveArtifact,
+  LiveArtifactDetailResponse,
+  LiveArtifactListResponse,
+  LiveArtifactPreview,
+  LiveArtifactRefreshLogEntry,
+  LiveArtifactRefreshStatus,
+  LiveArtifactStatus,
+  LiveArtifactSummary,
   MediaAspect,
   ProjectDeploymentsResponse,
   PersistedAgentEvent,
   Project,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -35,8 +46,83 @@ import type {
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
 
+export type { PreviewCommentMember, PreviewCommentSelectionKind } from '@open-design/contracts';
+
 export type ExecMode = 'daemon' | 'api';
 export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
+
+export type LiveArtifactTabId = `live:${string}`;
+export type ProjectWorkspaceTabId = string | LiveArtifactTabId;
+
+export function liveArtifactTabId(artifactId: string): LiveArtifactTabId {
+  return `live:${artifactId}`;
+}
+
+export function isLiveArtifactTabId(tabId: string): tabId is LiveArtifactTabId {
+  return tabId.startsWith('live:') && tabId.length > 'live:'.length;
+}
+
+export function liveArtifactIdFromTabId(tabId: LiveArtifactTabId): string {
+  return tabId.slice('live:'.length);
+}
+
+export type LiveArtifactViewerTab =
+  | 'preview'
+  | 'code'
+  | 'data'
+  | 'refresh-history';
+
+export interface ProjectFileWorkspaceEntry {
+  kind: 'file';
+  tabId: string;
+  name: string;
+  file: ProjectFile;
+}
+
+export interface LiveArtifactWorkspaceEntry {
+  kind: 'live-artifact';
+  tabId: LiveArtifactTabId;
+  artifactId: string;
+  projectId: string;
+  title: string;
+  slug: string;
+  status: LiveArtifactStatus;
+  refreshStatus: LiveArtifactRefreshStatus;
+  pinned: boolean;
+  preview: LiveArtifactPreview;
+  hasDocument: boolean;
+  updatedAt: string;
+  lastRefreshedAt?: string;
+}
+
+export type ProjectWorkspaceEntry = ProjectFileWorkspaceEntry | LiveArtifactWorkspaceEntry;
+
+export function liveArtifactSummaryToWorkspaceEntry(
+  liveArtifact: LiveArtifactSummary,
+): LiveArtifactWorkspaceEntry {
+  const entry: LiveArtifactWorkspaceEntry = {
+    kind: 'live-artifact',
+    tabId: liveArtifactTabId(liveArtifact.id),
+    artifactId: liveArtifact.id,
+    projectId: liveArtifact.projectId,
+    title: liveArtifact.title,
+    slug: liveArtifact.slug,
+    status: liveArtifact.status,
+    refreshStatus: liveArtifact.refreshStatus,
+    pinned: liveArtifact.pinned,
+    preview: liveArtifact.preview,
+    hasDocument: liveArtifact.hasDocument,
+    updatedAt: liveArtifact.updatedAt,
+  };
+  if (liveArtifact.lastRefreshedAt) entry.lastRefreshedAt = liveArtifact.lastRefreshedAt;
+  return entry;
+}
+
+export interface LiveArtifactPreviewRequest {
+  projectId: string;
+  artifactId: string;
+  previewUrl: string;
+}
 
 export interface MediaProviderCredentials {
   apiKey: string;
@@ -56,6 +142,7 @@ export interface ApiProtocolConfig {
 // other one's choice. Missing entries fall back to the agent's first
 // declared model (`'default'` — let the CLI pick).
 export type AgentModelChoice = AgentModelPrefs;
+export type AgentCliEnvConfig = AgentCliEnvPrefs;
 
 export type AppTheme = 'system' | 'light' | 'dark';
 
@@ -168,10 +255,13 @@ export interface AppConfig {
   // this is set so refreshing the page doesn't re-prompt.
   onboardingCompleted?: boolean;
   mediaProviders?: Record<string, MediaProviderCredentials>;
+  composio?: ComposioSettings;
   // Per-CLI model picker state, keyed by agent id (e.g. `gemini`, `codex`).
   // Pre-existing configs without this field fall through to the agent's
   // declared default.
   agentModels?: Record<string, AgentModelChoice>;
+  // Per-agent non-secret CLI config locations injected into detection and runs.
+  agentCliEnv?: AgentCliEnvConfig;
   // Caps the upstream completion length in API mode. Defaults to 8192 when
   // unset; raise it for providers (e.g. MiMo) that allow longer responses.
   maxTokens?: number;
@@ -183,9 +273,23 @@ export interface AppConfig {
   // configs that pre-date the feature land at `undefined`, which the loader
   // normalizes to a safe default (everything off).
   notifications?: NotificationsConfig;
+  // IDs of skills/design-systems the user has explicitly disabled.
+  disabledSkills?: string[];
+  disabledDesignSystems?: string[];
+}
+
+export interface ComposioSettings {
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  apiKeyTail?: string;
 }
 
 export type AgentEvent = PersistedAgentEvent;
+
+export interface LiveArtifactEventItem {
+  id: number;
+  event: Extract<AgentEvent, { kind: 'live_artifact' | 'live_artifact_refresh' }>;
+}
 
 export type { ChatAttachment, ChatCommentAttachment, ChatMessage };
 
@@ -246,6 +350,13 @@ export type {
   DeployProjectFileResponse,
   DesignSystemDetail,
   DesignSystemSummary,
+  LiveArtifact,
+  LiveArtifactDetailResponse,
+  LiveArtifactListResponse,
+  LiveArtifactRefreshLogEntry,
+  LiveArtifactRefreshStatus,
+  LiveArtifactStatus,
+  LiveArtifactSummary,
   MediaAspect,
   ProjectDeploymentsResponse,
   Project,
@@ -269,6 +380,6 @@ export type {
 };
 
 export interface OpenTabsState {
-  tabs: string[];
-  active: string | null;
+  tabs: ProjectWorkspaceTabId[];
+  active: ProjectWorkspaceTabId | null;
 }

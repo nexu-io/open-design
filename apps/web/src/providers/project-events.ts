@@ -1,10 +1,14 @@
 import { useEffect, useRef } from 'react';
-
+import type { LiveArtifactRefreshSsePayload, LiveArtifactSsePayload } from '@open-design/contracts';
 export interface ProjectFileChangeEvent {
   type: 'file-changed';
   path: string;
   kind: 'add' | 'change' | 'unlink';
 }
+
+export type ProjectLiveArtifactEvent = LiveArtifactSsePayload | LiveArtifactRefreshSsePayload;
+
+export type ProjectEvent = ProjectFileChangeEvent | ProjectLiveArtifactEvent;
 
 export interface ProjectEventsConnectionOptions {
   /** Test seam: substitute a mock EventSource constructor. */
@@ -40,7 +44,7 @@ export interface ProjectEventsConnection {
  */
 export function createProjectEventsConnection(
   projectId: string,
-  onChange: (evt: ProjectFileChangeEvent) => void,
+  onChange: (evt: ProjectEvent) => void,
   options: ProjectEventsConnectionOptions = {},
 ): ProjectEventsConnection {
   const Ctor = options.EventSourceCtor
@@ -80,6 +84,22 @@ export function createProjectEventsConnection(
         }
       }
     });
+    const handleLiveArtifactEvent = (evt: Event) => {
+      try {
+        const data = JSON.parse((evt as MessageEvent).data) as ProjectLiveArtifactEvent;
+        onChange(data);
+      } catch (err) {
+        if (
+          typeof process !== 'undefined' &&
+          process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[project-events] malformed live-artifact payload', err);
+        }
+      }
+    };
+    es.addEventListener('live_artifact', handleLiveArtifactEvent);
+    es.addEventListener('live_artifact_refresh', handleLiveArtifactEvent);
     es.addEventListener('error', () => {
       if (cancelled) return;
       es.close();
@@ -116,7 +136,7 @@ export function createProjectEventsConnection(
 export function useProjectFileEvents(
   projectId: string | null | undefined,
   enabled: boolean,
-  onChange: (evt: ProjectFileChangeEvent) => void,
+  onChange: (evt: ProjectEvent) => void,
   options: ProjectEventsConnectionOptions = {},
 ): void {
   const onChangeRef = useRef(onChange);

@@ -909,7 +909,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
-    .option("--prod", "use production build (requires pnpm build first)");
+    .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(

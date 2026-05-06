@@ -55,6 +55,7 @@ export interface PromptTemplateMetadata {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;

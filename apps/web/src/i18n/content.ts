@@ -169,6 +169,10 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
     examplePrompt:
       'Erstellen Sie ein Kanban-Board für ein 5-köpfiges Growth-Team mitten im Sprint — Backlog, Doing, Review, Done.',
   },
+  'live-artifact': {
+    examplePrompt:
+      'Erstellen Sie ein interaktives Live-Artefakt mit Statuskarten, Datentabelle und einem Detailpanel, das auf Auswahländerungen reagiert.',
+  },
   'magazine-poster': {
     examplePrompt:
       'Entwerfen Sie ein Editorial-Poster im Magazin-Stil — ‚You don\'t need a designer to ship your first draft anymore.‘ Zeitungspapier, sechs nummerierte Abschnitte.',

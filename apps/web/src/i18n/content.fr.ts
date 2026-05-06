@@ -120,6 +120,10 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Créez un Kanban board pour une équipe growth de 5 personnes en plein sprint — Backlog, Doing, Review, Done.',
   },
+  'live-artifact': {
+    examplePrompt:
+      'Créez un artefact live interactif avec des cartes de statut, un tableau de données et un panneau de détail qui réagit aux changements de sélection.',
+  },
   'magazine-poster': {
     examplePrompt:
       'Concevez un poster éditorial style magazine — “You don’t need a designer to ship your first draft anymore.” Papier journal, six sections numérotées.',
