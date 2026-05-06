@@ -493,5 +493,37 @@
       </div>
     </div>
   </div>
+
+<script>
+  // Make every Notion page-link / database row open the matching page on
+  // notion.so. Uses a slug derived from the visible title.
+  function slugify(s) {
+    return (s || '').replace(/《|》/g, '').trim().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}-]/gu, '');
+  }
+  function notionUrl(title) {
+    return 'https://www.notion.so/nexu/' + slugify(title);
+  }
+  document.querySelectorAll('.page-link').forEach(span => {
+    const url = notionUrl(span.textContent);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.cssText = 'color:inherit;text-decoration:none;border-bottom:1px solid var(--notion-gray-border);';
+    a.addEventListener('mouseenter', () => a.style.borderBottomColor = 'var(--notion-blue)');
+    a.addEventListener('mouseleave', () => a.style.borderBottomColor = 'var(--notion-gray-border)');
+    while (span.firstChild) a.appendChild(span.firstChild);
+    span.appendChild(a);
+  });
+  document.querySelectorAll('.notion-table tbody tr').forEach(row => {
+    const title = row.querySelector('.cell-title')?.childNodes[0]?.textContent;
+    if (!title) return;
+    const url = notionUrl(title);
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => window.open(url, '_blank', 'noopener,noreferrer'));
+    row.addEventListener('mouseenter', () => row.style.background = 'var(--notion-gray-light)');
+    row.addEventListener('mouseleave', () => row.style.background = '');
+  });
+</script>
 </body>
 </html>

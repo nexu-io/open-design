@@ -545,6 +545,27 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowUp') { e.preventDefault(); toggle(all[cur > 0 ? cur - 1 : all.length - 1]); }
   if (e.key === 'Enter' && cur >= 0) { e.preventDefault(); toggle(all[cur]); }
 });
+
+// Add an "Open in Linear ↗" anchor on every issue row that opens the
+// linear.app URL constructed from the issue identifier.
+const TEAM = 'nexu';
+document.querySelectorAll('.issue').forEach(issue => {
+  const id = issue.querySelector('.issue-id')?.textContent?.trim();
+  if (!id) return;
+  const url = `https://linear.app/${TEAM}/issue/${id}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = '↗';
+  a.title = `Open ${id} in Linear`;
+  a.style.cssText = 'margin-left:8px;color:var(--accent);text-decoration:none;font-weight:600;font-size:13px;opacity:0.7;';
+  a.addEventListener('mouseenter', () => a.style.opacity = '1');
+  a.addEventListener('mouseleave', () => a.style.opacity = '0.7');
+  a.addEventListener('click', e => e.stopPropagation()); // don't trigger toggle
+  const right = issue.querySelector('.issue-right');
+  if (right) right.appendChild(a);
+});
 </script>
 </body>
 </html>

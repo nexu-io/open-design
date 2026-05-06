@@ -615,6 +615,23 @@
     gap: 6px;
     margin-bottom: 4px;
   }
+
+  /* ─── Clickable CTAs ─── */
+  .bento-cta {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--orange);
+    text-decoration: none;
+    font-weight: 500;
+    align-self: flex-start;
+    transition: opacity 0.15s ease;
+  }
+  .bento-cta:hover { opacity: 0.7; text-decoration: underline; }
+  .top3-card.linked { cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease; text-decoration: none; color: inherit; }
+  .top3-card.linked:hover { border-color: var(--orange); }
+  .top3-card.linked:hover h3 { color: var(--orange); }
 </style>
 </head>
 <body>
@@ -1232,5 +1249,54 @@
   </div>
 
 </div>
+
+<script>
+  // Inject CTA links into each bento card based on its connector title.
+  const connectorLinks = {
+    'GitHub': 'https://github.com/nexu-io/open-design',
+    'GitLab': 'https://gitlab.com/nexu-io/open-design',
+    'Sentry': 'https://nexu.sentry.io/issues/?statsPeriod=24h',
+    'Vercel': 'https://vercel.com/nexu/open-design',
+    'Linear': 'https://linear.app/nexu/team/ENG/active',
+    'Slack': 'https://nexu.slack.com',
+    'Gmail': 'https://mail.google.com/mail/u/0/#inbox',
+    'Notion': 'https://www.notion.so/nexu',
+    'Jira': 'https://nexu.atlassian.net/jira/your-work',
+    'Trello': 'https://trello.com/nexu',
+    'Drive': 'https://drive.google.com/drive/u/0/recent',
+    '飞书 IM': 'https://www.feishu.cn/messenger',
+    '飞书文档': 'https://www.feishu.cn/drive/home'
+  };
+  document.querySelectorAll('.bento-card').forEach((card) => {
+    const title = card.querySelector('.bento-title')?.textContent.trim();
+    const url = connectorLinks[title];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.className = 'bento-cta';
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = `Open in ${title} ↗`;
+    card.appendChild(a);
+  });
+
+  // Make Top 3 cards clickable (entire tile is the link).
+  const top3Links = [
+    'https://github.com/nexu-io/open-design/pull/1842',
+    'https://www.notion.so/nexu/Onboarding-Flow-v3',
+    'https://nexu.sentry.io/issues/?project=auth-service&statsPeriod=24h'
+  ];
+  document.querySelectorAll('.top3-card').forEach((card, i) => {
+    const url = top3Links[i];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = card.className + ' linked';
+    while (card.firstChild) a.appendChild(card.firstChild);
+    card.replaceWith(a);
+  });
+</script>
 </body>
 </html>

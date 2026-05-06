@@ -611,5 +611,33 @@ body {
   </div>
 </main>
 
+<script>
+  // Open the matching Gmail thread in a new tab when an action button or
+  // reply-bar button is clicked. Uses Gmail's #search/from: deep link
+  // built from the sender's display name.
+  function openInGmail(sender, subject) {
+    const q = sender ? `from:${sender}` : (subject || '');
+    const url = 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(q);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+  document.querySelectorAll('.card').forEach(card => {
+    const sender = card.querySelector('.card-sender')?.textContent?.trim();
+    const subject = card.querySelector('.card-subject')?.textContent?.trim();
+    card.querySelectorAll('.action-btn').forEach(btn => {
+      btn.style.cursor = 'pointer';
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        openInGmail(sender, subject);
+      });
+    });
+  });
+  document.querySelectorAll('.reply-btn').forEach(btn => {
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      window.open('https://mail.google.com/mail/u/0/#inbox', '_blank', 'noopener,noreferrer');
+    });
+  });
+</script>
 </body>
 </html>

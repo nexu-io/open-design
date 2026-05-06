@@ -725,13 +725,45 @@
     });
   });
 
-  // Row hover highlight
+  // Row hover highlight + click-to-open-on-GitHub
+  const REPO = 'https://github.com/nexu-io/open-design';
+  function buildUrl(label) {
+    const t = (label || '').trim();
+    const prMatch = t.match(/PR\s*#(\d+)/i);
+    if (prMatch) return REPO + '/pull/' + prMatch[1];
+    const issueIdMatch = t.match(/^[A-Z]+-(\d+)/);
+    if (issueIdMatch) return REPO + '/issues?q=' + encodeURIComponent(t);
+    const hashMatch = t.match(/#(\d+)/);
+    if (hashMatch) return REPO + '/issues/' + hashMatch[1];
+    return REPO;
+  }
   document.querySelectorAll('.event-row').forEach(function(row) {
+    const label = row.querySelector('.event-pr-label')?.textContent;
+    const url = buildUrl(label);
     row.style.cursor = 'pointer';
     row.style.transition = 'background 80ms ease-out';
     row.addEventListener('mouseenter', function() { row.style.background = '#f6f8fa'; });
     row.addEventListener('mouseleave', function() { row.style.background = ''; });
+    row.addEventListener('click', function(e) {
+      // Don't override clicks on inner real anchors
+      if (e.target.closest('a')) return;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    });
+    // Upgrade the title placeholder anchor to a real URL
+    const titleAnchor = row.querySelector('.event-title-text a');
+    if (titleAnchor) {
+      titleAnchor.href = url;
+      titleAnchor.target = '_blank';
+      titleAnchor.rel = 'noopener noreferrer';
+    }
   });
+  // Top logo also points to the repo
+  const headerLogo = document.querySelector('.gh-header-logo');
+  if (headerLogo) {
+    headerLogo.href = REPO;
+    headerLogo.target = '_blank';
+    headerLogo.rel = 'noopener noreferrer';
+  }
 })();
 </script>
 </body>
