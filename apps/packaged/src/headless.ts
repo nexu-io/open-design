@@ -104,7 +104,12 @@ async function main(): Promise<void> {
     webOutputMode: config.webOutputMode,
   });
 
-const webUrl = sidecars.web.url ?? "";
+const webUrl = sidecars.web.url;
+  if (!webUrl) {
+    await sidecars.close().catch(() => undefined);
+    await identity.close().catch(() => undefined);
+    throw new Error("web sidecar failed to produce URL — check logs/desktop/latest.log");
+  }
 
   await writePackagedWebIdentity({
     paths,

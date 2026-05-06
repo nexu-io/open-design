@@ -1077,7 +1077,7 @@ export type LinuxHeadlessStartResult = {
   logPath: string;
   namespace: string;
   pid: number;
-  status: WebRootIdentity | null;
+  status: WebRootIdentity;
 };
 
 type WebRootIdentity = {
@@ -1128,7 +1128,8 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
   await mkdir(dirname(launcherPath), { recursive: true });
 
   // Write a self-contained launcher script. The namespace is baked in so the
-  // launcher name and the runtime namespace always agree. OD_DATA_DIR and
+  // launcher name and the runtime namespace always agree. namespace is
+  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. OD_DATA_DIR and
   // OD_RESOURCE_ROOT may still be overridden by the caller's environment.
   const script = [
     "#!/bin/sh",
@@ -1141,6 +1142,8 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
   return { launcherPath, namespace: config.namespace };
 }
 
+// Waits up to 35s for the desktop identity marker, then up to 60s for the
+// web identity (95s total).
 export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessStartResult> {
   const paths = resolveLinuxPaths(config);
   const entryPath = resolveHeadlessEntryPath(paths);
@@ -1196,6 +1199,10 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
   }
 
   const webIdentity = await waitForWebIdentity(config, 60_000);
+  if (webIdentity == null) {
+    await teardownOrphanedStart(child.pid).catch(() => undefined);
+    throw new Error(`web-root.json not written within 60s at ${webIdentityPath(config)}`);
+  }
 
   return {
     launcherPath: headlessLauncherPath(config),
