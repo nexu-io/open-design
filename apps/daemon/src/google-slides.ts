@@ -414,7 +414,19 @@ export async function updateTextByObjectId(deckId, objectId, text) {
   } catch (err) {
     if (hadPriorText) {
       try {
-        const fallbackRequests = [
+        // Slides batchUpdate is atomic, so the failed styled batch
+        // above left the original placeholder text in place. The
+        // fallback must clear it before inserting — otherwise the
+        // shape ends up with old + new text concatenated. Bundle
+        // deleteText + insertText (+ optional first-paragraph
+        // style) into a single batch so they apply atomically.
+        const fallbackRequests: any[] = [
+          {
+            deleteText: {
+              objectId,
+              textRange: { type: 'ALL' },
+            },
+          },
           { insertText: { objectId, text, insertionIndex: 0 } },
         ];
         const firstStyle = paragraphStyles[0];
@@ -432,7 +444,7 @@ export async function updateTextByObjectId(deckId, objectId, text) {
           presentationId: deckId,
           requestBody: { requests: fallbackRequests },
         });
-        return { ok: true, fallback: 'insert-only' };
+        return { ok: true, fallback: 'delete-insert' };
       } catch (inner) {
         throw wrapApiError(inner);
       }

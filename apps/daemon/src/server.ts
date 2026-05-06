@@ -4110,11 +4110,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/google/auth/callback', async (req, res) => {
     const error = typeof req.query.error === 'string' ? req.query.error : null;
     const code = typeof req.query.code === 'string' ? req.query.code : null;
+    // The callback page renders attacker-influenced query values
+    // (Google's `error` field, our own caught error message). The
+    // daemon listens on localhost which also hosts privileged /api/*
+    // routes — interpolating raw input into HTML would be a reflected
+    // XSS into the same origin. HTML-escape every interpolated value.
+    const esc = (s: string) =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     if (error) {
       res
         .status(400)
         .type('html')
-        .send(`<h1>Google OAuth error</h1><p>${error}</p><p>You can close this tab.</p>`);
+        .send(
+          `<h1>Google OAuth error</h1><p>${esc(error)}</p><p>You can close this tab.</p>`,
+        );
       return;
     }
     if (!code) {
@@ -4132,7 +4146,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             '<script>setTimeout(()=>window.close(),1500)</script>',
         );
     } catch (err) {
-      res.status(500).type('html').send(`<h1>OAuth exchange failed</h1><pre>${err.message}</pre>`);
+      res
+        .status(500)
+        .type('html')
+        .send(`<h1>OAuth exchange failed</h1><pre>${esc(err.message)}</pre>`);
     }
   });
 

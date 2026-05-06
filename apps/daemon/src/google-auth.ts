@@ -118,7 +118,10 @@ export async function getAuthClient() {
   client.on('tokens', (newTokens) => {
     // Google sends only the changed fields on refresh — merge instead of
     // overwriting so we don't drop the long-lived refresh_token.
-    const merged = { ...token, ...newTokens };
+    // Use the client's CURRENT credentials as the merge base (not the
+    // initial-load snapshot) so a later token rotation isn't clobbered
+    // by stale fields from the boot-time snapshot.
+    const merged = { ...client.credentials, ...newTokens };
     void saveToken(merged).catch(() => {});
   });
   cachedClient = client;
@@ -142,7 +145,11 @@ export async function exchangeCode(code, redirectUri = DEFAULT_REDIRECT_URI): Pr
   const { tokens } = await client.getToken(code);
   client.setCredentials(tokens);
   client.on('tokens', (newTokens) => {
-    const merged = { ...tokens, ...newTokens };
+    // Same merge-base concern as getAuthClient(): if the token gets
+    // rotated after this listener is attached, the next refresh
+    // should fold newTokens into the latest credentials, not into
+    // the initial snapshot.
+    const merged = { ...client.credentials, ...newTokens };
     void saveToken(merged).catch(() => {});
   });
   await saveToken(tokens);
