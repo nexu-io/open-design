@@ -244,10 +244,13 @@ export function App() {
     setTemplates(list);
   }, []);
 
-  const handleConfigSave = useCallback((next: AppConfig) => {
-    // Saving from any settings dialog (welcome or regular) counts as
-    // having completed onboarding — the user has actively chosen a
-    // configuration, so future page loads can skip the auto-popup.
+  const handleConfigSave = useCallback(async (next: AppConfig) => {
+    // Persist the raw Composio key to the daemon first. If the write fails,
+    // bail without touching local state so we never report a false positive.
+    const composioSuccess = await syncComposioConfigToDaemon(next.composio);
+    if (!composioSuccess) {
+      return { success: false };
+    }
     const withOnboarding: AppConfig = {
       ...next,
       composio: normalizeSavedComposioConfig(next.composio),
@@ -258,11 +261,8 @@ export function App() {
       force: true,
     });
     void syncConfigToDaemon(withOnboarding);
-    // Keep the Composio secret out of localStorage, but send the raw pending
-    // edit to the daemon before it is normalized away for local persistence.
-    void syncComposioConfigToDaemon(next.composio);
     setConfig(withOnboarding);
-    setSettingsOpen(false);
+    return { success: true };
   }, []);
 
   const handleModeChange = useCallback(

@@ -49,7 +49,7 @@ interface Props {
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   initialSection?: SettingsSection;
-  onSave: (cfg: AppConfig) => void;
+  onSave: (cfg: AppConfig) => Promise<{ success: boolean }> | void;
   onClose: () => void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
@@ -326,6 +326,8 @@ export function SettingsDialog({
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const languageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -1014,7 +1016,7 @@ export function SettingsDialog({
           {activeSection === 'media' ? <MediaProvidersSection cfg={cfg} setCfg={setCfg} /> : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
-          {activeSection === 'composio' ? <ComposioSection cfg={cfg} setCfg={setCfg} /> : null}
+          {activeSection === 'composio' ? <ComposioSection cfg={cfg} setCfg={setCfg} saveSuccess={saveSuccess} setSaveSuccess={setSaveSuccess} /> : null}
 
           {activeSection === 'language' ? (
           <section className="settings-section">
@@ -1161,10 +1163,34 @@ export function SettingsDialog({
           <button
             type="button"
             className="primary"
-            disabled={!canSave}
-            onClick={() => onSave(cfg)}
+            disabled={!canSave || isSaving}
+            onClick={async () => {
+              setIsSaving(true);
+              setSaveSuccess(false);
+              const result = await onSave(cfg);
+              setIsSaving(false);
+              if (!result?.success) return;
+              if (activeSection === 'composio' && !welcome) {
+                setSaveSuccess(true);
+                setCfg((curr) => {
+                  const apiKey = curr.composio?.apiKey?.trim();
+                  if (!apiKey) return curr;
+                  return {
+                    ...curr,
+                    composio: {
+                      ...curr.composio,
+                      apiKey: '',
+                      apiKeyConfigured: true,
+                      apiKeyTail: apiKey.slice(-4),
+                    },
+                  };
+                });
+              } else {
+                onClose();
+              }
+            }}
           >
-            {welcome ? t('settings.getStarted') : t('common.save')}
+            {isSaving ? 'Saving...' : (welcome ? t('settings.getStarted') : t('common.save'))}
           </button>
         </footer>
       </div>
@@ -1175,9 +1201,13 @@ export function SettingsDialog({
 function ComposioSection({
   cfg,
   setCfg,
+  saveSuccess,
+  setSaveSuccess,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  saveSuccess: boolean;
+  setSaveSuccess: (v: boolean) => void;
 }) {
   const composio = cfg.composio ?? {};
 
@@ -1222,24 +1252,34 @@ function ComposioSection({
             type="password"
             value={composio.apiKey ?? ''}
             placeholder={isSavedState ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
-            onChange={(e) => updateComposio({ apiKey: e.target.value })}
+            onChange={(e) => {
+              setSaveSuccess(false);
+              updateComposio({ apiKey: e.target.value });
+            }}
             aria-describedby="composio-api-key-help"
           />
           <button
             type="button"
             className="ghost"
             disabled={!apiKeyConfigured}
-            onClick={() => updateComposio({ apiKey: '', apiKeyConfigured: false, apiKeyTail: '' })}
+            onClick={() => {
+              setSaveSuccess(false);
+              updateComposio({ apiKey: '', apiKeyConfigured: false, apiKeyTail: '' });
+            }}
           >
             Clear
           </button>
         </div>
         <span id="composio-api-key-help" className="hint">
-          {isSavedState
-            ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
-            : apiKeyConfigured
-              ? 'Unsaved changes — click Save to store this key in the local daemon.'
-              : 'Keys are stored locally in the daemon and never sent through environment variables.'}
+          {saveSuccess ? (
+            <span role="status" className="success-hint">✓ API key saved successfully</span>
+          ) : hasPendingEdit ? (
+            'Unsaved changes — click Save to store this key in the local daemon.'
+          ) : isSavedState ? (
+            'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
+          ) : (
+            'Keys are stored locally in the daemon and never sent through environment variables.'
+          )}
         </span>
       </label>
     </section>
