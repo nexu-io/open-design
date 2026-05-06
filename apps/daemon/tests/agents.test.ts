@@ -460,7 +460,7 @@ test('qoder entry uses qodercli with stream-json stdin delivery and tier model h
 test('qoder args use non-interactive print mode with cwd, model, and add-dir', () => {
   const args = qoder.buildArgs(
     'prompt must not appear in argv',
-    [],
+    ['/tmp/uploads/logo.png', '/tmp/uploads/hero concept.png'],
     [
       '/repo/skills',
       '',
@@ -487,6 +487,10 @@ test('qoder args use non-interactive print mode with cwd, model, and add-dir', (
     '/repo/skills',
     '--add-dir',
     '/repo/design-systems',
+    '--attachment',
+    '/tmp/uploads/logo.png',
+    '--attachment',
+    '/tmp/uploads/hero concept.png',
   ]);
   assert.equal(args.includes('prompt must not appear in argv'), false);
   assert.equal(args.includes('./relative-skills'), false);
@@ -518,6 +522,26 @@ test('qoder args omit empty, non-string, and relative add-dir entries', () => {
   ]);
 
   assert.equal(args.includes('--add-dir'), false);
+});
+
+test('qoder args omit empty, non-string, and relative image attachment entries', () => {
+  const args = qoder.buildArgs('', [
+    '',
+    null,
+    undefined,
+    42,
+    './uploads/logo.png',
+    'uploads/hero.png',
+    '/tmp/uploads/logo.png',
+  ]);
+
+  assert.deepEqual(
+    args.filter((arg) => arg === '--attachment').length,
+    1,
+  );
+  assert.ok(args.includes('/tmp/uploads/logo.png'));
+  assert.equal(args.includes('./uploads/logo.png'), false);
+  assert.equal(args.includes('uploads/hero.png'), false);
 });
 
 test('detectAgents keeps qoder unavailable with fallback metadata when qodercli is missing', async () => {

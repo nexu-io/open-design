@@ -505,7 +505,7 @@ export const AGENT_DEFS = [
     // stream-json so the daemon can surface text and usage incrementally.
     buildArgs: (
       _prompt,
-      _imagePaths,
+      imagePaths,
       extraAllowedDirs = [],
       options = {},
       runtimeContext = {},
@@ -526,7 +526,11 @@ export const AGENT_DEFS = [
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && path.isAbsolute(d),
       );
+      const attachments = (imagePaths || []).filter(
+        (p) => typeof p === 'string' && path.isAbsolute(p),
+      );
       for (const d of dirs) args.push('--add-dir', d);
+      for (const p of attachments) args.push('--attachment', p);
       return args;
     },
     promptViaStdin: true,
