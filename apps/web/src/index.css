@@ -969,15 +969,6 @@ code {
   white-space: nowrap;
 }
 
-.composer-import-item-enabled {
-  cursor: pointer;
-  color: var(--text);
-}
-.composer-import-item-enabled:hover {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-
 .user-attachments {
   display: flex;
   gap: 6px;
@@ -8109,6 +8100,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: 100%;
 }
 .composer-import-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-import-item-enabled {
+  cursor: pointer;
+  color: var(--text);
+}
+.composer-import-item-enabled:hover {
   background: var(--bg-subtle);
   color: var(--text);
 }

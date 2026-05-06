@@ -1077,8 +1077,25 @@ function openNativeFolderDialog() {
         },
       );
     } else if (platform === 'win32') {
-      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a code folder to link'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }";
-      execFile('powershell.exe', ['-NoProfile', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
+      const ps = [
+        'Add-Type -AssemblyName System.Windows.Forms;',
+        '$owner = New-Object System.Windows.Forms.Form;',
+        "$owner.Text = 'Open Design';",
+        '$owner.TopMost = $true;',
+        '$owner.ShowInTaskbar = $true;',
+        "$owner.StartPosition = 'CenterScreen';",
+        '$owner.Width = 1;',
+        '$owner.Height = 1;',
+        '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog;',
+        "$dialog.Description = 'Select a code folder to link';",
+        '$dialog.ShowNewFolderButton = $false;',
+        'try {',
+        '  if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }',
+        '} finally {',
+        '  $owner.Dispose();',
+        '}',
+      ].join(' ');
+      execFile('powershell.exe', ['-NoProfile', '-Sta', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
         if (err) return resolve(null);
         const p = stdout.trim();
         resolve(p || null);
