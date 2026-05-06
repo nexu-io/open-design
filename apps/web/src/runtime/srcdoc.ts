@@ -162,7 +162,7 @@ function injectSandboxShim(doc: string): string {
     if (!link) return;
     const href = link.getAttribute('href');
     const rel = link.getAttribute('rel');
-    const isAnchor = href.startsWith('#') || href === ';
+    const isAnchor = href.startsWith('#') || href === '';
     if (isAnchor) {
       e.preventDefault();
       document
