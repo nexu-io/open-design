@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
+
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AssistantMessage } from '../../apps/web/src/components/AssistantMessage';
-import type { AgentEvent, ChatMessage } from '../../apps/web/src/types';
+import { AssistantMessage } from '../../src/components/AssistantMessage';
+import type { AgentEvent, ChatMessage } from '../../src/types';
 
 function messageWithEvents(events: AgentEvent[]): ChatMessage {
   return {

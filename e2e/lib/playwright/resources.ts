@@ -1,6 +1,8 @@
-export type CaseKind = 'prototype' | 'deck' | 'template' | 'workspace';
+import { playwrightUiScenarios } from '../../resources/playwright.ts';
 
-export interface MockArtifactCase {
+export type ScenarioKind = 'prototype' | 'deck' | 'template' | 'workspace';
+
+export interface MockArtifactScenario {
   identifier: string;
   title: string;
   html: string;
@@ -8,10 +10,10 @@ export interface MockArtifactCase {
   heading: string;
 }
 
-export interface UICase {
+export interface UiScenario {
   id: string;
   title: string;
-  kind: CaseKind;
+  kind: ScenarioKind;
   flow?:
     | 'standard'
     | 'design-system-selection'
@@ -40,6 +42,10 @@ export interface UICase {
   };
   prompt: string;
   secondaryPrompt?: string;
-  mockArtifact?: MockArtifactCase;
+  mockArtifact?: MockArtifactScenario;
   notes?: string[];
+}
+
+export function automatedUiScenarios(): UiScenario[] {
+  return playwrightUiScenarios.filter((scenario) => scenario.automated);
 }

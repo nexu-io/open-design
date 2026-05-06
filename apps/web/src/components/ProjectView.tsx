@@ -40,6 +40,7 @@ import {
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
+import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 import {
   createConversation,
@@ -84,6 +85,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
+import { CenteredLoader } from './Loading';
 
 interface Props {
   project: Project;
@@ -180,6 +182,10 @@ function appendLiveArtifactEventItem(
   return next.length > 50 ? next.slice(next.length - 50) : next;
 }
 
+export function projectSplitClassName(workspaceFocused: boolean): string {
+  return workspaceFocused ? 'split split-focus' : 'split';
+}
+
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
   if (evt.type === 'live_artifact') {
@@ -231,6 +237,7 @@ export function ProjectView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
+  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
@@ -241,6 +248,7 @@ export function ProjectView({
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
+  const [workspaceFocused, setWorkspaceFocused] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
   const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
@@ -298,24 +306,40 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
+    setConversationLoadError(null);
     (async () => {
-      const list = await listConversations(project.id);
-      if (cancelled) return;
-      if (list.length === 0) {
-        const fresh = await createConversation(project.id);
+      try {
+        const list = await listConversations(project.id);
         if (cancelled) return;
-        if (fresh) {
-          setConversations([fresh]);
-          setActiveConversationId(fresh.id);
+        if (list.length === 0) {
+          const fresh = await createConversation(project.id);
+          if (cancelled) return;
+          if (fresh) {
+            setConversations([fresh]);
+            setActiveConversationId(fresh.id);
+          } else {
+            throw new Error('Could not create a conversation for this project.');
+          }
+        } else {
+          setConversations(list);
+          setActiveConversationId(list[0]!.id);
         }
-      } else {
-        setConversations(list);
-        setActiveConversationId(list[0]!.id);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Could not load conversations for this project.';
+        setConversations([]);
+        setActiveConversationId(null);
+        setConversationLoadError(message);
+        setError(message);
       }
     })();
     return () => {
       cancelled = true;
     };
+  }, [project.id]);
+
+  useEffect(() => {
+    setWorkspaceFocused(false);
   }, [project.id]);
 
   // Load messages whenever the active conversation changes. This happens
@@ -652,6 +676,18 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
+  const appendAssistantErrorEvent = useCallback(
+    (messageId: string, message: string) => {
+      if (!message) return;
+      updateMessageById(
+        messageId,
+        (prev) => appendErrorStatusEvent(prev, message),
+        true,
+      );
+    },
+    [updateMessageById],
+  );
+
   const refreshPreviewComments = useCallback(async () => {
     if (!activeConversationId) return;
     const next = await fetchPreviewComments(project.id, activeConversationId);
@@ -846,6 +882,7 @@ export function ProjectView({
               textBuffer.cancel();
               unregisterTextBuffer();
               setError(err.message);
+              appendAssistantErrorEvent(message.id, err.message);
               updateMessageById(
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
@@ -891,7 +928,14 @@ export function ProjectView({
         })
           .catch((err) => {
             if ((err as Error).name !== 'AbortError') {
-              setError(err instanceof Error ? err.message : String(err));
+              const msg = err instanceof Error ? err.message : String(err);
+              setError(msg);
+              appendAssistantErrorEvent(message.id, msg);
+              updateMessageById(
+                message.id,
+                (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+                true,
+              );
             }
           })
           .finally(() => {
@@ -1174,6 +1218,7 @@ export function ProjectView({
           textBuffer.cancel();
           cancelSendTextBuffer();
           setError(err.message);
+          appendAssistantErrorEvent(assistantId, err.message);
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
@@ -1442,10 +1487,18 @@ export function ProjectView({
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
-    const fresh = await createConversation(project.id);
-    if (!fresh) return;
-    setConversations((curr) => [fresh, ...curr]);
-    setActiveConversationId(fresh.id);
+    setConversationLoadError(null);
+    try {
+      const fresh = await createConversation(project.id);
+      if (!fresh) throw new Error('Could not create a conversation for this project.');
+      setConversations((curr) => [fresh, ...curr]);
+      setActiveConversationId(fresh.id);
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
+      setConversationLoadError(message);
+      setError(message);
+    }
   }, [project.id]);
 
   const handleSelectConversation = useCallback((id: string) => {
@@ -1740,67 +1793,82 @@ export function ProjectView({
       </AppChromeHeader>
       <div
         ref={splitRef}
-        className={`split${resizingChatPanel ? ' is-resizing-chat' : ''}`}
-        style={{
-          gridTemplateColumns:
-            `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
-        }}
+        className={[
+          projectSplitClassName(workspaceFocused),
+          resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
+        ].filter(Boolean).join(' ')}
+        style={workspaceFocused
+          ? undefined
+          : {
+              gridTemplateColumns:
+                `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
+            }}
       >
-        <ChatPane
-          // The conversation id is part of the key so switching conversations
-          // resets internal scroll/draft state inside ChatPane and ChatComposer.
-          key={activeConversationId ?? 'no-conv'}
-          messages={messages}
-          streaming={streaming}
-          error={error}
-          projectId={project.id}
-          projectFiles={projectFiles}
-          projectFileNames={projectFileNames}
-          onEnsureProject={handleEnsureProject}
-          previewComments={previewComments}
-          attachedComments={attachedComments}
-          onAttachComment={attachPreviewComment}
-          onDetachComment={detachPreviewComment}
-          onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-          onSend={handleSend}
-          onStop={handleStop}
-          onRequestOpenFile={requestOpenFile}
-          initialDraft={initialDraft}
-          onSubmitForm={(text) => {
-            if (streaming) return;
-            void handleSend(text, [], []);
-          }}
-          onContinueRemainingTasks={handleContinueRemainingTasks}
-          onNewConversation={handleNewConversation}
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
-          onOpenSettings={onOpenSettings}
-          petConfig={config.pet}
-          onAdoptPet={onAdoptPetInline}
-          onTogglePet={onTogglePet}
-          onOpenPetSettings={onOpenPetSettings}
-          projectMetadata={project.metadata}
-          onProjectMetadataChange={(metadata) => {
-            onProjectChange({ ...project, metadata });
-          }}
-        />
-        <div
-          className="split-resize-handle"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={chatResizeLabel}
-          aria-valuemin={chatPanelAriaMinWidth}
-          aria-valuemax={chatPanelMaxWidth}
-          aria-valuenow={chatPanelWidth}
-          tabIndex={0}
-          title={chatResizeLabel}
-          onPointerDown={handleChatResizePointerDown}
-          onKeyDown={handleChatResizeKeyDown}
-          onBlur={handleChatResizeBlur}
-        />
+        <div className="split-chat-slot" hidden={workspaceFocused}>
+          {activeConversationId || conversationLoadError ? (
+            <ChatPane
+              // The conversation id is part of the key so switching conversations
+              // resets internal scroll/draft state inside ChatPane and ChatComposer.
+              key={activeConversationId ?? 'conversation-unavailable'}
+              messages={messages}
+              streaming={streaming}
+              error={conversationLoadError ?? error}
+              projectId={project.id}
+              projectFiles={projectFiles}
+              projectFileNames={projectFileNames}
+              onEnsureProject={handleEnsureProject}
+              previewComments={previewComments}
+              attachedComments={attachedComments}
+              onAttachComment={attachPreviewComment}
+              onDetachComment={detachPreviewComment}
+              onDeleteComment={(commentId) => void removePreviewComment(commentId)}
+              onSend={handleSend}
+              onStop={handleStop}
+              onRequestOpenFile={requestOpenFile}
+              initialDraft={initialDraft}
+              onSubmitForm={(text) => {
+                if (streaming) return;
+                void handleSend(text, [], []);
+              }}
+              onContinueRemainingTasks={handleContinueRemainingTasks}
+              onNewConversation={handleNewConversation}
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              onSelectConversation={handleSelectConversation}
+              onDeleteConversation={handleDeleteConversation}
+              onRenameConversation={handleRenameConversation}
+              onOpenSettings={onOpenSettings}
+              petConfig={config.pet}
+              onAdoptPet={onAdoptPetInline}
+              onTogglePet={onTogglePet}
+              onOpenPetSettings={onOpenPetSettings}
+              projectMetadata={project.metadata}
+              onProjectMetadataChange={(metadata) => {
+                onProjectChange({ ...project, metadata });
+              }}
+            />
+          ) : (
+            <div className="pane" data-testid="chat-pane-loading">
+              <CenteredLoader />
+            </div>
+          )}
+        </div>
+        {!workspaceFocused ? (
+          <div
+            className="split-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={chatResizeLabel}
+            aria-valuemin={chatPanelAriaMinWidth}
+            aria-valuemax={chatPanelMaxWidth}
+            aria-valuenow={chatPanelWidth}
+            tabIndex={0}
+            title={chatResizeLabel}
+            onPointerDown={handleChatResizePointerDown}
+            onKeyDown={handleChatResizeKeyDown}
+            onBlur={handleChatResizeBlur}
+          />
+        ) : null}
         <FileWorkspace
           projectId={project.id}
           files={projectFiles}
@@ -1819,6 +1887,8 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          focusMode={workspaceFocused}
+          onFocusModeChange={setWorkspaceFocused}
         />
       </div>
     </div>

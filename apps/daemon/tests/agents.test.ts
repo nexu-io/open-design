@@ -171,12 +171,30 @@ test('codex args do not include the literal `-` stdin sentinel (regression of #2
   assert.equal(withDisablePlugins.includes('-'), false);
 });
 
+test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', () => {
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  const args = codex.buildArgs(
+    '',
+    [],
+    ['/repo/skills', '', null, '/tmp/codex/generated_images', undefined],
+    {},
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(
+    args.filter((arg, index) => arg === '--add-dir' || args[index - 1] === '--add-dir'),
+    ['--add-dir', '/repo/skills', '--add-dir', '/tmp/codex/generated_images'],
+  );
+});
+
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes), [
     {
       name: 'open-design-live-artifacts',
       command: 'od',
       args: ['mcp', 'live-artifacts'],
+      env: [],
     },
   ]);
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kimi), [
@@ -184,6 +202,7 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
       name: 'open-design-live-artifacts',
       command: 'od',
       args: ['mcp', 'live-artifacts'],
+      env: [],
     },
   ]);
 
@@ -208,6 +227,7 @@ test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
         name: 'open-design-live-artifacts',
         command: process.execPath,
         args: ['/workspace/apps/daemon/dist/cli.js', 'mcp', 'live-artifacts'],
+        env: [],
       },
     ],
   );
@@ -1360,6 +1380,58 @@ test('spawnEnvForAgent strips ANTHROPIC_API_KEY for the claude adapter', () => {
   assert.equal('ANTHROPIC_API_KEY' in env, false);
   assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+});
+
+test('spawnEnvForAgent applies configured Claude Code env before auth stripping', () => {
+  const env = spawnEnvForAgent(
+    'claude',
+    {
+      ANTHROPIC_API_KEY: 'sk-leak',
+      PATH: '/usr/bin',
+    },
+    {
+      CLAUDE_CONFIG_DIR: '/Users/test/.claude-2',
+    },
+  );
+
+  assert.equal(env.CLAUDE_CONFIG_DIR, '/Users/test/.claude-2');
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent applies configured Codex env without mutating the base env', () => {
+  const base = { PATH: '/usr/bin' };
+  const env = spawnEnvForAgent('codex', base, {
+    CODEX_HOME: '/Users/test/.codex-alt',
+  });
+
+  assert.equal(env.CODEX_HOME, '/Users/test/.codex-alt');
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal('CODEX_HOME' in base, false);
+});
+
+test('detectAgents applies configured env while probing the CLI', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-env-'));
+  try {
+    const bin = join(dir, 'claude');
+    writeFileSync(
+      bin,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "$CLAUDE_CONFIG_DIR"; exit 0; fi\nif [ "$1" = "-p" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n',
+    );
+    chmodSync(bin, 0o755);
+    process.env.PATH = dir;
+    process.env.OD_AGENT_HOME = dir;
+
+    const agents = await detectAgents({
+      claude: { CLAUDE_CONFIG_DIR: '/tmp/claude-config-probe' },
+    });
+
+    const detected = agents.find((agent) => agent.id === 'claude');
+    assert.equal(detected?.available, true);
+    assert.equal(detected?.version, '/tmp/claude-config-probe');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // Windows env-var names are case-insensitive at the kernel level, but

@@ -3,8 +3,8 @@ import {
   latestTodosFromEvents,
   parseTodoWriteInput,
   unfinishedTodosFromEvents,
-} from '../../apps/web/src/runtime/todos';
-import type { AgentEvent } from '../../apps/web/src/types';
+} from '../../src/runtime/todos';
+import type { AgentEvent } from '../../src/types';
 
 const firstTodoInput = {
   todos: [

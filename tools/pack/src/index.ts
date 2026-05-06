@@ -5,6 +5,7 @@ import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform }
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
+  inspectPackedMacApp,
   packMac,
   readPackedMacLogs,
   startPackedMacApp,
@@ -94,7 +95,7 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
-addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup"))).action(
+addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
   async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("mac", options);
     switch (action) {
@@ -112,6 +113,9 @@ addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging c
         return;
       case "logs":
         printLogs(await readPackedMacLogs(config), options);
+        return;
+      case "inspect":
+        printJson(await inspectPackedMacApp(config, options));
         return;
       case "uninstall":
         printJson(await uninstallPackedMacApp(config));

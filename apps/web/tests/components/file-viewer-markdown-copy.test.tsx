@@ -1,13 +1,15 @@
+// @vitest-environment jsdom
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FileViewer } from '../../apps/web/src/components/FileViewer';
-import type { ProjectFile } from '../../apps/web/src/types';
-import { fetchProjectFileText } from '../../apps/web/src/providers/registry';
+import { FileViewer } from '../../src/components/FileViewer';
+import type { ProjectFile } from '../../src/types';
+import { fetchProjectFileText } from '../../src/providers/registry';
 
-vi.mock('../../apps/web/src/providers/registry', async () => {
-  const actual = await vi.importActual<typeof import('../../apps/web/src/providers/registry')>(
-    '../../apps/web/src/providers/registry',
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
   );
   return {
     ...actual,
@@ -64,7 +66,7 @@ describe('FileViewer markdown code block copy', () => {
     if (originalExecCommand) {
       Object.defineProperty(document, 'execCommand', originalExecCommand);
     } else {
-      delete (document as Document & { execCommand?: typeof document.execCommand }).execCommand;
+      delete (document as { execCommand?: typeof document.execCommand }).execCommand;
     }
     cleanup();
     vi.clearAllMocks();

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_CONFIG,
   loadConfig,
+  mergeDaemonConfig,
   syncComposioConfigToDaemon,
+  syncConfigToDaemon,
 } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
@@ -51,6 +53,85 @@ describe('syncComposioConfigToDaemon', () => {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
+    });
+  });
+});
+
+describe('syncConfigToDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('syncs per-agent CLI env prefs to the daemon app config', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe('/api/app-config');
+    expect(init.method).toBe('PUT');
+    expect(init.headers).toEqual({ 'content-type': 'application/json' });
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      onboardingCompleted: DEFAULT_CONFIG.onboardingCompleted,
+      agentId: DEFAULT_CONFIG.agentId,
+      agentModels: DEFAULT_CONFIG.agentModels,
+      skillId: DEFAULT_CONFIG.skillId,
+      designSystemId: DEFAULT_CONFIG.designSystemId,
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    });
+  });
+});
+
+describe('mergeDaemonConfig', () => {
+  it('clears stale local CLI env prefs when the daemon has none', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-old' },
+        },
+      },
+      {
+        agentId: 'codex',
+      },
+    );
+
+    expect(merged.agentId).toBe('codex');
+    expect(merged.agentCliEnv).toEqual({});
+  });
+
+  it('uses daemon CLI env prefs instead of merging with stale local entries', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-old' },
+        },
+      },
+      {
+        agentCliEnv: {
+          codex: { CODEX_HOME: '~/.codex-new' },
+        },
+      },
+    );
+
+    expect(merged.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-new' },
     });
   });
 });
