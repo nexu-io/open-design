@@ -129,6 +129,10 @@ function escapeAttr(value: string): string {
 // becomes a static, unnavigable preview. We install a same-origin
 // in-memory shim BEFORE any user script runs so those decks degrade
 // gracefully (position just doesn't persist across reloads).
+// allow-popups and allow-popups-to-escape-sandbox are needed for 
+// links with target="_blank" to work in the sandboxed preview.
+// Empty hrefs and hash only hrefs will be intercepted and ignored.
+// hrefs leading to an id on the page will be scrolled into view.
 function injectSandboxShim(doc: string): string {
   const shim = `<script data-od-sandbox-shim>(function(){
   function makeStore(){
@@ -153,6 +157,26 @@ function injectSandboxShim(doc: string): string {
   }
   tryShim('localStorage');
   tryShim('sessionStorage');
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href]');
+    if (!link) return;
+    const href = link.getAttribute('href');
+    const rel = link.getAttribute('rel');
+    const isAnchor = href.startsWith('#') || href === ';
+    if (isAnchor) {
+      e.preventDefault();
+      document
+        .getElementById(href.slice(1))
+        ?.scrollIntoView();
+    } else if (link.target === '_blank') {
+      e.preventDefault();
+      if (rel === 'noopener noreferrer') {
+        window.open(href, '_blank');
+      } else {
+          window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    }
+  });
 })();</script>`;
   if (/<head[^>]*>/i.test(doc))
     return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
