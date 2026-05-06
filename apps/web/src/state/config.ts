@@ -287,6 +287,15 @@ interface PublicMediaProviderConfigResponse {
   providers?: Record<string, PublicMediaProviderConfigEntry>;
 }
 
+export type DaemonMediaProvidersFetchResult =
+  | {
+    status: 'ok';
+    providers: AppConfig['mediaProviders'];
+  }
+  | {
+    status: 'error';
+  };
+
 interface MediaProviderDaemonWriteEntry {
   apiKey?: string;
   preserveApiKey?: boolean;
@@ -364,10 +373,10 @@ export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['compos
   }
 }
 
-export async function fetchMediaProvidersFromDaemon(): Promise<AppConfig['mediaProviders'] | null> {
+export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvidersFetchResult> {
   try {
     const response = await fetch('/api/media/config');
-    if (!response.ok) return null;
+    if (!response.ok) return { status: 'error' };
     const payload = await response.json() as PublicMediaProviderConfigResponse;
     const rawProviders = payload.providers ?? {};
     const providers: AppConfig['mediaProviders'] = {};
@@ -382,9 +391,12 @@ export async function fetchMediaProvidersFromDaemon(): Promise<AppConfig['mediaP
           : {}),
       };
     }
-    return providers;
+    return {
+      status: 'ok',
+      providers,
+    };
   } catch {
-    return null;
+    return { status: 'error' };
   }
 }
 
@@ -469,9 +481,10 @@ export function hasAnyConfiguredProvider(
 
 export function shouldSyncLocalMediaProvidersToDaemon(
   localProviders: Record<string, MediaProviderCredentials> | undefined,
-  daemonProviders: Record<string, MediaProviderCredentials> | null,
+  daemonProviders: Record<string, MediaProviderCredentials> | null | undefined,
 ): boolean {
-  return hasAnyConfiguredProvider(localProviders)
+  return daemonProviders != null
+    && hasAnyConfiguredProvider(localProviders)
     && !hasAnyDaemonManagedMediaProvider(daemonProviders);
 }
 

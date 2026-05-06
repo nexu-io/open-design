@@ -54,6 +54,8 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
 }
 
 export interface AgentRefreshOptions {
@@ -302,6 +304,8 @@ export function SettingsDialog({
   onSave,
   onClose,
   onRefreshAgents,
+  mediaProvidersNotice,
+  onReloadMediaProviders,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
@@ -1011,7 +1015,14 @@ export function SettingsDialog({
             </>
           ) : null}
 
-          {activeSection === 'media' ? <MediaProvidersSection cfg={cfg} setCfg={setCfg} /> : null}
+          {activeSection === 'media' ? (
+            <MediaProvidersSection
+              cfg={cfg}
+              setCfg={setCfg}
+              mediaProvidersNotice={mediaProvidersNotice}
+              onReloadMediaProviders={onReloadMediaProviders}
+            />
+          ) : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
           {activeSection === 'composio' ? <ComposioSection cfg={cfg} setCfg={setCfg} /> : null}
@@ -1249,11 +1260,17 @@ function ComposioSection({
 function MediaProvidersSection({
   cfg,
   setCfg,
+  mediaProvidersNotice,
+  onReloadMediaProviders,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
 }) {
   const { t } = useI18n();
+  const [reloadRunning, setReloadRunning] = useState(false);
+  const [reloadNotice, setReloadNotice] = useState<string | null>(null);
   const providers = MEDIA_PROVIDERS
     .filter((p) => p.settingsVisible !== false)
     .slice()
@@ -1282,6 +1299,22 @@ function MediaProvidersSection({
       return { ...curr, mediaProviders: map };
     });
   };
+  const handleReload = async () => {
+    if (!onReloadMediaProviders || reloadRunning) return;
+    setReloadRunning(true);
+    setReloadNotice(null);
+    try {
+      const next = await onReloadMediaProviders();
+      if (!next) {
+        setReloadNotice('Could not reload media provider settings from the local daemon.');
+        return;
+      }
+      setCfg((curr) => ({ ...curr, mediaProviders: next }));
+      setReloadNotice('Reloaded media provider settings from the local daemon.');
+    } finally {
+      setReloadRunning(false);
+    }
+  };
 
   return (
     <section className="settings-section">
@@ -1290,10 +1323,31 @@ function MediaProvidersSection({
           <h3>{t('settings.mediaProviders')}</h3>
           <p className="hint">{t('settings.mediaProvidersHint')}</p>
         </div>
+        {onReloadMediaProviders ? (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void handleReload()}
+            disabled={reloadRunning}
+          >
+            {reloadRunning ? t('common.loading') : 'Reload from daemon'}
+          </button>
+        ) : null}
       </div>
+      {mediaProvidersNotice ? (
+        <p className="hint" role="alert">{mediaProvidersNotice}</p>
+      ) : null}
+      {reloadNotice ? (
+        <p className="hint" role={reloadNotice.startsWith('Could not') ? 'alert' : 'status'}>
+          {reloadNotice}
+        </p>
+      ) : null}
       <div className="media-provider-list">
         {providers.map((provider) => {
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
+          const hasPendingEdit = Boolean(entry.apiKey.trim());
+          const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
+          const tail = entry.apiKeyTail?.trim();
           const configured = Boolean(
             entry.apiKey.trim() || entry.baseUrl.trim() || entry.apiKeyConfigured,
           );
@@ -1310,6 +1364,11 @@ function MediaProvidersSection({
               <div className="media-provider-head">
                 <div className="media-provider-meta">
                   <span className="media-provider-name">{provider.label}</span>
+                  {isSavedState ? (
+                    <span className="field-status-badge" title="Saved to local daemon">
+                      {tail ? `Saved · ••••${tail}` : 'Saved'}
+                    </span>
+                  ) : null}
                   <span className="media-provider-hint">{provider.hint}</span>
                 </div>
                 <div className="media-provider-badges">
@@ -1327,7 +1386,7 @@ function MediaProvidersSection({
                 <input
                   type="password"
                   value={entry.apiKey}
-                  placeholder={t('settings.mediaProviderPlaceholder')}
+                  placeholder={isSavedState ? 'Paste a new key to replace the saved one' : t('settings.mediaProviderPlaceholder')}
                   aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                   disabled={disabled}
                   onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}

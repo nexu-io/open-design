@@ -238,6 +238,20 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
       ),
     ).toBe(false);
   });
+
+  it('returns false when daemon media config could not be fetched', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        null,
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('fetchMediaProvidersFromDaemon', () => {
@@ -265,14 +279,24 @@ describe('fetchMediaProvidersFromDaemon', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({
-      openai: {
-        apiKey: '',
-        apiKeyConfigured: true,
-        apiKeyTail: '1234',
-        baseUrl: 'https://daemon.example/v1',
-        model: 'gpt-image-1',
+      status: 'ok',
+      providers: {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://daemon.example/v1',
+          model: 'gpt-image-1',
+        },
       },
     });
+  });
+
+  it('returns an error status when daemon media config fetch fails', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({ status: 'error' });
   });
 });
 

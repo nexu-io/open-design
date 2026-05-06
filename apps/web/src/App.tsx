@@ -85,6 +85,10 @@ export function App() {
   const [daemonMediaProviders, setDaemonMediaProviders] = useState<
     AppConfig['mediaProviders'] | null
   >(null);
+  const [daemonMediaProvidersFetchState, setDaemonMediaProvidersFetchState] = useState<
+    'idle' | 'ok' | 'error'
+  >('idle');
+  const [mediaProvidersNotice, setMediaProvidersNotice] = useState<string | null>(null);
   // Goes false once the bootstrap effect has finished its initial round of
   // fetches. The entry view uses this to show shimmer / skeleton states
   // instead of an "empty" page that flickers before data lands.
@@ -156,7 +160,9 @@ export function App() {
         alive ? fetchAppVersionInfo() : Promise.resolve(null),
         alive ? fetchDaemonConfig() : Promise.resolve(null),
         alive ? fetchComposioConfigFromDaemon() : Promise.resolve(null),
-        alive ? fetchMediaProvidersFromDaemon() : Promise.resolve(null),
+        alive
+          ? fetchMediaProvidersFromDaemon()
+          : Promise.resolve({ status: 'ok' as const, providers: {} }),
       ]);
       if (cancelled) return;
       setAgents(agentList);
@@ -166,18 +172,28 @@ export function App() {
       setTemplates(templateList);
       setPromptTemplates(promptTemplateList);
       setAppVersionInfo(versionInfo);
-      setDaemonMediaProviders(daemonMediaProviders);
+      const daemonMediaProvidersLoaded =
+        alive && daemonMediaProviders.status === 'ok'
+          ? daemonMediaProviders.providers
+          : null;
+      setDaemonMediaProviders(daemonMediaProvidersLoaded);
+      setDaemonMediaProvidersFetchState(alive ? daemonMediaProviders.status : 'idle');
+      setMediaProvidersNotice(
+        daemonMediaProviders.status === 'error'
+          ? 'Could not load media provider settings from the local daemon. Using browser-saved settings for now.'
+          : null,
+      );
 
       setConfig((prev) => {
         // Merge daemon-persisted config — daemon values win for the fields
         // it tracks so that the choice survives origin/storage resets.
         const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
           prev.mediaProviders,
-          daemonMediaProviders,
+          daemonMediaProvidersLoaded,
         );
         const next = mergeDaemonMediaProviders(
           mergeDaemonConfig(prev, daemonConfig),
-          daemonMediaProviders,
+          daemonMediaProvidersLoaded,
         );
 
         if (alive) {
@@ -197,7 +213,7 @@ export function App() {
         saveConfig(next);
         if (alive && migratedLocalMediaProviders && hasAnyConfiguredProvider(next.mediaProviders)) {
           void syncMediaProvidersToDaemon(next.mediaProviders, {
-            daemonProviders: daemonMediaProviders,
+            daemonProviders: daemonMediaProvidersLoaded,
           });
         }
         // Migrate localStorage prefs to daemon on first boot with the new
@@ -272,17 +288,39 @@ export function App() {
       onboardingCompleted: true,
     };
     saveConfig(withOnboarding);
-    void syncMediaProvidersToDaemon(withOnboarding.mediaProviders, {
-      daemonProviders: daemonMediaProviders,
-      force: true,
-    });
+    if (daemonMediaProvidersFetchState === 'ok') {
+      void syncMediaProvidersToDaemon(withOnboarding.mediaProviders, {
+        daemonProviders: daemonMediaProviders,
+        force: true,
+      });
+    }
     void syncConfigToDaemon(withOnboarding);
     // Keep the Composio secret out of localStorage, but send the raw pending
     // edit to the daemon before it is normalized away for local persistence.
     void syncComposioConfigToDaemon(next.composio);
     setConfig(withOnboarding);
     setSettingsOpen(false);
-  }, [daemonMediaProviders]);
+  }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
+
+  const reloadMediaProvidersFromDaemon = useCallback(async () => {
+    const result = await fetchMediaProvidersFromDaemon();
+    if (result.status !== 'ok') {
+      setDaemonMediaProvidersFetchState('error');
+      setMediaProvidersNotice(
+        'Could not load media provider settings from the local daemon. Using browser-saved settings for now.',
+      );
+      return null;
+    }
+    setDaemonMediaProviders(result.providers);
+    setDaemonMediaProvidersFetchState('ok');
+    setMediaProvidersNotice(null);
+    setConfig((prev) => {
+      const merged = mergeDaemonMediaProviders(prev, result.providers);
+      saveConfig(merged);
+      return merged;
+    });
+    return result.providers;
+  }, []);
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
@@ -614,6 +652,8 @@ export function App() {
             setSettingsOpen(false);
           }}
           onRefreshAgents={refreshAgents}
+          mediaProvidersNotice={mediaProvidersNotice}
+          onReloadMediaProviders={reloadMediaProvidersFromDaemon}
         />
       ) : null}
     </>
