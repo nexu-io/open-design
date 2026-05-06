@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import express from 'express';
 import { afterAll, beforeAll, afterEach, describe, expect, it } from 'vitest';
-import { isLocalSameOrigin } from '../src/server.js';
+import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // The install-info endpoint is a self-contained handler that resolves
 // absolute paths to node + cli.js so the Settings → MCP server panel
