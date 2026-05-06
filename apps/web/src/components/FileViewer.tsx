@@ -2154,24 +2154,21 @@ function HtmlViewer({
     items: WebDeployProjectFileResponse[],
     providerId: WebDeployProviderId,
   ): WebDeployProjectFileResponse | null {
-    return (
-      items.find((item) => item.fileName === file.name && item.providerId === providerId) ??
-      items.find((item) => item.fileName === file.name) ??
-      null
-    );
+    return items.find((item) => item.fileName === file.name && item.providerId === providerId) ?? null;
   }
 
   function syncDeployFormFromConfig(
     providerId: WebDeployProviderId,
     config: WebDeployConfigResponse | null,
   ) {
-    setDeployProviderId(config?.providerId ?? providerId);
-    setDeployConfig(config);
-    setDeployToken(config?.tokenMask || '');
-    setTeamId(config?.teamId || '');
-    setTeamSlug(config?.teamSlug || '');
-    setCloudflareAccountId(config?.accountId || '');
-    setCloudflareProjectName(config?.projectName || '');
+    const matchingConfig = config?.providerId === providerId ? config : null;
+    setDeployProviderId(providerId);
+    setDeployConfig(matchingConfig);
+    setDeployToken(matchingConfig?.tokenMask || '');
+    setTeamId(matchingConfig?.teamId || '');
+    setTeamSlug(matchingConfig?.teamSlug || '');
+    setCloudflareAccountId(matchingConfig?.accountId || '');
+    setCloudflareProjectName(matchingConfig?.projectName || '');
   }
 
   function buildDeployConfigRequest(providerId: WebDeployProviderId): WebUpdateDeployConfigRequest {
@@ -2192,13 +2189,20 @@ function HtmlViewer({
     };
   }
 
-  async function loadDeployProvider(providerId: WebDeployProviderId) {
-    const [config, deployments] = await Promise.all([
-      fetchDeployConfig(providerId),
-      fetchProjectDeployments(projectId),
-    ]);
-    const currentDeployment = findDeploymentForProvider(deployments, providerId);
-    syncDeployFormFromConfig(providerId, config);
+  async function loadDeployProvider(
+    providerId: WebDeployProviderId,
+    options?: { fallbackToExisting?: boolean },
+  ) {
+    const deployments = await fetchProjectDeployments(projectId);
+    const exactDeployment = findDeploymentForProvider(deployments, providerId);
+    const fallbackDeployment = options?.fallbackToExisting
+      ? deployments.find((item) => item.fileName === file.name) ?? null
+      : null;
+    const currentDeployment =
+      exactDeployment ?? fallbackDeployment;
+    const resolvedProviderId = exactDeployment?.providerId ?? currentDeployment?.providerId ?? providerId;
+    const config = await fetchDeployConfig(resolvedProviderId);
+    syncDeployFormFromConfig(resolvedProviderId, config);
     setDeployment(currentDeployment ?? null);
     setDeployResult(currentDeployment ?? null);
     return { config, currentDeployment };
@@ -2780,7 +2784,7 @@ function HtmlViewer({
     setDeployError(null);
     setCopiedDeployLink(false);
     setDeployPhase('idle');
-    await loadDeployProvider(deployProviderId);
+    await loadDeployProvider(deployProviderId, { fallbackToExisting: true });
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
@@ -2795,7 +2799,7 @@ function HtmlViewer({
     setDeployError(null);
     try {
       const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
-      if (!config) {
+      if (!config || config.providerId !== deployProviderId) {
         throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       }
       syncDeployFormFromConfig(deployProviderId, config);
@@ -2825,6 +2829,7 @@ function HtmlViewer({
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
+        if (!nextConfig) return;
         if (!nextConfig?.configured) {
           const option = getDeployProviderOption(deployProviderId);
           throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));

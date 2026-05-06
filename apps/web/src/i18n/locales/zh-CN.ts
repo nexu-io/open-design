@@ -720,6 +720,7 @@ export const zhCN: Dict = {
   'fileViewer.deployModalTitle': '部署到 Vercel',
   'fileViewer.deployModalSubtitle':
     'Use the selected provider account to deploy this HTML preview.',
+  'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': '获取 Vercel token',
   'fileViewer.vercelTokenPlaceholder': '粘贴你的 Vercel token',
   'fileViewer.vercelTokenReuseHint': '将使用已保存的 token。输入新 token 可替换。',
@@ -748,7 +749,7 @@ export const zhCN: Dict = {
   'fileViewer.deployLinkPreparingLabel': '公开链接准备中',
   'fileViewer.deployLinkDelayed':
     'Your site is deployed. The public link is still being prepared.',
-  'fileViewer.deployLinkProtectedLabel': '已启用部署保护',
+  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected':
     'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
   'fileViewer.retryLink': '立即重试',
