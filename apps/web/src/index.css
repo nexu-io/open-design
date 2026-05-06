@@ -5692,31 +5692,16 @@ button.connector-action.is-loading {
 .comment-target-overlay.selected {
   border-width: 2px;
 }
-.comment-target-tooltip {
+.comment-target-overlay-label {
   position: absolute;
-  left: 0;
-  top: 0;
-  transform: translateY(calc(-100% - 6px));
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: min(380px, 80vw);
-  padding: 4px 7px;
-  border-radius: 4px;
-  background: rgba(17, 24, 39, 0.95);
-  color: white;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-}
-.comment-target-tooltip strong {
-  color: #8ec5ff;
-  font-weight: 700;
-}
-.comment-target-tooltip span {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .comment-saved-marker {
   position: absolute;
