@@ -220,7 +220,7 @@ OD стоит на плечах четырёх open-source проектов:
 
 ### 1 · Мы не поставляем своего агента. Ваш уже достаточно хорош.
 
-На старте демон сканирует `PATH` в поисках [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) и [`vibe-acp`](https://github.com/mistralai/mistral-vibe). Всё найденное становится кандидатами на роль design engine — каждый работает через свой stdio-adapter и может переключаться из picker’а модели. CLI не установлен? `POST /api/proxy/stream` даёт тот же pipeline, только без spawn: вставьте любой OpenAI-compatible `baseUrl` + `apiKey`, и демон будет форвардить SSE chunks назад, при этом loopback / link-local / RFC1918 назначения отсекаются на границе.
+На старте демон сканирует `PATH` в поисках [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) и [`vibe-acp`](https://github.com/mistralai/mistral-vibe). Всё найденное становится кандидатами на роль design engine — каждый работает через свой stdio-adapter и может переключаться из picker’а модели. CLI не установлен? `POST /api/proxy/stream` даёт тот же pipeline, только без spawn: вставьте любой OpenAI-compatible `baseUrl` + `apiKey`, и демон будет форвардить SSE chunks назад, при этом loopback / link-local / RFC1918 назначения отсекаются на границе.
 
 ### 2 · Skills — это файлы, а не плагины.
 
@@ -625,7 +625,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -651,7 +651,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt отправляется как RPC-команда `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt отправляется как RPC-команда `prompt`) |
 | **OpenAI-compatible BYOK** | n/a | SSE pass-through | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`; SSRF-защита от loopback / link-local / RFC1918 |
 
 Добавить новый CLI — это одна запись в [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат стрима выбирается из `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (с отдельным `eventParser` на CLI), `acp-json-rpc`, `pi-rpc` или `plain`.

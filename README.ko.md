@@ -219,7 +219,7 @@ skill 추가는 폴더 하나면 됩니다. [`docs/skills-protocol.md`](docs/ski
 
 ### 1 · 에이전트를 제공하지 않습니다. 여러분의 것으로 충분합니다.
 
-Daemon은 시작 시 `PATH`에서 [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai)를 스캔합니다. 찾은 것들 모두가 후보 디자인 엔진이 됩니다 — stdio를 통해 구동되며 CLI당 하나의 어댑터, 모델 picker에서 즉시 전환 가능. [`multica`](https://github.com/multica-ai/multica)와 [`cc-switch`](https://github.com/farion1231/cc-switch)에서 영감을 받았습니다. CLI가 하나도 설치되어 있지 않다면? `POST /api/proxy/stream`이 spawn만 없는 동일한 파이프라인입니다 — 임의의 OpenAI 호환 `baseUrl` + `apiKey`만 붙여 넣으면 daemon이 SSE 청크를 브라우저로 그대로 전달하며, loopback / link-local / RFC1918 목적지는 경계에서 거부됩니다.
+Daemon은 시작 시 `PATH`에서 [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)를 스캔합니다. 찾은 것들 모두가 후보 디자인 엔진이 됩니다 — stdio를 통해 구동되며 CLI당 하나의 어댑터, 모델 picker에서 즉시 전환 가능. [`multica`](https://github.com/multica-ai/multica)와 [`cc-switch`](https://github.com/farion1231/cc-switch)에서 영감을 받았습니다. CLI가 하나도 설치되어 있지 않다면? `POST /api/proxy/stream`이 spawn만 없는 동일한 파이프라인입니다 — 임의의 OpenAI 호환 `baseUrl` + `apiKey`만 붙여 넣으면 daemon이 SSE 청크를 브라우저로 그대로 전달하며, loopback / link-local / RFC1918 목적지는 경계에서 거부됩니다.
 
 ### 2 · Skill은 파일이지 플러그인이 아닙니다.
 
@@ -621,7 +621,7 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -643,7 +643,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`(타입 이벤트) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`(Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`(stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]`(prompt는 RPC `prompt` 명령으로 전송) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`(stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]`(prompt는 RPC `prompt` 명령으로 전송) |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |

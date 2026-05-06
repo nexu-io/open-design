@@ -59,15 +59,14 @@ test('opencode json stream emits structured errors as error events', () => {
   const events = [];
   const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
 
-  handler.feed(
-    JSON.stringify({
-      type: 'error',
-      error: { data: { message: 'OpenCode auth failed: login required' } },
-    }) + '\n',
-  );
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { data: { message: 'OpenCode auth failed: login required' } },
+  });
+  handler.feed(errorLine + '\n');
 
   assert.deepEqual(events, [
-    { type: 'error', message: 'OpenCode auth failed: login required' },
+    { type: 'error', message: 'OpenCode auth failed: login required', raw: errorLine },
   ]);
 });
 
@@ -75,15 +74,14 @@ test('opencode json stream preserves nested error messages', () => {
   const events = [];
   const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
 
-  handler.feed(
-    JSON.stringify({
-      type: 'error',
-      error: { message: 'model not found: openai/nope' },
-    }) + '\n',
-  );
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { message: 'model not found: openai/nope' },
+  });
+  handler.feed(errorLine + '\n');
 
   assert.deepEqual(events, [
-    { type: 'error', message: 'model not found: openai/nope' },
+    { type: 'error', message: 'model not found: openai/nope', raw: errorLine },
   ]);
 });
 
@@ -91,15 +89,14 @@ test('opencode json stream falls back to error name when data has no message', (
   const events = [];
   const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
 
-  handler.feed(
-    JSON.stringify({
-      type: 'error',
-      error: { name: 'AuthError', data: {} },
-    }) + '\n',
-  );
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { name: 'AuthError', data: {} },
+  });
+  handler.feed(errorLine + '\n');
 
   assert.deepEqual(events, [
-    { type: 'error', message: 'AuthError' },
+    { type: 'error', message: 'AuthError', raw: errorLine },
   ]);
 });
 
@@ -111,6 +108,70 @@ test('unknown json stream lines become raw events', () => {
   handler.flush();
 
   assert.deepEqual(events, [{ type: 'raw', line: 'not-json' }]);
+});
+
+// Regression coverage for #691: OpenCode emits structured error frames on
+// stdout while still exiting 0. The parser must surface them as proper
+// `error` events (matching the qoder-stream contract) so server.ts's
+// `sendAgentEvent` flips the run to `failed` and forwards a visible SSE
+// error to the chat. Previously these were downgraded to `type:'raw'`,
+// which the chat UI doesn't render — the run looked like a fast clean
+// success while the user actually got nothing back.
+test('opencode json stream surfaces error frames as proper error events (regression of #691)', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: {
+      name: 'ProviderError',
+      data: { message: 'Authentication expired — please re-login.' },
+    },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Authentication expired — please re-login.',
+      raw: errorLine,
+    },
+  ]);
+});
+
+test('opencode json stream falls back to error.name when error.data.message is absent', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { name: 'NetworkError' },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'NetworkError',
+      raw: errorLine,
+    },
+  ]);
+});
+
+test('opencode json stream falls back to a generic message when error has no usable detail', () => {
+  const events = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+
+  const errorLine = JSON.stringify({ type: 'error', error: {} });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'OpenCode error',
+      raw: errorLine,
+    },
+  ]);
 });
 
 test('gemini stream emits init text and usage events', () => {

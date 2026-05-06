@@ -219,7 +219,7 @@ Einen Skill hinzuzufügen bedeutet: ein Ordner. Lesen Sie [`docs/skills-protocol
 
 ### 1 · Wir liefern keinen Agent. Ihrer ist gut genug.
 
-Der daemon durchsucht beim Start Ihren `PATH` nach [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi` und [`pi`](https://github.com/mariozechner/pi-ai). Was er findet, wird zur möglichen Design-Engine: über stdio mit je einem Adapter pro CLI gesteuert und im Model Picker austauschbar. Inspiriert von [`multica`](https://github.com/multica-ai/multica) und [`cc-switch`](https://github.com/farion1231/cc-switch). Keine CLI installiert? `POST /api/proxy/stream` ist dieselbe Pipeline ohne Spawn: Fügen Sie ein beliebiges OpenAI-kompatibles `baseUrl` + `apiKey` ein, und der daemon leitet SSE-Chunks zurück, wobei loopback / link-local / RFC1918 Ziele am Rand abgelehnt werden.
+Der daemon durchsucht beim Start Ihren `PATH` nach [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi` und [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Was er findet, wird zur möglichen Design-Engine: über stdio mit je einem Adapter pro CLI gesteuert und im Model Picker austauschbar. Inspiriert von [`multica`](https://github.com/multica-ai/multica) und [`cc-switch`](https://github.com/farion1231/cc-switch). Keine CLI installiert? `POST /api/proxy/stream` ist dieselbe Pipeline ohne Spawn: Fügen Sie ein beliebiges OpenAI-kompatibles `baseUrl` + `apiKey` ein, und der daemon leitet SSE-Chunks zurück, wobei loopback / link-local / RFC1918 Ziele am Rand abgelehnt werden.
 
 ### 2 · Skills sind Dateien, keine Plugins.
 
@@ -623,7 +623,7 @@ Die gesamte Maschinerie unten ist das [`huashu-design`](https://github.com/alcha
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -645,7 +645,7 @@ Beim daemon Boot automatisch aus `PATH` erkannt. Keine Konfiguration nötig. Str
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json` (typed events) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (Prompt als RPC-`prompt` Befehl gesendet) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (Prompt als RPC-`prompt` Befehl gesendet) |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |

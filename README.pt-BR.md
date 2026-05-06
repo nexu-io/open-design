@@ -220,7 +220,7 @@ Adicionar uma skill leva uma pasta. Leia [`docs/skills-protocol.md`](docs/skills
 
 ### 1 · Não despachamos um agente. O seu já basta.
 
-O daemon escaneia seu `PATH` por [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) e [`vibe-acp`](https://github.com/mistralai/mistral-vibe) na inicialização. Os que ele encontrar viram engines de design candidatas — dirigidas via stdio com um adapter por CLI, trocáveis pelo picker de modelo. Inspirado em [`multica`](https://github.com/multica-ai/multica) e [`cc-switch`](https://github.com/farion1231/cc-switch). Sem CLI instalado? O modo API é o mesmo pipeline menos o spawn — escolha Anthropic, OpenAI-compatible, Azure OpenAI ou Google Gemini, e o daemon repassa chunks SSE normalizados, com destinos loopback / link-local / RFC1918 rejeitados na borda.
+O daemon escaneia seu `PATH` por [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) e [`vibe-acp`](https://github.com/mistralai/mistral-vibe) na inicialização. Os que ele encontrar viram engines de design candidatas — dirigidas via stdio com um adapter por CLI, trocáveis pelo picker de modelo. Inspirado em [`multica`](https://github.com/multica-ai/multica) e [`cc-switch`](https://github.com/farion1231/cc-switch). Sem CLI instalado? O modo API é o mesmo pipeline menos o spawn — escolha Anthropic, OpenAI-compatible, Azure OpenAI ou Google Gemini, e o daemon repassa chunks SSE normalizados, com destinos loopback / link-local / RFC1918 rejeitados na borda.
 
 ### 2 · Skills são arquivos, não plugins.
 
@@ -626,7 +626,7 @@ Toda a maquinaria abaixo é o playbook do [`huashu-design`](https://github.com/a
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -652,7 +652,7 @@ Detectados automaticamente do `PATH` no boot do daemon. Sem config necessária. 
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt enviado como comando RPC `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt enviado como comando RPC `prompt`) |
 | **BYOK multi-provider** | n/a | Normalização SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini; com guarda SSRF contra loopback / link-local / RFC1918 |
 
 Adicionar um novo CLI é uma entrada em [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). O formato de stream é um de `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (com `eventParser` por CLI), `acp-json-rpc`, `pi-rpc` ou `plain`.
