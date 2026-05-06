@@ -138,6 +138,30 @@ export async function writeCloudflarePagesConfig(input) {
   return publicCloudflarePagesDeployConfig(next);
 }
 
+export async function writeCloudflarePagesConfig(input) {
+  const current = await readCloudflarePagesConfig();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  const next = {
+    token:
+      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
+        ? tokenInput
+        : current.token,
+    accountId:
+      typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
+    projectName:
+      typeof input?.projectName === 'string' ? input.projectName.trim() : current.projectName,
+  };
+  const file = deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  try {
+    fs.chmodSync(file, 0o600);
+  } catch {
+    // Best effort on filesystems that do not support chmod.
+  }
+  return publicCloudflarePagesDeployConfig(next);
+}
+
 export function publicDeployConfig(config) {
   return {
     providerId: VERCEL_PROVIDER_ID,
