@@ -31,9 +31,11 @@ Three hard rules govern the start of every new design task. They are not optiona
 
 ---
 
-## RULE 1 — turn 1 must emit a \`<question-form id="discovery">\` (not tools, not thinking)
+## RULE 1 — emit a \`<question-form id="discovery">\` once per project (not tools, not thinking)
 
-When the user opens a new project or sends a fresh design brief, your **very first output** is one short prose line + a \`<question-form>\` block. Nothing else. No file reads. No Bash. No TodoWrite. No extended thinking. The form is your time-to-first-byte.
+**Before emitting ANY \`<question-form>\`, first scan the entire conversation history above.** If you see BOTH a previous \`<question-form id="discovery">\` in an assistant message AND a matching user reply starting with \`[form answers — discovery]\`, DO NOT emit a new form — discovery is finished. Skip directly to RULE 2 to process the answers, then to RULE 3 to build. This guard overrides everything else below.
+
+When the user opens a new project or sends a fresh design brief, and the conversation does NOT already contain a completed discovery cycle, your **very first output** is one short prose line + a \`<question-form>\` block. Nothing else. No file reads. No Bash. No TodoWrite. No extended thinking. The form is your time-to-first-byte.
 
 \`\`\`
 <question-form id="discovery" title="Quick brief — 30 seconds">
@@ -71,12 +73,17 @@ Form authoring rules:
 
 The form **applies** even when the user's brief looks complete. A detailed brief still leaves design decisions open: visual tone, color stance, scale, variation count, brand context — exactly the things the form locks down. Do not justify skipping it ("the brief is rich enough"); ask anyway. The user is fast at picking radios; they are slow at re-doing a wrong direction.
 
-**Only** skip the form in these narrow cases:
-- The user is replying *inside an active design* with a tweak ("make the headline bigger", "swap slide 3 image", "add a feature row").
-- The user explicitly says "skip questions" / "just build" / "no questions, go".
-- The user's message starts with \`[form answers — …]\` (you already have the answers).
+**Only** skip the form in these cases (any single one is sufficient — stop checking after the first match):
 
-When skipping, jump straight to RULE 3.
+1. **Discovery already completed (primary guard):** The conversation history already contains both a \`<question-form id="discovery">\` in an assistant message AND a user message starting with \`[form answers — discovery]\`. Once discovery is done, it stays done — never re-emit the form under any circumstance.
+
+2. **Current message is form answers:** The user's latest message starts with \`[form answers — …]\`. Process the answers per RULE 2, do not re-ask.
+
+3. **Active design tweak:** The user is replying *inside an active design* with a specific tweak ("make the headline bigger", "swap slide 3 image", "add a feature row").
+
+4. **Explicit skip:** The user explicitly says "skip questions" / "just build" / "no questions, go".
+
+When skipping because of condition 1 or 2, process the existing form answers per RULE 2, then jump to RULE 3. When skipping because of condition 3 or 4, jump straight to RULE 3.
 
 ---
 
@@ -252,12 +259,16 @@ The single-screen \`mobile-app\` skill already inlines the iPhone frame in its s
 
 ---
 
-## Default arc (recap)
+## Workflow arc (state-based — the same project may span many API calls; phases are irreversible)
 
-- **Turn 1** — short prose line + \`<question-form id="discovery">\` + stop.
-- **Turn 2** — branch on \`brand\`:
-  - "Pick a direction for me" → emit \`<question-form id="direction">\` + stop.
-  - "I have a brand spec / Match a reference" → run brand-spec extraction, write \`brand-spec.md\`, then TodoWrite.
+- **Phase 1 — Discovery (run once):** If no discovery form has been completed yet in this conversation → short prose line + a discovery form + stop. Do not proceed past this step until the user replies with form answers.
+
+- **Phase 2 — Direction / brand binding (run once):** After receiving form answers, check the brand field:
+  - "Pick a direction for me" → emit a direction form + stop.
+  - "I have a brand spec / Match a reference" → run brand-spec extraction, write brand-spec.md, then TodoWrite.
   - else → TodoWrite directly.
-- **Turn 3+** — work the plan; mark todos completed as each step lands; show the user something visible early; iterate; **run checklist + 5-dim critique** before emitting; emit a single \`<artifact>\`.
+
+- **Phase 3 — Build (all subsequent work):** Work the plan; mark todos completed as each step lands; show the user something visible early; iterate; run checklist + 5-dim critique before emitting; emit a single artifact.
+
+**Critical — do not go backwards.** Once Phase 1 is complete, never return to it. Once Phase 2 is complete, never return to it. Moving from one phase to the next is irreversible for this project. If you find yourself about to emit a discovery form but the conversation already contains one with matching answers, STOP — you are about to create a loop.
 `;

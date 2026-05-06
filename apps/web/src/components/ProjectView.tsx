@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
-import { streamMessage } from '../providers/anthropic';
+import { streamMessage, streamMessageWithAgentLoop } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
   listActiveChatRuns,
@@ -105,6 +105,15 @@ interface Props {
 }
 
 let liveArtifactEventSequence = 0;
+
+function fmtSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let v = bytes;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
+}
 
 function appendLiveArtifactEventItem(
   prev: LiveArtifactEventItem[],
@@ -513,7 +522,7 @@ export function ProjectView({
         }
       }
     }
-    return composeSystemPrompt({
+    let base = composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
@@ -522,10 +531,31 @@ export function ProjectView({
       metadata: project.metadata,
       template,
     });
+
+    // API-mode system prompt extras: file listing, CWD hint, and tool
+    // instructions the model needs to locate and read uploaded files.
+    const cwdHint = `\n\nWorking directory: .od/projects/${project.id}/\nAll project files are flat under this directory. Use exact basenames (e.g. "paper.pdf", not a full path) with the Read tool.`;
+    const fileListHint = projectFiles.length
+      ? `\n\nFiles already in project (use the Read tool with the exact name from this list):\n${projectFiles
+          .map((f) => `- ${f.name}  ${fmtSize(f.size)}  ${f.kind}`)
+          .join('\n')}`
+      : '\n\nNo files in project folder yet.';
+
+    const toolHint =
+      '\n\nTools available via XML blocks (<tool_call name="...">...</tool_call>):' +
+      '\n- Read: <tool_call name="Read">{"file_path":"<name>"}</tool_call> — returns file content (text) or metadata (binary like PDF/images).' +
+      '\n- Write: <tool_call name="Write">{"file_path":"<name>","content":"<content>"}</tool_call> — create/overwrite a text file.' +
+      '\n- Bash: <tool_call name="Bash">{"command":"<shell command>"}</tool_call> — run a shell command in the project dir.' +
+      '\n- ListFiles: <tool_call name="ListFiles">{}</tool_call> — list all files in the project.' +
+      '\n- TodoWrite: <tool_call name="TodoWrite">{"todos":[...]}</tool_call> — render a checklist.';
+
+    return [base, cwdHint, fileListHint, toolHint].filter(Boolean).join('');
   }, [
+    project.id,
     project.skillId,
     project.designSystemId,
     project.metadata,
+    projectFiles,
     skills,
     designSystems,
   ]);
@@ -745,7 +775,7 @@ export function ProjectView({
               unregisterTextBuffer();
               updateMessageById(
                 message.id,
-                (prev) => ({ ...prev, runStatus: 'succeeded', endedAt: prev.endedAt ?? Date.now() }),
+                (prev) => ({ ...prev, endedAt: prev.endedAt ?? Date.now() }),
                 true,
               );
               completedReattachRunsRef.current.add(runId);
@@ -1050,7 +1080,7 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
+            runStatus: config.mode === 'api' ? 'succeeded' : prev.runStatus,
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
@@ -1156,16 +1186,52 @@ export function ProjectView({
         });
       } else {
         const systemPrompt = await composedSystemPrompt();
-        const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
+        let apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
+        // Append attachment paths to the user message so the model knows
+        // exactly which files were just uploaded or attached.
+        if (attachments.length > 0) {
+          const attachmentHint = `\n\n[Attached files — use Read tool with these paths: ${attachments.map((a) => `"${a.path}"`).join(', ')}]`;
+          apiHistory = apiHistory.map((m) =>
+            m.id === userMsg.id && m.role === 'user'
+              ? { ...m, content: m.content + attachmentHint }
+              : m,
+          );
+        }
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
-        void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
-          onDelta: (delta) => {
-            handlers.onDelta(delta);
-            handlers.onAgentEvent({ kind: 'text', text: delta });
+        void streamMessageWithAgentLoop(
+          config,
+          systemPrompt,
+          apiHistory,
+          controller.signal,
+          {
+            onDelta: (delta) => {
+              handlers.onDelta(delta);
+              handlers.onAgentEvent({ kind: 'text', text: delta });
+            },
+            onDone: handlers.onDone,
+            onError: handlers.onError,
+            onToolCall: (call) => {
+              pushEvent({
+                kind: 'tool_use',
+                id: `${call.name}-${Date.now()}`,
+                name: call.name,
+                input: call.parameters,
+              });
+            },
+            onToolResult: (result) => {
+              pushEvent({
+                kind: 'tool_result',
+                toolUseId: `${result.name}-recent`,
+                content: result.content.slice(0, 500),
+                isError: result.isError,
+              });
+            },
           },
-          onDone: handlers.onDone,
-          onError: handlers.onError,
-        });
+          {
+            projectId: project.id,
+            baseUrl: window.location.origin,
+          },
+        );
       }
     },
     [

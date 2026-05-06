@@ -2955,6 +2955,59 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  // POST /api/projects/:id/bash — execute a shell command scoped to the
+  // project directory. Used by the API-mode tool execution loop.
+  app.post('/api/projects/:id/bash', async (req, res) => {
+    try {
+      const { command, timeout } = req.body || {};
+      if (typeof command !== 'string' || !command.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'command required');
+      }
+
+      await ensureProject(PROJECTS_DIR, req.params.id);
+      const cwd = path.join(PROJECTS_DIR, req.params.id);
+      const timeoutMs = Math.min(
+        typeof timeout === 'number' && timeout > 0 ? timeout : 30_000,
+        60_000,
+      );
+
+      const { stdout, stderr, code } = await new Promise<{
+        stdout: string;
+        stderr: string;
+        code: number | null;
+      }>((resolve, reject) => {
+        const child = spawn(command, [], {
+          cwd,
+          shell: true,
+          timeout: timeoutMs,
+          windowsHide: true,
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk) => {
+          stdout += chunk;
+          if (stdout.length > 100_000) child.kill('SIGTERM');
+        });
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk;
+          if (stderr.length > 100_000) child.kill('SIGTERM');
+        });
+        child.on('error', reject);
+        child.on('close', (code) => resolve({ stdout, stderr, code }));
+      });
+
+      res.json({
+        stdout: stdout.slice(0, 100_000),
+        stderr: stderr.slice(0, 100_000),
+        exitCode: code,
+      });
+    } catch (err) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
   app.get('/api/media/models', (_req, res) => {
     res.json({
       providers: MEDIA_PROVIDERS,
@@ -3364,6 +3417,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
     const runId = run.id;
+    let lastStopReason = null;
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
@@ -3847,11 +3901,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
     if (def.streamFormat === 'claude-stream-json') {
-      const claude = createClaudeStreamHandler((ev) => send('agent', ev));
+      const claude = createClaudeStreamHandler((ev) => {
+        if (ev.type === 'usage' && ev.stopReason) lastStopReason = ev.stopReason;
+        send('agent', ev);
+      });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
-      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      const copilot = createCopilotStreamHandler((ev) => {
+        if (ev.type === 'usage' && ev.stopReason) lastStopReason = ev.stopReason;
+        send('agent', ev);
+      });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
@@ -3874,7 +3934,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } else if (def.streamFormat === 'json-event-stream') {
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        (ev) => send('agent', ev),
+        (ev) => {
+          if (ev.type === 'usage' && ev.stopReason) lastStopReason = ev.stopReason;
+          send('agent', ev);
+        },
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
@@ -3895,12 +3958,28 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (acpSession?.hasFatalError()) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
-      const status = run.cancelRequested
-        ? 'canceled'
-        : code === 0
-          ? 'succeeded'
-          : 'failed';
-      design.runs.finish(run, status, code, signal);
+      if (run.cancelRequested) {
+        return design.runs.finish(run, 'canceled', code, signal);
+      }
+      if (code !== 0) {
+        return design.runs.finish(run, 'failed', code, signal);
+      }
+      // Exit code 0 but stop_reason signals the agent did not finish.
+      // 'end_turn' / 'tool_use' mean the agent expected more rounds;
+      // exiting at that point is a truncated run, not a success.
+      if (
+        lastStopReason === 'end_turn' ||
+        lastStopReason === 'tool_use' ||
+        lastStopReason === 'max_tokens' ||
+        lastStopReason === 'stop_sequence' ||
+        lastStopReason === 'refusal'
+      ) {
+        console.warn(
+          `[od] run ${run.id} exited 0 but stop_reason=${lastStopReason} — marking failed`,
+        );
+        return design.runs.finish(run, 'failed', code, signal);
+      }
+      design.runs.finish(run, 'succeeded', code, signal);
     });
   };
 
@@ -4152,7 +4231,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const payload = {
       model,
       max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 16384,
       messages: Array.isArray(messages) ? messages : [],
       stream: true,
     };
@@ -4187,6 +4266,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
 
       let ended = false;
+      let stopReason = null;
       await streamUpstreamSse(response, ({ event, data }) => {
         if (!data) return false;
         if (event === 'error' || data.type === 'error') {
@@ -4195,11 +4275,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           ended = true;
           return true;
         }
+        if (event === 'message_delta' && data.delta?.stop_reason) {
+          stopReason = data.delta.stop_reason;
+          return false;
+        }
         if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
           sse.send('delta', { delta: data.delta.text });
         }
         if (event === 'message_stop') {
-          sse.send('end', {});
+          sse.send('end', { stopReason });
           ended = true;
           return true;
         }

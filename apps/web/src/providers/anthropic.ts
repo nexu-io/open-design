@@ -22,6 +22,9 @@ export interface StreamHandlers {
   onDelta: (textDelta: string) => void;
   onDone: (fullText: string) => void;
   onError: (err: Error) => void;
+  onToolCall?: (call: { name: string; parameters: Record<string, unknown> }) => void;
+  onToolResult?: (result: { name: string; content: string; isError: boolean }) => void;
+  onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void;
 }
 
 export function makeClient(cfg: AppConfig): Anthropic {
@@ -79,10 +82,158 @@ export async function streamMessage(
       handlers.onDelta(delta);
     });
 
-    await stream.finalMessage();
+    const final = await stream.finalMessage();
+    // Extract usage for token visualization
+    const usage = final.usage;
+    if (usage && handlers.onUsage) {
+      handlers.onUsage({
+        inputTokens: usage.input_tokens ?? undefined,
+        outputTokens: usage.output_tokens ?? undefined,
+      });
+    }
+    if (final.stop_reason === 'max_tokens' || final.stop_reason === 'length') {
+      handlers.onError(new Error(
+        `Response truncated (stop_reason=${final.stop_reason}). The output hit the token limit. ` +
+        `Try increasing max_tokens in Settings or reducing the prompt length.`
+      ));
+      return;
+    }
     handlers.onDone(acc);
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
+}
+
+// Agent loop: wraps streamMessage with tool-call parsing and execution.
+// When the model emits <tool_call> blocks (DeepSeek XML format), this
+// function extracts them, executes the corresponding tools via the daemon,
+// appends <tool_result> blocks to the conversation, and loops.
+//
+// Max 25 tool-call rounds. The loop stops when the model produces a
+// response with no tool calls, or when cancelled.
+
+export interface ToolLoopContext {
+  projectId: string;
+  baseUrl: string;
+}
+
+export async function streamMessageWithAgentLoop(
+  cfg: AppConfig,
+  system: string,
+  history: ChatMessage[],
+  signal: AbortSignal,
+  handlers: StreamHandlers,
+  toolCtx: ToolLoopContext,
+): Promise<void> {
+  const MAX_ROUNDS = 25;
+  let round = 0;
+  let fullAcc = '';
+
+  // Lazy-import parser + executor so the browser bundle doesn't bloat
+  // when this path isn't exercised.
+  const [
+    { parseToolCalls },
+    { executeToolCalls, formatToolResultsAsXml },
+  ] = await Promise.all([
+    import('./tool-call-parser'),
+    import('./tool-executor'),
+  ]);
+
+  while (round < MAX_ROUNDS) {
+    if (signal.aborted) return;
+
+    let acc = '';
+    let toolCallsFound = false;
+
+    const roundHandlers: StreamHandlers = {
+      onDelta: (delta) => {
+        acc += delta;
+        handlers.onDelta(delta);
+      },
+      onDone: (text: string) => {
+        acc = text;
+      },
+      onError: (err: Error) => {
+        throw err;
+      },
+      onUsage: handlers.onUsage,
+    };
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        roundHandlers.onError = (err) => reject(err);
+        const origDone = roundHandlers.onDone;
+        roundHandlers.onDone = (text: string) => {
+          acc = text;
+          resolve();
+        };
+
+        void streamMessage(cfg, system, history, signal, roundHandlers).catch(reject);
+      });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      handlers.onError(err instanceof Error ? err : new Error(String(err)));
+      return;
+    }
+
+    if (signal.aborted) return;
+
+    const { toolCalls, cleanText } = parseToolCalls(acc);
+
+    if (toolCalls.length === 0) {
+      fullAcc += acc;
+      handlers.onDone(fullAcc);
+      return;
+    }
+
+    // Append the clean text (without tool call XML) for display
+    fullAcc += cleanText + '\n\n';
+
+    // Add the full assistant response (with tool calls) to history for context
+    const assistantMsg: ChatMessage = {
+      id: `assistant-${round}-${Date.now()}`,
+      role: 'assistant' as const,
+      content: acc,
+    };
+    history = [...history, assistantMsg];
+
+    // Execute tools
+    for (const call of toolCalls) {
+      if (signal.aborted) return;
+      handlers.onToolCall?.({ name: call.name, parameters: call.parameters });
+    }
+
+    const results = await executeToolCalls(
+      toolCalls,
+      toolCtx.baseUrl,
+      toolCtx.projectId,
+    );
+
+    for (const r of results) {
+      handlers.onToolResult?.({ name: r.name, content: r.content, isError: r.isError });
+    }
+
+    // Append tool results to history for the next API round.
+    // Cap each result block to prevent binary-file reads or huge stderr
+    // dumps from blowing out the next API call.
+    const MAX_RESULT_CHARS = 50_000;
+    let toolResultXml = formatToolResultsAsXml(results);
+    if (toolResultXml.length > MAX_RESULT_CHARS) {
+      toolResultXml =
+        toolResultXml.slice(0, MAX_RESULT_CHARS) +
+        `\n... (tool result truncated at ${MAX_RESULT_CHARS} / ${toolResultXml.length} chars)`;
+    }
+    const toolResultMsg: ChatMessage = {
+      id: `tool-result-${round}-${Date.now()}`,
+      role: 'user' as const,
+      content: toolResultXml,
+    };
+    history = [...history, toolResultMsg];
+
+    round += 1;
+  }
+
+  // Exhausted max rounds — report what we have
+  handlers.onDone(fullAcc);
 }
