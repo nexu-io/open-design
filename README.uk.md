@@ -650,8 +650,8 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
-| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
 | **Багатопровайдерний BYOK** | н/д | Нормалізація SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-сумісний / Azure OpenAI / Gemini; захист від SSRF проти loopback / link-local / RFC1918 |
 
 Додавання нового CLI — це один запис у [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат потоку — один із `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (з `eventParser` для кожного CLI), `acp-json-rpc`, `pi-rpc` або `plain`.
