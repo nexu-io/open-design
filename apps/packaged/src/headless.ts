@@ -113,16 +113,6 @@ async function main(): Promise<void> {
     throw new Error("web sidecar failed to produce URL — check logs/desktop/latest.log");
   }
 
-  await writePackagedWebIdentity({
-    paths,
-    pid: process.pid,
-    url: webUrl,
-  });
-
-  process.stdout.write(`\n Open Design is running\n\n`);
-  process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
-  process.stdout.write(` Press Ctrl+C to stop\n\n`);
-
   const shutdown = async (): Promise<void> => {
     process.stdout.write("\n Shutting down Open Design...\n");
     await ipcServer.close().catch(() => undefined);
@@ -146,6 +136,16 @@ async function main(): Promise<void> {
       }
     },
   });
+
+  await writePackagedWebIdentity({
+    paths,
+    pid: process.pid,
+    url: webUrl,
+  });
+
+  process.stdout.write(`\n Open Design is running\n\n`);
+  process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
+  process.stdout.write(` Press Ctrl+C to stop\n\n`);
 
   process.on("SIGINT", () => {
     void shutdown();
