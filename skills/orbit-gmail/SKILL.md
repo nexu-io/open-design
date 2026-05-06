@@ -6,8 +6,8 @@ description: |
   explicitly scopes their daily digest to Gmail. Pulls the past 24
   hours of inbox activity (replies awaited, mentions, cc, auto-
   categorized bulk) from the user's authenticated Gmail connection
-  and renders the digest as a Daily Digest email at the top of a
-  Gmail-style three-pane inbox. This skill should not be triggered
+  and renders the digest as the Orbit Daily Digest email opened
+  inside Gmail's reading view. This skill should not be triggered
   manually — it is invoked by Orbit's daily-digest scheduler against
   live Gmail data.
 triggers:
@@ -26,14 +26,16 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Generate today's Open Orbit Gmail briefing. Gmail is my only connected connector — pull yesterday's mail and render it as a Daily Digest email pinned at the top of a Gmail three-pane inbox."
+  example_prompt: "Generate today's Open Orbit Gmail briefing. Gmail is my only connected connector — pull yesterday's mail and render it as the opened Orbit Daily Digest email inside Gmail's reading view."
 ---
 
 # Orbit · Gmail Briefing
 
-Single-connector Orbit template scoped to Gmail. The briefing arrives
-*as an email* in the user's inbox; opening it shows a structured digest
-broken into "needs reply / mentions you / auto-categorized".
+Single-connector Orbit template scoped to Gmail. The briefing renders
+as **the Orbit Daily Digest email already opened** inside Gmail's
+reading view — Gmail top header + the email chrome (toolbar / subject
+/ sender / digest body / reply bar). There is no left rail, no inbox
+list, and no three-pane layout.
 
 ## ⚠️ Source-of-truth protocol (read this first)
 
@@ -42,22 +44,26 @@ before writing any output. That file is the canonical design — your
 job is to **reproduce it**, not reinterpret it.
 
 **Step 2.** Mirror the example's structure 1:1:
-- Same DOM hierarchy and class names
-- Same left-rail items in the same order. **Do not add `已暂停 /
-  Snoozed`, extra system labels, or extra colored labels** that are
-  not in the example.
-- Same Categories tab strip (Primary / Social / Promotions only).
-- Same inbox-list rows in the same order — including the **single
-  yellow important star** on the top Orbit row only. Do **not** put
-  yellow important markers on additional rows.
-- Same digest-body sections, same priority strip, same reply bar.
-- Same `<script>` block at the end (link / reply injection).
+- Same DOM hierarchy and class names: `<header>` (Gmail top bar) →
+  `<main class="digest-wrap">` → `<div class="email-chrome">` →
+  toolbar / subject / sender row / digest body / reply bar.
+- The Gmail top header has only the elements present in the example
+  (hamburger / wordmark / search bar / help / settings / app launcher
+  / avatar). **Do not** add a left rail (no Compose button, no system
+  labels, no Categories tabs, no colored label list).
+- **Do not** render an inbox list of other emails. Only the opened
+  digest email is shown.
+- Same digest-body sections in the same order: greeting → summary
+  strip → 需要处理 → 值得关注 → 仅供知悉 → digest footer.
+- Same reply bar at the bottom (回复 / 全部回复 / 转发).
+- Same `<script>` block at the end (action-btn / reply-btn link
+  injection).
 
 **Step 3.** You may refresh mock copy (sender names, subjects, summary
 text, times) so it reads as "today", but you must **not** invent
-extra UI: no extra labels, no extra inbox rows, no extra section
-markers, no extra chrome ornaments. If a detail is not already in
-`example.html`, it does not belong in your output.
+extra UI: no inbox listing, no left rail, no Categories tab strip,
+no extra digest sections, no chrome ornaments. If a detail is not
+already in `example.html`, it does not belong in your output.
 
 The sections below are a **reference for tokens and visual language** —
 not a license to extend the page.
@@ -86,65 +92,56 @@ Type stack:
 - Body: 14px / line-height 20px
 - Email preview: 13px
 
-## Page sections
+## Page sections (top to bottom — the page is one column, not a 3-pane app)
 
-1. **Top app bar** — full width, 64px tall, white.
-   Left: hamburger (24px ☰) + Gmail wordmark (`Gmail` in `text-secondary`,
-   first `G` in red `#EA4335`).
-   Center: search bar — pill (`#eaf1fb` background, 28px radius), search
-   icon left, `搜索邮件` placeholder, settings ◐ icon on right.
-   Right: ❓ help, ⚙ settings, ▦ Google apps grid, round avatar.
+1. **Gmail top header** (`<header>`) — full width, white.
+   Left: hamburger (☰) + Gmail wordmark (`Gmail`, first `G` red).
+   Center: rounded search bar (`#eaf1fb` bg, search icon left, settings
+   icon right, placeholder `搜索邮件`).
+   Right: ❓ help, ⚙ settings, ▦ Google apps launcher, round avatar.
 
-2. **Three-pane main**:
-   - **Left rail** (256px): vertical list with these sections in order:
-     - **Compose** — large rounded button at top, 56px tall, white text
-       on `#c2e7ff` background, with rounded rectangle pencil icon left.
-     - System labels: `📥 收件箱 1,234`, `⭐ 已加星标`, `⏰ 已暂停`,
-       `📤 已发送`, `📝 草稿`, `📁 全部邮件`, `🗑 垃圾箱`. Active item
-       has red-tinted bg + red text.
-     - Labels (with colored dots): `● 工作`, `● 个人`, `● 旅行`, etc.
-   - **Inbox list** (flex 1): rows of emails. Top row is the pinned
-     **Orbit Daily Digest**, unread (bold), important star yellow ★,
-     yellow "important" tag, "Open Orbit" sender, single-line subject,
-     preview snippet, time on right. Other rows below at lower contrast.
-   - **Reading pane** (640px right): the opened Orbit digest body.
+2. **Email chrome** (`<main class="digest-wrap"> <div class="email-chrome">`)
+   — the opened email lives directly under the header. No left rail,
+   no inbox list. Sub-blocks in order:
 
-3. **Categories tab strip** — sits above the inbox list when on Inbox:
-   3 tabs: `📥 主要 / 👥 社交 / 🏷️ 推广`. Active = blue underline.
+   a. **Email toolbar** — back / archive / delete / mark unread / label
+      / spacer / prev / next.
 
-4. **Reading pane (digest body)** — this is the heart of the briefing.
-   - Header: subject line large (Google Sans 22px), sender row with
-     round avatar + `Open Orbit <orbit@opendesign.local>` + send time.
-     Action toolbar: ← back, 🗄 archive, ⚠ report, 🗑 delete, ✉ mark
-     unread, ⏰ snooze, ↗ move, 🏷 label, ⋮ more.
-   - Body sections (Cormorant or Google Sans display):
-     - **📨 等你回复 (N)** — each item: round avatar, sender + thread
-       subject, one-line preview, "提了 N 个问题" / "需要你 sign-off"
-       red caption.
-     - **📌 @ 或 cc 你 (N)** — items: avatar + sender, subject, mention
-       reason ("@你 + Bob" / "cc 你"), thread length.
-     - **🎯 自动归类 (N)** — collapsed groups: "GitHub 通知摘要 (折叠
-       12 封) · 1 条值得看", "公司全员 town hall 提醒".
-   - Footer micro-tag (12px muted, italic):
-     `已使用 Open Orbit 自动整理 · 不影响原邮件状态`.
+   b. **Email subject area** — `<h1 class="email-subject">` with the
+      digest subject (e.g. `☀ Eli, 你昨天的 6 封重要邮件 — Open Orbit
+      Daily`) followed by an inline `Orbit` tag.
 
-5. **Reply box** — beneath the digest, collapsed bar with
-   "回复 / 转发 / 私信发件人 / 设为重要" chips. Blue primary `回复`.
+   c. **Sender row** — round avatar `O` + `Open Orbit
+      <orbit@opendesign.local>` + 收件人 `我 ▾` + date right-aligned +
+      reply icon + more icon.
+
+   d. **Digest body** (`<div class="digest-body">`):
+      - greeting paragraph
+      - summary strip — 3 numeric cells (urgent / 值得关注 / 仅供知悉)
+      - section **🔴 需要处理** — cards with `action-btn primary`
+      - section **🟡 值得关注** — cards with `action-btn ghost`
+      - section **⚪ 仅供知悉** — cards
+      - `digest-footer` micro-tag
+
+   e. **Reply bar** — bottom row with 回复 / 全部回复 / 转发 buttons.
 
 ## Pill / icon rules
 
-- Important star: filled `#f4b400` triangle/star.
-- Avatars: 32px circles with letter + soft palette pastel bg.
-- Labels: small rounded pills with colored dots, no fills, just dot + text.
-- Search bar uses Material 1 elevation only when focused (we render
-  static — keep flat with `#eaf1fb`).
+- Avatars: round, 40px+ for sender, 32px for card, 28px for inline.
+- Labels / tags: small rounded pills with no fill (dot + text) **only**
+  where they appear in the example.
+- The single yellow important star (in the subject area or as a tag)
+  belongs to the Orbit digest only.
 
 ## Forbidden
 
 - Anything that doesn't look unmistakably Gmail
+- A left rail / sidebar (Compose button, system labels, colored labels)
+- An inbox list of other emails
+- A Categories tab strip (Primary / Social / Promotions)
 - Custom typography (must be Google Sans / Roboto)
 - Drop shadows on chrome (only the very subtle Material elevation)
 - Square avatars
 - Lorem ipsum
-- Mixing dark mode
-- Putting Orbit branding on the chrome (it lives only inside the digest)
+- Dark mode
+- Orbit branding on the Gmail chrome (it lives only inside the digest)
