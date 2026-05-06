@@ -164,8 +164,6 @@ export const uk: Dict = {
   'promptTemplates.openSource': 'Переглянути оригінал',
   'promptTemplates.openFullscreen': 'Відкрити попередній перегляд у повноекранному режимі',
   'promptTemplates.closeFullscreen': 'Закрити попередній перегляд у повноекранному режимі',
-  'promptTemplates.allSources': 'Усі джерела',
-  'promptTemplates.sourceFilterAria': 'Фільтрувати за джерелом',
   'promptTemplates.retry': 'Повторити',
 
   'connectors.title': 'Конектори',

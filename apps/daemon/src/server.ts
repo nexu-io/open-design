@@ -27,6 +27,7 @@ import {
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
+import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import { findSkillById, listSkills } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
@@ -686,6 +687,15 @@ export function resolveDataDir(raw, projectRoot) {
   return resolved;
 }
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
+// new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
+// across before SQLite opens. Synchronous on purpose: openDatabase below
+// would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
+// and https://github.com/nexu-io/open-design/issues/710.
+migrateLegacyDataDirSync({
+  legacyDir: process.env.OD_LEGACY_DATA_DIR,
+  dataDir: RUNTIME_DATA_DIR,
+});
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });

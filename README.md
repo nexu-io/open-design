@@ -372,6 +372,22 @@ If you ran the repo first and only later installed the packaged Desktop app, the
 
 > **⚠️ Do this in a clean state.** Migration replaces (not merges) the Desktop app's data dir with your repo `.od/`. Both writers must be fully stopped before copying — quit the Desktop app **and** stop the repo dev-server. SQLite-WAL needs to flush cleanly on both sides; if either daemon is still running it can write SQLite/WAL pages or project/artifact files mid-snapshot, leaving the staged copy inconsistent. If the Desktop app already has projects you care about, decide which side is authoritative before continuing — the steps below back up the Desktop's current `data/` to a sibling but do not merge.
 
+##### Option A: one-shot auto-migration via `OD_LEGACY_DATA_DIR`
+
+If your Desktop app's `data/` is still empty (typical after the upgrade that surfaced [#710](https://github.com/nexu-io/open-design/issues/710)), point the daemon at your old `.od/` once and let it copy the payload across on first boot. The daemon refuses to overwrite a `data/` that already has `app.sqlite`, and writes a `.migrated-from` marker so subsequent boots are no-ops.
+
+```bash
+# Quit the Desktop app first, then re-launch with this env set.
+# macOS/Linux:
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" open "/Applications/Open Design.app"
+# Windows (PowerShell):
+$env:OD_LEGACY_DATA_DIR="C:\path\to\old\repo\.od"; & "$env:LOCALAPPDATA\Programs\Open Design\Open Design.exe"
+```
+
+The daemon log records `[od-migrate] migration complete: copied N entries (...)`. After the first launch you can clear the env variable; the marker prevents re-migration even on subsequent runs.
+
+##### Option B: manual copy
+
 To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
 
 ```bash
