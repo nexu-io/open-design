@@ -444,23 +444,19 @@ export function wellKnownUserToolchainBins(
   const home = options.home ?? homedir();
   const includeSystemBins = options.includeSystemBins ?? process.platform !== "win32";
   const env = options.env ?? process.env;
-  const dirs: string[] = [
-    join(home, ".local", "bin"),
-    join(home, ".opencode", "bin"),
-    join(home, ".bun", "bin"),
-    join(home, ".volta", "bin"),
-    join(home, ".asdf", "shims"),
-    join(home, "Library", "pnpm"),
-    join(home, ".cargo", "bin"),
-  ];
-  // Honour an explicit npm prefix override before the conventional
-  // guesses below: `$NPM_CONFIG_PREFIX` / `$npm_config_prefix` is the
-  // user's *current* npm configuration, so a binary installed via
-  // `npm i -g` today lives at `<prefix>/bin`. The conventional guesses
-  // (`~/.npm-global`, `~/.npm-packages`) often hold *stale* installs
-  // from an older prefix the user has since rewritten — searching the
-  // env-driven prefix first gives "explicit beats convention" semantics
-  // and matches npm's own resolution order (env > .npmrc > default).
+  const dirs: string[] = [];
+  // The user's *explicit* npm prefix outranks every conventional
+  // location below — including `~/.local/bin`. The env var is the
+  // user's current npm configuration, so a binary installed via
+  // `npm i -g` today lives at `<prefix>/bin`. Conventional locations
+  // (`~/.local/bin`, `~/.npm-global`, `~/.npm-packages`) routinely
+  // hold *stale* installs from an older prefix the user has since
+  // rewritten, and `~/.local/bin` in particular is also a shared
+  // dumping ground for pip --user / cargo install / hand-built
+  // binaries that may collide with old npm artefacts. Putting the
+  // env-driven prefix first matches npm's own resolution order
+  // (env > .npmrc > default) and gives "explicit beats convention"
+  // semantics across the whole list, not just the npm-prefix block.
   // Trim before length-checking so accidental whitespace-only values
   // (`NPM_CONFIG_PREFIX=" "`) do not produce a `/bin`-suffixed garbage
   // entry.
@@ -471,14 +467,21 @@ export function wellKnownUserToolchainBins(
       dirs.push(join(npmPrefix, "bin"));
     }
   }
-  // Common user-level npm prefixes for sudo-free global installs. The
-  // npm docs canonical example uses ~/.local (already covered above);
-  // ~/.npm-global is the dominant non-canonical convention shipped in
-  // most third-party "fix npm EACCES" tutorials, and ~/.npm-packages
-  // is the second-most common variant. Without these, GUI-launched
-  // daemons miss `npm i -g`'d CLIs even though they resolve cleanly
-  // from the user's shell. See open-design issue #442.
   dirs.push(
+    join(home, ".local", "bin"),
+    join(home, ".opencode", "bin"),
+    join(home, ".bun", "bin"),
+    join(home, ".volta", "bin"),
+    join(home, ".asdf", "shims"),
+    join(home, "Library", "pnpm"),
+    join(home, ".cargo", "bin"),
+    // Common user-level npm prefixes for sudo-free global installs.
+    // ~/.npm-global is the dominant non-canonical convention shipped
+    // in most third-party "fix npm EACCES" tutorials, and
+    // ~/.npm-packages is the second-most common variant. Without
+    // these, GUI-launched daemons miss `npm i -g`'d CLIs even though
+    // they resolve cleanly from the user's shell. See open-design
+    // issue #442.
     join(home, ".npm-global", "bin"),
     join(home, ".npm-packages", "bin"),
   );

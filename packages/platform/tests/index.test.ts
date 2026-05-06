@@ -386,10 +386,11 @@ describe("wellKnownUserToolchainBins", () => {
   // PR #614 review (mrcfps): npm's own resolution order is env > .npmrc
   // > default, so when the user has explicitly configured a prefix via
   // $NPM_CONFIG_PREFIX, that location holds the *current* `npm i -g`
-  // installs and should outrank the conventional guesses. Conventional
-  // ~/.npm-global / ~/.npm-packages frequently retain *stale* binaries
-  // from an older prefix.
-  it("places $NPM_CONFIG_PREFIX/bin before the conventional ~/.npm-global and ~/.npm-packages guesses", () => {
+  // installs and should outrank every conventional location below —
+  // including ~/.local/bin (which is also a shared pip --user / cargo
+  // install dumping ground). Conventional locations frequently retain
+  // *stale* binaries from an older prefix.
+  it("places $NPM_CONFIG_PREFIX/bin before every conventional location, including ~/.local/bin", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-order-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-order-"));
     try {
@@ -399,13 +400,16 @@ describe("wellKnownUserToolchainBins", () => {
         includeSystemBins: false,
       });
       const explicitIdx = dirs.indexOf(join(customPrefix, "bin"));
+      const localBinIdx = dirs.indexOf(join(home, ".local", "bin"));
       const npmGlobalIdx = dirs.indexOf(join(home, ".npm-global", "bin"));
       const npmPackagesIdx = dirs.indexOf(join(home, ".npm-packages", "bin"));
-      expect(explicitIdx).toBeGreaterThanOrEqual(0);
-      expect(npmGlobalIdx).toBeGreaterThanOrEqual(0);
-      expect(npmPackagesIdx).toBeGreaterThanOrEqual(0);
-      expect(explicitIdx).toBeLessThan(npmGlobalIdx);
-      expect(explicitIdx).toBeLessThan(npmPackagesIdx);
+      // Explicit prefix must be present and ahead of every conventional
+      // sibling. The first hit wins inside resolveOnPath() and the
+      // packaged PATH builder, so this ordering propagates verbatim.
+      expect(explicitIdx).toBe(0);
+      expect(localBinIdx).toBeGreaterThan(explicitIdx);
+      expect(npmGlobalIdx).toBeGreaterThan(explicitIdx);
+      expect(npmPackagesIdx).toBeGreaterThan(explicitIdx);
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(customPrefix, { recursive: true, force: true });
