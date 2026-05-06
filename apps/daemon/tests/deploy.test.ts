@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   analyzeDeployPlan,
+  buildCloudflarePagesDeploymentForm,
   buildDeployFilePlan,
   buildDeployFileSet,
   checkDeploymentUrl,
@@ -24,7 +26,9 @@ import {
   isVercelProtectedResponse,
   normalizeDeployHookScriptUrl,
   prepareDeployPreflight,
+  publicCloudflarePagesDeployConfig,
   publicDeployConfig,
+  readCloudflarePagesConfig,
   readVercelConfig,
   resolveReferencedPath,
   rewriteCssReferences,
@@ -32,6 +36,7 @@ import {
   SAVED_CLOUDFLARE_TOKEN_MASK,
   SAVED_TOKEN_MASK,
   VERCEL_PROVIDER_ID,
+  writeCloudflarePagesConfig,
   waitForReachableDeploymentUrl,
   writeCloudflarePagesConfig,
   writeVercelConfig,
@@ -110,19 +115,19 @@ describe('deploy config', () => {
     });
   });
 
-  it('stores Cloudflare Pages credentials separately from vercel.json', async () => {
-    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
+  it('stores Cloudflare Pages credentials outside vercel.json and returns only the public mask', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-cloudflare-config-test-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
     try {
       const saved = await writeCloudflarePagesConfig({
         token: 'cloudflare-token-secret',
         accountId: 'account_123',
-        projectName: 'od-pages-demo',
+        projectName: 'demo-pages',
       });
 
       expect(path.basename(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID))).toBe('cloudflare-pages.json');
-      expect(path.basename(deployConfigPath(VERCEL_PROVIDER_ID))).toBe('vercel.json');
+      expect(path.basename(deployConfigPath())).toBe('vercel.json');
       expect(saved).toEqual({
         providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
         configured: true,
@@ -130,31 +135,48 @@ describe('deploy config', () => {
         teamId: '',
         teamSlug: '',
         accountId: 'account_123',
-        projectName: 'od-pages-demo',
+        projectName: 'demo-pages',
         target: 'preview',
       });
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
         token: 'cloudflare-token-secret',
         accountId: 'account_123',
-        projectName: 'od-pages-demo',
+        projectName: 'demo-pages',
       });
 
       const maskedUpdate = await writeCloudflarePagesConfig({
         token: SAVED_CLOUDFLARE_TOKEN_MASK,
-        projectName: 'renamed-pages-demo',
+        projectName: 'renamed-pages',
       });
 
       expect(maskedUpdate.tokenMask).toBe(SAVED_CLOUDFLARE_TOKEN_MASK);
-      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
+      expect(await readCloudflarePagesConfig()).toEqual({
         token: 'cloudflare-token-secret',
         accountId: 'account_123',
-        projectName: 'renamed-pages-demo',
+        projectName: 'renamed-pages',
       });
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
+  });
+
+  it('keeps Cloudflare Pages public config provider metadata stable', () => {
+    expect(publicCloudflarePagesDeployConfig({
+      token: 'cloudflare-token-secret',
+      accountId: 'account_123',
+      projectName: '',
+    })).toEqual({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      configured: true,
+      tokenMask: SAVED_CLOUDFLARE_TOKEN_MASK,
+      teamId: '',
+      teamSlug: '',
+      accountId: 'account_123',
+      projectName: '',
+      target: 'preview',
+    });
   });
 });
 
@@ -743,14 +765,18 @@ describe('deploy plan and analyzer', () => {
     expect(codes).not.toContain('broken-reference');
   });
 
-  it('preflight preserves provider identity when requested', async () => {
+  it('preflight payload echoes Cloudflare Pages provider dispatch', async () => {
     const { projectsRoot, projectId, dir } = await setupProject();
-    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><h1>Hello</h1>',
+    );
 
     const result = await prepareDeployPreflight(projectsRoot, projectId, 'index.html', {
       providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
     });
     expect(result.providerId).toBe(CLOUDFLARE_PAGES_PROVIDER_ID);
+    expect(result.files.map((f) => f.path)).toEqual(['index.html']);
   });
 
   it('preflight reports broken references instead of throwing', async () => {
@@ -784,109 +810,114 @@ describe('deploy plan and analyzer', () => {
   });
 });
 
-describe('cloudflare pages deploys', () => {
-  it('creates missing projects and uploads files via manifest keyed multipart parts', async () => {
-    const requests: Array<{ url: string; method: string; body?: any; headers: Headers }> = [];
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof Request
-            ? input.url
-            : String(input);
-      const method =
-        init?.method || (input instanceof Request ? input.method : 'GET');
-      const headers = new Headers(
-        init?.headers || (input instanceof Request ? input.headers : undefined),
-      );
-      requests.push({ url, method, body: init?.body, headers });
+describe('cloudflare pages deploy', () => {
+  it('builds direct-upload manifest and hashed file form parts', async () => {
+    const html = Buffer.from('<!doctype html><h1>Hello</h1>');
+    const css = Buffer.from('body{color:red}');
+    const htmlHash = createHash('sha256').update(html).digest('hex');
+    const cssHash = createHash('sha256').update(css).digest('hex');
 
-      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+    const { form, manifest } = buildCloudflarePagesDeploymentForm([
+      { file: 'index.html', data: html, contentType: 'text/html' },
+      { file: 'assets/app.css', data: css, contentType: 'text/css' },
+    ]);
+
+    expect(manifest).toEqual({
+      'index.html': htmlHash,
+      'assets/app.css': cssHash,
+    });
+    expect(form.get('manifest')).toBe(JSON.stringify(manifest));
+    expect(form.get('pages_build_output_dir')).toBe('.');
+    const htmlPart = form.get(htmlHash) as any;
+    const cssPart = form.get(cssHash) as any;
+    expect(htmlPart?.name).toBe('index.html');
+    expect(htmlPart?.type).toBe('text/html');
+    expect(await htmlPart.text()).toBe('<!doctype html><h1>Hello</h1>');
+    expect(cssPart?.name).toBe('assets/app.css');
+    expect(cssPart?.type).toBe('text/css');
+    expect(await cssPart.text()).toBe('body{color:red}');
+  });
+
+  it('creates a missing Cloudflare Pages project and uploads hashed file parts', async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; init?: any }> = [];
+    const html = Buffer.from('<!doctype html><h1>Hello</h1>');
+    const hash = createHash('sha256').update(html).digest('hex');
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/pages/projects/demo-pages') && !init?.method) {
         return new Response(JSON.stringify({ success: false, errors: [{ message: 'not found' }] }), {
           status: 404,
           headers: { 'content-type': 'application/json' },
         });
       }
-
-      if (url.endsWith('/pages/projects') && method === 'POST') {
-        const body = JSON.parse(String(init?.body ?? '{}'));
-        expect(body).toEqual({
+      if (url.endsWith('/pages/projects') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
           name: 'demo-pages',
           production_branch: 'main',
         });
-        return new Response(JSON.stringify({ success: true, result: { name: body.name } }), {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-
-      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
-        const form = init?.body as FormData;
-        expect(form).toBeInstanceOf(FormData);
-        const manifest = JSON.parse(String(form?.get('manifest') ?? '{}')) as Record<string, string>;
-        const outputDir = String(form?.get('pages_build_output_dir') ?? '');
-        expect(outputDir).toBe('.');
-        const indexHash = createHash('sha256').update('hello index').digest('hex');
-        const assetHash = createHash('sha256').update('body { color: red; }').digest('hex');
-        expect(manifest).toEqual({
-          'index.html': indexHash,
-          'assets/style.css': assetHash,
-        });
-        const indexPart = form?.get(indexHash) as File | null;
-        const assetPart = form?.get(assetHash) as File | null;
-        expect(indexPart?.name).toBe('index.html');
-        expect(indexPart?.type).toBe('text/html');
-        expect(await indexPart?.text()).toBe('hello index');
-        expect(assetPart?.name).toBe('assets/style.css');
-        expect(assetPart?.type).toBe('text/css');
-        expect(await assetPart?.text()).toBe('body { color: red; }');
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && init?.method === 'POST') {
+        const form = init.body as FormData;
+        expect(form.get('manifest')).toBe(JSON.stringify({ 'index.html': hash }));
+        expect(form.get('pages_build_output_dir')).toBe('.');
+        const part = form.get(hash) as any;
+        expect(part?.name).toBe('index.html');
+        expect(part?.type).toBe('text/html');
+        expect(await part.text()).toBe('<!doctype html><h1>Hello</h1>');
         return new Response(JSON.stringify({
           success: true,
-          result: { id: 'dep_123', url: 'https://demo-pages.pages.dev' },
+          result: { id: 'cf-deploy-1', url: 'https://demo-pages.pages.dev' },
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch;
+    try {
+      const result = await deployToCloudflarePages({
+        config: {
+          token: 'cloudflare-token-secret',
+          accountId: 'account_123',
+          projectName: 'demo-pages',
+        },
+        files: [{ file: 'index.html', data: html, contentType: 'text/html' }],
+        projectId: 'p1',
+      });
 
-      if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
-        return new Response('', { status: 200 });
-      }
-
-      throw new Error(`Unexpected fetch: ${method} ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await deployToCloudflarePages({
-      config: {
-        token: 'cloudflare-token-secret',
-        accountId: 'account_123',
-        projectName: 'demo-pages',
-      },
-      files: [
+      expect(result).toMatchObject({
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        url: 'https://demo-pages.pages.dev',
+        deploymentId: 'cf-deploy-1',
+        target: 'preview',
+        status: 'link-delayed',
+      });
+      expect(requests.map((req) => ({
+        method: req.init?.method ?? 'GET',
+        url: req.url,
+      }))).toEqual([
         {
-          file: 'index.html',
-          data: Buffer.from('hello index'),
-          contentType: 'text/html',
-          sourcePath: 'index.html',
+          method: 'GET',
+          url: 'https://api.cloudflare.com/client/v4/accounts/account_123/pages/projects/demo-pages',
         },
         {
-          file: 'assets/style.css',
-          data: Buffer.from('body { color: red; }'),
-          contentType: 'text/css',
-          sourcePath: 'assets/style.css',
+          method: 'POST',
+          url: 'https://api.cloudflare.com/client/v4/accounts/account_123/pages/projects',
         },
-      ],
-    });
-
-    expect(result).toMatchObject({
-      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-      deploymentId: 'dep_123',
-      url: 'https://demo-pages.pages.dev',
-      status: 'ready',
-    });
-    expect(requests).toHaveLength(4);
-    expect(requests[0]?.headers.get('authorization')).toBe('Bearer cloudflare-token-secret');
+        {
+          method: 'POST',
+          url: 'https://api.cloudflare.com/client/v4/accounts/account_123/pages/projects/demo-pages/deployments',
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
