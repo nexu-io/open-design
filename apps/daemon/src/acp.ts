@@ -7,13 +7,21 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
 
 export function buildAcpSessionNewParams(cwd, { mcpServers } = {}) {
+  const servers = Array.isArray(mcpServers) ? mcpServers : [];
   return {
     cwd: path.resolve(cwd),
     // MCP is an optional compatibility layer. Default to no MCP servers so ACP
     // agents can run through the skill + CLI path without MCP support. Do not
     // auto-install or mutate user/global MCP config; callers must pass an
     // explicit per-session MCP descriptor when a compatible agent supports it.
-    mcpServers: Array.isArray(mcpServers) ? mcpServers : [],
+    // Normalize to the ACP stdio server shape expected by Kimi/Hermes.
+    mcpServers: servers.map((s) => ({
+      type: typeof s?.type === 'string' ? s.type : 'stdio',
+      name: typeof s?.name === 'string' ? s.name : '',
+      command: typeof s?.command === 'string' ? s.command : '',
+      args: Array.isArray(s?.args) ? s.args : [],
+      env: Array.isArray(s?.env) ? s.env : [],
+    })),
   };
 }
 
