@@ -209,6 +209,40 @@ export function resolveCodexGeneratedImagesDir(
   return path.resolve(codexHome, 'generated_images');
 }
 
+export function resolveChatExtraAllowedDirs({
+  agentId,
+  skillsDir,
+  designSystemsDir,
+  linkedDirs = [],
+  codexGeneratedImagesDir,
+  existsSync = fs.existsSync,
+}: {
+  agentId?: string | null;
+  skillsDir?: string | null;
+  designSystemsDir?: string | null;
+  linkedDirs?: Array<string | null | undefined>;
+  codexGeneratedImagesDir?: string | null;
+  existsSync?: (path: string) => boolean;
+}): string[] {
+  const isCodex =
+    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
+  const candidates = isCodex
+    ? [codexGeneratedImagesDir]
+    : [
+        skillsDir,
+        designSystemsDir,
+        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
+      ];
+  return Array.from(
+    new Set(
+      candidates.filter(
+        (d) =>
+          typeof d === 'string' && d.length > 0 && existsSync(d),
+      ),
+    ),
+  );
+}
+
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
   return input
@@ -3549,12 +3583,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     //      path inside its working directory. We copy (not symlink) so
     //      the staged directory is a true write barrier — agents cannot
     //      mutate the shipped repo resource through their cwd.
-    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
-    //      `DESIGN_SYSTEMS_DIR` to agents that support it so the absolute
-    //      fallback path in the preamble is reachable when staging fails
-    //      (e.g. the project has no on-disk cwd, or fs.cp errored). For
-    //      Codex gpt-image image projects, also allow only the narrow
-    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder.
+    //   2. `--add-dir` allowlist. For non-Codex agents, pass `SKILLS_DIR`
+    //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
+    //      preamble is reachable when staging fails (e.g. the project has
+    //      no on-disk cwd, or fs.cp errored). Codex treats `--add-dir`
+    //      entries as writable, so Codex receives only the narrow
+    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder
+    //      for allowlisted gpt-image image projects.
     //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
     //      `cwd: PROJECT_ROOT` — there the absolute path is already an
     //      in-cwd path, so neither (1) nor (2) is required for it to
@@ -3607,12 +3642,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         codexGeneratedImagesDir = null;
       }
     }
-    const extraAllowedDirs = Array.from(new Set([
-      SKILLS_DIR,
-      DESIGN_SYSTEMS_DIR,
-      ...linkedDirs,
-      ...(codexGeneratedImagesDir ? [codexGeneratedImagesDir] : []),
-    ].filter((d) => fs.existsSync(d))));
+    const extraAllowedDirs = resolveChatExtraAllowedDirs({
+      agentId,
+      skillsDir: SKILLS_DIR,
+      designSystemsDir: DESIGN_SYSTEMS_DIR,
+      linkedDirs,
+      codexGeneratedImagesDir,
+    });
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
