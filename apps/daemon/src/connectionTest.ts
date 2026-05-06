@@ -33,6 +33,7 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import type {
   AgentTestRequest,
   ConnectionTestKind,
@@ -1051,10 +1052,18 @@ export async function testAgentConnection(
     }
     const stdinMode =
       def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
-    const env = spawnEnvForAgent(input.agentId, {
-      ...process.env,
-      ...(def.env || {}),
-    });
+    const configuredAgentEnv = agentCliEnvForAgent(
+      validateAgentCliEnv(input.agentCliEnv),
+      input.agentId,
+    );
+    const env = spawnEnvForAgent(
+      input.agentId,
+      {
+        ...process.env,
+        ...(def.env || {}),
+      },
+      configuredAgentEnv,
+    );
     const invocation = createCommandInvocation({
       command: resolvedBin,
       args,

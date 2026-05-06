@@ -4404,6 +4404,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             agentId: body.agentId,
             model: safeModel ?? undefined,
             reasoning: safeReasoning,
+            agentCliEnv:
+              body.agentCliEnv && typeof body.agentCliEnv === 'object'
+                ? body.agentCliEnv
+                : undefined,
             signal: controller.signal,
           });
           return res.json(result);

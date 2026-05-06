@@ -477,6 +477,7 @@ export function SettingsDialog({
     cfg.agentId,
     agentChoiceForTest?.model,
     agentChoiceForTest?.reasoning,
+    cfg.agentCliEnv,
   ]);
   useEffect(() => {
     providerTestRevisionRef.current += 1;
@@ -586,6 +587,7 @@ export function SettingsDialog({
           agentId: selected.id,
           model: choice.model || undefined,
           reasoning: choice.reasoning || undefined,
+          agentCliEnv: cfg.agentCliEnv ?? {},
         },
         controller.signal,
       );

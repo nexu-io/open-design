@@ -688,6 +688,57 @@ describe('POST /api/test/connection agent mode', () => {
     );
   });
 
+  it('spawns agent tests with draft allowlisted CLI env', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-env-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const codexHome = path.join(markerDir, 'codex-home');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  CODEX_HOME: process.env.CODEX_HOME || null,
+  SHOULD_NOT_PASS: process.env.OD_CONNECTION_TEST_SHOULD_NOT_PASS || null,
+}));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              agentCliEnv: {
+                codex: {
+                  CODEX_HOME: codexHome,
+                  OD_CONNECTION_TEST_SHOULD_NOT_PASS: 'leaked',
+                },
+                claude: {
+                  CLAUDE_CONFIG_DIR: path.join(markerDir, 'claude'),
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              CODEX_HOME: codexHome,
+              SHOULD_NOT_PASS: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
   it('waits for the Codex process before accepting early success text', async () => {
     await withFakeCodex(
       `

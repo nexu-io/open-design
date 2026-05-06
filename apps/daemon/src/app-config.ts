@@ -76,7 +76,7 @@ function validateAgentModels(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
+export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const result: AgentCliEnvPrefs = Object.create(null);

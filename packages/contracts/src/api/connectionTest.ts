@@ -2,6 +2,8 @@
 // translates each kind into user-facing copy; the daemon picks one per test
 // and returns it inside a JSON envelope (always HTTP 200 — see notes in the
 // daemon module for why).
+import type { AgentCliEnvPrefs } from './app-config';
+
 export type ConnectionTestKind =
   | 'success'
   | 'auth_failed'
@@ -31,6 +33,7 @@ export interface AgentTestRequest {
   agentId: string;
   model?: string;
   reasoning?: string;
+  agentCliEnv?: AgentCliEnvPrefs;
 }
 
 export type ConnectionTestRequest =
