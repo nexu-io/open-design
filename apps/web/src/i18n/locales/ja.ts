@@ -280,6 +280,7 @@ export const ja: Dict = {
   'examples.modePrototypeMobile': 'プロトタイプ · モバイル',
   'examples.modeDeck': 'スライド',
   'examples.modeDocument': 'ドキュメント & テンプレート',
+  'examples.modeOrbit': 'Orbit',
   'examples.scenarioGeneral': '一般',
   'examples.scenarioEngineering': 'エンジニアリング',
   'examples.scenarioProduct': 'プロダクト',

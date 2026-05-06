@@ -19,7 +19,7 @@ interface Props {
   onUsePrompt: (skill: SkillSummary) => void;
 }
 
-type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document';
+type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document' | 'orbit';
 type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
 
@@ -37,6 +37,7 @@ const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'prototype-mobile', labelKey: 'examples.modePrototypeMobile' },
   { value: 'deck', labelKey: 'examples.modeDeck' },
   { value: 'document', labelKey: 'examples.modeDocument' },
+  { value: 'orbit', labelKey: 'examples.modeOrbit' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {
@@ -85,6 +86,7 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
   if (filter === 'prototype-mobile')
     return skill.mode === 'prototype' && skill.platform === 'mobile';
   if (filter === 'document') return skill.mode === 'template';
+  if (filter === 'orbit') return skill.scenario === 'orbit';
   return true;
 }
 
@@ -147,12 +149,14 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       'prototype-mobile': 0,
       deck: 0,
       document: 0,
+      orbit: 0,
     };
     for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
       if (matchesMode(s, 'prototype-mobile')) c['prototype-mobile']++;
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
+      if (matchesMode(s, 'orbit')) c.orbit++;
     }
     return c;
   }, [skills, surfaceFilter]);
