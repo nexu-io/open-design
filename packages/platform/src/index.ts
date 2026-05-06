@@ -1,5 +1,8 @@
 import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 export type CommandInvocation = {
@@ -408,4 +411,103 @@ export async function readLogTail(filePath: string, maxLines = 80): Promise<stri
   } catch {
     return [];
   }
+}
+
+export type WellKnownUserToolchainOptions = {
+  // Override homedir() so callers in sandboxed tests or namespaced launches
+  // can substitute a fixture directory. Falls back to os.homedir().
+  home?: string;
+  // Include /opt/homebrew/bin and /usr/local/bin in the result. Defaults to
+  // true on POSIX so GUI-launched processes (which inherit a minimal PATH
+  // from launchd / desktop launchers) still see Homebrew-installed CLIs;
+  // defaults to false on Windows because those paths are POSIX-only.
+  includeSystemBins?: boolean;
+  // Read $NPM_CONFIG_PREFIX / $npm_config_prefix from this map and append
+  // `<prefix>/bin` if defined. Defaults to process.env so user-customised
+  // npm prefixes are picked up automatically. Pass an empty object to
+  // suppress lookup (useful in tests).
+  env?: NodeJS.ProcessEnv;
+};
+
+// Single source of truth for "user-level CLI install locations the daemon
+// must search even when launched with a minimal PATH". GUI launchers
+// (macOS .app bundles, Linux .desktop files) typically inherit a stripped
+// PATH from launchd / the desktop session and do not read interactive
+// shell rc files, so without this list any CLI installed under the user's
+// own toolchain (`npm i -g`, `pnpm self-install`, `cargo install`, asdf,
+// nvm, fnm, mise, ...) is silently undetected. Both the daemon resolver
+// and the packaged sidecar PATH builder consume this so the two layers
+// can never drift again.
+export function wellKnownUserToolchainBins(
+  options: WellKnownUserToolchainOptions = {},
+): string[] {
+  const home = options.home ?? homedir();
+  const includeSystemBins = options.includeSystemBins ?? process.platform !== "win32";
+  const env = options.env ?? process.env;
+  const dirs: string[] = [
+    join(home, ".local", "bin"),
+    join(home, ".opencode", "bin"),
+    join(home, ".bun", "bin"),
+    join(home, ".volta", "bin"),
+    join(home, ".asdf", "shims"),
+    join(home, "Library", "pnpm"),
+    join(home, ".cargo", "bin"),
+    // Common user-level npm prefixes for sudo-free global installs. The
+    // npm docs canonical example uses ~/.local (already covered above);
+    // ~/.npm-global is the dominant non-canonical convention shipped in
+    // most third-party "fix npm EACCES" tutorials, and ~/.npm-packages
+    // is the second-most common variant. Without these, GUI-launched
+    // daemons miss `npm i -g`'d CLIs even though they resolve cleanly
+    // from the user's shell. See open-design issue #442.
+    join(home, ".npm-global", "bin"),
+    join(home, ".npm-packages", "bin"),
+  ];
+  // Honour an explicit npm prefix override regardless of where the user
+  // pointed it. Covers setups that don't match either of the conventions
+  // above (e.g. corporate provisioning that exports a custom prefix).
+  const npmPrefix = env.NPM_CONFIG_PREFIX ?? env.npm_config_prefix;
+  if (typeof npmPrefix === "string" && npmPrefix.length > 0) {
+    dirs.push(join(npmPrefix, "bin"));
+  }
+  if (includeSystemBins) {
+    dirs.push("/opt/homebrew/bin", "/usr/local/bin");
+  }
+  // Per-version Node toolchains: scan the install root and surface every
+  // version directory's bin folder. Best-effort — missing roots simply
+  // contribute nothing.
+  for (const installRoot of [
+    {
+      root: join(home, ".local", "share", "mise", "installs", "node"),
+      segments: ["bin"],
+    },
+    {
+      root: join(home, ".nvm", "versions", "node"),
+      segments: ["bin"],
+    },
+    {
+      root: join(home, ".local", "share", "fnm", "node-versions"),
+      segments: ["installation", "bin"],
+    },
+  ]) {
+    for (const dir of existingChildBinDirs(installRoot.root, installRoot.segments)) {
+      dirs.push(dir);
+    }
+  }
+  return dirs;
+}
+
+function existingChildBinDirs(root: string, segments: string[]): string[] {
+  const out: string[] = [];
+  let entries: import("node:fs").Dirent<string>[];
+  try {
+    entries = readdirSync(root, { encoding: "utf8", withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const candidate = join(root, entry.name, ...segments);
+    if (existsSync(candidate)) out.push(candidate);
+  }
+  return out;
 }

@@ -762,6 +762,56 @@ fsTest(
   },
 );
 
+// Issue #442: GUI-launched daemons (Finder/Dock on macOS, .desktop on Linux)
+// inherit a stripped PATH that doesn't include the user's npm global prefix.
+// Most third-party "fix npm EACCES without sudo" tutorials configure
+// `~/.npm-global` as the prefix, so any CLI installed via `npm i -g <cli>`
+// lives at `~/.npm-global/bin/<cli>`. The daemon must search there even when
+// the inherited PATH only carries `/usr/bin:/bin:...`.
+fsTest(
+  'resolveAgentExecutable searches ~/.npm-global/bin under a minimal GUI-launched PATH (issue #442)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-npm-global-'));
+    try {
+      const dir = join(home, '.npm-global', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'gemini'), '');
+      chmodSync(join(dir, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      // Mirror the launchd default a `.app` actually inherits — no
+      // `~/.npm-global/bin`, no `/opt/homebrew/bin`, nothing user-side.
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      assert.equal(resolved, join(dir, 'gemini'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+// Same root cause as #442 but for the second-most-common alternative
+// non-canonical npm prefix shipped in older "fix sudo-free npm" guides.
+fsTest(
+  'resolveAgentExecutable also searches ~/.npm-packages/bin (alt npm prefix)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-npm-packages-'));
+    try {
+      const dir = join(home, '.npm-packages', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'gemini'), '');
+      chmodSync(join(dir, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      assert.equal(resolved, join(dir, 'gemini'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
 // DeepSeek TUI's exec subcommand requires the prompt as a positional
 // argument (no `-` stdin sentinel; clap declares `prompt: String` as a
 // required field). `--auto` enables agentic mode with auto-approval —
