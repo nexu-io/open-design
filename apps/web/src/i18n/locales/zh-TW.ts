@@ -151,6 +151,53 @@ export const zhTW: Dict = {
   'settings.runtimeDevelopment': '開發環境',
   'settings.versionUnavailable': '守護程式離線時無法取得版本詳情。',
 
+  // MCP server settings
+  'settings.mcpTitle': 'MCP server',
+  'settings.mcpHint':
+    '讓其他專案中的程式碼代理（Claude Code、Cursor、VS Code、Antigravity、Zed、Windsurf）讀取您的 Open Design 專案。您可以直接將設計匯入應用程式，無需先匯出 zip。',
+  'settings.mcpDaemonError':
+    '無法連線到本地守護程序以解析安裝路徑（{error}）。請確認 Open Design 正在執行，然後重新開啟此面板。',
+  'settings.mcpBuildDaemon': '請先建置守護行程。',
+  'settings.mcpNodeMissing': '缺少 Node 執行檔。',
+  'settings.mcpBuildHint':
+    '缺少 apps/daemon/dist/cli.js。請執行 `pnpm --filter @open-design/daemon build` 後重新整理。',
+  'settings.mcpMethodCli': 'CLI 指令',
+  'settings.mcpInstructionCli': '在您的終端機中執行此指令。',
+  'settings.mcpMethodToml': 'TOML 設定檔',
+  'settings.mcpInstructionCodex':
+    '將此表格附加到 {path}。Codex CLI 與 Codex IDE 擴充功能共用相同的設定。',
+  'settings.mcpMethodOneClick': '一鍵安裝',
+  'settings.mcpInstructionCursor':
+    '點擊「在 Cursor 中安裝」以透過核准對話框安裝，或將此 JSON 合併至 {path}。',
+  'settings.mcpDeeplinkInstallCursor': '在 Cursor 中安裝',
+  'settings.mcpMethodJson': 'JSON 設定檔',
+  'settings.mcpInstructionCopilot':
+    '開啟 Command Palette（{shortcut}），執行「MCP: Open User Configuration」，然後合併此 JSON。Copilot Chat 必須處於 Agent 模式，工具才會顯示。',
+  'settings.mcpInstructionAntigravity':
+    '在 Antigravity 中：Agent 面板「⋯」選單 → MCP Servers → Manage MCP Servers → View raw config。合併此 JSON。',
+  'settings.mcpInstructionZed':
+    '開啟 Zed Settings（{shortcut}），然後將此內容合併至最上層物件。Zed 使用「context_servers」，而非「mcpServers」。',
+  'settings.mcpInstructionWindsurf':
+    '開啟 {path}（或使用 Cascade 中的 MCPs 圖示 → Configure）並合併：',
+  'settings.mcpCopyAria': '複製 MCP 設定片段',
+  'settings.mcpResolvingFailed': '# 解析路徑失敗，請見上方錯誤',
+  'settings.mcpLoadingPaths': '# 正在從本地守護行程載入安裝路徑…',
+  'settings.mcpCopied': '已複製',
+  'settings.mcpCopy': '複製',
+  'settings.mcpCursorApproval': 'Cursor 會在寫入設定檔前彈出核准對話框。',
+  'settings.mcpRestartNote': '重新啟動您的客戶端以套用新的 server。',
+  'settings.mcpRestartDetail':
+    '大部分編輯器只在啟動時載入 MCP server。在 Cursor / VS Code / Antigravity / Windsurf 中，您可以從 Command Palette 執行「Developer: Reload Window」，無需完整重新啟動。Zed 與 Claude Code 則需要結束並重新開啟。',
+  'settings.mcpCapabilitiesTitle': '您的 agent 可以執行的操作',
+  'settings.mcpCapabilityRead':
+    '讀取或搜尋專案中的任何檔案（HTML、JSX、CSS、JSON、SVG、Markdown）。',
+  'settings.mcpCapabilityPull':
+    '透過單一呼叫拉取設計套件：包含進入點檔案以及所有引用的 CSS 變數、元件與字型。',
+  'settings.mcpCapabilityDefault':
+    '預設使用您在 Open Design 中開啟的專案與檔案，因此您可以說「在我的應用程式中建置這個」，無需重新說明是哪個設計。',
+  'settings.mcpRunningNote':
+    'Open Design 必須正在執行，MCP 工具呼叫才能成功。如果您在開啟 Open Design 之前就已啟動 coding agent，請重新啟動 agent，使其能夠連線到正在執行的守護行程。',
+
   'entry.tabDesigns': '我的設計',
   'entry.tabExamples': '範例',
   'entry.tabDesignSystems': '設計系統',

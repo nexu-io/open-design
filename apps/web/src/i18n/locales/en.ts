@@ -153,6 +153,53 @@ export const en: Dict = {
   'settings.runtimeDevelopment': 'Development',
   'settings.versionUnavailable': 'Version details are unavailable while the daemon is offline.',
 
+  // MCP server settings
+  'settings.mcpTitle': 'MCP server',
+  'settings.mcpHint':
+    'Lets a coding agent in another repo (Claude Code, Cursor, VS Code, Antigravity, Zed, Windsurf) read your Open Design projects. Use it to pull a design into your app without exporting a zip first.',
+  'settings.mcpDaemonError':
+    "Couldn't reach the local daemon to resolve install paths ({error}). Make sure Open Design is running, then reopen this panel.",
+  'settings.mcpBuildDaemon': 'Build the daemon first.',
+  'settings.mcpNodeMissing': 'Node binary is missing.',
+  'settings.mcpBuildHint':
+    'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
+  'settings.mcpMethodCli': 'CLI command',
+  'settings.mcpInstructionCli': 'Run this in your terminal.',
+  'settings.mcpMethodToml': 'TOML config',
+  'settings.mcpInstructionCodex':
+    'Append this table to {path}. The same config is shared between the Codex CLI and the Codex IDE extension.',
+  'settings.mcpMethodOneClick': 'One-click install',
+  'settings.mcpInstructionCursor':
+    'Click "Install in Cursor" to install with an approval dialog, or merge this JSON into {path}.',
+  'settings.mcpDeeplinkInstallCursor': 'Install in Cursor',
+  'settings.mcpMethodJson': 'JSON config',
+  'settings.mcpInstructionCopilot':
+    'Open the Command Palette ({shortcut}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.',
+  'settings.mcpInstructionAntigravity':
+    'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
+  'settings.mcpInstructionZed':
+    'Open Zed Settings ({shortcut}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".',
+  'settings.mcpInstructionWindsurf':
+    'Open {path} (or use the MCPs icon in Cascade → Configure) and merge:',
+  'settings.mcpCopyAria': 'Copy MCP configuration snippet',
+  'settings.mcpResolvingFailed': '# resolving paths failed, see the error above',
+  'settings.mcpLoadingPaths': '# loading install paths from the local daemon…',
+  'settings.mcpCopied': 'Copied',
+  'settings.mcpCopy': 'Copy',
+  'settings.mcpCursorApproval': 'Cursor pops an approval dialog before writing the config.',
+  'settings.mcpRestartNote': 'Restart your client to pick up the new server.',
+  'settings.mcpRestartDetail':
+    'Most editors only load MCP servers at startup. In Cursor / VS Code / Antigravity / Windsurf you can run `Developer: Reload Window` from the command palette instead of a full restart. Zed and Claude Code need a quit and reopen.',
+  'settings.mcpCapabilitiesTitle': 'What your agent can do',
+  'settings.mcpCapabilityRead':
+    'Read or search any file in a project (HTML, JSX, CSS, JSON, SVG, Markdown).',
+  'settings.mcpCapabilityPull':
+    'Pull a design bundle in one call: the entry file plus every CSS variable, component, and font it references.',
+  'settings.mcpCapabilityDefault':
+    'Default to the project and file you have open in Open Design, so you can say "build this in my app" without re-stating which design.',
+  'settings.mcpRunningNote':
+    'Open Design must be running for MCP tool calls to succeed. If you started your coding agent before opening Open Design, restart the agent so it can reach the live daemon.',
+
   'entry.tabDesigns': 'Designs',
   'entry.tabExamples': 'Examples',
   'entry.tabDesignSystems': 'Design systems',

@@ -151,6 +151,53 @@ export const zhCN: Dict = {
   'settings.runtimeDevelopment': '开发环境',
   'settings.versionUnavailable': '守护进程离线时无法获取版本详情。',
 
+  // MCP server settings
+  'settings.mcpTitle': 'MCP server',
+  'settings.mcpHint':
+    '让其他仓库中的编码助手（Claude Code、Cursor、VS Code、Antigravity、Zed、Windsurf）读取你的 Open Design 项目。无需先导出 zip，即可将设计拉取到你的应用中。',
+  'settings.mcpDaemonError':
+    '无法连接到本地守护进程以解析安装路径（{error}）。请确保 Open Design 正在运行，然后重新打开此面板。',
+  'settings.mcpBuildDaemon': '请先构建守护进程。',
+  'settings.mcpNodeMissing': 'Node 二进制文件缺失。',
+  'settings.mcpBuildHint':
+    'apps/daemon/dist/cli.js 缺失。请运行 `pnpm --filter @open-design/daemon build` 并刷新。',
+  'settings.mcpMethodCli': 'CLI 命令',
+  'settings.mcpInstructionCli': '在你的终端中运行此命令。',
+  'settings.mcpMethodToml': 'TOML 配置',
+  'settings.mcpInstructionCodex':
+    '将以下配置追加到 {path}。Codex CLI 与 Codex IDE 扩展共享同一配置。',
+  'settings.mcpMethodOneClick': '一键安装',
+  'settings.mcpInstructionCursor':
+    '点击"在 Cursor 中安装"以通过确认对话框安装，或将此 JSON 合并到 {path}。',
+  'settings.mcpDeeplinkInstallCursor': '在 Cursor 中安装',
+  'settings.mcpMethodJson': 'JSON 配置',
+  'settings.mcpInstructionCopilot':
+    '打开命令面板（{shortcut}），运行 "MCP: Open User Configuration"，然后合并此 JSON。Copilot Chat 必须处于 Agent 模式，工具才会显示。',
+  'settings.mcpInstructionAntigravity':
+    '在 Antigravity 中：Agent 面板 "..." 菜单 → MCP Servers → Manage MCP Servers → View raw config。合并此 JSON。',
+  'settings.mcpInstructionZed':
+    '打开 Zed Settings（{shortcut}），然后将此配置合并到顶层对象中。Zed 使用 "context_servers"，而非 "mcpServers"。',
+  'settings.mcpInstructionWindsurf':
+    '打开 {path}（或在 Cascade 中使用 MCPs 图标 → Configure）并合并：',
+  'settings.mcpCopyAria': '复制 MCP 配置片段',
+  'settings.mcpResolvingFailed': '# 解析路径失败，请查看上方错误',
+  'settings.mcpLoadingPaths': '# 正在从本地守护进程加载安装路径…',
+  'settings.mcpCopied': '已复制',
+  'settings.mcpCopy': '复制',
+  'settings.mcpCursorApproval': 'Cursor 会在写入配置前弹出确认对话框。',
+  'settings.mcpRestartNote': '重启客户端以加载新 server。',
+  'settings.mcpRestartDetail':
+    '大多数编辑器仅在启动时加载 MCP server。在 Cursor / VS Code / Antigravity / Windsurf 中，你可以在命令面板中运行 `Developer: Reload Window`，无需完全重启。Zed 和 Claude Code 需要退出并重新打开。',
+  'settings.mcpCapabilitiesTitle': '你的助手可以做什么',
+  'settings.mcpCapabilityRead':
+    '读取或搜索项目中的任意文件（HTML、JSX、CSS、JSON、SVG、Markdown）。',
+  'settings.mcpCapabilityPull':
+    '一次调用拉取设计包：入口文件及其引用的所有 CSS 变量、组件和字体。',
+  'settings.mcpCapabilityDefault':
+    '默认使用你在 Open Design 中打开的项目和文件，因此你可以直接说"在我的应用中构建这个"，无需重复说明是哪个设计。',
+  'settings.mcpRunningNote':
+    'Open Design 必须处于运行状态，MCP 工具调用才能成功。如果你在打开 Open Design 之前启动了编码助手，请重启助手以便它能连接到正在运行的守护进程。',
+
   'entry.tabDesigns': '我的设计',
   'entry.tabExamples': '示例',
   'entry.tabDesignSystems': '设计体系',

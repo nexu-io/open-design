@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const id: Dict = {
+  ...en,
   'common.cancel': 'Batal',
   'common.save': 'Simpan',
   'common.close': 'Tutup',

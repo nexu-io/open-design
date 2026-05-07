@@ -1972,7 +1972,7 @@ interface McpClient {
   // Optional one-click install action. Currently only Cursor
   // supports deeplinks of this shape.
   buildDeeplink?: (info: McpInstallInfo) => string;
-  deeplinkLabel?: string;
+  deeplinkLabel?: () => string;
 }
 
 // Path hint per OS. Localizes the "where to paste" copy so a
@@ -2037,129 +2037,96 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
 }`;
 }
 
-const MCP_CLIENTS: McpClient[] = [
-  {
-    id: 'claude',
-    label: 'Claude Code',
-    // `claude mcp add-json <name> '<json>'` takes ONLY the inner
-    // server-config object, not the full mcpServers wrapper. We
-    // inline the JSON into the command itself so the snippet is a
-    // real one-liner the user can copy and run, no template
-    // substitution. Single quotes around the JSON work in bash, zsh,
-    // PowerShell, and Git Bash; the only outlier is Windows cmd.exe,
-    // where users would need to swap to PowerShell.
-    buildMethod: () => 'CLI command',
-    buildInstruction: () => 'Run this in your terminal.',
-    buildSnippet: (info) => {
-      const inner = JSON.stringify(buildMcpStdioServerConfig(info));
-      return `claude mcp add-json --scope user open-design '${inner}'`;
-    },
-    buildSnippetLang: () => 'bash',
-  },
-  {
-    id: 'codex',
-    label: 'Codex',
-    // Codex CLI shares config between the terminal CLI and the IDE
-    // extension at ~/.codex/config.toml (TOML, not JSON, and a
-    // different table key from every other client - mcp_servers
-    // rather than mcpServers / servers / context_servers). Schema
-    // ref: https://developers.openai.com/codex/mcp.
-    //
-    // For our payload (just command + args, both strings/arrays of
-    // strings) JSON.stringify happens to produce valid TOML literal
-    // values, since TOML basic strings use the same double-quote
-    // escape rules and TOML inline arrays match JSON array syntax.
-    buildMethod: () => 'TOML config',
-    buildInstruction: (info) => {
-      const path = homeConfigPath(
-        info.platform,
-        '~/.codex/config.toml',
-        '%USERPROFILE%\\.codex\\config.toml',
-      );
-      return `Append this table to ${path}. The same config is shared between the Codex CLI and the Codex IDE extension.`;
-    },
-    buildSnippet: (info) => `[mcp_servers.open-design]
-command = ${JSON.stringify(info.command)}
-args = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
-    buildSnippetLang: () => 'toml',
-  },
-  {
-    id: 'cursor',
-    label: 'Cursor',
-    buildMethod: () => 'One-click install',
-    buildInstruction: (info) =>
-      `Click "Install in Cursor" to install with an approval dialog, or merge this JSON into ${homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json')}.`,
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-    buildDeeplink: (info) => {
-      const inner = buildMcpStdioServerConfig(info);
-      // Cursor expects the inner server-config object base64-encoded
-      // as ?config=...; the handler decodes it and pops an approval
-      // dialog before writing to mcp.json. We UTF-8-encode first so
-      // non-Latin1 chars in paths (e.g. an accented username) do not
-      // throw from btoa().
-      const encoded = utf8Btoa(JSON.stringify(inner));
-      return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
-    },
-    deeplinkLabel: 'Install in Cursor',
-  },
-  {
-    id: 'vscode',
-    label: 'VS Code',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open the Command Palette (${commandPaletteShortcut(info.platform)}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.`,
-    buildSnippet: (info) => `{
-  "servers": {
-    "open-design": {
-      "type": "stdio",
-      "command": ${JSON.stringify(info.command)},
-      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,
-      "env": ${JSON.stringify(info.env)}` : ''}
-    }
-  }
-}`,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'antigravity',
-    label: 'Antigravity',
-    buildMethod: () => 'JSON config',
-    buildInstruction: () =>
-      'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'zed',
-    label: 'Zed',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open Zed Settings (${settingsShortcut(info.platform)}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".`,
-    buildSnippet: (info) => `{
-  "context_servers": {
-    "open-design": {
-      "source": "custom",
-      "command": ${JSON.stringify(info.command)},
-      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,
-      "env": ${JSON.stringify(info.env)}` : ''}
-    }
-  }
-}`,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'windsurf',
-    label: 'Windsurf',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open ${homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json')} (or use the MCPs icon in Cascade → Configure) and merge:`,
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-  },
-];
-
 function IntegrationsSection() {
+  const { t } = useI18n();
+
+  const MCP_CLIENTS: McpClient[] = [
+    {
+      id: 'claude',
+      label: 'Claude Code',
+      buildMethod: () => t('settings.mcpMethodCli'),
+      buildInstruction: () => t('settings.mcpInstructionCli'),
+      buildSnippet: (info) => {
+        const inner = JSON.stringify(buildMcpStdioServerConfig(info));
+        return `claude mcp add-json --scope user open-design '${inner}'`;
+      },
+      buildSnippetLang: () => 'bash',
+    },
+    {
+      id: 'codex',
+      label: 'Codex',
+      buildMethod: () => t('settings.mcpMethodToml'),
+      buildInstruction: (info) => {
+        const path = homeConfigPath(
+          info.platform,
+          '~/.codex/config.toml',
+          '%USERPROFILE%\\.codex\\config.toml',
+        );
+        return t('settings.mcpInstructionCodex', { path });
+      },
+      buildSnippet: (info) => `[mcp_servers.open-design]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
+      buildSnippetLang: () => 'toml',
+    },
+    {
+      id: 'cursor',
+      label: 'Cursor',
+      buildMethod: () => t('settings.mcpMethodOneClick'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionCursor', {
+          path: homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+      buildDeeplink: (info) => {
+        const inner = buildMcpStdioServerConfig(info);
+        const encoded = utf8Btoa(JSON.stringify(inner));
+        return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
+      },
+      deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'vscode',
+      label: 'VS Code',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionCopilot', {
+          shortcut: commandPaletteShortcut(info.platform),
+        }),
+      buildSnippet: (info) => `{\n  "servers": {\n    "open-design": {\n      "type": "stdio",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'antigravity',
+      label: 'Antigravity',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: () => t('settings.mcpInstructionAntigravity'),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'zed',
+      label: 'Zed',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionZed', {
+          shortcut: settingsShortcut(info.platform),
+        }),
+      buildSnippet: (info) => `{\n  "context_servers": {\n    "open-design": {\n      "source": "custom",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'windsurf',
+      label: 'Windsurf',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionWindsurf', {
+          path: homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+  ];
+
   const [clientId, setClientId] = useState<McpClientId>('claude');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -2255,13 +2222,8 @@ function IntegrationsSection() {
     <section className="settings-section">
       <div className="section-head">
         <div>
-          <h3>MCP server</h3>
-          <p className="hint">
-            Lets a coding agent in another repo (Claude Code, Cursor,
-            VS Code, Antigravity, Zed, Windsurf) read your Open Design
-            projects. Use it to pull a design into your app without
-            exporting a zip first.
-          </p>
+          <h3>{t('settings.mcpTitle')}</h3>
+          <p className="hint">{t('settings.mcpHint')}</p>
         </div>
       </div>
 
@@ -2271,9 +2233,7 @@ function IntegrationsSection() {
             className="empty-card"
             style={{ marginBottom: 14, color: 'var(--danger-fg, #f88)' }}
           >
-            Couldn&rsquo;t reach the local daemon to resolve install paths
-            ({infoError}). Make sure Open Design is running, then reopen this
-            panel.
+            {t('settings.mcpDaemonError', { error: infoError! })}
           </div>
         ) : null}
 
@@ -2287,11 +2247,10 @@ function IntegrationsSection() {
           >
             <strong>
               {!info.cliExists
-                ? 'Build the daemon first.'
-                : 'Node binary is missing.'}
+                ? t('settings.mcpBuildDaemon')
+                : t('settings.mcpNodeMissing')}
             </strong>{' '}
-            {info.buildHint ??
-              'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.'}
+            {info.buildHint ?? t('settings.mcpBuildHint')}
           </div>
         ) : null}
 
@@ -2380,7 +2339,7 @@ function IntegrationsSection() {
               style={{ padding: '6px 14px', fontSize: 13 }}
             >
               <Icon name="link" size={14} />
-              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel}</span>
+              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel ? client.deeplinkLabel() : ''}</span>
             </button>
             <span
               style={{
@@ -2389,7 +2348,7 @@ function IntegrationsSection() {
                 color: 'var(--fg-2, #9aa0a6)',
               }}
             >
-              Cursor pops an approval dialog before writing the config.
+              {t('settings.mcpCursorApproval')}
             </span>
           </div>
         ) : null}
@@ -2417,8 +2376,8 @@ function IntegrationsSection() {
             <code>
               {snippet ||
                 (infoError
-                  ? '# resolving paths failed, see the error above'
-                  : '# loading install paths from the local daemon…')}
+                  ? t('settings.mcpResolvingFailed')
+                  : t('settings.mcpLoadingPaths'))}
             </code>
           </pre>
           <button
@@ -2433,10 +2392,10 @@ function IntegrationsSection() {
               padding: '4px 10px',
               fontSize: 12,
             }}
-            aria-label="Copy MCP configuration snippet"
+            aria-label={t('settings.mcpCopyAria')}
           >
             <Icon name={copied ? 'check' : 'copy'} size={14} />
-            <span style={{ marginLeft: 6 }}>{copied ? 'Copied' : 'Copy'}</span>
+            <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
           </button>
         </div>
 
@@ -2452,13 +2411,9 @@ function IntegrationsSection() {
             lineHeight: 1.5,
           }}
         >
-          <strong>Restart your client to pick up the new server.</strong>{' '}
+          <strong>{t('settings.mcpRestartNote')}</strong>{' '}
           <span style={{ color: 'var(--text-muted)' }}>
-            Most editors only load MCP servers at startup. In Cursor / VS
-            Code / Antigravity / Windsurf you can run{' '}
-            <code>Developer: Reload Window</code> from the command palette
-            instead of a full restart. Zed and Claude Code need a quit and
-            reopen.
+            {t('settings.mcpRestartDetail')}
           </span>
         </div>
 
@@ -2473,7 +2428,7 @@ function IntegrationsSection() {
               fontWeight: 600,
             }}
           >
-            What your agent can do
+            {t('settings.mcpCapabilitiesTitle')}
           </p>
           <ul
             style={{
@@ -2483,19 +2438,9 @@ function IntegrationsSection() {
               color: 'var(--text)',
             }}
           >
-            <li>
-              Read or search any file in a project (HTML, JSX, CSS, JSON,
-              SVG, Markdown).
-            </li>
-            <li>
-              Pull a design bundle in one call: the entry file plus every
-              CSS variable, component, and font it references.
-            </li>
-            <li>
-              Default to the project and file you have open in Open Design,
-              so you can say &ldquo;build this in my app&rdquo; without
-              re-stating which design.
-            </li>
+            <li>{t('settings.mcpCapabilityRead')}</li>
+            <li>{t('settings.mcpCapabilityPull')}</li>
+            <li>{t('settings.mcpCapabilityDefault')}</li>
           </ul>
         </div>
 
@@ -2507,9 +2452,7 @@ function IntegrationsSection() {
             lineHeight: 1.5,
           }}
         >
-          Open Design must be running for MCP tool calls to succeed. If
-          you started your coding agent before opening Open Design,
-          restart the agent so it can reach the live daemon.
+          {t('settings.mcpRunningNote')}
         </p>
       </div>
     </section>

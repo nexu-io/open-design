@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const fa: Dict = {
+  ...en,
   'common.cancel': 'لغو',
   'common.save': 'ذخیره',
   'common.close': 'بستن',

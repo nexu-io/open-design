@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const ptBR: Dict = {
+  ...en,
   'common.cancel': 'Cancelar',
   'common.save': 'Salvar',
   'common.close': 'Fechar',
