@@ -2399,7 +2399,12 @@ function IntegrationsSection() {
             style={{
               background: 'var(--surface-2, #11141a)',
               color: 'var(--fg-1, #e6e6e6)',
-              padding: '12px 14px',
+              // Reserve top clearance for the absolutely-positioned
+              // Copy button so the first line of the snippet does not
+              // sit underneath it, and reserve right clearance so a
+              // wrapped bash one-liner stops short of the button rather
+              // than scrolling behind it. Issue #632.
+              padding: '40px 80px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
