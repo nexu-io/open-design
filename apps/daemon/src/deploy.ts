@@ -226,6 +226,21 @@ export async function deployToVercel({ config, files, projectId, ctx }) {
 
   const deploymentId = created.id || created.uid;
   const initialUrl = deploymentUrl(created);
+
+  // BUG-2 durable fix (spec-101): daemon-spawned od-* projects inherit team-default
+  // Deployment Protection (SSO wall) on first deploy. Wedge artifacts are PUBLIC by
+  // design — visitors browse the published landing page without auth. Disable per-
+  // project SSO immediately after the project is created. Fire-and-forget so a
+  // transient PATCH failure cannot block the deploy. Idempotent on already-disabled.
+  // Refs: openclaw docs/runbooks/vercel-deployment-protection.md
+  const newProjectId = created.projectId;
+  if (newProjectId) {
+    disableProjectSsoProtection(config, ctx, newProjectId).catch(() => {
+      // Silent: deploy already succeeded; SSO disable is best-effort. Operator can
+      // PATCH manually via the runbook if a per-project wall surfaces in QA.
+    });
+  }
+
   const ready = deploymentId
     ? await pollVercelDeployment(config, deploymentId, ctx)
     : created;
@@ -245,6 +260,22 @@ export async function deployToVercel({ config, files, projectId, ctx }) {
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
   };
+}
+
+async function disableProjectSsoProtection(config, ctx, projectId) {
+  const resp = await fetch(`${VERCEL_API}/v9/projects/${projectId}${vercelTeamQuery(config, ctx)}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ssoProtection: null }),
+  });
+  if (!resp.ok) {
+    const body = await readVercelJson(resp).catch(() => null);
+    throw vercelError(body, resp.status);
+  }
+  return readVercelJson(resp);
 }
 
 export function extractHtmlReferences(html) {

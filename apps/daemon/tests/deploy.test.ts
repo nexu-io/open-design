@@ -559,3 +559,174 @@ describe('deployToVercel — multi-tenant ctx refactor (spec 101 T025/T026)', ()
     expect(() => assertProjectIdValid('valid_id-123')).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Spec 101 — BUG-2 durable fix: auto-disable SSO protection on new od-* projects.
+// disableProjectSsoProtection is called fire-and-forget from deployToVercel
+// immediately after a successful /v13/deployments POST returns a projectId.
+// ---------------------------------------------------------------------------
+
+describe("deployToVercel — BUG-2 auto-disable SSO (spec-101 durable fix)", () => {
+  type FetchCall = { url: string; init?: RequestInit };
+  let calls: FetchCall[];
+
+  function makeFetchMockWithProjectId(opts: { patchStatus?: number } = {}) {
+    return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      calls.push({ url, init });
+
+      // POST /v13/deployments — return response WITH projectId to trigger PATCH.
+      if (url.startsWith("https://api.vercel.com/v13/deployments") && (init?.method ?? "GET") === "POST") {
+        return new Response(
+          JSON.stringify({
+            id: "dpl_test_1",
+            uid: "dpl_test_1",
+            projectId: "prj_test_1",
+            url: "od-test-abc.vercel.app",
+            readyState: "READY",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // PATCH /v9/projects/<projectId> — SSO disable call.
+      if (url.includes("/v9/projects/") && init?.method === "PATCH") {
+        const status = opts.patchStatus ?? 200;
+        return new Response(
+          status === 200 ? JSON.stringify({ id: "prj_test_1" }) : "error",
+          { status, headers: { "content-type": "application/json" } },
+        );
+      }
+      // Poll lookup GET on /v13/deployments/<id> — return READY immediately.
+      if (url.startsWith("https://api.vercel.com/v13/deployments/")) {
+        return new Response(
+          JSON.stringify({
+            id: "dpl_test_1",
+            url: "od-test-abc.vercel.app",
+            readyState: "READY",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // Public-url reachability probe (HEAD/GET on the deployment URL).
+      return new Response("ok", { status: 200 });
+    });
+  }
+
+  const baseFiles = [
+    {
+      file: "index.html",
+      data: Buffer.from("<!doctype html><h1>hi</h1>", "utf8"),
+      contentType: "text/html",
+      sourcePath: "index.html",
+    },
+  ];
+  const baseConfig = { token: "tok_test", teamId: "", teamSlug: "" };
+
+  beforeEach(() => {
+    calls = [];
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("(a) fires PATCH /v9/projects/<id> with {ssoProtection:null} after successful deploy", async () => {
+    vi.stubGlobal("fetch", makeFetchMockWithProjectId());
+
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: "abc123",
+      ctx: { tenant_id: "ceremonia", vercel_team: "ceremonia-89dd9b81" },
+    });
+
+    const patchCall = calls.find(
+      (c) => c.init?.method === "PATCH" && c.url.startsWith("https://api.vercel.com/v9/projects/prj_test_1"),
+    );
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse(String(patchCall!.init!.body)).ssoProtection).toBeNull();
+  });
+
+  it("(b) PATCH uses the same vercelTeamQuery (slug) as the create call", async () => {
+    vi.stubGlobal("fetch", makeFetchMockWithProjectId());
+
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: "abc123",
+      ctx: { tenant_id: "ceremonia", vercel_team: "ceremonia-89dd9b81" },
+    });
+
+    const createCall = calls.find((c) => (c.init?.method ?? "GET") === "POST");
+    const patchCall = calls.find(
+      (c) => c.init?.method === "PATCH" && c.url.includes("/v9/projects/"),
+    );
+    expect(createCall).toBeDefined();
+    expect(patchCall).toBeDefined();
+
+    // Both URLs must carry the same team slug query — proves PATCH routes to the right team.
+    const createSlug = new URL(createCall!.url).searchParams.get("slug");
+    const patchSlug = new URL(patchCall!.url).searchParams.get("slug");
+    expect(patchSlug).toBe(createSlug);
+    expect(patchSlug).toBe("ceremonia-89dd9b81");
+  });
+
+  it("(c) PATCH 500 does NOT throw — deploy resolves successfully (fire-and-forget absorbs error)", async () => {
+    vi.stubGlobal("fetch", makeFetchMockWithProjectId({ patchStatus: 500 }));
+
+    const result = await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: "abc123",
+      ctx: { tenant_id: "ceremonia", vercel_team: "ceremonia-89dd9b81" },
+    });
+
+    expect(result).toMatchObject({
+      providerId: "vercel-self",
+      deploymentId: "dpl_test_1",
+      target: "preview",
+    });
+  });
+
+  it("(d) when Vercel response lacks projectId, no PATCH fires", async () => {
+    // Use a custom mock that returns a deployment WITHOUT projectId.
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      calls.push({ url, init });
+
+      if (url.startsWith("https://api.vercel.com/v13/deployments") && (init?.method ?? "GET") === "POST") {
+        return new Response(
+          JSON.stringify({
+            id: "dpl_test_1",
+            uid: "dpl_test_1",
+            // projectId intentionally absent — PATCH must not fire
+            url: "od-test-abc.vercel.app",
+            readyState: "READY",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.startsWith("https://api.vercel.com/v13/deployments/")) {
+        return new Response(
+          JSON.stringify({ id: "dpl_test_1", url: "od-test-abc.vercel.app", readyState: "READY" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("ok", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deployToVercel({
+      config: baseConfig,
+      files: baseFiles,
+      projectId: "abc123",
+      ctx: { tenant_id: "ceremonia", vercel_team: "ceremonia-89dd9b81" },
+    });
+
+    const patchCall = calls.find(
+      (c) => c.init?.method === "PATCH" && c.url.includes("/v9/projects/"),
+    );
+    expect(patchCall).toBeUndefined();
+  });
+});
