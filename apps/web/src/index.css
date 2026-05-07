@@ -4759,6 +4759,24 @@ button.connector-action.is-loading {
   table-layout: auto;
 }
 .df-thead { border-bottom: 1px solid var(--border); }
+.df-th-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.df-th-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .df-th-sortable {
   cursor: pointer;
   user-select: none;

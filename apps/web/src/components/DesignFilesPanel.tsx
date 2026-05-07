@@ -267,27 +267,30 @@ export function DesignFilesPanel({
                       <th className="df-th-icon" />
                       <th
                         className="df-th-name df-th-sortable"
-                        onClick={toggleSort('name')}
                         aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        {t('designFiles.colName')}
-                        {sortKey === 'name' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                        <button type="button" className="df-th-btn" onClick={toggleSort('name')}>
+                          {t('designFiles.colName')}
+                          {sortKey === 'name' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                        </button>
                       </th>
                       <th
                         className="df-th-kind df-th-sortable"
-                        onClick={toggleSort('kind')}
                         aria-sort={sortKey === 'kind' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        {t('designFiles.colKind')}
-                        {sortKey === 'kind' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                        <button type="button" className="df-th-btn" onClick={toggleSort('kind')}>
+                          {t('designFiles.colKind')}
+                          {sortKey === 'kind' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                        </button>
                       </th>
                       <th
                         className="df-th-time df-th-sortable"
-                        onClick={toggleSort('mtime')}
                         aria-sort={sortKey === 'mtime' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        {t('designFiles.colModified')}
-                        {sortKey === 'mtime' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                        <button type="button" className="df-th-btn" onClick={toggleSort('mtime')}>
+                          {t('designFiles.colModified')}
+                          {sortKey === 'mtime' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                        </button>
                       </th>
                       <th className="df-th-menu" />
                     </tr>
