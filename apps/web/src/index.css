@@ -4758,7 +4758,7 @@ button.connector-action.is-loading {
   border-collapse: collapse;
   table-layout: auto;
 }
-.df-thead { border-bottom: 1px solid var(--border); }
+.df-table thead { border-bottom: 1px solid var(--border); }
 .df-th-btn {
   all: unset;
   cursor: pointer;
