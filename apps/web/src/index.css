@@ -376,7 +376,7 @@ code {
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
-  line-height: 12px;
+  line-height: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
