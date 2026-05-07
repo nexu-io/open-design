@@ -1336,15 +1336,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
-      ports.flatMap((p) => [
+    return new Set([
+      ...ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         // When bound to a specific non-loopback address (e.g. Tailscale,
         // LAN IP, or 0.0.0.0), allow browser requests from that address
         // too so the documented --host escape hatch remains usable.
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
-    );
+      // Some browser builds (observed on Chrome on Windows under certain
+      // localhost-with-non-standard-port profiles, issue #733) serialize
+      // the Origin header without the port, e.g. `http://127.0.0.1`
+      // instead of `http://127.0.0.1:6313`. The cross-origin policy is
+      // still loopback-only — port-less means "the same origin's host
+      // without a port" — so accepting these portless variants doesn't
+      // widen the trust boundary, just makes the matcher tolerant of
+      // how individual browsers serialize the header. Without this,
+      // every /api request from such a browser dies with 403.
+      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}`)),
+      ...schemes.map((s) => `${s}://${host}`),
+    ]);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -5128,11 +5139,16 @@ export function isLocalSameOrigin(req, port) {
   if (origin == null || origin === '') return true;
 
   const schemes = ['http', 'https'];
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
+  const allowedOrigins = new Set([
+    ...ports.flatMap((p) => [
       ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
       ...schemes.map((s) => `${s}://${bindHost}:${p}`),
     ]),
-  );
+    // Match `buildAllowedOrigins()`: accept the portless serializations
+    // some browsers emit on localhost (issue #733). Loopback-only, so
+    // the trust boundary doesn't change.
+    ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}`)),
+    ...schemes.map((s) => `${s}://${bindHost}`),
+  ]);
   return allowedOrigins.has(String(origin));
 }

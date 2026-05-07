@@ -32,12 +32,16 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    const allowedOrigins = new Set(
-      ports.flatMap((p) => [
+    const allowedOrigins = new Set([
+      ...ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
-    );
+      // Mirror buildAllowedOrigins(): accept the portless serializations
+      // some browsers emit on localhost (issue #733).
+      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}`)),
+      ...schemes.map((s) => `${s}://${host}`),
+    ]);
     if (!allowedOrigins.has(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
@@ -145,6 +149,48 @@ describe('daemon origin validation middleware', () => {
       origin: `https://127.0.0.1:${port}`,
     });
     expect(res.status).toBe(200);
+  });
+
+  // --- Portless Origin (issue #733) ---
+  // Some browser builds (observed on Chrome under Windows when serving
+  // localhost on a non-standard port) send the Origin header without
+  // the port — `http://127.0.0.1` instead of `http://127.0.0.1:6313`.
+  // The middleware must accept these portless loopback variants so
+  // every /api request from such a browser doesn't 403.
+
+  it('allows portless Origin: http://127.0.0.1 (loopback, no port)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://127.0.0.1',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows portless Origin: http://localhost (loopback, no port)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://localhost',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows portless Origin: http://[::1] (IPv6 loopback, no port)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://[::1]',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows portless Origin via HTTPS', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'https://127.0.0.1',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('still blocks non-loopback portless Origins (security boundary preserved)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://evil.com',
+    });
+    expect(res.status).toBe(403);
   });
 
   // --- Origin: null (sandboxed iframe previews) ---
@@ -320,5 +366,12 @@ describe('origin validation: non-loopback bind host', () => {
       origin: `http://evil.com:${port}`,
     });
     expect(res.status).toBe(403);
+  });
+
+  it('allows portless Origin from the non-loopback bind host (issue #733)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://${nonLoopbackHost}`,
+    });
+    expect(res.status).toBe(200);
   });
 });
