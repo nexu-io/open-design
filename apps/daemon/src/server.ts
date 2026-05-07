@@ -1324,21 +1324,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (webPort && webPort !== resolvedPort) ports.push(webPort);
     const schemes = ['http', 'https'];
     const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set([
-      // Origins with explicit ports.
-      ...ports.flatMap((p) => [
+    return new Set(
+      ports.flatMap((p) => [
         ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
         // When bound to a specific non-loopback address (e.g. Tailscale,
         // LAN IP, or 0.0.0.0), allow browser requests from that address
         // too so the documented --host escape hatch remains usable.
         ...schemes.map((s) => `${s}://${host}:${p}`),
       ]),
-      // Origins without ports — Chrome may strip the port from the
-      // Origin header on same-origin requests (e.g. Origin: http://127.0.0.1
-      // instead of http://127.0.0.1:6313).
-      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}`)),
-      ...schemes.map((s) => `${s}://${host}`),
-    ]);
+    );
+  }
+
+  // Portless loopback origins (e.g. http://127.0.0.1 without a port).
+  // Chrome may strip the port from the Origin header on same-origin GET
+  // requests. Only used as a fallback for safe, idempotent GET requests;
+  // mutating routes (POST/PUT/PATCH/DELETE) always require an exact
+  // port-match via buildAllowedOrigins() or isLocalSameOrigin() to
+  // prevent local CSRF from a page on the default port (80).
+  function isPortlessLoopbackOrigin(origin) {
+    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1])(|$)/.test(origin);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -1376,7 +1380,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     if (!buildAllowedOrigins().has(String(origin))) {
-      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      // Fallback: Chrome may strip the port from the Origin header on
+      // same-origin requests (e.g. http://127.0.0.1 instead of
+      // http://127.0.0.1:6313). Allow portless loopback origins only
+      // for GET requests, which are idempotent and safe from CSRF.
+      // Mutating methods (POST/PUT/PATCH/DELETE) always require an
+      // exact port-match to prevent a page on the default port (80)
+      // from triggering state-changing operations.
+      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
+        return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      }
     }
     next();
   });
