@@ -96,33 +96,68 @@ export function resolveDaemonStatusTimeoutMs(
   return DAEMON_STATUS_TIMEOUT_MS;
 }
 
-async function waitForStatus<T>(
+/**
+ * Waits for the sidecar to report a ready status over IPC.
+ *
+ * When `watch` is provided, the polling loop also races the spawned
+ * child's `exit` event so a daemon that throws at startup (e.g. the
+ * #710 migrator's LegacyMigrationError on invalid OD_LEGACY_DATA_DIR,
+ * existing target payload, symlink in payload, or marker write
+ * failure) surfaces immediately instead of leaving the packaged app
+ * waiting the full DAEMON_MIGRATION_STATUS_TIMEOUT_MS for a process
+ * that already exited. The error message includes the daemon log path
+ * so the user can read the actual failure reason.
+ */
+export async function waitForStatus<T>(
   ipcPath: string,
   isReady: (status: T) => boolean,
   timeoutMs = DAEMON_STATUS_TIMEOUT_MS,
+  watch: { child: { exitCode: number | null; signalCode: NodeJS.Signals | null; once: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void; off: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void }; logPath: string } | null = null,
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
+  let childExited: { code: number | null; signal: NodeJS.Signals | null } | null = null;
 
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const status = await requestJsonIpc<T>(
-        ipcPath,
-        { type: SIDECAR_MESSAGES.STATUS },
-        { timeoutMs: 800 },
-      );
-      if (isReady(status)) return status;
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(150);
+  // Cover the race between spawn-resolved and now: if the child has
+  // already exited by the time we got here, the 'exit' event is gone,
+  // so seed childExited from the synchronous status fields.
+  if (watch != null && watch.child.exitCode !== null) {
+    childExited = { code: watch.child.exitCode, signal: watch.child.signalCode };
   }
 
-  throw new Error(
-    `timed out waiting for sidecar status at ${ipcPath}${
-      lastError instanceof Error ? ` (${lastError.message})` : ""
-    }`,
-  );
+  const onChildExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+    childExited = { code, signal };
+  };
+  watch?.child.once('exit', onChildExit);
+
+  try {
+    while (Date.now() - startedAt < timeoutMs) {
+      if (childExited !== null) {
+        throw new Error(
+          `daemon exited before reporting status (code=${childExited.code}, signal=${childExited.signal ?? 'none'}); see ${watch?.logPath ?? '<no log path>'} for details`,
+        );
+      }
+      try {
+        const status = await requestJsonIpc<T>(
+          ipcPath,
+          { type: SIDECAR_MESSAGES.STATUS },
+          { timeoutMs: 800 },
+        );
+        if (isReady(status)) return status;
+      } catch (error) {
+        lastError = error;
+      }
+      await sleep(150);
+    }
+
+    throw new Error(
+      `timed out waiting for sidecar status at ${ipcPath}${
+        lastError instanceof Error ? ` (${lastError.message})` : ""
+      }`,
+    );
+  } finally {
+    watch?.child.off('exit', onChildExit);
+  }
 }
 
 function extractPort(url: string): string {
@@ -285,6 +320,12 @@ export async function startPackagedSidecars(
       daemon.ipcPath,
       (status) => status.url != null,
       resolveDaemonStatusTimeoutMs(),
+      // Race the IPC polling against the daemon child's exit. Without
+      // this, a daemon that throws at startup (LegacyMigrationError on
+      // invalid OD_LEGACY_DATA_DIR, existing target payload, symlink,
+      // marker write failure) leaves the packaged app waiting the full
+      // 30-minute migration budget for a process that already died.
+      { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
 
