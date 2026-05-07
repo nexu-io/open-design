@@ -5876,8 +5876,17 @@ button.connector-action.is-loading {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+.comment-popover-actions > * {
+  /* Buttons may carry labels longer than their natural fair-share of the
+     320px popover width (Save comment, Send to chat, Sending..., Add note,
+     Remove). Without an explicit shrink ceiling and wrap, the row pushes
+     past the popover's right edge instead of breaking onto a new line.
+     Issue #779. */
+  max-width: 100%;
 }
 .comment-popover-remove {
   color: var(--red);
