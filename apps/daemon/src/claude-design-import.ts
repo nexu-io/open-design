@@ -8,7 +8,7 @@ const EOCD_SIG = 0x06054b50;
 const CENTRAL_SIG = 0x02014b50;
 const LOCAL_SIG = 0x04034b50;
 
-const MAX_FILES = 500;
+const MAX_FILES = 5000;
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -25,13 +25,21 @@ export async function importClaudeDesignZip(zipPath, projectDir) {
     if (entry.uncompressedSize > MAX_FILE_BYTES) {
       throw new Error(`zip file too large: ${relPath}`);
     }
-    totalBytes += entry.uncompressedSize;
-    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
 
+    // Decode first; the central directory's uncompressedSize is unreliable for
+    // streaming/data-descriptor zips (it can read 0 even when the payload
+    // carries real data). The inflate cap and the post-decode size checks below
+    // are authoritative.
     const body = readEntryBody(zip, entry);
-    if (body.length !== entry.uncompressedSize) {
+    if (body.length > MAX_FILE_BYTES) {
+      throw new Error(`zip file too large: ${relPath}`);
+    }
+    if (entry.uncompressedSize > 0 && body.length !== entry.uncompressedSize) {
       throw new Error(`zip entry size mismatch: ${relPath}`);
     }
+    totalBytes += body.length;
+    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
+
     files.push({ path: relPath, body });
   }
 
@@ -113,7 +121,16 @@ function readEntryBody(zip, entry) {
   if (bodyEnd > zip.length) throw new Error(`zip entry exceeds archive: ${entry.name}`);
   const compressed = zip.slice(bodyStart, bodyEnd);
   if (entry.method === 0) return Buffer.from(compressed);
-  return inflateRawSync(compressed, { maxOutputLength: entry.uncompressedSize });
+  // A genuinely empty deflate payload would still occupy at least the BFINAL
+  // marker; an entirely missing payload cannot be inflated, so treat it as
+  // empty rather than handing a zero-length buffer to zlib.
+  if (compressed.length === 0) return Buffer.alloc(0);
+  // When the central directory advertises 0 (streaming zips with data
+  // descriptors), fall back to the per-file ceiling so legitimate non-empty
+  // payloads decode instead of being silently truncated. The post-decode
+  // checks in the caller enforce MAX_FILE_BYTES and total-bytes limits.
+  const cap = entry.uncompressedSize > 0 ? entry.uncompressedSize : MAX_FILE_BYTES;
+  return inflateRawSync(compressed, { maxOutputLength: cap });
 }
 
 function sanitizeZipPath(name) {
