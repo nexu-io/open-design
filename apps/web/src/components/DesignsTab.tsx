@@ -131,8 +131,11 @@ export function DesignsTab({
 		if (sub === "recent") {
 			list = [...list].sort((a, b) => b.updatedAt - a.updatedAt);
 		}
+
 		if (sub === "yours") {
-			list = [...list].sort((a, b) => a.updatedAt - b.updatedAt);
+			list = [...list].sort(
+				(a, b) => b.project.createdAt - a.project.createdAt,
+			);
 		}
 
 		if (!q) return list;
