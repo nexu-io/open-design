@@ -583,7 +583,7 @@ export const uk: Dict = {
   'designFiles.prev': 'Назад',
   'designFiles.next': 'Далі',
   'designFiles.jumpToPage': 'Перейти на сторінку',
-  'designFiles.of': 'із',
+  'designFiles.pageInfo': '{start}–{end} із {total}',
   'liveArtifact.refresh.button': 'Оновити',
   'liveArtifact.refresh.buttonTitle': 'Оновити live-артефакт',
   'liveArtifact.refresh.loadingTitle': 'Оновлення live-артефакту…',

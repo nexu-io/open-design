@@ -525,7 +525,7 @@ export const esES: Dict = {
   'designFiles.prev': 'Anterior',
   'designFiles.next': 'Siguiente',
   'designFiles.jumpToPage': 'Ir a la página',
-  'designFiles.of': 'de',
+  'designFiles.pageInfo': '{start}–{end} de {total}',
   'quickSwitcher.placeholder': 'Abrir archivo…',
   'quickSwitcher.empty': 'No hay archivos en este proyecto',
   'quickSwitcher.noMatches': 'Sin resultados',

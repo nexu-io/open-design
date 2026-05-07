@@ -570,7 +570,7 @@ export const pl: Dict = {
   'designFiles.prev': 'Poprzednia',
   'designFiles.next': 'Następna',
   'designFiles.jumpToPage': 'Przejdź do strony',
-  'designFiles.of': 'z',
+  'designFiles.pageInfo': '{start}–{end} z {total}',
   'quickSwitcher.placeholder': 'Otwórz plik…',
   'quickSwitcher.empty': 'Brak plików w tym projekcie',
   'quickSwitcher.noMatches': 'Brak wyników',

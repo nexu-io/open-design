@@ -572,7 +572,7 @@ export const zhTW: Dict = {
   'designFiles.prev': '上一頁',
   'designFiles.next': '下一頁',
   'designFiles.jumpToPage': '跳轉到頁面',
-  'designFiles.of': '/',
+  'designFiles.pageInfo': '{start}–{end} / {total}',
   'quickSwitcher.placeholder': '開啟檔案…',
   'quickSwitcher.empty': '此專案中沒有檔案',
   'quickSwitcher.noMatches': '無符合項目',

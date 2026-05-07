@@ -72,6 +72,8 @@ export function DesignFilesPanel({
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
   const safePage = Math.min(page, totalPages - 1);
   const pageFiles = sortedFiles.slice(safePage * effectivePageSize, (safePage + 1) * effectivePageSize);
+  const rangeStart = safePage * effectivePageSize + 1;
+  const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
 
   useEffect(() => {
     setPage(0);
@@ -350,7 +352,7 @@ export function DesignFilesPanel({
                       </select>
                     </label>
                     <span className="df-page-info">
-                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} {t('designFiles.of')} {sortedFiles.length}
+                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
                     </span>
                     <div className="df-pagination-right">
                       <button
@@ -534,7 +536,7 @@ export function DesignFilesPanel({
                       {t('designFiles.next')}
                     </button>
                     <span className="df-page-info">
-                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} {t('designFiles.of')} {sortedFiles.length}
+                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
                     </span>
                   </div>
                 </>

@@ -582,7 +582,7 @@ export const fa: Dict = {
   'designFiles.prev': 'قبلی',
   'designFiles.next': 'بعدی',
   'designFiles.jumpToPage': 'برو به صفحه',
-  'designFiles.of': 'از',
+  'designFiles.pageInfo': '{start}–{end} از {total}',
   'quickSwitcher.placeholder': 'باز کردن فایل…',
   'quickSwitcher.empty': 'هیچ فایلی در این پروژه نیست',
   'quickSwitcher.noMatches': 'بدون نتیجه',

@@ -572,7 +572,7 @@ export const zhCN: Dict = {
   'designFiles.prev': '上一页',
   'designFiles.next': '下一页',
   'designFiles.jumpToPage': '跳转到页面',
-  'designFiles.of': '/',
+  'designFiles.pageInfo': '{start}–{end} / {total}',
   'quickSwitcher.placeholder': '打开文件…',
   'quickSwitcher.empty': '此项目中没有文件',
   'quickSwitcher.noMatches': '无匹配项',

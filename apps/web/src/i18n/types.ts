@@ -641,7 +641,7 @@ export interface Dict {
   'designFiles.prev': string;
   'designFiles.next': string;
   'designFiles.jumpToPage': string;
-  'designFiles.of': string;
+  'designFiles.pageInfo': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;

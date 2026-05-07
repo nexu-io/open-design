@@ -561,7 +561,7 @@ export const tr: Dict = {
   'designFiles.prev': 'Önceki',
   'designFiles.next': 'Sonraki',
   'designFiles.jumpToPage': 'Sayfaya git',
-  'designFiles.of': '/',
+  'designFiles.pageInfo': '{start}–{end} / {total}',
   'quickSwitcher.placeholder': 'Dosya aç…',
   'quickSwitcher.empty': 'Bu projede dosya yok',
   'quickSwitcher.noMatches': 'Eşleşme yok',
