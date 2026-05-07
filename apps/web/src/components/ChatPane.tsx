@@ -169,7 +169,13 @@ export function ChatPane({
       el.scrollTop = el.scrollHeight;
       setScrolledFromBottom(false);
     });
-  }, [activeConversationId, messages.length]);
+    // `tab` is in the deps so that switching conversations while
+    // Comments is open doesn't strand the new conversation at scrollTop:
+    // 0. The activeConversationId-reset effect above clears
+    // didInitialScrollRef while the chat-log is unmounted; this effect
+    // then re-runs when the user returns to Chat and the element is
+    // available, scrolling the new conversation to its initial bottom.
+  }, [activeConversationId, messages.length, tab]);
 
   useEffect(() => {
     const el = logRef.current;

@@ -166,7 +166,7 @@ describe('chat scroll preservation across tab switches', () => {
     expect(remountedTop).toBe(1500);
   });
 
-  it('does not restore previous conversation scroll when activeConversationId changes', async () => {
+  it('lands new conversation at its own bottom when switching conversations off-tab', async () => {
     const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
     const log = getChatLog();
     const ctl = mockScrollGeometry(log, {
@@ -179,9 +179,9 @@ describe('chat scroll preservation across tab switches', () => {
     ctl.setScrollTop(150);
     await switchTab('Comments');
 
-    // While off-tab, the active conversation changes to B. Returning to
-    // Chat should land at conversation B's own initial position, not
-    // restore conversation A's scrollTop.
+    // While off-tab the active conversation changes to B. Returning to
+    // Chat must land at conversation B's own initial bottom, not at
+    // scrollTop: 0 and not at conversation A's saved offset.
     rerender(chatPaneEl(sampleMessages, 'conv-B'));
     await switchTab('Chat');
 
@@ -205,8 +205,9 @@ describe('chat scroll preservation across tab switches', () => {
 
     await flushFrame();
 
-    // Saved state was cleared on the conversation switch, so the rAF
-    // restore branch is skipped and scrollTop stays at its initial 0.
-    expect(remountedTop).toBe(0);
+    // Saved state was cleared and the initial-bottom-scroll effect
+    // re-runs with `tab` in its deps, so the new conversation lands at
+    // its own scrollHeight rather than the browser default 0.
+    expect(remountedTop).toBe(1000);
   });
 });
