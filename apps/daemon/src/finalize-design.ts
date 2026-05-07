@@ -27,14 +27,31 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import * as path from 'node:path';
 import Database from 'better-sqlite3';
+import type {
+  FinalizeAnthropicRequest,
+  FinalizeAnthropicResponse,
+  FinalizeArtifactRef,
+} from '@open-design/contracts/api/finalize';
 import { getProject } from './db.js';
 import { readDesignSystem } from './design-systems.js';
 import {
   listFiles,
   readProjectFile,
   resolveProjectDir,
+  validateProjectPath,
 } from './projects.js';
 import { exportProjectTranscript } from './transcript-export.js';
+
+// Re-export the request/response types so existing daemon-internal
+// imports (and the route handler) keep their referenced names. The
+// canonical definitions live in @open-design/contracts/api/finalize
+// per @lefarcen's P2 review feedback on PR #832 (drift risk between
+// daemon and web client otherwise).
+export type {
+  FinalizeAnthropicRequest,
+  FinalizeAnthropicResponse,
+  FinalizeArtifactRef,
+};
 
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_MAX_TOKENS = 16000;
@@ -42,29 +59,6 @@ const INPUT_BODY_CAP_BYTES = 384 * 1024;
 const LOCK_FILENAME = '.finalize.lock';
 const OUTPUT_FILENAME = 'DESIGN.md';
 const DEFAULT_TIMEOUT_MS = 120_000;
-
-export interface FinalizeAnthropicRequest {
-  apiKey: string;
-  baseUrl?: string;
-  model: string;
-  maxTokens?: number;
-}
-
-export interface FinalizeArtifactRef {
-  name: string;
-  updatedAt: string | null;
-}
-
-export interface FinalizeAnthropicResponse {
-  designMdPath: string;
-  bytesWritten: number;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  artifact: FinalizeArtifactRef | null;
-  transcriptMessageCount: number;
-  designSystemId: string | null;
-}
 
 export interface FinalizeOptions {
   apiKey: string;
@@ -146,21 +140,37 @@ export async function resolveCurrentArtifact(
     activeTabRow && typeof activeTabRow.name === 'string' ? activeTabRow.name : null;
 
   if (activeTabName) {
-    const sidecarPath = path.join(dir, `${activeTabName}.artifact.json`);
-    if (fs.existsSync(sidecarPath)) {
-      const file = await readProjectFile(
-        projectsRoot,
-        projectId,
-        activeTabName,
-        metadata ?? undefined,
-      );
-      return {
-        name: file.name,
-        body: file.buffer.toString('utf8'),
-        manifest: file.artifactManifest ?? null,
-      };
+    // Validate the tab name BEFORE composing it into a filesystem path.
+    // A malformed tab (e.g. `../../../etc/passwd` written by an attacker
+    // with DB write access) would otherwise probe outside the project
+    // dir via path.join. validateProjectPath throws on traversal
+    // segments, absolute paths, null bytes, and reserved segments.
+    // Invalid tab names fall through to the newest-artifact branch
+    // rather than aborting finalize. P3 finding from @lefarcen on PR #832.
+    let safeTabName: string | null = null;
+    try {
+      safeTabName = validateProjectPath(activeTabName);
+    } catch {
+      safeTabName = null;
     }
-    // Active tab points at a non-artifact file — fall through to step 2.
+    if (safeTabName) {
+      const sidecarPath = path.join(dir, `${safeTabName}.artifact.json`);
+      if (fs.existsSync(sidecarPath)) {
+        const file = await readProjectFile(
+          projectsRoot,
+          projectId,
+          safeTabName,
+          metadata ?? undefined,
+        );
+        return {
+          name: file.name,
+          body: file.buffer.toString('utf8'),
+          manifest: file.artifactManifest ?? null,
+        };
+      }
+    }
+    // Active tab points at a non-artifact file (or an unsafe name) — fall
+    // through to the newest-artifact branch.
   }
 
   const files = await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined });

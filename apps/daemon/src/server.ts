@@ -3828,41 +3828,45 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } catch (err) {
       // Concurrent finalize - the lockfile was already held by another
       // call. Caller can retry after a short wait; not a client error.
+      // Maps to the shared CONFLICT code per @lefarcen P2 on PR #832.
       if (err instanceof FinalizePackageLockedError) {
-        return sendApiError(res, 409, 'FINALIZE_IN_PROGRESS', err.message);
+        return sendApiError(res, 409, 'CONFLICT', err.message);
       }
 
-      // Upstream Anthropic error - status-aware mapping. Run the raw
-      // upstream body through redactSecrets so the API key cannot leak
-      // even if Anthropic echoes the inbound headers.
+      // Upstream Anthropic error - status-aware mapping using shared
+      // ApiErrorCode values. Run the raw upstream body through
+      // redactSecrets so the API key cannot leak even if Anthropic
+      // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
+      // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
       if (err instanceof FinalizeUpstreamError) {
         const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
         const init = safeDetails ? { details: safeDetails } : {};
         if (err.status === 401) {
-          return sendApiError(res, 401, 'AUTH_FAILED', err.message, init);
+          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
         }
         if (err.status === 429) {
           return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
         }
-        // 5xx, 502, or our own 502 sentinel for malformed responses.
-        return sendApiError(res, 502, 'UPSTREAM_FAILED', err.message, init);
+        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
       }
 
       // The blocking call hit our 120s AbortController timeout - or the
       // caller passed an already-aborted signal. Either way, surface as
-      // 503 TIMEOUT so the caller can retry.
+      // 503 with the shared UPSTREAM_UNAVAILABLE code (no dedicated
+      // TIMEOUT code in the contracts ApiErrorCode union).
       const errName =
         err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
       if (errName === 'AbortError') {
-        return sendApiError(res, 503, 'TIMEOUT', 'finalize timed out');
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'finalize timed out');
       }
 
       // Unexpected runtime failure (file IO, db access, prompt build).
       // Log via console.error per the daemon convention; client sees a
-      // generic 500. Run the message through redactSecrets defensively.
+      // generic 500 with the shared INTERNAL_ERROR code. Run the message
+      // through redactSecrets defensively.
       console.error('[finalize/anthropic]', err);
       const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
-      return sendApiError(res, 500, 'INTERNAL', safeMsg);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
     }
   });
 

@@ -219,6 +219,41 @@ describe('resolveCurrentArtifact', () => {
     const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
     expect(out).toBeNull();
   });
+
+  // PR #832 P3 fix from @lefarcen: a malformed tabs row (e.g. an
+  // attacker with DB write access setting tabs.name = `../../../etc/passwd`)
+  // would otherwise cause path.join to compose a probe URL outside the
+  // project dir before readProjectFile's path-safety check kicked in.
+  // Post-fix: the resolver runs the tab name through validateProjectPath
+  // first; an invalid name falls through to the newest-artifact branch.
+  it('falls through (does not throw) when active tab name contains traversal segments', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+
+    // A real artifact exists.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'design.html', '<p>real</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Design',
+        entry: 'design.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-07T00:00:00.000Z',
+      },
+    });
+    // Inject a malformed tabs row directly via SQL — bypasses the
+    // production tab-creation code path which would normally validate.
+    db.prepare(
+      `INSERT INTO tabs (project_id, name, position, is_active) VALUES (?, ?, 0, 1)`,
+    ).run(PROJECT_ID, '../../../etc/passwd');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+    // The resolver must NOT throw and must NOT return the malformed name.
+    // It falls through to the newest-artifact branch and returns the
+    // real artifact instead.
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('design.html');
+  });
 });
 
 describe('buildSynthesisPrompt', () => {
@@ -693,7 +728,7 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
   // fetch TypeError) used to fall through the route's catch-all and surface
   // as 500 INTERNAL. Post-fix they are rewrapped as
   // FinalizeUpstreamError(502, ...) inside the function so the route maps
-  // to 502 UPSTREAM_FAILED with redacted details.
+  // to 502 UPSTREAM_UNAVAILABLE with redacted details.
   it('rewraps fetch network rejection as FinalizeUpstreamError(502)', async () => {
     const { db, projectsRoot, designSystemsRoot } = setupPipeline();
 
