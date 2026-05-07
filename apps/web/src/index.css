@@ -5963,6 +5963,21 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* MCP Copy button floats above a syntax-highlighted <pre>; .ghost's
+   transparent background let the dark code surface bleed through and
+   made the affordance effectively invisible. Pin a solid panel
+   background here (not inline) so button.ghost:hover:not(:disabled)
+   still wins the cascade. Issue #742. */
+button.ghost.mcp-copy-btn {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+button.ghost.mcp-copy-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
 .inspect-section {
   display: flex;
   flex-direction: column;

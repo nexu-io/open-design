@@ -2423,7 +2423,7 @@ function IntegrationsSection() {
           </pre>
           <button
             type="button"
-            className="ghost"
+            className="ghost mcp-copy-btn"
             onClick={onCopy}
             disabled={!snippet}
             style={{
@@ -2432,15 +2432,6 @@ function IntegrationsSection() {
               right: 8,
               padding: '4px 10px',
               fontSize: 12,
-              // The button floats above the syntax-highlighted code block.
-              // button.ghost's default transparent background let the dark
-              // pre surface bleed through and made the Copy affordance
-              // effectively invisible. Pin a solid panel-colored background
-              // and a visible border so the button reads against either
-              // theme. Issue #742.
-              background: 'var(--bg-panel)',
-              border: '1px solid var(--border)',
-              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
             }}
             aria-label="Copy MCP configuration snippet"
           >
