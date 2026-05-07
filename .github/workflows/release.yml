@@ -1,0 +1,50 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build app
+        run: pnpm tools-pack mac build --to app --${{ matrix.arch }}
+
+      - name: Create DMG
+        run: |
+          APP=$(find . -maxdepth 3 -name "*.app" | head -1)
+          DMG_NAME="open-design-${{ github.ref_name }}-mac-${{ matrix.arch }}.dmg"
+          hdiutil create -volname "Open Design" -srcfolder "$APP" -ov -format UDZO "$DMG_NAME"
+
+      - name: Generate SHA256 checksums
+        run: shasum -a 256 *.dmg > SHA256SUMS.txt
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.dmg
+            SHA256SUMS.txt

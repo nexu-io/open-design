@@ -321,6 +321,14 @@ pnpm tools-dev run web
 # open the web URL printed by tools-dev
 ```
 
+**macOS Desktop App (one-click install):**
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/scripts/install.sh)
+```
+
+This clones the repo, builds a self-contained `.app` via `tools-pack`, and copies it to `/Applications/`. After installation, find **Open Design** in Launchpad or Spotlight. Requires macOS and an internet connection; the script handles Node, pnpm, and all dependencies automatically.
+
 Windows launcher: build `OpenDesign.exe` yourself with the instructions in `tools/launcher/README.md`, or download it from GitHub Releases. Then place it in the repo root and double-click it to run `pnpm install` if needed and start Open Design with `pnpm tools-dev`.
 
 Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optional helpers only; if you use one, run `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` before `pnpm install`.
