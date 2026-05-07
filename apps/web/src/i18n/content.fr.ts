@@ -475,6 +475,7 @@ export const FR_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'key-visual': 'key visual',
   'kinetic-typography': 'typographie cinétique',
   'linear-style': 'style Linear',
+  'live-artifact': 'live artifact',
   logo: 'logo',
   lyubu: 'Lyu Bu',
   map: 'carte',

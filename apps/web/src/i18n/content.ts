@@ -524,6 +524,7 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'key-visual': 'Key Visual',
   'kinetic-typography': 'Kinetische Typografie',
   'linear-style': 'Linear-Stil',
+  'live-artifact': 'Live-Artefakt',
   logo: 'Logo',
   lyubu: 'Lyu Bu',
   map: 'Karte',

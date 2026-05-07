@@ -475,6 +475,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'key-visual': 'Ключевой визуал',
   'kinetic-typography': 'Кинетическая типографика',
   'linear-style': 'Стиль Linear',
+  'live-artifact': 'Live-артефакт',
   logo: 'Логотип',
   lyubu: 'Люй Бу',
   map: 'Карта',
