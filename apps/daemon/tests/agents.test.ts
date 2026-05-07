@@ -58,6 +58,7 @@ const pi = requireAgent('pi');
 const deepseek = requireAgent('deepseek');
 const gemini = requireAgent('gemini');
 const qoder = requireAgent('qoder');
+const opencode = requireAgent('opencode');
 const deepseekMaxPromptArgBytes = deepseek.maxPromptArgBytes;
 assert.ok(
   deepseekMaxPromptArgBytes !== undefined,
@@ -1147,6 +1148,80 @@ fsTest(
   },
 );
 
+// ---- OpenCode desktop-vs-CLI binary fallback (issue #814) -----------------
+// OpenCode Desktop installs two binaries on PATH: `opencode` (the GUI
+// launcher, opens a desktop window when invoked, never reads stdin) and
+// `opencode-cli` (the headless CLI the daemon needs). Resolving `opencode`
+// first means the daemon ends up spawning the GUI for every desktop user
+// and silently does nothing. The OpenCode AGENT_DEF declares the always-
+// CLI binary as primary and falls back to the historical `opencode` for
+// the legacy CLI-only install.
+
+test('opencode entry declares opencode-cli as primary and opencode as fallback (issue #814)', () => {
+  assert.equal(
+    opencode.bin,
+    'opencode-cli',
+    `opencode.bin must be 'opencode-cli' so OpenCode Desktop installs resolve to the headless CLI, not the GUI launcher; got ${JSON.stringify(opencode.bin)}`,
+  );
+  assert.ok(
+    Array.isArray(opencode.fallbackBins),
+    'opencode.fallbackBins must be an array',
+  );
+  assert.ok(
+    opencode.fallbackBins.includes('opencode'),
+    `opencode.fallbackBins must include 'opencode' so legacy CLI-only installs (no desktop, no -cli suffix) still resolve; got ${JSON.stringify(opencode.fallbackBins)}`,
+  );
+});
+
+fsTest(
+  'resolveAgentExecutable picks opencode-cli over opencode when both are on PATH (the OpenCode Desktop case from #814)',
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
+    try {
+      // Simulate an OpenCode Desktop install: both binaries are on
+      // PATH. The bare `opencode` is the GUI launcher; `opencode-cli`
+      // is the real CLI the daemon needs.
+      writeFileSync(join(dir, 'opencode'), '');
+      writeFileSync(join(dir, 'opencode-cli'), '');
+      chmodSync(join(dir, 'opencode'), 0o755);
+      chmodSync(join(dir, 'opencode-cli'), 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+
+      const resolved = resolveAgentExecutable({
+        bin: 'opencode-cli',
+        fallbackBins: ['opencode'],
+      });
+      assert.equal(resolved, join(dir, 'opencode-cli'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentExecutable falls back to opencode when only the legacy CLI binary is installed (no desktop)',
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
+    try {
+      // Pre-Desktop / npm-global install: only `opencode` is on PATH
+      // and it is the actual CLI. The daemon must still find it.
+      writeFileSync(join(dir, 'opencode'), '');
+      chmodSync(join(dir, 'opencode'), 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+
+      const resolved = resolveAgentExecutable({
+        bin: 'opencode-cli',
+        fallbackBins: ['opencode'],
+      });
+      assert.equal(resolved, join(dir, 'opencode'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
 fsTest(
   'resolveAgentExecutable searches mise node bins when PATH is minimal',
   () => {
@@ -1182,8 +1257,11 @@ fsTest(
   'resolveAgentExecutable still resolves agents without a fallbackBins field',
   () => {
     // Guard against a regression that would require every AGENT_DEF to
-    // declare fallbackBins. Most agents (codex / gemini / opencode / ...)
+    // declare fallbackBins. Most agents (codex / gemini / hermes / ...)
     // only have a single binary name and must keep working unchanged.
+    // (Note: opencode used to live in this list but now declares
+    // fallbackBins for its own desktop-vs-CLI binary case — see
+    // issue #814.)
     const dir = mkdtempSync(join(tmpdir(), 'od-agents-resolve-'));
     try {
       writeFileSync(join(dir, 'codex'), '');

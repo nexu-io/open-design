@@ -380,7 +380,24 @@ export const AGENT_DEFS = [
   {
     id: 'opencode',
     name: 'OpenCode',
-    bin: 'opencode',
+    // OpenCode Desktop (https://opencode.dev) ships two binaries when
+    // installed: `opencode` is the GUI launcher (clicking it opens a
+    // desktop app, not a stdin-driven CLI), and `opencode-cli` is the
+    // headless CLI that speaks the `run --format json …` protocol the
+    // daemon expects. Resolving `opencode` first ends up spawning the
+    // desktop launcher, which doesn't read stdin and never produces
+    // JSON events — so the agent silently does nothing for any user
+    // with the desktop install (issue #814).
+    //
+    // Resolve `opencode-cli` first, then fall back to bare `opencode`
+    // for the legacy CLI-only install (no desktop app), where there is
+    // no `-cli` suffix and the bare name is the real CLI.
+    // `resolveAgentExecutable` walks `bin` then `fallbackBins` in
+    // order, so this gives us "prefer the always-CLI binary, fall
+    // back to the historical name" — same mechanism Claude Code uses
+    // to fall back to `openclaude` (issue #235).
+    bin: 'opencode-cli',
+    fallbackBins: ['opencode'],
     versionArgs: ['--version'],
     // `opencode models` prints `provider/model` per line.
     listModels: {
