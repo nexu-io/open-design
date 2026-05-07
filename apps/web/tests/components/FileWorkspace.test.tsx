@@ -22,6 +22,22 @@ describe('FileWorkspace upload input', () => {
     expect(markup).not.toContain('accept=');
   });
 
+  it('does not render an upload failure banner without an upload error', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(markup).not.toContain('viewer-empty');
+  });
+
   it('keeps focus mode controls in the workspace tab bar', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace

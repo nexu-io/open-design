@@ -147,6 +147,7 @@ export function FileWorkspace({
   }, [openRequest]);
 
   function openFile(name: string) {
+    setUploadError(null);
     onTabsStateChange({
       tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
       active: name,
@@ -472,7 +473,9 @@ export function FileWorkspace({
         ) : null}
       </div>
       <div className="ws-body">
-        {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
+        {uploadError && activeTab === DESIGN_FILES_TAB ? (
+          <div className="viewer-empty">{uploadError}</div>
+        ) : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}
