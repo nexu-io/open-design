@@ -198,6 +198,83 @@ export async function finalizeDesignPackage(
   throw new Error('finalizeDesignPackage not yet implemented (phase D scaffold)');
 }
 
+const SYSTEM_PROMPT = `You are a senior product designer synthesizing a finalized design package
+from a multi-turn design session. Your output is a single Markdown document
+named DESIGN.md that captures the durable design intent of the work so a
+fresh contributor (human or LLM) can reconstruct context without replaying
+the full chat.
+
+Output structure (Markdown headings exactly as below):
+# DESIGN.md
+## Summary
+## Brand & Voice
+## Information Architecture
+## Components & Patterns
+## Visual System
+## Open Questions
+## Provenance
+
+The Provenance section MUST list:
+- Project ID
+- Design system (or "none" if not selected)
+- Current artifact (file name, or "none" if not in scope)
+- Transcript message count
+- Generated UTC timestamp
+
+Output the Markdown body only. No preamble, no chat-style framing, no
+"Here's your DESIGN.md" prefix. Do not invent facts not supported by the
+inputs; if an input is missing or empty, the corresponding section should
+say so explicitly rather than fabricating content.`;
+
+export interface SynthesisPromptInput {
+  projectId: string;
+  transcriptJsonl: string;
+  transcriptMessageCount: number;
+  designSystemId: string | null;
+  designSystemBody: string | null;
+  artifact: ResolvedArtifact | null;
+  now: Date;
+}
+
+export interface SynthesisPromptOutput {
+  systemPrompt: string;
+  userPrompt: string;
+}
+
+/**
+ * Build the system + user prompts for the Anthropic Messages API call.
+ * Inputs are verbatim except for the transcript (which the caller has
+ * already passed through `truncateTranscriptForPrompt` — this function
+ * does not re-truncate). Missing inputs (no design system selected, no
+ * artifact in scope) produce explicit "none"/parenthetical placeholders
+ * so Claude does not hallucinate content for absent sections.
+ */
+export function buildSynthesisPrompt(input: SynthesisPromptInput): SynthesisPromptOutput {
+  const designSystemHeader = input.designSystemId ?? 'none';
+  const designSystemBody =
+    input.designSystemBody && input.designSystemBody.trim().length > 0
+      ? input.designSystemBody
+      : '(no design system selected for this project)';
+
+  const artifactHeader = input.artifact ? input.artifact.name : 'none';
+  const artifactBody = input.artifact
+    ? input.artifact.body
+    : '(no artifact in scope for this finalize)';
+
+  const userPrompt =
+    `The following inputs describe the design session for project ${input.projectId}.\n\n` +
+    `## Transcript (JSONL)\n${input.transcriptJsonl}\n\n` +
+    `## Active design system: ${designSystemHeader}\n${designSystemBody}\n\n` +
+    `## Current artifact: ${artifactHeader}\n${artifactBody}\n\n` +
+    `## Generation context\n` +
+    `- Generated at: ${input.now.toISOString()}\n` +
+    `- Project ID: ${input.projectId}\n` +
+    `- Transcript message count: ${input.transcriptMessageCount}\n\n` +
+    `Synthesize DESIGN.md per the system instructions.`;
+
+  return { systemPrompt: SYSTEM_PROMPT, userPrompt };
+}
+
 /**
  * Truncate a JSONL transcript body so it fits inside Claude's context
  * window when fed into a synthesis prompt. The on-disk transcript stays

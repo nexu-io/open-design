@@ -19,6 +19,7 @@ import {
 } from '../src/db.js';
 import { writeProjectFile } from '../src/projects.js';
 import {
+  buildSynthesisPrompt,
   finalizeDesignPackage,
   FinalizePackageLockedError,
   FinalizeUpstreamError,
@@ -211,8 +212,75 @@ describe('resolveCurrentArtifact', () => {
   });
 });
 
-describe.skip('finalizeDesignPackage (phases F-I land remaining bodies)', () => {
+describe('buildSynthesisPrompt', () => {
+  const FIXED_NOW = new Date('2026-05-07T14:00:00.000Z');
+  const TRANSCRIPT_FIXTURE =
+    JSON.stringify({ kind: 'header', schemaVersion: 2, projectId: 'p1', messageCount: 2 }) +
+    '\n' +
+    JSON.stringify({ kind: 'message', id: 'm1', role: 'user', blocks: [{ type: 'text', text: 'hi' }] }) +
+    '\n' +
+    JSON.stringify({ kind: 'message', id: 'm2', role: 'assistant', blocks: [{ type: 'text', text: 'hello' }] }) +
+    '\n';
+
+  it('includes the transcript JSONL verbatim and the generation context', () => {
+    const out = buildSynthesisPrompt({
+      projectId: 'p1',
+      transcriptJsonl: TRANSCRIPT_FIXTURE,
+      transcriptMessageCount: 2,
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\nminimal\n',
+      artifact: { name: 'design.html', body: '<p>artifact</p>', manifest: null },
+      now: FIXED_NOW,
+    });
+
+    expect(out.systemPrompt).toContain('# DESIGN.md');
+    expect(out.systemPrompt).toContain('## Provenance');
+
+    expect(out.userPrompt).toContain('## Transcript (JSONL)');
+    expect(out.userPrompt).toContain(TRANSCRIPT_FIXTURE);
+    expect(out.userPrompt).toContain('## Active design system: shadcn');
+    expect(out.userPrompt).toContain('# shadcn\nminimal\n');
+    expect(out.userPrompt).toContain('## Current artifact: design.html');
+    expect(out.userPrompt).toContain('<p>artifact</p>');
+    expect(out.userPrompt).toContain('Generated at: 2026-05-07T14:00:00.000Z');
+    expect(out.userPrompt).toContain('Project ID: p1');
+    expect(out.userPrompt).toContain('Transcript message count: 2');
+    expect(out.userPrompt).toContain('Synthesize DESIGN.md per the system instructions.');
+  });
+
+  it('falls back to "none" + parenthetical when no design system is selected', () => {
+    const out = buildSynthesisPrompt({
+      projectId: 'p1',
+      transcriptJsonl: TRANSCRIPT_FIXTURE,
+      transcriptMessageCount: 2,
+      designSystemId: null,
+      designSystemBody: null,
+      artifact: { name: 'design.html', body: '<p>artifact</p>', manifest: null },
+      now: FIXED_NOW,
+    });
+
+    expect(out.userPrompt).toContain('## Active design system: none');
+    expect(out.userPrompt).toContain('(no design system selected for this project)');
+  });
+
+  it('falls back to "none" + parenthetical when no artifact is in scope', () => {
+    const out = buildSynthesisPrompt({
+      projectId: 'p1',
+      transcriptJsonl: TRANSCRIPT_FIXTURE,
+      transcriptMessageCount: 2,
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+      artifact: null,
+      now: FIXED_NOW,
+    });
+
+    expect(out.userPrompt).toContain('## Current artifact: none');
+    expect(out.userPrompt).toContain('(no artifact in scope for this finalize)');
+  });
+});
+
+describe.skip('finalizeDesignPackage (phases G-I land remaining bodies)', () => {
   it('placeholder', () => {
-    /* phases F-I add real cases here */
+    /* phases G-I add real cases here */
   });
 });
