@@ -5865,7 +5865,15 @@ button.connector-action.is-loading {
   font-size: 12px;
 }
 .board-note-item span {
+  /* The note span sits next to a Remove button inside a fixed-width
+     ~300px popover. Without flex: 1 + min-width: 0 + overflow-wrap an
+     unbroken long string (URL, hash, base64) refuses to break and
+     pushes the popover layout sideways past its 320px boundary.
+     Issue #782. */
+  flex: 1;
+  min-width: 0;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .comment-popover textarea {
   min-height: 78px;
