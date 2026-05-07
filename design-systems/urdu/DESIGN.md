@@ -98,7 +98,7 @@ font-family: "Noto Nastaliq Urdu", "Mehr Nastaliq", "URW Chancery", serif;
 **Import (add to `<head>`):**
 ```html
 <link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" as="style">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq +Urdu:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" rel="stylesheet">
 ```
 
 #### Latin Script (Secondary)
@@ -781,7 +781,7 @@ Here's a complete, production-ready example:
       --color-border: #E2E8F0;
       
       /* Typography */
-      --font-urdu: "Noto Naskh Arabic", serif;
+      --font-urdu: "Noto Nastaliq Urdu", serif;
       --font-latin: "Inter", "Segoe UI", sans-serif;
       
       /* Spacing */
