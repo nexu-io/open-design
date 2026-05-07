@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   readMaskedConfig,
@@ -27,11 +27,13 @@ describe('media-config OpenAI OAuth fallback', () => {
   );
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-home-'));
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-project-'));
     process.env.HOME = homeDir;
+    homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
     for (const key of OPENAI_ENV_KEYS) {
       delete process.env[key];
     }
@@ -62,6 +64,7 @@ describe('media-config OpenAI OAuth fallback', () => {
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
     }
+    homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
   });
@@ -369,6 +372,73 @@ describe('media-config OpenAI OAuth fallback', () => {
       expect(resolved).toEqual({
         apiKey: 'fresh-write-key',
         baseUrl: 'https://fresh.test/v1',
+      });
+    });
+
+    // Round 3 review feedback on PR #530.
+    // resolveOverrideDir shares expandHomePrefix with resolveDataDir, so
+    // OD_DATA_DIR=$HOME/.open-design (and ${HOME}/.open-design) routes
+    // both daemon runtime data AND media credentials to the same expanded
+    // path. Without this, media-config.json was written under
+    // <projectRoot>/$HOME/.open-design and stored provider keys appeared
+    // missing on the next read.
+    it('expands $HOME/... in OD_DATA_DIR fallback so media-config co-locates with daemon data', async () => {
+      const subdir = '.od-test-home';
+      process.env.OD_DATA_DIR = `$HOME/${subdir}`;
+      const expandedDir = path.join(homeDir, subdir);
+      await writeProvidersAt(expandedDir, {
+        providers: {
+          openai: {
+            apiKey: 'home-key',
+            baseUrl: 'https://home.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'home-key',
+        baseUrl: 'https://home.test/v1',
+      });
+    });
+
+    it('expands ${HOME}/... in OD_DATA_DIR fallback', async () => {
+      const subdir = '.od-test-braced';
+      process.env.OD_DATA_DIR = `\${HOME}/${subdir}`;
+      const expandedDir = path.join(homeDir, subdir);
+      await writeProvidersAt(expandedDir, {
+        providers: {
+          openai: {
+            apiKey: 'braced-key',
+            baseUrl: 'https://braced.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'braced-key',
+        baseUrl: 'https://braced.test/v1',
+      });
+    });
+
+    it('expands $HOME/... in OD_MEDIA_CONFIG_DIR (explicit override path)', async () => {
+      const subdir = '.od-media-home';
+      process.env.OD_MEDIA_CONFIG_DIR = `$HOME/${subdir}`;
+      const expandedDir = path.join(homeDir, subdir);
+      await writeProvidersAt(expandedDir, {
+        providers: {
+          openai: {
+            apiKey: 'media-home-key',
+            baseUrl: 'https://media-home.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'media-home-key',
+        baseUrl: 'https://media-home.test/v1',
       });
     });
   });

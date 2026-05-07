@@ -71,7 +71,7 @@ describe('syncConfigToDaemon', () => {
       ...DEFAULT_CONFIG,
       agentCliEnv: {
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-        codex: { CODEX_HOME: '~/.codex-alt' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       },
     });
 
@@ -91,7 +91,7 @@ describe('syncConfigToDaemon', () => {
       designSystemId: DEFAULT_CONFIG.designSystemId,
       agentCliEnv: {
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-        codex: { CODEX_HOME: '~/.codex-alt' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       },
     });
   });
@@ -125,13 +125,13 @@ describe('mergeDaemonConfig', () => {
       },
       {
         agentCliEnv: {
-          codex: { CODEX_HOME: '~/.codex-new' },
+          codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
         },
       },
     );
 
     expect(merged.agentCliEnv).toEqual({
-      codex: { CODEX_HOME: '~/.codex-new' },
+      codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
     });
   });
 });

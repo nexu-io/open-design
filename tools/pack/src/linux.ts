@@ -71,13 +71,19 @@ type DockerUserMapping = {
   gid: number;
 };
 
+function toDockerMountPath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
 export function buildDockerArgs(
   config: ToolPackConfig,
   user: DockerUserMapping,
 ): string[] {
-  const dockerHome = join(config.roots.toolPackRoot, ".docker-home");
-  const electronCache = join(config.roots.toolPackRoot, ".docker-cache", "electron");
-  const electronBuilderCache = join(config.roots.toolPackRoot, ".docker-cache", "electron-builder");
+  const workspaceRoot = toDockerMountPath(config.workspaceRoot);
+  const toolPackRoot = toDockerMountPath(config.roots.toolPackRoot);
+  const dockerHome = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-home"));
+  const electronCache = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-cache", "electron"));
+  const electronBuilderCache = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-cache", "electron-builder"));
 
   // The tool-pack root is mounted at a fixed container path so the inner build
   // can be told where to write output via `--dir /tools-pack`. Without this
@@ -127,9 +133,9 @@ export function buildDockerArgs(
     "--user",
     `${user.uid}:${user.gid}`,
     "-v",
-    `${config.workspaceRoot}:/project`,
+    `${workspaceRoot}:/project`,
     "-v",
-    `${config.roots.toolPackRoot}:/tools-pack`,
+    `${toolPackRoot}:/tools-pack`,
     "-v",
     `${dockerHome}:/home/builder`,
     "-v",

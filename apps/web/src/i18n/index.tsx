@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { de } from './locales/de';
 import { en } from './locales/en';
+import { id } from './locales/id';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
 import { ar } from './locales/ar';
@@ -34,6 +35,7 @@ type DictKey = keyof Dict;
 
 const DICTS: Record<Locale, Dict> = {
   'en': en,
+  'id': id,
   'de': de,
   'zh-CN': zhCN,
   'zh-TW': zhTW,

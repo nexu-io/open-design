@@ -27,6 +27,8 @@ export interface UrlLoadDecision {
   isDeck: boolean;
   /** Comment mode is active — needs the comment bridge. */
   commentMode: boolean;
+  /** Inspect mode is active — needs the selection bridge for live tuning. */
+  inspectMode?: boolean;
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
 }
@@ -41,6 +43,9 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   if (d.mode !== 'preview') return false;
   if (d.isDeck) return false;
   if (d.commentMode) return false;
+  // Inspect needs the selection bridge injected via buildSrcdoc; a raw
+  // URL-loaded iframe has no listener to apply per-element overrides.
+  if (d.inspectMode) return false;
   if (d.forceInline) return false;
   return true;
 }

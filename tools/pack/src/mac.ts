@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, chmod, cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -70,6 +70,11 @@ type MacPaths = {
   webStandaloneHookAuditPath: string;
   webStandaloneHookConfigPath: string;
   zipPath: string;
+};
+
+type SeededAppConfigPaths = {
+  sourcePath: string;
+  targetPath: string;
 };
 
 export type MacPackResult = {
@@ -275,8 +280,47 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+function resolveSeededAppConfigPaths(config: ToolPackConfig): SeededAppConfigPaths {
+  const configuredDataDir = process.env.OD_DATA_DIR?.trim();
+  const sourceDataDir = configuredDataDir
+    ? resolveProjectRelativePath(configuredDataDir, config.workspaceRoot)
+    : join(config.workspaceRoot, ".od");
+  return {
+    sourcePath: join(sourceDataDir, "app-config.json"),
+    targetPath: join(config.roots.runtime.namespaceRoot, "data", "app-config.json"),
+  };
+}
+
+async function seedPackagedAppConfig(config: ToolPackConfig): Promise<void> {
+  if (config.portable) return;
+
+  const { sourcePath, targetPath } = resolveSeededAppConfigPaths(config);
+  if (!(await pathExists(sourcePath))) return;
+
+  const raw = await readFile(sourcePath, "utf8");
+  const parsed = JSON.parse(raw) as unknown;
+  if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+    throw new Error(`packaged app-config seed must be a JSON object: ${sourcePath}`);
+  }
+
+  await mkdir(dirname(targetPath), { recursive: true });
+  await writeFile(targetPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+}
+
 function toPosixPath(value: string): string {
   return value.replaceAll("\\", "/");
+}
+
+function expandHomePrefix(raw: string): string {
+  const home = homedir();
+  if (raw === "~" || raw === "$HOME" || raw === "${HOME}") return home;
+  const match = /^(~|\$\{HOME\}|\$HOME)[/\\](.*)$/.exec(raw);
+  return match ? join(home, match[2] ?? "") : raw;
+}
+
+function resolveProjectRelativePath(raw: string, projectRoot: string): string {
+  const expanded = expandHomePrefix(raw);
+  return isAbsolute(expanded) ? expanded : resolve(projectRoot, expanded);
 }
 
 async function sizePathBytes(
@@ -784,6 +828,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   const paths = resolveMacPaths(config);
   const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
   await buildWorkspaceArtifacts(config);
+  await seedPackagedAppConfig(config);
   await copyResourceTree(config, paths);
   const tarballs = await collectWorkspaceTarballs(config, paths);
   await writeAssembledApp(config, paths, tarballs);
@@ -804,6 +849,8 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     zipPath: artifacts.zipPath,
   };
 }
+
+export { resolveSeededAppConfigPaths, seedPackagedAppConfig };
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {

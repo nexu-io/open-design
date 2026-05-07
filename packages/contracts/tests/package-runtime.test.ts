@@ -16,6 +16,10 @@ function readPackageJson(): {
   return JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
 }
 
+function packagePath(target: string): string {
+  return join(packageRoot, target.replace(/^\.\//, ''));
+}
+
 describe('@open-design/contracts package runtime shape', () => {
   it('exports built JavaScript instead of TypeScript source files', () => {
     const pkg = readPackageJson();
@@ -25,23 +29,33 @@ describe('@open-design/contracts package runtime shape', () => {
     expect(pkg.files).toEqual(['dist']);
     expect(pkg.exports?.['.']?.default).toBe('./dist/index.mjs');
     expect(pkg.exports?.['.']?.types).toBe('./dist/index.d.ts');
+    expect(pkg.exports?.['./api/connectionTest']?.default).toBe('./dist/api/connectionTest.mjs');
+    expect(pkg.exports?.['./api/connectionTest']?.types).toBe('./dist/api/connectionTest.d.ts');
     expect(pkg.exports?.['./critique']?.default).toBe('./dist/critique.mjs');
     expect(pkg.exports?.['./critique']?.types).toBe('./dist/critique.d.ts');
   });
 
   it('points every runtime export at generated files', async () => {
-    await expect(access(join(packageRoot, 'dist/index.mjs'))).resolves.toBeUndefined();
-    await expect(access(join(packageRoot, 'dist/index.d.ts'))).resolves.toBeUndefined();
-    await expect(access(join(packageRoot, 'dist/critique.mjs'))).resolves.toBeUndefined();
-    await expect(access(join(packageRoot, 'dist/critique.d.ts'))).resolves.toBeUndefined();
+    const pkg = readPackageJson();
+    const exports = Object.entries(pkg.exports ?? {});
+
+    expect(exports.length).toBeGreaterThan(0);
+    for (const [_name, target] of exports) {
+      expect(target.default).toMatch(/^\.\/dist\/.+\.mjs$/);
+      expect(target.types).toMatch(/^\.\/dist\/.+\.d\.ts$/);
+      await expect(access(packagePath(target.default!))).resolves.toBeUndefined();
+      await expect(access(packagePath(target.types!))).resolves.toBeUndefined();
+    }
   });
 
   it('makes runtime exports importable through package exports', async () => {
     const contracts = await import('@open-design/contracts');
+    const connectionTest = await import('@open-design/contracts/api/connectionTest');
     const critique = await import('@open-design/contracts/critique');
 
     expect(contracts.composeSystemPrompt).toEqual(expect.any(Function));
     expect(contracts.exampleHealthResponse).toEqual({ ok: true, service: 'daemon' });
+    expect(Object.keys(connectionTest)).toEqual([]);
     expect(critique.defaultCritiqueConfig()).toMatchObject({
       enabled: false,
       protocolVersion: critique.CRITIQUE_PROTOCOL_VERSION,

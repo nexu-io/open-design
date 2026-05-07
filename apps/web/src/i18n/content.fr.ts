@@ -324,6 +324,7 @@ export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
+  'waitlist-page',
 ] as const;
 
 export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [

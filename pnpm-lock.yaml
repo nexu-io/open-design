@@ -162,6 +162,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.0)
 
   apps/web:
     dependencies:
@@ -330,6 +333,9 @@ importers:
       '@electron/notarize':
         specifier: 3.1.0
         version: 3.1.0
+      '@electron/rebuild':
+        specifier: 4.0.4
+        version: 4.0.4
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
