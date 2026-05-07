@@ -330,11 +330,15 @@ export function App() {
       // to "None" for every kind now, and the user expects that to land
       // as a no-design-system project rather than silently inheriting the
       // workspace default.
+      const derivedPendingPrompt =
+      input.pendingPrompt ??
+      (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
+
       const result = await createProject({
         name: input.name,
         skillId: input.skillId,
         designSystemId: input.designSystemId,
-        pendingPrompt: input.pendingPrompt,
+        pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
       });
       if (!result) return;
