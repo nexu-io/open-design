@@ -159,16 +159,28 @@ function injectSandboxShim(doc: string): string {
   tryShim('sessionStorage');
   document.addEventListener('click', (e) => {
     if (!e.target || !(e.target instanceof Element)) return;
-    const link = e.target.closest('a[href]');
+    var link = e.target.closest('a[href]');
     if (!link) return;
-    const href = link.getAttribute('href');
-    const isAnchor = href.startsWith('#') || href === '';
+    var href = link.getAttribute('href');
+    if (href === null) return;
+    var isAnchor = href.startsWith('#') || href === '';
     if (isAnchor) {
       e.preventDefault();
-      location.hash = href;
-    } else if (link.target === '_blank') {
+      var targetId = href.slice(1);
+      var target = targetId ? document.getElementById(targetId) : null;
+      if (target) {
+        target.scrollIntoView();
+        location.hash === href && history.replaceState(null, '', ' ');
+        location.hash = href;
+      }
+    } else if (link.getAttribute('target') === '_blank') {
       e.preventDefault();
-      window.open(href, '_blank', 'noopener,noreferrer');
+      let safe = false;
+      try {
+        var url = new URL(href, location.href);
+        safe = url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:';
+      } catch(_) {}
+      safe && window.open(href, '_blank', 'noopener,noreferrer');
     }
   });
 })();</script>`;
