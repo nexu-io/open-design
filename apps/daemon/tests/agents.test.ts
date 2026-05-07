@@ -138,6 +138,64 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', (
   assert.equal(args.includes('plugins'), false);
 });
 
+test('codex model picker includes current OpenAI choices in priority order', async () => {
+  const expectedModels = [
+    'default',
+    'gpt-5.5',
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.3-codex',
+    'gpt-5-codex',
+    'gpt-5',
+    'o3',
+    'o4-mini',
+  ];
+
+  assert.deepEqual(codex.fallbackModels.map((m) => m.id), expectedModels);
+  assert.deepEqual(codex.reasoningOptions.map((o) => o.id), [
+    'default',
+    'none',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+  ]);
+
+  const args = codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-5.5', reasoning: 'xhigh' },
+    { cwd: '/tmp/od-project' },
+  );
+  assert.ok(args.includes('--model'));
+  assert.ok(args.includes('gpt-5.5'));
+  assert.ok(args.includes('model_reasoning_effort="xhigh"'));
+
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
+  try {
+    const codexBin = join(dir, 'codex');
+    writeFileSync(
+      codexBin,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
+    );
+    chmodSync(codexBin, 0o755);
+    process.env.OD_AGENT_HOME = dir;
+    process.env.PATH = dir;
+
+    const agents = await detectAgents();
+    const detected = agents.find((agent) => agent.id === 'codex');
+
+    assert.ok(detected);
+    assert.equal(detected.available, true);
+    assert.equal(detected.version, 'codex 1.0.0');
+    assert.deepEqual(detected.models.map((m) => m.id), expectedModels);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Recent Codex CLI versions reject a bare `-` argv sentinel; passing it
 // alongside the stdin pipe causes `error: unexpected argument '-' found`
 // and exit code 2 before any prompt is read. We deliver the prompt via

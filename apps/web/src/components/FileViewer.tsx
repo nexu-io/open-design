@@ -1313,12 +1313,12 @@ function BoardComposerPopover({
       }}
     >
       <div className="comment-popover-head">
-        <div>
+        <div title={target.elementId}>
           <strong id={titleId}>{target.elementId}</strong>
           <span>{target.label}</span>
           <span>{selectionKindLabel(target.selectionKind, target.memberCount)}</span>
         </div>
-        <button type="button" className="ghost" onClick={onClose}>
+        <button type="button" className="ghost" onClick={onClose} title={t('common.close')}>
           {t('common.close')}
         </button>
       </div>

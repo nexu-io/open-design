@@ -52,6 +52,7 @@ interface Props {
   loading?: boolean;
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -229,6 +230,7 @@ export function EntryView({
   loading = false,
   onCreateProject,
   onImportClaudeDesign,
+  onImportFolder,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
@@ -510,6 +512,7 @@ export function EntryView({
           promptTemplates={promptTemplates}
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
+          onImportFolder={onImportFolder}
           mediaProviders={config.mediaProviders}
           connectors={connectors}
           connectorsLoading={connectorsLoading}

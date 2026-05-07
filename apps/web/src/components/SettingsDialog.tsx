@@ -1696,6 +1696,34 @@ export function SettingsDialog({
   );
 }
 
+/**
+ * The four UI states the Composio API key field can be in.
+ *
+ * `saved-pending` exists so the saved-key indicator stays visible while
+ * the user types a draft replacement. Previously the badge was tied to
+ * `!hasPendingEdit`, which made it vanish on the first keystroke and
+ * trained users to think the original key had already been overwritten
+ * (issue #741). Treating "saved key plus draft" as its own state lets
+ * the badge stay anchored while the hint text differentiates the
+ * unsaved replacement from a fully-saved value.
+ */
+export type ComposioCredentialState =
+  | 'empty'
+  | 'pending-new'
+  | 'saved'
+  | 'saved-pending';
+
+export function deriveComposioCredentialState(
+  composio: { apiKey?: string; apiKeyConfigured?: boolean } | null | undefined,
+): ComposioCredentialState {
+  const hasPendingEdit = Boolean(composio?.apiKey?.trim());
+  const hasSavedKey = Boolean(composio?.apiKeyConfigured);
+  if (hasSavedKey && hasPendingEdit) return 'saved-pending';
+  if (hasSavedKey) return 'saved';
+  if (hasPendingEdit) return 'pending-new';
+  return 'empty';
+}
+
 function ComposioSection({
   cfg,
   setCfg,
@@ -1708,9 +1736,9 @@ function ComposioSection({
   const updateComposio = (patch: NonNullable<AppConfig['composio']>) => {
     setCfg((curr) => ({ ...curr, composio: { ...(curr.composio ?? {}), ...patch } }));
   };
-  const hasPendingEdit = Boolean(composio.apiKey?.trim());
-  const apiKeyConfigured = Boolean(hasPendingEdit || composio.apiKeyConfigured);
-  const isSavedState = apiKeyConfigured && !hasPendingEdit;
+  const credentialState = deriveComposioCredentialState(composio);
+  const hasSavedKey = credentialState === 'saved' || credentialState === 'saved-pending';
+  const apiKeyConfigured = credentialState !== 'empty';
   const tail = composio.apiKeyTail?.trim();
 
   return (
@@ -1725,7 +1753,7 @@ function ComposioSection({
         <span className="field-label-row">
           <span className="field-label-group">
             <span className="field-label">Composio API Key</span>
-            {isSavedState ? (
+            {hasSavedKey ? (
               <span className="field-status-badge" title="Saved to local daemon">
                 {tail ? `Saved · ••••${tail}` : 'Saved'}
               </span>
@@ -1745,7 +1773,7 @@ function ComposioSection({
           <input
             type="password"
             value={composio.apiKey ?? ''}
-            placeholder={isSavedState ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
+            placeholder={hasSavedKey ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
             onChange={(e) => updateComposio({ apiKey: e.target.value })}
             aria-describedby="composio-api-key-help"
           />
@@ -1759,11 +1787,13 @@ function ComposioSection({
           </button>
         </div>
         <span id="composio-api-key-help" className="hint">
-          {isSavedState
-            ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
-            : apiKeyConfigured
-              ? 'Unsaved changes — click Save to store this key in the local daemon.'
-              : 'Keys are stored locally in the daemon and never sent through environment variables.'}
+          {credentialState === 'saved-pending'
+            ? 'Unsaved replacement. Click Save to overwrite the saved key, or Clear to discard the draft and the saved key.'
+            : credentialState === 'saved'
+              ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
+              : credentialState === 'pending-new'
+                ? 'Unsaved changes. Click Save to store this key in the local daemon.'
+                : 'Keys are stored locally in the daemon and never sent through environment variables.'}
         </span>
       </label>
     </section>

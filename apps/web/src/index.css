@@ -2266,6 +2266,31 @@ code {
   display: block;
   flex: 0 0 auto;
 }
+.newproj-open-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.newproj-folder-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg));
+  color: var(--text);
+  box-sizing: border-box;
+}
+.newproj-folder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.newproj-folder-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
 .newproj-footer {
   padding: 0 18px 16px;
   font-size: 11px;
@@ -5970,11 +5995,25 @@ button.connector-action.is-loading {
 .comment-popover-head div {
   display: grid;
   gap: 1px;
+  min-width: 0;
+  overflow: hidden;
 }
-.comment-popover-head strong { font-size: 13px; }
+.comment-popover-head strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .comment-popover-head span {
   color: var(--text-muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-popover-head button.ghost {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .board-pod-summary {
   display: grid;
@@ -6018,7 +6057,15 @@ button.connector-action.is-loading {
   font-size: 12px;
 }
 .board-note-item span {
+  /* The note span sits next to a Remove button inside a fixed-width
+     ~300px popover. Without flex: 1 + min-width: 0 + overflow-wrap an
+     unbroken long string (URL, hash, base64) refuses to break and
+     pushes the popover layout sideways past its 320px boundary.
+     Issue #782. */
+  flex: 1;
+  min-width: 0;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .comment-popover textarea {
   min-height: 78px;
@@ -6029,8 +6076,17 @@ button.connector-action.is-loading {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+.comment-popover-actions > * {
+  /* Buttons may carry labels longer than their natural fair-share of the
+     320px popover width (Save comment, Send to chat, Sending..., Add note,
+     Remove). Without an explicit shrink ceiling and wrap, the row pushes
+     past the popover's right edge instead of breaking onto a new line.
+     Issue #779. */
+  max-width: 100%;
 }
 .comment-popover-remove {
   color: var(--red);

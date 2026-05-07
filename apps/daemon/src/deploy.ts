@@ -165,7 +165,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     throw new DeployError('Only HTML files can be deployed.', 400);
   }
 
-  const entry = await readProjectFile(projectsRoot, projectId, entryPath);
+  const entry = await readProjectFile(projectsRoot, projectId, entryPath, options.metadata);
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
   const deployHtml = injectDeployHookScript(
@@ -215,7 +215,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
 
     let projectFile;
     try {
-      projectFile = await readProjectFile(projectsRoot, projectId, safePath);
+      projectFile = await readProjectFile(projectsRoot, projectId, safePath, options.metadata);
     } catch (err) {
       if (err && err.code === 'ENOENT') {
         missing.push(safePath);
