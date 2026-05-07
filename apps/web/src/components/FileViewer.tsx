@@ -22,6 +22,7 @@ import {
   refreshLiveArtifact,
   updateDeployConfig,
   type WebDeployConfigResponse,
+  type WebDeploymentInfo,
   type WebDeployProjectFileResponse,
   type WebDeployProviderId,
   type WebUpdateDeployConfigRequest,
@@ -2090,7 +2091,8 @@ function HtmlViewer({
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
-  const [deployment, setDeployment] = useState<WebDeployProjectFileResponse | null>(null);
+  const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
+  const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
@@ -2137,11 +2139,15 @@ function HtmlViewer({
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
 
-  function findDeploymentForProvider(
-    items: WebDeployProjectFileResponse[],
-    providerId: WebDeployProviderId,
-  ): WebDeployProjectFileResponse | null {
-    return items.find((item) => item.fileName === file.name && item.providerId === providerId) ?? null;
+  function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
+    const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
+    for (const option of DEPLOY_PROVIDER_OPTIONS) {
+      const deploymentForProvider = items.find(
+        (item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim(),
+      );
+      if (deploymentForProvider) next[option.id] = deploymentForProvider;
+    }
+    return next;
   }
 
   function syncDeployFormFromConfig(
@@ -2179,15 +2185,17 @@ function HtmlViewer({
     options?: { fallbackToExisting?: boolean },
   ) {
     const deployments = await fetchProjectDeployments(projectId);
-    const exactDeployment = findDeploymentForProvider(deployments, providerId);
+    const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
+    const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
     const fallbackDeployment = options?.fallbackToExisting
-      ? deployments.find((item) => item.fileName === file.name) ?? null
+      ? Object.values(nextDeploymentsByProvider)[0] ?? null
       : null;
     const currentDeployment =
       exactDeployment ?? fallbackDeployment;
     const resolvedProviderId = exactDeployment?.providerId ?? currentDeployment?.providerId ?? providerId;
     const config = await fetchDeployConfig(resolvedProviderId);
     syncDeployFormFromConfig(resolvedProviderId, config);
+    setDeploymentsByProvider(nextDeploymentsByProvider);
     setDeployment(currentDeployment ?? null);
     setDeployResult(currentDeployment ?? null);
     return { config, currentDeployment };
@@ -2230,7 +2238,9 @@ function HtmlViewer({
     setDeployPhase('idle');
     void fetchProjectDeployments(projectId).then((items) => {
       if (cancelled) return;
-      const current = findDeploymentForProvider(items, deployProviderId);
+      const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
+      const current = nextDeploymentsByProvider[deployProviderId] ?? null;
+      setDeploymentsByProvider(nextDeploymentsByProvider);
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
     });
@@ -2829,6 +2839,10 @@ function HtmlViewer({
       }
       setDeployPhase('preparing-link');
       const next = await deployProjectFile(projectId, file.name, deployProviderId);
+      setDeploymentsByProvider((current) => ({
+        ...current,
+        [next.providerId]: next,
+      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
@@ -2849,6 +2863,10 @@ function HtmlViewer({
     setDeployPhase('preparing-link');
     try {
       const next = await checkDeploymentLink(projectId, current.id);
+      setDeploymentsByProvider((items) => ({
+        ...items,
+        [next.providerId]: next,
+      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
@@ -2972,12 +2990,16 @@ function HtmlViewer({
   const deployActionLabelFor = (providerId: WebDeployProviderId) => {
     const option = getDeployProviderOption(providerId);
     const label = t(option.labelKey);
-    const hasActiveDeploymentForProvider =
-      providerId === deployProviderId && Boolean(activeDeployedUrl);
+    const hasActiveDeploymentForProvider = Boolean(deploymentsByProvider[providerId]?.url?.trim());
     return hasActiveDeploymentForProvider
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
+  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
+    providerId: option.id,
+    providerLabel: t(option.labelKey),
+    url: deploymentsByProvider[option.id]?.url?.trim() || '',
+  })).filter((item) => item.url);
   const deployButtonLabel =
     deployPhase === 'deploying'
       ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
@@ -2987,6 +3009,10 @@ function HtmlViewer({
   const copyDeployLabel = copiedDeployLink
     ? t('fileViewer.copied')
     : t('fileViewer.copyDeployLink');
+  const copyDeployMenuLabel = (providerLabel: string) =>
+    copiedDeployLink
+      ? t('fileViewer.copied')
+      : `${t('fileViewer.copyDeployLink')} · ${providerLabel}`;
 
   return (
     <div className="viewer html-viewer">
@@ -3312,21 +3338,24 @@ function HtmlViewer({
                       <span>{deployActionLabelFor(option.id)}</span>
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    disabled={!activeDeployedUrl}
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      void copyDeployLink(activeDeployedUrl);
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
-                    <span>
-                      {copyDeployLabel}
-                    </span>
-                  </button>
+                  {deployCopyLinks.length > 0 ? (
+                    <div className="share-menu-divider" />
+                  ) : null}
+                  {deployCopyLinks.map((item) => (
+                    <button
+                      key={`copy-${item.providerId}`}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setShareMenuOpen(false);
+                        void copyDeployLink(item.url);
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
+                      <span>{copyDeployMenuLabel(item.providerLabel)}</span>
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
