@@ -57,6 +57,11 @@ import {
   validateBaseUrl,
 } from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
+import {
+  finalizeDesignPackage,
+  FinalizePackageLockedError,
+  FinalizeUpstreamError,
+} from './finalize-design.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
@@ -3765,6 +3770,63 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err?.message || err),
       );
+    }
+  });
+
+  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
+    try {
+      const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+      if (typeof apiKey !== 'string' || !apiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      }
+      if (baseUrl !== undefined) {
+        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
+        }
+        const validated = validateExternalApiBaseUrl(baseUrl);
+        if (validated.error) {
+          return sendApiError(
+            res,
+            validated.forbidden ? 403 : 400,
+            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+            validated.error,
+          );
+        }
+      }
+      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      }
+
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      // Phase C: function throws "not yet implemented"; full pipeline lands in
+      // Phase H. Routing this stub now lets typecheck + scope diff catch any
+      // wiring drift early. Phase I replaces this catch block with full error
+      // mapping (FinalizePackageLockedError → 409, FinalizeUpstreamError →
+      // 401/429/502, AbortError → 503, etc).
+      const result = await finalizeDesignPackage(
+        db,
+        PROJECTS_DIR,
+        DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { apiKey, baseUrl, model, maxTokens },
+      );
+      res.json(result);
+    } catch (err) {
+      if (err instanceof FinalizePackageLockedError) {
+        return sendApiError(res, 409, 'FINALIZE_IN_PROGRESS', err.message);
+      }
+      if (err instanceof FinalizeUpstreamError) {
+        return sendApiError(res, 502, 'UPSTREAM_FAILED', err.message);
+      }
+      console.error('[finalize/anthropic]', err);
+      return sendApiError(res, 500, 'INTERNAL', String(err?.message || err));
     }
   });
 
