@@ -597,18 +597,23 @@ code {
 .split-chat-slot {
   display: flex;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .split-chat-slot[hidden] {
   display: none;
 }
 .split-chat-slot > .pane {
   flex: 1 1 auto;
+  min-width: 0;
 }
 .pane {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg-panel);
+  overflow: hidden;
 }
 .split-resize-handle {
   width: 8px;
@@ -4475,8 +4480,10 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
   flex: 1;
+  overflow: hidden;
 }
 .ws-tabs-shell {
   display: flex;
