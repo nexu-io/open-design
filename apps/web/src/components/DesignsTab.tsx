@@ -363,9 +363,11 @@ export function DesignsTab({
 										>
 											{statusLabel(status, t)}
 										</span>
-										{p.status?.updatedAt
+										{sub === "recent" && p.status?.updatedAt
 											? ` · ${relativeTime(p.status.updatedAt, t)}`
-											: ""}
+											: sub === "yours" && p.createdAt
+												? ` · ${relativeTime(p.createdAt, t)}`
+												: ""}
 									</div>
 								</div>
 							</div>
@@ -442,9 +444,11 @@ export function DesignsTab({
 															<span>{t("designs.cardFreeform")}</span>
 														)}
 														{skill ? ` · ${skill}` : ""}
-														{p.status?.updatedAt
+														{sub === "recent" && p.status?.updatedAt
 															? ` · ${relativeTime(p.status.updatedAt, t)}`
-															: ""}
+															: sub === "yours" && p.createdAt
+																? ` · ${relativeTime(p.createdAt, t)}`
+																: ""}
 													</div>
 												</div>
 											);
