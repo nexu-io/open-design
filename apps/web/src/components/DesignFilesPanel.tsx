@@ -317,7 +317,7 @@ export function DesignFilesPanel({
                       </select>
                     </label>
                     <span className="df-page-info">
-                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} of {sortedFiles.length}
+                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} {t('designFiles.of', { total: sortedFiles.length })} {sortedFiles.length}
                     </span>
                     <div className="df-pagination-right">
                       <button
@@ -501,7 +501,7 @@ export function DesignFilesPanel({
                       {t('designFiles.next')}
                     </button>
                     <span className="df-page-info">
-                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} of {sortedFiles.length}
+                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} {t('designFiles.of', { total: sortedFiles.length })} {sortedFiles.length}
                     </span>
                   </div>
                 </>

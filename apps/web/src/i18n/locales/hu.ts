@@ -567,6 +567,7 @@ export const hu: Dict = {
   'designFiles.prev': 'Előző',
   'designFiles.next': 'Következő',
   'designFiles.jumpToPage': 'Ugrás oldalra',
+  'designFiles.of': '/',
   'quickSwitcher.placeholder': 'Fájl megnyitása…',
   'quickSwitcher.empty': 'Nincsenek fájlok ebben a projektben',
   'quickSwitcher.noMatches': 'Nincs találat',

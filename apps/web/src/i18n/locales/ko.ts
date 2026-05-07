@@ -567,6 +567,7 @@ export const ko: Dict = {
   'designFiles.prev': '이전',
   'designFiles.next': '다음',
   'designFiles.jumpToPage': '페이지로 이동',
+  'designFiles.of': '/',
   'quickSwitcher.placeholder': '파일 열기…',
   'quickSwitcher.empty': '이 프로젝트에 파일이 없습니다',
   'quickSwitcher.noMatches': '일치 항목 없음',

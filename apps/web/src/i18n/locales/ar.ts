@@ -567,6 +567,7 @@ export const ar: Dict = {
   'designFiles.prev': 'السابق',
   'designFiles.next': 'التالي',
   'designFiles.jumpToPage': 'انتقل إلى الصفحة',
+  'designFiles.of': 'من',
   'quickSwitcher.placeholder': 'فتح ملف…',
   'quickSwitcher.empty': 'لا توجد ملفات في هذا المشروع',
   'quickSwitcher.noMatches': 'لا توجد نتائج',

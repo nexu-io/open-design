@@ -521,6 +521,7 @@ export const de: Dict = {
   'designFiles.prev': 'Zurück',
   'designFiles.next': 'Weiter',
   'designFiles.jumpToPage': 'Gehe zu Seite',
+  'designFiles.of': 'von',
   'quickSwitcher.placeholder': 'Datei öffnen…',
   'quickSwitcher.empty': 'Keine Dateien in diesem Projekt',
   'quickSwitcher.noMatches': 'Keine Treffer',

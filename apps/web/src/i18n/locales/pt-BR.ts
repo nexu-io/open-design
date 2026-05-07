@@ -579,6 +579,7 @@ export const ptBR: Dict = {
   'designFiles.prev': 'Anterior',
   'designFiles.next': 'Próximo',
   'designFiles.jumpToPage': 'Ir para a página',
+  'designFiles.of': 'de',
   'quickSwitcher.placeholder': 'Abrir arquivo…',
   'quickSwitcher.empty': 'Nenhum arquivo neste projeto',
   'quickSwitcher.noMatches': 'Sem resultados',

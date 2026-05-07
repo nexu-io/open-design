@@ -520,6 +520,7 @@ export const ja: Dict = {
   'designFiles.prev': '前へ',
   'designFiles.next': '次へ',
   'designFiles.jumpToPage': 'ページにジャンプ',
+  'designFiles.of': '/',
   'quickSwitcher.placeholder': 'ファイルを開く…',
   'quickSwitcher.empty': 'このプロジェクトにファイルがありません',
   'quickSwitcher.noMatches': '一致なし',

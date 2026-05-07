@@ -579,6 +579,7 @@ export const ru: Dict = {
   'designFiles.prev': 'Назад',
   'designFiles.next': 'Вперёд',
   'designFiles.jumpToPage': 'Перейти на страницу',
+  'designFiles.of': 'из',
   'quickSwitcher.placeholder': 'Открыть файл…',
   'quickSwitcher.empty': 'В проекте нет файлов',
   'quickSwitcher.noMatches': 'Нет совпадений',

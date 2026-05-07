@@ -568,6 +568,7 @@ export const id: Dict = {
   'designFiles.prev': 'Sebelumnya',
   'designFiles.next': 'Berikutnya',
   'designFiles.jumpToPage': 'Lompat ke halaman',
+  'designFiles.of': 'dari',
 
   'quickSwitcher.placeholder': 'Buka file...',
   'quickSwitcher.empty': 'Tidak ada file di proyek ini',

@@ -580,6 +580,7 @@ export const en: Dict = {
   'designFiles.prev': 'Previous',
   'designFiles.next': 'Next',
   'designFiles.jumpToPage': 'Go to page',
+  'designFiles.of': 'of',
   'quickSwitcher.placeholder': 'Open file…',
   'quickSwitcher.empty': 'No files in this project',
   'quickSwitcher.noMatches': 'No matches',
