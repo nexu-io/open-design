@@ -5012,15 +5012,11 @@ export function isLocalSameOrigin(req, port) {
   if (origin == null || origin === '') return true;
 
   const schemes = ['http', 'https'];
-  const allowedOrigins = new Set([
-    ...ports.flatMap((p) => [
+  const allowedOrigins = new Set(
+    ports.flatMap((p) => [
       ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
       ...schemes.map((s) => `${s}://${bindHost}:${p}`),
     ]),
-    // Origins without ports — Chrome may strip the port from the
-    // Origin header on same-origin requests.
-    ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}`)),
-    ...schemes.map((s) => `${s}://${bindHost}`),
-  ]);
+  );
   return allowedOrigins.has(String(origin));
 }
