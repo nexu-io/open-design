@@ -2190,11 +2190,9 @@ function HtmlViewer({
     const fallbackDeployment = options?.fallbackToExisting
       ? Object.values(nextDeploymentsByProvider)[0] ?? null
       : null;
-    const currentDeployment =
-      exactDeployment ?? fallbackDeployment;
-    const resolvedProviderId = exactDeployment?.providerId ?? currentDeployment?.providerId ?? providerId;
-    const config = await fetchDeployConfig(resolvedProviderId);
-    syncDeployFormFromConfig(resolvedProviderId, config);
+    const currentDeployment = exactDeployment ?? fallbackDeployment;
+    const config = await fetchDeployConfig(providerId);
+    syncDeployFormFromConfig(providerId, config);
     setDeploymentsByProvider(nextDeploymentsByProvider);
     setDeployment(currentDeployment ?? null);
     setDeployResult(currentDeployment ?? null);

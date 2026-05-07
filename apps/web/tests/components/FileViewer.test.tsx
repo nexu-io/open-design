@@ -227,6 +227,84 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByLabelText('Pages project name')).toBeNull();
   });
 
+  it('keeps the explicitly selected deploy provider when another provider already has a deployment', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'vercel-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'vercel-self',
+              url: 'https://vercel.example',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=cloudflare-pages') {
+        return new Response(JSON.stringify({
+          providerId: 'cloudflare-pages',
+          configured: true,
+          tokenMask: 'saved-cloudflare-token',
+          accountId: 'account-123',
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=vercel-self') {
+        return new Response(JSON.stringify({
+          providerId: 'vercel-self',
+          configured: true,
+          tokenMask: 'saved-vercel-token',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
+
+    const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
+    await waitFor(() => {
+      expect((providerSelect as HTMLSelectElement).value).toBe('cloudflare-pages');
+    });
+
+    const calledUrls = fetchMock.mock.calls.map(([input]) => (
+      typeof input === 'string' ? input : input instanceof Request ? input.url : String(input)
+    ));
+    expect(calledUrls).toContain('/api/deploy/config?providerId=cloudflare-pages');
+    expect(calledUrls).not.toContain('/api/deploy/config?providerId=vercel-self');
+    expect((screen.getByLabelText(/Cloudflare API token/i) as HTMLInputElement).value).toBe('saved-cloudflare-token');
+  });
+
   it('shows separate copy links for existing Vercel and Cloudflare deployments', async () => {
     const file = baseFile({
       name: 'index.html',
