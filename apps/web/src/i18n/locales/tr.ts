@@ -656,6 +656,7 @@ export const tr: Dict = {
   'fileViewer.exportJsx': 'JSX olarak dışa aktar',
   'fileViewer.exportReactHtml': 'Önizlemeyi HTML olarak dışa aktar',
   'fileViewer.saveAsTemplate': 'Şablon olarak kaydet…',
+  'fileViewer.templateModalTitle': 'Şablon olarak kaydet',
   'fileViewer.savingTemplate': 'Şablon kaydediliyor…',
   'fileViewer.savedTemplate': '"{name}" olarak kaydedildi',
   'fileViewer.savedTemplateFail': 'Şablon olarak kaydedilemedi — yeniden deneyin.',

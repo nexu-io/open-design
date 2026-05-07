@@ -664,6 +664,7 @@ export const hu: Dict = {
   'fileViewer.exportJsx': 'Exportálás JSX-ként',
   'fileViewer.exportReactHtml': 'Előnézet exportálása HTML-ként',
   'fileViewer.saveAsTemplate': 'Mentés sablonként…',
+  'fileViewer.templateModalTitle': 'Mentés sablonként',
   'fileViewer.savingTemplate': 'Sablon mentése…',
   'fileViewer.savedTemplate': 'Mentve „{name}" néven',
   'fileViewer.savedTemplateFail': 'A sablon mentése nem sikerült — próbáld újra.',

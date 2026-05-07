@@ -677,6 +677,7 @@ export const fa: Dict = {
   'fileViewer.exportJsx': 'صادرکردن به JSX',
   'fileViewer.exportReactHtml': 'صادرکردن پیش‌نمایش به HTML',
   'fileViewer.saveAsTemplate': 'ذخیره به عنوان قالب…',
+  'fileViewer.templateModalTitle': 'ذخیره به عنوان قالب',
   'fileViewer.savingTemplate': 'در حال ذخیره قالب…',
   'fileViewer.savedTemplate': 'به عنوان «{name}» ذخیره شد',
   'fileViewer.savedTemplateFail': 'ذخیره قالب ناموفق بود — دوباره امتحان کنید.',

@@ -676,6 +676,7 @@ export const ru: Dict = {
   'fileViewer.exportJsx': 'Экспорт как JSX',
   'fileViewer.exportReactHtml': 'Экспорт предпросмотра как HTML',
   'fileViewer.saveAsTemplate': 'Сохранить как шаблон…',
+  'fileViewer.templateModalTitle': 'Сохранить как шаблон',
   'fileViewer.savingTemplate': 'Сохранение шаблона…',
   'fileViewer.savedTemplate': 'Сохранено как «{name}»',
   'fileViewer.savedTemplateFail': 'Не удалось сохранить шаблон — попробуйте снова.',

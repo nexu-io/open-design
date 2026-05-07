@@ -732,6 +732,7 @@ export interface Dict {
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
+  'fileViewer.templateModalTitle': string;
   'fileViewer.savingTemplate': string;
   'fileViewer.savedTemplate': string;
   'fileViewer.savedTemplateFail': string;

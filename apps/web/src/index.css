@@ -6849,6 +6849,37 @@ button.connector-action.is-loading {
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+/* Template-save modal — replaces the previous window.prompt() flow that
+   silently no-op'd in Electron (issue #723). Tighter width than the
+   deploy modal because there's only two fields. */
+.template-modal {
+  width: min(520px, calc(100vw - 32px));
+}
+.template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+.template-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.template-field input,
+.template-field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+}
+.template-field input { min-height: 36px; }
+.template-field textarea { resize: vertical; min-height: 64px; }
 .deploy-form {
   display: flex;
   flex-direction: column;

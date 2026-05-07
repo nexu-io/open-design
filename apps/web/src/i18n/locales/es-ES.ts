@@ -619,6 +619,7 @@ export const esES: Dict = {
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar vista previa como HTML',
   'fileViewer.saveAsTemplate': 'Guardar como plantilla…',
+  'fileViewer.templateModalTitle': 'Guardar como plantilla',
   'fileViewer.savingTemplate': 'Guardando plantilla…',
   'fileViewer.savedTemplate': 'Guardado como «{name}»',
   'fileViewer.savedTemplateFail': 'No se pudo guardar la plantilla. Inténtalo de nuevo.',

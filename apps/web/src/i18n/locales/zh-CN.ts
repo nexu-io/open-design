@@ -664,6 +664,7 @@ export const zhCN: Dict = {
   'fileViewer.exportJsx': '导出为 JSX',
   'fileViewer.exportReactHtml': '导出预览 HTML',
   'fileViewer.saveAsTemplate': '保存为模板…',
+  'fileViewer.templateModalTitle': '保存为模板',
   'fileViewer.savingTemplate': '正在保存模板…',
   'fileViewer.savedTemplate': '已保存为「{name}」',
   'fileViewer.savedTemplateFail': '保存模板失败，请重试。',

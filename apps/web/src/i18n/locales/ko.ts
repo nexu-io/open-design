@@ -664,6 +664,7 @@ export const ko: Dict = {
   'fileViewer.exportJsx': 'JSX로 내보내기',
   'fileViewer.exportReactHtml': '미리보기를 HTML로 내보내기',
   'fileViewer.saveAsTemplate': '템플릿으로 저장…',
+  'fileViewer.templateModalTitle': '템플릿으로 저장',
   'fileViewer.savingTemplate': '템플릿 저장 중…',
   'fileViewer.savedTemplate': '"{name}"(으)로 저장됨',
   'fileViewer.savedTemplateFail': '템플릿 저장에 실패했습니다. 다시 시도해 주세요.',

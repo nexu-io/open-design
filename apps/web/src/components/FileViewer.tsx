@@ -2031,9 +2031,17 @@ function HtmlViewer({
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   // Template save UX. We surface a transient "Saved" pill in the share
-  // menu so the user gets feedback without a noisy toast layer.
+  // menu so the user gets feedback without a noisy toast layer. The
+  // modal carries the name + description input because the desktop app
+  // runs in Electron, where `window.prompt()` is disabled by default
+  // and silently returns null — making the previous prompt-based flow
+  // a no-op for every desktop user (issue #723).
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateNote, setTemplateNote] = useState<string | null>(null);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<DeployProjectFileResponse | null>(null);
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [deployConfig, setDeployConfig] = useState<DeployConfigResponse | null>(null);
@@ -2607,33 +2615,48 @@ function HtmlViewer({
   // the viewer), so the template captures the whole design, not a single
   // page. Surfaced here in the Share menu because that's where the user's
   // share / export mental model already lives.
-  async function handleSaveAsTemplate() {
+  function openSaveAsTemplateModal() {
     setShareMenuOpen(false);
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
-    const name = window.prompt(t('fileViewer.templateNamePrompt'), defaultName);
-    if (!name || !name.trim()) return;
-    const description = window.prompt(
-      t('fileViewer.templateDescPrompt'),
-      '',
-    );
+    setTemplateName(defaultName);
+    setTemplateDescription('');
+    setTemplateError(null);
+    setTemplateNote(null);
+    setTemplateModalOpen(true);
+  }
+
+  async function submitSaveAsTemplate() {
+    const trimmedName = templateName.trim();
+    if (!trimmedName) {
+      // The Save button is also disabled when the name is empty so this
+      // path is normally unreachable, but guard the network call anyway
+      // in case Enter-to-submit fires before the disabled state catches up.
+      return;
+    }
     setSavingTemplate(true);
+    setTemplateError(null);
     setTemplateNote(null);
     try {
       const tpl = await saveTemplate({
-        name: name.trim(),
-        description: description?.trim() || undefined,
+        name: trimmedName,
+        description: templateDescription.trim() || undefined,
         sourceProjectId: projectId,
       });
-      setTemplateNote(
-        tpl
-          ? t('fileViewer.savedTemplate', { name: tpl.name })
-          : t('fileViewer.savedTemplateFail'),
+      if (tpl) {
+        setTemplateModalOpen(false);
+        setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
+        // Auto-clear the note so the menu doesn't keep stale state next open.
+        setTimeout(() => setTemplateNote(null), 4000);
+      } else {
+        setTemplateError(t('fileViewer.savedTemplateFail'));
+      }
+    } catch (err) {
+      setTemplateError(
+        err instanceof Error ? err.message : t('fileViewer.savedTemplateFail'),
       );
     } finally {
       setSavingTemplate(false);
-      // Auto-clear the note so the menu doesn't keep stale state next open.
-      setTimeout(() => setTemplateNote(null), 4000);
     }
   }
 
@@ -3140,7 +3163,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      void handleSaveAsTemplate();
+                      openSaveAsTemplateModal();
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
@@ -3472,6 +3495,71 @@ function HtmlViewer({
                   : deployPhase === 'preparing-link'
                     ? t('fileViewer.preparingPublicLink')
                     : t('fileViewer.deployToVercel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {templateModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal template-modal" role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <h2>{t('fileViewer.templateModalTitle')}</h2>
+            </div>
+            <div className="template-form">
+              <label className="template-field">
+                <span>{t('fileViewer.templateNamePrompt')}</span>
+                <input
+                  type="text"
+                  value={templateName}
+                  placeholder={t('fileViewer.templateNameDefault')}
+                  disabled={savingTemplate}
+                  autoFocus
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && templateName.trim() && !savingTemplate) {
+                      e.preventDefault();
+                      void submitSaveAsTemplate();
+                    }
+                  }}
+                />
+              </label>
+              <label className="template-field">
+                <span>{t('fileViewer.templateDescPrompt')}</span>
+                <textarea
+                  value={templateDescription}
+                  disabled={savingTemplate}
+                  rows={3}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                />
+              </label>
+              {templateError ? (
+                <p className="deploy-error">{templateError}</p>
+              ) : null}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={savingTemplate}
+                onClick={() => {
+                  setTemplateModalOpen(false);
+                  setTemplateError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={savingTemplate || !templateName.trim()}
+                onClick={() => {
+                  void submitSaveAsTemplate();
+                }}
+              >
+                {savingTemplate
+                  ? t('fileViewer.savingTemplate')
+                  : t('common.save')}
               </button>
             </div>
           </div>

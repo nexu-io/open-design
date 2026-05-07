@@ -676,6 +676,7 @@ export const ptBR: Dict = {
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar prévia como HTML',
   'fileViewer.saveAsTemplate': 'Salvar como template…',
+  'fileViewer.templateModalTitle': 'Salvar como template',
   'fileViewer.savingTemplate': 'Salvando template…',
   'fileViewer.savedTemplate': 'Salvo como "{name}"',
   'fileViewer.savedTemplateFail': 'Não foi possível salvar o template — tente novamente.',
