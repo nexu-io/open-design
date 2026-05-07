@@ -524,6 +524,7 @@ export const ar: Dict = {
     'لا يوجد شيء هنا بعد. اسحب الملفات أدناه، أو أنشئ رسماً / الصق نصاً.',
   'designFiles.refresh': 'تحديث',
   'designFiles.delete': 'حذف',
+  'designFiles.deleteSelected': 'حذف {n}',
   'designFiles.searchPlaceholder': 'بحث في الملفات...',
   'designFiles.up': 'للأعلى',
   'designFiles.back': 'رجوع',

@@ -535,6 +535,7 @@ export const fa: Dict = {
     'هنوز هیچ چیزی اینجا نیست. فایل‌ها را رها کنید، یا یک طرح ایجاد کنید / متن بچسبانید.',
   'designFiles.refresh': 'بازنشانی',
   'designFiles.delete': 'حذف',
+  'designFiles.deleteSelected': 'حذف {n}',
   'designFiles.searchPlaceholder': 'جستجوی فایل‌ها…',
   'designFiles.up': 'بالا',
   'designFiles.back': 'بازگشت',
