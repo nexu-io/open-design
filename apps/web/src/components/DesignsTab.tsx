@@ -15,12 +15,13 @@ type SubTab = "recent" | "yours";
 type ViewMode = "grid" | "kanban";
 
 type DesignListItem =
-	| { type: "project"; project: Project; updatedAt: number }
+	| { type: "project"; project: Project; updatedAt: number; createdAt: number }
 	| {
 			type: "live-artifact";
 			project: Project;
 			liveArtifact: LiveArtifactSummary;
 			updatedAt: number;
+			createdAt: number;
 	  };
 
 const DESIGNS_VIEW_STORAGE_KEY = "od:designs:view";
@@ -117,15 +118,19 @@ export function DesignsTab({
 			type: "project",
 			project,
 			updatedAt: project.updatedAt,
+			createdAt: project.createdAt,
 		}));
+
 		const liveItems = projects.flatMap((project) =>
 			(liveArtifactsByProject[project.id] ?? []).map((liveArtifact) => ({
 				type: "live-artifact" as const,
 				project,
 				liveArtifact,
 				updatedAt: Date.parse(liveArtifact.updatedAt) || project.updatedAt,
+				createdAt: Date.parse(liveArtifact.createdAt) || project.createdAt,
 			})),
 		);
+
 		list = [...list, ...liveItems];
 
 		if (sub === "recent") {
@@ -133,9 +138,7 @@ export function DesignsTab({
 		}
 
 		if (sub === "yours") {
-			list = [...list].sort(
-				(a, b) => b.project.createdAt - a.project.createdAt,
-			);
+			list = [...list].sort((a, b) => b.createdAt - a.createdAt);
 		}
 
 		if (!q) return list;
@@ -304,7 +307,9 @@ export function DesignsTab({
 												t,
 											)}
 											{" · "}
-											{relativeTime(item.updatedAt, t)}
+											{sub === "recent"
+												? relativeTime(item.updatedAt, t)
+												: relativeTime(item.createdAt, t)}
 										</div>
 									</div>
 								</div>
@@ -363,9 +368,9 @@ export function DesignsTab({
 										>
 											{statusLabel(status, t)}
 										</span>
-										{sub === "recent" && p.status?.updatedAt
-											? ` · ${relativeTime(p.status.updatedAt, t)}`
-											: sub === "yours" && p.createdAt
+										{sub === "recent"
+											? ` · ${relativeTime(p.updatedAt, t)}`
+											: sub === "yours"
 												? ` · ${relativeTime(p.createdAt, t)}`
 												: ""}
 									</div>
@@ -444,9 +449,9 @@ export function DesignsTab({
 															<span>{t("designs.cardFreeform")}</span>
 														)}
 														{skill ? ` · ${skill}` : ""}
-														{sub === "recent" && p.status?.updatedAt
-															? ` · ${relativeTime(p.status.updatedAt, t)}`
-															: sub === "yours" && p.createdAt
+														{sub === "recent"
+															? ` · ${relativeTime(p.updatedAt, t)}`
+															: sub === "yours"
 																? ` · ${relativeTime(p.createdAt, t)}`
 																: ""}
 													</div>
