@@ -516,8 +516,8 @@ async function runMcp(args) {
     return;
   }
 
-  const daemonUrl =
-    flags['daemon-url'] || process.env.OD_DAEMON_URL || 'http://127.0.0.1:7456';
+  const { resolveMcpDaemonUrl } = await import('./mcp-daemon-url.js');
+  const daemonUrl = await resolveMcpDaemonUrl({ flagUrl: flags['daemon-url'] });
 
   const { runMcpStdio } = await import('./mcp.js');
   await runMcpStdio({ daemonUrl });
@@ -532,8 +532,15 @@ in another repo so the agent can pull files from a local Open Design
 project without exporting a zip every iteration.
 
 Options:
-  --daemon-url <url>   Open Design daemon HTTP base URL (default: env
-                       OD_DAEMON_URL, falling back to http://127.0.0.1:7456).
+  --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
+                       order: this flag, OD_DAEMON_URL, the running
+                       daemon's sidecar IPC status socket
+                       (/tmp/open-design/ipc/<namespace>/daemon.sock),
+                       then http://127.0.0.1:7456. With IPC discovery
+                       the spawned MCP server tracks the live daemon
+                       URL across restarts even when the daemon binds
+                       an ephemeral port, so MCP client configs do not
+                       need to be re-pasted on each port change.
 
 Tools exposed:
   list_projects                  list every Open Design project

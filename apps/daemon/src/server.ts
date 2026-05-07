@@ -1667,9 +1667,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const commandEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
       ? { ELECTRON_RUN_AS_NODE: '1' }
       : null;
+    // The snippet intentionally omits --daemon-url. `od mcp` discovers
+    // the live daemon URL via the sidecar IPC status socket on every
+    // spawn, so the client config stays valid across restarts even
+    // when the daemon binds an ephemeral port (tools-dev, packaged).
+    // OD_DAEMON_URL or --daemon-url remain available as escape hatches
+    // for users who run the daemon outside the sidecar runtime.
     const payload = {
       command: process.execPath,
-      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
+      args: [cliPath, 'mcp'],
       ...(commandEnv == null ? {} : { env: commandEnv }),
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
