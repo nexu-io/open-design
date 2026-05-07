@@ -180,19 +180,42 @@ export function ChatPane({
     }
   }, [messages, error]);
 
+  // Saved chat-log scrollTop, preserved across tab switches.
+  // The chat-log <div> is conditionally rendered (line 331:
+  // `{tab === 'chat' ? ... : null}`) so it unmounts when the user
+  // switches to Comments. On remount it would default to scrollTop: 0
+  // (top of conversation), and the initial-bottom-scroll effect skips
+  // because didInitialScrollRef is already true. Save scrollTop while
+  // Chat is visible and restore it on remount so reading position
+  // survives tab toggles. Issue #790.
+  const savedChatScrollTopRef = useRef<number | null>(null);
   useEffect(() => {
+    if (tab !== 'chat') return;
     const el = logRef.current;
     if (!el) return;
+
+    // Restore previously-saved position on remount. Defer to the next
+    // frame so the conditional <> contents finish layout before the
+    // scrollTop write lands.
+    const saved = savedChatScrollTopRef.current;
+    if (saved !== null) {
+      requestAnimationFrame(() => {
+        const target = logRef.current;
+        if (target) target.scrollTop = saved;
+      });
+    }
+
     function onScroll() {
       const target = logRef.current;
       if (!target) return;
+      savedChatScrollTopRef.current = target.scrollTop;
       const distance =
         target.scrollHeight - target.scrollTop - target.clientHeight;
       setScrolledFromBottom(distance > 120);
     }
     el.addEventListener('scroll', onScroll);
     return () => el.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [tab]);
 
   // Close the conversation history dropdown on outside click / Escape.
   useEffect(() => {
