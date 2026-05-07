@@ -8,7 +8,8 @@
 // namespace import (`import * as fs from 'node:fs'`) gives a frozen
 // Module Namespace Object that `vi.spyOn` cannot mutate.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -625,5 +626,89 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
       fetchImpl: fetchImpl as any,
     } as any);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+// HTTP-layer tests for the route handler's validation. Boot the daemon
+// once via startServer({ port: 0, returnServer: true }) and send real
+// HTTP POSTs. These tests exercise the validation branches the function-
+// level tests above cannot reach (validateExternalApiBaseUrl is a
+// closure inside startServer, not exported).
+describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', () => {
+  let server: http.Server;
+  let serverBaseUrl: string;
+
+  beforeAll(async () => {
+    const { startServer } = await import('../src/server.js');
+    const started = (await startServer({ port: 0, returnServer: true })) as unknown as {
+      url: string;
+      server: http.Server;
+    };
+    serverBaseUrl = started.url;
+    server = started.server;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  function postJson(id: string, body: unknown): Promise<Response> {
+    return fetch(`${serverBaseUrl}/api/projects/${id}/finalize/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('400 BAD_REQUEST when baseUrl is not a valid URL (test #13)', async () => {
+    const res = await postJson('p1', {
+      apiKey: 'sk-test',
+      baseUrl: 'not-a-url',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('BAD_REQUEST');
+  });
+
+  it('403 FORBIDDEN when baseUrl points at a private internal IP (test #14)', async () => {
+    // validateBaseUrl explicitly allows loopback (for local OpenAI-compatible
+    // servers) but blocks private internal IPs (10/8, 172.16/12, 192.168/16,
+    // fc00::/7, fe80::/10) — see apps/daemon/src/connectionTest.ts:158-185.
+    const res = await postJson('p1', {
+      apiKey: 'sk-test',
+      baseUrl: 'http://10.0.0.1',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('400 BAD_REQUEST when apiKey is missing (test #15)', async () => {
+    const res = await postJson('p1', {
+      // apiKey deliberately omitted
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('BAD_REQUEST');
+    expect(body.error.message.toLowerCase()).toContain('apikey');
+  });
+
+  it('400 BAD_REQUEST when :id contains characters outside the safe-id regex (test #16)', async () => {
+    // The isSafeId regex at apps/daemon/src/projects.ts:556-558 allows only
+    // [A-Za-z0-9._-]{1,128}. An id like `bad!id` contains `!` and must
+    // be rejected before any DB or filesystem work.
+    const res = await postJson('bad!id', {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('BAD_REQUEST');
+    expect(body.error.message.toLowerCase()).toContain('project id');
   });
 });

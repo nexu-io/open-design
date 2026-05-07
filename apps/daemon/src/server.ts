@@ -52,6 +52,7 @@ import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import {
+  redactSecrets,
   testAgentConnection,
   testProviderConnection,
   validateBaseUrl,
@@ -3774,8 +3775,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
     try {
-      const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+      // Path-traversal guard on :id mirrors the isSafeId regex at
+      // apps/daemon/src/projects.ts:556-558. Reject early so unsafe ids
+      // cannot reach getProject (which would 404) or the function (which
+      // would throw an internal "invalid project id" mapped to 500).
+      if (!/^[A-Za-z0-9._-]{1,128}$/.test(String(req.params.id))) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
       if (typeof apiKey !== 'string' || !apiKey.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
       }
@@ -3805,11 +3814,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
 
-      // Phase C: function throws "not yet implemented"; full pipeline lands in
-      // Phase H. Routing this stub now lets typecheck + scope diff catch any
-      // wiring drift early. Phase I replaces this catch block with full error
-      // mapping (FinalizePackageLockedError → 409, FinalizeUpstreamError →
-      // 401/429/502, AbortError → 503, etc).
       const result = await finalizeDesignPackage(
         db,
         PROJECTS_DIR,
@@ -3819,14 +3823,43 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
       res.json(result);
     } catch (err) {
+      // Concurrent finalize - the lockfile was already held by another
+      // call. Caller can retry after a short wait; not a client error.
       if (err instanceof FinalizePackageLockedError) {
         return sendApiError(res, 409, 'FINALIZE_IN_PROGRESS', err.message);
       }
+
+      // Upstream Anthropic error - status-aware mapping. Run the raw
+      // upstream body through redactSecrets so the API key cannot leak
+      // even if Anthropic echoes the inbound headers.
       if (err instanceof FinalizeUpstreamError) {
-        return sendApiError(res, 502, 'UPSTREAM_FAILED', err.message);
+        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const init = safeDetails ? { details: safeDetails } : {};
+        if (err.status === 401) {
+          return sendApiError(res, 401, 'AUTH_FAILED', err.message, init);
+        }
+        if (err.status === 429) {
+          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+        }
+        // 5xx, 502, or our own 502 sentinel for malformed responses.
+        return sendApiError(res, 502, 'UPSTREAM_FAILED', err.message, init);
       }
+
+      // The blocking call hit our 120s AbortController timeout - or the
+      // caller passed an already-aborted signal. Either way, surface as
+      // 503 TIMEOUT so the caller can retry.
+      const errName =
+        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
+      if (errName === 'AbortError') {
+        return sendApiError(res, 503, 'TIMEOUT', 'finalize timed out');
+      }
+
+      // Unexpected runtime failure (file IO, db access, prompt build).
+      // Log via console.error per the daemon convention; client sees a
+      // generic 500. Run the message through redactSecrets defensively.
       console.error('[finalize/anthropic]', err);
-      return sendApiError(res, 500, 'INTERNAL', String(err?.message || err));
+      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      return sendApiError(res, 500, 'INTERNAL', safeMsg);
     }
   });
 
