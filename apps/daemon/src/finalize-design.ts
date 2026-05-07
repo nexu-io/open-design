@@ -187,15 +187,129 @@ export async function finalizeDesignPackage(
   _projectId: string,
   _options: FinalizeOptions,
 ): Promise<FinalizeAnthropicResponse> {
-  // Phase D body still pending — synthesis pipeline lands in Phase H.
-  // Path constants referenced here stay reachable for incremental phases.
+  // Phase H wires the full pipeline. Path constants referenced here stay
+  // reachable for the route-handler imports across incremental phases.
   void DEFAULT_BASE_URL;
-  void DEFAULT_MAX_TOKENS;
   void LOCK_FILENAME;
   void OUTPUT_FILENAME;
-  void DEFAULT_TIMEOUT_MS;
-  void path;
-  throw new Error('finalizeDesignPackage not yet implemented (phase D scaffold)');
+  throw new Error('finalizeDesignPackage not yet implemented (phase G scaffold)');
+}
+
+/**
+ * Append `/v1/<suffix>` to a base URL, but only if the URL does not
+ * already include a `/vN` segment. Mirrors the helper inlined in
+ * `apps/daemon/src/connectionTest.ts:188-195` (not exported there).
+ */
+export function appendVersionedApiPath(baseUrl: string, suffix: string): string {
+  const url = new URL(baseUrl);
+  const pathname = url.pathname.replace(/\/+$/, '');
+  url.pathname = /\/v\d+(\/|$)/.test(pathname) ? `${pathname}${suffix}` : `${pathname}/v1${suffix}`;
+  return url.toString();
+}
+
+export interface AnthropicCallParams {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  maxTokens: number;
+  systemPrompt: string;
+  userPrompt: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof globalThis.fetch;
+  /** Test-only: skip the inter-attempt sleep so retries are instant. */
+  _sleepMs?: (ms: number) => Promise<void>;
+}
+
+const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Call Anthropic's Messages API once, retrying once on a transient
+ * upstream failure (HTTP 429 or 5xx). On a terminal failure, throw a
+ * `FinalizeUpstreamError` carrying the upstream HTTP status and raw
+ * body text — the route handler maps the status to one of
+ * AUTH_FAILED / RATE_LIMITED / UPSTREAM_FAILED and runs the raw body
+ * through `redactSecrets` before exposing it as `details` on the
+ * error JSON.
+ *
+ * Retry posture (1 retry) is opinionated; the maintainer's
+ * "standard exponential backoff" answer was directional and a single
+ * retry matches the existing daemon's posture (transcript export and
+ * connectionTest do zero retries).
+ */
+export async function callAnthropicWithRetry(
+  params: AnthropicCallParams,
+): Promise<Response> {
+  const fetchImpl = params.fetchImpl ?? globalThis.fetch;
+  const sleep = params._sleepMs ?? defaultSleep;
+  const url = appendVersionedApiPath(params.baseUrl, '/messages');
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-api-key': params.apiKey,
+    'anthropic-version': '2023-06-01',
+  };
+  const body = JSON.stringify({
+    model: params.model,
+    max_tokens: params.maxTokens,
+    system: params.systemPrompt,
+    messages: [{ role: 'user', content: params.userPrompt }],
+    stream: false,
+  });
+
+  for (let attempt = 0; attempt <= 1; attempt += 1) {
+    const init: RequestInit = { method: 'POST', headers, body };
+    if (params.signal) init.signal = params.signal;
+    const response = await fetchImpl(url, init);
+    if (response.ok) return response;
+
+    const transient = response.status === 429 || response.status >= 500;
+    if (!transient || attempt === 1) {
+      const text = await response.text().catch(() => '');
+      throw new FinalizeUpstreamError(response.status, text);
+    }
+    // Linear backoff: 1s on attempt 0. Two retries would extend to 2s on
+    // attempt 1 — kept at one retry to stay within the daemon's blocking-
+    // fast posture for `/finalize`.
+    await sleep(1000 * (attempt + 1));
+  }
+  // Loop above always returns or throws within two iterations. This is
+  // unreachable; satisfies TypeScript control-flow analysis.
+  throw new Error('callAnthropicWithRetry: unreachable');
+}
+
+/**
+ * Extract the Markdown body from Anthropic's Messages API response.
+ * Concatenates `content[].text` for every block where `type === 'text'`,
+ * preserving order. Throws `FinalizeUpstreamError(502)` if the response
+ * shape is unexpected (no content array, no text blocks) — synthesis
+ * cannot proceed, and the route handler maps the throw to
+ * `502 UPSTREAM_FAILED` rather than producing an empty DESIGN.md on disk.
+ */
+export function extractDesignMd(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') {
+    throw new FinalizeUpstreamError(502, '', 'upstream Anthropic response was not an object');
+  }
+  const content = (payload as { content?: unknown }).content;
+  if (!Array.isArray(content)) {
+    throw new FinalizeUpstreamError(
+      502,
+      '',
+      'upstream Anthropic response had no content array',
+    );
+  }
+  let out = '';
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const b = block as { type?: unknown; text?: unknown };
+    if (b.type === 'text' && typeof b.text === 'string') out += b.text;
+  }
+  if (out.length === 0) {
+    throw new FinalizeUpstreamError(
+      502,
+      '',
+      'upstream Anthropic response contained no text blocks',
+    );
+  }
+  return out;
 }
 
 const SYSTEM_PROMPT = `You are a senior product designer synthesizing a finalized design package

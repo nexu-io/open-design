@@ -8,7 +8,7 @@
 // namespace import (`import * as fs from 'node:fs'`) gives a frozen
 // Module Namespace Object that `vi.spyOn` cannot mutate.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,13 +19,18 @@ import {
 } from '../src/db.js';
 import { writeProjectFile } from '../src/projects.js';
 import {
+  appendVersionedApiPath,
   buildSynthesisPrompt,
+  callAnthropicWithRetry,
+  extractDesignMd,
   finalizeDesignPackage,
   FinalizePackageLockedError,
   FinalizeUpstreamError,
   resolveCurrentArtifact,
   truncateTranscriptForPrompt,
 } from '../src/finalize-design.js';
+
+void appendVersionedApiPath;
 
 // Touch the imports so the unused-import linter stays quiet on the scaffold.
 void finalizeDesignPackage;
@@ -279,8 +284,108 @@ describe('buildSynthesisPrompt', () => {
   });
 });
 
-describe.skip('finalizeDesignPackage (phases G-I land remaining bodies)', () => {
+describe('callAnthropicWithRetry', () => {
+  const baseParams = {
+    apiKey: 'sk-test-key',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-opus-4-7',
+    maxTokens: 16000,
+    systemPrompt: 'sys',
+    userPrompt: 'usr',
+    _sleepMs: async () => {},
+  };
+
+  function jsonResponse(status: number, body: any): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  function textResponse(status: number, body: string): Response {
+    return new Response(body, { status });
+  }
+
+  it('throws FinalizeUpstreamError(401) on auth failure (no retry on 4xx non-429)', async () => {
+    const fetchImpl = vi.fn(async () => textResponse(401, '{"error":{"type":"authentication_error","message":"invalid x-api-key"}}'));
+    await expect(callAnthropicWithRetry({ ...baseParams, fetchImpl })).rejects.toMatchObject({
+      name: 'FinalizeUpstreamError',
+      status: 401,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries once on 429 and resolves when the second response succeeds', async () => {
+    const ok = jsonResponse(200, { content: [{ type: 'text', text: 'DESIGN.md body' }], usage: { input_tokens: 1, output_tokens: 1 } });
+    const fetchImpl = vi
+      .fn<any, any>()
+      .mockResolvedValueOnce(textResponse(429, '{"error":"rate limited"}'))
+      .mockResolvedValueOnce(ok);
+
+    const response = await callAnthropicWithRetry({ ...baseParams, fetchImpl });
+    expect(response.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws FinalizeUpstreamError(503) when both attempts return 5xx', async () => {
+    const fetchImpl = vi
+      .fn<any, any>()
+      .mockResolvedValueOnce(textResponse(503, 'service unavailable'))
+      .mockResolvedValueOnce(textResponse(503, 'service unavailable'));
+
+    await expect(callAnthropicWithRetry({ ...baseParams, fetchImpl })).rejects.toMatchObject({
+      name: 'FinalizeUpstreamError',
+      status: 503,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates AbortError from fetch when the signal is aborted', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      // Mirror native fetch's behavior: throw AbortError when init.signal is aborted.
+      if (init?.signal?.aborted) {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+      throw new Error('fetch should never be called with non-aborted signal in this test');
+    });
+    controller.abort();
+
+    await expect(
+      callAnthropicWithRetry({ ...baseParams, fetchImpl, signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+describe('extractDesignMd', () => {
+  it('concatenates text blocks in order', () => {
+    const payload = {
+      content: [
+        { type: 'text', text: '# DESIGN.md\n## Summary\n' },
+        { type: 'text', text: 'body continues here.\n' },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+    expect(extractDesignMd(payload)).toBe('# DESIGN.md\n## Summary\nbody continues here.\n');
+  });
+
+  it('throws FinalizeUpstreamError(502) when the response shape has no content array', () => {
+    expect(() => extractDesignMd({ unexpected: true })).toThrow(FinalizeUpstreamError);
+    try {
+      extractDesignMd({ unexpected: true });
+    } catch (err: any) {
+      expect(err.status).toBe(502);
+    }
+  });
+
+  it('throws FinalizeUpstreamError(502) when content array has zero text blocks', () => {
+    expect(() => extractDesignMd({ content: [{ type: 'tool_use', id: 'x', name: 'y', input: {} }] })).toThrow(FinalizeUpstreamError);
+  });
+});
+
+describe.skip('finalizeDesignPackage (phases H-I land remaining bodies)', () => {
   it('placeholder', () => {
-    /* phases G-I add real cases here */
+    /* phases H-I add real cases here */
   });
 });
