@@ -1422,7 +1422,7 @@ git commit -m "feat(daemon): branch agent spawn through critique orchestrator wh
 
 **Files:**
 - Create: `apps/daemon/src/prompts/panel.ts`
-- Test: `apps/web/tests/prompts/panel.test.ts`
+- Test: `apps/daemon/tests/prompts/panel.test.ts`
 
 - [ ] **Step 1: Failing snapshot test**
 
@@ -1530,7 +1530,7 @@ Skill: ${skill.id}.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/daemon/src/prompts/panel.ts apps/web/tests/prompts/panel.test.ts
+git add apps/daemon/src/prompts/panel.ts apps/daemon/tests/prompts/panel.test.ts
 git commit -m "feat(web): add Critique Theater prompt protocol addendum"
 ```
 
@@ -1548,7 +1548,7 @@ grep -n "compose\|render\|prompt" apps/daemon/src/prompts/discovery.ts | head -2
 - [ ] **Step 2: Add failing test that final composed prompt contains PROTOCOL block**
 
 ```ts
-// apps/web/tests/prompts/discovery.test.ts (extend)
+// apps/daemon/tests/prompts/discovery.test.ts (extend)
 it('appends Critique Theater protocol when cfg.enabled', () => {
   const out = composeDiscoveryPrompt({ ...input, critique: { enabled: true } });
   expect(out).toContain('<CRITIQUE_RUN');
