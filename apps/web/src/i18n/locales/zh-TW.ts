@@ -717,7 +717,7 @@ export const zhTW: Dict = {
   'fileViewer.deployingToProvider': '正在部署到 {provider}…',
   'fileViewer.preparingPublicLink': '正在準備公開連結…',
   'fileViewer.copyDeployLink': '複製連結',
-  'fileViewer.deployModalTitle': '部署到 Vercel',
+    'fileViewer.deployModalTitle': '部署',
   'fileViewer.deployModalSubtitle': '使用所選平台帳號部署目前 HTML 預覽。',
   'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': '取得 Vercel token',

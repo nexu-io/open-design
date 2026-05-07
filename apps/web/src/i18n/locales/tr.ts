@@ -691,7 +691,7 @@ export const tr: Dict = {
   'fileViewer.deployingToProvider': '{provider}’e yayınlanıyor…',
   'fileViewer.preparingPublicLink': 'Herkese açık bağlantı hazırlanıyor…',
   'fileViewer.copyDeployLink': 'Bağlantıyı kopyala',
-  'fileViewer.deployModalTitle': 'Vercel’e yayınla',
+    'fileViewer.deployModalTitle': 'Yayınla',
   'fileViewer.deployModalSubtitle': 'Bu HTML önizlemesini seçilen sağlayıcı hesabıyla yayınlayın.',
   'fileViewer.vercelToken': 'Vercel tokeni',
   'fileViewer.vercelTokenGetLink': 'Vercel tokenini al',

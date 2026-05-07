@@ -655,7 +655,7 @@ export const esES: Dict = {
   'fileViewer.deployingToProvider': 'Desplegando en {provider}…',
   'fileViewer.preparingPublicLink': 'Preparando enlace público…',
   'fileViewer.copyDeployLink': 'Copiar enlace',
-  'fileViewer.deployModalTitle': 'Desplegar en Vercel',
+    'fileViewer.deployModalTitle': 'Desplegar',
   'fileViewer.deployModalSubtitle': 'Usa la cuenta del proveedor seleccionado para desplegar esta vista previa HTML.',
   'fileViewer.vercelToken': 'Token de Vercel',
   'fileViewer.vercelTokenGetLink': 'Obtener token de Vercel',

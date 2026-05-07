@@ -700,7 +700,7 @@ export const hu: Dict = {
   'fileViewer.deployingToProvider': 'Telepítés ide: {provider}…',
   'fileViewer.preparingPublicLink': 'Nyilvános link előkészítése…',
   'fileViewer.copyDeployLink': 'Link másolása',
-  'fileViewer.deployModalTitle': 'Telepítés Vercelre',
+    'fileViewer.deployModalTitle': 'Telepítés',
   'fileViewer.deployModalSubtitle': 'A kiválasztott szolgáltató fiókjával telepítheted ezt a HTML-előnézetet.',
   'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': 'Vercel token kérése',

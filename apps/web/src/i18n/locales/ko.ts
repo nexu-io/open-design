@@ -700,7 +700,7 @@ export const ko: Dict = {
   'fileViewer.deployingToProvider': '{provider}에 배포 중…',
   'fileViewer.preparingPublicLink': '공개 링크 준비 중…',
   'fileViewer.copyDeployLink': '링크 복사',
-  'fileViewer.deployModalTitle': 'Vercel에 배포',
+    'fileViewer.deployModalTitle': '배포',
   'fileViewer.deployModalSubtitle': '선택한 플랫폼 계정으로 이 HTML 미리보기를 배포합니다.',
   'fileViewer.vercelToken': 'Vercel 토큰',
   'fileViewer.vercelTokenGetLink': 'Vercel 토큰 발급 받기',

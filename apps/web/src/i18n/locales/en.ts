@@ -731,7 +731,7 @@ export const en: Dict = {
   'fileViewer.deployingToProvider': 'Deploying to {provider}…',
   'fileViewer.preparingPublicLink': 'Preparing public link…',
   'fileViewer.copyDeployLink': 'Copy link',
-  'fileViewer.deployModalTitle': 'Deploy to Vercel',
+    'fileViewer.deployModalTitle': 'Deploy',
   'fileViewer.deployModalSubtitle': 'Use the selected provider account to deploy this HTML preview.',
   'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': 'Get Vercel token',

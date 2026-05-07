@@ -731,7 +731,7 @@ export const uk: Dict = {
   'fileViewer.deployingToProvider': 'Розгортання на {provider}…',
   'fileViewer.preparingPublicLink': 'Підготовка публічного посилання…',
   'fileViewer.copyDeployLink': 'Копіювати посилання',
-  'fileViewer.deployModalTitle': 'Розгорнути на Vercel',
+    'fileViewer.deployModalTitle': 'Розгорнути',
   'fileViewer.deployModalSubtitle': 'Використайте акаунт вибраного провайдера, щоб розгорнути цей HTML-перегляд.',
   'fileViewer.vercelToken': 'Токен Vercel',
   'fileViewer.vercelTokenGetLink': 'Отримати токен Vercel',

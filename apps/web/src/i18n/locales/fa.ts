@@ -822,7 +822,7 @@ export const fa: Dict = {
   'fileViewer.deployingToProvider': 'در حال استقرار روی {provider}…',
   'fileViewer.preparingPublicLink': 'در حال آماده‌سازی لینک عمومی…',
   'fileViewer.copyDeployLink': 'کپی لینک',
-  'fileViewer.deployModalTitle': 'استقرار روی Vercel',
+    'fileViewer.deployModalTitle': 'استقرار',
   'fileViewer.deployModalSubtitle': 'از حساب ارائه‌دهنده انتخاب‌شده برای استقرار این پیش‌نمایش HTML استفاده کنید.',
   'fileViewer.vercelToken': 'توکن Vercel',
   'fileViewer.vercelTokenGetLink': 'دریافت توکن Vercel',

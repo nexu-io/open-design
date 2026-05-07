@@ -653,7 +653,7 @@ export const ja: Dict = {
   'fileViewer.deployingToProvider': '{provider} にデプロイ中…',
   'fileViewer.preparingPublicLink': '公開リンクを準備中…',
   'fileViewer.copyDeployLink': 'リンクをコピー',
-  'fileViewer.deployModalTitle': 'Vercel にデプロイ',
+    'fileViewer.deployModalTitle': 'デプロイ',
   'fileViewer.deployModalSubtitle': '選択したプロバイダーのアカウントを使用して、この HTML プレビューをデプロイします。',
   'fileViewer.vercelToken': 'Vercel トークン',
   'fileViewer.vercelTokenGetLink': 'Vercel トークンを取得',

@@ -730,7 +730,7 @@ export const ptBR: Dict = {
   'fileViewer.deployingToProvider': 'Implantando em {provider}…',
   'fileViewer.preparingPublicLink': 'Preparando link público…',
   'fileViewer.copyDeployLink': 'Copiar link',
-  'fileViewer.deployModalTitle': 'Implantar na Vercel',
+    'fileViewer.deployModalTitle': 'Implantar',
   'fileViewer.deployModalSubtitle': 'Use a conta do provedor selecionado para implantar esta prévia HTML.',
   'fileViewer.vercelToken': 'Token da Vercel',
   'fileViewer.vercelTokenGetLink': 'Obter token da Vercel',

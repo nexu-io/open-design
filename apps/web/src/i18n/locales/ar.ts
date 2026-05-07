@@ -698,7 +698,7 @@ export const ar: Dict = {
   'fileViewer.deployingToProvider': 'جارٍ النشر إلى {provider}…',
   'fileViewer.preparingPublicLink': 'جاري تحضير الرابط العام...',
   'fileViewer.copyDeployLink': 'نسخ الرابط',
-  'fileViewer.deployModalTitle': 'نشر على Vercel',
+    'fileViewer.deployModalTitle': 'النشر',
   'fileViewer.deployModalSubtitle': 'استخدم حساب منصة النشر المحددة لنشر معاينة HTML هذه.',
   'fileViewer.vercelToken': 'رمز Vercel',
   'fileViewer.vercelTokenGetLink': 'احصل على رمز Vercel',

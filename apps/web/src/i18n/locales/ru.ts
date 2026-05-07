@@ -730,7 +730,7 @@ export const ru: Dict = {
   'fileViewer.deployingToProvider': 'Развёртывание на {provider}…',
   'fileViewer.preparingPublicLink': 'Подготовка публичной ссылки…',
   'fileViewer.copyDeployLink': 'Скопировать ссылку',
-  'fileViewer.deployModalTitle': 'Развернуть на Vercel',
+    'fileViewer.deployModalTitle': 'Развернуть',
   'fileViewer.deployModalSubtitle': 'Используйте аккаунт выбранного провайдера, чтобы развернуть этот HTML-просмотр.',
   'fileViewer.vercelToken': 'Токен Vercel',
   'fileViewer.vercelTokenGetLink': 'Получить токен Vercel',

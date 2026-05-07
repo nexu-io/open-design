@@ -654,7 +654,7 @@ export const de: Dict = {
   'fileViewer.deployingToProvider': 'Deployment auf {provider}…',
   'fileViewer.preparingPublicLink': 'Öffentlicher Link wird vorbereitet…',
   'fileViewer.copyDeployLink': 'Link kopieren',
-  'fileViewer.deployModalTitle': 'Auf Vercel deployen',
+    'fileViewer.deployModalTitle': 'Bereitstellen',
   'fileViewer.deployModalSubtitle': 'Verwende das Konto des gewählten Anbieters, um diese HTML-Vorschau zu deployen.',
   'fileViewer.vercelToken': 'Vercel Token',
   'fileViewer.vercelTokenGetLink': 'Vercel Token abrufen',

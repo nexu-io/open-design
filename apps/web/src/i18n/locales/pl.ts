@@ -700,7 +700,7 @@ export const pl: Dict = {
   'fileViewer.deployingToProvider': 'Wdrażanie na {provider}…',
   'fileViewer.preparingPublicLink': 'Przygotowywanie publicznego linku…',
   'fileViewer.copyDeployLink': 'Kopiuj link',
-  'fileViewer.deployModalTitle': 'Wdróż na Vercel',
+    'fileViewer.deployModalTitle': 'Wdróż',
   'fileViewer.deployModalSubtitle': 'Użyj konta wybranego dostawcy, aby wdrożyć ten podgląd HTML.',
   'fileViewer.vercelToken': 'Token Vercel',
   'fileViewer.vercelTokenGetLink': 'Pobierz token Vercel',
