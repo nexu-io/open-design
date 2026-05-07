@@ -395,9 +395,15 @@ export async function updateDeployConfig(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: { message?: string }; message?: string }
+        | null;
+      throw new Error(payload?.error?.message || payload?.message || `Could not save deploy config (${resp.status})`);
+    }
     return (await resp.json()) as WebDeployConfigResponse;
-  } catch {
+  } catch (err) {
+    if (err instanceof Error) throw err;
     return null;
   }
 }

@@ -184,7 +184,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).not.toContain('data-od-render-mode="url-load"');
   });
 
-  it('shows both Vercel and Cloudflare Pages deploy entries in the share menu', () => {
+  it('shows Cloudflare Pages as a deploy action without requiring a project name input', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -211,7 +211,13 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
+
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByText('Account ID')).toBeTruthy();
+    expect(screen.getByText('Pages project name')).toBeTruthy();
+    expect(screen.getByText(/generates a Pages project name automatically/i)).toBeTruthy();
+    expect(screen.queryByLabelText('Pages project name')).toBeNull();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {

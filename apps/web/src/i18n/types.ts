@@ -801,6 +801,7 @@ export interface Dict {
   'fileViewer.vercelTeamSlug': string;
   'fileViewer.cloudflareAccountId': string;
   'fileViewer.cloudflareAccountIdHint': string;
+  'fileViewer.cloudflareAccountIdRequired': string;
   'fileViewer.cloudflareProjectName': string;
   'fileViewer.cloudflareProjectNameHint': string;
   'fileViewer.optional': string;

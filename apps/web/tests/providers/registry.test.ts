@@ -216,7 +216,7 @@ describe('deploy provider registry helpers', () => {
       teamId: '',
       teamSlug: '',
       accountId: 'account-123',
-      projectName: 'open-design-preview',
+      projectName: '',
       target: 'preview',
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -225,7 +225,7 @@ describe('deploy provider registry helpers', () => {
       providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
       configured: true,
       accountId: 'account-123',
-      projectName: 'open-design-preview',
+      projectName: '',
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/deploy/config?providerId=cloudflare-pages');
@@ -239,7 +239,7 @@ describe('deploy provider registry helpers', () => {
       teamId: '',
       teamSlug: '',
       accountId: 'account-123',
-      projectName: 'open-design-preview',
+      projectName: '',
       target: 'preview',
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -248,11 +248,10 @@ describe('deploy provider registry helpers', () => {
       providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
       token: 'cf-token',
       accountId: 'account-123',
-      projectName: 'open-design-preview',
     })).resolves.toMatchObject({
       providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
       accountId: 'account-123',
-      projectName: 'open-design-preview',
+      projectName: '',
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/deploy/config', {
@@ -262,7 +261,6 @@ describe('deploy provider registry helpers', () => {
         providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
         token: 'cf-token',
         accountId: 'account-123',
-        projectName: 'open-design-preview',
       }),
     });
   });

@@ -89,18 +89,12 @@ type DeployProviderOption = {
     | 'fileViewer.cloudflareApiTokenPlaceholder';
   tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
   tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
-  configSaveFailedKey:
-    | 'fileViewer.deployConfigSaveFailed'
-    | 'fileViewer.cloudflareDeployConfigSaveFailed';
-  deployFailedKey: 'fileViewer.deployFailed' | 'fileViewer.cloudflareDeployFailed';
   previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
     | 'fileViewer.cloudflareApiToken';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
-  projectNameLabelKey?: 'fileViewer.cloudflareProjectName';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
-  projectNameHintKey?: 'fileViewer.cloudflareProjectNameHint';
 };
 const MAX_BRIDGE_COORDINATE = 1_000_000;
 
@@ -120,8 +114,6 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
     tokenRequiredKey: 'fileViewer.vercelTokenRequired',
-    configSaveFailedKey: 'fileViewer.deployConfigSaveFailed',
-    deployFailedKey: 'fileViewer.deployFailed',
     previewHintKey: 'fileViewer.vercelPreviewOnly',
     tokenLabelKey: 'fileViewer.vercelToken',
   },
@@ -133,14 +125,10 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
     tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
-    configSaveFailedKey: 'fileViewer.cloudflareDeployConfigSaveFailed',
-    deployFailedKey: 'fileViewer.cloudflareDeployFailed',
     previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
-    projectNameLabelKey: 'fileViewer.cloudflareProjectName',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
-    projectNameHintKey: 'fileViewer.cloudflareProjectNameHint',
   },
 ];
 
@@ -2116,7 +2104,6 @@ function HtmlViewer({
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
   const [cloudflareAccountId, setCloudflareAccountId] = useState('');
-  const [cloudflareProjectName, setCloudflareProjectName] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
@@ -2168,7 +2155,6 @@ function HtmlViewer({
     setTeamId(matchingConfig?.teamId || '');
     setTeamSlug(matchingConfig?.teamSlug || '');
     setCloudflareAccountId(matchingConfig?.accountId || '');
-    setCloudflareProjectName(matchingConfig?.projectName || '');
   }
 
   function buildDeployConfigRequest(providerId: WebDeployProviderId): WebUpdateDeployConfigRequest {
@@ -2178,7 +2164,6 @@ function HtmlViewer({
         providerId,
         token,
         accountId: cloudflareAccountId.trim(),
-        projectName: cloudflareProjectName.trim(),
       };
     }
     return {
@@ -2798,6 +2783,14 @@ function HtmlViewer({
     setSavingDeployConfig(true);
     setDeployError(null);
     try {
+      if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+        if (!deployToken.trim()) {
+          throw new Error(t('fileViewer.cloudflareApiTokenRequired'));
+        }
+        if (!cloudflareAccountId.trim()) {
+          throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
+        }
+      }
       const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
       if (!config || config.providerId !== deployProviderId) {
         throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
@@ -2825,7 +2818,6 @@ function HtmlViewer({
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
         cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
-        cloudflareProjectName.trim() !== (deployConfig?.projectName || '') ||
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
@@ -3600,20 +3592,14 @@ function HtmlViewer({
                     <span>{t('fileViewer.cloudflareAccountId')}</span>
                     <input
                       value={cloudflareAccountId}
-                      placeholder={t('fileViewer.optional')}
                       onChange={(e) => setCloudflareAccountId(e.target.value)}
                     />
                     <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
                   </label>
-                  <label>
+                  <div className="deploy-auto-field">
                     <span>{t('fileViewer.cloudflareProjectName')}</span>
-                    <input
-                      value={cloudflareProjectName}
-                      placeholder={t('fileViewer.optional')}
-                      onChange={(e) => setCloudflareProjectName(e.target.value)}
-                    />
                     <span className="field-hint">{t('fileViewer.cloudflareProjectNameHint')}</span>
-                  </label>
+                  </div>
                 </div>
               ) : (
                 <div className="deploy-field-grid">
@@ -3684,16 +3670,16 @@ function HtmlViewer({
                     >
                       <Icon name="copy" size={14} />
                       <span>{copyDeployLabel}</span>
-                    </button>
-                    <a
-                      className={`ghost-link ${activeDeploymentReady ? '' : 'disabled'}`}
-                      href={activeDeploymentReady ? activeDeployedUrl : undefined}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      aria-disabled={!activeDeploymentReady}
-                    >
-                      <Icon name="upload" size={14} />
-                      {t('fileViewer.open')}
+                      </button>
+                      <a
+                        className={`ghost-link ${activeDeploymentProtected ? 'disabled' : ''}`}
+                        href={activeDeploymentProtected ? undefined : activeDeployedUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        aria-disabled={activeDeploymentProtected}
+                      >
+                        <Icon name="upload" size={14} />
+                        {t('fileViewer.open')}
                     </a>
                   </div>
                 </div>

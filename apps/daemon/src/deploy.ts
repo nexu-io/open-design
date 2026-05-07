@@ -85,9 +85,14 @@ export async function writeCloudflarePagesConfig(input) {
         ? tokenInput
         : current.token,
     accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
-    projectName:
-      typeof input?.projectName === 'string' ? input.projectName.trim() : current.projectName,
+    // Legacy installs may already have a saved Cloudflare Pages projectName.
+    // New writes intentionally stop treating it as user configuration: the
+    // deploy route derives a Pages project name from the current OD project,
+    // mirroring Vercel's automatic `od-${projectId}` deployment name.
+    projectName: '',
   };
+  if (!next.token) throw new DeployError('Cloudflare API token is required.', 400);
+  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
   return publicCloudflarePagesConfig(next);
 }
@@ -116,7 +121,7 @@ export function publicDeployConfig(config) {
 export function publicCloudflarePagesConfig(config) {
   return {
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    configured: Boolean(config?.token && config?.accountId && config?.projectName),
+    configured: Boolean(config?.token && config?.accountId),
     tokenMask: config?.token ? SAVED_CLOUDFLARE_TOKEN_MASK : '',
     teamId: '',
     teamSlug: '',
@@ -305,7 +310,7 @@ export async function deployToVercel({ config, files, projectId }) {
 export async function deployToCloudflarePages({ config, files }) {
   if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
   if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name is required.', 400);
+  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
 
   await ensureCloudflarePagesProject(config);
 
@@ -338,12 +343,13 @@ export async function deployToCloudflarePages({ config, files }) {
   }
 
   const deployment = deployed?.result ?? deployed;
-  const candidates = deploymentUrlCandidates(deployment);
-  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [deployment?.url]);
+  const productionUrl = cloudflarePagesProductionUrl(config);
+  const candidates = deploymentUrlCandidates({ url: productionUrl }, deployment);
+  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [productionUrl, deployment?.url]);
 
   return {
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    url: link.url || deploymentUrl(deployment),
+    url: link.url || productionUrl || deploymentUrl(deployment),
     deploymentId: deployment?.id,
     target: 'preview',
     status: link.status,
@@ -1029,6 +1035,18 @@ function cloudflarePagesProjectUrl(config, suffix = '') {
   return suffix ? `${base}/${suffix}` : base;
 }
 
+function cloudflarePagesProductionUrl(config) {
+  return config?.projectName ? `https://${config.projectName}.pages.dev` : '';
+}
+
+export function cloudflarePagesProjectNameForProject(projectId, projectName = '') {
+  const idSuffix = safeDnsLabel(projectId).slice(0, 12) || randomUUID().slice(0, 8);
+  const nameBase = safeDnsLabel(projectName) || 'project';
+  const fixedLength = 'od--'.length + idSuffix.length;
+  const baseLength = Math.max(1, 63 - fixedLength);
+  return safeDnsLabel(`od-${nameBase.slice(0, baseLength)}-${idSuffix}`);
+}
+
 function cloudflareHeaders(config, extra = {}) {
   return {
     Authorization: `Bearer ${config.token}`,
@@ -1078,9 +1096,20 @@ function deploymentUrl(json) {
 }
 
 function safeVercelProjectName(raw) {
+  return safeProjectLabel(raw, 80) || `od-${randomUUID().slice(0, 8)}`;
+}
+
+function safeDnsLabel(raw) {
+  return safeProjectLabel(raw, 63);
+}
+
+function safeProjectLabel(raw, maxLength) {
   return String(raw)
+    .normalize('NFKD')
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || `od-${randomUUID().slice(0, 8)}`;
+    .slice(0, maxLength)
+    .replace(/-+$/g, '');
 }

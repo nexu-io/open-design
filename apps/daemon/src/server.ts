@@ -142,6 +142,7 @@ import {
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesProjectNameForProject,
   DeployError,
   deployToCloudflarePages,
   deployToVercel,
@@ -2836,7 +2837,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
       const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
         ? await deployToCloudflarePages({
-            config: await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+            config: {
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              projectName: cloudflarePagesProjectNameForProject(
+                req.params.id,
+                getProject(db, req.params.id)?.name,
+              ),
+            },
             files,
             projectId: req.params.id,
           })
@@ -2936,11 +2943,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             'deployment not found',
           );
         }
-        const result = await checkDeploymentUrl(existing.url);
+        const checkUrl = existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? `https://${cloudflarePagesProjectNameForProject(
+              req.params.id,
+              getProject(db, req.params.id)?.name,
+            )}.pages.dev`
+          : existing.url;
+        const result = await checkDeploymentUrl(checkUrl);
         const now = Date.now();
         /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
         const body = upsertDeployment(db, {
           ...existing,
+          url: checkUrl || existing.url,
           status: result.reachable ? 'ready' : result.status || 'link-delayed',
           statusMessage: result.reachable
             ? 'Public link is ready.'

@@ -12,6 +12,7 @@ import {
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesProjectNameForProject,
   DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES,
   DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
   deploymentUrlCandidates,
@@ -118,7 +119,6 @@ describe('deploy config', () => {
       const saved = await writeCloudflarePagesConfig({
         token: 'cloudflare-token-secret',
         accountId: 'account_123',
-        projectName: 'od-pages-demo',
       });
 
       expect(path.basename(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID))).toBe('cloudflare-pages.json');
@@ -130,26 +130,51 @@ describe('deploy config', () => {
         teamId: '',
         teamSlug: '',
         accountId: 'account_123',
-        projectName: 'od-pages-demo',
+        projectName: '',
         target: 'preview',
       });
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
         token: 'cloudflare-token-secret',
         accountId: 'account_123',
-        projectName: 'od-pages-demo',
+        projectName: '',
       });
 
       const maskedUpdate = await writeCloudflarePagesConfig({
         token: SAVED_CLOUDFLARE_TOKEN_MASK,
-        projectName: 'renamed-pages-demo',
+        accountId: 'account_456',
       });
 
       expect(maskedUpdate.tokenMask).toBe(SAVED_CLOUDFLARE_TOKEN_MASK);
+      expect(maskedUpdate.accountId).toBe('account_456');
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
         token: 'cloudflare-token-secret',
-        accountId: 'account_123',
-        projectName: 'renamed-pages-demo',
+        accountId: 'account_456',
+        projectName: '',
       });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('requires Cloudflare Pages token and account id while deriving project names automatically', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-required-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      await expect(writeCloudflarePagesConfig({
+        token: 'cloudflare-token-secret',
+      })).rejects.toThrow(/account ID is required/i);
+      await expect(writeCloudflarePagesConfig({
+        accountId: 'account_123',
+      })).rejects.toThrow(/API token is required/i);
+      expect(cloudflarePagesProjectNameForProject('project-123', 'AI 生图网站')).toBe(
+        'od-ai-project-123',
+      );
+      expect(cloudflarePagesProjectNameForProject('12345678', '中文项目')).toBe(
+        'od-project-12345678',
+      );
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
@@ -842,7 +867,7 @@ describe('cloudflare pages deploys', () => {
         expect(await assetPart?.text()).toBe('body { color: red; }');
         return new Response(JSON.stringify({
           success: true,
-          result: { id: 'dep_123', url: 'https://demo-pages.pages.dev' },
+          result: { id: 'dep_123', url: 'https://d34527d9.demo-pages.pages.dev' },
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
