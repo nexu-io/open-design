@@ -2403,8 +2403,11 @@ function IntegrationsSection() {
               // Copy button so the first line of the snippet does not
               // sit underneath it, and reserve right clearance so a
               // wrapped bash one-liner stops short of the button rather
-              // than scrolling behind it. Issue #632.
-              padding: '40px 80px 12px 14px',
+              // than scrolling behind it. The right padding is sized
+              // for the wider "Copied" post-click state (icon + text +
+              // button padding + the 8px right offset) with a few px
+              // of buffer for elevated font sizes / zoom. Issue #632.
+              padding: '40px 104px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
