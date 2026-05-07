@@ -29,7 +29,7 @@
 - [ ] Plan is organised by problem using numbered headers
 - [ ] Critical findings are visually highlighted (red callout box)
 - [ ] Document is print-friendly (white background, `@media print` rules present)
-- [ ] A validated risk score is included where applicable (TIMI, CURB-65, qSOFA, Wells)
+- [ ] A validated risk score is included where applicable (TIMI, GRACE, Killip class + Shock Index for STEMI/cardiogenic shock, CURB-65, qSOFA, Wells)
 
 ## P2 — Nice to Have
 

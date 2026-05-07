@@ -80,8 +80,9 @@ Read the user's prompt and extract:
 - Clinical context: ED, ward rounds, conference case, outpatient, etc.
 - Specialty context: cardiology, emergency, internal medicine, etc.
 
-If the chief complaint is missing, ask one clarifying question before
-proceeding. Do not proceed without it.
+If the chief complaint or presenting problem is missing:
+- **SOAP / Conference**: ask one clarifying question before proceeding. Do not proceed without it.
+- **Brief Rounds**: if the admission problem or ID line is already available (e.g. "day-3 ICU review for septic shock"), proceed directly — a separate chief complaint is not required.
 
 ### Step 2 — Build the clinical narrative
 
@@ -143,8 +144,10 @@ The assessment section must contain:
 3. **Differential diagnosis** — exactly 3 to 5 items, each with one
    sentence of supporting or refuting evidence
 4. **Risk stratification** — include a validated clinical score where
-   applicable (TIMI for ACS, CURB-65 for pneumonia, qSOFA for sepsis,
-   Wells for PE, etc.)
+   applicable (TIMI for ACS, GRACE for ACS, Killip class + Shock Index
+   for STEMI/cardiogenic shock, CURB-65 for pneumonia, qSOFA for sepsis,
+   Wells for PE, etc.). Killip class and Shock Index together are
+   accepted as sufficient risk stratification for STEMI/cardiogenic shock cases.
 
 ### Step 5 — Write the management plan
 
