@@ -43,7 +43,7 @@ Isso não é "IA tentando desenhar algo". É uma IA que foi treinada, pela pilha
 
 OD se apoia em quatro ombros open-source:
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — a bússola da filosofia de design. Workflow Junior-Designer, protocolo de 5 passos para asset de marca, checklist anti-AI-slop, autocrítica em 5 dimensões e a ideia "5 escolas × 20 filosofias de design" por trás do nosso direction picker — tudo destilado em [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts).
+- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — a bússola da filosofia de design. Workflow Junior-Designer, protocolo de 5 passos para asset de marca, checklist anti-AI-slop, autocrítica em 5 dimensões e a ideia "5 escolas × 20 filosofias de design" por trás do nosso direction picker — tudo destilado em [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts).
 - [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — o modo deck. Empacotado literalmente sob [`skills/guizang-ppt/`](skills/guizang-ppt/) com o LICENSE original preservado; layouts estilo revista, hero WebGL, checklists P0/P1/P2.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — a estrela-guia de UX e nosso peer mais próximo. A primeira alternativa open-source ao Claude Design. Pegamos o loop de streaming-artifact dele, o padrão de preview em iframe sandboxed (React 18 + Babel vendored), o painel de agente ao vivo (todos + tool calls + geração interruptível) e a lista de cinco formatos de export (HTML / PDF / PPTX / ZIP / Markdown). Divergimos de propósito no form factor — eles são um app desktop Electron com [`pi-ai`][piai] embutido; nós somos um web app + daemon local que delega ao seu CLI já existente.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — a arquitetura de daemon-and-runtime. Detecção de agente por scan de PATH, daemon local como único processo privilegiado, visão de mundo agente-como-time.
@@ -57,7 +57,7 @@ OD se apoia em quatro ombros open-source:
 | **Design systems built-in** | **129** — 2 starters escritos à mão + 70 sistemas de produto (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) de [`awesome-design-md`][acd2], mais 57 design skills de [`awesome-design-skills`][ads] adicionados direto em `design-systems/` |
 | **Skills built-in** | **31** — 27 em modo `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 em modo `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Agrupadas no picker por `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Geração de mídia** | Imagem · vídeo · áudio entregues lado a lado com o loop de design. **gpt-image-2** (Azure / OpenAI) para pôsteres, avatares, infográficos, mapas ilustrados · **Seedance 2.0** (ByteDance) para texto-para-vídeo cinematográfico de 15s e imagem-para-vídeo · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) para motion graphics HTML→MP4 (revelações de produto, kinetic typography, gráficos de dados, overlays sociais, logo outros). **93** prompts prontos para replicar — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — em [`prompt-templates/`](prompt-templates/), com thumbnails de preview e atribuição da fonte. Mesma superfície de chat do código; saída é um `.mp4` / `.png` real entrando no workspace do projeto. |
-| **Direções visuais** | 5 escolas curadas (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — cada uma trazendo paleta OKLch determinística + font stack ([`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts)) |
+| **Direções visuais** | 5 escolas curadas (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — cada uma trazendo paleta OKLch determinística + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Frames de dispositivo** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, compartilhados entre skills sob [`assets/frames/`](assets/frames/) |
 | **Runtime de agente** | Daemon local sobe o CLI dentro da pasta do seu projeto — agente recebe `Read`, `Write`, `Bash`, `WebFetch` reais contra um ambiente real em disco, com fallbacks de Windows `ENAMETOOLONG` (stdin / arquivo de prompt) em todos os adapters |
 | **Imports** | Solte um ZIP exportado do [Claude Design][cd] no welcome dialog — `POST /api/import/claude-design` parseia para um projeto real, então seu agente continua editando de onde a Anthropic parou |
@@ -254,7 +254,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
 ```
 
-Toda camada é compositável. Toda camada é um arquivo que dá pra editar. Leia [`packages/contracts/src/prompts/system.ts`](packages/contracts/src/prompts/system.ts) e [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) para ver o contrato real.
+Toda camada é compositável. Toda camada é um arquivo que dá pra editar. Leia [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) e [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) para ver o contrato real.
 
 ## Arquitetura
 
@@ -497,7 +497,7 @@ Quando o usuário não tem brand spec, o agente emite um segundo formulário com
 | Brutalist | Cru, tipografia gigante, sem sombra, acentos duros | Bloomberg Businessweek · Achtung |
 | Soft warm | Generoso, baixo contraste, neutros pessegos | Marketing da Notion · Apple Health |
 
-Spec completa → [`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts).
+Spec completa → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts).
 
 ## Geração de mídia
 
@@ -587,7 +587,7 @@ O loop chat / artifact é o destaque, mas algumas capacidades menos visíveis j�
 
 ## Maquinário anti-AI-slop
 
-Toda a maquinaria abaixo é o playbook do [`huashu-design`](https://github.com/alchaincyf/huashu-design), portado para a pilha de prompt do OD e exigível por skill via o pre-flight de side files. Leia [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) para o texto vivo:
+Toda a maquinaria abaixo é o playbook do [`huashu-design`](https://github.com/alchaincyf/huashu-design), portado para a pilha de prompt do OD e exigível por skill via o pre-flight de side files. Leia [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) para o texto vivo:
 
 - **Formulário de perguntas primeiro.** O turn 1 é só `<question-form>` — sem pensar, sem tools, sem narração. O usuário escolhe defaults na velocidade de um radio.
 - **Extração de brand-spec.** Quando o usuário anexa um screenshot ou URL, o agente roda um protocolo de cinco passos (localizar · baixar · grep hex · codificar `brand-spec.md` · vocalizar) antes de escrever CSS. **Nunca chuta cores de marca de memória.**
@@ -662,7 +662,7 @@ Todo projeto externo do qual este repo emprestou. Cada link aponta para a fonte 
 | Projeto | Papel aqui |
 |---|---|
 | [`Claude Design`][cd] | O produto closed-source ao qual este repo é alternativa open-source. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | O núcleo de filosofia de design. Workflow Junior-Designer, protocolo de 5 passos para asset de marca, checklist anti-AI-slop, autocrítica em 5 dimensões e a biblioteca "5 escolas × 20 filosofias de design" por trás do nosso direction picker — tudo destilado em [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) e [`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts). |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | O núcleo de filosofia de design. Workflow Junior-Designer, protocolo de 5 passos para asset de marca, checklist anti-AI-slop, autocrítica em 5 dimensões e a biblioteca "5 escolas × 20 filosofias de design" por trás do nosso direction picker — tudo destilado em [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) e [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Skill magazine-web-PPT bundled literalmente sob [`skills/guizang-ppt/`](skills/guizang-ppt/) com LICENSE original preservado. Default do deck mode. Cultura de checklist P0/P1/P2 emprestada para todas as outras skills. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | A arquitetura de daemon + adapter. Detecção de agente por scan de PATH, daemon local como único processo privilegiado, visão de mundo agente-como-time. Adotamos o modelo; não vendoramos o código. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | A primeira alternativa open-source ao Claude Design e nosso peer mais próximo. Padrões UX adotados: loop streaming-artifact, preview em iframe sandboxed (React 18 + Babel vendored), painel de agente ao vivo (todos + tool calls + interruptível), lista de cinco formatos de export (HTML/PDF/PPTX/ZIP/Markdown), hub de storage local-first, injeção de gosto via `SKILL.md` e a primeira passada de anotações de preview em modo comentário. Padrões UX ainda no nosso roadmap: confiabilidade plena de edição cirúrgica e painel de tweaks emitido pela IA. **Deliberadamente não vendoramos [`pi-ai`][piai]** — o open-codesign embute como runtime de agente; nós delegamos para o CLI que o usuário já tem. |
