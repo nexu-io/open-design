@@ -102,17 +102,80 @@ export async function finalizeDesignPackage(
   _projectId: string,
   _options: FinalizeOptions,
 ): Promise<FinalizeAnthropicResponse> {
-  // Phase C scaffold — body fills in across phases D-H.
-  // Reference path constants here so they are reachable from the route
-  // handler's import (which only currently uses the function and the
-  // error classes). Without this the constants would lint as unused
-  // until Phase H wires them into the real body.
+  // Phase D body still pending — synthesis pipeline lands in Phase H.
+  // Path constants referenced here stay reachable for incremental phases.
   void DEFAULT_BASE_URL;
   void DEFAULT_MAX_TOKENS;
-  void INPUT_BODY_CAP_BYTES;
   void LOCK_FILENAME;
   void OUTPUT_FILENAME;
   void DEFAULT_TIMEOUT_MS;
   void path;
-  throw new Error('finalizeDesignPackage not yet implemented (phase C scaffold)');
+  throw new Error('finalizeDesignPackage not yet implemented (phase D scaffold)');
+}
+
+/**
+ * Truncate a JSONL transcript body so it fits inside Claude's context
+ * window when fed into a synthesis prompt. The on-disk transcript stays
+ * untouched (PR #493's lossless contract); this function operates on a
+ * copy that lives only in the prompt.
+ *
+ * Strategy: keep the header line (line 0); if the remaining body exceeds
+ * INPUT_BODY_CAP_BYTES (minus the header + marker reservation), retain
+ * head and tail lines in roughly equal byte budgets and drop the middle
+ * with a single sentinel JSON line:
+ *
+ *   {"kind":"truncated","reason":"size","omittedBytes":<N>}
+ *
+ * `omittedBytes` is the difference between the original UTF-8 byte
+ * length and the truncated output's UTF-8 byte length, so a synthesis
+ * consumer can detect the gap.
+ *
+ * If head + tail budgets together cover the whole body (e.g. all message
+ * lines are tiny), no marker is emitted; the output is the input
+ * verbatim.
+ */
+export function truncateTranscriptForPrompt(jsonl: string): string {
+  const buf = Buffer.from(jsonl, 'utf8');
+  if (buf.byteLength <= INPUT_BODY_CAP_BYTES) return jsonl;
+
+  const lines = jsonl.split('\n');
+  const header = lines[0] ?? '';
+  const body = lines.slice(1);
+
+  const markerLine = '{"kind":"truncated","reason":"size","omittedBytes":__N__}';
+  const reservedBytes =
+    Buffer.byteLength(header + '\n', 'utf8') +
+    Buffer.byteLength(markerLine + '\n', 'utf8') +
+    64;
+  const perSideBudget = Math.floor((INPUT_BODY_CAP_BYTES - reservedBytes) / 2);
+
+  const headLines: string[] = [];
+  let headBytes = 0;
+  let headIndex = 0;
+  for (; headIndex < body.length; headIndex += 1) {
+    const lineBytes = Buffer.byteLength(body[headIndex] + '\n', 'utf8');
+    if (headBytes + lineBytes > perSideBudget) break;
+    headLines.push(body[headIndex]);
+    headBytes += lineBytes;
+  }
+
+  const tailLines: string[] = [];
+  let tailBytes = 0;
+  for (let i = body.length - 1; i >= headIndex; i -= 1) {
+    const lineBytes = Buffer.byteLength(body[i] + '\n', 'utf8');
+    if (tailBytes + lineBytes > perSideBudget) break;
+    tailLines.unshift(body[i]);
+    tailBytes += lineBytes;
+  }
+
+  if (headLines.length + tailLines.length >= body.length) {
+    // Head + tail covers the whole body — no truncation needed beyond the
+    // marker reservation. Return verbatim.
+    return [header, ...headLines, ...tailLines].join('\n');
+  }
+
+  const without = [header, ...headLines, ...tailLines].join('\n');
+  const omittedBytes = buf.byteLength - Buffer.byteLength(without, 'utf8');
+  const marker = markerLine.replace('__N__', String(omittedBytes));
+  return [header, ...headLines, marker, ...tailLines].join('\n');
 }
