@@ -1342,7 +1342,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // port-match via buildAllowedOrigins() or isLocalSameOrigin() to
   // prevent local CSRF from a page on the default port (80).
   function isPortlessLoopbackOrigin(origin) {
-    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1])(|$)/.test(origin);
+    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
