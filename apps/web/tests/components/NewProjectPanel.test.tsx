@@ -74,6 +74,7 @@ beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   Element.prototype.scrollIntoView = vi.fn();
 });
+
 describe('NewProjectPanel design system defaults', () => {
   it('uses the configured default design system when it exists in the catalog', () => {
     expect(defaultDesignSystemSelection('clay', designSystems)).toEqual(['clay']);
@@ -108,6 +109,7 @@ describe('NewProjectPanel design system defaults', () => {
       inspirations: [],
     });
   });
+
   it('preserves prototype fidelity across tab switches and saves it into the create payload', () => {
     const onCreate = vi.fn();
     render(
