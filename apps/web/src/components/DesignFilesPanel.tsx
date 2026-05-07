@@ -75,6 +75,10 @@ export function DesignFilesPanel({
   }, [pageSize]);
 
   useEffect(() => {
+    setPage((p) => Math.min(p, totalPages - 1));
+  }, [totalPages]);
+
+  useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const names = new Set(files.map((f) => f.name));
@@ -324,7 +328,7 @@ export function DesignFilesPanel({
                         type="button"
                         className="df-page-btn"
                         disabled={safePage <= 0}
-                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        onClick={() => setPage(Math.max(0, safePage - 1))}
                       >
                         {t('designFiles.prev')}
                       </button>
@@ -332,7 +336,7 @@ export function DesignFilesPanel({
                         type="button"
                         className="df-page-btn"
                         disabled={safePage >= totalPages - 1}
-                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
                       >
                         {t('designFiles.next')}
                       </button>
