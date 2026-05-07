@@ -62,6 +62,18 @@ export function DesignFilesPanel({
     });
   }, [files, sortKey, sortDir]);
 
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number | 'all'>(30);
+
+  const effectivePageSize = pageSize === 'all' ? sortedFiles.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageFiles = sortedFiles.slice(safePage * effectivePageSize, (safePage + 1) * effectivePageSize);
+
+  useEffect(() => {
+    setPage(0);
+  }, [pageSize]);
+
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
@@ -261,153 +273,228 @@ export function DesignFilesPanel({
                 </div>
               ) : null}
               {sortedFiles.length > 0 ? (
-                <table className="df-table">
-                  <thead>
-                    <tr>
-                      <th className="df-th-check" />
-                      <th className="df-th-icon" />
-                      <th
-                        className="df-th-name df-th-sortable"
-                        aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                <>
+                  <div className="df-pagination df-pagination-start">
+                    <label>
+                      {t('designFiles.perPage')}:
+                      <select
+                        value={pageSize === 'all' ? 'all' : pageSize}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPageSize(val === 'all' ? 'all' : Number(val));
+                        }}
                       >
-                        <button type="button" className="df-th-btn" onClick={toggleSort('name')}>
-                          {t('designFiles.colName')}
-                          {sortKey === 'name' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
-                        </button>
-                      </th>
-                      <th
-                        className="df-th-kind df-th-sortable"
-                        aria-sort={sortKey === 'kind' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        <option value={15}>15</option>
+                        <option value={30}>30</option>
+                        <option value={45}>45</option>
+                        <option value={60}>60</option>
+                        <option value="all">{t('designFiles.all')}</option>
+                      </select>
+                    </label>
+                    <span className="df-page-info">
+                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} of {sortedFiles.length}
+                    </span>
+                    <div className="df-pagination-right">
+                      <button
+                        type="button"
+                        className="df-page-btn"
+                        disabled={safePage <= 0}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
                       >
-                        <button type="button" className="df-th-btn" onClick={toggleSort('kind')}>
-                          {t('designFiles.colKind')}
-                          {sortKey === 'kind' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
-                        </button>
-                      </th>
-                      <th
-                        className="df-th-time df-th-sortable"
-                        aria-sort={sortKey === 'mtime' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        {t('designFiles.prev')}
+                      </button>
+                      <button
+                        type="button"
+                        className="df-page-btn"
+                        disabled={safePage >= totalPages - 1}
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                       >
-                        <button type="button" className="df-th-btn" onClick={toggleSort('mtime')}>
-                          {t('designFiles.colModified')}
-                          {sortKey === 'mtime' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
-                        </button>
-                      </th>
-                      <th className="df-th-menu" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedFiles.map((f) => {
-                      const active = preview === f.name;
-                      const isHovered = hover === f.name;
-                      return (
-                        <tr
-                          key={f.name}
-                          data-testid={`design-file-row-${f.name}`}
-                          className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
-                          onMouseEnter={() => setHover(f.name)}
-                          onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                          onClick={() => setPreview(f.name)}
-                          onDoubleClick={() => onOpenFile(f.name)}
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              const now = Date.now();
-                              const last = lastKeyPress.current.get(f.name) ?? 0;
-                              if (now - last < 300) {
-                                lastKeyPress.current.delete(f.name);
-                                onOpenFile(f.name);
-                              } else {
-                                lastKeyPress.current.set(f.name, now);
-                                setPreview(f.name);
-                              }
-                            }
-                          }}
+                        {t('designFiles.next')}
+                      </button>
+                    </div>
+                  </div>
+                  <table className="df-table">
+                    <thead>
+                      <tr>
+                        <th className="df-th-check" />
+                        <th className="df-th-icon" />
+                        <th
+                          className="df-th-name df-th-sortable"
+                          aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                         >
-                          <td className="df-cell-check">
-                            <span
-                              className="df-row-check"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleSelect(f.name);
-                              }}
-                              role="checkbox"
-                              aria-checked={selected.has(f.name)}
-                              tabIndex={0}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
+                          <button type="button" className="df-th-btn" onClick={toggleSort('name')}>
+                            {t('designFiles.colName')}
+                            {sortKey === 'name' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                          </button>
+                        </th>
+                        <th
+                          className="df-th-kind df-th-sortable"
+                          aria-sort={sortKey === 'kind' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          <button type="button" className="df-th-btn" onClick={toggleSort('kind')}>
+                            {t('designFiles.colKind')}
+                            {sortKey === 'kind' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                          </button>
+                        </th>
+                        <th
+                          className="df-th-time df-th-sortable"
+                          aria-sort={sortKey === 'mtime' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          <button type="button" className="df-th-btn" onClick={toggleSort('mtime')}>
+                            {t('designFiles.colModified')}
+                            {sortKey === 'mtime' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                          </button>
+                        </th>
+                        <th className="df-th-menu" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageFiles.map((f) => {
+                        const active = preview === f.name;
+                        const isHovered = hover === f.name;
+                        return (
+                          <tr
+                            key={f.name}
+                            data-testid={`design-file-row-${f.name}`}
+                            className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
+                            onMouseEnter={() => setHover(f.name)}
+                            onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+                            onClick={() => setPreview(f.name)}
+                            onDoubleClick={() => onOpenFile(f.name)}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                const now = Date.now();
+                                const last = lastKeyPress.current.get(f.name) ?? 0;
+                                if (now - last < 300) {
+                                  lastKeyPress.current.delete(f.name);
+                                  onOpenFile(f.name);
+                                } else {
+                                  lastKeyPress.current.set(f.name, now);
+                                  setPreview(f.name);
+                                }
+                              }
+                            }}
+                          >
+                            <td className="df-cell-check">
+                              <span
+                                className="df-row-check"
+                                onClick={(e) => {
                                   e.stopPropagation();
                                   toggleSelect(f.name);
-                                }
-                              }}
-                            >
-                              {selected.has(f.name) ? '\u2611' : '\u2610'}
-                            </span>
-                          </td>
-                          <td className="df-cell-icon">
-                            <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-                              {kindGlyph(f.kind)}
-                            </span>
-                          </td>
-                          <td className="df-cell-name">
-                            <span className="df-row-name-wrap">
-                              <span className="df-row-name">{f.name}</span>
-                              <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-                            </span>
-                          </td>
-                          <td className="df-cell-kind">
-                            <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
-                          </td>
-                          <td className="df-cell-time">{relativeTime(f.mtime, t)}</td>
-                          <td className="df-cell-menu">
-                            <span
-                              data-testid={`design-file-menu-${f.name}`}
-                              className="df-row-menu"
-                              style={isHovered || active ? { opacity: 1 } : undefined}
-                              role="button"
-                              aria-label={t('designFiles.rowMenu')}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const rect = (e.target as HTMLElement)
-                                  .closest('.df-row-menu')
-                                  ?.getBoundingClientRect();
-                                if (!rect) return;
+                                }}
+                                role="checkbox"
+                                aria-checked={selected.has(f.name)}
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toggleSelect(f.name);
+                                  }
+                                }}
+                              >
+                                {selected.has(f.name) ? '\u2611' : '\u2610'}
+                              </span>
+                            </td>
+                            <td className="df-cell-icon">
+                              <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+                                {kindGlyph(f.kind)}
+                              </span>
+                            </td>
+                            <td className="df-cell-name">
+                              <span className="df-row-name-wrap">
+                                <span className="df-row-name">{f.name}</span>
+                                <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+                              </span>
+                            </td>
+                            <td className="df-cell-kind">
+                              <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
+                            </td>
+                            <td className="df-cell-time">{relativeTime(f.mtime, t)}</td>
+                            <td className="df-cell-menu">
+                              <span
+                                data-testid={`design-file-menu-${f.name}`}
+                                className="df-row-menu"
+                                style={isHovered || active ? { opacity: 1 } : undefined}
+                                role="button"
+                                aria-label={t('designFiles.rowMenu')}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = (e.target as HTMLElement)
+                                    .closest('.df-row-menu')
+                                    ?.getBoundingClientRect();
+                                  if (!rect) return;
 
-                                const viewportHeight = window.innerHeight;
-                                const spaceBelow = viewportHeight - rect.bottom;
-                                const spaceAbove = rect.top;
+                                  const viewportHeight = window.innerHeight;
+                                  const spaceBelow = viewportHeight - rect.bottom;
+                                  const spaceAbove = rect.top;
 
-                                let top: number;
-                                if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                                  top = rect.bottom + 4;
-                                } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                                  top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
-                                } else {
-                                  top = Math.max(
-                                    MENU_SAFE_PADDING,
-                                    viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
-                                  );
-                                }
+                                  let top: number;
+                                  if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+                                    top = rect.bottom + 4;
+                                  } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+                                    top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
+                                  } else {
+                                    top = Math.max(
+                                      MENU_SAFE_PADDING,
+                                      viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
+                                    );
+                                  }
 
-                                const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
+                                  const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
 
-                                setMenuPos({
-                                  name: f.name,
-                                  top,
-                                  left,
-                                });
-                              }}
-                            >
-                              ⋯
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                                  setMenuPos({
+                                    name: f.name,
+                                    top,
+                                    left,
+                                  });
+                                }}
+                              >
+                                ⋯
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="df-pagination df-pagination-center">
+                    <button
+                      type="button"
+                      className="df-page-btn"
+                      disabled={safePage <= 0}
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    >
+                      {t('designFiles.prev')}
+                    </button>
+                    <label>
+                      {t('designFiles.jumpToPage')}:
+                      <select
+                        value={safePage}
+                        onChange={(e) => setPage(Number(e.target.value))}
+                      >
+                        {Array.from({ length: totalPages }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="df-page-btn"
+                      disabled={safePage >= totalPages - 1}
+                      onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    >
+                      {t('designFiles.next')}
+                    </button>
+                    <span className="df-page-info">
+                      {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sortedFiles.length)} of {sortedFiles.length}
+                    </span>
+                  </div>
+                </>
               ) : null}
             </>
           )}

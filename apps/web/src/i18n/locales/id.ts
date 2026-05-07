@@ -563,6 +563,11 @@ export const id: Dict = {
   'designFiles.colName': 'Name',
   'designFiles.colKind': 'Kind',
   'designFiles.colModified': 'Modified',
+  'designFiles.perPage': 'Show',
+  'designFiles.all': 'All',
+  'designFiles.prev': 'Previous',
+  'designFiles.next': 'Next',
+  'designFiles.jumpToPage': 'Go to page',
 
   'quickSwitcher.placeholder': 'Buka file...',
   'quickSwitcher.empty': 'Tidak ada file di proyek ini',

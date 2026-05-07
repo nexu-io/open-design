@@ -4843,6 +4843,78 @@ button.connector-action.is-loading {
   color: var(--text-muted);
 }
 
+/* --- pagination --- */
+.df-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.df-pagination-start {
+  justify-content: flex-start;
+}
+.df-pagination-center {
+  justify-content: center;
+}
+.df-pagination-end {
+  justify-content: flex-end;
+}
+.df-pagination-right {
+  margin-left: auto;
+}
+.df-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.df-pagination select {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.df-pagination select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.df-page-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.df-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.df-page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-info {
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
 .df-row {
   display: grid;
   grid-template-columns: 28px 36px 1fr auto auto;

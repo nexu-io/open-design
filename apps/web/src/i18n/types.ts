@@ -633,6 +633,11 @@ export interface Dict {
   'designFiles.colName': string;
   'designFiles.colKind': string;
   'designFiles.colModified': string;
+  'designFiles.perPage': string;
+  'designFiles.all': string;
+  'designFiles.prev': string;
+  'designFiles.next': string;
+  'designFiles.jumpToPage': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
