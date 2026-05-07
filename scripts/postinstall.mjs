@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,48 +51,38 @@ for (const target of buildTargets) {
 }
 
 // Verify the better-sqlite3 native addon loads under the current Node.js ABI.
-// prebuild-install may have fetched a prebuilt binary for a different ABI (e.g.
-// after switching between Node 22 / 24 / 25). When the addon fails to dlopen,
-// rebuild from source using the node-gyp bundled with better-sqlite3 in the
-// pnpm virtual store — no external tooling required beyond a C++ compiler.
-const b3Link = resolve(repoRoot, "node_modules", "better-sqlite3");
-if (existsSync(b3Link)) {
-  const req = createRequire(import.meta.url);
-  let b3Loads = false;
-  try {
-    req(b3Link);
-    b3Loads = true;
-  } catch {}
+// better-sqlite3 is a dep of apps/daemon (not the workspace root), so resolve
+// it from the daemon package context. prebuild-install may have fetched a
+// prebuilt binary for a different ABI (e.g. after switching between Node 22 /
+// 24 / 25). When the addon fails to dlopen, pnpm rebuild handles the rebuild
+// using its own node-gyp lifecycle — no assumptions about where node-gyp lives.
+const req = createRequire(resolve(repoRoot, "apps/daemon/package.json"));
+let needsRebuild = false;
+try {
+  req("better-sqlite3");
+} catch (e) {
+  // MODULE_NOT_FOUND means daemon deps aren't installed yet — not our problem.
+  // Any other error (ERR_DLOPEN_FAILED, ABI mismatch, etc.) warrants a rebuild.
+  if (e?.code !== "MODULE_NOT_FOUND") {
+    needsRebuild = true;
+  }
+}
 
-  if (!b3Loads) {
-    // realpathSync resolves the pnpm symlink to the actual store path, e.g.
-    // node_modules/.pnpm/better-sqlite3@X.Y.Z/node_modules/better-sqlite3
-    // node-gyp is a direct dep and lives one level up in the same subtree.
-    const b3Dir = realpathSync(b3Link);
-    const nodeGypScript = resolve(b3Dir, "..", "node-gyp", "bin", "node-gyp.js");
-
-    if (!existsSync(nodeGypScript)) {
-      process.stderr.write(
-        "postinstall: node-gyp not found in the pnpm store alongside better-sqlite3.\n" +
-          "Run `pnpm install` again, or install build tools and retry.\n",
-      );
-      process.exit(1);
-    }
-
-    process.stdout.write(
-      `postinstall: rebuilding better-sqlite3 for Node.js ${process.version}...\n`,
+if (needsRebuild) {
+  process.stdout.write(
+    `postinstall: rebuilding better-sqlite3 for Node.js ${process.version}...\n`,
+  );
+  const rebuild = spawnSync(
+    packageManager.command,
+    [...packageManager.argsPrefix, "--filter", "@open-design/daemon", "rebuild", "better-sqlite3"],
+    { cwd: repoRoot, stdio: "inherit" },
+  );
+  if (rebuild.error != null) throw rebuild.error;
+  if (rebuild.status !== 0) {
+    process.stderr.write(
+      "postinstall: better-sqlite3 rebuild failed.\n" +
+        "Install build tools (python3, make, g++ or clang++) then run: pnpm install\n",
     );
-    const rebuild = spawnSync(process.execPath, [nodeGypScript, "rebuild"], {
-      cwd: b3Dir,
-      stdio: "inherit",
-    });
-    if (rebuild.error != null) throw rebuild.error;
-    if (rebuild.status !== 0) {
-      process.stderr.write(
-        "postinstall: better-sqlite3 rebuild failed.\n" +
-          "Install build tools (python3, make, g++ or clang++) then run: pnpm install\n",
-      );
-      process.exit(rebuild.status ?? 1);
-    }
+    process.exit(rebuild.status ?? 1);
   }
 }
