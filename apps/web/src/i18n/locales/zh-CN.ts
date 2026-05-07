@@ -718,8 +718,7 @@ export const zhCN: Dict = {
   'fileViewer.preparingPublicLink': '正在准备公开链接…',
   'fileViewer.copyDeployLink': '复制链接',
   'fileViewer.deployModalTitle': '部署到 Vercel',
-  'fileViewer.deployModalSubtitle':
-    '使用所选平台账号部署当前 HTML 预览。',
+  'fileViewer.deployModalSubtitle': '使用所选平台账号部署当前 HTML 预览。',
   'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': '获取 Vercel token',
   'fileViewer.vercelTokenPlaceholder': '粘贴你的 Vercel token',
@@ -730,6 +729,7 @@ export const zhCN: Dict = {
   'fileViewer.cloudflareApiTokenPlaceholder': '粘贴你的 Cloudflare API token',
   'fileViewer.cloudflareApiTokenReuseHint': '将使用已保存的 Cloudflare API token。输入新 token 可替换。',
   'fileViewer.cloudflareApiTokenRequired': '请先输入并保存 Cloudflare API token。',
+  'fileViewer.cloudflareApiTokenScopeHint': 'Token 需要 Account: Cloudflare Pages: Edit 权限，以及账号读取权限。',
   'fileViewer.vercelTeamId': 'Team ID',
   'fileViewer.vercelTeamSlug': 'Team slug',
   'fileViewer.cloudflareAccountId': 'Account ID',
@@ -742,14 +742,12 @@ export const zhCN: Dict = {
   'fileViewer.deployConfigSaveFailed': '保存 Vercel 设置失败。',
   'fileViewer.deployFailed': '部署失败，请检查 Vercel 设置后重试。',
   'fileViewer.deployProviderConfigSaveFailed': '无法保存 {provider} 设置。',
-  'fileViewer.deployProviderFailed': '{provider} deploy failed. Check settings and try again.',
+  'fileViewer.deployProviderFailed': '{provider} 部署失败。请检查设置后重试。',
   'fileViewer.deployResultLabel': '部署链接',
   'fileViewer.deployLinkPreparingLabel': '公开链接准备中',
-  'fileViewer.deployLinkDelayed':
-    'Your site is deployed. The public link is still being prepared.',
-  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
-  'fileViewer.deployLinkProtected':
-    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
+  'fileViewer.deployLinkDelayed': '站点已经部署，平台仍在准备公开链接。',
+  'fileViewer.deployLinkProtectedLabel': '部署访问保护已开启',
+  'fileViewer.deployLinkProtected': '站点已部署，但此预览链接要求登录后才能访问。请关闭 Deployment Protection 或使用自定义域名。',
   'fileViewer.retryLink': '立即重试',
 
   'questionForm.submit': '提交',

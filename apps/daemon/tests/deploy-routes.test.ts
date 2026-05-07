@@ -66,6 +66,29 @@ describe('deploy provider routes', () => {
         accountId: 'account_123',
         projectName: '',
       });
+
+      const maskedResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+          token: SAVED_CLOUDFLARE_TOKEN_MASK,
+          accountId: 'account_456',
+        }),
+      });
+      expect(maskedResp.status).toBe(200);
+      expect(await maskedResp.json()).toMatchObject({
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_CLOUDFLARE_TOKEN_MASK,
+        accountId: 'account_456',
+        projectName: '',
+      });
+      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
+        token: 'cloudflare-token-secret',
+        accountId: 'account_456',
+        projectName: '',
+      });
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
@@ -253,7 +276,17 @@ describe('deploy provider routes', () => {
           deploymentId: 'cf_dep_123',
           url: `https://${expectedPagesProject}.pages.dev`,
           status: 'ready',
+          providerMetadata: {
+            cloudflarePagesProjectName: expectedPagesProject,
+          },
         });
+
+        const renameResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Renamed project after deploy' }),
+        });
+        expect(renameResp.status).toBe(200);
 
         const checkResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments/${deployment.id}/check-link`, {
           method: 'POST',

@@ -121,7 +121,7 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
   {
     id: CLOUDFLARE_PAGES_PROVIDER_ID,
     labelKey: 'fileViewer.cloudflarePagesProvider',
-    tokenLink: 'https://dash.cloudflare.com/?to=/:account/pages',
+    tokenLink: 'https://dash.cloudflare.com/profile/api-tokens',
     tokenLinkKey: 'fileViewer.cloudflareApiTokenGetLink',
     tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
@@ -3614,6 +3614,9 @@ function HtmlViewer({
               </div>
               {deployConfig?.configured ? (
                 <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+              ) : null}
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
               ) : null}
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                 <div className="deploy-field-grid single-field">

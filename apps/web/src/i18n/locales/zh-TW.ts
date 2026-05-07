@@ -718,8 +718,7 @@ export const zhTW: Dict = {
   'fileViewer.preparingPublicLink': '正在準備公開連結…',
   'fileViewer.copyDeployLink': '複製連結',
   'fileViewer.deployModalTitle': '部署到 Vercel',
-  'fileViewer.deployModalSubtitle':
-    '使用所選平台帳號部署目前 HTML 預覽。',
+  'fileViewer.deployModalSubtitle': '使用所選平台帳號部署目前 HTML 預覽。',
   'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': '取得 Vercel token',
   'fileViewer.vercelTokenPlaceholder': '貼上你的 Vercel token',
@@ -730,6 +729,7 @@ export const zhTW: Dict = {
   'fileViewer.cloudflareApiTokenPlaceholder': '貼上你的 Cloudflare API token',
   'fileViewer.cloudflareApiTokenReuseHint': '將使用已儲存的 Cloudflare API token。輸入新 token 可替換。',
   'fileViewer.cloudflareApiTokenRequired': '請先輸入並儲存 Cloudflare API token。',
+  'fileViewer.cloudflareApiTokenScopeHint': 'Token 需要 Account: Cloudflare Pages: Edit 權限，以及帳號讀取權限。',
   'fileViewer.vercelTeamId': 'Team ID',
   'fileViewer.vercelTeamSlug': 'Team slug',
   'fileViewer.cloudflareAccountId': 'Account ID',
@@ -742,14 +742,12 @@ export const zhTW: Dict = {
   'fileViewer.deployConfigSaveFailed': '儲存 Vercel 設定失敗。',
   'fileViewer.deployFailed': '部署失敗，請檢查 Vercel 設定後重試。',
   'fileViewer.deployProviderConfigSaveFailed': '無法儲存 {provider} 設定。',
-  'fileViewer.deployProviderFailed': '{provider} deploy failed. Check settings and try again.',
+  'fileViewer.deployProviderFailed': '{provider} 部署失敗。請檢查設定後重試。',
   'fileViewer.deployResultLabel': '部署連結',
   'fileViewer.deployLinkPreparingLabel': '公開連結準備中',
-  'fileViewer.deployLinkDelayed':
-    'Your site is deployed. The public link is still being prepared.',
-  'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
-  'fileViewer.deployLinkProtected':
-    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
+  'fileViewer.deployLinkDelayed': '站點已部署，平台仍在準備公開連結。',
+  'fileViewer.deployLinkProtectedLabel': '部署存取保護已開啟',
+  'fileViewer.deployLinkProtected': '站點已部署，但此預覽連結要求登入後才能存取。請關閉 Deployment Protection 或使用自訂網域。',
   'fileViewer.retryLink': '立即重試',
 
   'questionForm.submit': '提交',

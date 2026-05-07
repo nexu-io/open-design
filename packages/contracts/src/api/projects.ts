@@ -201,6 +201,7 @@ export interface DeploymentInfo {
   status: DeploymentStatus;
   statusMessage?: string;
   reachableAt?: number;
+  providerMetadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
 }

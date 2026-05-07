@@ -10,6 +10,8 @@ import {
   buildDeployFilePlan,
   buildDeployFileSet,
   checkDeploymentUrl,
+  chunkCloudflarePagesAssetUploads,
+  CLOUDFLARE_PAGES_ASSET_MAX_BYTES,
   CLOUDFLARE_PAGES_PROVIDER_ID,
   cloudflarePagesAssetHash,
   cloudflarePagesProjectNameForProject,
@@ -810,6 +812,69 @@ describe('deploy plan and analyzer', () => {
 });
 
 describe('cloudflare pages deploys', () => {
+  it('chunks asset uploads before posting to Cloudflare Pages', () => {
+    const chunks = chunkCloudflarePagesAssetUploads(
+      [
+        { hash: 'a'.repeat(32), data: Buffer.from('one'), contentType: 'text/plain' },
+        { hash: 'b'.repeat(32), data: Buffer.from('two'), contentType: 'text/plain' },
+        { hash: 'c'.repeat(32), data: Buffer.from('three'), contentType: 'text/plain' },
+      ],
+      { maxFiles: 2, maxBytes: 10_000 },
+    );
+
+    expect(chunks.map((chunk) => chunk.map((file) => file.hash))).toEqual([
+      ['a'.repeat(32), 'b'.repeat(32)],
+      ['c'.repeat(32)],
+    ]);
+  });
+
+  it('rejects Cloudflare Pages assets above the per-file upload limit', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      files: [
+        {
+          file: 'huge.bin',
+          data: Buffer.alloc(CLOUDFLARE_PAGES_ASSET_MAX_BYTES + 1),
+          contentType: 'application/octet-stream',
+          sourcePath: 'huge.bin',
+        },
+      ],
+    })).rejects.toThrow(/25\.00 MiB or smaller/);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('creates missing projects and uploads assets before submitting a manifest', async () => {
     const requests: Array<{ url: string; method: string; body?: any; headers: Headers }> = [];
     const indexHash = cloudflarePagesAssetHash({
@@ -964,6 +1029,108 @@ describe('cloudflare pages deploys', () => {
     expect(requests).toHaveLength(8);
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer cloudflare-token-secret');
   });
+
+  it('treats concurrent Cloudflare Pages project creation races as already satisfied', async () => {
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello index'),
+    });
+    let projectLookupCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        projectLookupCount += 1;
+        if (projectLookupCount === 1) {
+          return new Response(JSON.stringify({ success: false, errors: [{ message: 'not found' }] }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/projects') && method === 'POST') {
+        return new Response(
+          JSON.stringify({ success: false, errors: [{ message: 'Project already exists' }] }),
+          { status: 409, headers: { 'content-type': 'application/json' } },
+        );
+      }
+
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({ hashes: [indexHash] });
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_123', url: 'https://d34527d9.demo-pages.pages.dev' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('hello index'),
+          contentType: 'text/html',
+          sourcePath: 'index.html',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      deploymentId: 'dep_123',
+      url: 'https://demo-pages.pages.dev',
+      status: 'ready',
+    });
+    expect(projectLookupCount).toBe(2);
+  });
 });
 
 describe('deployment link readiness', () => {
@@ -1000,6 +1167,17 @@ describe('deployment link readiness', () => {
     expect(result).toMatchObject({
       status: 'link-delayed',
       url: 'http://127.0.0.1:9',
+    });
+  });
+
+  it('uses provider-specific copy for missing public URLs', async () => {
+    const result = await waitForReachableDeploymentUrl([], {
+      providerLabel: 'Cloudflare Pages',
+    });
+
+    expect(result).toMatchObject({
+      status: 'link-delayed',
+      statusMessage: 'Cloudflare Pages did not return a public deployment URL.',
     });
   });
 

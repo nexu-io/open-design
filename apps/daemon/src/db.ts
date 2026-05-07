@@ -137,6 +137,7 @@ function migrate(db) {
       status TEXT NOT NULL DEFAULT 'ready',
       status_message TEXT,
       reachable_at INTEGER,
+      provider_metadata_json TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       UNIQUE(project_id, file_name, provider_id),
@@ -192,6 +193,9 @@ function migrate(db) {
   if (!deploymentCols.some((c) => c.name === 'reachable_at')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN reachable_at INTEGER`);
   }
+  if (!deploymentCols.some((c) => c.name === 'provider_metadata_json')) {
+    db.exec(`ALTER TABLE deployments ADD COLUMN provider_metadata_json TEXT`);
+  }
   migrateCritique(db);
 }
 
@@ -201,6 +205,7 @@ const DEPLOYMENT_COLS = `id, project_id AS projectId, file_name AS fileName,
   provider_id AS providerId, url, deployment_id AS deploymentId,
   deployment_count AS deploymentCount, target, status,
   status_message AS statusMessage, reachable_at AS reachableAt,
+  provider_metadata_json AS providerMetadataJson,
   created_at AS createdAt, updated_at AS updatedAt`;
 
 export function listDeployments(db, projectId) {
@@ -260,15 +265,20 @@ export function upsertDeployment(db, deployment) {
     status: deployment.status ?? existing?.status ?? 'ready',
     statusMessage: deployment.statusMessage ?? null,
     reachableAt: deployment.reachableAt ?? null,
+    providerMetadata:
+      deployment.providerMetadata === undefined
+        ? existing?.providerMetadata
+        : deployment.providerMetadata,
     createdAt: existing?.createdAt ?? deployment.createdAt ?? now,
     updatedAt: deployment.updatedAt ?? now,
   };
+  const providerMetadataJson = stringifyJsonObjectOrNull(next.providerMetadata);
   db.prepare(
     `INSERT INTO deployments
        (id, project_id, file_name, provider_id, url, deployment_id,
         deployment_count, target, status, status_message, reachable_at,
-        created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        provider_metadata_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_id, file_name, provider_id) DO UPDATE SET
        url = excluded.url,
        deployment_id = excluded.deployment_id,
@@ -277,6 +287,7 @@ export function upsertDeployment(db, deployment) {
        status = excluded.status,
        status_message = excluded.status_message,
        reachable_at = excluded.reachable_at,
+       provider_metadata_json = excluded.provider_metadata_json,
        updated_at = excluded.updated_at`,
   ).run(
     next.id,
@@ -290,6 +301,7 @@ export function upsertDeployment(db, deployment) {
     next.status,
     next.statusMessage,
     next.reachableAt,
+    providerMetadataJson,
     next.createdAt,
     next.updatedAt,
   );
@@ -297,6 +309,7 @@ export function upsertDeployment(db, deployment) {
 }
 
 function normalizeDeployment(row) {
+  const providerMetadata = parseJsonOrUndef(row.providerMetadataJson);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -309,9 +322,18 @@ function normalizeDeployment(row) {
     status: row.status || 'ready',
     statusMessage: row.statusMessage ?? undefined,
     reachableAt: row.reachableAt == null ? undefined : Number(row.reachableAt),
+    providerMetadata:
+      providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
+        ? providerMetadata
+        : undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };
+}
+
+function stringifyJsonObjectOrNull(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return Object.keys(value).length > 0 ? JSON.stringify(value) : null;
 }
 
 // ---------- projects ----------

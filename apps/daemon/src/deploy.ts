@@ -14,6 +14,9 @@ export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
 
 const VERCEL_API = 'https://api.vercel.com';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
+export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES = 100;
+export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES = 75 * 1024 * 1024;
+export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
 
@@ -295,7 +298,10 @@ export async function deployToVercel({ config, files, projectId }) {
   }
 
   const candidates = deploymentUrlCandidates(ready, created);
-  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [initialUrl]);
+  const link = await waitForReachableDeploymentUrl(
+    candidates.length ? candidates : [initialUrl],
+    { providerLabel: 'Vercel' },
+  );
 
   return {
     providerId: VERCEL_PROVIDER_ID,
@@ -338,12 +344,14 @@ export async function deployToCloudflarePages({ config, files }) {
 
   const deployment = deployed?.result ?? deployed;
   const productionUrl = cloudflarePagesProductionUrl(config);
-  const candidates = deploymentUrlCandidates({ url: productionUrl }, deployment);
-  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [productionUrl, deployment?.url]);
+  const link = await waitForReachableDeploymentUrl(
+    productionUrl ? [productionUrl] : [deployment?.url],
+    { providerLabel: 'Cloudflare Pages' },
+  );
 
   return {
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    url: link.url || productionUrl || deploymentUrl(deployment),
+    url: productionUrl || link.url || deploymentUrl(deployment),
     deploymentId: deployment?.id,
     target: 'preview',
     status: link.status,
@@ -372,9 +380,29 @@ async function ensureCloudflarePagesProject(config) {
   });
   const created = await readCloudflareJson(createResp);
   if (!createResp.ok || created?.success === false) {
+    if (isCloudflarePagesProjectAlreadyExists(created)) {
+      const retryResp = await fetch(cloudflarePagesProjectUrl(config), {
+        headers: cloudflareHeaders(config),
+      });
+      const retryFound = await readCloudflareJson(retryResp);
+      if (retryResp.ok && retryFound?.success !== false) {
+        return retryFound?.result ?? retryFound;
+      }
+    }
     throw cloudflareError(created, createResp.status, 'Cloudflare Pages project creation failed.');
   }
   return created?.result ?? created;
+}
+
+function isCloudflarePagesProjectAlreadyExists(body) {
+  const text = JSON.stringify(body || {}).toLowerCase();
+  return (
+    text.includes('already exists') ||
+    text.includes('already exist') ||
+    text.includes('project exists') ||
+    text.includes('project name is taken') ||
+    text.includes('duplicate')
+  );
 }
 
 async function getCloudflarePagesUploadToken(config) {
@@ -393,6 +421,12 @@ async function uploadCloudflarePagesAssets(uploadToken, files) {
   const uniqueFiles = new Map();
   for (const file of files) {
     const data = Buffer.from(file.data);
+    if (data.length > CLOUDFLARE_PAGES_ASSET_MAX_BYTES) {
+      throw new DeployError(
+        `Cloudflare Pages assets must be ${formatMib(CLOUDFLARE_PAGES_ASSET_MAX_BYTES)} or smaller: ${file.file} is ${formatMib(data.length)}.`,
+        400,
+      );
+    }
     const hash = cloudflarePagesAssetHash({ ...file, data });
     if (!uniqueFiles.has(hash)) {
       uniqueFiles.set(hash, {
@@ -405,26 +439,33 @@ async function uploadCloudflarePagesAssets(uploadToken, files) {
   const hashes = Array.from(uniqueFiles.keys());
   const missing = await cloudflarePagesMissingAssetHashes(uploadToken, hashes);
   if (missing.length > 0) {
-    const payload = missing.map((hash) => {
+    const missingFiles = missing.map((hash) => {
       const file = uniqueFiles.get(hash);
       if (!file) throw new DeployError(`Cloudflare reported an unknown asset hash: ${hash}`, 502);
       return {
-        key: hash,
+        ...file,
+        hash,
+      };
+    });
+
+    for (const batch of chunkCloudflarePagesAssetUploads(missingFiles)) {
+      const payload = batch.map((file) => ({
+        key: file.hash,
         value: file.data.toString('base64'),
         metadata: {
           contentType: file.contentType,
         },
         base64: true,
-      };
-    });
-    const uploadResp = await fetch(`${CLOUDFLARE_API}/pages/assets/upload`, {
-      method: 'POST',
-      headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    });
-    const uploaded = await readCloudflareJson(uploadResp);
-    if (!uploadResp.ok || uploaded?.success === false) {
-      throw cloudflareError(uploaded, uploadResp.status, 'Cloudflare Pages asset upload failed.');
+      }));
+      const uploadResp = await fetch(`${CLOUDFLARE_API}/pages/assets/upload`, {
+        method: 'POST',
+        headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
+      });
+      const uploaded = await readCloudflareJson(uploadResp);
+      if (!uploadResp.ok || uploaded?.success === false) {
+        throw cloudflareError(uploaded, uploadResp.status, 'Cloudflare Pages asset upload failed.');
+      }
     }
   }
 
@@ -437,6 +478,43 @@ async function uploadCloudflarePagesAssets(uploadToken, files) {
   if (!upsertResp.ok || upserted?.success === false) {
     throw cloudflareError(upserted, upsertResp.status, 'Cloudflare Pages asset hash update failed.');
   }
+}
+
+export function chunkCloudflarePagesAssetUploads(
+  files,
+  {
+    maxFiles = CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES,
+    maxBytes = CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES,
+  } = {},
+) {
+  const chunks = [];
+  let current = [];
+  let currentBytes = 2; // JSON array brackets.
+
+  for (const file of files) {
+    const nextBytes = estimateCloudflarePagesAssetUploadPayloadBytes(file);
+    const wouldExceedCount = current.length >= maxFiles;
+    const wouldExceedBytes = current.length > 0 && currentBytes + nextBytes > maxBytes;
+    if (wouldExceedCount || wouldExceedBytes) {
+      chunks.push(current);
+      current = [];
+      currentBytes = 2;
+    }
+    current.push(file);
+    currentBytes += nextBytes;
+  }
+
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+function estimateCloudflarePagesAssetUploadPayloadBytes(file) {
+  const data = Buffer.from(file?.data ?? '');
+  const encodedBytes = Math.ceil(data.length / 3) * 4;
+  const contentTypeBytes = Buffer.byteLength(file?.contentType || 'application/octet-stream');
+  const hashBytes = Buffer.byteLength(file?.hash || '');
+  // Conservative JSON/object overhead for `key`, `value`, `metadata`, and commas.
+  return encodedBytes + contentTypeBytes + hashBytes + 128;
 }
 
 async function cloudflarePagesMissingAssetHashes(uploadToken, hashes) {
@@ -957,7 +1035,7 @@ async function pollVercelDeployment(config, id) {
 
 export async function waitForReachableDeploymentUrl(
   urls,
-  { timeoutMs = 60_000, intervalMs = 2_000 } = {},
+  { timeoutMs = 60_000, intervalMs = 2_000, providerLabel = 'Deployment provider' } = {},
 ) {
   const candidates = [...new Set((urls || []).map(normalizeDeploymentUrl).filter(Boolean))];
   const fallbackUrl = candidates[0] || '';
@@ -965,7 +1043,7 @@ export async function waitForReachableDeploymentUrl(
     return {
       status: 'link-delayed',
       url: '',
-      statusMessage: 'Deployment provider did not return a public deployment URL.',
+      statusMessage: `${providerLabel} did not return a public deployment URL.`,
     };
   }
 
@@ -999,7 +1077,7 @@ export async function waitForReachableDeploymentUrl(
     status: 'link-delayed',
     url: fallbackUrl,
     statusMessage:
-      lastMessage || 'Deployment provider returned a deployment URL, but it is not reachable yet.',
+      lastMessage || `${providerLabel} returned a deployment URL, but it is not reachable yet.`,
   };
 }
 

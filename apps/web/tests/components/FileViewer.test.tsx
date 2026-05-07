@@ -220,6 +220,7 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(screen.getByText('Account ID')).toBeTruthy();
+    expect(screen.getByText(/Cloudflare Pages: Edit/i)).toBeTruthy();
     expect(screen.queryByText('Pages project name')).toBeNull();
     expect(screen.queryByText(/generates a Pages project name automatically/i)).toBeNull();
     expect(screen.queryByText(/project name is selected automatically/i)).toBeNull();

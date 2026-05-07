@@ -732,19 +732,18 @@ export const en: Dict = {
   'fileViewer.preparingPublicLink': 'Preparing public link…',
   'fileViewer.copyDeployLink': 'Copy link',
   'fileViewer.deployModalTitle': 'Deploy to Vercel',
-  'fileViewer.deployModalSubtitle':
-    'Use the selected provider account to deploy this HTML preview.',
+  'fileViewer.deployModalSubtitle': 'Use the selected provider account to deploy this HTML preview.',
   'fileViewer.vercelToken': 'Vercel token',
   'fileViewer.vercelTokenGetLink': 'Get Vercel token',
   'fileViewer.vercelTokenPlaceholder': 'Paste your Vercel token',
-  'fileViewer.vercelTokenReuseHint':
-    'Saved token will be used. Enter a new token to replace it.',
+  'fileViewer.vercelTokenReuseHint': 'Saved token will be used. Enter a new token to replace it.',
   'fileViewer.vercelTokenRequired': 'Enter and save a Vercel token first.',
   'fileViewer.cloudflareApiToken': 'Cloudflare API token',
   'fileViewer.cloudflareApiTokenGetLink': 'Get Cloudflare API token',
   'fileViewer.cloudflareApiTokenPlaceholder': 'Paste your Cloudflare API token',
   'fileViewer.cloudflareApiTokenReuseHint': 'The saved Cloudflare API token will be used. Enter a new token to replace it.',
   'fileViewer.cloudflareApiTokenRequired': 'Enter and save a Cloudflare API token first.',
+  'fileViewer.cloudflareApiTokenScopeHint': 'Token needs Account: Cloudflare Pages: Edit plus account read access.',
   'fileViewer.vercelTeamId': 'Team ID',
   'fileViewer.vercelTeamSlug': 'Team slug',
   'fileViewer.cloudflareAccountId': 'Account ID',
@@ -760,11 +759,9 @@ export const en: Dict = {
   'fileViewer.deployProviderFailed': '{provider} deploy failed. Check settings and try again.',
   'fileViewer.deployResultLabel': 'Deployed URL',
   'fileViewer.deployLinkPreparingLabel': 'Public link pending',
-  'fileViewer.deployLinkDelayed':
-    'Your site is deployed. The public link is still being prepared.',
+  'fileViewer.deployLinkDelayed': 'Your site is deployed. The public link is still being prepared.',
   'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
-  'fileViewer.deployLinkProtected':
-    'Your site deployed, but this preview link is requiring authentication. Disable deployment protection or use a custom domain.',
+  'fileViewer.deployLinkProtected': 'Your site deployed, but this preview link is requiring authentication. Disable Deployment Protection or use a custom domain.',
   'fileViewer.retryLink': 'Retry now',
 
   'questionForm.submit': 'Submit',

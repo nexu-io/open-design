@@ -44,25 +44,10 @@ export const DEPLOY_PROVIDER_IDS = [
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
 
-export type WebDeployConfigResponse = Omit<DeployConfigResponse, 'providerId'> & {
-  providerId: WebDeployProviderId;
-  accountId?: string;
-  projectName?: string;
-};
-
-export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest & {
-  providerId?: WebDeployProviderId;
-  accountId?: string;
-  projectName?: string;
-};
-
-export type WebDeploymentInfo = Omit<ProjectDeploymentsResponse['deployments'][number], 'providerId'> & {
-  providerId: WebDeployProviderId;
-};
-
-export type WebDeployProjectFileResponse = Omit<DeployProjectFileResponse, 'providerId'> & {
-  providerId: WebDeployProviderId;
-};
+export type WebDeployConfigResponse = DeployConfigResponse;
+export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;
+export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
+export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 
 export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
   return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);

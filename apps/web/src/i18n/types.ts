@@ -797,6 +797,7 @@ export interface Dict {
   'fileViewer.cloudflareApiTokenPlaceholder': string;
   'fileViewer.cloudflareApiTokenReuseHint': string;
   'fileViewer.cloudflareApiTokenRequired': string;
+  'fileViewer.cloudflareApiTokenScopeHint': string;
   'fileViewer.vercelTeamId': string;
   'fileViewer.vercelTeamSlug': string;
   'fileViewer.cloudflareAccountId': string;
