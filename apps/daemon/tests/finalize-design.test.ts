@@ -627,6 +627,118 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
     } as any);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  // PR #832 P1 fix from @lefarcen: imported-folder projects (created via
+  // /api/import/folder) carry metadata.baseDir which redirects file IO to
+  // the user's actual folder. Pre-fix, the pipeline called projectDir()
+  // unconditionally so DESIGN.md landed in the hidden .od/projects/<id>
+  // dir instead of metadata.baseDir; the resolver also missed the user's
+  // real artifacts. Post-fix, both call sites use resolveProjectDir.
+  it('writes DESIGN.md under metadata.baseDir for imported-folder projects', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-finalize-imported-'));
+    const designSystemsRoot = path.join(tempDir, 'design-systems');
+    fs.mkdirSync(designSystemsRoot, { recursive: true });
+    fs.mkdirSync(path.join(designSystemsRoot, 'shadcn'), { recursive: true });
+    fs.writeFileSync(path.join(designSystemsRoot, 'shadcn', 'DESIGN.md'), '# shadcn\n');
+
+    // The user's actual folder lives outside .od/projects/.
+    const userFolder = path.join(tempDir, 'user-imported-folder');
+    fs.mkdirSync(userFolder, { recursive: true });
+
+    const db = openDatabase(tempDir);
+    insertProject(db, {
+      id: PROJECT_ID,
+      name: 'Imported',
+      designSystemId: 'shadcn',
+      metadata: { baseDir: userFolder },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    projectsRoot = path.join(tempDir, 'projects');
+    fs.mkdirSync(path.join(projectsRoot, PROJECT_ID), { recursive: true });
+
+    insertConversation(db, {
+      id: 'c1',
+      projectId: PROJECT_ID,
+      title: 't',
+      createdAt: 100,
+      updatedAt: 100,
+    });
+    upsertMessage(db, 'c1', {
+      id: 'm1',
+      role: 'user',
+      content: '',
+      events: [{ kind: 'text', text: 'hi' }],
+    });
+
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+      fetchImpl: happyFetch('# DESIGN.md\nimported folder body\n'),
+    } as any);
+
+    // DESIGN.md must land in the user's actual folder, NOT the hidden
+    // `.od/projects/<id>` dir.
+    expect(result.designMdPath).toBe(path.join(userFolder, 'DESIGN.md'));
+    expect(fs.existsSync(result.designMdPath)).toBe(true);
+    expect(fs.readFileSync(result.designMdPath, 'utf8')).toBe(
+      '# DESIGN.md\nimported folder body\n',
+    );
+    // The hidden daemon data dir should NOT have a DESIGN.md.
+    expect(fs.existsSync(path.join(projectsRoot, PROJECT_ID, 'DESIGN.md'))).toBe(false);
+  });
+
+  // PR #832 P1 fix from @lefarcen: network failures (DNS, ECONNREFUSED,
+  // fetch TypeError) used to fall through the route's catch-all and surface
+  // as 500 INTERNAL. Post-fix they are rewrapped as
+  // FinalizeUpstreamError(502, ...) inside the function so the route maps
+  // to 502 UPSTREAM_FAILED with redacted details.
+  it('rewraps fetch network rejection as FinalizeUpstreamError(502)', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline();
+
+    const networkError = new TypeError('fetch failed');
+    (networkError as any).cause = { code: 'ENOTFOUND' };
+    const fetchImpl = vi.fn(async () => {
+      throw networkError;
+    });
+
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        baseUrl: 'https://nonexistent.invalid',
+        model: 'claude-opus-4-7',
+        fetchImpl: fetchImpl as any,
+      } as any),
+    ).rejects.toMatchObject({
+      name: 'FinalizeUpstreamError',
+      status: 502,
+    });
+  });
+
+  it('rewraps 200 with non-JSON body as FinalizeUpstreamError(502)', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline();
+
+    // 200 OK with text/html body — response.json() will throw SyntaxError.
+    const fetchImpl = vi.fn(async () =>
+      new Response('<html>upstream proxy error</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-opus-4-7',
+        fetchImpl: fetchImpl as any,
+      } as any),
+    ).rejects.toMatchObject({
+      name: 'FinalizeUpstreamError',
+      status: 502,
+    });
+  });
 });
 
 // HTTP-layer tests for the route handler's validation. Boot the daemon

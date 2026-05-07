@@ -31,8 +31,8 @@ import { getProject } from './db.js';
 import { readDesignSystem } from './design-systems.js';
 import {
   listFiles,
-  projectDir,
   readProjectFile,
+  resolveProjectDir,
 } from './projects.js';
 import { exportProjectTranscript } from './transcript-export.js';
 
@@ -123,6 +123,11 @@ interface ResolvedArtifact {
  *      in the response and the prompt's "Current artifact" section
  *      reads "none".
  *
+ * `metadata` is the project row's `metadata` field (from `getProject`).
+ * For imported-folder projects, `metadata.baseDir` redirects file IO
+ * to the user's actual folder; without it, this resolver would only
+ * look under `.od/projects/<id>` and miss the real artifacts.
+ *
  * Sidecar presence is checked via `existsSync` on the on-disk path so
  * the resolver does not depend on `inferLegacyManifest`'s heuristic.
  */
@@ -130,8 +135,9 @@ export async function resolveCurrentArtifact(
   db: Db,
   projectsRoot: string,
   projectId: string,
+  metadata?: { baseDir?: string } | null,
 ): Promise<ResolvedArtifact | null> {
-  const dir = projectDir(projectsRoot, projectId);
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata ?? undefined);
 
   const activeTabRow = db
     .prepare(`SELECT name FROM tabs WHERE project_id = ? AND is_active = 1 LIMIT 1`)
@@ -142,7 +148,12 @@ export async function resolveCurrentArtifact(
   if (activeTabName) {
     const sidecarPath = path.join(dir, `${activeTabName}.artifact.json`);
     if (fs.existsSync(sidecarPath)) {
-      const file = await readProjectFile(projectsRoot, projectId, activeTabName);
+      const file = await readProjectFile(
+        projectsRoot,
+        projectId,
+        activeTabName,
+        metadata ?? undefined,
+      );
       return {
         name: file.name,
         body: file.buffer.toString('utf8'),
@@ -152,7 +163,7 @@ export async function resolveCurrentArtifact(
     // Active tab points at a non-artifact file — fall through to step 2.
   }
 
-  const files = await listFiles(projectsRoot, projectId);
+  const files = await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined });
   const candidates = files
     .filter((f: { name: string; artifactManifest?: { updatedAt?: string } | null }) => {
       // Require a real sidecar on disk; an inferred manifest does not count.
@@ -168,7 +179,12 @@ export async function resolveCurrentArtifact(
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); // descending; '' sorts last
 
   if (candidates.length > 0) {
-    const newest = await readProjectFile(projectsRoot, projectId, candidates[0]!.name);
+    const newest = await readProjectFile(
+      projectsRoot,
+      projectId,
+      candidates[0]!.name,
+      metadata ?? undefined,
+    );
     return {
       name: newest.name,
       body: newest.buffer.toString('utf8'),
@@ -193,7 +209,16 @@ export async function finalizeDesignPackage(
     throw new Error(`project not found: ${projectId}`);
   }
 
-  const dir = projectDir(projectsRoot, projectId);
+  // Imported-folder projects (created via /api/import/folder) carry
+  // `metadata.baseDir` and write to the user's actual folder rather than
+  // `.od/projects/<id>`. resolveProjectDir handles both shapes; calling
+  // bare `projectDir` would silently land DESIGN.md in the hidden daemon
+  // data dir for these projects (PR #832 P1 finding from @lefarcen).
+  const projectMetadata = (project as { metadata?: { baseDir?: string } | null }).metadata ?? null;
+  const dir = resolveProjectDir(projectsRoot, projectId, projectMetadata ?? undefined);
+  // For imported-folder projects, `dir` is the user's own directory and
+  // already exists; mkdirSync is a no-op (recursive:true is idempotent).
+  // For native projects, it lazily creates `.od/projects/<id>`.
   fs.mkdirSync(dir, { recursive: true });
   const finalPath = path.join(dir, OUTPUT_FILENAME);
   const lockPath = path.join(dir, LOCK_FILENAME);
@@ -237,7 +262,14 @@ export async function finalizeDesignPackage(
       : null;
 
     // Phase 5: current artifact (active tab → newest .artifact.json → null).
-    const artifact = await resolveCurrentArtifact(db, projectsRoot, projectId);
+    // Thread metadata so imported-folder projects discover the real artifacts
+    // under metadata.baseDir rather than the empty `.od/projects/<id>` dir.
+    const artifact = await resolveCurrentArtifact(
+      db,
+      projectsRoot,
+      projectId,
+      projectMetadata,
+    );
 
     // Phase 6: build prompt.
     const { systemPrompt, userPrompt } = buildSynthesisPrompt({
@@ -253,6 +285,13 @@ export async function finalizeDesignPackage(
     // Phase 7: Anthropic call with bounded blocking timeout. We use our own
     // AbortController if the caller did not pass one; either way the call
     // bounds at DEFAULT_TIMEOUT_MS.
+    //
+    // Network errors (DNS, ECONNREFUSED, ECONNRESET) and JSON parse errors
+    // on the response body are rewrapped as FinalizeUpstreamError(502) so
+    // the route handler maps them to 502 UPSTREAM_FAILED rather than 500
+    // INTERNAL. Per @lefarcen P1 review on PR #832: only HTTP-non-OK
+    // responses were previously wrapped, leaving DNS/parse failures to
+    // surface as generic 500s.
     const ownController = options.signal ? null : new AbortController();
     const timeoutId = ownController
       ? setTimeout(() => ownController.abort(), DEFAULT_TIMEOUT_MS)
@@ -270,13 +309,39 @@ export async function finalizeDesignPackage(
       const signalToUse = options.signal ?? ownController?.signal;
       if (signalToUse) callParams.signal = signalToUse;
       if (options.fetchImpl) callParams.fetchImpl = options.fetchImpl;
-      response = await callAnthropicWithRetry(callParams);
+      try {
+        response = await callAnthropicWithRetry(callParams);
+      } catch (err: unknown) {
+        if (err instanceof FinalizeUpstreamError) throw err;
+        const errName =
+          err && typeof err === 'object' && 'name' in err
+            ? (err as { name?: unknown }).name
+            : '';
+        if (errName === 'AbortError') throw err; // route handler maps to 503
+        // Network-level failure (TypeError from fetch, ENOTFOUND/ECONNREFUSED
+        // via cause.code, etc.) — rewrap as upstream failure so the route
+        // handler maps to 502 UPSTREAM_FAILED with redacted details.
+        const message = err instanceof Error ? err.message : String(err);
+        throw new FinalizeUpstreamError(502, '', `upstream network error: ${message}`);
+      }
     } finally {
       if (timeoutId !== null) clearTimeout(timeoutId);
     }
 
-    // Phase 8: extract DESIGN.md body and usage counters.
-    const payload: unknown = await response.json();
+    // Phase 8: extract DESIGN.md body and usage counters. A 200 with a body
+    // that isn't valid JSON (or isn't an object) is treated as an upstream
+    // failure rather than letting JSON.parse's SyntaxError surface as 500.
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new FinalizeUpstreamError(
+        502,
+        '',
+        `upstream Anthropic returned non-JSON body: ${message}`,
+      );
+    }
     const designMd = extractDesignMd(payload);
     const usage = (payload as { usage?: { input_tokens?: number; output_tokens?: number } }).usage ?? {};
     const inputTokens = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
