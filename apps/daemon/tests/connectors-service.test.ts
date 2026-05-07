@@ -466,3 +466,93 @@ describe('connector execution policy', () => {
     await expect(service.execute(request, context)).resolves.toMatchObject({ ok: true });
   });
 });
+
+// Issue #748: connector card badges (and other UIs that surface a single
+// tool count) need a stable number that doesn't lurch from ~2 hardcoded
+// fallback tools to several hundred provider-discovered tools the moment
+// a Composio API key is configured. The fix is to expose
+// `allowedToolNames` on the wire `ConnectorDetail` and have UIs use that
+// for the count instead of `tools.length`. These tests pin the contract.
+describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
+  it('exposes allowedToolNames on getConnector() so UIs can render a stable count', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    expect(detail.allowedToolNames).toEqual(['docs.search']);
+  });
+
+  it('returns allowedToolNames as a defensive copy (mutating the result must not affect the source)', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    detail.allowedToolNames.push('docs.evil_inject');
+    expect(definition.allowedToolNames).toEqual(['docs.search']);
+
+    const detailAgain = await service.getConnector('external_docs');
+    expect(detailAgain.allowedToolNames).toEqual(['docs.search']);
+  });
+
+  it('keeps allowedToolNames small even when tools.length holds the full provider inventory (the #748 regression guard)', async () => {
+    const statusService = new ConnectorStatusService();
+    // Simulate Composio's post-hydration shape: catalog ships ~2 curated
+    // tools but the provider inventory expands to hundreds. The real
+    // composio adapter only auto-allows live tools when their classified
+    // safety is read+auto, so most of those hundreds stay out of the
+    // allowlist. Reproduce that shape directly here so the test pins the
+    // invariant without depending on Composio's network path.
+    const provisionedTools = Array.from({ length: 800 }, (_, index) => ({
+      name: `external_docs.bulk_op_${index}`,
+      title: `Bulk op ${index}`,
+      requiredScopes: ['docs:write'],
+      // Mark these as write — i.e. NOT auto-allowed for the agent — so
+      // they belong in `tools` but never in `allowedToolNames`. This
+      // mirrors the Composio shape where most provider-discovered tools
+      // are write/destructive and therefore get gated out of the
+      // execution-safe subset (see catalog.ts:isRefreshEligible…).
+      safety: classifyConnectorToolSafety({ name: `external_docs.bulk_op_${index}`, title: `Bulk op ${index}`, requiredScopes: ['docs:write'] }),
+      refreshEligible: false,
+    }));
+    const definition: ConnectorCatalogDefinition = {
+      ...readOnlyDefinition(),
+      tools: [...readOnlyDefinition().tools, ...provisionedTools],
+      allowedToolNames: ['docs.search'],
+    };
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+
+    // The badge in apps/web/src/components/EntryView.tsx uses
+    // `connector.allowedToolNames?.length ?? connector.tools.length`,
+    // so this single number is the one users see in the connector card.
+    expect(detail.allowedToolNames.length).toBe(1);
+    // Sanity: the wider inventory is still on the wire for the detail
+    // drawer to enumerate — we're just no longer using its length for
+    // the badge.
+    expect(detail.tools.length).toBe(801);
+
+    // Spot-check that none of the bulk write tools accidentally leaked
+    // into the allowlist.
+    expect(detail.allowedToolNames).not.toContain('external_docs.bulk_op_0');
+    expect(detail.allowedToolNames).not.toContain('external_docs.bulk_op_799');
+
+    // refreshEligible classification stays a property of the definition,
+    // not of the badge surface — confirm the helper still agrees so a
+    // future refactor can't quietly let write tools into the allowlist
+    // via a different code path.
+    expect(isRefreshEligibleConnectorToolSafety(provisionedTools[0].safety)).toBe(false);
+  });
+
+  it('treats an empty allowedToolNames as a real "0 tools" badge value (not a missing field)', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = externalConnector();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    expect(Array.isArray(detail.allowedToolNames)).toBe(true);
+    expect(detail.allowedToolNames.length).toBe(0);
+  });
+});

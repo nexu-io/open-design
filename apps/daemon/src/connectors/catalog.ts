@@ -36,6 +36,14 @@ export interface ConnectorDetail {
   status: ConnectorStatus;
   accountLabel?: string;
   tools: ConnectorToolDetail[];
+  /**
+   * Names of tools the connector permits agents to call. Subset of
+   * `tools`. UIs surfacing a single tool count should prefer this over
+   * `tools.length`: `tools` carries the full provider inventory after
+   * Composio hydration (≈868 tools for GitHub), while
+   * `allowedToolNames` stays close to the curated subset (issue #748).
+   */
+  allowedToolNames: string[];
   featuredToolNames?: string[];
   minimumApproval?: ConnectorToolApproval;
   lastError?: string;
@@ -163,6 +171,7 @@ export function connectorDefinitionToDetail(definition: ConnectorCatalogDefiniti
     ...(definition.description === undefined ? {} : { description: definition.description }),
     status: definition.disabled ? 'disabled' : 'available',
     tools: definition.tools.map((tool) => toolDefinitionToDetail(tool)),
+    allowedToolNames: [...definition.allowedToolNames],
     ...(definition.featuredToolNames === undefined ? {} : { featuredToolNames: [...definition.featuredToolNames] }),
     ...(definition.minimumApproval === undefined ? {} : { minimumApproval: definition.minimumApproval }),
     auth: {

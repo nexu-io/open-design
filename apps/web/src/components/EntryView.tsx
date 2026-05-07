@@ -933,7 +933,14 @@ function ConnectorCard({
   const isConnected = connector.status === 'connected';
   const canConnect = !disabled && !isPending && connector.status === 'available';
   const canDisconnect = !disabled && !isPending && isConnected;
-  const toolCount = connector.tools.length;
+  // Use the curated allowedToolNames count rather than connector.tools.length
+  // so the badge stays close to "tools the agent can actually invoke" instead
+  // of jumping from ~2 hardcoded fallback tools to several hundred raw
+  // provider tools the moment a Composio API key is configured (issue #748).
+  // Fall back to tools.length for safety: older daemon builds (or any
+  // connector that hasn't migrated yet) won't ship allowedToolNames over
+  // the wire.
+  const toolCount = connector.allowedToolNames?.length ?? connector.tools.length;
   const showToolsBadge = toolsLoaded;
   const toolsBadgeLabel = formatToolsBadge(toolCount, t);
 
@@ -1086,7 +1093,11 @@ function ConnectorDetailDrawer({
   const canConnect = !disabled && !isPending && connector.status === 'available';
   const canDisconnect = !disabled && !isPending && isConnected;
   const accountLabel = getDisplayableConnectorAccountLabel(connector);
-  const toolCount = connector.tools.length;
+  // Mirror the connector card: badge count tracks the curated allowlist
+  // (issue #748). The drawer below still iterates over connector.tools to
+  // show the full inventory — the count and the list are intentionally
+  // different surfaces.
+  const toolCount = connector.allowedToolNames?.length ?? connector.tools.length;
   const isLoadingTools = !toolsLoaded || (toolsLoading && toolCount === 0);
   const showToolsBadge = toolsLoaded;
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);

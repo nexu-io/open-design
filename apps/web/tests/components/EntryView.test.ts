@@ -25,11 +25,11 @@ describe('connector OAuth callback origin', () => {
 describe('connector display sorting', () => {
   it('places connected connectors first and sorts the rest alphabetically', () => {
     const sorted = sortConnectorsForDisplay([
-      { id: 'zapi', name: 'Zapier', provider: 'Composio', category: 'Automation', status: 'available', tools: [] },
-      { id: 'gmail', name: 'Gmail', provider: 'Composio', category: 'Email', status: 'connected', tools: [] },
-      { id: 'airtable', name: 'Airtable', provider: 'Composio', category: 'Data', status: 'available', tools: [] },
-      { id: 'github', name: 'GitHub', provider: 'Composio', category: 'Code', status: 'connected', tools: [] },
-      { id: 'calendar', name: 'Calendar', provider: 'Composio', category: 'Calendar', status: 'available', tools: [] },
+      { id: 'zapi', name: 'Zapier', provider: 'Composio', category: 'Automation', status: 'available', tools: [], allowedToolNames: [] },
+      { id: 'gmail', name: 'Gmail', provider: 'Composio', category: 'Email', status: 'connected', tools: [], allowedToolNames: [] },
+      { id: 'airtable', name: 'Airtable', provider: 'Composio', category: 'Data', status: 'available', tools: [], allowedToolNames: [] },
+      { id: 'github', name: 'GitHub', provider: 'Composio', category: 'Code', status: 'connected', tools: [], allowedToolNames: [] },
+      { id: 'calendar', name: 'Calendar', provider: 'Composio', category: 'Calendar', status: 'available', tools: [], allowedToolNames: [] },
     ]);
 
     expect(sorted.map((connector) => connector.id)).toEqual([
@@ -51,6 +51,7 @@ describe('connector display sorting', () => {
         status: 'connected',
         description: 'Sync issues from GitHub repositories.',
         tools: [],
+        allowedToolNames: [],
       },
       {
         id: 'github-enterprise',
@@ -59,6 +60,7 @@ describe('connector display sorting', () => {
         category: 'Code',
         status: 'available',
         tools: [],
+        allowedToolNames: [],
       },
       {
         id: 'github',
@@ -67,6 +69,7 @@ describe('connector display sorting', () => {
         category: 'Code',
         status: 'available',
         tools: [],
+        allowedToolNames: [],
       },
       {
         id: 'slack',
@@ -82,6 +85,7 @@ describe('connector display sorting', () => {
             refreshEligible: false,
           },
         ],
+        allowedToolNames: [],
       },
     ], 'github');
 
