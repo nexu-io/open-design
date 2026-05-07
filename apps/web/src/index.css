@@ -4800,12 +4800,9 @@ button.connector-action.is-loading {
 .df-sort-arrow { font-size: 10px; }
 
 .df-file-row {
-  cursor: pointer;
   transition: background 120ms ease;
-  outline: none;
 }
 .df-file-row:hover { background: var(--bg-subtle); }
-.df-file-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .df-file-row.active { background: var(--blue-bg); }
 .df-file-row.active .df-row-name { color: var(--text-strong); }
 .df-file-row.selected { background: var(--blue-bg); }
@@ -4821,6 +4818,19 @@ button.connector-action.is-loading {
 .df-cell-name {
   padding: 10px 12px 10px 0;
   vertical-align: middle;
+}
+.df-row-name-btn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.df-row-name-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 .df-cell-kind {
   padding: 10px 12px 10px 0;
@@ -5020,6 +5030,7 @@ button.connector-action.is-loading {
   transition: opacity 120ms ease;
 }
 .df-row:hover .df-row-menu { opacity: 1; }
+.df-row-menu:focus { opacity: 1; }
 .df-row-menu:hover { background: var(--border); color: var(--text); }
 .df-section-more {
   margin: 6px 20px 10px;

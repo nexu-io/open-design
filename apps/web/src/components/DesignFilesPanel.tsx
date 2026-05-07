@@ -141,6 +141,31 @@ export function DesignFilesPanel({
     });
   }
 
+  function openMenuFor(name: string, el: HTMLElement) {
+    const rect = el.closest('.df-row-menu')?.getBoundingClientRect();
+    if (!rect) return;
+
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top: number;
+    if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+      top = rect.bottom + 4;
+    } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+      top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
+    } else {
+      top = Math.max(
+        MENU_SAFE_PADDING,
+        viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
+      );
+    }
+
+    const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
+
+    setMenuPos({ name, top, left });
+  }
+
   async function handleBatchDownload() {
     const fileList = [...selected];
     if (fileList.length === 0) return;
@@ -359,23 +384,6 @@ export function DesignFilesPanel({
                             className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
                             onMouseEnter={() => setHover(f.name)}
                             onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                            onClick={() => setPreview(f.name)}
-                            onDoubleClick={() => onOpenFile(f.name)}
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                const now = Date.now();
-                                const last = lastKeyPress.current.get(f.name) ?? 0;
-                                if (now - last < 300) {
-                                  lastKeyPress.current.delete(f.name);
-                                  onOpenFile(f.name);
-                                } else {
-                                  lastKeyPress.current.set(f.name, now);
-                                  setPreview(f.name);
-                                }
-                              }
-                            }}
                           >
                             <td className="df-cell-check">
                               <span
@@ -404,10 +412,31 @@ export function DesignFilesPanel({
                               </span>
                             </td>
                             <td className="df-cell-name">
-                              <span className="df-row-name-wrap">
-                                <span className="df-row-name">{f.name}</span>
-                                <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-                              </span>
+                              <button
+                                type="button"
+                                className="df-row-name-btn"
+                                onClick={() => setPreview(f.name)}
+                                onDoubleClick={() => onOpenFile(f.name)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    const now = Date.now();
+                                    const last = lastKeyPress.current.get(f.name) ?? 0;
+                                    if (now - last < 300) {
+                                      lastKeyPress.current.delete(f.name);
+                                      onOpenFile(f.name);
+                                    } else {
+                                      lastKeyPress.current.set(f.name, now);
+                                      setPreview(f.name);
+                                    }
+                                  }
+                                }}
+                              >
+                                <span className="df-row-name-wrap">
+                                  <span className="df-row-name">{f.name}</span>
+                                  <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+                                </span>
+                              </button>
                             </td>
                             <td className="df-cell-kind">
                               <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
@@ -419,37 +448,18 @@ export function DesignFilesPanel({
                                 className="df-row-menu"
                                 style={isHovered || active ? { opacity: 1 } : undefined}
                                 role="button"
+                                tabIndex={0}
                                 aria-label={t('designFiles.rowMenu')}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const rect = (e.target as HTMLElement)
-                                    .closest('.df-row-menu')
-                                    ?.getBoundingClientRect();
-                                  if (!rect) return;
-
-                                  const viewportHeight = window.innerHeight;
-                                  const spaceBelow = viewportHeight - rect.bottom;
-                                  const spaceAbove = rect.top;
-
-                                  let top: number;
-                                  if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                                    top = rect.bottom + 4;
-                                  } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                                    top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
-                                  } else {
-                                    top = Math.max(
-                                      MENU_SAFE_PADDING,
-                                      viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
-                                    );
+                                  openMenuFor(f.name, e.target as HTMLElement);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openMenuFor(f.name, e.currentTarget as HTMLElement);
                                   }
-
-                                  const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
-
-                                  setMenuPos({
-                                    name: f.name,
-                                    top,
-                                    left,
-                                  });
                                 }}
                               >
                                 ⋯
