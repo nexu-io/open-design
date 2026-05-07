@@ -9,6 +9,34 @@ When `inputs.connector === mock` (or the daemon cannot resolve the
 configured connector), the artifact falls back to seeded sample data.
 This keeps screenshots, the picker preview, and offline use working.
 
+> **Status — relationship to `skills/live-artifact/`.**
+>
+> The canonical, currently-shipping live-artifact contract lives in
+> [`skills/live-artifact/SKILL.md`](../../live-artifact/SKILL.md): it is
+> *file-shaped* (`artifact.json` + `template.html` + `data.json` +
+> `provenance.json`) and *CLI-shaped* on the agent side (the agent calls
+> `"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts {create,update}` and
+> `tools connectors {list,execute}` rather than HTTP). The renderer is
+> scalar-only `html_template_v1` (`apps/daemon/src/live-artifacts/render.ts`).
+>
+> `live-dashboard` is a **complementary** browser-runtime variant: the
+> artifact is rendered as a single self-contained HTML page, and the
+> live behaviors (refresh-on-open, manual Refresh, auto-refresh, stale
+> pill) run in-page rather than at template-render time. Polling
+> therefore needs an HTTP shape, which is what the rest of this file
+> describes (`POST /api/od/connectors/poll`).
+>
+> Treat the HTTP shape below as a **forward-looking proposal** that
+> sits alongside the file/CLI contract: the daemon does not yet expose
+> `POST /api/od/connectors/poll` (`apps/daemon/src/server.ts` /
+> `apps/daemon/src/live-artifacts/`), so out-of-the-box the artifact
+> renders against the seeded sample data and the Refresh button only
+> tweens the fixture. When the daemon-team route lands, only
+> `seedNextChange()` in the template needs to be replaced with the
+> `poll()` helper documented here — the `connectors.json` shape is
+> already a usable declarative source-of-truth that downstream tooling
+> (the live-artifact CLI, MCP wrappers, audit logs) can read today.
+
 ---
 
 ## `connectors.json` schema
@@ -72,11 +100,22 @@ same shape with provider-specific `endpoint` strings.
 
 1. Read `connectors.json` from the artifact dir.
 2. Look up `bindings[primary].provider` in the Composio catalog.
-3. Resolve `auth_ref` against `~/.od/media-config.json` (e.g.
-   `notion.token`). **Never** read tokens from the artifact itself.
-4. For each `reads[].endpoint`, construct the live HTTP request with
-   the resolved auth and substitute `${...}` placeholders from
-   `media-config.json#notion.*`.
+3. Resolve `auth_ref` against the daemon's `media-config.json`. The
+   actual lookup is environment-aware (see
+   [`apps/daemon/src/media-config.ts`](../../../apps/daemon/src/media-config.ts),
+   `configFile()` — precedence high → low):
+   - `<OD_MEDIA_CONFIG_DIR>/media-config.json` when that env var is set;
+   - else `<OD_DATA_DIR>/media-config.json` when `OD_DATA_DIR` is set
+     (relative paths are anchored to the active project root, `$HOME`
+     and `~` shorthands are expanded);
+   - else `<projectRoot>/.od/media-config.json` for the active project.
+
+   The artifact never opens any of these paths itself — it always goes
+   through the daemon poll endpoint, and the daemon enforces the
+   correct lookup order. **Never** read tokens from the artifact.
+4. For each `reads[].endpoint`, the daemon constructs the live HTTP
+   request with the resolved auth and substitutes `${...}` placeholders
+   from the resolved `media-config.json#<provider>.*` values.
 5. Cache responses for `freshness.auto_refresh_seconds`. The
    `Refresh` button issues an explicit poll that bypasses the cache.
 

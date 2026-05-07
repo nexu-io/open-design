@@ -152,13 +152,23 @@ Wire these in a single `<script>` block at the bottom of `index.html`:
 - The Refresh button calls `refresh({silent: false})`. Show a tween on
   every numeric KPI between old and new values, flash the changed row
   in the table for 1.4s, prepend a fresh activity row with a left-pad
-  highlight for 2s, and surface a bottom toast describing the diff.
+  highlight for 2s, and surface a bottom toast describing the diff. The
+  tween/flash hooks are already wired in `assets/template.html`
+  (`tweenText()` + `.flash` + `.db-row.changed` + `.feed-row.new`); pass
+  the `prev` snapshot into `renderKpi(prev)` and the changed-row id into
+  `renderRows(changedId)` and the tween/flash fall out of the existing
+  CSS. Do not rebuild this from scratch.
 - `setInterval(refresh, refresh_seconds * 1000)` when Auto is on.
 - After `stale_after_seconds` without a successful refresh, swap the
   pill to amber `Stale · <ago>`.
-- Real connector mode: `fetch('/api/od/connectors/' + connector +
-  '/poll', {...})`. The OD daemon resolves the connector at runtime via
-  `connectors.json`. On error, fall back to the seeded mock so the
+- Real connector mode: `POST /api/od/connectors/poll` with a JSON body
+  `{ project, read }`, where `project` is the id from
+  `<meta name="od:project">` and `read` is one of the `bindings[*].reads[].id`
+  values declared in `connectors.json`. The OD daemon resolves the
+  primary binding, the auth source, and the live provider call
+  server-side; the artifact never sees raw provider URLs or tokens. See
+  `references/connectors.md` for the wire shape and the daemon
+  resolution order. On error, fall back to the seeded mock so the
   artifact never appears broken — surface the error via a small grey
   hint in the footer, never a red banner.
 
