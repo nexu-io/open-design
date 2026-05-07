@@ -156,6 +156,9 @@ export function ChatPane({
 
   useEffect(() => {
     didInitialScrollRef.current = false;
+    // A new conversation should land at the bottom (its own initial
+    // scroll), not inherit the previous conversation's saved position.
+    savedChatScrollRef.current = null;
   }, [activeConversationId]);
 
   useEffect(() => {

@@ -46,8 +46,8 @@ function mockScrollGeometry(
   };
 }
 
-function renderChatPane(messages: ChatMessage[]) {
-  return render(
+function chatPaneEl(messages: ChatMessage[], activeConversationId: string | null) {
+  return (
     <ChatPane
       messages={messages}
       streaming={false}
@@ -58,11 +58,15 @@ function renderChatPane(messages: ChatMessage[]) {
       onSend={() => {}}
       onStop={() => {}}
       conversations={[]}
-      activeConversationId={null}
+      activeConversationId={activeConversationId}
       onSelectConversation={() => {}}
       onDeleteConversation={() => {}}
-    />,
+    />
   );
+}
+
+function renderChatPane(messages: ChatMessage[], activeConversationId: string | null = null) {
+  return render(chatPaneEl(messages, activeConversationId));
 }
 
 const sampleMessages: ChatMessage[] = [
@@ -117,7 +121,7 @@ describe('chat scroll preservation across tab switches', () => {
   });
 
   it('snaps to new scrollHeight when user was pinned to bottom and new content arrived off-tab', async () => {
-    const { rerender } = renderChatPane(sampleMessages);
+    renderChatPane(sampleMessages);
     const log = getChatLog();
     const ctl = mockScrollGeometry(log, {
       scrollHeight: 1000,
@@ -160,23 +164,49 @@ describe('chat scroll preservation across tab switches', () => {
 
     // Bottom-pinned user lands at scrollHeight, not at the old offset.
     expect(remountedTop).toBe(1500);
+  });
 
-    // Sanity: also exercise that a non-pinned user does not snap.
-    rerender(
-      <ChatPane
-        messages={sampleMessages}
-        streaming={false}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        onEnsureProject={async () => 'project-1'}
-        onSend={() => {}}
-        onStop={() => {}}
-        conversations={[]}
-        activeConversationId={null}
-        onSelectConversation={() => {}}
-        onDeleteConversation={() => {}}
-      />,
-    );
+  it('does not restore previous conversation scroll when activeConversationId changes', async () => {
+    const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
+    const log = getChatLog();
+    const ctl = mockScrollGeometry(log, {
+      scrollHeight: 1000,
+      clientHeight: 400,
+      scrollTop: 0,
+    });
+
+    // User scrolls up in conversation A and switches to Comments.
+    ctl.setScrollTop(150);
+    await switchTab('Comments');
+
+    // While off-tab, the active conversation changes to B. Returning to
+    // Chat should land at conversation B's own initial position, not
+    // restore conversation A's scrollTop.
+    rerender(chatPaneEl(sampleMessages, 'conv-B'));
+    await switchTab('Chat');
+
+    const remounted = getChatLog();
+    let remountedTop = 0;
+    Object.defineProperty(remounted, 'scrollHeight', {
+      configurable: true,
+      get: () => 1000,
+    });
+    Object.defineProperty(remounted, 'clientHeight', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(remounted, 'scrollTop', {
+      configurable: true,
+      get: () => remountedTop,
+      set: (v: number) => {
+        remountedTop = v;
+      },
+    });
+
+    await flushFrame();
+
+    // Saved state was cleared on the conversation switch, so the rAF
+    // restore branch is skipped and scrollTop stays at its initial 0.
+    expect(remountedTop).toBe(0);
   });
 });
