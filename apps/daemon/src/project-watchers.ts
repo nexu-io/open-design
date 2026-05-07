@@ -2,7 +2,7 @@
 import path from 'node:path';
 import chokidar from 'chokidar';
 
-import { projectDir } from './projects.js';
+import { projectDir, resolveProjectDir } from './projects.js';
 
 /**
  * Refcounted per-project file watcher registry.
@@ -121,7 +121,14 @@ function makeEntry(dir, opts) {
  *   last; `ready` resolves once chokidar has finished its initial scan.
  */
 export function subscribe(projectsRoot, projectId, onEvent, opts = {}) {
-  const dir = projectDir(projectsRoot, projectId);
+  // Resolve to the project's actual root: for folder-imported projects
+  // (metadata.baseDir set) we watch the user's folder so the live-reload
+  // SSE stream actually fires when their files change. The registry is
+  // keyed by the resolved directory, not the project id, so two
+  // projects pointing at the same folder share one watcher.
+  const dir = opts.metadata
+    ? resolveProjectDir(projectsRoot, projectId, opts.metadata)
+    : projectDir(projectsRoot, projectId);
   const key = dir;
 
   let entry = registry.get(key);

@@ -605,12 +605,14 @@ code {
   display: flex;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 .split-chat-slot[hidden] {
   display: none;
 }
 .split-chat-slot > .pane {
   flex: 1 1 auto;
+  min-width: 0;
 }
 .pane {
   display: flex;
@@ -618,6 +620,7 @@ code {
   min-height: 0;
   min-width: 0;
   background: var(--bg-panel);
+  overflow: hidden;
 }
 .split-resize-handle {
   width: 8px;
@@ -969,15 +972,6 @@ code {
   white-space: nowrap;
 }
 
-.composer-import-item-enabled {
-  cursor: pointer;
-  color: var(--text);
-}
-.composer-import-item-enabled:hover {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-
 .user-attachments {
   display: flex;
   gap: 6px;
@@ -1154,7 +1148,12 @@ code {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.55;
-  max-width: 50ch;
+  /* 72ch lets typical one-sentence English subtitles fit on a single
+   * line inside the 920px settings modal while still wrapping cleanly
+   * on narrow viewports (the modal width clamps to 100vw - 48px) and
+   * for the longest locales (German, French). 50ch was forcing even
+   * the English subtitle onto two lines. See nexu-io/open-design#743. */
+  max-width: 72ch;
 }
 .modal-foot {
   display: flex;
@@ -1338,7 +1337,8 @@ code {
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
-.settings-rescan-status {
+.settings-rescan-status,
+.settings-test-status {
   margin: -4px 0 0;
   padding: 7px 10px;
   border: 1px solid var(--green-border);
@@ -1348,10 +1348,38 @@ code {
   font-size: 12px;
   line-height: 1.4;
 }
-.settings-rescan-status.error {
+.settings-rescan-status.error,
+.settings-test-status.error {
   border-color: var(--red-border);
   background: var(--red-bg);
   color: var(--red);
+}
+.settings-test-status.warn {
+  border-color: var(--amber-border, var(--orange-border, var(--green-border)));
+  background: var(--amber-bg, var(--orange-bg, var(--green-bg)));
+  color: var(--amber, var(--orange, var(--green)));
+}
+.settings-test-status.running {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.settings-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+  justify-content: center;
+}
+.settings-test-btn.loading {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.section-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .settings-field-error {
   color: var(--red);
@@ -2237,6 +2265,31 @@ code {
 .newproj-import svg {
   display: block;
   flex: 0 0 auto;
+}
+.newproj-open-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.newproj-folder-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg));
+  color: var(--text);
+  box-sizing: border-box;
+}
+.newproj-folder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.newproj-folder-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 .newproj-footer {
   padding: 0 18px 16px;
@@ -4491,8 +4544,10 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
   flex: 1;
+  overflow: hidden;
 }
 .ws-tabs-shell {
   display: flex;
@@ -4516,6 +4571,9 @@ button.connector-action.is-loading {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
+  /* thinner scrollbar to avoid overlap */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .ws-tab {
@@ -4701,6 +4759,8 @@ button.connector-action.is-loading {
   gap: 6px;
 }
 .df-head .df-actions button:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.df-head .df-actions button.danger { color: var(--red); }
+.df-head .df-actions button.danger:hover:not(:disabled) { background: var(--red-bg); color: var(--red); }
 
 .df-body {
   flex: 1;
@@ -5757,11 +5817,25 @@ button.connector-action.is-loading {
 .comment-popover-head div {
   display: grid;
   gap: 1px;
+  min-width: 0;
+  overflow: hidden;
 }
-.comment-popover-head strong { font-size: 13px; }
+.comment-popover-head strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .comment-popover-head span {
   color: var(--text-muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-popover-head button.ghost {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .board-pod-summary {
   display: grid;
@@ -5805,7 +5879,15 @@ button.connector-action.is-loading {
   font-size: 12px;
 }
 .board-note-item span {
+  /* The note span sits next to a Remove button inside a fixed-width
+     ~300px popover. Without flex: 1 + min-width: 0 + overflow-wrap an
+     unbroken long string (URL, hash, base64) refuses to break and
+     pushes the popover layout sideways past its 320px boundary.
+     Issue #782. */
+  flex: 1;
+  min-width: 0;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .comment-popover textarea {
   min-height: 78px;
@@ -5816,8 +5898,17 @@ button.connector-action.is-loading {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+.comment-popover-actions > * {
+  /* Buttons may carry labels longer than their natural fair-share of the
+     320px popover width (Save comment, Send to chat, Sending..., Add note,
+     Remove). Without an explicit shrink ceiling and wrap, the row pushes
+     past the popover's right edge instead of breaking onto a new line.
+     Issue #779. */
+  max-width: 100%;
 }
 .comment-popover-remove {
   color: var(--red);
@@ -5828,6 +5919,134 @@ button.connector-action.is-loading {
   background: var(--red-bg);
   border-color: var(--red-border);
 }
+
+/* Inspect panel — sibling of the comment popover. Anchored to the
+   right side of the preview surface. Width is fixed so layout doesn't
+   reflow as the user scrubs slider values; controls reserve space for
+   their numeric readouts. */
+.inspect-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: 296px;
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+}
+.inspect-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inspect-panel-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.inspect-panel-title strong {
+  font-size: 13px;
+}
+.inspect-panel-title code {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inspect-section-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inspect-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.inspect-row > label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.inspect-row input[type='color'] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+.inspect-row input[type='text'],
+.inspect-row select {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 11px;
+  font-family: inherit;
+}
+.inspect-row input[type='range'] {
+  width: 100%;
+}
+.inspect-row-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 42px;
+  text-align: right;
+}
+.inspect-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inspect-panel-error {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--red-border);
+  border-radius: 4px;
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 11px;
+}
+.inspect-empty-hint {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+.inspect-empty-hint code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  font-size: 11px;
+}
+
 .comments-panel {
   display: flex;
   flex-direction: column;
@@ -6855,6 +7074,11 @@ button.connector-action.is-loading {
   gap: 14px;
   margin-top: 18px;
 }
+.deploy-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .field-label-row {
   display: flex;
   align-items: baseline;
@@ -6906,7 +7130,8 @@ button.connector-action.is-loading {
   border: 1px solid color-mix(in srgb, #1f9d55 28%, var(--border));
   font-variant-numeric: tabular-nums;
 }
-.deploy-form input {
+.deploy-form input,
+.deploy-form select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--border);
@@ -6925,10 +7150,18 @@ button.connector-action.is-loading {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.deploy-field-grid.single-field {
+  grid-template-columns: minmax(0, 1fr);
+}
 .deploy-field-grid label {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .deploy-error {
   margin: 0;
@@ -8094,6 +8327,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: 100%;
 }
 .composer-import-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-import-item-enabled {
+  cursor: pointer;
+  color: var(--text);
+}
+.composer-import-item-enabled:hover {
   background: var(--bg-subtle);
   color: var(--text);
 }

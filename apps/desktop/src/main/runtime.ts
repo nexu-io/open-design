@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -230,6 +231,19 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
 }
 
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
+  const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+
+  // ipcMain.handle() registers a handler in an internal map that is *not*
+  // surfaced via eventNames(); the previous `!eventNames().includes(...)`
+  // check was therefore always true and would throw "Attempted to register
+  // a second handler" on the second createDesktopRuntime() call (e.g. dev
+  // hot-reload). removeHandler is a no-op when nothing is registered.
+  ipcMain.removeHandler("dialog:pick-folder");
+  ipcMain.handle("dialog:pick-folder", async () => {
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
     height: 900,
@@ -240,6 +254,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: preloadPath,
     },
     width: 1280,
   });

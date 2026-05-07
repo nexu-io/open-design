@@ -56,8 +56,8 @@ const residualAllowedExactPaths = new Set([
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
-  // electron-builder hook path; CJS compatibility entry used by tools-pack mac builds.
-  "tools/pack/resources/mac/web-standalone-after-pack.cjs",
+  // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
+  "tools/pack/resources/web-standalone-after-pack.cjs",
 ]);
 
 const residualAllowedPathPrefixes = [
@@ -338,11 +338,60 @@ async function checkWebTestLayout(): Promise<boolean> {
   return true;
 }
 
+const toolsRootAllowlist = new Map<string, "directory" | "file">([
+  // Keep top-level tools intentionally small. `tools/launcher` was an incoming
+  // Windows shim experiment from PR #683 and is not an active repo boundary.
+  ["AGENTS.md", "file"],
+  ["dev", "directory"],
+  ["pack", "directory"],
+]);
+
+async function checkToolsLayout(): Promise<boolean> {
+  const toolsRoot = path.join(repoRoot, "tools");
+  const entries = await readdir(toolsRoot, { withFileTypes: true });
+  const seen = new Set<string>();
+  const violations: string[] = [];
+
+  for (const entry of entries) {
+    const expected = toolsRootAllowlist.get(entry.name);
+    const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
+
+    if (expected == null) {
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, and pack/`);
+      continue;
+    }
+
+    seen.add(entry.name);
+    if (expected === "directory" && !entry.isDirectory()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name}/ to be a directory`);
+    }
+    if (expected === "file" && !entry.isFile()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name} to be a file`);
+    }
+  }
+
+  for (const [entryName, expected] of toolsRootAllowlist) {
+    if (!seen.has(entryName)) {
+      violations.push(`tools/${entryName}${expected === "directory" ? "/" : ""} -> required tools boundary is missing`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Tools layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Tools layout check passed: tools/ top-level entries match the active boundary allowlist.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
+  { name: "tools layout", run: checkToolsLayout },
 ];
 
 const results: boolean[] = [];

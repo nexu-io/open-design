@@ -317,8 +317,6 @@ pnpm tools-dev run web
 # 開啟 tools-dev 輸出的 web URL
 ```
 
-Windows 啟動器：請依照 `tools/launcher/README.md` 的說明自行建置 `OpenDesign.exe`，或從 GitHub Releases 下載。接著將它放到 repo 根目錄並雙擊；它會在需要時執行 `pnpm install`，再用 `pnpm tools-dev` 啟動 Open Design。
-
 環境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可選輔助工具，不是專案必需步驟；如果使用它們，先執行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再執行 `pnpm install`。
 
 桌面版/後臺啟動、固定埠重啟，以及 media 生成派發器檢查（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）見 [`QUICKSTART.md`](QUICKSTART.md)。
@@ -780,7 +778,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 感謝每一位讓 Open Design 變得更好的朋友 —— 無論是寫程式碼、修文檔、提 issue、加 skill 還是加 design system，每一次真實貢獻都會被記住。下面這面牆是最直觀的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design 貢獻者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-07" alt="Open Design 貢獻者" />
 </a>
 
 第一次提 PR？歡迎從 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 標籤起步。
@@ -797,9 +795,9 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-07" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
   </picture>
 </a>
 

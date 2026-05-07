@@ -62,9 +62,14 @@ export interface ProjectMetadata {
   templateId?: string;
   templateLabel?: string;
   inspirationDesignSystemIds?: string[];
-  importedFrom?: 'claude-design' | string;
+  importedFrom?: 'claude-design' | 'folder' | string;
   entryFile?: string;
   sourceFileName?: string;
+  // Folder-import (#597): when set, the project's files live under this
+  // absolute path instead of .od/projects/<id>/. OD reads and writes
+  // directly inside the user's folder. Stored as the realpath() result so
+  // symlinks can't redirect writes after import time.
+  baseDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
@@ -140,6 +145,23 @@ export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
 }
 
+// POST /api/import/folder — create a project rooted at an existing local
+// folder. The submitted baseDir is stored as the project's metadata.baseDir
+// (after realpath canonicalization) and OD reads/writes directly inside it.
+// The user owns version control; OD does not snapshot or copy.
+export interface ImportFolderRequest {
+  baseDir: string;
+  name?: string;
+  skillId?: string | null;
+  designSystemId?: string | null;
+}
+
+export interface ImportFolderResponse {
+  project: Project;
+  conversationId: string;
+  entryFile: string | null;
+}
+
 export interface ConversationsResponse {
   conversations: Conversation[];
 }
@@ -160,7 +182,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -175,13 +197,18 @@ export interface DeployConfigResponse {
   tokenMask: string;
   teamId: string;
   teamSlug: string;
+  accountId?: string;
+  projectName?: string;
   target: 'preview';
 }
 
 export interface UpdateDeployConfigRequest {
+  providerId?: DeployProviderId;
   token?: string;
   teamId?: string;
   teamSlug?: string;
+  accountId?: string;
+  projectName?: string;
 }
 
 export interface DeploymentInfo {
@@ -196,6 +223,7 @@ export interface DeploymentInfo {
   status: DeploymentStatus;
   statusMessage?: string;
   reachableAt?: number;
+  providerMetadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
 }

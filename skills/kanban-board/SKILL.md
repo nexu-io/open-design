@@ -23,7 +23,7 @@ od:
     requires: true
     sections: [color, typography, layout, components]
   craft:
-    requires: [state-coverage]
+    requires: [state-coverage, laws-of-ux]
   example_prompt: "Make me a kanban board for a 5-person growth squad mid-sprint — backlog, doing, review, done."
 ---
 

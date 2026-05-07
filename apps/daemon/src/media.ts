@@ -42,6 +42,7 @@ import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { Agent as UndiciAgent } from 'undici';
 import {
   AUDIO_DURATIONS_SEC,
   VIDEO_LENGTHS_SEC,
@@ -516,6 +517,12 @@ function defaultAspectFor(surface) {
 // ---------------------------------------------------------------------------
 
 const AZURE_DEFAULT_API_VERSION = '2024-02-01';
+const OPENAI_IMAGE_HEADERS_TIMEOUT_MS = 10 * 60 * 1000;
+const OPENAI_IMAGE_BODY_TIMEOUT_MS = 10 * 60 * 1000;
+const openAIImageDispatcher = new UndiciAgent({
+  headersTimeout: OPENAI_IMAGE_HEADERS_TIMEOUT_MS,
+  bodyTimeout: OPENAI_IMAGE_BODY_TIMEOUT_MS,
+});
 
 async function renderOpenAIImage(ctx, credentials) {
   if (!credentials.apiKey) {
@@ -562,6 +569,7 @@ async function renderOpenAIImage(ctx, credentials) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    dispatcher: openAIImageDispatcher,
   });
   const text = await resp.text();
   if (!resp.ok) {
