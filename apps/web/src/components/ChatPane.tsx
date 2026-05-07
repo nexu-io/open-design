@@ -218,6 +218,14 @@ export function ChatPane({
         } else {
           target.scrollTop = saved.scrollTop;
         }
+        // Resync the jump-to-latest affordance with the restored
+        // position. Without this, a user who left Chat ~60px from the
+        // bottom and returns to find new messages stacked underneath
+        // would land hundreds of pixels above the latest turn while
+        // scrolledFromBottom remained false until they scrolled.
+        const distance =
+          target.scrollHeight - target.scrollTop - target.clientHeight;
+        setScrolledFromBottom(distance > 120);
       });
     }
 

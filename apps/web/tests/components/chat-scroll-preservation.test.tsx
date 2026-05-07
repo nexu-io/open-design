@@ -166,6 +166,56 @@ describe('chat scroll preservation across tab switches', () => {
     expect(remountedTop).toBe(1500);
   });
 
+  it('reveals the jump-to-latest button when restored position is no longer near bottom', async () => {
+    renderChatPane(sampleMessages);
+    const log = getChatLog();
+    const ctl = mockScrollGeometry(log, {
+      scrollHeight: 1000,
+      clientHeight: 400,
+      scrollTop: 0,
+    });
+
+    // User leaves Chat ~60px from the bottom (distance = 1000 - 540 - 400 = 60).
+    ctl.setScrollTop(540);
+
+    await switchTab('Comments');
+
+    // While off-tab, new messages stack underneath. scrollHeight grows
+    // dramatically; the saved absolute scrollTop is now hundreds of
+    // pixels above the latest turn.
+    ctl.setScrollHeight(2000);
+
+    await switchTab('Chat');
+
+    // Carry the new geometry into the remounted element so the
+    // distance-from-bottom calc inside the rAF restore can see it.
+    const remounted = getChatLog();
+    let remountedTop = 0;
+    Object.defineProperty(remounted, 'scrollHeight', {
+      configurable: true,
+      get: () => 2000,
+    });
+    Object.defineProperty(remounted, 'clientHeight', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(remounted, 'scrollTop', {
+      configurable: true,
+      get: () => remountedTop,
+      set: (v: number) => {
+        remountedTop = v;
+      },
+    });
+
+    await flushFrame();
+
+    // Restored to old offset (540), but distance = 2000 - 540 - 400 = 1060
+    // is well past the 120px threshold, so the jump-to-latest button
+    // must be visible immediately, not hidden until the user scrolls.
+    expect(remountedTop).toBe(540);
+    expect(screen.getByRole('button', { name: /jump to latest/i })).toBeTruthy();
+  });
+
   it('lands new conversation at its own bottom when switching conversations off-tab', async () => {
     const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
     const log = getChatLog();
