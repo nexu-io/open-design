@@ -1507,7 +1507,7 @@ function InspectPanel({
     <aside className="inspect-panel" data-testid="inspect-panel">
       <header className="inspect-panel-head">
         <div className="inspect-panel-title">
-          <strong>{target.label || target.elementId}</strong>
+          <strong title={target.label || target.elementId}>{target.label || target.elementId}</strong>
           <code title={target.selector}>{target.elementId}</code>
         </div>
         <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">

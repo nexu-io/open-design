@@ -5957,8 +5957,8 @@ button.connector-action.is-loading {
   /* Long target.label values (deeply-nested component selectors) used
      to spill past the title container and out of the panel because
      this rule had no overflow constraint. Truncate with ellipsis;
-     the full string remains accessible via the title attribute on
-     the sibling <code>. Issue #780. */
+     the <strong> carries title={label} so the full string is still
+     visible on hover. Issue #780. */
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
