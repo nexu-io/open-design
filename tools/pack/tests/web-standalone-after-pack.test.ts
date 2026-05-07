@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
@@ -29,6 +29,16 @@ async function writePackage(packageRoot: string, packageName: string): Promise<v
   await writeFile(join(packageRoot, "index.js"), "module.exports = {};\n", "utf8");
 }
 
+async function writePnpmLinkedPackage(standaloneRoot: string, packageName: string): Promise<string> {
+  const packageDirectoryName = `${packageName}@0.0.0`.split("/").join("+");
+  const packageRoot = join(standaloneRoot, "node_modules", ".pnpm", packageDirectoryName, "node_modules", packageName);
+  const hoistPath = join(standaloneRoot, "node_modules", ".pnpm", "node_modules", packageName);
+  await writePackage(packageRoot, packageName);
+  await mkdir(path.dirname(hoistPath), { recursive: true });
+  await symlink(packageRoot, hoistPath);
+  return packageRoot;
+}
+
 async function writeRootWebPackage(resourcesRoot: string): Promise<void> {
   const webPackageRoot = join(resourcesRoot, "app", "node_modules", "@open-design", "web");
   await mkdir(join(webPackageRoot, "dist", "sidecar"), { recursive: true });
@@ -38,26 +48,36 @@ async function writeRootWebPackage(resourcesRoot: string): Promise<void> {
 
 async function writeStandaloneFixture(
   workspaceRoot: string,
-  options: { includeHoistedNext: boolean; includeWebNext: boolean },
+  options: { includeHoistedNext: boolean; includeWebNext: boolean; useAbsolutePnpmSymlinks?: boolean },
 ): Promise<string> {
   const standaloneRoot = join(workspaceRoot, "apps", "web", ".next", "standalone");
   const sourceWebRoot = join(standaloneRoot, "apps", "web");
   const hoistRoot = join(standaloneRoot, "node_modules", ".pnpm", "node_modules");
 
-  if (options.includeHoistedNext) {
-    await writePackage(join(hoistRoot, "next"), "next");
+  if (options.useAbsolutePnpmSymlinks) {
+    const nextPackageRoot = options.includeHoistedNext ? await writePnpmLinkedPackage(standaloneRoot, "next") : null;
+    await writePnpmLinkedPackage(standaloneRoot, "react");
+    await writePnpmLinkedPackage(standaloneRoot, "react-dom");
+    await writePnpmLinkedPackage(standaloneRoot, "styled-jsx");
+    if (options.includeWebNext && nextPackageRoot != null) {
+      await mkdir(join(sourceWebRoot, "node_modules"), { recursive: true });
+      await symlink(nextPackageRoot, join(sourceWebRoot, "node_modules", "next"));
+    }
+  } else {
+    if (options.includeHoistedNext) {
+      await writePackage(join(hoistRoot, "next"), "next");
+    }
+    await writePackage(join(hoistRoot, "react"), "react");
+    await writePackage(join(hoistRoot, "react-dom"), "react-dom");
+    await writePackage(join(hoistRoot, "styled-jsx"), "styled-jsx");
+    if (options.includeWebNext) {
+      await writePackage(join(sourceWebRoot, "node_modules", "next"), "next");
+    }
   }
-  await writePackage(join(hoistRoot, "react"), "react");
-  await writePackage(join(hoistRoot, "react-dom"), "react-dom");
-  await writePackage(join(hoistRoot, "styled-jsx"), "styled-jsx");
 
   await mkdir(join(sourceWebRoot, ".next", "static"), { recursive: true });
   await writeFile(join(sourceWebRoot, "server.js"), "module.exports = {};\n", "utf8");
   await writeFile(join(sourceWebRoot, ".next", "BUILD_ID"), "fixture\n", "utf8");
-
-  if (options.includeWebNext) {
-    await writePackage(join(sourceWebRoot, "node_modules", "next"), "next");
-  }
 
   await mkdir(join(workspaceRoot, "apps", "web", ".next", "static"), { recursive: true });
   await writeFile(join(workspaceRoot, "apps", "web", ".next", "static", "client.js"), "client();\n", "utf8");
@@ -65,7 +85,12 @@ async function writeStandaloneFixture(
   return standaloneRoot;
 }
 
-async function runFixture(options: { includeHoistedNext?: boolean; includeWebNext: boolean }): Promise<{
+async function runFixture(options: {
+  includeHoistedNext?: boolean;
+  includeWebNext: boolean;
+  platformName?: "darwin" | "win32";
+  useAbsolutePnpmSymlinks?: boolean;
+}): Promise<{
   appOutDir: string;
   auditReportPath: string;
   destinationRoot: string;
@@ -76,9 +101,13 @@ async function runFixture(options: { includeHoistedNext?: boolean; includeWebNex
   const standaloneSourceRoot = await writeStandaloneFixture(workspaceRoot, {
     includeHoistedNext: options.includeHoistedNext ?? true,
     includeWebNext: options.includeWebNext,
+    useAbsolutePnpmSymlinks: options.useAbsolutePnpmSymlinks,
   });
-  const appOutDir = join(root, "builder", "win-unpacked");
-  const resourcesRoot = join(appOutDir, "resources");
+  const platformName = options.platformName ?? "win32";
+  const appOutDir = join(root, "builder", platformName === "darwin" ? "mac-arm64" : "win-unpacked");
+  const resourcesRoot = platformName === "darwin"
+    ? join(appOutDir, "Open Design.app", "Contents", "Resources")
+    : join(appOutDir, "resources");
   const auditReportPath = join(root, "audit.json");
   const configPath = join(root, "config.json");
   const oldConfigEnv = process.env[CONFIG_ENV];
@@ -110,7 +139,7 @@ async function runFixture(options: { includeHoistedNext?: boolean; includeWebNex
   try {
     await runWebStandaloneAfterPack({
       appOutDir,
-      electronPlatformName: "win32",
+      electronPlatformName: platformName,
       packager: { appInfo: { productFilename: "Open Design" } },
     });
   } catch (error) {
@@ -172,5 +201,29 @@ describe("web standalone afterPack hook", () => {
     await expect(runFixture({ includeHoistedNext: false, includeWebNext: false })).rejects.toThrow(
       /copied standalone app-local Next package missing/,
     );
+  });
+
+  it("rewrites darwin copied pnpm symlinks to stay inside the packaged resource", async () => {
+    const fixture = await runFixture({
+      includeWebNext: true,
+      platformName: "darwin",
+      useAbsolutePnpmSymlinks: true,
+    });
+
+    try {
+      const report = JSON.parse(await readFile(fixture.auditReportPath, "utf8")) as {
+        copiedAudit: { externalSymlinks: string[]; resolvedModules: Record<string, string> };
+      };
+      const copiedNextLink = join(fixture.destinationRoot, "apps", "web", "node_modules", "next");
+      const nextTarget = await readlink(copiedNextLink);
+
+      expect(path.isAbsolute(nextTarget)).toBe(false);
+      expect(report.copiedAudit.externalSymlinks).toEqual([]);
+      expect(report.copiedAudit.resolvedModules["next/package.json"].split(path.sep).join("/")).toMatch(
+        /open-design-web-standalone\/node_modules\/\.pnpm\/next@0\.0\.0\/node_modules\/next\/package\.json$/,
+      );
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
   });
 });

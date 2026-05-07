@@ -142,13 +142,17 @@ import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './
 import {
   buildDeployFileSet,
   checkDeploymentUrl,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesProjectNameForProject,
   DeployError,
+  deployToCloudflarePages,
   deployToVercel,
+  isDeployProviderId,
   prepareDeployPreflight,
-  publicDeployConfig,
-  readVercelConfig,
+  publicDeployConfigForProvider,
+  readDeployConfig,
   VERCEL_PROVIDER_ID,
-  writeVercelConfig,
+  writeDeployConfig,
 } from './deploy.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
@@ -162,6 +166,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
+const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
   const daemonDir =
@@ -169,7 +174,16 @@ export function resolveProjectRoot(moduleDir: string): string {
   return path.resolve(daemonDir, '../..');
 }
 
-export function resolveDaemonCliPath(): string {
+function cleanOptionalPath(value: string | undefined): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? path.resolve(value)
+    : null;
+}
+
+export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
+  if (configured) return configured;
+
   const packageJsonPath = require.resolve('@open-design/daemon/package.json');
   return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
@@ -876,6 +890,46 @@ function sendApiError(res, status, code, message, init = {}) {
     .json(createCompatApiErrorResponse(code, message, init));
 }
 
+const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
+
+function cloudflarePagesDeploymentMetadata(projectName) {
+  const normalized = typeof projectName === 'string' ? projectName.trim() : '';
+  return normalized
+    ? { [CLOUDFLARE_PAGES_PROJECT_METADATA_KEY]: normalized }
+    : undefined;
+}
+
+function cloudflarePagesProjectNameFromDeployment(deployment) {
+  const value = deployment?.providerMetadata?.[CLOUDFLARE_PAGES_PROJECT_METADATA_KEY];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return cloudflarePagesProjectNameFromUrl(deployment?.url);
+}
+
+function cloudflarePagesProjectNameFromUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return '';
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    if (!host.endsWith('.pages.dev')) return '';
+    const labels = host.slice(0, -'.pages.dev'.length).split('.').filter(Boolean);
+    return labels.at(-1) || '';
+  } catch {
+    return '';
+  }
+}
+
+function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
+  const priorName = cloudflarePagesProjectNameFromDeployment(prior);
+  if (priorName) return priorName;
+
+  for (const deployment of listDeployments(db, projectId)) {
+    if (deployment.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) continue;
+    const stableName = cloudflarePagesProjectNameFromDeployment(deployment);
+    if (stableName) return stableName;
+  }
+
+  return cloudflarePagesProjectNameForProject(projectId, projectName);
+}
+
 // Filename slug for the Content-Disposition header on archive downloads.
 // Browsers reject quotes and control bytes; we keep Unicode letters/digits
 // so a project name with non-ASCII characters (e.g. "café-design")
@@ -1573,7 +1627,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const hints: string[] = [];
     if (!cliExists) {
       hints.push(
-        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
+        `Open Design CLI entry is missing at ${cliPath}. Rebuild the daemon or packaged app and refresh.`,
       );
     }
     if (!nodeExists) {
@@ -2781,10 +2835,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Deploy --------------------------------------------------------------
 
-  app.get('/api/deploy/config', async (_req, res) => {
+  app.get('/api/deploy/config', async (req, res) => {
     try {
+      const providerId =
+        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfig(await readVercelConfig());
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -2793,8 +2852,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.put('/api/deploy/config', async (req, res) => {
     try {
+      const input = req.body || {};
+      const providerId =
+        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeVercelConfig(req.body || {});
+      const body = await writeDeployConfig(providerId, input);
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -2814,7 +2879,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2832,11 +2897,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         req.params.id,
         fileName,
       );
-      const result = await deployToVercel({
-        config: await readVercelConfig(),
-        files,
-        projectId: req.params.id,
-      });
+      const project = getProject(db, req.params.id);
+      const cloudflarePagesProjectName =
+        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
+          : '';
+      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? await deployToCloudflarePages({
+            config: {
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              projectName: cloudflarePagesProjectName,
+            },
+            files,
+            projectId: req.params.id,
+          })
+        : await deployToVercel({
+            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -2851,6 +2930,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
+        providerMetadata:
+          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName)
+            : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
@@ -2874,7 +2957,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2890,6 +2973,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         PROJECTS_DIR,
         req.params.id,
         fileName,
+        { providerId },
       );
       res.json(body);
     } catch (err) {
@@ -2927,11 +3011,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             'deployment not found',
           );
         }
-        const result = await checkDeploymentUrl(existing.url);
+        const stableCloudflareProjectName =
+          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesProjectNameFromDeployment(existing)
+            : '';
+        const checkUrl = stableCloudflareProjectName
+          ? `https://${stableCloudflareProjectName}.pages.dev`
+          : existing.url;
+        const result = await checkDeploymentUrl(checkUrl);
         const now = Date.now();
         /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
         const body = upsertDeployment(db, {
           ...existing,
+          url: checkUrl || existing.url,
           status: result.reachable ? 'ready' : result.status || 'link-delayed',
           statusMessage: result.reachable
             ? 'Public link is ready.'
@@ -4300,12 +4392,44 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
+      // Route through sendAgentEvent so that pi-rpc's error events
+      // (extension_error, auto_retry_end with success=false, and the
+      // message_update error delta) set agentStreamError and flip the
+      // run to `failed` on close — same path as qoder-stream-json and
+      // json-event-stream after issue #691. Also enables the
+      // substantive-output guard (agentProducedOutput) so a pi run
+      // that exits 0 without producing visible content is caught.
+      //
+      // attachPiRpcSession invokes its send callback with the two-arg
+      // channel/payload shape: send('agent', payload) for normal events
+      // and send('error', {message}) from fail(). sendAgentEvent
+      // expects a single event object, so we adapt at the call site:
+      //   - 'agent' channel → relay payload through sendAgentEvent
+      //   - 'error' channel → route through the daemon's error path
+      //     (createSseErrorPayload + send SSE + set agentStreamError)
+      trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        send,
+        send: (channel, payload) => {
+          if (channel === 'agent') {
+            sendAgentEvent(payload);
+          } else if (channel === 'error') {
+            if (agentStreamError) return;
+            agentStreamError = String(payload?.message || 'Pi session error');
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              agentStreamError,
+              { retryable: false },
+            ));
+          } else {
+            send(channel, payload);
+          }
+        },
+        imagePaths: def.supportsImagePaths ? safeImages : [],
+        uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({

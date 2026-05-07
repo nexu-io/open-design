@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
-import { resolveSeededAppConfigPaths, seedPackagedAppConfig } from "../src/mac.js";
+import { resolveSeededAppConfigPaths, seedPackagedAppConfig } from "../src/mac/index.js";
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {

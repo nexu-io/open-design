@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{data.brand_name}} — Clinic Operations Console</title>
+  <style>
+    :root {
+      --canvas: #eef2f6;
+      --surface: #ffffff;
+      --surface-muted: #f8fafc;
+      --surface-inverse: #0f172a;
+      --border: #e5e7eb;
+      --border-strong: #d6dbe3;
+      --fg: #0f172a;
+      --fg-muted: #64748b;
+      --fg-tertiary: #94a3b8;
+      --fg-on-inverse: #f8fafc;
+      --accent: #10b981;
+      --accent-strong: #059669;
+      --accent-soft: #d1fae5;
+      --pill-up-bg: #d1fae5; --pill-up-fg: #059669;
+      --pill-down-bg: #fee2e2; --pill-down-fg: #dc2626;
+      --pill-avail-bg: #d1fae5; --pill-avail-fg: #047857;
+      --pill-unav-bg: #fee2e2; --pill-unav-fg: #b91c1c;
+      --pill-leave-bg: #fef3c7; --pill-leave-fg: #b45309;
+      --stripe-blue: #bfdbfe; --stripe-amber: #fde68a; --stripe-mint: #a7f3d0;
+      --donut-blue: #bfdbfe; --donut-pink: #fbcfe8; --donut-mint: #ccfbf1;
+      --legend-blue: #3b82f6; --legend-amber: #f59e0b; --legend-pink: #ec4899; --legend-mint: #2dd4bf;
+      --av-orange-1: #fed7aa; --av-orange-2: #f97316; --av-orange-fg: #7c2d12;
+      --av-pink-1:   #fbcfe8; --av-pink-2:   #ec4899;
+      --av-mint-1:   #a7f3d0; --av-mint-2:   #10b981;
+      --av-blue-1:   #bfdbfe; --av-blue-2:   #3b82f6;
+      --av-violet-1: #ddd6fe; --av-violet-2: #7c3aed;
+      --av-amber-1:  #fde68a; --av-amber-2:  #f59e0b; --av-amber-fg: #78350f;
+      --av-rose-1:   #fecaca; --av-rose-2:   #ef4444;
+      --av-fg-light: #ffffff;
+      --r-card: 18px; --r-pill: 999px; --r-md: 14px; --r-sm: 10px; --r-xs: 8px;
+      --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 2px 6px rgba(15,23,42,.04);
+      --shadow-popover: 0 12px 28px rgba(2,6,23,.32);
+      --font-display: 'Plus Jakarta Sans', 'SF Pro Display', system-ui, sans-serif;
+      --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 20px;
+      background: var(--canvas); color: var(--fg);
+      font: 14px/1.5 var(--font-body);
+      font-feature-settings: "tnum", "lnum";
+      display: grid; grid-template-columns: 240px 1fr; gap: 20px;
+      min-height: 100vh;
+    }
+    @media (max-width: 920px) {
+      body { grid-template-columns: 1fr; }
+      aside.sidebar { position: static !important; height: auto !important; }
+    }
+    .card, aside.sidebar {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-card); box-shadow: var(--shadow-card);
+    }
+    aside.sidebar {
+      padding: 18px; display: flex; flex-direction: column; gap: 16px;
+      position: sticky; top: 20px; height: calc(100vh - 40px);
+    }
+    .brand { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
+    .brand-mark { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+    .brand-leaf { width: 22px; height: 22px; border-radius: var(--r-pill); background: var(--accent); color: var(--surface); display: inline-flex; align-items: center; justify-content: center; }
+    .brand-toggle { color: var(--fg-tertiary); }
+    .nav-section { display: flex; flex-direction: column; gap: 2px; }
+    .nav-label { color: var(--fg-tertiary); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 10px 4px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-sm); color: var(--fg-muted); font-size: 13px; }
+    .nav-item .ico { color: var(--fg-muted); }
+    .nav-item .count { margin-left: auto; background: var(--surface-muted); color: var(--fg-muted); border-radius: var(--r-pill); padding: 1px 8px; font-size: 11px; font-weight: 500; }
+    .nav-item .count:empty { display: none; }
+    .nav-item.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+    .nav-item.active .ico { color: var(--accent-strong); }
+    .pro-card { margin-top: auto; background: var(--surface-muted); border-radius: var(--r-md); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .pro-tag { display: inline-flex; background: var(--fg); color: var(--surface); border-radius: var(--r-pill); padding: 2px 8px; font-size: 10px; font-weight: 600; width: fit-content; }
+    .pro-card h4 { margin: 0; font-size: 13px; font-weight: 600; font-family: var(--font-display); }
+    .pro-card p { margin: 0; font-size: 11px; color: var(--fg-muted); }
+    .pro-actions { display: flex; gap: 8px; margin-top: 4px; }
+    .pro-actions button { font-size: 11px; padding: 6px 12px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface); color: var(--fg-muted); cursor: pointer; }
+    .pro-actions .primary { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 600; }
+    .user-row { display: flex; align-items: center; gap: 10px; padding: 10px 6px 0; border-top: 1px solid var(--border); }
+    .user-row .meta { display: flex; flex-direction: column; }
+    .user-row .name { font-size: 13px; font-weight: 600; }
+    .user-row .role { font-size: 11px; color: var(--fg-tertiary); }
+    .user-row .out { margin-left: auto; color: var(--fg-tertiary); }
+
+    .av { border-radius: var(--r-pill); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--av-fg-light); font-weight: 600; }
+    .av-32 { width: 32px; height: 32px; font-size: 12px; }
+    .av-40 { width: 40px; height: 40px; font-size: 14px; }
+    .av-orange { background: linear-gradient(135deg, var(--av-orange-1), var(--av-orange-2)); color: var(--av-orange-fg); }
+    .av-pink   { background: linear-gradient(135deg, var(--av-pink-1),   var(--av-pink-2)); }
+    .av-mint   { background: linear-gradient(135deg, var(--av-mint-1),   var(--av-mint-2)); }
+    .av-blue   { background: linear-gradient(135deg, var(--av-blue-1),   var(--av-blue-2)); }
+    .av-violet { background: linear-gradient(135deg, var(--av-violet-1), var(--av-violet-2)); }
+    .av-amber  { background: linear-gradient(135deg, var(--av-amber-1),  var(--av-amber-2)); color: var(--av-amber-fg); }
+    .av-rose   { background: linear-gradient(135deg, var(--av-rose-1),   var(--av-rose-2)); }
+
+    main { display: flex; flex-direction: column; gap: 24px; }
+    .greeting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .greeting { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+    .actions { display: flex; align-items: center; gap: 12px; }
+    .search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 9px 14px; width: 260px; color: var(--fg-tertiary); font-size: 13px; }
+    .search .kbd { margin-left: auto; font-size: 11px; border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--fg); font-family: var(--font-body); }
+    .btn.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 600; }
+
+    .kpi-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media (max-width: 1100px) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px)  { .kpi-strip { grid-template-columns: 1fr; } }
+    .kpi { padding: 18px; display: flex; flex-direction: column; gap: 12px; min-height: 150px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+    .kpi-head { display: flex; align-items: center; gap: 10px; }
+    .kpi-glyph { width: 32px; height: 32px; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-strong); display: inline-flex; align-items: center; justify-content: center; }
+    .kpi-label { font-size: 13px; color: var(--fg-muted); font-weight: 500; flex: 1; }
+    .kpi-menu { color: var(--fg-tertiary); }
+    .kpi-num-row { display: flex; align-items: baseline; gap: 10px; }
+    .kpi-num { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.1; letter-spacing: -0.015em; }
+    .pill { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--r-pill); padding: 2px 8px; font-size: 11px; font-weight: 600; }
+    .pill.up { background: var(--pill-up-bg); color: var(--pill-up-fg); }
+    .pill.down { background: var(--pill-down-bg); color: var(--pill-down-fg); }
+    .pill.avail { background: var(--pill-avail-bg); color: var(--pill-avail-fg); font-weight: 500; }
+    .pill.unav  { background: var(--pill-unav-bg);  color: var(--pill-unav-fg);  font-weight: 500; }
+    .pill.leave { background: var(--pill-leave-bg); color: var(--pill-leave-fg); font-weight: 500; }
+    .kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+    .kpi-cap { font-size: 12px; color: var(--fg-tertiary); line-height: 1.4; max-width: 60%; }
+    .kpi-strip-pat { height: 32px; flex-shrink: 0; border-radius: var(--r-xs); }
+    .stripe-amber { background: repeating-linear-gradient(135deg, var(--stripe-amber) 0 8px, var(--surface) 8px 16px); width: 96px; }
+    .stripe-blue  { background: repeating-linear-gradient(135deg, var(--stripe-blue)  0 8px, var(--surface) 8px 16px); width: 120px; }
+    .stripe-mint  { background: repeating-linear-gradient(135deg, var(--stripe-mint)  0 8px, var(--surface) 8px 16px); width: 96px; }
+    .kpi-mini-stat { font-size: 11px; color: var(--fg-tertiary); margin-top: 4px; text-align: right; }
+    .kpi-rooms-list { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+    .kpi-rooms-list .row { display: flex; justify-content: space-between; font-size: 12px; }
+    .kpi-rooms-list .row .lbl { color: var(--fg-muted); display: flex; align-items: center; gap: 6px; }
+    .kpi-rooms-list .row .lbl::before { content: ""; width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--fg-tertiary); }
+    .kpi-rooms-list .row .val { color: var(--fg); font-weight: 600; }
+
+    .mid-row { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    @media (max-width: 1100px) { .mid-row { grid-template-columns: 1fr; } }
+    .card-pad { padding: 20px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .card-title { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+    .card-title .ico-tile { width: 26px; height: 26px; border-radius: var(--r-sm); background: var(--surface-muted); color: var(--fg-muted); display: inline-flex; align-items: center; justify-content: center; }
+    .dropdown { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 10px; font-size: 12px; color: var(--fg-muted); background: var(--surface); }
+
+    .legend { display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+    .legend .lg { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-muted); }
+    .legend .dot { width: 8px; height: 8px; border-radius: var(--r-pill); }
+
+    .cal-head { display: flex; align-items: center; justify-content: space-between; }
+    .cal-month { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+    .cal-nav { color: var(--fg-muted); display: inline-flex; gap: 6px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 12px; margin-top: 10px; position: relative; }
+    .cal-grid .dow { color: var(--fg-tertiary); font-weight: 500; padding: 6px 0; font-size: 11px; }
+    .cal-grid .day { height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-pill); }
+    .cal-grid .day.muted { color: var(--fg-tertiary); }
+    .cal-grid .day.active { background: var(--accent); color: var(--surface); font-weight: 700; position: relative; }
+    .cal-grid .day.active::after { content: ""; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--accent); }
+    .activity-popover { background: var(--surface-inverse); color: var(--fg-on-inverse); border-radius: var(--r-md); padding: 14px; box-shadow: var(--shadow-popover); margin-top: 14px; }
+    .activity-popover h6 { margin: 0 0 10px; font-size: 12px; font-weight: 600; }
+    .activity-popover .ev { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .activity-popover .ev:last-of-type { border-bottom: none; }
+    .activity-popover .ev .av-pop { width: 22px; height: 22px; border-radius: var(--r-pill); flex-shrink: 0; }
+    .activity-popover .ev .av-pop.blue   { background: linear-gradient(135deg, var(--av-blue-1),   var(--av-blue-2)); }
+    .activity-popover .ev .av-pop.pink   { background: linear-gradient(135deg, var(--av-pink-1),   var(--av-pink-2)); }
+    .activity-popover .ev .av-pop.violet { background: linear-gradient(135deg, var(--av-violet-1), var(--av-violet-2)); }
+    .activity-popover .ev .av-pop.mint   { background: linear-gradient(135deg, var(--av-mint-1),   var(--av-mint-2)); }
+    .activity-popover .ev .av-pop.amber  { background: linear-gradient(135deg, var(--av-amber-1),  var(--av-amber-2)); }
+    .activity-popover .ev .name { flex: 1; font-size: 11px; }
+    .activity-popover .ev .time { font-size: 10px; color: rgba(248,250,252,0.6); }
+    .activity-popover .add { margin-top: 8px; font-size: 11px; color: rgba(248,250,252,0.7); }
+
+    .bottom-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    @media (max-width: 1100px) { .bottom-row { grid-template-columns: 1fr; } }
+    .donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0; }
+    .donut { position: relative; width: 180px; height: 180px; }
+    .donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .donut .center .lbl { font-size: 12px; color: var(--fg-tertiary); }
+    .donut .center .num { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1; margin-top: 2px; }
+    .donut-legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--fg-muted); }
+    .donut-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+    .donut-legend .lg .dot { width: 8px; height: 8px; border-radius: var(--r-pill); }
+    .donut-legend .lg .v { color: var(--fg); font-weight: 600; margin-right: 2px; }
+
+    .sched-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; margin-bottom: 12px; }
+    .sched-stats .col { padding: 4px 12px; border-left: 1px solid var(--border); }
+    .sched-stats .col:first-child { border-left: none; padding-left: 0; }
+    .sched-stats .col .v { font-family: var(--font-display); font-size: 18px; font-weight: 700; line-height: 1.1; }
+    .sched-stats .col .v small { font-size: 11px; color: var(--fg-tertiary); font-weight: 400; margin-left: 2px; }
+    .sched-stats .col .lbl { font-size: 11px; color: var(--fg-tertiary); margin-top: 2px; }
+
+    .list-head { display: flex; align-items: center; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--fg-tertiary); font-weight: 500; }
+    .list-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .list-row:last-child { border-bottom: none; }
+    .person { flex: 1; display: flex; flex-direction: column; }
+    .person .n { font-size: 13px; font-weight: 600; }
+    .person .r { font-size: 11px; color: var(--fg-tertiary); }
+    .pill.list { padding: 3px 10px; }
+    .appt-time { display: flex; flex-direction: column; align-items: flex-end; }
+    .appt-time .d { font-size: 11px; color: var(--fg-tertiary); }
+    .appt-time .t { font-size: 13px; font-weight: 600; }
+
+    .ic    { width: 18px; height: 18px; stroke-width: 1.6; }
+    .ic-sm { width: 14px; height: 14px; stroke-width: 1.6; }
+  </style>
+</head>
+<body data-od-id="clinic-console-template">
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="icon-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></symbol>
+      <symbol id="icon-message" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z"/></symbol>
+      <symbol id="icon-schedule" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+      <symbol id="icon-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
+      <symbol id="icon-card" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></symbol>
+      <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
+      <symbol id="icon-pill" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 2v4M14 2v4M5 10h14M6 6h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM12 13v6M9 16h6"/></symbol>
+      <symbol id="icon-bed" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 17h18M5 17v-5a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v5"/></symbol>
+      <symbol id="icon-check-square" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 14l3 3 5-5"/></symbol>
+      <symbol id="icon-people" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><path d="M3 21v-1a6 6 0 0 1 12 0v1"/><circle cx="17" cy="6" r="2.5"/><path d="M14 14a4 4 0 0 1 7 4"/></symbol>
+      <symbol id="icon-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12c4-8 14-8 14 0 0 6-7 8-7 8s-7-2-7-8z"/></symbol>
+      <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol>
+      <symbol id="icon-stethoscope" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 1 1 8 0v4"/></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></symbol>
+      <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="icon-chev-left" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6"/></symbol>
+      <symbol id="icon-chev-right" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"/></symbol>
+      <symbol id="icon-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></symbol>
+      <symbol id="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 6l-6 6 6 6M21 6l-6 6 6 6"/></symbol>
+      <symbol id="icon-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    </defs>
+  </svg>
+
+  <aside class="sidebar" data-od-id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <span class="brand-leaf"><svg class="ic-sm"><use href="#icon-leaf"/></svg></span>
+        {{data.brand_name}}
+      </div>
+      <span class="brand-toggle"><svg class="ic"><use href="#icon-collapse"/></svg></span>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">{{data.nav_main_label}}</div>
+      <a class="nav-item {{data.nav_main.0.active_class}}"><svg class="ic"><use href="#icon-dashboard"/></svg>{{data.nav_main.0.label}}<span class="count">{{data.nav_main.0.count}}</span></a>
+      <a class="nav-item {{data.nav_main.1.active_class}}"><svg class="ic"><use href="#icon-message"/></svg>{{data.nav_main.1.label}}<span class="count">{{data.nav_main.1.count}}</span></a>
+      <a class="nav-item {{data.nav_main.2.active_class}}"><svg class="ic"><use href="#icon-schedule"/></svg>{{data.nav_main.2.label}}<span class="count">{{data.nav_main.2.count}}</span></a>
+      <a class="nav-item {{data.nav_main.3.active_class}}"><svg class="ic"><use href="#icon-bell"/></svg>{{data.nav_main.3.label}}<span class="count">{{data.nav_main.3.count}}</span></a>
+      <a class="nav-item {{data.nav_main.4.active_class}}"><svg class="ic"><use href="#icon-card"/></svg>{{data.nav_main.4.label}}<span class="count">{{data.nav_main.4.count}}</span></a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">{{data.nav_management_label}}</div>
+      <a class="nav-item {{data.nav_management.0.active_class}}"><svg class="ic"><use href="#icon-user"/></svg>{{data.nav_management.0.label}}<span class="count">{{data.nav_management.0.count}}</span></a>
+      <a class="nav-item {{data.nav_management.1.active_class}}"><svg class="ic"><use href="#icon-pill"/></svg>{{data.nav_management.1.label}}<span class="count">{{data.nav_management.1.count}}</span></a>
+      <a class="nav-item {{data.nav_management.2.active_class}}"><svg class="ic"><use href="#icon-bed"/></svg>{{data.nav_management.2.label}}<span class="count">{{data.nav_management.2.count}}</span></a>
+      <a class="nav-item {{data.nav_management.3.active_class}}"><svg class="ic"><use href="#icon-check-square"/></svg>{{data.nav_management.3.label}}<span class="count">{{data.nav_management.3.count}}</span></a>
+      <a class="nav-item {{data.nav_management.4.active_class}}"><svg class="ic"><use href="#icon-people"/></svg>{{data.nav_management.4.label}}<span class="count">{{data.nav_management.4.count}}</span></a>
+    </div>
+
+    <div class="pro-card">
+      <span class="pro-tag">{{data.pro_card.tag}}</span>
+      <h4>{{data.pro_card.title}}</h4>
+      <p>{{data.pro_card.body}}</p>
+      <div class="pro-actions">
+        <button class="primary">{{data.pro_card.primary_label}}</button>
+        <button>{{data.pro_card.secondary_label}}</button>
+      </div>
+    </div>
+
+    <div class="user-row">
+      <span class="av av-32 {{data.user.av_class}}">{{data.user.initial}}</span>
+      <div class="meta">
+        <span class="name">{{data.user.name}}</span>
+        <span class="role">{{data.user.role}}</span>
+      </div>
+      <span class="out"><svg class="ic"><use href="#icon-logout"/></svg></span>
+    </div>
+  </aside>
+
+  <main>
+
+    <header class="greeting-row" data-od-id="greeting">
+      <div class="greeting">{{data.greeting}}</div>
+      <div class="actions">
+        <div class="search">
+          <svg class="ic-sm"><use href="#icon-search"/></svg>
+          {{data.search_placeholder}}
+          <span class="kbd">{{data.search_shortcut}}</span>
+        </div>
+        <button class="btn"><svg class="ic-sm"><use href="#icon-download"/></svg>{{data.secondary_action_label}}</button>
+        <button class="btn primary"><svg class="ic-sm"><use href="#icon-plus"/></svg>{{data.primary_action_label}}</button>
+      </div>
+    </header>
+
+    <section class="kpi-strip" data-od-id="kpi-strip">
+      <div class="kpi">
+        <div class="kpi-head">
+          <span class="kpi-glyph"><svg class="ic-sm"><use href="#icon-user"/></svg></span>
+          <span class="kpi-label">{{data.kpi_a.label}}</span>
+          <span class="kpi-menu">⋯</span>
+        </div>
+        <div class="kpi-num-row"><div class="kpi-num">{{data.kpi_a.value}}</div><span class="pill {{data.kpi_a.trend_class}}">{{data.kpi_a.trend_label}}</span></div>
+        <div class="kpi-foot">
+          <div class="kpi-cap">{{data.kpi_a.caption}}</div>
+          <div class="kpi-strip-pat {{data.kpi_a.strip_class}}"></div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <span class="kpi-glyph"><svg class="ic-sm"><use href="#icon-schedule"/></svg></span>
+          <span class="kpi-label">{{data.kpi_b.label}}</span>
+          <span class="kpi-menu">⋯</span>
+        </div>
+        <div class="kpi-num-row"><div class="kpi-num">{{data.kpi_b.value}}</div><span class="pill {{data.kpi_b.trend_class}}">{{data.kpi_b.trend_label}}</span></div>
+        <div class="kpi-foot">
+          <div class="kpi-cap">{{data.kpi_b.caption}}</div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;">
+            <div class="kpi-strip-pat {{data.kpi_b.strip_class}}"></div>
+            <div class="kpi-mini-stat">{{data.kpi_b.mini_stat}}</div>
+          </div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <span class="kpi-glyph"><svg class="ic-sm"><use href="#icon-bed"/></svg></span>
+          <span class="kpi-label">{{data.kpi_c.label}}</span>
+          <span class="kpi-menu">⋯</span>
+        </div>
+        <div class="kpi-num-row"><div class="kpi-num">{{data.kpi_c.value}}</div><span class="pill {{data.kpi_c.trend_class}}">{{data.kpi_c.trend_label}}</span></div>
+        <div class="kpi-rooms-list">
+          <div class="row"><span class="lbl">{{data.kpi_c.rows.0.label}}</span><span class="val">{{data.kpi_c.rows.0.value}}</span></div>
+          <div class="row"><span class="lbl">{{data.kpi_c.rows.1.label}}</span><span class="val">{{data.kpi_c.rows.1.value}}</span></div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <span class="kpi-glyph"><svg class="ic-sm"><use href="#icon-people"/></svg></span>
+          <span class="kpi-label">{{data.kpi_d.label}}</span>
+          <span class="kpi-menu">⋯</span>
+        </div>
+        <div class="kpi-num-row"><div class="kpi-num">{{data.kpi_d.value}}</div><span class="pill {{data.kpi_d.trend_class}}">{{data.kpi_d.trend_label}}</span></div>
+        <div class="kpi-foot">
+          <div class="kpi-cap">{{data.kpi_d.caption}}</div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;">
+            <div class="kpi-strip-pat {{data.kpi_d.strip_class}}"></div>
+            <div class="kpi-mini-stat">{{data.kpi_d.mini_stat}}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mid-row" data-od-id="patient-overview-and-calendar">
+      <div class="card card-pad">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="ico-tile"><svg class="ic-sm"><use href="#icon-clock"/></svg></span>
+            {{data.chart.title}}
+          </div>
+          <div class="dropdown">{{data.chart.dropdown_label}}<svg class="ic-sm"><use href="#icon-chev-down"/></svg></div>
+        </div>
+        <div class="legend">
+          <span class="lg"><span class="dot" style="background: var(--accent);"></span>{{data.chart.legend_a}}</span>
+          <span class="lg"><span class="dot" style="background: var(--legend-blue);"></span>{{data.chart.legend_b}}</span>
+          <span class="lg"><span class="dot" style="background: var(--legend-amber);"></span>{{data.chart.legend_c}}</span>
+        </div>
+
+        <svg viewBox="0 0 600 240" preserveAspectRatio="none" style="width:100%; height:240px; display:block;">
+          <defs>
+            <pattern id="stripeBlue" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+              <rect width="12" height="12" style="fill: var(--surface);" />
+              <rect width="6"  height="12" style="fill: var(--stripe-blue);" />
+            </pattern>
+            <pattern id="stripeMint" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+              <rect width="12" height="12" style="fill: var(--surface);" />
+              <rect width="6"  height="12" style="fill: var(--stripe-mint);" opacity="0.7" />
+            </pattern>
+          </defs>
+          <g style="stroke: var(--border);" stroke-width="1">
+            <line x1="0" y1="48"  x2="600" y2="48" />
+            <line x1="0" y1="96"  x2="600" y2="96" />
+            <line x1="0" y1="144" x2="600" y2="144" />
+            <line x1="0" y1="192" x2="600" y2="192" />
+          </g>
+          <g>
+            <rect x="{{data.chart.bars.0.x}}"  y="{{data.chart.bars.0.y}}"  width="22" height="{{data.chart.bars.0.h}}"  rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.1.x}}"  y="{{data.chart.bars.1.y}}"  width="22" height="{{data.chart.bars.1.h}}"  rx="6" fill="url(#stripeBlue)" />
+            <rect x="{{data.chart.bars.2.x}}"  y="{{data.chart.bars.2.y}}"  width="22" height="{{data.chart.bars.2.h}}"  rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.3.x}}"  y="{{data.chart.bars.3.y}}"  width="22" height="{{data.chart.bars.3.h}}"  rx="6" fill="url(#stripeBlue)" />
+            <rect x="{{data.chart.bars.4.x}}"  y="{{data.chart.bars.4.y}}"  width="22" height="{{data.chart.bars.4.h}}"  rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.5.x}}"  y="{{data.chart.bars.5.y}}"  width="22" height="{{data.chart.bars.5.h}}"  rx="6" fill="url(#stripeBlue)" style="stroke: var(--accent);" stroke-width="2" />
+            <rect x="{{data.chart.bars.6.x}}"  y="{{data.chart.bars.6.y}}"  width="22" height="{{data.chart.bars.6.h}}"  rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.7.x}}"  y="{{data.chart.bars.7.y}}"  width="22" height="{{data.chart.bars.7.h}}"  rx="6" fill="url(#stripeBlue)" />
+            <rect x="{{data.chart.bars.8.x}}"  y="{{data.chart.bars.8.y}}"  width="22" height="{{data.chart.bars.8.h}}"  rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.9.x}}"  y="{{data.chart.bars.9.y}}"  width="22" height="{{data.chart.bars.9.h}}"  rx="6" fill="url(#stripeBlue)" />
+            <rect x="{{data.chart.bars.10.x}}" y="{{data.chart.bars.10.y}}" width="22" height="{{data.chart.bars.10.h}}" rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.11.x}}" y="{{data.chart.bars.11.y}}" width="22" height="{{data.chart.bars.11.h}}" rx="6" fill="url(#stripeBlue)" />
+            <rect x="{{data.chart.bars.12.x}}" y="{{data.chart.bars.12.y}}" width="22" height="{{data.chart.bars.12.h}}" rx="6" fill="url(#stripeMint)" />
+            <rect x="{{data.chart.bars.13.x}}" y="{{data.chart.bars.13.y}}" width="22" height="{{data.chart.bars.13.h}}" rx="6" fill="url(#stripeBlue)" />
+          </g>
+          <g style="fill: var(--fg-tertiary);" font-size="11" text-anchor="middle">
+            <text x="46"  y="232">{{data.chart.x_labels.0}}</text>
+            <text x="132" y="232">{{data.chart.x_labels.1}}</text>
+            <text x="218" y="232">{{data.chart.x_labels.2}}</text>
+            <text x="304" y="232">{{data.chart.x_labels.3}}</text>
+            <text x="390" y="232">{{data.chart.x_labels.4}}</text>
+            <text x="476" y="232">{{data.chart.x_labels.5}}</text>
+            <text x="562" y="232">{{data.chart.x_labels.6}}</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="card card-pad" data-od-id="calendar">
+        <div class="cal-head">
+          <span class="cal-nav"><svg class="ic-sm"><use href="#icon-chev-left"/></svg></span>
+          <div class="cal-month">{{data.calendar.month_label}}</div>
+          <span class="cal-nav"><svg class="ic-sm"><use href="#icon-chev-right"/></svg></span>
+        </div>
+        <div class="cal-grid">
+          <div class="dow">{{data.calendar.dow.0}}</div><div class="dow">{{data.calendar.dow.1}}</div><div class="dow">{{data.calendar.dow.2}}</div><div class="dow">{{data.calendar.dow.3}}</div><div class="dow">{{data.calendar.dow.4}}</div><div class="dow">{{data.calendar.dow.5}}</div><div class="dow">{{data.calendar.dow.6}}</div>
+          <div class="day {{data.calendar.days.0.modifier}}">{{data.calendar.days.0.label}}</div><div class="day {{data.calendar.days.1.modifier}}">{{data.calendar.days.1.label}}</div><div class="day {{data.calendar.days.2.modifier}}">{{data.calendar.days.2.label}}</div><div class="day {{data.calendar.days.3.modifier}}">{{data.calendar.days.3.label}}</div><div class="day {{data.calendar.days.4.modifier}}">{{data.calendar.days.4.label}}</div><div class="day {{data.calendar.days.5.modifier}}">{{data.calendar.days.5.label}}</div><div class="day {{data.calendar.days.6.modifier}}">{{data.calendar.days.6.label}}</div>
+          <div class="day {{data.calendar.days.7.modifier}}">{{data.calendar.days.7.label}}</div><div class="day {{data.calendar.days.8.modifier}}">{{data.calendar.days.8.label}}</div><div class="day {{data.calendar.days.9.modifier}}">{{data.calendar.days.9.label}}</div><div class="day {{data.calendar.days.10.modifier}}">{{data.calendar.days.10.label}}</div><div class="day {{data.calendar.days.11.modifier}}">{{data.calendar.days.11.label}}</div><div class="day {{data.calendar.days.12.modifier}}">{{data.calendar.days.12.label}}</div><div class="day {{data.calendar.days.13.modifier}}">{{data.calendar.days.13.label}}</div>
+          <div class="day {{data.calendar.days.14.modifier}}">{{data.calendar.days.14.label}}</div><div class="day {{data.calendar.days.15.modifier}}">{{data.calendar.days.15.label}}</div><div class="day {{data.calendar.days.16.modifier}}">{{data.calendar.days.16.label}}</div><div class="day {{data.calendar.days.17.modifier}}">{{data.calendar.days.17.label}}</div><div class="day {{data.calendar.days.18.modifier}}">{{data.calendar.days.18.label}}</div><div class="day {{data.calendar.days.19.modifier}}">{{data.calendar.days.19.label}}</div><div class="day {{data.calendar.days.20.modifier}}">{{data.calendar.days.20.label}}</div>
+          <div class="day {{data.calendar.days.21.modifier}}">{{data.calendar.days.21.label}}</div><div class="day {{data.calendar.days.22.modifier}}">{{data.calendar.days.22.label}}</div><div class="day {{data.calendar.days.23.modifier}}">{{data.calendar.days.23.label}}</div><div class="day {{data.calendar.days.24.modifier}}">{{data.calendar.days.24.label}}</div><div class="day {{data.calendar.days.25.modifier}}">{{data.calendar.days.25.label}}</div><div class="day {{data.calendar.days.26.modifier}}">{{data.calendar.days.26.label}}</div><div class="day {{data.calendar.days.27.modifier}}">{{data.calendar.days.27.label}}</div>
+          <div class="day {{data.calendar.days.28.modifier}}">{{data.calendar.days.28.label}}</div><div class="day {{data.calendar.days.29.modifier}}">{{data.calendar.days.29.label}}</div><div class="day {{data.calendar.days.30.modifier}}">{{data.calendar.days.30.label}}</div><div class="day {{data.calendar.days.31.modifier}}">{{data.calendar.days.31.label}}</div><div class="day {{data.calendar.days.32.modifier}}">{{data.calendar.days.32.label}}</div><div class="day {{data.calendar.days.33.modifier}}">{{data.calendar.days.33.label}}</div><div class="day {{data.calendar.days.34.modifier}}">{{data.calendar.days.34.label}}</div>
+        </div>
+
+        <div class="activity-popover" data-od-id="activity-popover">
+          <h6>{{data.activity.title}}</h6>
+          <div class="ev"><span class="av-pop {{data.activity.events.0.av_class}}"></span><span class="name">{{data.activity.events.0.name}}</span><span class="time">{{data.activity.events.0.time}}</span></div>
+          <div class="ev"><span class="av-pop {{data.activity.events.1.av_class}}"></span><span class="name">{{data.activity.events.1.name}}</span><span class="time">{{data.activity.events.1.time}}</span></div>
+          <div class="ev"><span class="av-pop {{data.activity.events.2.av_class}}"></span><span class="name">{{data.activity.events.2.name}}</span><span class="time">{{data.activity.events.2.time}}</span></div>
+          <div class="add">{{data.activity.add_label}}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bottom-row">
+
+      <div class="card card-pad" data-od-id="top-clinics">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="ico-tile"><svg class="ic-sm"><use href="#icon-stethoscope"/></svg></span>
+            {{data.donut.title}}
+          </div>
+          <span class="kpi-menu">⋯</span>
+        </div>
+        <div class="donut-wrap">
+          <div class="donut">
+            <svg viewBox="0 0 100 100" style="width:100%; height:100%; transform: rotate(-90deg);">
+              <circle cx="50" cy="50" r="38" fill="none" stroke-width="14" style="stroke: var(--donut-blue);" />
+              <circle cx="50" cy="50" r="38" fill="none" stroke-width="14" style="stroke: var(--donut-pink);" stroke-dasharray="{{data.donut.segment_b.dasharray}}" stroke-dashoffset="{{data.donut.segment_b.dashoffset}}" />
+              <circle cx="50" cy="50" r="38" fill="none" stroke-width="14" style="stroke: var(--donut-mint);" stroke-dasharray="{{data.donut.segment_c.dasharray}}" stroke-dashoffset="{{data.donut.segment_c.dashoffset}}" />
+            </svg>
+            <div class="center">
+              <span class="lbl">{{data.donut.center_label}}</span>
+              <span class="num">{{data.donut.center_num}}</span>
+            </div>
+          </div>
+          <div class="donut-legend">
+            <div class="lg"><span class="dot" style="background: var(--legend-blue);"></span><span class="v">{{data.donut.legend.0.value}}</span> {{data.donut.legend.0.label}}</div>
+            <div class="lg"><span class="dot" style="background: var(--legend-pink);"></span><span class="v">{{data.donut.legend.1.value}}</span> {{data.donut.legend.1.label}}</div>
+            <div class="lg"><span class="dot" style="background: var(--legend-mint);"></span><span class="v">{{data.donut.legend.2.value}}</span> {{data.donut.legend.2.label}}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-pad" data-od-id="doctor-schedule">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="ico-tile"><svg class="ic-sm"><use href="#icon-schedule"/></svg></span>
+            {{data.schedule.title}}
+          </div>
+          <span class="kpi-menu">⋯</span>
+        </div>
+
+        <div class="sched-stats">
+          <div class="col"><div class="v">{{data.schedule.stats.0.value}} <small>{{data.schedule.stats.0.small}}</small></div><div class="lbl">{{data.schedule.stats.0.label}}</div></div>
+          <div class="col"><div class="v">{{data.schedule.stats.1.value}} <small>{{data.schedule.stats.1.small}}</small></div><div class="lbl">{{data.schedule.stats.1.label}}</div></div>
+          <div class="col"><div class="v">{{data.schedule.stats.2.value}} <small>{{data.schedule.stats.2.small}}</small></div><div class="lbl">{{data.schedule.stats.2.label}}</div></div>
+        </div>
+
+        <div class="list-head">{{data.schedule.list_header_label}}<svg class="ic-sm"><use href="#icon-chev-down"/></svg></div>
+        <div class="list-row">
+          <span class="av av-32 {{data.schedule.doctors.0.av_class}}">{{data.schedule.doctors.0.initial}}</span>
+          <div class="person"><span class="n">{{data.schedule.doctors.0.name}}</span><span class="r">{{data.schedule.doctors.0.role}}</span></div>
+          <span class="pill list {{data.schedule.doctors.0.status_class}}">{{data.schedule.doctors.0.status_label}}</span>
+        </div>
+        <div class="list-row">
+          <span class="av av-32 {{data.schedule.doctors.1.av_class}}">{{data.schedule.doctors.1.initial}}</span>
+          <div class="person"><span class="n">{{data.schedule.doctors.1.name}}</span><span class="r">{{data.schedule.doctors.1.role}}</span></div>
+          <span class="pill list {{data.schedule.doctors.1.status_class}}">{{data.schedule.doctors.1.status_label}}</span>
+        </div>
+        <div class="list-row">
+          <span class="av av-32 {{data.schedule.doctors.2.av_class}}">{{data.schedule.doctors.2.initial}}</span>
+          <div class="person"><span class="n">{{data.schedule.doctors.2.name}}</span><span class="r">{{data.schedule.doctors.2.role}}</span></div>
+          <span class="pill list {{data.schedule.doctors.2.status_class}}">{{data.schedule.doctors.2.status_label}}</span>
+        </div>
+        <div class="list-row">
+          <span class="av av-32 {{data.schedule.doctors.3.av_class}}">{{data.schedule.doctors.3.initial}}</span>
+          <div class="person"><span class="n">{{data.schedule.doctors.3.name}}</span><span class="r">{{data.schedule.doctors.3.role}}</span></div>
+          <span class="pill list {{data.schedule.doctors.3.status_class}}">{{data.schedule.doctors.3.status_label}}</span>
+        </div>
+      </div>
+
+      <div class="card card-pad" data-od-id="appointments">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="ico-tile"><svg class="ic-sm"><use href="#icon-check-square"/></svg></span>
+            {{data.appointments.title}}
+          </div>
+          <span class="kpi-menu">⋯</span>
+        </div>
+        <div class="list-row">
+          <span class="av av-40 {{data.appointments.list.0.av_class}}">{{data.appointments.list.0.initial}}</span>
+          <div class="person"><span class="n">{{data.appointments.list.0.name}}</span><span class="r">{{data.appointments.list.0.role}}</span></div>
+          <div class="appt-time"><span class="d">{{data.appointments.list.0.date}}</span><span class="t">{{data.appointments.list.0.time}}</span></div>
+        </div>
+        <div class="list-row">
+          <span class="av av-40 {{data.appointments.list.1.av_class}}">{{data.appointments.list.1.initial}}</span>
+          <div class="person"><span class="n">{{data.appointments.list.1.name}}</span><span class="r">{{data.appointments.list.1.role}}</span></div>
+          <div class="appt-time"><span class="d">{{data.appointments.list.1.date}}</span><span class="t">{{data.appointments.list.1.time}}</span></div>
+        </div>
+        <div class="list-row">
+          <span class="av av-40 {{data.appointments.list.2.av_class}}">{{data.appointments.list.2.initial}}</span>
+          <div class="person"><span class="n">{{data.appointments.list.2.name}}</span><span class="r">{{data.appointments.list.2.role}}</span></div>
+          <div class="appt-time"><span class="d">{{data.appointments.list.2.date}}</span><span class="t">{{data.appointments.list.2.time}}</span></div>
+        </div>
+        <div class="list-row">
+          <span class="av av-40 {{data.appointments.list.3.av_class}}">{{data.appointments.list.3.initial}}</span>
+          <div class="person"><span class="n">{{data.appointments.list.3.name}}</span><span class="r">{{data.appointments.list.3.role}}</span></div>
+          <div class="appt-time"><span class="d">{{data.appointments.list.3.date}}</span><span class="t">{{data.appointments.list.3.time}}</span></div>
+        </div>
+        <div class="list-row">
+          <span class="av av-40 {{data.appointments.list.4.av_class}}">{{data.appointments.list.4.initial}}</span>
+          <div class="person"><span class="n">{{data.appointments.list.4.name}}</span><span class="r">{{data.appointments.list.4.role}}</span></div>
+          <div class="appt-time"><span class="d">{{data.appointments.list.4.date}}</span><span class="t">{{data.appointments.list.4.time}}</span></div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+</body>
+</html>

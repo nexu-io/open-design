@@ -11,7 +11,7 @@ import {
   startPackedMacApp,
   stopPackedMacApp,
   uninstallPackedMacApp,
-} from "./mac.js";
+} from "./mac/index.js";
 import {
   cleanupPackedWinNamespace,
   installPackedWinApp,

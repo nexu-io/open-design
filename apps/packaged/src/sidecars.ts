@@ -273,7 +273,10 @@ export async function startPackagedSidecars(
   paths: PackagedNamespacePaths,
   options: {
     appVersion: string | null;
+    daemonCliEntry: string | null;
+    daemonSidecarEntry: string | null;
     nodeCommand: string | null;
+    webSidecarEntry: string | null;
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
   },
@@ -292,9 +295,10 @@ export async function startPackagedSidecars(
   try {
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: "0",
+        ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
         // Packaged daemon managed paths are deliberately delivered through
         // the sidecar launch environment. The daemon may keep its own default
         // fallback, but packaged runtime must not rely on path inference from
@@ -331,7 +335,7 @@ export async function startPackagedSidecars(
 
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",

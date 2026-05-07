@@ -460,6 +460,7 @@ test('pi args use rpc mode without --no-session and append model/thinking option
   assert.ok(!baseArgs.includes('--no-session'), 'pi must not pass --no-session');
   assert.equal(pi.promptViaStdin, true);
   assert.equal(pi.streamFormat, 'pi-rpc');
+  assert.equal(pi.supportsImagePaths, true);
 
   const withModel = pi.buildArgs('', [], [], { model: 'anthropic/claude-sonnet-4-5' }, {});
   assert.deepEqual(withModel, [
@@ -475,6 +476,66 @@ test('pi args use rpc mode without --no-session and append model/thinking option
     'rpc',
     '--thinking',
     'high',
+  ]);
+});
+
+test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
+  const args = pi.buildArgs(
+    '',
+    [],
+    ['/tmp/skills', '/tmp/design-systems'],
+    {},
+    {},
+  );
+
+  assert.deepEqual(args, [
+    '--mode',
+    'rpc',
+    '--append-system-prompt',
+    '/tmp/skills',
+    '--append-system-prompt',
+    '/tmp/design-systems',
+  ]);
+});
+
+test('pi args filter relative paths from extraAllowedDirs', () => {
+  const args = pi.buildArgs(
+    '',
+    [],
+    ['/tmp/skills', 'relative/path', '/tmp/design-systems'],
+    {},
+    {},
+  );
+
+  // Relative paths should be filtered out.
+  assert.deepEqual(args, [
+    '--mode',
+    'rpc',
+    '--append-system-prompt',
+    '/tmp/skills',
+    '--append-system-prompt',
+    '/tmp/design-systems',
+  ]);
+});
+
+test('pi args combine model, thinking, and extraAllowedDirs', () => {
+  const args = pi.buildArgs(
+    '',
+    [],
+    ['/tmp/skills'],
+    { model: 'openai/gpt-5', reasoning: 'medium' },
+    {},
+  );
+
+  assert.deepEqual(args, [
+    '--mode',
+    'rpc',
+    '--model',
+    'openai/gpt-5',
+    '--thinking',
+    'medium',
+    '--append-system-prompt',
+    '/tmp/skills',
   ]);
 });
 

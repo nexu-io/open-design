@@ -891,7 +891,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   // launches as `unmanaged`, which on uninstall would also remove the
   // AppImage/desktop/icon files out from under the still-running app.
   // Accept either TOOLS_PACK (CLI start) or PACKAGED (menu launch). Mirrors
-  // the dual-source acceptance pattern in mac.ts:709-714.
+  // the dual-source acceptance pattern in mac/lifecycle.ts.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -932,7 +932,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
     };
   }
 
-  // Try graceful shutdown via IPC first. mac.ts's pattern: best-effort SHUTDOWN
+  // Try graceful shutdown via IPC first. mac/lifecycle.ts's pattern: best-effort SHUTDOWN
   // request with a short timeout so Electron renderers + sidecars get a chance
   // to flush state (SQLite WAL, logs) before SIGTERM.
   let gracefulRequested = false;

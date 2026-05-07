@@ -322,8 +322,6 @@ pnpm tools-dev run web
 # open the web URL printed by tools-dev
 ```
 
-مشغّل Windows: ابنِ `OpenDesign.exe` بنفسك باتباع التعليمات في `tools/launcher/README.md`، أو نزّله من GitHub Releases. بعد ذلك ضعه في جذر المستودع وانقر عليه مرتين ليشغّل `pnpm install` عند الحاجة ثم يبدأ Open Design عبر `pnpm tools-dev`.
-
 متطلّبات البيئة: Node `~24` و pnpm `10.33.x`. أدوات `nvm`/`fnm` اختيارية فقط؛ إن استخدمت إحداها فشغّل `nvm install 24 && nvm use 24` أو `fnm install 24 && fnm use 24` قبل `pnpm install`.
 
 لتشغيل سطح المكتب / الخلفية، إعادة التشغيل بمنافذ ثابتة، وفحوص dispatcher توليد الوسائط (`OD_BIN`، `OD_DAEMON_URL`، `apps/daemon/dist/cli.js`) راجع [`QUICKSTART.md`](QUICKSTART.md).

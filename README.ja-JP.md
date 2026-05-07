@@ -320,8 +320,6 @@ pnpm tools-dev run web
 # tools-dev が出力した Web URL を開く
 ```
 
-Windows ランチャー: `tools/launcher/README.md` の手順で `OpenDesign.exe` を自分でビルドするか、GitHub Releases からダウンロードします。その後、リポジトリのルートに置いてダブルクリックすると、必要に応じて `pnpm install` を実行し、`pnpm tools-dev` で Open Design を起動します。
-
 環境要件：Node `~24`、pnpm `10.33.x`。`nvm` / `fnm` はあくまでオプションのヘルパーです。使用する場合は `pnpm install` の前に `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。
 
 デスクトップ / バックグラウンド起動、固定ポート再起動、メディア生成ディスパッチャの確認（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）は [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md) を参照。

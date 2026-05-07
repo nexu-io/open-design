@@ -605,12 +605,14 @@ code {
   display: flex;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 .split-chat-slot[hidden] {
   display: none;
 }
 .split-chat-slot > .pane {
   flex: 1 1 auto;
+  min-width: 0;
 }
 .pane {
   display: flex;
@@ -618,6 +620,7 @@ code {
   min-height: 0;
   min-width: 0;
   background: var(--bg-panel);
+  overflow: hidden;
 }
 .split-resize-handle {
   width: 8px;
@@ -4516,8 +4519,10 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
   flex: 1;
+  overflow: hidden;
 }
 .ws-tabs-shell {
   display: flex;
@@ -4729,6 +4734,8 @@ button.connector-action.is-loading {
   gap: 6px;
 }
 .df-head .df-actions button:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.df-head .df-actions button.danger { color: var(--red); }
+.df-head .df-actions button.danger:hover:not(:disabled) { background: var(--red-bg); color: var(--red); }
 
 .df-body {
   flex: 1;
@@ -7185,6 +7192,11 @@ button.connector-action.is-loading {
   gap: 14px;
   margin-top: 18px;
 }
+.deploy-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .field-label-row {
   display: flex;
   align-items: baseline;
@@ -7236,7 +7248,8 @@ button.connector-action.is-loading {
   border: 1px solid color-mix(in srgb, #1f9d55 28%, var(--border));
   font-variant-numeric: tabular-nums;
 }
-.deploy-form input {
+.deploy-form input,
+.deploy-form select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--border);
@@ -7255,10 +7268,18 @@ button.connector-action.is-loading {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.deploy-field-grid.single-field {
+  grid-template-columns: minmax(0, 1fr);
+}
 .deploy-field-grid label {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .deploy-error {
   margin: 0;

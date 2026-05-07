@@ -1,4 +1,4 @@
-const { access, cp, lstat, mkdir, readFile, readdir, rm, stat, symlink, writeFile } = require("node:fs/promises");
+const { access, cp, lstat, mkdir, readFile, readlink, readdir, realpath, rm, stat, symlink, writeFile } = require("node:fs/promises");
 const { createRequire } = require("node:module");
 const path = require("node:path");
 
@@ -37,6 +37,11 @@ function requireAbsolutePath(record, key) {
 function isWithin(parent, child) {
   const relative = path.relative(parent, child);
   return relative.length === 0 || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function isWithinPhysicalPath(parent, child) {
+  const [realParent, realChild] = await Promise.all([realpath(parent), realpath(child)]);
+  return isWithin(realParent, realChild);
 }
 
 async function pathExists(filePath) {
@@ -228,6 +233,14 @@ async function installStandaloneResource(config, resourcesRoot, platformName) {
   await copyRequired(path.join(sourceWebRoot, ".next"), path.join(destinationWebRoot, ".next"));
   const copiedStatic = await copyOptional(config.webStaticSourceRoot, path.join(destinationWebRoot, ".next", "static"));
   const copiedPublic = await copyOptional(config.webPublicSourceRoot, path.join(destinationWebRoot, "public"));
+  const rewrittenSymlinks = platformName === "win32"
+    ? []
+    : await rewriteCopiedStandaloneSymlinks({
+      destinationRoot,
+      destinationWebRoot,
+      sourceWebRoot,
+      standaloneSourceRoot: config.standaloneSourceRoot,
+    });
 
   return {
     copiedNestedNodeModules,
@@ -236,8 +249,81 @@ async function installStandaloneResource(config, resourcesRoot, platformName) {
     destinationRoot,
     destinationWebRoot,
     linkedHoistEntries,
+    rewrittenSymlinks,
     sourceWebRoot,
   };
+}
+
+async function rewriteCopiedStandaloneSymlinks(options) {
+  const mappings = [
+    {
+      destinationRoot: path.join(options.destinationWebRoot, "node_modules"),
+      sourceRoot: path.join(options.sourceWebRoot, "node_modules"),
+    },
+    {
+      destinationRoot: path.join(options.destinationRoot, "node_modules"),
+      sourceRoot: path.join(options.standaloneSourceRoot, "node_modules"),
+    },
+    {
+      destinationRoot: options.destinationWebRoot,
+      sourceRoot: options.sourceWebRoot,
+    },
+    {
+      destinationRoot: options.destinationRoot,
+      sourceRoot: options.standaloneSourceRoot,
+    },
+  ];
+  const rewrittenSymlinks = [];
+
+  function mapPath(pathToMap, fromKey, toKey) {
+    for (const mapping of mappings) {
+      if (!isWithin(mapping[fromKey], pathToMap)) continue;
+      return path.join(mapping[toKey], path.relative(mapping[fromKey], pathToMap));
+    }
+    return null;
+  }
+
+  async function visit(current) {
+    let metadata;
+    try {
+      metadata = await lstat(current);
+    } catch {
+      return;
+    }
+
+    if (metadata.isSymbolicLink()) {
+      const copiedSourcePath = mapPath(current, "destinationRoot", "sourceRoot");
+      if (copiedSourcePath == null) return;
+
+      const currentTarget = await readlink(current);
+      const sourceTarget = path.resolve(path.dirname(copiedSourcePath), currentTarget);
+      const destinationTarget = mapPath(sourceTarget, "sourceRoot", "destinationRoot");
+      // External source-tree symlinks are not rewritten; the closure audit below
+      // reports them as externalSymlink and fails the package instead.
+      if (destinationTarget == null) return;
+
+      const nextTarget = path.relative(path.dirname(current), destinationTarget) || ".";
+      if (nextTarget === currentTarget) return;
+
+      await rm(current, { force: true, recursive: true });
+      await symlink(nextTarget, current);
+      rewrittenSymlinks.push({
+        path: current,
+        target: nextTarget,
+      });
+      return;
+    }
+
+    if (!metadata.isDirectory()) return;
+
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      await visit(path.join(current, entry.name));
+    }
+  }
+
+  await visit(options.destinationRoot);
+  return rewrittenSymlinks;
 }
 
 async function removePathAndRecord(targetPath, reason, removedPaths) {
@@ -409,7 +495,12 @@ function isForbiddenCopiedEntry(relativePath, platformName) {
   );
 }
 
-async function collectClosureStats(root, current = root, stats = { brokenSymlinks: [], forbiddenEntries: [], symlinks: 0 }, platformName = process.platform) {
+async function collectClosureStats(
+  root,
+  current = root,
+  stats = { brokenSymlinks: [], externalSymlinks: [], forbiddenEntries: [], symlinks: 0 },
+  platformName = process.platform,
+) {
   let metadata;
   try {
     metadata = await lstat(current);
@@ -426,6 +517,9 @@ async function collectClosureStats(root, current = root, stats = { brokenSymlink
     stats.symlinks += 1;
     try {
       await stat(current);
+      if (!(await isWithinPhysicalPath(root, current))) {
+        stats.externalSymlinks.push(relativePath.split(path.sep).join("/"));
+      }
     } catch {
       stats.brokenSymlinks.push(relativePath.split(path.sep).join("/"));
     }
@@ -441,8 +535,8 @@ async function collectClosureStats(root, current = root, stats = { brokenSymlink
   return stats;
 }
 
-function assertResolvedInside(root, moduleName, resolvedPath) {
-  if (!isWithin(root, resolvedPath)) {
+async function assertResolvedInside(root, moduleName, resolvedPath) {
+  if (!(await isWithinPhysicalPath(root, resolvedPath))) {
     throw new Error(`[tools-pack web-standalone] ${moduleName} resolved outside copied standalone: ${resolvedPath}`);
   }
 }
@@ -466,13 +560,16 @@ async function auditCopiedStandalone(config, installResult, platformName) {
   const resolvedModules = {};
   for (const moduleName of REQUIRED_MODULES) {
     const resolvedPath = localRequire.resolve(moduleName);
-    assertResolvedInside(installResult.destinationRoot, moduleName, resolvedPath);
+    await assertResolvedInside(installResult.destinationRoot, moduleName, resolvedPath);
     resolvedModules[moduleName] = resolvedPath;
   }
 
   const closureStats = await collectClosureStats(installResult.destinationRoot, installResult.destinationRoot, undefined, platformName);
   if (closureStats.brokenSymlinks.length > 0) {
     throw new Error(`[tools-pack web-standalone] copied standalone has broken symlinks: ${closureStats.brokenSymlinks.join(", ")}`);
+  }
+  if (closureStats.externalSymlinks.length > 0) {
+    throw new Error(`[tools-pack web-standalone] copied standalone has external symlinks: ${closureStats.externalSymlinks.join(", ")}`);
   }
   if (closureStats.forbiddenEntries.length > 0) {
     throw new Error(`[tools-pack web-standalone] copied standalone has forbidden entries: ${closureStats.forbiddenEntries.join(", ")}`);
@@ -483,6 +580,7 @@ async function auditCopiedStandalone(config, installResult, platformName) {
     bytes: await sizePathBytes(installResult.destinationRoot),
     destinationRoot: installResult.destinationRoot,
     destinationWebRoot: installResult.destinationWebRoot,
+    externalSymlinks: closureStats.externalSymlinks,
     forbiddenEntries: closureStats.forbiddenEntries,
     nodeModulesBytes: await sizePathBytes(nodeModulesRoot),
     resolvedModules,
@@ -519,7 +617,7 @@ async function auditCopiedStandaloneNextDedupe(installResult, platformName) {
   }
 
   const resolvedNextPackagePath = createRequire(serverPath).resolve("next/package.json");
-  if (!isWithin(retainedNextRoot, resolvedNextPackagePath)) {
+  if (!(await isWithinPhysicalPath(retainedNextRoot, resolvedNextPackagePath))) {
     throw new Error(
       `[tools-pack web-standalone] copied standalone next resolved outside retained app-local next: ${resolvedNextPackagePath}`,
     );

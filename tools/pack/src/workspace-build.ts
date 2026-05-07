@@ -64,10 +64,11 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
   for (const packageInfo of WORKSPACE_BUILD_PACKAGES) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
+  const nodeId = `${config.platform}.workspace-build`;
 
   return hashJson({
     buildCommands: BUILD_COMMANDS,
-    node: "win.workspace-build",
+    node: nodeId,
     nodeVersion: process.version,
     packageHashes,
     packageManager: await readPackageManager(config.workspaceRoot),
@@ -155,6 +156,7 @@ export async function ensureWorkspaceBuildArtifacts(
   build: () => Promise<void>,
 ): Promise<void> {
   const key = await createWorkspaceBuildCacheKey(config);
+  const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts(config);
   await cache.acquire<WorkspaceBuildMetadata>({
     materialize: artifacts.map((artifact) => ({
@@ -162,7 +164,7 @@ export async function ensureWorkspaceBuildArtifacts(
       to: join(config.workspaceRoot, artifact.workspacePath),
     })),
     node: {
-      id: "win.workspace-build",
+      id: nodeId,
       key,
       outputs: ["stamp.json", ...artifacts.map((artifact) => artifact.cachePath)],
       invalidate: async () => null,

@@ -362,8 +362,10 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 };
 
 const DE_SKILL_IDS_WITH_EN_FALLBACK = [
+  'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
+  'live-dashboard',
   'orbit-general',
   'orbit-github',
   'orbit-gmail',
@@ -465,9 +467,10 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Product: 'Produkt',
   'Short Form': 'Short Form',
   Travel: 'Reise',
+  'Live Artifact': 'Live-Artefakt',
 };
 
-const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [] as const;
+const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = ['notion-team-dashboard-live-artifact'] as const;
 
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
@@ -524,6 +527,7 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'key-visual': 'Key Visual',
   'kinetic-typography': 'Kinetische Typografie',
   'linear-style': 'Linear-Stil',
+  'live-artifact': 'Live-Artefakt',
   logo: 'Logo',
   lyubu: 'Lyu Bu',
   map: 'Karte',

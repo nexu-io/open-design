@@ -114,6 +114,10 @@ describe("ensureWorkspaceBuildArtifacts", () => {
 
       expect(builds).toBe(1);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
+      expect(cache.report().entries.map((entry) => entry.nodeId)).toEqual([
+        "win.workspace-build",
+        "win.workspace-build",
+      ]);
       expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("build-1\n");
     } finally {
       await rm(root, { force: true, recursive: true });
@@ -141,6 +145,47 @@ describe("ensureWorkspaceBuildArtifacts", () => {
       expect(builds).toBe(1);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
       expect(await readFile(join(root, "apps/web/dist/sidecar/index.js"), "utf8")).toBe("build-1\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps platform-specific workspace build cache nodes separate", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-platform-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const winConfig = createConfig(root, cache.root);
+    const macConfig: ToolPackConfig = {
+      ...winConfig,
+      platform: "mac",
+      roots: {
+        ...winConfig.roots,
+        output: {
+          ...winConfig.roots.output,
+          namespaceRoot: join(root, ".tmp", "out", "mac", "namespaces", "test"),
+          platformRoot: join(root, ".tmp", "out", "mac"),
+        },
+        runtime: {
+          namespaceBaseRoot: join(root, ".tmp", "runtime", "mac", "namespaces"),
+          namespaceRoot: join(root, ".tmp", "runtime", "mac", "namespaces", "test"),
+        },
+      },
+    };
+
+    try {
+      await writeWorkspace(root);
+      await ensureWorkspaceBuildArtifacts(winConfig, cache, async () => {
+        await writeOutputs(root, "win-build");
+      });
+      await ensureWorkspaceBuildArtifacts(macConfig, cache, async () => {
+        await writeOutputs(root, "mac-build");
+      });
+
+      expect(cache.report().entries.map((entry) => entry.nodeId)).toEqual([
+        "win.workspace-build",
+        "mac.workspace-build",
+      ]);
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss"]);
+      expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("mac-build\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -8,6 +8,8 @@ import {
   fetchLiveArtifactCode,
   fetchLiveArtifactRefreshes,
   checkDeploymentLink,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
   fetchDeployConfig,
   fetchProjectDeployments,
@@ -19,6 +21,11 @@ import {
   LiveArtifactRefreshError,
   refreshLiveArtifact,
   updateDeployConfig,
+  type WebDeployConfigResponse,
+  type WebDeploymentInfo,
+  type WebDeployProjectFileResponse,
+  type WebDeployProviderId,
+  type WebUpdateDeployConfigRequest,
   writeProjectTextFile,
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
@@ -38,8 +45,6 @@ import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
-  DeployConfigResponse,
-  DeployProjectFileResponse,
   LiveArtifact,
   LiveArtifactRefreshLogEntry,
   LiveArtifactViewerTab,
@@ -75,6 +80,23 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
+type DeployProviderOption = {
+  id: WebDeployProviderId;
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  tokenLink: string;
+  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenPlaceholderKey:
+    | 'fileViewer.vercelTokenPlaceholder'
+    | 'fileViewer.cloudflareApiTokenPlaceholder';
+  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
+  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
+  tokenLabelKey:
+    | 'fileViewer.vercelToken'
+    | 'fileViewer.cloudflareApiToken';
+  accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
+  accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
+};
 const MAX_BRIDGE_COORDINATE = 1_000_000;
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
@@ -110,6 +132,37 @@ const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
 const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
 const MARKDOWN_COPY_TOAST_CLASS = 'markdown-code-toast';
+
+const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
+  {
+    id: DEFAULT_DEPLOY_PROVIDER_ID,
+    labelKey: 'fileViewer.vercelProvider',
+    tokenLink: 'https://vercel.com/account/settings/tokens',
+    tokenLinkKey: 'fileViewer.vercelTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.vercelTokenRequired',
+    previewHintKey: 'fileViewer.vercelPreviewOnly',
+    tokenLabelKey: 'fileViewer.vercelToken',
+  },
+  {
+    id: CLOUDFLARE_PAGES_PROVIDER_ID,
+    labelKey: 'fileViewer.cloudflarePagesProvider',
+    tokenLink: 'https://dash.cloudflare.com/profile/api-tokens',
+    tokenLinkKey: 'fileViewer.cloudflareApiTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
+    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
+    tokenLabelKey: 'fileViewer.cloudflareApiToken',
+    accountIdLabelKey: 'fileViewer.cloudflareAccountId',
+    accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+];
+
+function getDeployProviderOption(providerId: WebDeployProviderId): DeployProviderOption {
+  return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0]!;
+}
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
@@ -2753,18 +2806,21 @@ function HtmlViewer({
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
-  const [deployment, setDeployment] = useState<DeployProjectFileResponse | null>(null);
+  const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
+  const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const [deployModalOpen, setDeployModalOpen] = useState(false);
-  const [deployConfig, setDeployConfig] = useState<DeployConfigResponse | null>(null);
+  const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
-  const [deployResult, setDeployResult] = useState<DeployProjectFileResponse | null>(null);
+  const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState(false);
-  const [vercelToken, setVercelToken] = useState('');
+  const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
+  const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
+  const [cloudflareAccountId, setCloudflareAccountId] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
@@ -2819,6 +2875,69 @@ function HtmlViewer({
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
+
+  function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
+    const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
+    for (const option of DEPLOY_PROVIDER_OPTIONS) {
+      const deploymentForProvider = items.find(
+        (item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim(),
+      );
+      if (deploymentForProvider) next[option.id] = deploymentForProvider;
+    }
+    return next;
+  }
+
+  function syncDeployFormFromConfig(
+    providerId: WebDeployProviderId,
+    config: WebDeployConfigResponse | null,
+  ) {
+    const matchingConfig = config?.providerId === providerId ? config : null;
+    setDeployProviderId(providerId);
+    setDeployConfig(matchingConfig);
+    setDeployToken(matchingConfig?.tokenMask || '');
+    setTeamId(matchingConfig?.teamId || '');
+    setTeamSlug(matchingConfig?.teamSlug || '');
+    setCloudflareAccountId(matchingConfig?.accountId || '');
+  }
+
+  function buildDeployConfigRequest(providerId: WebDeployProviderId): WebUpdateDeployConfigRequest {
+    const token = deployToken.trim();
+    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+      return {
+        providerId,
+        token,
+        accountId: cloudflareAccountId.trim(),
+      };
+    }
+    return {
+      providerId,
+      token,
+      teamId: teamId.trim(),
+      teamSlug: teamSlug.trim(),
+    };
+  }
+
+  async function loadDeployProvider(
+    providerId: WebDeployProviderId,
+    options?: { fallbackToExisting?: boolean },
+  ) {
+    const deployments = await fetchProjectDeployments(projectId);
+    const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
+    const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
+    const fallbackDeployment = options?.fallbackToExisting
+      ? Object.values(nextDeploymentsByProvider)[0] ?? null
+      : null;
+    const currentDeployment = exactDeployment ?? fallbackDeployment;
+    // Use the explicit providerId for config/form so a fallback deployment from
+    // another provider only fills the existing-URL display, never the form/credentials.
+    const config = await fetchDeployConfig(providerId);
+    syncDeployFormFromConfig(providerId, config);
+    setDeploymentsByProvider(nextDeploymentsByProvider);
+    setDeployment(currentDeployment ?? null);
+    setDeployResult(currentDeployment ?? null);
+    return { config, currentDeployment };
+  }
+
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
   // controls in the toolbar and reflects the count beside them.
@@ -2856,16 +2975,16 @@ function HtmlViewer({
     setDeployPhase('idle');
     void fetchProjectDeployments(projectId).then((items) => {
       if (cancelled) return;
-      const current = items.find(
-        (item) => item.fileName === file.name && item.providerId === 'vercel-self',
-      );
+      const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
+      const current = nextDeploymentsByProvider[deployProviderId] ?? null;
+      setDeploymentsByProvider(nextDeploymentsByProvider);
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name]);
+  }, [projectId, file.name, deployProviderId]);
 
   // Detect deck-shaped HTML even when the project's skill didn't declare
   // `mode: deck`. Freeform projects often produce a deck because the user
@@ -3544,77 +3663,83 @@ function HtmlViewer({
     }
   }
 
-  async function openDeployModal() {
+  async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
     setShareMenuOpen(false);
     setDeployModalOpen(true);
     setDeployError(null);
     setCopiedDeployLink(false);
     setDeployPhase('idle');
-    const [config, deployments] = await Promise.all([
-      fetchDeployConfig(),
-      fetchProjectDeployments(projectId),
-    ]);
-    if (config) {
-      setDeployConfig(config);
-      setVercelToken(config.tokenMask || '');
-      setTeamId(config.teamId || '');
-      setTeamSlug(config.teamSlug || '');
-    }
-    const current = deployments.find(
-      (item) => item.fileName === file.name && item.providerId === 'vercel-self',
-    );
-    setDeployment(current ?? null);
-    setDeployResult(current ?? null);
+    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+  }
+
+  async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
+    if (nextProviderId === deployProviderId) return;
+    setDeployError(null);
+    setDeployPhase('idle');
+    await loadDeployProvider(nextProviderId);
   }
 
   async function saveDeployConfig() {
     setSavingDeployConfig(true);
     setDeployError(null);
     try {
-      const config = await updateDeployConfig({
-        token: vercelToken,
-        teamId,
-        teamSlug,
-      });
-      if (!config) throw new Error(t('fileViewer.deployConfigSaveFailed'));
-      setDeployConfig(config);
-      setVercelToken(config.tokenMask || '');
-      setTeamId(config.teamId || '');
-      setTeamSlug(config.teamSlug || '');
+      if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+        if (!deployToken.trim()) {
+          throw new Error(t('fileViewer.cloudflareApiTokenRequired'));
+        }
+        if (!cloudflareAccountId.trim()) {
+          throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
+        }
+      }
+      const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
+      if (!config || config.providerId !== deployProviderId) {
+        throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
+      }
+      syncDeployFormFromConfig(deployProviderId, config);
       return config;
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployConfigSaveFailed'));
+      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       return null;
     } finally {
       setSavingDeployConfig(false);
     }
   }
 
-  async function deployToVercel() {
+  async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
     setCopiedDeployLink(false);
     try {
-      const typedToken = vercelToken.trim();
+      const typedToken = deployToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
       const needsConfigSave =
         hasNewToken ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
+        cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
+        if (!nextConfig) return;
         if (!nextConfig?.configured) {
-          throw new Error(t('fileViewer.vercelTokenRequired'));
+          const option = getDeployProviderOption(deployProviderId);
+          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name);
+      const next = await deployProjectFile(projectId, file.name, deployProviderId);
+      setDeploymentsByProvider((current) => ({
+        ...current,
+        [next.providerId]: next,
+      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployFailed'));
+      const option = getDeployProviderOption(deployProviderId);
+      setDeployError(
+        err instanceof Error ? err.message : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) }),
+      );
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -3628,6 +3753,10 @@ function HtmlViewer({
     setDeployPhase('preparing-link');
     try {
       const next = await checkDeploymentLink(projectId, current.id);
+      setDeploymentsByProvider((items) => ({
+        ...items,
+        [next.providerId]: next,
+      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
@@ -3746,9 +3875,34 @@ function HtmlViewer({
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
   const activeDeploymentNeedsRetry = activeDeploymentDelayed || activeDeploymentProtected;
+  const deployProvider = getDeployProviderOption(deployProviderId);
+  const deployProviderLabel = t(deployProvider.labelKey);
+  const deployActionLabelFor = (providerId: WebDeployProviderId) => {
+    const option = getDeployProviderOption(providerId);
+    const label = t(option.labelKey);
+    const hasActiveDeploymentForProvider = Boolean(deploymentsByProvider[providerId]?.url?.trim());
+    return hasActiveDeploymentForProvider
+      ? t('fileViewer.redeployToProvider', { provider: label })
+      : t('fileViewer.deployToProvider', { provider: label });
+  };
+  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
+    providerId: option.id,
+    providerLabel: t(option.labelKey),
+    url: deploymentsByProvider[option.id]?.url?.trim() || '',
+  })).filter((item) => item.url);
+  const deployButtonLabel =
+    deployPhase === 'deploying'
+      ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
+      : deployPhase === 'preparing-link'
+        ? t('fileViewer.preparingPublicLink')
+        : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
   const copyDeployLabel = copiedDeployLink
     ? t('fileViewer.copied')
     : t('fileViewer.copyDeployLink');
+  const copyDeployMenuLabel = (providerLabel: string) =>
+    copiedDeployLink
+      ? t('fileViewer.copied')
+      : `${t('fileViewer.copyDeployLink')} · ${providerLabel}`;
 
   return (
     <div className="viewer html-viewer">
@@ -4082,36 +4236,38 @@ function HtmlViewer({
                     </span>
                   </button>
                   <div className="share-menu-divider" />
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      void openDeployModal();
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
-                    <span>
-                      {activeDeployedUrl
-                        ? t('fileViewer.redeployToVercel')
-                        : t('fileViewer.deployToVercel')}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    disabled={!activeDeployedUrl}
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      void copyDeployLink(activeDeployedUrl);
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
-                    <span>
-                      {copyDeployLabel}
-                    </span>
-                  </button>
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        void openDeployModal(option.id);
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
+                      <span>{deployActionLabelFor(option.id)}</span>
+                    </button>
+                  ))}
+                  {deployCopyLinks.length > 0 ? (
+                    <div className="share-menu-divider" />
+                  ) : null}
+                  {deployCopyLinks.map((item) => (
+                    <button
+                      key={`copy-${item.providerId}`}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setShareMenuOpen(false);
+                        void copyDeployLink(item.url);
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
+                      <span>{copyDeployMenuLabel(item.providerLabel)}</span>
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -4364,27 +4520,42 @@ function HtmlViewer({
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div className="kicker">VERCEL</div>
-              <h2>{t('fileViewer.deployModalTitle')}</h2>
+              <div className="kicker">{deployProviderLabel}</div>
+              <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
               <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
             </div>
             <div className="deploy-form">
+              <label className="deploy-provider-field">
+                <span>{t('fileViewer.deployProviderLabel')}</span>
+                <select
+                  value={deployProviderId}
+                  onChange={(e) => {
+                    void changeDeployProvider(e.target.value as WebDeployProviderId);
+                  }}
+                >
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {t(option.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="field-label-row">
-                <label htmlFor="vercel-token">{t('fileViewer.vercelToken')}</label>
+                <label htmlFor="deploy-token">{t(deployProvider.tokenLabelKey)}</label>
                 <a
-                  href="https://vercel.com/account/settings/tokens"
+                  href={deployProvider.tokenLink}
                   target="_blank"
                   rel="noreferrer noopener"
                 >
-                  {t('fileViewer.vercelTokenGetLink')}
+                  {t(deployProvider.tokenLinkKey)}
                 </a>
               </div>
               <input
-                id="vercel-token"
+                id="deploy-token"
                 type="password"
-                value={vercelToken}
-                placeholder={t('fileViewer.vercelTokenPlaceholder')}
-                onChange={(e) => setVercelToken(e.target.value)}
+                value={deployToken}
+                placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                onChange={(e) => setDeployToken(e.target.value)}
               />
               <div className="deploy-config-actions">
                 <button
@@ -4399,27 +4570,43 @@ function HtmlViewer({
                 </button>
               </div>
               {deployConfig?.configured ? (
-                <p className="hint">{t('fileViewer.vercelTokenReuseHint')}</p>
+                <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
               ) : null}
-              <div className="deploy-field-grid">
-                <label>
-                  <span>{t('fileViewer.vercelTeamId')}</span>
-                  <input
-                    value={teamId}
-                    placeholder={t('fileViewer.optional')}
-                    onChange={(e) => setTeamId(e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>{t('fileViewer.vercelTeamSlug')}</span>
-                  <input
-                    value={teamSlug}
-                    placeholder={t('fileViewer.optional')}
-                    onChange={(e) => setTeamSlug(e.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="hint">{t('fileViewer.vercelPreviewOnly')}</p>
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+              ) : null}
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <div className="deploy-field-grid single-field">
+                  <label>
+                    <span>{t('fileViewer.cloudflareAccountId')}</span>
+                    <input
+                      value={cloudflareAccountId}
+                      onChange={(e) => setCloudflareAccountId(e.target.value)}
+                    />
+                    <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="deploy-field-grid">
+                  <label>
+                    <span>{t('fileViewer.vercelTeamId')}</span>
+                    <input
+                      value={teamId}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setTeamId(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>{t('fileViewer.vercelTeamSlug')}</span>
+                    <input
+                      value={teamSlug}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setTeamSlug(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+              <p className="hint">{t(deployProvider.previewHintKey)}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {activeDeployedUrl ? (
                 <div
@@ -4468,16 +4655,16 @@ function HtmlViewer({
                     >
                       <Icon name="copy" size={14} />
                       <span>{copyDeployLabel}</span>
-                    </button>
-                    <a
-                      className={`ghost-link ${activeDeploymentReady ? '' : 'disabled'}`}
-                      href={activeDeploymentReady ? activeDeployedUrl : undefined}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      aria-disabled={!activeDeploymentReady}
-                    >
-                      <Icon name="upload" size={14} />
-                      {t('fileViewer.open')}
+                      </button>
+                      <a
+                        className={`ghost-link ${activeDeploymentProtected ? 'disabled' : ''}`}
+                        href={activeDeploymentProtected ? undefined : activeDeployedUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        aria-disabled={activeDeploymentProtected}
+                      >
+                        <Icon name="upload" size={14} />
+                        {t('fileViewer.open')}
                     </a>
                   </div>
                 </div>
@@ -4496,14 +4683,10 @@ function HtmlViewer({
                 className="viewer-action primary"
                 disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
-                  void deployToVercel();
+                  void deployToSelectedProvider();
                 }}
               >
-                {deployPhase === 'deploying'
-                  ? t('fileViewer.deployingToVercel')
-                  : deployPhase === 'preparing-link'
-                    ? t('fileViewer.preparingPublicLink')
-                    : t('fileViewer.deployToVercel')}
+                {deployButtonLabel}
               </button>
             </div>
           </div>
