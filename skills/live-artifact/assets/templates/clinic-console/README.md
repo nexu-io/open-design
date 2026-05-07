@@ -113,9 +113,18 @@ Each item shape:
 | Key | Example | Notes |
 |---|---|---|
 | `label` | `"Dashboard"` | Nav text. |
-| `icon_href` | `"#icon-dashboard"` | Fragment id of an inline `<symbol>` defined at the top of `template.html`. Available ids: `#icon-dashboard`, `#icon-message`, `#icon-schedule`, `#icon-bell`, `#icon-card`, `#icon-user`, `#icon-pill`, `#icon-bed`, `#icon-check-square`, `#icon-people`, `#icon-leaf`, `#icon-clock`, `#icon-stethoscope`, `#icon-search`, `#icon-download`, `#icon-plus`, `#icon-chev-left`, `#icon-chev-right`, `#icon-chev-down`, `#icon-collapse`, `#icon-logout`. |
 | `active_class` | `""` or `"active"` | Set to `"active"` on exactly one nav item across both groups. |
 | `count` | `""` or `"10"` | Empty string hides the count badge (CSS `:empty { display: none }`). |
+
+> **Icons are template-locked.** Each nav slot's icon is hardcoded inside
+> `template.html` (see [Icons are template-locked](#icons-are-template-locked)
+> below) and is not exposed through `data.json`. The `html_template_v1`
+> security validator forbids `{{data.*}}` interpolation inside URL-bearing
+> attributes (`<use href>`, `<a href>`, `<img src>`, …) — and even if it
+> didn't, the validator runs *before* substitution, so a malformed `data.json`
+> could smuggle a `javascript:` URL past it. The reorder rule is therefore:
+> if you change the meaning of a nav slot, also edit the corresponding
+> `<use href="#icon-…">` literal in `template.html`.
 
 ### `pro_card`
 
@@ -137,11 +146,13 @@ Common keys:
 
 | Key | Example | Notes |
 |---|---|---|
-| `icon_href` | `"#icon-user"` | Mint glyph in the tile header. |
 | `label` | `"Total doctors"` | Tile label. |
 | `value` | `"1,089"` | Big number (Plus Jakarta Sans 700). Use commas for thousands. |
 | `trend_class` | `"up"` or `"down"` | Pill grammar — `up` = mint, `down` = rose. |
 | `trend_label` | `"↑ 5.5%"` | Always include the arrow glyph. |
+
+> KPI icons are also template-locked — see
+> [Icons are template-locked](#icons-are-template-locked) below.
 
 A / B / D additional keys:
 
@@ -231,6 +242,66 @@ Each `list` row:
 | `role` | `"Gastroenterology · room 204"` | Specialty + venue / mode hint (`room N`, `video call`, `telemedicine`). |
 | `date` | `"Today"` | Short date label. |
 | `time` | `"09:40"` | 24h or 12h, pick one and stay consistent. |
+
+## Icons are template-locked
+
+`html_template_v1` forbids `{{data.*}}` interpolation inside URL-bearing
+attributes such as `<use href>`, `<a href>`, `<img src>`,
+`<form action>`, etc. (see
+[`skills/live-artifact/references/artifact-schema.md`](../../../references/artifact-schema.md#html-template-v1-binding-rules)).
+The renderer's security validator runs *before* `{{data.*}}` substitution, so
+even a well-formed validator pass would not protect a future `data.json`
+that put `javascript:alert(1)` (or any other URL value) into one of these
+attributes.
+
+This template therefore hardcodes every `<use href="#icon-…">` reference in
+`template.html` itself. Each slot has a fixed icon id:
+
+| Slot | Hardcoded icon id |
+|---|---|
+| Sidebar brand mark | `#icon-leaf` |
+| Sidebar collapse toggle | `#icon-collapse` |
+| `nav_main[0]` Dashboard | `#icon-dashboard` |
+| `nav_main[1]` Message | `#icon-message` |
+| `nav_main[2]` Schedule | `#icon-schedule` |
+| `nav_main[3]` Notification | `#icon-bell` |
+| `nav_main[4]` Transaction | `#icon-card` |
+| `nav_management[0]` Doctor | `#icon-user` |
+| `nav_management[1]` Medicine | `#icon-pill` |
+| `nav_management[2]` Bedroom | `#icon-bed` |
+| `nav_management[3]` Appointment | `#icon-check-square` |
+| `nav_management[4]` Patient | `#icon-people` |
+| Sidebar logout | `#icon-logout` |
+| Greeting-row search | `#icon-search` |
+| Greeting-row secondary CTA | `#icon-download` |
+| Greeting-row primary CTA | `#icon-plus` |
+| `kpi_a` glyph | `#icon-user` |
+| `kpi_b` glyph | `#icon-schedule` |
+| `kpi_c` glyph | `#icon-bed` |
+| `kpi_d` glyph | `#icon-people` |
+| Patient-overview card | `#icon-clock` |
+| Time-range dropdown chevron | `#icon-chev-down` |
+| Calendar prev / next | `#icon-chev-left`, `#icon-chev-right` |
+| Top-clinics card | `#icon-stethoscope` |
+| Doctor-schedule card | `#icon-schedule` |
+| List header chevron | `#icon-chev-down` |
+| Today's-appointments card | `#icon-check-square` |
+
+If you re-purpose a slot (e.g. swap `nav_main[2] Schedule` for
+`nav_main[2] Reports`), edit the corresponding `<use href="#icon-…">` literal
+in `template.html` to match — the icon set inside the inline `<symbol>`
+defs at the top of `template.html` already includes 21 icons covering the
+common clinic / hospital / pharmacy / telemedicine vocabulary
+(`#icon-dashboard`, `#icon-message`, `#icon-schedule`, `#icon-bell`,
+`#icon-card`, `#icon-user`, `#icon-pill`, `#icon-bed`, `#icon-check-square`,
+`#icon-people`, `#icon-leaf`, `#icon-clock`, `#icon-stethoscope`,
+`#icon-search`, `#icon-download`, `#icon-plus`, `#icon-chev-left`,
+`#icon-chev-right`, `#icon-chev-down`, `#icon-collapse`, `#icon-logout`).
+
+If you need a runtime-configurable icon, add a new constrained,
+non-URL-bearing mechanism (for example a `data.kpi_a.icon_class` that toggles
+between a fixed list of CSS classes the template enumerates) — never
+interpolate into `<use href>` directly.
 
 ## Style guarantees
 

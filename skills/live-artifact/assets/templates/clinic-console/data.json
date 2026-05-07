@@ -15,20 +15,20 @@
 
   "nav_main_label": "Main Menu",
   "nav_main": [
-    { "label": "Dashboard",    "icon_href": "#icon-dashboard", "active_class": "active", "count": "" },
-    { "label": "Message",      "icon_href": "#icon-message",   "active_class": "",       "count": "10" },
-    { "label": "Schedule",     "icon_href": "#icon-schedule",  "active_class": "",       "count": "" },
-    { "label": "Notification", "icon_href": "#icon-bell",      "active_class": "",       "count": "12" },
-    { "label": "Transaction",  "icon_href": "#icon-card",      "active_class": "",       "count": "" }
+    { "label": "Dashboard",    "active_class": "active", "count": "" },
+    { "label": "Message",      "active_class": "",       "count": "10" },
+    { "label": "Schedule",     "active_class": "",       "count": "" },
+    { "label": "Notification", "active_class": "",       "count": "12" },
+    { "label": "Transaction",  "active_class": "",       "count": "" }
   ],
 
   "nav_management_label": "Management",
   "nav_management": [
-    { "label": "Doctor",      "icon_href": "#icon-user",         "active_class": "", "count": "" },
-    { "label": "Medicine",    "icon_href": "#icon-pill",         "active_class": "", "count": "" },
-    { "label": "Bedroom",     "icon_href": "#icon-bed",          "active_class": "", "count": "" },
-    { "label": "Appointment", "icon_href": "#icon-check-square", "active_class": "", "count": "" },
-    { "label": "Patient",     "icon_href": "#icon-people",       "active_class": "", "count": "" }
+    { "label": "Doctor",      "active_class": "", "count": "" },
+    { "label": "Medicine",    "active_class": "", "count": "" },
+    { "label": "Bedroom",     "active_class": "", "count": "" },
+    { "label": "Appointment", "active_class": "", "count": "" },
+    { "label": "Patient",     "active_class": "", "count": "" }
   ],
 
   "pro_card": {
@@ -40,7 +40,6 @@
   },
 
   "kpi_a": {
-    "icon_href": "#icon-user",
     "label": "Total doctors",
     "value": "1,089",
     "trend_class": "down",
@@ -49,7 +48,6 @@
     "strip_class": "stripe-amber"
   },
   "kpi_b": {
-    "icon_href": "#icon-schedule",
     "label": "Total bookings",
     "value": "17,610",
     "trend_class": "up",
@@ -59,7 +57,6 @@
     "mini_stat": "1,635 today"
   },
   "kpi_c": {
-    "icon_href": "#icon-bed",
     "label": "Available rooms",
     "value": "8,450",
     "trend_class": "up",
@@ -70,7 +67,6 @@
     ]
   },
   "kpi_d": {
-    "icon_href": "#icon-people",
     "label": "Total visitors",
     "value": "29,709",
     "trend_class": "up",
