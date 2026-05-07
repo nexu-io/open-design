@@ -16,6 +16,7 @@ import {
 } from './prompts/system.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
+import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
@@ -1664,19 +1665,43 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
       );
     }
-    const commandEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
+    // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
+    // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
+    // In sidecar mode the snippet omits --daemon-url and the spawned
+    // `od mcp` discovers the live URL via the IPC status socket on
+    // every spawn, so the client config survives ephemeral-port
+    // restarts. We also propagate OD_SIDECAR_NAMESPACE (and IPC_BASE
+    // when overridden) so a non-default namespace daemon stays
+    // reachable - the MCP client does not inherit the daemon's env,
+    // so without this the spawned `od mcp` would probe the default
+    // namespace socket and miss.
+    //
+    // For direct `od` / `od --port X` launches there is no IPC
+    // socket; bake --daemon-url so custom ports keep working.
+    const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
+    const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
+    const sidecarEnv = {};
+    if (isSidecarMode) {
+      const ns = process.env[SIDECAR_ENV.NAMESPACE];
+      if (ns != null && ns !== SIDECAR_DEFAULTS.namespace) {
+        sidecarEnv[SIDECAR_ENV.NAMESPACE] = ns;
+      }
+      const ipcBase = process.env[SIDECAR_ENV.IPC_BASE];
+      if (ipcBase != null && ipcBase.length > 0) {
+        sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
+      }
+    }
+    const electronEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
       ? { ELECTRON_RUN_AS_NODE: '1' }
       : null;
-    // The snippet intentionally omits --daemon-url. `od mcp` discovers
-    // the live daemon URL via the sidecar IPC status socket on every
-    // spawn, so the client config stays valid across restarts even
-    // when the daemon binds an ephemeral port (tools-dev, packaged).
-    // OD_DAEMON_URL or --daemon-url remain available as escape hatches
-    // for users who run the daemon outside the sidecar runtime.
+    const env = { ...sidecarEnv, ...(electronEnv ?? {}) };
+    const args = isSidecarMode
+      ? [cliPath, 'mcp']
+      : [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`];
     const payload = {
       command: process.execPath,
-      args: [cliPath, 'mcp'],
-      ...(commandEnv == null ? {} : { env: commandEnv }),
+      args,
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
       // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts

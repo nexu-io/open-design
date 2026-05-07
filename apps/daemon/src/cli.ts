@@ -536,11 +536,13 @@ Options:
                        order: this flag, OD_DAEMON_URL, the running
                        daemon's sidecar IPC status socket
                        (/tmp/open-design/ipc/<namespace>/daemon.sock),
-                       then http://127.0.0.1:7456. With IPC discovery
-                       the spawned MCP server tracks the live daemon
-                       URL across restarts even when the daemon binds
-                       an ephemeral port, so MCP client configs do not
-                       need to be re-pasted on each port change.
+                       then http://127.0.0.1:7456. Each new MCP spawn
+                       discovers the live daemon URL at startup, so
+                       MCP client configs stay valid across daemon
+                       restarts even when the port is ephemeral. A
+                       running MCP server caches the URL; restart the
+                       MCP client after a daemon restart to pick up a
+                       new port.
 
 Tools exposed:
   list_projects                  list every Open Design project
