@@ -1360,31 +1360,35 @@ function BoardComposerPopover({
             {t('chat.comments.remove')}
           </button>
         ) : <span />}
-        <button
-          type="button"
-          className="ghost"
-          disabled={!draft.trim()}
-          onClick={onAddDraft}
-        >
-          Add note
-        </button>
-        <button
-          type="button"
-          className="ghost"
-          disabled={target.selectionKind === 'pod' || !draft.trim()}
-          onClick={() => void onSaveComment()}
-        >
-          Save comment
-        </button>
-        <button
-          type="button"
-          className="primary"
-          data-testid="comment-add-send"
-          disabled={pendingCount === 0 || sending}
-          onClick={() => void onSendBatch()}
-        >
-          {sending ? 'Sending...' : 'Send to chat'}
-        </button>
+        <div className="comment-popover-right-actions">
+          <button
+            type="button"
+            className="ghost"
+            disabled={!draft.trim()}
+            onClick={onAddDraft}
+          >
+            Add note
+          </button>
+          {target.selectionKind !== 'pod' && (
+            <button
+              type="button"
+              className="ghost"
+              disabled={!draft.trim()}
+              onClick={() => void onSaveComment()}
+            >
+              Save comment
+            </button>
+          )}
+          <button
+            type="button"
+            className="primary"
+            data-testid="comment-add-send"
+            disabled={pendingCount === 0 || sending}
+            onClick={() => void onSendBatch()}
+          >
+            {sending ? 'Sending...' : 'Send to chat'}
+          </button>
+        </div>
       </div>
     </div>
   );

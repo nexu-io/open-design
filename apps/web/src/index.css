@@ -5879,6 +5879,10 @@ button.connector-action.is-loading {
   gap: 8px;
   margin-top: 8px;
 }
+.comment-popover-right-actions {
+  display: flex;
+  gap: 6px;
+}
 .comment-popover-remove {
   color: var(--red);
   background: transparent;
