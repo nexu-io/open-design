@@ -158,23 +158,17 @@ function injectSandboxShim(doc: string): string {
   tryShim('localStorage');
   tryShim('sessionStorage');
   document.addEventListener('click', (e) => {
+    if (!e.target || !(e.target instanceof Element)) return;
     const link = e.target.closest('a[href]');
     if (!link) return;
     const href = link.getAttribute('href');
-    const rel = link.getAttribute('rel');
     const isAnchor = href.startsWith('#') || href === '';
     if (isAnchor) {
       e.preventDefault();
-      document
-        .getElementById(href.slice(1))
-        ?.scrollIntoView();
+      location.hash = href;
     } else if (link.target === '_blank') {
       e.preventDefault();
-      if (rel === 'noopener noreferrer') {
-        window.open(href, '_blank');
-      } else {
-          window.open(href, '_blank', 'noopener,noreferrer');
-      }
+      window.open(href, '_blank', 'noopener,noreferrer');
     }
   });
 })();</script>`;
