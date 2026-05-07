@@ -833,6 +833,7 @@ export const ptBR: Dict = {
   'sketch.clear': 'Limpar',
   'sketch.close': 'Fechar',
   'sketch.textPrompt': 'Texto:',
+  'sketch.textModalTitle': 'Adicionar texto',
 
   'pet.title': 'Bichinhos',
   'pet.tabBuiltIn': 'Inclusos',

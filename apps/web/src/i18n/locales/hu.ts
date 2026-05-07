@@ -803,6 +803,7 @@ export const hu: Dict = {
   'sketch.clear': 'Törlés',
   'sketch.close': 'Bezárás',
   'sketch.textPrompt': 'Szöveg:',
+  'sketch.textModalTitle': 'Szöveg hozzáadása',
 
   'pet.title': 'Háziállatok',
   'pet.subtitle': 'Fogadj be egy apró társat, aki a munkaterületed felett lebeg.',

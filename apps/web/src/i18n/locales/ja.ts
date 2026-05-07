@@ -756,6 +756,7 @@ export const ja: Dict = {
   'sketch.clear': 'クリア',
   'sketch.close': '閉じる',
   'sketch.textPrompt': 'テキスト:',
+  'sketch.textModalTitle': 'テキストを追加',
 
   'pet.title': 'ペット',
   'pet.tabBuiltIn': '組み込み',

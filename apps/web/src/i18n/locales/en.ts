@@ -834,6 +834,7 @@ export const en: Dict = {
   'sketch.clear': 'Clear',
   'sketch.close': 'Close',
   'sketch.textPrompt': 'Text:',
+  'sketch.textModalTitle': 'Add text',
 
   'pet.title': 'Pets',
   'pet.subtitle': 'Adopt a tiny companion that floats over your workspace.',

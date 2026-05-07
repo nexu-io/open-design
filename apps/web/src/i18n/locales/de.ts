@@ -757,6 +757,7 @@ export const de: Dict = {
   'sketch.clear': 'Leeren',
   'sketch.close': 'Schließen',
   'sketch.textPrompt': 'Text:',
+  'sketch.textModalTitle': 'Text hinzufügen',
 
   'pet.title': 'Haustiere',
   'pet.tabBuiltIn': 'Vorgegeben',

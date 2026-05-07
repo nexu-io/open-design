@@ -803,6 +803,7 @@ export const pl: Dict = {
   'sketch.clear': 'Wyczyść',
   'sketch.close': 'Zamknij',
   'sketch.textPrompt': 'Tekst:',
+  'sketch.textModalTitle': 'Dodaj tekst',
 
   'pet.title': 'Pupile',
   'pet.tabBuiltIn': 'Wbudowane',

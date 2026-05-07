@@ -801,6 +801,7 @@ export const fr: Dict = {
   'sketch.clear': 'Effacer',
   'sketch.close': 'Fermer',
   'sketch.textPrompt': 'Texte :',
+  'sketch.textModalTitle': 'Ajouter du texte',
 
   'pet.title': 'Compagnons',
   'pet.subtitle': 'Adoptez un petit compagnon qui flotte au-dessus de votre espace de travail.',

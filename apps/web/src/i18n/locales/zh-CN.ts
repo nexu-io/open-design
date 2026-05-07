@@ -815,6 +815,7 @@ export const zhCN: Dict = {
   'sketch.clear': '清空',
   'sketch.close': '关闭',
   'sketch.textPrompt': '请输入文本：',
+  'sketch.textModalTitle': '添加文本',
 
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',

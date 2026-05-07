@@ -815,6 +815,7 @@ export const zhTW: Dict = {
   'sketch.clear': '清除',
   'sketch.close': '關閉',
   'sketch.textPrompt': '請輸入文字：',
+  'sketch.textModalTitle': '新增文字',
 
   'pet.title': '寵物',
   'pet.tabBuiltIn': '內建',

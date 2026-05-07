@@ -834,6 +834,7 @@ export const uk: Dict = {
   'sketch.clear': 'Очистити',
   'sketch.close': 'Закрити',
   'sketch.textPrompt': 'Текст:',
+  'sketch.textModalTitle': 'Додати текст',
 
   'pet.title': 'Маскоти',
   'pet.subtitle': 'Встановити крихітного супутника, який пливе над вашим робочим простором.',

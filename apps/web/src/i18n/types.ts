@@ -1007,4 +1007,5 @@ export interface Dict {
   'sketch.clear': string;
   'sketch.close': string;
   'sketch.textPrompt': string;
+  'sketch.textModalTitle': string;
 }

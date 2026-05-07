@@ -803,6 +803,7 @@ export const ko: Dict = {
   'sketch.clear': '모두 지우기',
   'sketch.close': '닫기',
   'sketch.textPrompt': '텍스트:',
+  'sketch.textModalTitle': '텍스트 추가',
 
   'pet.title': '펫',
   'pet.tabBuiltIn': '내장',

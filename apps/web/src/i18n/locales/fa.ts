@@ -835,6 +835,7 @@ export const fa: Dict = {
   'sketch.clear': 'پاک کردن',
   'sketch.close': 'بستن',
   'sketch.textPrompt': 'متن:',
+  'sketch.textModalTitle': 'افزودن متن',
 
   'pet.title': 'حیوان خانگی',
   'pet.tabBuiltIn': 'پیش‌فرض',

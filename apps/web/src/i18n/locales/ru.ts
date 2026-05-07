@@ -833,6 +833,7 @@ export const ru: Dict = {
   'sketch.clear': 'Очистить',
   'sketch.close': 'Закрыть',
   'sketch.textPrompt': 'Текст:',
+  'sketch.textModalTitle': 'Добавить текст',
 
   'pet.title': 'Питомцы',
   'pet.tabBuiltIn': 'Встроенные',
