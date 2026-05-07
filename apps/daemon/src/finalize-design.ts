@@ -153,18 +153,20 @@ export function truncateTranscriptForPrompt(jsonl: string): string {
   let headBytes = 0;
   let headIndex = 0;
   for (; headIndex < body.length; headIndex += 1) {
-    const lineBytes = Buffer.byteLength(body[headIndex] + '\n', 'utf8');
+    const line = body[headIndex] ?? '';
+    const lineBytes = Buffer.byteLength(line + '\n', 'utf8');
     if (headBytes + lineBytes > perSideBudget) break;
-    headLines.push(body[headIndex]);
+    headLines.push(line);
     headBytes += lineBytes;
   }
 
   const tailLines: string[] = [];
   let tailBytes = 0;
   for (let i = body.length - 1; i >= headIndex; i -= 1) {
-    const lineBytes = Buffer.byteLength(body[i] + '\n', 'utf8');
+    const line = body[i] ?? '';
+    const lineBytes = Buffer.byteLength(line + '\n', 'utf8');
     if (tailBytes + lineBytes > perSideBudget) break;
-    tailLines.unshift(body[i]);
+    tailLines.unshift(line);
     tailBytes += lineBytes;
   }
 
