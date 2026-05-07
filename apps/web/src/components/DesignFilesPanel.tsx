@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -22,26 +22,9 @@ interface Props {
   onNewSketch: () => void;
 }
 
-type Section = 'pages' | 'scripts' | 'images' | 'sketches' | 'other';
+type SortKey = 'name' | 'kind' | 'mtime';
+type SortDir = 'asc' | 'desc';
 
-const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
-  pages: 'designFiles.sectionPages',
-  scripts: 'designFiles.sectionScripts',
-  images: 'designFiles.sectionImages',
-  sketches: 'designFiles.sectionSketches',
-  other: 'designFiles.sectionOther',
-};
-
-const SECTION_ORDER: Section[] = ['pages', 'sketches', 'scripts', 'images', 'other'];
-const INITIAL_SECTION_FILE_LIMIT = 30;
-const SECTION_FILE_LIMIT_INCREMENT = 200;
-
-/**
- * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
- * Claude Design's "Design Files" surface: grouped sections, hover-revealed
- * row menu, drop-files footer, and (when a row is selected) a right-side
- * preview pane. Triggered as a sticky first tab in FileWorkspace.
- */
 export function DesignFilesPanel({
   projectId,
   files,
@@ -64,29 +47,20 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 115;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
-  const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
-  const [isSectionExpansionPending, startSectionExpansion] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>('mtime');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  const grouped = useMemo(() => {
-    const groups: Record<Section, ProjectFile[]> = {
-      pages: [],
-      sketches: [],
-      scripts: [],
-      images: [],
-      other: [],
-    };
-    const sorted = [...files].sort((a, b) => b.mtime - a.mtime);
-    for (const f of sorted) {
-      groups[sectionFor(f)].push(f);
-    }
-    return groups;
-  }, [files]);
+  const sortedFiles = useMemo(() => {
+    return [...files].sort((a, b) => {
+      let cmp: number;
+      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+      else if (sortKey === 'kind') cmp = kindSortPriority(a.kind) - kindSortPriority(b.kind);
+      else cmp = a.mtime - b.mtime;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [files, sortKey, sortDir]);
 
-  // Prune selections that no longer exist in the current file list
-  // (e.g. after a refresh or delete within the same project).
-  // Cross-project leaks are handled by the parent remounting this
-  // component via key={projectId}.
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
@@ -108,7 +82,6 @@ export function DesignFilesPanel({
     [preview, files],
   );
 
-  // Close the row menu on outside click / escape.
   useEffect(() => {
     if (!menuPos) return;
     const close = () => setMenuPos(null);
@@ -132,6 +105,17 @@ export function DesignFilesPanel({
     }
   }
 
+  function toggleSort(key: SortKey) {
+    return () => {
+      if (sortKey === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortKey(key);
+        setSortDir('asc');
+      }
+    };
+  }
+
   function toggleSelect(name: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -140,22 +124,6 @@ export function DesignFilesPanel({
       } else {
         next.add(name);
       }
-      return next;
-    });
-  }
-
-  function selectAllInSection(sectionFiles: ProjectFile[]) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const f of sectionFiles) next.add(f.name);
-      return next;
-    });
-  }
-
-  function clearSection(sectionFiles: ProjectFile[]) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const f of sectionFiles) next.delete(f.name);
       return next;
     });
   }
@@ -209,15 +177,6 @@ export function DesignFilesPanel({
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
         <div className="df-head">
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => setPreview(null)}
-            title={t('designFiles.up')}
-            aria-label={t('designFiles.back')}
-          >
-            ↑
-          </button>
           <button
             type="button"
             className="icon-only"
@@ -300,154 +259,137 @@ export function DesignFilesPanel({
                   ))}
                 </div>
               ) : null}
-              {SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => {
-                const sectionFiles = grouped[section];
-                const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
-                const visibleFiles = sectionFiles.slice(0, visibleLimit);
-                const hiddenCount = sectionFiles.length - visibleFiles.length;
-                return (
-                <div className="df-section" key={section}>
-                  <div className="df-section-label">
-                    {t(SECTION_LABEL_KEY[section])}
-                    <span className="df-section-count">{sectionFiles.length}</span>
-                    <button
-                      type="button"
-                      className="df-select-all"
-                      title={t('designFiles.selectAll')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectAllInSection(sectionFiles);
-                      }}
-                    >
-                      {t('designFiles.selectAll')}
-                    </button>
-                    {sectionFiles.some((f) => selected.has(f.name)) ? (
-                      <button
-                        type="button"
-                        className="df-select-all"
-                        title={t('designFiles.clearSelection')}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          clearSection(sectionFiles);
-                        }}
+              {sortedFiles.length > 0 ? (
+                <table className="df-table">
+                  <thead>
+                    <tr>
+                      <th className="df-th-check" />
+                      <th className="df-th-icon" />
+                      <th
+                        className="df-th-name df-th-sortable"
+                        onClick={toggleSort('name')}
+                        aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        {t('designFiles.clearSelection')}
-                      </button>
-                    ) : null}
-                  </div>
-                  {visibleFiles.map((f) => {
-                    const active = preview === f.name;
-                    const isHovered = hover === f.name;
-                    return (
-                      <button
-                        key={f.name}
-                        type="button"
-                        data-testid={`design-file-row-${f.name}`}
-                        className={`df-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
-                        onMouseEnter={() => setHover(f.name)}
-                        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                        onClick={() => setPreview(f.name)}
-                        onDoubleClick={() => onOpenFile(f.name)}
+                        {t('designFiles.colName')}
+                        {sortKey === 'name' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                      </th>
+                      <th
+                        className="df-th-kind df-th-sortable"
+                        onClick={toggleSort('kind')}
+                        aria-sort={sortKey === 'kind' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        <span
-                          className="df-row-check"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSelect(f.name);
-                          }}
-                          role="checkbox"
-                          aria-checked={selected.has(f.name)}
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleSelect(f.name);
-                            }
-                          }}
+                        {t('designFiles.colKind')}
+                        {sortKey === 'kind' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                      </th>
+                      <th
+                        className="df-th-time df-th-sortable"
+                        onClick={toggleSort('mtime')}
+                        aria-sort={sortKey === 'mtime' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        {t('designFiles.colModified')}
+                        {sortKey === 'mtime' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' \u2191' : ' \u2193'}</span> : null}
+                      </th>
+                      <th className="df-th-menu" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedFiles.map((f) => {
+                      const active = preview === f.name;
+                      const isHovered = hover === f.name;
+                      return (
+                        <tr
+                          key={f.name}
+                          data-testid={`design-file-row-${f.name}`}
+                          className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
+                          onMouseEnter={() => setHover(f.name)}
+                          onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+                          onClick={() => setPreview(f.name)}
+                          onDoubleClick={() => onOpenFile(f.name)}
                         >
-                          {selected.has(f.name) ? '☑' : '☐'}
-                        </span>
-                        <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-                          {kindGlyph(f.kind)}
-                        </span>
-                        <span className="df-row-name-wrap">
-                          <span className="df-row-name">{f.name}</span>
-                          <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-                        </span>
-                        <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
-                        <span
-                          data-testid={`design-file-menu-${f.name}`}
-                          className="df-row-menu"
-                          style={isHovered || active ? { opacity: 1 } : undefined}
-                          role="button"
-                          aria-label={t('designFiles.rowMenu')}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const rect = (e.target as HTMLElement)
-                              .closest('.df-row-menu')
-                              ?.getBoundingClientRect();
-                            if (!rect) return;
+                          <td className="df-cell-check">
+                            <span
+                              className="df-row-check"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSelect(f.name);
+                              }}
+                              role="checkbox"
+                              aria-checked={selected.has(f.name)}
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleSelect(f.name);
+                                }
+                              }}
+                            >
+                              {selected.has(f.name) ? '\u2611' : '\u2610'}
+                            </span>
+                          </td>
+                          <td className="df-cell-icon">
+                            <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+                              {kindGlyph(f.kind)}
+                            </span>
+                          </td>
+                          <td className="df-cell-name">
+                            <span className="df-row-name-wrap">
+                              <span className="df-row-name">{f.name}</span>
+                              <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+                            </span>
+                          </td>
+                          <td className="df-cell-kind">
+                            <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
+                          </td>
+                          <td className="df-cell-time">{relativeTime(f.mtime, t)}</td>
+                          <td className="df-cell-menu">
+                            <span
+                              data-testid={`design-file-menu-${f.name}`}
+                              className="df-row-menu"
+                              style={isHovered || active ? { opacity: 1 } : undefined}
+                              role="button"
+                              aria-label={t('designFiles.rowMenu')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rect = (e.target as HTMLElement)
+                                  .closest('.df-row-menu')
+                                  ?.getBoundingClientRect();
+                                if (!rect) return;
 
-                            const viewportHeight = window.innerHeight;
-                            const spaceBelow = viewportHeight - rect.bottom;
-                            const spaceAbove = rect.top;
+                                const viewportHeight = window.innerHeight;
+                                const spaceBelow = viewportHeight - rect.bottom;
+                                const spaceAbove = rect.top;
 
-                            let top: number;
-                            if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                              top = rect.bottom + 4;
-                            } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                              top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
-                            } else {
-                              top = Math.max(
-                                MENU_SAFE_PADDING,
-                                viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
-                              );
-                            }
+                                let top: number;
+                                if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+                                  top = rect.bottom + 4;
+                                } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
+                                  top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
+                                } else {
+                                  top = Math.max(
+                                    MENU_SAFE_PADDING,
+                                    viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
+                                  );
+                                }
 
-                            const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
+                                const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
 
-                            setMenuPos({
-                              name: f.name,
-                              top,
-                              left,
-                            });
-                          }}
-                        >
-                          ⋯
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {hiddenCount > 0 ? (
-                    <button
-                      type="button"
-                      className="df-section-more"
-                      disabled={isSectionExpansionPending}
-                      aria-busy={isSectionExpansionPending}
-                      onClick={() =>
-                        startSectionExpansion(() => {
-                          setSectionLimits((curr) => ({
-                            ...curr,
-                            [section]: Math.min(
-                              sectionFiles.length,
-                              visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
-                            ),
-                          }));
-                        })
-                      }
-                    >
-                      <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
-                      <span>
-                        {t('designFiles.showMore', {
-                          n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
-                        })}
-                      </span>
-                    </button>
-                  ) : null}
-                </div>
-                );
-              })}
+                                setMenuPos({
+                                  name: f.name,
+                                  top,
+                                  left,
+                                });
+                              }}
+                            >
+                              \u22EF
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : null}
             </>
           )}
           <div
@@ -620,31 +562,32 @@ function DfPreview({
   );
 }
 
-function sectionFor(file: ProjectFile): Section {
-  if (file.kind === 'html' || file.kind === 'text') return 'pages';
-  if (file.kind === 'sketch') return 'sketches';
-  if (file.kind === 'code') return 'scripts';
-  if (file.kind === 'image') return 'images';
-  if (
-    file.kind === 'pdf' ||
-    file.kind === 'document' ||
-    file.kind === 'presentation' ||
-    file.kind === 'spreadsheet'
-  ) return 'pages';
-  return 'other';
+function kindSortPriority(kind: ProjectFileKind): number {
+  if (kind === 'html') return 0;
+  if (kind === 'text') return 1;
+  if (kind === 'code') return 2;
+  if (kind === 'sketch') return 3;
+  if (kind === 'image') return 4;
+  if (kind === 'document') return 5;
+  if (kind === 'pdf') return 6;
+  if (kind === 'presentation') return 7;
+  if (kind === 'spreadsheet') return 8;
+  if (kind === 'video') return 9;
+  if (kind === 'audio') return 10;
+  return 11;
 }
 
 function kindGlyph(kind: ProjectFileKind): string {
-  if (kind === 'html') return '⟨⟩';
-  if (kind === 'image') return '▣';
-  if (kind === 'sketch') return '✎';
-  if (kind === 'text') return '¶';
-  if (kind === 'code') return '{}';
+  if (kind === 'html') return '\u27E8\u27E9';
+  if (kind === 'image') return '\u25A3';
+  if (kind === 'sketch') return '\u270E';
+  if (kind === 'text') return '\u00B6';
+  if (kind === 'code') return '\u007B\u007D';
   if (kind === 'pdf') return 'PDF';
   if (kind === 'document') return 'DOC';
   if (kind === 'presentation') return 'PPT';
   if (kind === 'spreadsheet') return 'XLS';
-  return '·';
+  return '\u00B7';
 }
 
 function kindLabel(kind: ProjectFileKind, t: TranslateFn): string {

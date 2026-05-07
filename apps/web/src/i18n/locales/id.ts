@@ -560,6 +560,9 @@ export const id: Dict = {
   'designFiles.kindSpreadsheet': 'Spreadsheet',
   'designFiles.kindLiveArtifact': 'Live artifact',
   'designFiles.kindBinary': 'Biner',
+  'designFiles.colName': 'Name',
+  'designFiles.colKind': 'Kind',
+  'designFiles.colModified': 'Modified',
 
   'quickSwitcher.placeholder': 'Buka file...',
   'quickSwitcher.empty': 'Tidak ada file di proyek ini',

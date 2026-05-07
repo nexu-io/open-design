@@ -630,6 +630,9 @@ export interface Dict {
   'designFiles.kindSpreadsheet': string;
   'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
+  'designFiles.colName': string;
+  'designFiles.colKind': string;
+  'designFiles.colModified': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
