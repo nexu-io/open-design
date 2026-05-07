@@ -50,6 +50,7 @@ export function DesignFilesPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>('mtime');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const lastKeyPress = useRef<Map<string, number>>(new Map());
 
   const sortedFiles = useMemo(() => {
     return [...files].sort((a, b) => {
@@ -308,6 +309,21 @@ export function DesignFilesPanel({
                           onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
                           onClick={() => setPreview(f.name)}
                           onDoubleClick={() => onOpenFile(f.name)}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              const now = Date.now();
+                              const last = lastKeyPress.current.get(f.name) ?? 0;
+                              if (now - last < 300) {
+                                lastKeyPress.current.delete(f.name);
+                                onOpenFile(f.name);
+                              } else {
+                                lastKeyPress.current.set(f.name, now);
+                                setPreview(f.name);
+                              }
+                            }
+                          }}
                         >
                           <td className="df-cell-check">
                             <span
@@ -384,7 +400,7 @@ export function DesignFilesPanel({
                                 });
                               }}
                             >
-                              \u22EF
+                              ⋯
                             </span>
                           </td>
                         </tr>

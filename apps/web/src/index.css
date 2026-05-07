@@ -4802,8 +4802,10 @@ button.connector-action.is-loading {
 .df-file-row {
   cursor: pointer;
   transition: background 120ms ease;
+  outline: none;
 }
 .df-file-row:hover { background: var(--bg-subtle); }
+.df-file-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .df-file-row.active { background: var(--blue-bg); }
 .df-file-row.active .df-row-name { color: var(--text-strong); }
 .df-file-row.selected { background: var(--blue-bg); }
