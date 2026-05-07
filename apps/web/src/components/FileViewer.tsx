@@ -3587,7 +3587,7 @@ function HtmlViewer({
                 <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
               ) : null}
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <div className="deploy-field-grid">
+                <div className="deploy-field-grid single-field">
                   <label>
                     <span>{t('fileViewer.cloudflareAccountId')}</span>
                     <input
@@ -3596,10 +3596,6 @@ function HtmlViewer({
                     />
                     <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
                   </label>
-                  <div className="deploy-auto-field">
-                    <span>{t('fileViewer.cloudflareProjectName')}</span>
-                    <span className="field-hint">{t('fileViewer.cloudflareProjectNameHint')}</span>
-                  </div>
                 </div>
               ) : (
                 <div className="deploy-field-grid">

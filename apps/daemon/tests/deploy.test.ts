@@ -1,5 +1,4 @@
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -12,6 +11,7 @@ import {
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesAssetHash,
   cloudflarePagesProjectNameForProject,
   DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES,
   DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
@@ -810,8 +810,16 @@ describe('deploy plan and analyzer', () => {
 });
 
 describe('cloudflare pages deploys', () => {
-  it('creates missing projects and uploads files via manifest keyed multipart parts', async () => {
+  it('creates missing projects and uploads assets before submitting a manifest', async () => {
     const requests: Array<{ url: string; method: string; body?: any; headers: Headers }> = [];
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello index'),
+    });
+    const assetHash = cloudflarePagesAssetHash({
+      file: 'assets/style.css',
+      data: Buffer.from('body { color: red; }'),
+    });
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =
         typeof input === 'string'
@@ -845,26 +853,69 @@ describe('cloudflare pages deploys', () => {
         });
       }
 
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        expect(headers.get('authorization')).toBe('Bearer pages-upload-jwt');
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({
+          hashes: [indexHash, assetHash],
+        });
+        return new Response(JSON.stringify({ success: true, result: [indexHash, assetHash] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/assets/upload') && method === 'POST') {
+        expect(headers.get('authorization')).toBe('Bearer pages-upload-jwt');
+        expect(JSON.parse(String(init?.body ?? '[]'))).toEqual([
+          {
+            key: indexHash,
+            value: Buffer.from('hello index').toString('base64'),
+            metadata: { contentType: 'text/html' },
+            base64: true,
+          },
+          {
+            key: assetHash,
+            value: Buffer.from('body { color: red; }').toString('base64'),
+            metadata: { contentType: 'text/css' },
+            base64: true,
+          },
+        ]);
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        expect(headers.get('authorization')).toBe('Bearer pages-upload-jwt');
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({
+          hashes: [indexHash, assetHash],
+        });
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
       if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
         const form = init?.body as FormData;
         expect(form).toBeInstanceOf(FormData);
         const manifest = JSON.parse(String(form?.get('manifest') ?? '{}')) as Record<string, string>;
-        const outputDir = String(form?.get('pages_build_output_dir') ?? '');
-        expect(outputDir).toBe('.');
-        const indexHash = createHash('sha256').update('hello index').digest('hex');
-        const assetHash = createHash('sha256').update('body { color: red; }').digest('hex');
+        expect(form.get('branch')).toBe('main');
+        expect(form.get('pages_build_output_dir')).toBeNull();
         expect(manifest).toEqual({
-          'index.html': indexHash,
-          'assets/style.css': assetHash,
+          '/index.html': indexHash,
+          '/assets/style.css': assetHash,
         });
-        const indexPart = form?.get(indexHash) as File | null;
-        const assetPart = form?.get(assetHash) as File | null;
-        expect(indexPart?.name).toBe('index.html');
-        expect(indexPart?.type).toBe('text/html');
-        expect(await indexPart?.text()).toBe('hello index');
-        expect(assetPart?.name).toBe('assets/style.css');
-        expect(assetPart?.type).toBe('text/css');
-        expect(await assetPart?.text()).toBe('body { color: red; }');
+        expect(form.get(indexHash)).toBeNull();
+        expect(form.get(assetHash)).toBeNull();
         return new Response(JSON.stringify({
           success: true,
           result: { id: 'dep_123', url: 'https://d34527d9.demo-pages.pages.dev' },
@@ -910,7 +961,7 @@ describe('cloudflare pages deploys', () => {
       url: 'https://demo-pages.pages.dev',
       status: 'ready',
     });
-    expect(requests).toHaveLength(4);
+    expect(requests).toHaveLength(8);
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer cloudflare-token-secret');
   });
 });

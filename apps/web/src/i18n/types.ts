@@ -802,8 +802,6 @@ export interface Dict {
   'fileViewer.cloudflareAccountId': string;
   'fileViewer.cloudflareAccountIdHint': string;
   'fileViewer.cloudflareAccountIdRequired': string;
-  'fileViewer.cloudflareProjectName': string;
-  'fileViewer.cloudflareProjectNameHint': string;
   'fileViewer.optional': string;
   'fileViewer.vercelPreviewOnly': string;
   'fileViewer.cloudflarePagesPreviewHint': string;

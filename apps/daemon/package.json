@@ -38,6 +38,7 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "better-sqlite3": "^12.9.0",
+    "blake3-wasm": "2.1.5",
     "chokidar": "^5.0.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",

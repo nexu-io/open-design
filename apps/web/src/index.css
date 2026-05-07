@@ -6965,8 +6965,10 @@ button.connector-action.is-loading {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-.deploy-field-grid label,
-.deploy-auto-field {
+.deploy-field-grid.single-field {
+  grid-template-columns: minmax(0, 1fr);
+}
+.deploy-field-grid label {
   display: flex;
   flex-direction: column;
   gap: 6px;

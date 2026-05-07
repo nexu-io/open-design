@@ -175,7 +175,53 @@ describe('deploy provider routes', () => {
             headers: { 'content-type': 'application/json' },
           });
         }
+        if (url.endsWith(`/pages/projects/${expectedPagesProject}/upload-token`) && method === 'GET') {
+          return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+          const body = JSON.parse(String(init?.body ?? '{}')) as { hashes?: string[] };
+          expect(Array.isArray(body.hashes)).toBe(true);
+          expect(body.hashes?.length).toBeGreaterThan(0);
+          return new Response(JSON.stringify({ success: true, result: body.hashes }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/pages/assets/upload') && method === 'POST') {
+          const body = JSON.parse(String(init?.body ?? '[]')) as Array<{
+            key?: string;
+            value?: string;
+            metadata?: { contentType?: string };
+            base64?: boolean;
+          }>;
+          expect(body).toHaveLength(1);
+          expect(body[0]?.base64).toBe(true);
+          expect(body[0]?.metadata?.contentType).toMatch(/^text\/html/);
+          expect(body[0]?.key).toMatch(/^[a-f0-9]{32}$/);
+          expect(body[0]?.value).toEqual(expect.any(String));
+          return new Response(JSON.stringify({ success: true, result: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+          const body = JSON.parse(String(init?.body ?? '{}')) as { hashes?: string[] };
+          expect(Array.isArray(body.hashes)).toBe(true);
+          expect(body.hashes?.length).toBeGreaterThan(0);
+          return new Response(JSON.stringify({ success: true, result: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
         if (url.endsWith(`/pages/projects/${expectedPagesProject}/deployments`) && method === 'POST') {
+          const form = init?.body as FormData;
+          const manifest = JSON.parse(String(form.get('manifest') ?? '{}')) as Record<string, string>;
+          expect(Object.keys(manifest)).toContain('/index.html');
+          expect(form.get('branch')).toBe('main');
+          expect(form.get('pages_build_output_dir')).toBeNull();
           return new Response(JSON.stringify({
             success: true,
             result: { id: 'cf_dep_123', url: `https://d34527d9.${expectedPagesProject}.pages.dev` },
@@ -199,8 +245,9 @@ describe('deploy provider routes', () => {
             providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
           }),
         });
-        expect(deployResp.status).toBe(200);
-        const deployment = await deployResp.json() as { id: string };
+        const deployBody = await deployResp.text();
+        expect(deployResp.status, deployBody).toBe(200);
+        const deployment = JSON.parse(deployBody) as { id: string };
         expect(deployment).toMatchObject({
           providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
           deploymentId: 'cf_dep_123',

@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { hash as blake3Hash } from 'blake3-wasm';
 import { readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
@@ -314,23 +315,16 @@ export async function deployToCloudflarePages({ config, files }) {
 
   await ensureCloudflarePagesProject(config);
 
+  const uploadToken = await getCloudflarePagesUploadToken(config);
+  await uploadCloudflarePagesAssets(uploadToken, files);
+
   const form = new FormData();
   const manifest = {};
-  const uploadedHashes = new Set();
   for (const file of files) {
-    const data = Buffer.from(file.data);
-    const hash = createHash('sha256').update(data).digest('hex');
-    manifest[file.file] = hash;
-    if (uploadedHashes.has(hash)) continue;
-    uploadedHashes.add(hash);
-    form.append(
-      hash,
-      new Blob([data], { type: file.contentType || 'application/octet-stream' }),
-      file.file,
-    );
+    manifest[`/${file.file}`] = cloudflarePagesAssetHash(file);
   }
   form.append('manifest', JSON.stringify(manifest));
-  form.append('pages_build_output_dir', '.');
+  form.append('branch', 'main');
 
   const deployResp = await fetch(cloudflarePagesProjectUrl(config, 'deployments'), {
     method: 'POST',
@@ -381,6 +375,88 @@ async function ensureCloudflarePagesProject(config) {
     throw cloudflareError(created, createResp.status, 'Cloudflare Pages project creation failed.');
   }
   return created?.result ?? created;
+}
+
+async function getCloudflarePagesUploadToken(config) {
+  const tokenResp = await fetch(cloudflarePagesProjectUrl(config, 'upload-token'), {
+    headers: cloudflareHeaders(config),
+  });
+  const tokenBody = await readCloudflareJson(tokenResp);
+  const jwt = tokenBody?.result?.jwt || tokenBody?.jwt;
+  if (!tokenResp.ok || tokenBody?.success === false || !jwt) {
+    throw cloudflareError(tokenBody, tokenResp.status, 'Cloudflare Pages upload token request failed.');
+  }
+  return jwt;
+}
+
+async function uploadCloudflarePagesAssets(uploadToken, files) {
+  const uniqueFiles = new Map();
+  for (const file of files) {
+    const data = Buffer.from(file.data);
+    const hash = cloudflarePagesAssetHash({ ...file, data });
+    if (!uniqueFiles.has(hash)) {
+      uniqueFiles.set(hash, {
+        hash,
+        data,
+        contentType: file.contentType || 'application/octet-stream',
+      });
+    }
+  }
+  const hashes = Array.from(uniqueFiles.keys());
+  const missing = await cloudflarePagesMissingAssetHashes(uploadToken, hashes);
+  if (missing.length > 0) {
+    const payload = missing.map((hash) => {
+      const file = uniqueFiles.get(hash);
+      if (!file) throw new DeployError(`Cloudflare reported an unknown asset hash: ${hash}`, 502);
+      return {
+        key: hash,
+        value: file.data.toString('base64'),
+        metadata: {
+          contentType: file.contentType,
+        },
+        base64: true,
+      };
+    });
+    const uploadResp = await fetch(`${CLOUDFLARE_API}/pages/assets/upload`, {
+      method: 'POST',
+      headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    const uploaded = await readCloudflareJson(uploadResp);
+    if (!uploadResp.ok || uploaded?.success === false) {
+      throw cloudflareError(uploaded, uploadResp.status, 'Cloudflare Pages asset upload failed.');
+    }
+  }
+
+  const upsertResp = await fetch(`${CLOUDFLARE_API}/pages/assets/upsert-hashes`, {
+    method: 'POST',
+    headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ hashes }),
+  });
+  const upserted = await readCloudflareJson(upsertResp);
+  if (!upsertResp.ok || upserted?.success === false) {
+    throw cloudflareError(upserted, upsertResp.status, 'Cloudflare Pages asset hash update failed.');
+  }
+}
+
+async function cloudflarePagesMissingAssetHashes(uploadToken, hashes) {
+  const resp = await fetch(`${CLOUDFLARE_API}/pages/assets/check-missing`, {
+    method: 'POST',
+    headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ hashes }),
+  });
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json?.success === false) {
+    throw cloudflareError(json, resp.status, 'Cloudflare Pages asset lookup failed.');
+  }
+  const result = json?.result ?? json;
+  return Array.isArray(result) ? result : Array.isArray(result?.hashes) ? result.hashes : hashes;
+}
+
+export function cloudflarePagesAssetHash(file) {
+  const data = Buffer.from(file.data);
+  const extension = path.posix.extname(file.file).slice(1);
+  return blake3Hash(`${data.toString('base64')}${extension}`).toString('hex').slice(0, 32);
 }
 
 export function extractHtmlReferences(html) {
@@ -1050,6 +1126,13 @@ export function cloudflarePagesProjectNameForProject(projectId, projectName = ''
 function cloudflareHeaders(config, extra = {}) {
   return {
     Authorization: `Bearer ${config.token}`,
+    ...extra,
+  };
+}
+
+function cloudflareAssetHeaders(token, extra = {}) {
+  return {
+    Authorization: `Bearer ${token}`,
     ...extra,
   };
 }
