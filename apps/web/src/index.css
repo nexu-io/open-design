@@ -605,12 +605,14 @@ code {
   display: flex;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 .split-chat-slot[hidden] {
   display: none;
 }
 .split-chat-slot > .pane {
   flex: 1 1 auto;
+  min-width: 0;
 }
 .pane {
   display: flex;
@@ -618,6 +620,7 @@ code {
   min-height: 0;
   min-width: 0;
   background: var(--bg-panel);
+  overflow: hidden;
 }
 .split-resize-handle {
   width: 8px;
@@ -969,15 +972,6 @@ code {
   white-space: nowrap;
 }
 
-.composer-import-item-enabled {
-  cursor: pointer;
-  color: var(--text);
-}
-.composer-import-item-enabled:hover {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-
 .user-attachments {
   display: flex;
   gap: 6px;
@@ -1154,7 +1148,12 @@ code {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.55;
-  max-width: 50ch;
+  /* 72ch lets typical one-sentence English subtitles fit on a single
+   * line inside the 920px settings modal while still wrapping cleanly
+   * on narrow viewports (the modal width clamps to 100vw - 48px) and
+   * for the longest locales (German, French). 50ch was forcing even
+   * the English subtitle onto two lines. See nexu-io/open-design#743. */
+  max-width: 72ch;
 }
 .modal-foot {
   display: flex;
@@ -1338,7 +1337,8 @@ code {
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
-.settings-rescan-status {
+.settings-rescan-status,
+.settings-test-status {
   margin: -4px 0 0;
   padding: 7px 10px;
   border: 1px solid var(--green-border);
@@ -1348,10 +1348,38 @@ code {
   font-size: 12px;
   line-height: 1.4;
 }
-.settings-rescan-status.error {
+.settings-rescan-status.error,
+.settings-test-status.error {
   border-color: var(--red-border);
   background: var(--red-bg);
   color: var(--red);
+}
+.settings-test-status.warn {
+  border-color: var(--amber-border, var(--orange-border, var(--green-border)));
+  background: var(--amber-bg, var(--orange-bg, var(--green-bg)));
+  color: var(--amber, var(--orange, var(--green)));
+}
+.settings-test-status.running {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.settings-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+  justify-content: center;
+}
+.settings-test-btn.loading {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.section-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .settings-field-error {
   color: var(--red);
@@ -4491,8 +4519,10 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
   flex: 1;
+  overflow: hidden;
 }
 .ws-tabs-shell {
   display: flex;
@@ -4516,6 +4546,9 @@ button.connector-action.is-loading {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
+  /* thinner scrollbar to avoid overlap */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .ws-tab {
@@ -5692,31 +5725,16 @@ button.connector-action.is-loading {
 .comment-target-overlay.selected {
   border-width: 2px;
 }
-.comment-target-tooltip {
+.comment-target-overlay-label {
   position: absolute;
-  left: 0;
-  top: 0;
-  transform: translateY(calc(-100% - 6px));
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: min(380px, 80vw);
-  padding: 4px 7px;
-  border-radius: 4px;
-  background: rgba(17, 24, 39, 0.95);
-  color: white;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-}
-.comment-target-tooltip strong {
-  color: #8ec5ff;
-  font-weight: 700;
-}
-.comment-target-tooltip span {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .comment-saved-marker {
   position: absolute;
@@ -5843,6 +5861,134 @@ button.connector-action.is-loading {
   background: var(--red-bg);
   border-color: var(--red-border);
 }
+
+/* Inspect panel — sibling of the comment popover. Anchored to the
+   right side of the preview surface. Width is fixed so layout doesn't
+   reflow as the user scrubs slider values; controls reserve space for
+   their numeric readouts. */
+.inspect-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: 296px;
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+}
+.inspect-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inspect-panel-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.inspect-panel-title strong {
+  font-size: 13px;
+}
+.inspect-panel-title code {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inspect-section-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inspect-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.inspect-row > label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.inspect-row input[type='color'] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+.inspect-row input[type='text'],
+.inspect-row select {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 11px;
+  font-family: inherit;
+}
+.inspect-row input[type='range'] {
+  width: 100%;
+}
+.inspect-row-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 42px;
+  text-align: right;
+}
+.inspect-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inspect-panel-error {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--red-border);
+  border-radius: 4px;
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 11px;
+}
+.inspect-empty-hint {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+.inspect-empty-hint code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  font-size: 11px;
+}
+
 .comments-panel {
   display: flex;
   flex-direction: column;
@@ -8109,6 +8255,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: 100%;
 }
 .composer-import-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-import-item-enabled {
+  cursor: pointer;
+  color: var(--text);
+}
+.composer-import-item-enabled:hover {
   background: var(--bg-subtle);
   color: var(--text);
 }

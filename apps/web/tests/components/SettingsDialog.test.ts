@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
+  canRunProviderConnectionTest,
   isValidApiBaseUrl,
+  shouldShowCustomModelInput,
   switchApiProtocolConfig,
+  testStatusVariant,
   updateAgentCliEnvValue,
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
-import type { AppConfig } from '../../src/types';
+import type { AppConfig, ConnectionTestResponse } from '../../src/types';
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -21,7 +24,7 @@ const baseConfig: AppConfig = {
 };
 
 describe('SettingsDialog API protocol switching', () => {
-  it('stores the current custom protocol config before loading another protocol', () => {
+  it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
       apiKey: 'anthropic-key',
@@ -36,8 +39,9 @@ describe('SettingsDialog API protocol switching', () => {
       mode: 'api',
       apiProtocol: 'openai',
       apiKey: '',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      baseUrl: 'https://my-proxy.example.com',
+      model: 'my-model',
+      apiProviderBaseUrl: null,
     });
     expect(next.apiProtocolConfigs?.anthropic).toMatchObject({
       apiKey: 'anthropic-key',
@@ -127,12 +131,88 @@ describe('SettingsDialog API protocol switching', () => {
   });
 });
 
+describe('SettingsDialog test status variant', () => {
+  const baseResult: ConnectionTestResponse = { ok: false, kind: 'unknown', latencyMs: 0 };
+  it('returns success for an ok result', () => {
+    expect(testStatusVariant({ ok: true, kind: 'success', latencyMs: 12 })).toBe(
+      'success',
+    );
+  });
+  it('returns warn for rate-limit (config still looks valid)', () => {
+    expect(testStatusVariant({ ...baseResult, kind: 'rate_limited' })).toBe(
+      'warn',
+    );
+  });
+  it('returns error for the failure kinds', () => {
+    for (const kind of [
+      'auth_failed',
+      'forbidden',
+      'not_found_model',
+      'invalid_model_id',
+      'invalid_base_url',
+      'upstream_unavailable',
+      'timeout',
+      'agent_not_installed',
+      'agent_spawn_failed',
+      'unknown',
+    ] as const) {
+      expect(testStatusVariant({ ...baseResult, kind })).toBe('error');
+    }
+  });
+});
+
+describe('SettingsDialog provider connection test requirements', () => {
+  it('allows Azure tests to use the daemon default API version', () => {
+    expect(
+      canRunProviderConnectionTest({
+        apiKey: 'azure-key',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        model: 'deployment-one',
+      }),
+    ).toBe(true);
+  });
+
+  it('still requires the shared provider fields', () => {
+    expect(
+      canRunProviderConnectionTest({ ...baseConfig, apiKey: '' }),
+    ).toBe(false);
+    expect(
+      canRunProviderConnectionTest({ ...baseConfig, baseUrl: '' }),
+    ).toBe(false);
+    expect(
+      canRunProviderConnectionTest({ ...baseConfig, model: '' }),
+    ).toBe(false);
+  });
+});
+
+describe('SettingsDialog custom model picker state', () => {
+  it('keeps custom input visible while an intermediate value matches a known model', () => {
+    expect(
+      shouldShowCustomModelInput('gpt-5', ['gpt-5', 'o3'], true),
+    ).toBe(true);
+  });
+
+  it('uses the dropdown when a known model is selected outside custom mode', () => {
+    expect(
+      shouldShowCustomModelInput('gpt-5', ['gpt-5', 'o3'], false),
+    ).toBe(false);
+  });
+
+  it('shows custom input for unknown or empty model values', () => {
+    expect(
+      shouldShowCustomModelInput('gpt-5.5', ['gpt-5', 'o3'], false),
+    ).toBe(true);
+    expect(shouldShowCustomModelInput('', ['gpt-5', 'o3'], false)).toBe(true);
+  });
+});
+
 describe('SettingsDialog API Base URL validation', () => {
   it('accepts public http/https URLs and loopback local providers', () => {
     expect(isValidApiBaseUrl('https://api.openai.com/v1')).toBe(true);
     expect(isValidApiBaseUrl('http://localhost:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('http://127.0.0.1:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('http://[::1]:11434/v1')).toBe(true);
+    expect(isValidApiBaseUrl('http://[::ffff:127.0.0.1]:11434/v1')).toBe(true);
     expect(isValidApiBaseUrl('  https://resource.openai.azure.com  ')).toBe(true);
 
     expect(isValidApiBaseUrl('ddddd')).toBe(false);
@@ -144,6 +224,9 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
   });
 });
 
@@ -167,6 +250,27 @@ describe('SettingsDialog agent CLI env settings', () => {
     expect(next.agentCliEnv).toEqual({
       claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
       codex: { CODEX_HOME: '~/.codex-alt' },
+    });
+  });
+
+  it('updates additional Codex CLI env values without dropping sibling Codex fields', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'codex',
+      'CODEX_BIN',
+      '  ~/bin/codex-next  ',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
     });
   });
 

@@ -6,7 +6,9 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+
+import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -94,6 +96,8 @@ type HealthEvalValue = {
 
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
+const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
+const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 
 macDescribe('packaged mac runtime smoke', () => {
   let installedAppPath: string | null = null;
@@ -163,6 +167,124 @@ macDescribe('packaged mac runtime smoke', () => {
   }, 180_000);
 });
 
+desktopMacDescribe('mac desktop settings smoke', () => {
+  const desktop = createDesktopHarness('mac-settings-smoke');
+
+  beforeAll(async () => {
+    await desktop.start();
+  }, 75_000);
+
+  afterAll(async () => {
+    await desktop.stop();
+  }, 30_000);
+
+  test('opens the current API configuration from the desktop shell', async () => {
+    await seedDesktopConfig(desktop, {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProtocol: 'anthropic',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+      theme: 'system',
+    }, 'model');
+
+    await desktop.openSettings();
+    await openDesktopSettingsSection(desktop, 'Configure execution mode');
+
+    await waitFor(async () => {
+      const snapshot = await readDesktopSettingsSnapshot(desktop);
+      expect(snapshot.dialogOpen).toBe(true);
+      expect(snapshot.heading).toBe('Execution & model');
+      expect(snapshot.selectedProtocol).toBe('Anthropic API');
+      expect(snapshot.quickFillProvider).toBe('Anthropic (Claude)');
+      expect(snapshot.baseUrl).toBe('https://api.anthropic.com');
+      expect(snapshot.model).toBe('claude-sonnet-4-5');
+    });
+  }, 45_000);
+
+  test('keeps legacy provider tracking coherent when switching API protocols', async () => {
+    await seedDesktopConfig(desktop, {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+    }, 'baseUrl');
+
+    await desktop.openSettings();
+    await openDesktopSettingsSection(desktop, 'Configure execution mode');
+
+    await waitFor(async () => {
+      const snapshot = await readDesktopSettingsSnapshot(desktop);
+      expect(snapshot.dialogOpen).toBe(true);
+      expect(snapshot.selectedProtocol).toBe('OpenAI API');
+      expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
+      expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
+    });
+
+    await clickDesktopProtocolTab(desktop, 'Anthropic');
+
+    await waitFor(async () => {
+      const snapshot = await readDesktopSettingsSnapshot(desktop);
+      expect(snapshot.selectedProtocol).toBe('Anthropic API');
+      expect(snapshot.quickFillProvider).toBe('DeepSeek — Anthropic');
+      expect(snapshot.baseUrl).toBe('https://api.deepseek.com/anthropic');
+      expect(snapshot.model).toBe('deepseek-chat');
+    });
+  }, 45_000);
+
+  test('previews and saves the desktop appearance preference', async () => {
+    await seedDesktopConfig(desktop, {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProtocol: 'anthropic',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+      theme: 'system',
+    }, 'theme');
+
+    await desktop.openSettings();
+    await openDesktopSettingsSection(desktop, 'Appearance');
+    await clickDesktopSegmentButton(desktop, 'Dark');
+
+    await waitFor(async () => {
+      const snapshot = await readDesktopAppearanceSnapshot(desktop);
+      expect(snapshot.dialogOpen).toBe(true);
+      expect(snapshot.activeTheme).toBe('Dark');
+      expect(snapshot.documentTheme).toBe('dark');
+      expect(snapshot.savedTheme).toBe('system');
+    });
+
+    await clickDesktopSettingsFooterButton(desktop, 'primary');
+
+    await waitFor(async () => {
+      const snapshot = await readDesktopAppearanceSnapshot(desktop);
+      expect(snapshot.dialogOpen).toBe(false);
+      expect(snapshot.documentTheme).toBe('dark');
+      expect(snapshot.savedTheme).toBe('dark');
+    });
+  }, 45_000);
+});
+
 async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Promise<T> {
   const args = [
     'exec',
@@ -198,6 +320,155 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
   } catch (error) {
     throw new Error(`tools-pack mac ${action} did not print JSON: ${String(error)}\n${result.stdout}`);
   }
+}
+
+type DesktopHarness = ReturnType<typeof createDesktopHarness>;
+
+type DesktopSettingsSnapshot = {
+  baseUrl: string | null;
+  dialogOpen: boolean;
+  heading: string | null;
+  model: string | null;
+  quickFillProvider: string | null;
+  selectedProtocol: string | null;
+};
+
+type DesktopAppearanceSnapshot = {
+  activeTheme: string | null;
+  dialogOpen: boolean;
+  documentTheme: string | null;
+  savedTheme: string | null;
+};
+
+async function seedDesktopConfig(
+  desktop: DesktopHarness,
+  config: Record<string, unknown>,
+  stableField: string,
+): Promise<void> {
+  await desktop.seedConfigAndReload(config, stableField);
+}
+
+async function openDesktopSettingsSection(
+  desktop: DesktopHarness,
+  label: string,
+): Promise<void> {
+  const clicked = await desktop.eval<boolean>(`
+    (() => {
+      const section = Array.from(document.querySelectorAll('[role="dialog"] button'))
+        .find((node) => node.textContent?.includes(${JSON.stringify(label)}));
+      if (!(section instanceof HTMLElement)) return false;
+      section.click();
+      return true;
+    })()
+  `);
+  expect(clicked).toBe(true);
+}
+
+async function clickDesktopProtocolTab(
+  desktop: DesktopHarness,
+  label: 'Anthropic' | 'OpenAI',
+): Promise<void> {
+  const clicked = await desktop.eval<boolean>(`
+    (() => {
+      const protocolTabs = Array.from(document.querySelectorAll('[role="tablist"]'))
+        .find((node) => node.getAttribute('aria-label') === 'API protocol');
+      const tab = Array.from(protocolTabs?.querySelectorAll('[role="tab"]') ?? [])
+        .find((node) => node.textContent?.trim() === ${JSON.stringify(label)});
+      if (!(tab instanceof HTMLElement)) return false;
+      tab.click();
+      return true;
+    })()
+  `);
+  expect(clicked).toBe(true);
+}
+
+async function clickDesktopSegmentButton(
+  desktop: DesktopHarness,
+  label: string,
+): Promise<void> {
+  const clicked = await desktop.eval<boolean>(`
+    (() => {
+      const button = Array.from(document.querySelectorAll('[role="dialog"] button'))
+        .find((node) => node.textContent?.trim() === ${JSON.stringify(label)});
+      if (!(button instanceof HTMLElement)) return false;
+      button.click();
+      return true;
+    })()
+  `);
+  expect(clicked).toBe(true);
+}
+
+async function clickDesktopSettingsFooterButton(
+  desktop: DesktopHarness,
+  className: 'ghost' | 'primary',
+): Promise<void> {
+  const clicked = await desktop.eval<boolean>(`
+    (() => {
+      const footerButton = document.querySelector('.modal-foot button.${className}');
+      if (!(footerButton instanceof HTMLElement)) return false;
+      footerButton.click();
+      return true;
+    })()
+  `);
+  expect(clicked).toBe(true);
+}
+
+async function readDesktopSettingsSnapshot(
+  desktop: DesktopHarness,
+): Promise<DesktopSettingsSnapshot> {
+  return await desktop.eval<DesktopSettingsSnapshot>(`
+    (() => {
+      const labelFields = Array.from(document.querySelectorAll('[role="dialog"] label.field'));
+      const getField = (label) => {
+        const field = labelFields.find((node) =>
+          node.querySelector('.field-label')?.textContent?.trim() === label,
+        );
+        if (!field) return null;
+        const control = field.querySelector('input, select, textarea');
+        if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
+          return null;
+        }
+        if (control instanceof HTMLSelectElement) {
+          return control.selectedOptions.item(0)?.textContent?.trim() ?? control.value;
+        }
+        return control.value;
+      };
+      const activeProtocol = Array.from(document.querySelectorAll('[role="tablist"][aria-label="API protocol"] [role="tab"]'))
+        .find((node) => node.getAttribute('aria-selected') === 'true');
+      const protocolText = activeProtocol?.textContent?.trim() ?? null;
+
+      return {
+        baseUrl: getField('Base URL'),
+        dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
+        heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
+        model: getField('Model'),
+        quickFillProvider: getField('Quick fill provider'),
+        selectedProtocol: protocolText === 'OpenAI' || protocolText === 'Anthropic'
+          ? protocolText + ' API'
+          : protocolText,
+      };
+    })()
+  `);
+}
+
+async function readDesktopAppearanceSnapshot(
+  desktop: DesktopHarness,
+): Promise<DesktopAppearanceSnapshot> {
+  return await desktop.eval<DesktopAppearanceSnapshot>(`
+    (() => {
+      const raw = window.localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
+      const config = raw ? JSON.parse(raw) : {};
+      const activeButton = Array.from(document.querySelectorAll('[role="dialog"] button[aria-pressed="true"]'))
+        .find((node) => ['Light', 'Dark', 'System'].includes(node.textContent?.trim() ?? ''));
+
+      return {
+        activeTheme: activeButton?.textContent?.trim() ?? null,
+        dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
+        documentTheme: document.documentElement.getAttribute('data-theme'),
+        savedTheme: typeof config.theme === 'string' ? config.theme : null,
+      };
+    })()
+  `);
 }
 
 async function waitForHealthyDesktop(): Promise<MacInspectResult> {

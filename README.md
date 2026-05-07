@@ -24,6 +24,7 @@
   <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
+  <a href="https://x.com/nexudotio"><img alt="Follow @nexudotio on X" src="https://img.shields.io/badge/follow-%40nexudotio-1DA1F2?style=flat-square&logo=x&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
@@ -220,7 +221,7 @@ Adding a skill takes one folder. Read [`docs/skills-protocol.md`](docs/skills-pr
 
 ### 1 · We don't ship an agent. Yours is good enough.
 
-The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev), `kilo`, [`vibe-acp`](https://github.com/mistralai/mistral-vibe), and `deepseek` on startup. Whichever ones it finds become candidate design engines — driven over stdio with one adapter per CLI, swappable from the model picker. Inspired by [`multica`](https://github.com/multica-ai/multica) and [`cc-switch`](https://github.com/farion1231/cc-switch). No CLI installed? The API mode is the same pipeline minus the spawn — choose Anthropic, OpenAI-compatible, Azure OpenAI, or Google Gemini and the daemon forwards normalized SSE chunks back, with loopback / link-local / RFC1918 destinations rejected at the edge.
+The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev), `kilo`, [`vibe-acp`](https://github.com/mistralai/mistral-vibe), and `deepseek` on startup. Whichever ones it finds become candidate design engines — driven over stdio with one adapter per CLI, swappable from the model picker. Inspired by [`multica`](https://github.com/multica-ai/multica) and [`cc-switch`](https://github.com/farion1231/cc-switch). No CLI installed? The API mode is the same pipeline minus the spawn — choose Anthropic, OpenAI-compatible, Azure OpenAI, or Google Gemini and the daemon forwards normalized SSE chunks back, with loopback / link-local / RFC1918 destinations rejected at the edge.
 
 ### 2 · Skills are files, not plugins.
 
@@ -320,6 +321,8 @@ pnpm tools-dev run web
 # open the web URL printed by tools-dev
 ```
 
+Windows launcher: build `OpenDesign.exe` yourself with the instructions in `tools/launcher/README.md`, or download it from GitHub Releases. Then place it in the repo root and double-click it to run `pnpm install` if needed and start Open Design with `pnpm tools-dev`.
+
 Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optional helpers only; if you use one, run `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` before `pnpm install`.
 
 For desktop/background startup, fixed-port restarts, and media generation dispatcher checks (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`), see [`QUICKSTART.md`](QUICKSTART.md).
@@ -372,26 +375,75 @@ If you ran the repo first and only later installed the packaged Desktop app, the
 
 > **⚠️ Do this in a clean state.** Migration replaces (not merges) the Desktop app's data dir with your repo `.od/`. Both writers must be fully stopped before copying — quit the Desktop app **and** stop the repo dev-server. SQLite-WAL needs to flush cleanly on both sides; if either daemon is still running it can write SQLite/WAL pages or project/artifact files mid-snapshot, leaving the staged copy inconsistent. If the Desktop app already has projects you care about, decide which side is authoritative before continuing — the steps below back up the Desktop's current `data/` to a sibling but do not merge.
 
-To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
+##### Option A: one-shot auto-migration via `OD_LEGACY_DATA_DIR`
+
+Use this when the Desktop app's `data/` is still empty, which is the typical state right after the upgrade that surfaced [#710](https://github.com/nexu-io/open-design/issues/710). Quit the Desktop app first (so its daemon is not holding `app.sqlite`), then re-launch with `OD_LEGACY_DATA_DIR` pointed at your old repo `.od/`. The daemon stages your payload into a sibling tmp directory and only promotes it into `data/` on success; on any failure the staging directory is removed so the next boot retries cleanly.
+
+The daemon refuses, with a visible startup error, when:
+
+- the path in `OD_LEGACY_DATA_DIR` does not contain `app.sqlite` (typo, deleted source, wrong path), or
+- the Desktop's `data/` already contains any of `app.sqlite`, `projects/`, `artifacts/`, `media-config.json`, etc. SQLite/WAL pairs and project trees cannot be safely interleaved, so the daemon refuses to merge instead of silently corrupting either side. If the Desktop has already booted and seeded its own `data/`, use Option B and decide explicitly which side wins.
+
+A `.migrated-from` marker is written on success so subsequent boots no-op.
+
+Quit the Desktop app first, then re-launch with this env set. The launcher must put the variable into the *app process* environment, not just the shell that runs `open` / `xdg-open`.
+
+**macOS** (LaunchServices does not inherit shell env, so use the direct binary):
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" \
+  "/Applications/Open Design.app/Contents/MacOS/Open Design"
+```
+
+If you prefer the Dock launcher, set the variable in `launchctl` first, open the app, then unset it:
+
+```bash
+launchctl setenv OD_LEGACY_DATA_DIR "/path/to/old/repo/.od"
+open "/Applications/Open Design.app"
+# After the migration log line appears:
+launchctl unsetenv OD_LEGACY_DATA_DIR
+```
+
+**Linux** (run the binary directly so the env var actually reaches it):
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" /path/to/open-design
+# (e.g. the AppImage you launched, or the unpacked binary under /opt)
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:OD_LEGACY_DATA_DIR="C:\path\to\old\repo\.od"
+& "$env:LOCALAPPDATA\Programs\Open Design\Open Design.exe"
+```
+
+The daemon log records `[od-migrate] migration complete: copied N entries (...)`. After the first launch you can clear the env variable; the marker prevents re-migration even on subsequent runs.
+
+##### Option B: manual copy
+
+To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app, when Option A is not viable (Desktop already has its own data and you want to replace it explicitly).
+
+**macOS / Linux (bash):**
 
 ```bash
 set -euo pipefail
 # 1. Stop both writers so the source and target are quiescent.
-#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Windows/Linux).
+#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Linux).
 #    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
 # 2. Set REPO and APP_DATA to your actual paths; the example below is macOS + beta.
 REPO="/path/to/open-design"
 APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
 
 # 3. Preflight: see what (if anything) the Desktop app already has.
-ls "$APP_DATA/projects" 2>/dev/null && echo "↑ Desktop already has projects — confirm this is a replace, not a merge."
+ls "$APP_DATA/projects" 2>/dev/null && echo "Desktop already has projects, confirm this is a replace, not a merge."
 
 # 4. Stage into a sibling first, then atomically swap into place. `set -e` plus
 #    the explicit rsync exit check guarantee a non-zero copy aborts before any
 #    `mv` runs, so the Desktop data dir cannot end up half-populated.
 STAGE="${APP_DATA}.staged-$(date +%F-%H%M)"
 mkdir -p "$STAGE"
-rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed — aborting before swap"; exit 1; }
+rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed, aborting before swap"; exit 1; }
 
 # 5. Backup the Desktop's current data, then promote the staged copy.
 mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F-%H%M)"
@@ -400,7 +452,38 @@ mv "$STAGE" "$APP_DATA"
 # 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
 ```
 
-If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` and renaming the `.fresh-baseline-*` directory back into place.
+**Windows (PowerShell):**
+
+```powershell
+$ErrorActionPreference = 'Stop'
+# 1. Stop both writers so the source and target are quiescent.
+#    - Quit the Desktop app (File > Exit).
+#    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
+# 2. Set $Repo and $AppData to your actual paths; the example below is stable channel.
+$Repo    = 'C:\path\to\open-design'
+$AppData = Join-Path $env:APPDATA 'Open Design\namespaces\release-stable-win\data'
+
+# 3. Preflight: see what (if anything) the Desktop app already has.
+if (Test-Path (Join-Path $AppData 'projects')) {
+  Write-Host 'Desktop already has projects, confirm this is a replace, not a merge.'
+}
+
+# 4. Stage into a sibling first. Robocopy /MIR mirrors source to staging, and
+#    its exit codes >= 8 are real errors (0..7 are success/info), so we guard
+#    explicitly before promoting.
+$Stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
+$Stage = "$AppData.staged-$Stamp"
+robocopy "$Repo\.od" $Stage /MIR /XD 'backup-*' | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed (exit $LASTEXITCODE), aborting before swap" }
+
+# 5. Backup the Desktop's current data, then promote the staged copy.
+if (Test-Path $AppData) { Rename-Item $AppData "$AppData.fresh-baseline-$Stamp" }
+Rename-Item $Stage $AppData
+
+# 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
+```
+
+If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` (or `$AppData` on Windows) and renaming the `.fresh-baseline-*` directory back into place.
 
 > **⚠️ Schema migrations are forward-only.** The daemon applies `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` changes on boot; there is no version guard. After migrating, **do not** open the same data dir with an older repo checkout — unsupported columns or behavior mismatches can leave the workspace inconsistent. Back up `app.sqlite*` before the first launch with the new app.
 
@@ -752,7 +835,7 @@ The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -778,7 +861,7 @@ Auto-detected from `PATH` on daemon boot. No config required. Streaming dispatch
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` (prompt as positional arg) |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt sent as RPC `prompt` command) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt sent as RPC `prompt` command) |
 | **Multi-provider BYOK** | n/a | SSE normalization | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini; SSRF-guarded against loopback / link-local / RFC1918 |
 
 Adding a new CLI is one entry in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Streaming format is one of `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (with a per-CLI `eventParser`), `acp-json-rpc`, `pi-rpc`, or `plain`.
@@ -824,6 +907,10 @@ Phased delivery → [`docs/roadmap.md`](docs/roadmap.md).
 
 This is an early implementation — the closed loop (detect → pick skill + design system → chat → parse `<artifact>` → preview → save) runs end-to-end. The prompt stack and skill library are where most of the value lives, and they're stable. The component-level UI is shipping daily.
 
+## Stay in the loop
+
+Follow **[@nexudotio](https://x.com/nexudotio)** on X for release notes, new skills, new design systems, and the occasional behind-the-scenes thread on what's shipping next. Discord is for chat, X is for the milestones — both links are in the badges above.
+
 ## Star us
 
 <p align="center">
@@ -847,7 +934,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-07" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -864,9 +951,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-07" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
   </picture>
 </a>
 

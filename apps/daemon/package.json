@@ -41,7 +41,8 @@
     "chokidar": "^5.0.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

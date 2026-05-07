@@ -364,9 +364,16 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
+  'orbit-general',
+  'orbit-github',
+  'orbit-gmail',
+  'orbit-linear',
+  'orbit-notion',
+  'social-media-dashboard',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
+  'waitlist-page',
 ] as const;
 
 const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
@@ -431,6 +438,7 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'sleek',
   'spacious',
   'storytelling',
+  'totality-festival',
   'tetris',
   'vibrant',
   'vintage',

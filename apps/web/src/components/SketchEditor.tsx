@@ -73,6 +73,13 @@ export function SketchEditor({
   const [size, setSize] = useState(2);
   const drawingRef = useRef<SketchItem | null>(null);
   const [, force] = useState(0);
+  // Text-tool modal. Replaces window.prompt() because Electron 28+
+  // disables that API by default and silently returns null, making
+  // the text tool a no-op in the desktop app. Same root cause as
+  // issue #723 (FileViewer's Save-as-template flow).
+  const [textModalOpen, setTextModalOpen] = useState(false);
+  const [textModalValue, setTextModalValue] = useState('');
+  const textAnchorRef = useRef<{ x: number; y: number } | null>(null);
 
   // Resize canvas to its container while keeping a high DPR for crisp lines.
   useEffect(() => {
@@ -126,13 +133,11 @@ export function SketchEditor({
     const pos = pointerPos(e);
 
     if (tool === 'text') {
-      const text = window.prompt(t('sketch.textPrompt'));
-      if (text) {
-        onItemsChange([
-          ...items,
-          { kind: 'text', x: pos.x, y: pos.y, text, color, size: 16 + size * 4 },
-        ]);
-      }
+      // Stash the click position and open the modal. The actual TextItem is
+      // appended in submitTextModal, once the user confirms.
+      textAnchorRef.current = pos;
+      setTextModalValue('');
+      setTextModalOpen(true);
       return;
     }
 
@@ -187,6 +192,28 @@ export function SketchEditor({
   }
   function handleClear() {
     onItemsChange([]);
+  }
+
+  function submitTextModal() {
+    const text = textModalValue.trim();
+    const anchor = textAnchorRef.current;
+    if (!text || !anchor) {
+      cancelTextModal();
+      return;
+    }
+    onItemsChange([
+      ...items,
+      { kind: 'text', x: anchor.x, y: anchor.y, text, color, size: 16 + size * 4 },
+    ]);
+    setTextModalOpen(false);
+    setTextModalValue('');
+    textAnchorRef.current = null;
+  }
+
+  function cancelTextModal() {
+    setTextModalOpen(false);
+    setTextModalValue('');
+    textAnchorRef.current = null;
   }
 
   return (
@@ -250,6 +277,46 @@ export function SketchEditor({
           style={{ touchAction: 'none' }}
         />
       </div>
+      {textModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <h2>{t('sketch.textModalTitle')}</h2>
+            </div>
+            <label>
+              <span>{t('sketch.textPrompt')}</span>
+              <input
+                type="text"
+                value={textModalValue}
+                autoFocus
+                onChange={(e) => setTextModalValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && textModalValue.trim()) {
+                    e.preventDefault();
+                    submitTextModal();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelTextModal();
+                  }
+                }}
+              />
+            </label>
+            <div className="modal-foot">
+              <button type="button" className="ghost" onClick={cancelTextModal}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={!textModalValue.trim()}
+                onClick={submitTextModal}
+              >
+                {t('common.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
