@@ -342,26 +342,35 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
   ]);
 });
 
-// Copilot does NOT treat `-` as a stdin sentinel — it reads it as a
-// literal one-character prompt. The prompt must be passed directly as the
-// value of `-p`. Pin the argv shape so the regression can't drift back.
-// Also pin the order — Copilot expects `-p <prompt>` before any other
-// flag, including model / add-dir extensions.
-test('copilot args pass the prompt directly as the -p value (not via stdin sentinel)', () => {
+// Copilot reads the prompt from stdin when `-p` is omitted entirely
+// (upstream copilot-cli issue #1046, confirmed working as
+// `echo "..." | copilot --model <id>`). The earlier `-p -` attempt
+// was a dead end because Copilot takes `-` as a literal one-character
+// prompt; omitting `-p` is a separate code path that does delegate to
+// stdin under a non-TTY pipe. Pin `promptViaStdin: true` and the
+// stdin-only argv shape so a future refactor can't silently bring
+// `-p <prompt>` back and reintroduce the Windows ENAMETOOLONG
+// regression (issue #705).
+test('copilot delivers the prompt via stdin (no -p, no prompt body in argv)', () => {
   const prompt = 'design a landing page';
   const baseArgs = copilot.buildArgs(prompt, [], [], {});
-  assert.equal(baseArgs[0], '-p');
-  assert.equal(baseArgs[1], prompt);
+  assert.equal(copilot.promptViaStdin, true);
+  assert.ok(
+    !baseArgs.includes('-p'),
+    'copilot argv must not include -p; the prompt rides stdin',
+  );
+  assert.ok(
+    !baseArgs.includes(prompt),
+    'copilot argv must not include the prompt body; it rides stdin',
+  );
   assert.deepEqual(baseArgs, [
-    '-p',
-    prompt,
     '--allow-all-tools',
     '--output-format',
     'json',
   ]);
 });
 
-test('copilot args keep `-p <prompt>` at the front when model and extra dirs are added', () => {
+test('copilot args append model and extra dirs after the base flags without reintroducing -p', () => {
   const prompt = 'design a landing page';
   const args = copilot.buildArgs(
     prompt,
@@ -369,11 +378,9 @@ test('copilot args keep `-p <prompt>` at the front when model and extra dirs are
     ['/tmp/od-skills', '/tmp/od-design-systems'],
     { model: 'claude-sonnet-4.6' },
   );
-  assert.equal(args[0], '-p');
-  assert.equal(args[1], prompt);
+  assert.ok(!args.includes('-p'));
+  assert.ok(!args.includes(prompt));
   assert.deepEqual(args, [
-    '-p',
-    prompt,
     '--allow-all-tools',
     '--output-format',
     'json',
@@ -386,7 +393,7 @@ test('copilot args keep `-p <prompt>` at the front when model and extra dirs are
   ]);
 });
 
-test('copilot drops empty / non-string entries from extraAllowedDirs without breaking the `-p <prompt>` lead', () => {
+test('copilot drops empty / non-string entries from extraAllowedDirs without reintroducing -p', () => {
   const prompt = 'design a landing page';
   const args = copilot.buildArgs(
     prompt,
@@ -394,12 +401,36 @@ test('copilot drops empty / non-string entries from extraAllowedDirs without bre
     ['', null, '/tmp/od-skills', undefined],
     {},
   );
-  assert.equal(args[0], '-p');
-  assert.equal(args[1], prompt);
+  assert.ok(!args.includes('-p'));
   // Only the one valid path survives.
   const addDirIndex = args.indexOf('--add-dir');
   assert.equal(args[addDirIndex + 1], '/tmp/od-skills');
   assert.equal(args.filter((a) => a === '--add-dir').length, 1);
+});
+
+// Mirror of the Claude Code 200_000-char synthetic-prompt guard: even
+// when the composed prompt is large enough to blow the Windows
+// CreateProcess command-line cap (~32 KB direct, ~8 KB through a `.cmd`
+// shim), no argv entry must ever carry the prompt body. This is the
+// structural assertion that the issue #705 fix can't quietly regress.
+test('copilot flags promptViaStdin and never embeds the prompt in argv', () => {
+  assert.equal(copilot.promptViaStdin, true);
+
+  const longPrompt = 'x'.repeat(200_000);
+  const args = copilot.buildArgs(longPrompt, [], [], {});
+
+  assert.ok(Array.isArray(args), 'copilot.buildArgs must return argv');
+  assert.equal(
+    args.includes(longPrompt),
+    false,
+    'prompt must not appear in argv',
+  );
+  for (const arg of args) {
+    assert.ok(
+      typeof arg === 'string' && arg.length < 1000,
+      `no argv entry should carry the prompt body (saw length ${arg.length})`,
+    );
+  }
 });
 
 test('kiro args use acp subcommand for json-rpc streaming', () => {
