@@ -4231,7 +4231,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const payload = {
       model,
       max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 16384,
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 65535,
       messages: Array.isArray(messages) ? messages : [],
       stream: true,
     };
@@ -4336,7 +4336,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       model,
       messages: payloadMessages,
       max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 65535,
       stream: true,
     };
 
@@ -4435,7 +4435,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const payload = {
       messages: payloadMessages,
       max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 65535,
       stream: true,
     };
 
@@ -4529,7 +4529,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       contents,
       generationConfig: {
         maxOutputTokens:
-          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 65535,
       },
     };
     if (typeof systemPrompt === 'string' && systemPrompt) {

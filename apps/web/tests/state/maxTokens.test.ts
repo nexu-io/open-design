@@ -27,7 +27,7 @@ describe('modelMaxTokensDefault', () => {
 
   it('returns FALLBACK_MAX_TOKENS for unknown ids', () => {
     expect(modelMaxTokensDefault('definitely-not-a-real-model-x9z')).toBe(FALLBACK_MAX_TOKENS);
-    expect(FALLBACK_MAX_TOKENS).toBe(8192);
+    expect(FALLBACK_MAX_TOKENS).toBe(65535);
   });
 });
 

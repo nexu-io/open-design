@@ -10,9 +10,9 @@ import litellmData from './litellm-models.json';
 //
 // Anything LiteLLM doesn't track (or where its value is wrong for our
 // usage) goes in OVERRIDES; unknown models fall through to FALLBACK.
-// 16384 is enough for ~10 tool calls with Chinese content in a single turn.
-// 8192 was too low — complex TodoWrite payloads would truncate mid-JSON.
-export const FALLBACK_MAX_TOKENS = 16384;
+// 65535 gives ample headroom for long multi-turn conversations with
+// tool calls, avoiding mid-stream truncation on complex workflows.
+export const FALLBACK_MAX_TOKENS = 65535;
 
 // Bounds the user can express via the Settings override. Source of truth
 // for both the UI input attributes and runtime validation in
