@@ -68,7 +68,7 @@ export function DesignFilesPanel({
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number | 'all'>(30);
 
-  const effectivePageSize = pageSize === 'all' ? sortedFiles.length : pageSize;
+  const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
   const safePage = Math.min(page, totalPages - 1);
   const pageFiles = sortedFiles.slice(safePage * effectivePageSize, (safePage + 1) * effectivePageSize);
@@ -80,7 +80,7 @@ export function DesignFilesPanel({
   }, [pageSize]);
 
   useEffect(() => {
-    setPage((p) => Math.min(p, totalPages - 1));
+    if (Number.isFinite(totalPages)) setPage((p) => Math.min(p, totalPages - 1));
   }, [totalPages]);
 
   useEffect(() => {
@@ -469,7 +469,7 @@ export function DesignFilesPanel({
                               >
                                 <span className="df-row-name-wrap">
                                   <span className="df-row-name">{f.name}</span>
-                                  <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
+                                  <span className="df-row-sub">{formatSize(f.size)}</span>
                                 </span>
                               </button>
                             </td>
@@ -752,6 +752,12 @@ function kindLabel(kind: ProjectFileKind, t: TranslateFn): string {
   if (kind === 'presentation') return t('designFiles.kindPresentation');
   if (kind === 'spreadsheet') return t('designFiles.kindSpreadsheet');
   return t('designFiles.kindBinary');
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function relativeTime(ts: number, t: TranslateFn): string {
