@@ -582,8 +582,6 @@
     "deepseek-chat": 8192,
     "deepseek-reasoner": 65536,
     "deepseek-v3-2-251201": 32768,
-    "deepseek-v4-flash": 384000,
-    "deepseek-v4-pro": 384000,
     "deepseek.v3-v1:0": 81920,
     "deepseek.v3.2": 163840,
     "deepseek/deepseek-chat": 8192,
