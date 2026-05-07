@@ -360,7 +360,7 @@ code {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-  max-height: 31px;
+  max-height: 32px;
   overflow: hidden;
 }
 .app-project-title .title {
