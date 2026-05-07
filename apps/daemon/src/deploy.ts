@@ -4,19 +4,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { hash as blake3Hash } from 'blake3-wasm';
 import { readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
-export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
-export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
 
 const VERCEL_API = 'https://api.vercel.com';
-const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
-export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES = 100;
-export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES = 75 * 1024 * 1024;
-export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
 
@@ -29,14 +22,14 @@ export class DeployError extends Error {
   }
 }
 
-export function deployConfigPath(providerId = VERCEL_PROVIDER_ID) {
+export function deployConfigPath() {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  return path.join(base, 'vercel.json');
 }
 
 export async function readVercelConfig() {
   try {
-    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(), 'utf8');
     const parsed = JSON.parse(raw);
     return {
       token: typeof parsed.token === 'string' ? parsed.token : '',
@@ -45,21 +38,6 @@ export async function readVercelConfig() {
     };
   } catch (err) {
     if (err && err.code === 'ENOENT') return { token: '', teamId: '', teamSlug: '' };
-    throw err;
-  }
-}
-
-export async function readCloudflarePagesConfig() {
-  try {
-    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
-      accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
-      projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
-    };
-  } catch (err) {
-    if (err && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '' };
     throw err;
   }
 }
@@ -76,39 +54,15 @@ export async function writeVercelConfig(input) {
     teamSlug:
       typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
   };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
-  return publicDeployConfig(next);
-}
-
-export async function writeCloudflarePagesConfig(input) {
-  const current = await readCloudflarePagesConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const next = {
-    token:
-      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
-    // Legacy installs may already have a saved Cloudflare Pages projectName.
-    // New writes intentionally stop treating it as user configuration: the
-    // deploy route derives a Pages project name from the current OD project,
-    // mirroring Vercel's automatic `od-${projectId}` deployment name.
-    projectName: '',
-  };
-  if (!next.token) throw new DeployError('Cloudflare API token is required.', 400);
-  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
-  return publicCloudflarePagesConfig(next);
-}
-
-async function writeDeployConfigFile(file, config) {
+  const file = deployConfigPath();
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   try {
     fs.chmodSync(file, 0o600);
   } catch {
     // Best effort on filesystems that do not support chmod.
   }
+  return publicDeployConfig(next);
 }
 
 export function publicDeployConfig(config) {
@@ -122,50 +76,13 @@ export function publicDeployConfig(config) {
   };
 }
 
-export function publicCloudflarePagesConfig(config) {
-  return {
-    providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    configured: Boolean(config?.token && config?.accountId),
-    tokenMask: config?.token ? SAVED_CLOUDFLARE_TOKEN_MASK : '',
-    teamId: '',
-    teamSlug: '',
-    accountId: config?.accountId || '',
-    projectName: config?.projectName || '',
-    target: 'preview',
-  };
-}
-
-export async function readDeployConfig(providerId = VERCEL_PROVIDER_ID) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
-  return readVercelConfig();
-}
-
-export async function writeDeployConfig(providerId = VERCEL_PROVIDER_ID, input = {}) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
-  return writeVercelConfig(input);
-}
-
-export function publicDeployConfigForProvider(providerId = VERCEL_PROVIDER_ID, config = {}) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
-  return publicDeployConfig(config);
-}
-
-export function isDeployProviderId(value) {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
-}
-
-// Walk the entry HTML and any referenced CSS, producing the full set of
-// files that would be uploaded for a deploy along with the lists of
-// missing and invalid references. Does not throw on a partial result so
-// callers can distinguish between "ready to ship" and "ready except for
-// these specific issues" without parsing an error string.
-export async function buildDeployFilePlan(projectsRoot, projectId, entryName, options = {}) {
+export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
   const entryPath = validateProjectPath(entryName);
   if (!/\.html?$/i.test(entryPath)) {
     throw new DeployError('Only HTML files can be deployed.', 400);
   }
 
-  const entry = await readProjectFile(projectsRoot, projectId, entryPath, options.metadata);
+  const entry = await readProjectFile(projectsRoot, projectId, entryPath);
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
   const deployHtml = injectDeployHookScript(
@@ -188,13 +105,6 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     base: entryBase,
   }));
 
-  // Inline `<style>` blocks and `style="..."` attributes can reference
-  // background images, custom fonts, and stylesheets via @import. They
-  // are resolved relative to the entry HTML, same as src/href.
-  for (const ref of extractInlineCssReferences(html)) {
-    pending.push({ ref, base: entryBase });
-  }
-
   for (const manifestRef of entry.artifactManifest?.supportingFiles ?? []) {
     pending.push({ ref: manifestRef, base: entryBase });
   }
@@ -215,7 +125,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
 
     let projectFile;
     try {
-      projectFile = await readProjectFile(projectsRoot, projectId, safePath, options.metadata);
+      projectFile = await readProjectFile(projectsRoot, projectId, safePath);
     } catch (err) {
       if (err && err.code === 'ENOENT') {
         missing.push(safePath);
@@ -240,27 +150,17 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     }
   }
 
-  return {
-    entryPath,
-    html,
-    files: Array.from(files.values()),
-    missing,
-    invalid,
-  };
-}
-
-export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
-  const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
-  if (plan.missing.length || plan.invalid.length) {
+  if (missing.length || invalid.length) {
     const parts = [];
-    if (plan.missing.length) parts.push(`missing: ${plan.missing.join(', ')}`);
-    if (plan.invalid.length) parts.push(`invalid: ${plan.invalid.join(', ')}`);
+    if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
+    if (invalid.length) parts.push(`invalid: ${invalid.join(', ')}`);
     throw new DeployError(`Could not deploy referenced files (${parts.join('; ')}).`, 400, {
-      missing: plan.missing,
-      invalid: plan.invalid,
+      missing,
+      invalid,
     });
   }
-  return plan.files;
+
+  return Array.from(files.values());
 }
 
 export async function deployToVercel({ config, files, projectId }) {
@@ -298,10 +198,7 @@ export async function deployToVercel({ config, files, projectId }) {
   }
 
   const candidates = deploymentUrlCandidates(ready, created);
-  const link = await waitForReachableDeploymentUrl(
-    candidates.length ? candidates : [initialUrl],
-    { providerLabel: 'Vercel' },
-  );
+  const link = await waitForReachableDeploymentUrl(candidates.length ? candidates : [initialUrl]);
 
   return {
     providerId: VERCEL_PROVIDER_ID,
@@ -312,229 +209,6 @@ export async function deployToVercel({ config, files, projectId }) {
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
   };
-}
-
-export async function deployToCloudflarePages({ config, files }) {
-  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
-  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
-
-  await ensureCloudflarePagesProject(config);
-
-  const uploadToken = await getCloudflarePagesUploadToken(config);
-  await uploadCloudflarePagesAssets(uploadToken, files);
-
-  const form = new FormData();
-  const manifest = {};
-  for (const file of files) {
-    manifest[`/${file.file}`] = cloudflarePagesAssetHash(file);
-  }
-  form.append('manifest', JSON.stringify(manifest));
-  form.append('branch', 'main');
-
-  const deployResp = await fetch(cloudflarePagesProjectUrl(config, 'deployments'), {
-    method: 'POST',
-    headers: cloudflareHeaders(config),
-    body: form,
-  });
-  const deployed = await readCloudflareJson(deployResp);
-  if (!deployResp.ok || deployed?.success === false) {
-    throw cloudflareError(deployed, deployResp.status, 'Cloudflare Pages deployment failed.');
-  }
-
-  const deployment = deployed?.result ?? deployed;
-  const productionUrl = cloudflarePagesProductionUrl(config);
-  const link = await waitForReachableDeploymentUrl(
-    productionUrl ? [productionUrl] : [deployment?.url],
-    { providerLabel: 'Cloudflare Pages' },
-  );
-
-  return {
-    providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    url: productionUrl || link.url || deploymentUrl(deployment),
-    deploymentId: deployment?.id,
-    target: 'preview',
-    status: link.status,
-    statusMessage: link.statusMessage,
-    reachableAt: link.reachableAt,
-  };
-}
-
-async function ensureCloudflarePagesProject(config) {
-  const getResp = await fetch(cloudflarePagesProjectUrl(config), {
-    headers: cloudflareHeaders(config),
-  });
-  const found = await readCloudflareJson(getResp);
-  if (getResp.ok && found?.success !== false) return found?.result ?? found;
-  if (getResp.status !== 404) {
-    throw cloudflareError(found, getResp.status, 'Cloudflare Pages project lookup failed.');
-  }
-
-  const createResp = await fetch(cloudflareAccountPagesProjectsUrl(config), {
-    method: 'POST',
-    headers: cloudflareHeaders(config, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      name: config.projectName,
-      production_branch: 'main',
-    }),
-  });
-  const created = await readCloudflareJson(createResp);
-  if (!createResp.ok || created?.success === false) {
-    if (isCloudflarePagesProjectAlreadyExists(created)) {
-      const retryResp = await fetch(cloudflarePagesProjectUrl(config), {
-        headers: cloudflareHeaders(config),
-      });
-      const retryFound = await readCloudflareJson(retryResp);
-      if (retryResp.ok && retryFound?.success !== false) {
-        return retryFound?.result ?? retryFound;
-      }
-    }
-    throw cloudflareError(created, createResp.status, 'Cloudflare Pages project creation failed.');
-  }
-  return created?.result ?? created;
-}
-
-function isCloudflarePagesProjectAlreadyExists(body) {
-  const text = JSON.stringify(body || {}).toLowerCase();
-  return (
-    text.includes('already exists') ||
-    text.includes('already exist') ||
-    text.includes('project exists') ||
-    text.includes('project name is taken') ||
-    text.includes('duplicate')
-  );
-}
-
-async function getCloudflarePagesUploadToken(config) {
-  const tokenResp = await fetch(cloudflarePagesProjectUrl(config, 'upload-token'), {
-    headers: cloudflareHeaders(config),
-  });
-  const tokenBody = await readCloudflareJson(tokenResp);
-  const jwt = tokenBody?.result?.jwt || tokenBody?.jwt;
-  if (!tokenResp.ok || tokenBody?.success === false || !jwt) {
-    throw cloudflareError(tokenBody, tokenResp.status, 'Cloudflare Pages upload token request failed.');
-  }
-  return jwt;
-}
-
-async function uploadCloudflarePagesAssets(uploadToken, files) {
-  const uniqueFiles = new Map();
-  for (const file of files) {
-    const data = Buffer.from(file.data);
-    if (data.length > CLOUDFLARE_PAGES_ASSET_MAX_BYTES) {
-      throw new DeployError(
-        `Cloudflare Pages assets must be ${formatMib(CLOUDFLARE_PAGES_ASSET_MAX_BYTES)} or smaller: ${file.file} is ${formatMib(data.length)}.`,
-        400,
-      );
-    }
-    const hash = cloudflarePagesAssetHash({ ...file, data });
-    if (!uniqueFiles.has(hash)) {
-      uniqueFiles.set(hash, {
-        hash,
-        data,
-        contentType: file.contentType || 'application/octet-stream',
-      });
-    }
-  }
-  const hashes = Array.from(uniqueFiles.keys());
-  const missing = await cloudflarePagesMissingAssetHashes(uploadToken, hashes);
-  if (missing.length > 0) {
-    const missingFiles = missing.map((hash) => {
-      const file = uniqueFiles.get(hash);
-      if (!file) throw new DeployError(`Cloudflare reported an unknown asset hash: ${hash}`, 502);
-      return {
-        ...file,
-        hash,
-      };
-    });
-
-    for (const batch of chunkCloudflarePagesAssetUploads(missingFiles)) {
-      const payload = batch.map((file) => ({
-        key: file.hash,
-        value: file.data.toString('base64'),
-        metadata: {
-          contentType: file.contentType,
-        },
-        base64: true,
-      }));
-      const uploadResp = await fetch(`${CLOUDFLARE_API}/pages/assets/upload`, {
-        method: 'POST',
-        headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify(payload),
-      });
-      const uploaded = await readCloudflareJson(uploadResp);
-      if (!uploadResp.ok || uploaded?.success === false) {
-        throw cloudflareError(uploaded, uploadResp.status, 'Cloudflare Pages asset upload failed.');
-      }
-    }
-  }
-
-  const upsertResp = await fetch(`${CLOUDFLARE_API}/pages/assets/upsert-hashes`, {
-    method: 'POST',
-    headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ hashes }),
-  });
-  const upserted = await readCloudflareJson(upsertResp);
-  if (!upsertResp.ok || upserted?.success === false) {
-    throw cloudflareError(upserted, upsertResp.status, 'Cloudflare Pages asset hash update failed.');
-  }
-}
-
-export function chunkCloudflarePagesAssetUploads(
-  files,
-  {
-    maxFiles = CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES,
-    maxBytes = CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES,
-  } = {},
-) {
-  const chunks = [];
-  let current = [];
-  let currentBytes = 2; // JSON array brackets.
-
-  for (const file of files) {
-    const nextBytes = estimateCloudflarePagesAssetUploadPayloadBytes(file);
-    const wouldExceedCount = current.length >= maxFiles;
-    const wouldExceedBytes = current.length > 0 && currentBytes + nextBytes > maxBytes;
-    if (wouldExceedCount || wouldExceedBytes) {
-      chunks.push(current);
-      current = [];
-      currentBytes = 2;
-    }
-    current.push(file);
-    currentBytes += nextBytes;
-  }
-
-  if (current.length > 0) chunks.push(current);
-  return chunks;
-}
-
-function estimateCloudflarePagesAssetUploadPayloadBytes(file) {
-  const data = Buffer.from(file?.data ?? '');
-  const encodedBytes = Math.ceil(data.length / 3) * 4;
-  const contentTypeBytes = Buffer.byteLength(file?.contentType || 'application/octet-stream');
-  const hashBytes = Buffer.byteLength(file?.hash || '');
-  // Conservative JSON/object overhead for `key`, `value`, `metadata`, and commas.
-  return encodedBytes + contentTypeBytes + hashBytes + 128;
-}
-
-async function cloudflarePagesMissingAssetHashes(uploadToken, hashes) {
-  const resp = await fetch(`${CLOUDFLARE_API}/pages/assets/check-missing`, {
-    method: 'POST',
-    headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ hashes }),
-  });
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json?.success === false) {
-    throw cloudflareError(json, resp.status, 'Cloudflare Pages asset lookup failed.');
-  }
-  const result = json?.result ?? json;
-  return Array.isArray(result) ? result : Array.isArray(result?.hashes) ? result.hashes : hashes;
-}
-
-export function cloudflarePagesAssetHash(file) {
-  const data = Buffer.from(file.data);
-  const extension = path.posix.extname(file.file).slice(1);
-  return blake3Hash(`${data.toString('base64')}${extension}`).toString('hex').slice(0, 32);
 }
 
 export function extractHtmlReferences(html) {
@@ -558,69 +232,14 @@ export function extractHtmlReferences(html) {
   return refs;
 }
 
-// Character classes scope the lazy match so unclosed url(((( or
-// `@import "foo` cannot trigger O(n^2) regex backtracking on
-// attacker-controlled CSS. The tradeoff is that quoted urls
-// containing literal `)` characters must be percent-encoded; CSS
-// authors are already expected to do this in practice.
-const CSS_URL_REGEX = /url\(\s*(['"]?)([^)]*?)\1\s*\)/gi;
-const CSS_IMPORT_REGEX = /@import\s+(?:url\(\s*)?(['"])([^'"]*?)\1/gi;
-
 export function extractCssReferences(css) {
   const refs = [];
-  const urlRe = new RegExp(CSS_URL_REGEX.source, CSS_URL_REGEX.flags);
+  const urlRe = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
   let match;
   while ((match = urlRe.exec(css))) refs.push(match[2]);
-  const importRe = new RegExp(CSS_IMPORT_REGEX.source, CSS_IMPORT_REGEX.flags);
+  const importRe = /@import\s+(?:url\(\s*)?(['"])(.*?)\1/gi;
   while ((match = importRe.exec(css))) refs.push(match[2]);
   return refs;
-}
-
-// Collect url() / @import references from inline `<style>` blocks and
-// `style="..."` attributes. These bypass the external-stylesheet path
-// (link rel=stylesheet -> .css file -> extractCssReferences) but still
-// pull in real assets, e.g. background images and @font-face sources.
-//
-// Style-like text that lives inside `<script>` string literals or HTML
-// comments is intentionally skipped, mirroring how extractHtmlReferences
-// treats those raw-text regions.
-export function extractInlineCssReferences(html) {
-  const source = String(html);
-  const refs = [];
-  const skipRanges = htmlRawTextRanges(source);
-
-  const styleBlockRe = /<style\b[^<>]*>([\s\S]*?)<\/style\s*>/gi;
-  let block;
-  while ((block = styleBlockRe.exec(source))) {
-    if (isOffsetInRanges(block.index, skipRanges)) continue;
-    refs.push(...extractCssReferences(block[1]));
-  }
-
-  for (const tag of parseHtmlTags(source)) {
-    const attrs = parseHtmlAttributes(tag.attrs);
-    const style = attrs.get('style');
-    if (style) refs.push(...extractCssReferences(style));
-  }
-
-  return refs;
-}
-
-// Rewrite url() / @import references inside a CSS string so that paths
-// resolved relative to `baseDir` survive the entry-HTML being moved to
-// the deploy root. Mirrors `rewriteHtmlReference` for HTML attributes.
-// Uses the same hardened character classes as `extractCssReferences` so
-// extract and rewrite see the same set of references.
-export function rewriteCssReferences(css, baseDir) {
-  return String(css)
-    .replace(CSS_URL_REGEX, (match, quote, value) => {
-      if (!value) return match;
-      const rewritten = rewriteHtmlReference(value, baseDir);
-      return `url(${quote}${rewritten}${quote})`;
-    })
-    .replace(/(@import\s+)(['"])([^'"]*?)\2/gi, (_full, prefix, quote, value) => {
-      const rewritten = rewriteHtmlReference(value, baseDir);
-      return `${prefix}${quote}${rewritten}${quote}`;
-    });
 }
 
 export function resolveReferencedPath(raw, baseDir) {
@@ -637,221 +256,13 @@ export function resolveReferencedPath(raw, baseDir) {
 }
 
 export function rewriteEntryHtmlReferences(html, baseDir) {
-  const source = String(html);
-  // Compute raw-text ranges against the input first so the style-block
-  // pre-pass can skip `<style>...</style>` text that lives inside a
-  // `<script>` string literal or an HTML comment. Without this gate, a
-  // template like `const tpl = '<style>...url("foo")...</style>'` would
-  // get mutated, changing runtime JS behavior.
-  const inputRawTextRanges = htmlRawTextRanges(source);
-  const styleRewritten = source.replace(
-    /(<style\b[^<>]*>)([\s\S]*?)(<\/style\s*>)/gi,
-    (full, openTag, content, closeTag, offset) => {
-      if (isOffsetInRanges(offset, inputRawTextRanges)) return full;
-      return `${openTag}${rewriteCssReferences(content, baseDir)}${closeTag}`;
-    },
-  );
-  // Re-derive raw-text ranges against the post-style HTML: rewriting can
-  // shift offsets, and the tag-attribute pass below skips raw-text
-  // regions by absolute offset. Two scans are intentional, deploy is
-  // not a hot path and the cost is linear in document size.
-  const rawTextRanges = htmlRawTextRanges(styleRewritten);
-  return styleRewritten.replace(/<([A-Za-z][A-Za-z0-9:-]*)([^<>]*?)>/g, (tag, rawName, rawAttrs, offset) => {
+  const rawTextRanges = htmlRawTextRanges(html);
+  return String(html).replace(/<([A-Za-z][A-Za-z0-9:-]*)([^<>]*?)>/g, (tag, rawName, rawAttrs, offset) => {
     if (isOffsetInRanges(offset, rawTextRanges)) return tag;
     const tagName = String(rawName).toLowerCase();
     const attrs = parseHtmlAttributes(rawAttrs);
     return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir)}>`;
   });
-}
-
-// Soft thresholds chosen against Vercel's v13 deployment shape and
-// typical first-paint budgets. Per-asset is a usability hint, not a
-// hard cap; bundle is a margin against Vercel's 100MB request body
-// (each file is base64-encoded which adds ~33%, so 75MiB pre-encoded
-// is the safer ceiling).
-export const DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES = 4 * 1024 * 1024;
-export const DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES = 75 * 1024 * 1024;
-export const DEPLOY_PREFLIGHT_LARGE_HTML_BYTES = 1 * 1024 * 1024;
-
-function isExternalUrl(value) {
-  if (typeof value !== 'string') return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) return true;
-  if (trimmed.startsWith('//')) return true;
-  return false;
-}
-
-function pushUnique(list, warning) {
-  const key = `${warning.code}:${warning.path ?? ''}:${warning.url ?? ''}`;
-  if (list.seen.has(key)) return;
-  list.seen.add(key);
-  list.warnings.push(warning);
-}
-
-// Walk the entry HTML once to gather signals that affect deployment
-// quality without touching the network. Returns a structured warning
-// list the UI can render verbatim.
-//
-// `entryPath` is used as the warning `path` for HTML-level findings so
-// the UI can deep-link from a warning into the source file the author
-// is actually editing. `files` carries deploy-relative paths (the entry
-// HTML is always renamed to `index.html`) so per-asset warnings live in
-// the deploy namespace.
-/**
- * @param {{
- *   entryPath: string,
- *   html: string,
- *   files: any[],
- *   missing?: any[],
- *   invalid?: any[]
- * }} input
- * @returns {{ warnings: any[], totalBytes: number, totalFiles: number }}
- */
-export function analyzeDeployPlan(input: {
-  entryPath: string;
-  html: string;
-  files: any[];
-  missing?: any[];
-  invalid?: any[];
-}): { warnings: any[]; totalBytes: number; totalFiles: number } {
-  const { entryPath, html, files } = input;
-  const missing = input.missing ?? [];
-  const invalid = input.invalid ?? [];
-  const acc: { warnings: any[]; seen: Set<string> } = { warnings: [], seen: new Set() };
-
-  for (const ref of missing) {
-    pushUnique(acc, {
-      code: 'broken-reference',
-      path: ref,
-      message: `Referenced file is missing on disk: ${ref}`,
-    });
-  }
-  for (const ref of invalid) {
-    pushUnique(acc, {
-      code: 'invalid-reference',
-      path: ref,
-      message: `Reference is not a valid project path: ${ref}`,
-    });
-  }
-
-  let totalBytes = 0;
-  let entrySize = 0;
-  for (const f of files || []) {
-    const size = f.data?.length ?? 0;
-    totalBytes += size;
-    if (f.file === 'index.html') entrySize = size;
-    if (size > DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES && f.file !== 'index.html') {
-      pushUnique(acc, {
-        code: 'large-asset',
-        path: f.file,
-        size,
-        message: `Asset is ${formatMib(size)}, larger than ${formatMib(DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES)}; consider compressing or hosting on a CDN.`,
-      });
-    }
-  }
-
-  if (entrySize > DEPLOY_PREFLIGHT_LARGE_HTML_BYTES) {
-    pushUnique(acc, {
-      // Report against the source entry path so the UI can deep-link
-      // back to the file the author edits, not the deploy-renamed
-      // `index.html` which does not exist in the project tree.
-      code: 'large-html',
-      path: entryPath,
-      size: entrySize,
-      message: `Entry HTML is ${formatMib(entrySize)}; large HTML inflates time-to-first-paint.`,
-    });
-  }
-  if (totalBytes > DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES) {
-    pushUnique(acc, {
-      code: 'large-bundle',
-      size: totalBytes,
-      message: `Bundle is ${formatMib(totalBytes)}; Vercel rejects deploy bodies above ~100MB after base64 encoding.`,
-    });
-  }
-
-  const source = String(html ?? '');
-  // Anchor to the document prolog so a `<!doctype html>` substring that
-  // happens to live inside a `<script>` template literal or a comment
-  // is not treated as a real declaration. Per HTML5, the prolog may
-  // begin with an optional BOM, then any number of HTML comments and
-  // whitespace, then the doctype. Built via `new RegExp` so the BOM
-  // appears as an explicit U+FEFF escape rather than a literal
-  // zero-width character in the regex source.
-  if (!new RegExp('^\\uFEFF?\\s*(?:<!--[\\s\\S]*?-->\\s*)*<!doctype\\s+html', 'i').test(source)) {
-    pushUnique(acc, {
-      code: 'no-doctype',
-      path: entryPath,
-      message: 'Entry HTML is missing `<!DOCTYPE html>`; browsers may render in quirks mode.',
-    });
-  }
-
-  let hasViewport = false;
-  for (const tag of parseHtmlTags(source)) {
-    const attrs = parseHtmlAttributes(tag.attrs);
-    if (
-      tag.name === 'meta' &&
-      String(attrs.get('name') || '').toLowerCase() === 'viewport'
-    ) {
-      hasViewport = true;
-    }
-    if (tag.name === 'script') {
-      const src = attrs.get('src');
-      if (isExternalUrl(src)) {
-        pushUnique(acc, {
-          code: 'external-script',
-          path: entryPath,
-          url: src,
-          message: `External script will not be vendored into the deploy: ${src}`,
-        });
-      }
-    }
-    if (tag.name === 'link') {
-      const rel = String(attrs.get('rel') || '').toLowerCase();
-      const href = attrs.get('href');
-      if (rel.split(/\s+/).includes('stylesheet') && isExternalUrl(href)) {
-        pushUnique(acc, {
-          code: 'external-stylesheet',
-          path: entryPath,
-          url: href,
-          message: `External stylesheet will not be vendored into the deploy: ${href}`,
-        });
-      }
-    }
-  }
-  if (!hasViewport) {
-    pushUnique(acc, {
-      code: 'no-viewport',
-      path: entryPath,
-      message: 'Entry HTML is missing `<meta name="viewport">`; mobile rendering will be off.',
-    });
-  }
-
-  return { warnings: acc.warnings, totalBytes, totalFiles: (files || []).length };
-}
-
-function formatMib(bytes) {
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-}
-
-// One-shot orchestrator: build the file plan, run the analyzer, and
-// return the typed preflight payload exposed by the daemon.
-export async function prepareDeployPreflight(projectsRoot, projectId, entryName, options = {}) {
-  const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
-  const { warnings, totalBytes, totalFiles } = analyzeDeployPlan(plan);
-  return {
-    providerId: options.providerId || VERCEL_PROVIDER_ID,
-    entry: plan.entryPath,
-    files: plan.files.map((f) => ({
-      path: f.file,
-      size: f.data?.length ?? 0,
-      mime: f.contentType || 'application/octet-stream',
-      sourcePath: f.sourcePath,
-    })),
-    totalFiles,
-    totalBytes,
-    warnings,
-  };
 }
 
 export function injectDeployHookScript(html, scriptUrl) {
@@ -961,22 +372,15 @@ function rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir) {
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
     (full, rawName, equals, rawValue, doubleQuoted, singleQuoted, unquoted) => {
       const name = String(rawName).toLowerCase();
-      if (
-        name !== 'src' &&
-        name !== 'poster' &&
-        name !== 'srcset' &&
-        name !== 'href' &&
-        name !== 'style'
-      ) {
+      if (name !== 'src' && name !== 'poster' && name !== 'srcset' && name !== 'href') {
         return full;
       }
       if (name === 'href' && !shouldRewriteHref) return full;
 
       const value = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
-      let nextValue;
-      if (name === 'srcset') nextValue = rewriteSrcset(value, baseDir);
-      else if (name === 'style') nextValue = rewriteCssReferences(value, baseDir);
-      else nextValue = rewriteHtmlReference(value, baseDir);
+      const nextValue = name === 'srcset'
+        ? rewriteSrcset(value, baseDir)
+        : rewriteHtmlReference(value, baseDir);
       if (doubleQuoted !== undefined) return `${rawName}${equals}"${nextValue}"`;
       if (singleQuoted !== undefined) return `${rawName}${equals}'${nextValue}'`;
       return `${rawName}${equals}${nextValue}`;
@@ -1035,7 +439,7 @@ async function pollVercelDeployment(config, id) {
 
 export async function waitForReachableDeploymentUrl(
   urls,
-  { timeoutMs = 60_000, intervalMs = 2_000, providerLabel = 'Deployment provider' } = {},
+  { timeoutMs = 60_000, intervalMs = 2_000 } = {},
 ) {
   const candidates = [...new Set((urls || []).map(normalizeDeploymentUrl).filter(Boolean))];
   const fallbackUrl = candidates[0] || '';
@@ -1043,7 +447,7 @@ export async function waitForReachableDeploymentUrl(
     return {
       status: 'link-delayed',
       url: '',
-      statusMessage: `${providerLabel} did not return a public deployment URL.`,
+      statusMessage: 'Vercel did not return a public deployment URL.',
     };
   }
 
@@ -1077,7 +481,7 @@ export async function waitForReachableDeploymentUrl(
     status: 'link-delayed',
     url: fallbackUrl,
     statusMessage:
-      lastMessage || `${providerLabel} returned a deployment URL, but it is not reachable yet.`,
+      lastMessage || 'Vercel returned a deployment URL, but it is not reachable yet.',
   };
 }
 
@@ -1180,65 +584,12 @@ function vercelTeamQuery(config) {
   return s ? `?${s}` : '';
 }
 
-function cloudflareAccountPagesProjectsUrl(config) {
-  return `${CLOUDFLARE_API}/accounts/${encodeURIComponent(config.accountId)}/pages/projects`;
-}
-
-function cloudflarePagesProjectUrl(config, suffix = '') {
-  const base = `${cloudflareAccountPagesProjectsUrl(config)}/${encodeURIComponent(config.projectName)}`;
-  return suffix ? `${base}/${suffix}` : base;
-}
-
-function cloudflarePagesProductionUrl(config) {
-  return config?.projectName ? `https://${config.projectName}.pages.dev` : '';
-}
-
-export function cloudflarePagesProjectNameForProject(projectId, projectName = '') {
-  const idSuffix = safeDnsLabel(projectId).slice(0, 12) || randomUUID().slice(0, 8);
-  const nameBase = safeDnsLabel(projectName) || 'project';
-  const fixedLength = 'od--'.length + idSuffix.length;
-  const baseLength = Math.max(1, 63 - fixedLength);
-  return safeDnsLabel(`od-${nameBase.slice(0, baseLength)}-${idSuffix}`);
-}
-
-function cloudflareHeaders(config, extra = {}) {
-  return {
-    Authorization: `Bearer ${config.token}`,
-    ...extra,
-  };
-}
-
-function cloudflareAssetHeaders(token, extra = {}) {
-  return {
-    Authorization: `Bearer ${token}`,
-    ...extra,
-  };
-}
-
-async function readCloudflareJson(resp) {
-  try {
-    return await resp.json();
-  } catch {
-    return {};
-  }
-}
-
 async function readVercelJson(resp) {
   try {
     return await resp.json();
   } catch {
     return {};
   }
-}
-
-function cloudflareError(json, status, fallback) {
-  const message =
-    json?.errors?.find?.((err) => err?.message)?.message ||
-    json?.messages?.find?.((item) => item?.message)?.message ||
-    json?.message ||
-    fallback ||
-    `Cloudflare request failed (${status}).`;
-  return new DeployError(message, status, json);
 }
 
 function vercelError(json, status) {
@@ -1257,20 +608,9 @@ function deploymentUrl(json) {
 }
 
 function safeVercelProjectName(raw) {
-  return safeProjectLabel(raw, 80) || `od-${randomUUID().slice(0, 8)}`;
-}
-
-function safeDnsLabel(raw) {
-  return safeProjectLabel(raw, 63);
-}
-
-function safeProjectLabel(raw, maxLength) {
   return String(raw)
-    .normalize('NFKD')
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, maxLength)
-    .replace(/-+$/g, '');
+    .slice(0, 80) || `od-${randomUUID().slice(0, 8)}`;
 }

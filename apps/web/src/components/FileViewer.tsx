@@ -1,254 +1,45 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
-  fetchLiveArtifact,
-  fetchLiveArtifactCode,
-  fetchLiveArtifactRefreshes,
   checkDeploymentLink,
-  CLOUDFLARE_PAGES_PROVIDER_ID,
-  DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
   fetchDeployConfig,
   fetchProjectDeployments,
   fetchProjectFilePreview,
   fetchProjectFileText,
-  liveArtifactPreviewUrl,
   projectFileUrl,
   projectRawUrl,
-  LiveArtifactRefreshError,
-  refreshLiveArtifact,
   updateDeployConfig,
-  type WebDeployConfigResponse,
-  type WebDeploymentInfo,
-  type WebDeployProjectFileResponse,
-  type WebDeployProviderId,
-  type WebUpdateDeployConfigRequest,
-  writeProjectTextFile,
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   exportAsHtml,
   exportAsJsx,
-  exportAsMd,
   exportAsPdf,
-  exportProjectAsZip,
+  exportAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
-  openSandboxedPreviewInNewTab,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
-import type {
-  LiveArtifactEventItem,
-  LiveArtifact,
-  LiveArtifactRefreshLogEntry,
-  LiveArtifactViewerTab,
-  LiveArtifactWorkspaceEntry,
-  ProjectFile,
-} from '../types';
+import type { DeployConfigResponse, DeployProjectFileResponse, ProjectFile } from '../types';
 import { Icon } from './Icon';
 import {
-  buildBoardCommentAttachments,
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
-  selectionKindLabel,
   targetFromSnapshot,
   type PreviewCommentSnapshot,
 } from '../comments';
-import type {
-  ChatCommentAttachment,
-  PreviewComment,
-  PreviewCommentMember,
-  PreviewCommentTarget,
-} from '../types';
-import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
-import {
-  applyManualEditPatch,
-  readManualEditAttributes,
-  readManualEditFields,
-  readManualEditOuterHtml,
-  readManualEditStyles,
-} from '../edit-mode/source-patches';
-import type { ManualEditBridgeMessage, ManualEditHistoryEntry, ManualEditPatch, ManualEditTarget } from '../edit-mode/types';
+import type { PreviewComment, PreviewCommentTarget } from '../types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
-type BoardTool = 'inspect' | 'pod';
-type StrokePoint = { x: number; y: number };
-type DeployProviderOption = {
-  id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
-  tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
-  tokenPlaceholderKey:
-    | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
-  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
-  tokenLabelKey:
-    | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
-  accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
-  accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
-};
-const MAX_BRIDGE_COORDINATE = 1_000_000;
 
-// The five basic style facets the inspect panel exposes. Kept narrow on
-// purpose — open-slide's design tokens panel only edits global tokens, so
-// the per-element delta is small + obvious + cheap to read back from
-// getComputedStyle on the iframe side.
-type InspectStyleSnapshot = {
-  color?: string;
-  backgroundColor?: string;
-  fontSize?: string;
-  fontWeight?: string;
-  paddingTop?: string;
-  paddingRight?: string;
-  paddingBottom?: string;
-  paddingLeft?: string;
-  borderRadius?: string;
-  textAlign?: string;
-  fontFamily?: string;
-  lineHeight?: string;
-};
-
-type InspectTarget = {
-  elementId: string;
-  selector: string;
-  label: string;
-  text: string;
-  style: InspectStyleSnapshot;
-};
-
-const MAX_CACHED_SLIDE_STATES = 64;
 const htmlPreviewSlideState = new Map<string, SlideState>();
-const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
-const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
-const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
-const MARKDOWN_COPY_TOAST_CLASS = 'markdown-code-toast';
-
-const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
-  {
-    id: DEFAULT_DEPLOY_PROVIDER_ID,
-    labelKey: 'fileViewer.vercelProvider',
-    tokenLink: 'https://vercel.com/account/settings/tokens',
-    tokenLinkKey: 'fileViewer.vercelTokenGetLink',
-    tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
-    tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
-    tokenRequiredKey: 'fileViewer.vercelTokenRequired',
-    previewHintKey: 'fileViewer.vercelPreviewOnly',
-    tokenLabelKey: 'fileViewer.vercelToken',
-  },
-  {
-    id: CLOUDFLARE_PAGES_PROVIDER_ID,
-    labelKey: 'fileViewer.cloudflarePagesProvider',
-    tokenLink: 'https://dash.cloudflare.com/profile/api-tokens',
-    tokenLinkKey: 'fileViewer.cloudflareApiTokenGetLink',
-    tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
-    tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
-    tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
-    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
-    tokenLabelKey: 'fileViewer.cloudflareApiToken',
-    accountIdLabelKey: 'fileViewer.cloudflareAccountId',
-    accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
-  },
-];
-
-function getDeployProviderOption(providerId: WebDeployProviderId): DeployProviderOption {
-  return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0]!;
-}
-
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const priorFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      return document.execCommand('copy');
-    } catch {
-      return false;
-    } finally {
-      document.body.removeChild(ta);
-      if (priorFocus?.isConnected) {
-        try {
-          priorFocus.focus({ preventScroll: true });
-        } catch {
-          priorFocus.focus();
-        }
-      }
-    }
-  }
-}
-
-function decorateMarkdownCodeBlocks(html: string): string {
-  let blockIndex = 0;
-  return html.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/g, (_match, attrs: string, content: string) => {
-    const blockId = String(blockIndex++);
-    return `<div class="markdown-code-block" ${MARKDOWN_CODE_BLOCK_ATTR}="${blockId}"><pre${attrs}>${content}</pre></div>`;
-  });
-}
-
-function setMarkdownCodeBlockCopiedState(block: HTMLElement, copied: boolean, t: TranslateFn) {
-  const button = block.querySelector<HTMLButtonElement>(`.${MARKDOWN_COPY_BUTTON_CLASS}`);
-  if (!button) return;
-  const label = copied ? t('fileViewer.copied') : t('fileViewer.copy');
-  button.textContent = label;
-  button.setAttribute('aria-label', label);
-  button.title = t('fileViewer.copyTitle');
-
-  const existingToast = block.querySelector(`.${MARKDOWN_COPY_TOAST_CLASS}`);
-  if (copied) {
-    if (existingToast instanceof HTMLElement) {
-      existingToast.textContent = t('fileViewer.copied');
-      return;
-    }
-    const toast = document.createElement('span');
-    toast.className = MARKDOWN_COPY_TOAST_CLASS;
-    toast.setAttribute('role', 'status');
-    toast.setAttribute('aria-live', 'polite');
-    toast.textContent = t('fileViewer.copied');
-    button.insertAdjacentElement('afterend', toast);
-    return;
-  }
-
-  existingToast?.remove();
-}
-
-function ensureMarkdownCodeBlockControls(root: HTMLElement, t: TranslateFn) {
-  for (const block of root.querySelectorAll<HTMLElement>(`[${MARKDOWN_CODE_BLOCK_ATTR}]`)) {
-    let button = block.querySelector<HTMLButtonElement>(`.${MARKDOWN_COPY_BUTTON_CLASS}`);
-    if (!button) {
-      button = document.createElement('button');
-      button.type = 'button';
-      button.className = MARKDOWN_COPY_BUTTON_CLASS;
-      const blockId = block.getAttribute(MARKDOWN_CODE_BLOCK_ATTR) ?? '';
-      button.setAttribute(MARKDOWN_COPY_BLOCK_ATTR, blockId);
-      block.prepend(button);
-    }
-    setMarkdownCodeBlockCopiedState(block, false, t);
-  }
-}
-
-function setSlideStateCached(key: string, state: SlideState) {
-  htmlPreviewSlideState.set(key, state);
-  if (htmlPreviewSlideState.size > MAX_CACHED_SLIDE_STATES) {
-    const oldest = htmlPreviewSlideState.keys().next().value;
-    if (oldest != null) htmlPreviewSlideState.delete(oldest);
-  }
-}
 
 interface Props {
   projectId: string;
@@ -260,8 +51,6 @@ interface Props {
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
-  onFileSaved?: () => Promise<void> | void;
 }
 
 export function FileViewer({
@@ -274,8 +63,6 @@ export function FileViewer({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
-  onSendBoardCommentAttachments,
-  onFileSaved,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -294,8 +81,6 @@ export function FileViewer({
         previewComments={previewComments}
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
-        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-        onFileSaved={onFileSaved}
       />
     );
   }
@@ -334,909 +119,6 @@ export function FileViewer({
   return <BinaryViewer projectId={projectId} file={file} />;
 }
 
-export function LiveArtifactViewer({
-  projectId,
-  liveArtifact,
-  liveArtifactEvents = [],
-  onRefreshArtifacts,
-}: {
-  projectId: string;
-  liveArtifact: LiveArtifactWorkspaceEntry;
-  liveArtifactEvents?: LiveArtifactEventItem[];
-  onRefreshArtifacts?: () => Promise<void> | void;
-}) {
-  const t = useT();
-  const [mode, setMode] = useState<LiveArtifactViewerTab>('preview');
-  const [detail, setDetail] = useState<LiveArtifact | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [zoom, setZoom] = useState(100);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [refreshSuccess, setRefreshSuccess] = useState<string | null>(null);
-  const [refreshEvents, setRefreshEvents] = useState<LiveArtifactRefreshEvent[]>([]);
-  const [refreshHistory, setRefreshHistory] = useState<LiveArtifactRefreshLogEntry[]>([]);
-
-  useEffect(() => {
-    setRefreshError(null);
-    setRefreshSuccess(null);
-    setRefreshEvents([]);
-  }, [projectId, liveArtifact.artifactId]);
-
-  useEffect(() => {
-    if (!refreshSuccess) return;
-    const timeout = window.setTimeout(() => setRefreshSuccess(null), 6000);
-    return () => window.clearTimeout(timeout);
-  }, [refreshSuccess]);
-
-  const processedLiveArtifactEventIdRef = useRef(0);
-
-  useEffect(() => {
-    const pendingEvents = liveArtifactEvents.filter((item) => item.id > processedLiveArtifactEventIdRef.current);
-    if (pendingEvents.length === 0) return;
-    processedLiveArtifactEventIdRef.current = pendingEvents[pendingEvents.length - 1]?.id ?? processedLiveArtifactEventIdRef.current;
-
-    for (const { event: liveArtifactEvent } of pendingEvents) {
-    if (
-      (liveArtifactEvent.kind !== 'live_artifact' && liveArtifactEvent.kind !== 'live_artifact_refresh') ||
-      liveArtifactEvent.projectId !== projectId ||
-      liveArtifactEvent.artifactId !== liveArtifact.artifactId
-    ) {
-      continue;
-    }
-
-    if (liveArtifactEvent.kind === 'live_artifact') {
-      setRefreshError(null);
-      if (liveArtifactEvent.action === 'deleted') {
-        setRefreshSuccess(`Live artifact deleted: ${liveArtifactEvent.title}`);
-        continue;
-      }
-      setRefreshSuccess(
-        liveArtifactEvent.action === 'created'
-          ? `Live artifact created: ${liveArtifactEvent.title}`
-          : `Live artifact updated: ${liveArtifactEvent.title}`,
-      );
-      void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
-        if (next) setDetail(next);
-      });
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
-      setReloadKey((n) => n + 1);
-      continue;
-    }
-
-    if (liveArtifactEvent.phase === 'started') {
-      setRefreshing(true);
-      setRefreshError(null);
-      setRefreshSuccess(null);
-      setRefreshEvents((prev) => appendRefreshEvent(prev, { phase: 'started' }));
-      continue;
-    }
-
-    if (liveArtifactEvent.phase === 'failed') {
-      setRefreshing(false);
-      setRefreshError(liveArtifactEvent.error ?? t('liveArtifact.refresh.genericFailure'));
-      setRefreshEvents((prev) =>
-        appendRefreshEvent(prev, {
-          phase: 'failed',
-          error: liveArtifactEvent.error ?? undefined,
-        }),
-      );
-      void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
-        if (next) setDetail(next);
-      });
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
-      continue;
-    }
-
-    setRefreshing(false);
-    setRefreshError(null);
-    setRefreshEvents((prev) =>
-      appendRefreshEvent(prev, {
-        phase: 'succeeded',
-        refreshedSourceCount: liveArtifactEvent.refreshedSourceCount ?? 0,
-      }),
-    );
-    if ((liveArtifactEvent.refreshedSourceCount ?? 0) > 0) {
-      setRefreshSuccess(t('liveArtifact.refresh.successOne'));
-    } else {
-      setRefreshError(t('liveArtifact.refresh.noSourceTitle'));
-    }
-    void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
-      if (next) setDetail(next);
-    });
-    void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
-    setReloadKey((n) => n + 1);
-    }
-  }, [liveArtifactEvents, liveArtifact.artifactId, projectId, t]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setDetail(null);
-    void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
-      if (cancelled) return;
-      setDetail(next);
-      setLoading(false);
-    });
-    void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then((next) => {
-      if (!cancelled) setRefreshHistory(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, liveArtifact.artifactId, liveArtifact.updatedAt]);
-
-  const previewUrl = useMemo(
-    () => `${liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}&v=${reloadKey}`,
-    [projectId, liveArtifact.artifactId, reloadKey],
-  );
-  const previewScale = zoom / 100;
-
-  function bumpZoom(delta: number) {
-    setZoom((z) => Math.max(25, Math.min(200, z + delta)));
-  }
-
-  async function handleRefresh() {
-    if (refreshing) return;
-    setRefreshing(true);
-    setRefreshError(null);
-    setRefreshSuccess(null);
-    setRefreshEvents((prev) => appendRefreshEvent(prev, { phase: 'started' }));
-    try {
-      const result = await refreshLiveArtifact(projectId, liveArtifact.artifactId);
-      setDetail(result.artifact);
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
-      setReloadKey((n) => n + 1);
-      setRefreshEvents((prev) =>
-        appendRefreshEvent(prev, {
-          phase: 'succeeded',
-          refreshedSourceCount: result.refresh.refreshedSourceCount,
-        }),
-      );
-      if (result.refresh.refreshedSourceCount > 0) {
-        setRefreshSuccess(t('liveArtifact.refresh.successOne'));
-      } else {
-        setRefreshError(t('liveArtifact.refresh.noSourceTitle'));
-      }
-      await onRefreshArtifacts?.();
-    } catch (error) {
-      const message = refreshErrorMessage(error, t);
-      setRefreshError(message);
-      setRefreshEvents((prev) => appendRefreshEvent(prev, { phase: 'failed', error: message }));
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  const dataPayload = detail?.document?.dataJson ?? null;
-  const currentRefreshStatus = detail?.refreshStatus ?? liveArtifact.refreshStatus;
-  const isRunning = refreshing || currentRefreshStatus === 'running';
-
-  return (
-    <div className="viewer html-viewer live-artifact-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => setReloadKey((n) => n + 1)}
-            title={t('fileViewer.reload')}
-            aria-label={t('fileViewer.reloadAria')}
-          >
-            <Icon name="reload" size={14} />
-          </button>
-        </div>
-        <div className="viewer-toolbar-actions">
-          <div className="viewer-tabs">
-            {LIVE_ARTIFACT_VIEWER_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`viewer-tab ${mode === tab.id ? 'active' : ''}`}
-                onClick={() => setMode(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div
-            className="viewer-preview-controls"
-            data-active={mode === 'preview' ? 'true' : 'false'}
-            aria-hidden={mode === 'preview' ? undefined : true}
-          >
-            <span className="viewer-divider" aria-hidden />
-            <button
-              type="button"
-              className="icon-only"
-              onClick={() => bumpZoom(-25)}
-              title={t('fileViewer.zoomOut')}
-              aria-label={t('fileViewer.zoomOut')}
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <Icon name="minus" size={14} />
-            </button>
-            <button
-              type="button"
-              className="viewer-action viewer-zoom-level"
-              onClick={() => setZoom(100)}
-              title={t('fileViewer.resetZoom')}
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-            </button>
-            <button
-              type="button"
-              className="icon-only"
-              onClick={() => bumpZoom(25)}
-              title={t('fileViewer.zoomIn')}
-              aria-label={t('fileViewer.zoomIn')}
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <Icon name="plus" size={14} />
-            </button>
-            <span className="viewer-divider" aria-hidden />
-            <a
-              className="ghost-link"
-              href={liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}
-              target="_blank"
-              rel="noreferrer noopener"
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              {t('fileViewer.open')}
-            </a>
-          </div>
-          <span className="viewer-divider" aria-hidden />
-          <button
-            type="button"
-            className="viewer-action primary"
-            data-running={isRunning ? 'true' : 'false'}
-            onClick={() => void handleRefresh()}
-            disabled={isRunning}
-            aria-busy={isRunning}
-            aria-label={isRunning ? t('liveArtifact.refresh.running') : t('liveArtifact.refresh.button')}
-            title={
-              isRunning
-                ? t('liveArtifact.refresh.running')
-                : t('liveArtifact.refresh.buttonTitle')
-            }
-          >
-            <Icon name={isRunning ? 'spinner' : 'reload'} size={13} />
-            <span>{isRunning ? t('liveArtifact.refresh.running') : t('liveArtifact.refresh.button')}</span>
-          </button>
-        </div>
-      </div>
-      <div className="viewer-body">
-        {refreshError ? (
-          <LiveArtifactRefreshNotice
-            tone="error"
-            message={refreshError}
-            action={t('liveArtifact.refresh.failureAction')}
-          />
-        ) : refreshSuccess ? (
-          <LiveArtifactRefreshNotice
-            tone="success"
-            message={refreshSuccess}
-            action={t('liveArtifact.refresh.successAction')}
-            onDismiss={() => setRefreshSuccess(null)}
-            dismissLabel={t('common.close')}
-          />
-        ) : isRunning ? (
-          <LiveArtifactRefreshNotice
-            tone="running"
-            message={t('liveArtifact.refresh.runningMessage')}
-            action={t('liveArtifact.refresh.runningAction')}
-          />
-        ) : currentRefreshStatus === 'failed' ? (
-          <LiveArtifactRefreshNotice
-            tone="error"
-            message={t('liveArtifact.refresh.previousFailure', { message: t('liveArtifact.refresh.genericFailure') })}
-            action={t('liveArtifact.refresh.failureAction')}
-          />
-        ) : null}
-        {mode === 'preview' ? (
-          <div
-            style={{
-              width: `${100 / previewScale}%`,
-              height: `${100 / previewScale}%`,
-              transform: `scale(${previewScale})`,
-              transformOrigin: '0 0',
-            }}
-          >
-            <iframe
-              data-testid="live-artifact-preview-frame"
-              title={liveArtifact.title}
-              sandbox="allow-scripts"
-              src={previewUrl}
-            />
-          </div>
-        ) : loading ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : mode === 'code' ? (
-          <LiveArtifactCodePanel
-            projectId={projectId}
-            artifactId={liveArtifact.artifactId}
-            reloadKey={reloadKey}
-          />
-        ) : mode === 'data' ? (
-          <JsonPanel value={dataPayload} emptyLabel="No data.json cache available." />
-        ) : (
-          <LiveArtifactRefreshHistoryPanel
-            liveArtifact={detail}
-            fallbackRefreshStatus={liveArtifact.refreshStatus}
-            fallbackLastRefreshedAt={liveArtifact.lastRefreshedAt}
-            isRunning={isRunning}
-            sessionEvents={refreshEvents}
-            persistedEvents={refreshHistory}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LiveArtifactRefreshNotice({
-  tone,
-  message,
-  action,
-  onDismiss,
-  dismissLabel,
-}: {
-  tone: 'running' | 'success' | 'error';
-  message: string;
-  action: string;
-  onDismiss?: () => void;
-  dismissLabel?: string;
-}) {
-  return (
-    <div
-      className={`live-artifact-refresh-notice ${tone}`}
-      role={tone === 'error' ? 'alert' : 'status'}
-      aria-label={`${message} ${action}`}
-    >
-      <span className="live-artifact-refresh-notice-copy">
-        <strong>{message}</strong>
-        <span>{action}</span>
-      </span>
-      {onDismiss ? (
-        <button type="button" className="icon-only" onClick={onDismiss} aria-label={dismissLabel}>
-          ×
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function refreshErrorMessage(error: unknown, t: TranslateFn): string {
-  if (error instanceof LiveArtifactRefreshError && error.status === 0) {
-    return t('liveArtifact.refresh.networkFailure');
-  }
-  if (error instanceof LiveArtifactRefreshError && error.code === 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE') {
-    return t('liveArtifact.refresh.noSourceTitle');
-  }
-  if (error instanceof Error && error.message.length > 0) return error.message;
-  return t('liveArtifact.refresh.genericFailure');
-}
-
-const LIVE_ARTIFACT_VIEWER_TABS: Array<{ id: LiveArtifactViewerTab; label: string }> = [
-  { id: 'preview', label: 'Preview' },
-  { id: 'code', label: 'Code' },
-  { id: 'data', label: 'Data' },
-  { id: 'refresh-history', label: 'Refresh history' },
-];
-
-type LiveArtifactCodeVariant = 'template' | 'rendered-source';
-
-function LiveArtifactCodePanel({ projectId, artifactId, reloadKey }: { projectId: string; artifactId: string; reloadKey: number }) {
-  const [variant, setVariant] = useState<LiveArtifactCodeVariant>('template');
-  const [code, setCode] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setFailed(false);
-    setCode(null);
-    void fetchLiveArtifactCode(projectId, artifactId, variant).then((next) => {
-      if (cancelled) return;
-      setCode(next);
-      setFailed(next == null);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [artifactId, projectId, reloadKey, variant]);
-
-  return (
-    <div className="live-artifact-code-panel">
-      <div className="live-artifact-code-header">
-        <div className="live-artifact-code-copy">
-          <strong>{variant === 'template' ? 'Template HTML' : 'Rendered HTML'}</strong>
-          <span>
-            {variant === 'template'
-              ? 'The editable template used with data.json to generate the preview.'
-              : 'The generated index.html currently loaded by Preview.'}
-          </span>
-        </div>
-        <div className="viewer-tabs live-artifact-code-tabs" aria-label="Code variant">
-          <button
-            type="button"
-            className={`viewer-tab ${variant === 'template' ? 'active' : ''}`}
-            onClick={() => setVariant('template')}
-          >
-            Template
-          </button>
-          <button
-            type="button"
-            className={`viewer-tab ${variant === 'rendered-source' ? 'active' : ''}`}
-            onClick={() => setVariant('rendered-source')}
-          >
-            Rendered
-          </button>
-        </div>
-      </div>
-      {loading ? (
-        <div className="viewer-empty">Loading code…</div>
-      ) : failed ? (
-        <div className="viewer-empty">Code is not available yet.</div>
-      ) : code && code.trim().length > 0 ? (
-        <pre className="viewer-source">{code}</pre>
-      ) : (
-        <div className="viewer-empty">This code file is empty.</div>
-      )}
-    </div>
-  );
-}
-
-function JsonPanel({ value, emptyLabel }: { value: unknown; emptyLabel: string }) {
-  if (value == null) return <div className="viewer-empty">{emptyLabel}</div>;
-  return <pre className="viewer-source">{JSON.stringify(value, null, 2)}</pre>;
-}
-
-function liveArtifactMetadataPayload(liveArtifact: LiveArtifact): unknown {
-  return {
-    artifact: {
-      id: liveArtifact.id,
-      title: liveArtifact.title,
-      slug: liveArtifact.slug,
-      status: liveArtifact.status,
-      pinned: liveArtifact.pinned,
-      preview: liveArtifact.preview,
-      refreshStatus: liveArtifact.refreshStatus,
-      createdAt: liveArtifact.createdAt,
-      updatedAt: liveArtifact.updatedAt,
-      lastRefreshedAt: liveArtifact.lastRefreshedAt,
-    },
-    document: liveArtifact.document
-      ? {
-          format: liveArtifact.document.format,
-          templatePath: liveArtifact.document.templatePath,
-          generatedPreviewPath: liveArtifact.document.generatedPreviewPath,
-          dataPath: liveArtifact.document.dataPath,
-          dataSchemaJson: liveArtifact.document.dataSchemaJson,
-          sourceJson: liveArtifact.document.sourceJson,
-        }
-      : null,
-  };
-}
-
-function liveArtifactProvenancePayload(liveArtifact: LiveArtifact): unknown {
-  return {
-    documentSource: liveArtifact.document?.sourceJson ?? null,
-  };
-}
-
-function liveArtifactRefreshPayload(liveArtifact: LiveArtifact): unknown {
-  return {
-    refreshStatus: liveArtifact.refreshStatus,
-    lastRefreshedAt: liveArtifact.lastRefreshedAt ?? null,
-  };
-}
-
-type LiveArtifactRefreshStatus = LiveArtifact['refreshStatus'];
-
-interface LiveArtifactRefreshEvent {
-  id: number;
-  phase: 'started' | 'succeeded' | 'failed';
-  at: number;
-  durationMs?: number;
-  refreshedSourceCount?: number;
-  error?: string;
-}
-
-let refreshEventSequence = 0;
-
-function appendRefreshEvent(
-  prev: LiveArtifactRefreshEvent[],
-  next: Omit<LiveArtifactRefreshEvent, 'id' | 'at' | 'durationMs'>,
-): LiveArtifactRefreshEvent[] {
-  const at = Date.now();
-  refreshEventSequence += 1;
-  const event: LiveArtifactRefreshEvent = { ...next, id: refreshEventSequence, at };
-  if (next.phase !== 'started') {
-    // Pair with the most recent 'started' to compute duration.
-    for (let i = prev.length - 1; i >= 0; i -= 1) {
-      const candidate = prev[i];
-      if (candidate && candidate.phase === 'started') {
-        event.durationMs = Math.max(0, at - candidate.at);
-        break;
-      }
-    }
-  }
-  // Cap at 25 entries to keep the panel lightweight.
-  const MAX = 25;
-  const combined = [...prev, event];
-  return combined.length > MAX ? combined.slice(combined.length - MAX) : combined;
-}
-
-function formatAbsoluteDateTime(iso: string | number | undefined): string | null {
-  if (iso === undefined || iso === null) return null;
-  const date = typeof iso === 'number' ? new Date(iso) : new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  try {
-    return date.toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return date.toISOString();
-  }
-}
-
-function formatRelativeTime(iso: string | number | undefined, now = Date.now()): string | null {
-  if (iso === undefined || iso === null) return null;
-  const ms = typeof iso === 'number' ? iso : new Date(iso).getTime();
-  if (Number.isNaN(ms)) return null;
-  const deltaSec = Math.round((ms - now) / 1000);
-  const abs = Math.abs(deltaSec);
-  const suffix = deltaSec <= 0 ? ' ago' : ' from now';
-  if (abs < 5) return 'just now';
-  if (abs < 60) return `${abs}s${suffix}`;
-  if (abs < 3600) return `${Math.round(abs / 60)}m${suffix}`;
-  if (abs < 86400) return `${Math.round(abs / 3600)}h${suffix}`;
-  if (abs < 86400 * 30) return `${Math.round(abs / 86400)}d${suffix}`;
-  if (abs < 86400 * 365) return `${Math.round(abs / (86400 * 30))}mo${suffix}`;
-  return `${Math.round(abs / (86400 * 365))}y${suffix}`;
-}
-
-function formatDurationMs(ms: number | undefined): string | null {
-  if (ms === undefined || ms === null || Number.isNaN(ms)) return null;
-  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = Math.round((ms % 60_000) / 1000);
-  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
-}
-
-interface RefreshStatusDescriptor {
-  label: string;
-  tone: 'neutral' | 'running' | 'success' | 'warning' | 'error';
-  description: string;
-}
-
-function describeRefreshStatus(status: LiveArtifactRefreshStatus): RefreshStatusDescriptor {
-  switch (status) {
-    case 'running':
-      return {
-        label: 'Refreshing',
-        tone: 'running',
-        description: 'A refresh run is currently in progress.',
-      };
-    case 'succeeded':
-      return {
-        label: 'Up to date',
-        tone: 'success',
-        description: 'The last refresh finished successfully.',
-      };
-    case 'failed':
-      return {
-        label: 'Refresh failed',
-        tone: 'error',
-        description: 'The last refresh attempt did not complete successfully.',
-      };
-    case 'idle':
-      return {
-        label: 'Ready to refresh',
-        tone: 'neutral',
-        description: 'Refreshable sources are configured but no run is in progress.',
-      };
-    case 'never':
-    default:
-      return {
-        label: 'Not refreshable',
-        tone: 'warning',
-        description: 'This live artifact has no refresh source yet.',
-      };
-  }
-}
-
-function describeEventPhase(
-  event: LiveArtifactRefreshEvent,
-): { label: string; tone: 'running' | 'success' | 'error' } {
-  if (event.phase === 'started') return { label: 'Started', tone: 'running' };
-  if (event.phase === 'succeeded') return { label: 'Succeeded', tone: 'success' };
-  return { label: 'Failed', tone: 'error' };
-}
-
-export function LiveArtifactRefreshHistoryPanel({
-  liveArtifact,
-  fallbackRefreshStatus,
-  fallbackLastRefreshedAt,
-  isRunning,
-  sessionEvents,
-  persistedEvents = [],
-}: {
-  liveArtifact: LiveArtifact | null;
-  fallbackRefreshStatus: LiveArtifactRefreshStatus;
-  fallbackLastRefreshedAt?: string;
-  isRunning: boolean;
-  sessionEvents: LiveArtifactRefreshEvent[];
-  persistedEvents?: LiveArtifactRefreshLogEntry[];
-}) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    // Keep relative timestamps fresh; 30s cadence is enough for "x minutes ago" feel.
-    const id = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const status: LiveArtifactRefreshStatus = isRunning
-    ? 'running'
-    : liveArtifact?.refreshStatus ?? fallbackRefreshStatus;
-  const descriptor = describeRefreshStatus(status);
-  const lastRefreshedAt = liveArtifact?.lastRefreshedAt ?? fallbackLastRefreshedAt;
-  const createdAt = liveArtifact?.createdAt;
-  const updatedAt = liveArtifact?.updatedAt;
-  const documentSource = liveArtifact?.document?.sourceJson ?? null;
-  const reversedEvents = [...sessionEvents].reverse();
-  const reversedPersistedEvents = [...persistedEvents].reverse().slice(0, 25);
-  const rawDebugPayload = liveArtifact
-    ? {
-        refresh: liveArtifactRefreshPayload(liveArtifact),
-        metadata: liveArtifactMetadataPayload(liveArtifact),
-        provenance: liveArtifactProvenancePayload(liveArtifact),
-      }
-    : null;
-
-  return (
-    <div className="live-artifact-refresh-panel">
-      <section className="live-artifact-refresh-hero">
-        <div className="live-artifact-refresh-hero-main">
-          <span
-            className={`live-artifact-badge refresh-status tone-${descriptor.tone}`}
-            data-testid="live-artifact-refresh-status-badge"
-          >
-            {descriptor.label}
-          </span>
-          <p className="live-artifact-refresh-hero-desc">{descriptor.description}</p>
-        </div>
-        <div className="live-artifact-refresh-hero-meta">
-          <div className="live-artifact-refresh-hero-metric">
-            <span className="live-artifact-refresh-label">Last refreshed</span>
-            {lastRefreshedAt ? (
-              <>
-                <span className="live-artifact-refresh-value">
-                  {formatRelativeTime(lastRefreshedAt, now) ?? '—'}
-                </span>
-                <span
-                  className="live-artifact-refresh-sub"
-                  title={formatAbsoluteDateTime(lastRefreshedAt) ?? undefined}
-                >
-                  {formatAbsoluteDateTime(lastRefreshedAt) ?? ''}
-                </span>
-              </>
-            ) : (
-              <span className="live-artifact-refresh-value muted">Never</span>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="live-artifact-refresh-facts">
-        <LiveArtifactRefreshFact
-          label="Created"
-          iso={createdAt}
-          emptyLabel="Unknown"
-          now={now}
-        />
-        <LiveArtifactRefreshFact
-          label="Last updated"
-          iso={updatedAt}
-          emptyLabel="Unknown"
-          now={now}
-        />
-      </section>
-
-      <section className="live-artifact-refresh-section">
-        <header className="live-artifact-refresh-section-header">
-          <h4>Persisted refresh history</h4>
-          <span className="live-artifact-refresh-hint">
-            Entries loaded from refreshes.jsonl
-          </span>
-        </header>
-        {reversedPersistedEvents.length === 0 ? (
-          <div className="live-artifact-refresh-empty">
-            No persisted refresh history yet.
-          </div>
-        ) : (
-          <ol className="live-artifact-refresh-timeline">
-            {reversedPersistedEvents.map((event) => {
-              const tone = event.status === 'succeeded'
-                ? 'success'
-                : event.status === 'running'
-                  ? 'running'
-                  : event.status === 'failed' || event.status === 'cancelled'
-                    ? 'error'
-                    : 'running';
-              const duration = formatDurationMs(event.durationMs);
-              return (
-                <li key={`${event.refreshId}:${event.sequence}`} className={`live-artifact-refresh-event tone-${tone}`}>
-                  <span className="live-artifact-refresh-event-dot" aria-hidden />
-                  <div className="live-artifact-refresh-event-body">
-                    <div className="live-artifact-refresh-event-row">
-                      <span className={`live-artifact-badge refresh-status tone-${tone}`}>
-                        {event.status}
-                      </span>
-                      <strong>{event.step}</strong>
-                      <span className="live-artifact-refresh-event-time">
-                        {formatRelativeTime(event.startedAt, now) ?? 'just now'}
-                      </span>
-                    </div>
-                    <div className="live-artifact-refresh-event-meta">
-                      <span>{event.refreshId}</span>
-                      {duration ? <span>{duration}</span> : null}
-                      {event.error?.message ? <span>{event.error.message}</span> : null}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </section>
-
-      <section className="live-artifact-refresh-section">
-        <header className="live-artifact-refresh-section-header">
-          <h4>Session activity</h4>
-          <span className="live-artifact-refresh-hint">
-            Events observed while this tab is open
-          </span>
-        </header>
-        {reversedEvents.length === 0 ? (
-          <div className="live-artifact-refresh-empty">
-            No refresh activity yet in this session. Trigger
-            {' '}<em>Refresh</em>{' '}to record a timeline, or wait for automated runs.
-          </div>
-        ) : (
-          <ol className="live-artifact-refresh-timeline">
-            {reversedEvents.map((event) => {
-              const phase = describeEventPhase(event);
-              const duration = formatDurationMs(event.durationMs);
-              return (
-                <li key={event.id} className={`live-artifact-refresh-event tone-${phase.tone}`}>
-                  <span className="live-artifact-refresh-event-dot" aria-hidden />
-                  <div className="live-artifact-refresh-event-body">
-                    <div className="live-artifact-refresh-event-row">
-                      <span
-                        className={`live-artifact-badge refresh-status tone-${phase.tone}`}
-                      >
-                        {phase.label}
-                      </span>
-                      <span
-                        className="live-artifact-refresh-event-time"
-                        title={formatAbsoluteDateTime(event.at) ?? undefined}
-                      >
-                        {formatRelativeTime(event.at, now) ?? ''}
-                      </span>
-                    </div>
-                    <div className="live-artifact-refresh-event-detail">
-                      {event.phase === 'succeeded' ? (
-                        <span>
-                          {`${event.refreshedSourceCount ?? 0} source${
-                            (event.refreshedSourceCount ?? 0) === 1 ? '' : 's'
-                          } updated`}
-                          {duration ? ` · ${duration}` : ''}
-                        </span>
-                      ) : event.phase === 'failed' ? (
-                        <span>
-                          {event.error ?? 'Refresh failed.'}
-                          {duration ? ` · ${duration}` : ''}
-                        </span>
-                      ) : (
-                        <span>Refresh started…</span>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </section>
-
-      {documentSource ? (
-        <section className="live-artifact-refresh-section">
-          <header className="live-artifact-refresh-section-header">
-            <h4>Document source</h4>
-            <span className="live-artifact-refresh-hint">
-              Source configured
-            </span>
-          </header>
-          <dl className="live-artifact-refresh-kv">
-            <div>
-              <dt>Type</dt>
-              <dd>{documentSource.type}</dd>
-            </div>
-            {documentSource.toolName ? (
-              <div>
-                <dt>Tool</dt>
-                <dd>
-                  <code>{documentSource.toolName}</code>
-                </dd>
-              </div>
-            ) : null}
-            {documentSource.connector ? (
-              <div>
-                <dt>Connector</dt>
-                <dd>
-                  {documentSource.connector.accountLabel ??
-                    documentSource.connector.connectorId}
-                </dd>
-              </div>
-            ) : null}
-          </dl>
-        </section>
-      ) : null}
-
-      {rawDebugPayload != null ? (
-        <details className="live-artifact-refresh-raw">
-          <summary>Advanced debug metadata</summary>
-          <p className="live-artifact-refresh-raw-note">
-            May include connector IDs, file names, source metadata, and internal artifact paths.
-          </p>
-          <pre className="viewer-source">{JSON.stringify(rawDebugPayload, null, 2)}</pre>
-        </details>
-      ) : null}
-    </div>
-  );
-}
-
-function LiveArtifactRefreshFact({
-  label,
-  iso,
-  value,
-  helper,
-  emptyLabel,
-  now,
-}: {
-  label: string;
-  iso?: string;
-  value?: string;
-  helper?: string;
-  emptyLabel?: string;
-  now?: number;
-}) {
-  const relative = iso !== undefined ? formatRelativeTime(iso, now) : null;
-  const absolute = iso !== undefined ? formatAbsoluteDateTime(iso) : null;
-  const resolved = value ?? relative ?? emptyLabel ?? '—';
-  const sub = helper ?? (iso !== undefined ? absolute ?? '' : '');
-  return (
-    <div className="live-artifact-refresh-fact">
-      <span className="live-artifact-refresh-label">{label}</span>
-      <span className="live-artifact-refresh-value" title={absolute ?? undefined}>
-        {resolved}
-      </span>
-      {sub ? <span className="live-artifact-refresh-sub">{sub}</span> : null}
-    </div>
-  );
-}
-
 function FileActions({
   projectId,
   file,
@@ -1266,91 +148,39 @@ function FileActions({
   );
 }
 
-function BoardComposerPopover({
+function CommentPopover({
   target,
   existing,
   draft,
-  notes,
   onDraft,
-  onAddDraft,
-  onRemoveQueuedNote,
   onClose,
-  onSaveComment,
-  onSendBatch,
+  onSave,
   onRemove,
-  sending,
   t,
 }: {
   target: PreviewCommentSnapshot;
   existing: PreviewComment | null;
   draft: string;
-  notes: string[];
   onDraft: (value: string) => void;
-  onAddDraft: () => void;
-  onRemoveQueuedNote: (index: number) => void;
   onClose: () => void;
-  onSaveComment: () => void | Promise<void>;
-  onSendBatch: () => void | Promise<void>;
+  onSave: (attach: boolean) => void | Promise<void>;
   onRemove: (commentId: string) => void | Promise<void>;
-  sending: boolean;
   t: TranslateFn;
 }) {
-  const pendingCount = notes.length + (draft.trim() ? 1 : 0);
-  const podMembers = target.podMembers ?? [];
-  const titleId = useId();
   return (
-    <div
-      className="comment-popover"
-      data-testid="comment-popover"
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby={titleId}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          onClose();
-        }
-      }}
-    >
+    <div className="comment-popover" data-testid="comment-popover">
       <div className="comment-popover-head">
         <div>
-          <strong id={titleId}>{target.elementId}</strong>
+          <strong>{target.elementId}</strong>
           <span>{target.label}</span>
-          <span>{selectionKindLabel(target.selectionKind, target.memberCount)}</span>
         </div>
         <button type="button" className="ghost" onClick={onClose}>
           {t('common.close')}
         </button>
       </div>
-      {podMembers.length > 0 ? (
-        <div className="board-pod-summary">
-          <strong>{target.memberCount || podMembers.length} captured items</strong>
-          <div className="board-pod-members">
-            {podMembers.slice(0, 6).map((member) => (
-              <span key={member.elementId} className="board-pod-chip">
-                {summarizeMember(member)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {notes.length > 0 ? (
-        <div className="board-note-list">
-          {notes.map((note, index) => (
-            <div key={`${target.elementId}-${index}`} className="board-note-item">
-              <span>{note}</span>
-              <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
       <textarea
         data-testid="comment-popover-input"
         value={draft}
-        autoFocus
-        aria-label={t('chat.comments.placeholder')}
         placeholder={t('chat.comments.placeholder')}
         onChange={(event) => onDraft(event.target.value)}
       />
@@ -1362,729 +192,16 @@ function BoardComposerPopover({
         ) : <span />}
         <button
           type="button"
-          className="ghost"
-          disabled={!draft.trim()}
-          onClick={onAddDraft}
-        >
-          Add note
-        </button>
-        <button
-          type="button"
-          className="ghost"
-          disabled={target.selectionKind === 'pod' || !draft.trim()}
-          onClick={() => void onSaveComment()}
-        >
-          Save comment
-        </button>
-        <button
-          type="button"
           className="primary"
           data-testid="comment-add-send"
-          disabled={pendingCount === 0 || sending}
-          onClick={() => void onSendBatch()}
+          disabled={!draft.trim()}
+          onClick={() => void onSave(true)}
         >
-          {sending ? 'Sending...' : 'Send to chat'}
+          {existing ? t('chat.comments.updateSend') : t('chat.comments.addSend')}
         </button>
       </div>
     </div>
   );
-}
-
-// Maps a CSS computed value (e.g. "rgb(40, 50, 60)" or "16px") to a form
-// input value. Browsers return colors as rgb()/rgba(); HTML <input type=color>
-// only accepts "#rrggbb". Lengths come back as "12px" or "0px"; we strip
-// units for slider binding and re-append on emit.
-//
-// Note: <input type=color> has no alpha channel, so an rgba() with alpha < 1
-// is collapsed to its opaque RGB equivalent here. Most agent-generated HTML
-// uses opaque colors, so this is a known cosmetic limitation — a
-// semi-transparent source value will display in the panel as fully opaque.
-function rgbToHex(value: string | undefined): string {
-  if (!value) return '#000000';
-  const v = value.trim();
-  if (v.startsWith('#') && (v.length === 7 || v.length === 4)) {
-    if (v.length === 4) {
-      return '#' + [1, 2, 3].map((i) => {
-        const c = v.charAt(i);
-        return c + c;
-      }).join('');
-    }
-    return v;
-  }
-  const m = v.match(/rgba?\(\s*([0-9.]+)[ ,]+([0-9.]+)[ ,]+([0-9.]+)/i);
-  if (!m) return '#000000';
-  const toHex = (n: string) => {
-    const x = Math.max(0, Math.min(255, Math.round(Number(n))));
-    return x.toString(16).padStart(2, '0');
-  };
-  return '#' + toHex(m[1] ?? '0') + toHex(m[2] ?? '0') + toHex(m[3] ?? '0');
-}
-
-// Parse a CSS length to a number. Inspect's current sliders all clamp to a
-// non-negative range (padding, font-size, border-radius), so we reject
-// negatives at parse time too — otherwise a `-12px` source value would be
-// silently floored to 0 by the slider clamp without the regex agreeing.
-// If a future control needs negative values (e.g. margin), thread an
-// explicit `allowNegative` flag rather than reintroducing `-?` here.
-function pxToNumber(value: string | undefined): number {
-  if (!value) return 0;
-  const m = value.trim().match(/^(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) : 0;
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-function InspectPanel({
-  target,
-  onApply,
-  onResetElement,
-  onSaveToSource,
-  onClose,
-  saving,
-  savedAt,
-  error,
-}: {
-  target: InspectTarget;
-  onApply: (prop: string, value: string) => void;
-  onResetElement: (elementId: string) => void;
-  onSaveToSource: () => void;
-  onClose: () => void;
-  saving: boolean;
-  savedAt: number | null;
-  error: string | null;
-}) {
-  // Local "draft" mirror of the most recent value the user picked, so
-  // sliders/colors keep responding even before the iframe echoes back the
-  // computed result. Reset whenever the selected element changes.
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  useEffect(() => {
-    setDraft({});
-  }, [target.elementId]);
-
-  const value = (prop: string, fallback: string): string =>
-    draft[prop] ?? fallback;
-
-  function setVal(prop: string, raw: string) {
-    setDraft((d) => ({ ...d, [prop]: raw }));
-    onApply(prop, raw);
-  }
-
-  // Padding is exposed as a single shared slider that emits the `padding`
-  // shorthand; the browser fans the value out to all four sides internally.
-  // When per-side control becomes useful, switch to emitting explicit
-  // padding-top / padding-right / padding-bottom / padding-left props
-  // (the bridge already allow-lists those long-hand names).
-  const initialPadding = pxToNumber(target.style.paddingTop);
-  const initialFontSize = pxToNumber(target.style.fontSize);
-  const initialRadius = pxToNumber(target.style.borderRadius);
-
-  // Color / length controls all read through `draft` first so the input
-  // tracks the most recent user pick even before getComputedStyle catches
-  // up. Without this the picker would snap back to the initial computed
-  // snapshot on every change and feel non-editable.
-  const colorHex = value('color', rgbToHex(target.style.color));
-  const bgHex = value('background-color', rgbToHex(target.style.backgroundColor));
-  const padding = value('padding', String(initialPadding));
-  const fontSize = value('font-size', String(initialFontSize));
-  const radius = value('border-radius', String(initialRadius));
-  const textAlign = value('text-align', target.style.textAlign || 'left');
-  const fontWeight = value('font-weight', target.style.fontWeight || '400');
-  // Parse once: `pxToNumber(...) || initial...` would treat a legitimate
-  // `0px` draft as missing and snap the slider back to the original
-  // computed value, making it impossible to remove padding/radius from an
-  // element whose initial value is nonzero. `pxToNumber` already returns
-  // 0 for unparseable input, so its result is safe to consume directly
-  // and zero is preserved.
-  const paddingNum = pxToNumber(padding);
-  const fontSizeNum = pxToNumber(fontSize);
-  const radiusNum = pxToNumber(radius);
-
-  const justSaved = savedAt && Date.now() - savedAt < 4000;
-
-  return (
-    <aside className="inspect-panel" data-testid="inspect-panel">
-      <header className="inspect-panel-head">
-        <div className="inspect-panel-title">
-          <strong>{target.label || target.elementId}</strong>
-          <code title={target.selector}>{target.elementId}</code>
-        </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">
-          ×
-        </button>
-      </header>
-
-      <section className="inspect-section">
-        <div className="inspect-section-label">Colors</div>
-        <div className="inspect-row">
-          <label htmlFor="ip-color">Text</label>
-          <input
-            id="ip-color"
-            data-testid="inspect-color"
-            type="color"
-            value={colorHex}
-            onChange={(e) => setVal('color', e.target.value)}
-          />
-          <input
-            type="text"
-            value={colorHex}
-            onChange={(e) => setVal('color', e.target.value)}
-            spellCheck={false}
-          />
-        </div>
-        <div className="inspect-row">
-          <label htmlFor="ip-bg">Background</label>
-          <input
-            id="ip-bg"
-            data-testid="inspect-bg"
-            type="color"
-            value={bgHex}
-            onChange={(e) => setVal('background-color', e.target.value)}
-          />
-          <input
-            type="text"
-            value={bgHex}
-            onChange={(e) => setVal('background-color', e.target.value)}
-            spellCheck={false}
-          />
-        </div>
-      </section>
-
-      <section className="inspect-section">
-        <div className="inspect-section-label">Typography</div>
-        <div className="inspect-row">
-          <label htmlFor="ip-fs">Size</label>
-          <input
-            id="ip-fs"
-            data-testid="inspect-font-size"
-            type="range"
-            min={8}
-            max={160}
-            step={1}
-            value={clamp(fontSizeNum, 8, 160)}
-            onChange={(e) => setVal('font-size', `${e.target.value}px`)}
-          />
-          <span className="inspect-row-value">{Math.round(fontSizeNum)}px</span>
-        </div>
-        <div className="inspect-row">
-          <label htmlFor="ip-fw">Weight</label>
-          <select
-            id="ip-fw"
-            value={fontWeight}
-            onChange={(e) => setVal('font-weight', e.target.value)}
-          >
-            {['100', '300', '400', '500', '600', '700', '800', '900'].map((w) => (
-              <option key={w} value={w}>{w}</option>
-            ))}
-          </select>
-        </div>
-        <div className="inspect-row">
-          <label htmlFor="ip-ta">Align</label>
-          <select
-            id="ip-ta"
-            value={textAlign}
-            onChange={(e) => setVal('text-align', e.target.value)}
-          >
-            {['left', 'center', 'right', 'justify'].map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-        </div>
-      </section>
-
-      <section className="inspect-section">
-        <div className="inspect-section-label">Spacing &amp; Shape</div>
-        <div className="inspect-row">
-          <label htmlFor="ip-pad">Padding</label>
-          <input
-            id="ip-pad"
-            data-testid="inspect-padding"
-            type="range"
-            min={0}
-            max={120}
-            step={1}
-            value={clamp(paddingNum, 0, 120)}
-            onChange={(e) => setVal('padding', `${e.target.value}px`)}
-          />
-          <span className="inspect-row-value">{Math.round(paddingNum)}px</span>
-        </div>
-        <div className="inspect-row">
-          <label htmlFor="ip-rad">Radius</label>
-          <input
-            id="ip-rad"
-            data-testid="inspect-radius"
-            type="range"
-            min={0}
-            max={120}
-            step={1}
-            value={clamp(radiusNum, 0, 120)}
-            onChange={(e) => setVal('border-radius', `${e.target.value}px`)}
-          />
-          <span className="inspect-row-value">{Math.round(radiusNum)}px</span>
-        </div>
-      </section>
-
-      <footer className="inspect-panel-footer">
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            setDraft({});
-            onResetElement(target.elementId);
-          }}
-        >
-          Reset element
-        </button>
-        <button
-          type="button"
-          className="primary"
-          data-testid="inspect-save"
-          disabled={saving}
-          onClick={onSaveToSource}
-        >
-          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save to source'}
-        </button>
-      </footer>
-      {error ? <div className="inspect-panel-error">{error}</div> : null}
-    </aside>
-  );
-}
-
-// Inspect-mode override entry as held in the host's authoritative map and as
-// it travels in od:inspect-overrides messages. The host's persisted map is
-// owned and mutated only by host-driven onApply / reset actions plus the
-// initial parse of the source's <style data-od-inspect-overrides> block;
-// inbound iframe messages are treated as preview acknowledgements, never as
-// save input. Artifact code rendered with scripts enabled can call
-// window.parent.postMessage with a forged payload — ev.source still points
-// at iframe.contentWindow — so any field arriving from the iframe is
-// untrusted. Even the structured `overrides` field could be tampered with
-// to flip allow-listed properties on elements the user never edited, which
-// is why we no longer ingest it on save.
-type InspectOverridePayload = {
-  selector?: unknown;
-  props?: unknown;
-};
-
-// Authoritative host-side override map: elementId → { selector, props }.
-// Mirrors the in-iframe shape so serializeInspectOverrides can consume it.
-export type InspectOverrideEntry = {
-  selector: string;
-  props: Record<string, string>;
-};
-export type InspectOverrideMap = Record<string, InspectOverrideEntry>;
-
-// Allow-list of CSS properties the host will persist on Save. Mirrors the
-// in-iframe ALLOWED_PROPS list so the host doesn't accept properties that
-// the bridge itself would reject.
-const HOST_ALLOWED_INSPECT_PROPS = new Set([
-  'color',
-  'background-color',
-  'font-size',
-  'font-weight',
-  'font-family',
-  'line-height',
-  'text-align',
-  'padding',
-  'padding-top',
-  'padding-right',
-  'padding-bottom',
-  'padding-left',
-  'border-radius',
-]);
-
-// Reject values that could break out of `prop: value` and into the
-// surrounding <style> block — semicolons, braces, angle brackets, and
-// newlines. Mirrors the bridge's UNSAFE_VALUE regex.
-const HOST_UNSAFE_INSPECT_VALUE = /[;{}<>\n\r]/;
-
-// Reject elementIds whose characters could break out of `[attr="..."]`
-// inside a <style> block. Forbidden:
-//   - `"` and `\` would close the attribute string or smuggle CSS
-//     escapes the host didn't pre-process;
-//   - `<` and `>` would close the surrounding <style> tag;
-//   - C0/C1 controls (newline, etc.) end the CSS rule under string
-//     tokenization — kept in as defense-in-depth against parser quirks.
-// Everything else — including ASCII whitespace and leading digits — is
-// allowed, so deck labels like `01 Cover` survive instead of being
-// dropped on the way to the persisted overrides block.
-const HOST_UNSAFE_INSPECT_ID = /["\\<>\u0000-\u001f\u007f]/;
-
-// Build the inspect overrides CSS body the host will persist, from the
-// structured `overrides` field of an od:inspect-overrides message. The host
-// MUST NOT trust the sibling `css` string — it is attacker-controlled when
-// artifact JS forges the message. The selector is re-derived from each
-// elementId; only allow-listed properties with safe values survive.
-//
-// Exported so unit tests can exercise the validator with hostile payloads.
-export function serializeInspectOverrides(overrides: unknown): string {
-  if (!overrides || typeof overrides !== 'object') return '';
-  const map = overrides as Record<string, unknown>;
-  const lines: string[] = [];
-  for (const elementId of Object.keys(map)) {
-    if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
-    const entry = map[elementId] as InspectOverridePayload | null | undefined;
-    if (!entry || typeof entry !== 'object') continue;
-    const props = entry.props;
-    if (!props || typeof props !== 'object') continue;
-    // Trust only the *kind* of selector the bridge built, not the value
-    // it carried. The bridge runs CSS.escape over the elementId, so a raw
-    // equality check against `[data-screen-label="${elementId}"]` would
-    // miss legitimate deck labels like `01 Cover` (whitespace, leading
-    // digit) and silently downgrade them to `[data-od-id="..."]`. The
-    // elementId itself was sanitized above, so embedding it verbatim into
-    // the re-derived selector is safe inside an attribute value string.
-    const inboundSelector = typeof entry.selector === 'string' ? entry.selector : '';
-    const attr = inboundSelector.startsWith('[data-screen-label="')
-      ? 'data-screen-label'
-      : 'data-od-id';
-    const safeSelector = `[${attr}="${elementId}"]`;
-    const decls: string[] = [];
-    for (const [rawName, rawValue] of Object.entries(props as Record<string, unknown>)) {
-      if (typeof rawName !== 'string' || typeof rawValue !== 'string') continue;
-      const name = rawName.toLowerCase();
-      if (!HOST_ALLOWED_INSPECT_PROPS.has(name)) continue;
-      const value = rawValue.trim();
-      if (!value || HOST_UNSAFE_INSPECT_VALUE.test(value)) continue;
-      decls.push(`${name}: ${value} !important`);
-    }
-    if (!decls.length) continue;
-    lines.push(`${safeSelector} { ${decls.join('; ')} }`);
-  }
-  return lines.join('\n');
-}
-
-// Apply a single host-driven prop change to the authoritative override map.
-// Returns a new map (or the same reference if no-op so React skips renders).
-// Empty value clears the prop; clearing the last prop drops the elementId.
-// Mirrors the iframe bridge's applyOverride sanitization so the host map and
-// the live preview stay in lock-step under the same rules.
-export function updateInspectOverride(
-  map: InspectOverrideMap,
-  elementId: string,
-  selector: string,
-  prop: string,
-  value: string,
-): InspectOverrideMap {
-  if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) return map;
-  const propName = String(prop || '').toLowerCase();
-  if (!HOST_ALLOWED_INSPECT_PROPS.has(propName)) return map;
-  const trimmed = String(value ?? '').trim();
-  if (trimmed && HOST_UNSAFE_INSPECT_VALUE.test(trimmed)) return map;
-  const existing = map[elementId];
-  const nextProps: Record<string, string> = { ...(existing?.props ?? {}) };
-  if (!trimmed) {
-    if (!(propName in nextProps)) return map;
-    delete nextProps[propName];
-  } else if (nextProps[propName] === trimmed && existing?.selector === selector) {
-    return map;
-  } else {
-    nextProps[propName] = trimmed;
-  }
-  const nextMap: InspectOverrideMap = { ...map };
-  if (Object.keys(nextProps).length === 0) {
-    delete nextMap[elementId];
-  } else {
-    nextMap[elementId] = { selector: selector || existing?.selector || '', props: nextProps };
-  }
-  return nextMap;
-}
-
-// Parse any persisted <style data-od-inspect-overrides> blocks in the
-// artifact source into the host's authoritative override map. The host owns
-// this map and only mutates it from onApply / reset actions plus this
-// initial hydration step — inbound iframe od:inspect-overrides messages are
-// not ingested. Without this step, opening a file that already carries an
-// override block would leave the host map empty, so a Save-to-source after
-// any subsequent edit could splice a CSS body that drops every previously
-// saved rule for elements the user did not touch in this session.
-//
-// Mirrors the iframe bridge's hydrateOverridesFromDom: same allow-list,
-// same value sanitizer, same selector kinds, so what the iframe applies and
-// what the host persists stay in lock-step. Pure string transform; no DOM.
-//
-// HTML-aware: enumerates `<style data-od-inspect-overrides>` elements via
-// the same walker used by the splicer, so a `<style data-od-inspect-overrides>`
-// literal living inside a `<script>`, `<style>` (e.g. CSS comment), `<textarea>`,
-// `<title>`, or HTML comment is not mistaken for a real override block. Without
-// that exclusion, useEffect would seed the host map from forged/quoted text and
-// a later Save-to-source would persist phantom CSS the user never created.
-export function parseInspectOverridesFromSource(source: string): InspectOverrideMap {
-  const map: InspectOverrideMap = {};
-  if (!source) return map;
-  for (const body of stripInspectOverridesAndIndex(source).bodies) {
-    const ruleRe = /(\[data-(?:od-id|screen-label)="([^"]*)"\])\s*\{\s*([^}]*)\}/g;
-    let ruleMatch: RegExpExecArray | null;
-    while ((ruleMatch = ruleRe.exec(body)) !== null) {
-      const selector = ruleMatch[1] ?? '';
-      const elementId = ruleMatch[2] ?? '';
-      const declBody = ruleMatch[3] ?? '';
-      if (!selector || !elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
-      const props: Record<string, string> = {};
-      for (const raw of declBody.split(';')) {
-        if (!raw) continue;
-        const colon = raw.indexOf(':');
-        if (colon <= 0) continue;
-        const name = raw.slice(0, colon).trim().toLowerCase();
-        if (!HOST_ALLOWED_INSPECT_PROPS.has(name)) continue;
-        const value = raw.slice(colon + 1).replace(/!important/gi, '').trim();
-        if (!value || HOST_UNSAFE_INSPECT_VALUE.test(value)) continue;
-        props[name] = value;
-      }
-      if (Object.keys(props).length) {
-        map[elementId] = { selector, props };
-      }
-    }
-  }
-  return map;
-}
-
-// HTML5 raw-text and escapable-raw-text elements: the parser does not
-// interpret markup inside their contents, so a literal `</head>` or
-// `<style data-od-inspect-overrides>` written as text inside one of them
-// must NOT be treated as a real tag. Without this exclusion, a regex-only
-// splicer can match `</head>` inside an inline <script> string literal or
-// a CSS comment and inject the override block into the middle of
-// JavaScript/CSS instead of the actual document head, corrupting the
-// artifact on Save to source.
-const RAW_TEXT_INSPECT_ELEMENTS = new Set(['script', 'style', 'textarea', 'title']);
-
-// Decide whether a `<style ...>` opening tag actually carries a real
-// `data-od-inspect-overrides` attribute, as opposed to merely mentioning
-// the marker text inside another attribute name or value. The naive
-// `\bdata-od-inspect-overrides\b` test against the whole tag text is
-// over-broad in two cases:
-//
-//   1. A longer attribute name that has the marker as a prefix, e.g.
-//      `<style data-od-inspect-overrides-note="docs">`. The `-` after
-//      `overrides` is a non-word character, so `\b` matches and the tag
-//      gets mis-stripped on save / mis-parsed on hydration.
-//   2. The marker spelled inside an attribute value, e.g.
-//      `<style title="data-od-inspect-overrides">`. The whole tag text
-//      contains the literal, so the regex matches even though the actual
-//      attribute names are `title` only.
-//
-// Both shapes occur in real artifacts (notes, documentation, fixtures)
-// and would either silently drop the user's CSS on save or seed phantom
-// overrides into the host map even though the artifact has no real
-// override block. So we walk attributes proper, lower-casing each name
-// and skipping any quoted value, and report a hit only when one of those
-// names is exactly `data-od-inspect-overrides` (boolean attribute or
-// assigned value, both legal HTML for our marker).
-function styleTagIsInspectOverrideBlock(tagText: string): boolean {
-  const start = /^<style/i.exec(tagText);
-  if (!start) return false;
-  let i = start[0].length;
-  const end = tagText.length;
-  while (i < end) {
-    const ch = tagText.charAt(i);
-    if (ch === '>') return false;
-    if (ch === '/' || /\s/.test(ch)) {
-      i++;
-      continue;
-    }
-    const nameStart = i;
-    while (i < end) {
-      const c = tagText.charAt(i);
-      if (c === '=' || c === '/' || c === '>' || /\s/.test(c)) break;
-      i++;
-    }
-    const name = tagText.slice(nameStart, i).toLowerCase();
-    while (i < end && /\s/.test(tagText.charAt(i))) i++;
-    if (i < end && tagText.charAt(i) === '=') {
-      i++;
-      while (i < end && /\s/.test(tagText.charAt(i))) i++;
-      const quote = tagText.charAt(i);
-      if (quote === '"' || quote === "'") {
-        i++;
-        const close = tagText.indexOf(quote, i);
-        i = close < 0 ? end : close + 1;
-      } else {
-        while (i < end) {
-          const c = tagText.charAt(i);
-          if (c === '>' || /\s/.test(c)) break;
-          i++;
-        }
-      }
-    }
-    if (name === 'data-od-inspect-overrides') return true;
-  }
-  return false;
-}
-
-// Find the start (`<` position) of the matching close tag for a raw-text
-// element, scanning case-insensitively. The close tag must be followed by
-// a tag-name boundary (whitespace, `/`, or `>`) so a longer name like
-// `</scripted>` doesn't accidentally close a `<script>`.
-function findInspectRawTextEnd(source: string, start: number, name: string): number {
-  const lower = source.toLowerCase();
-  const needle = '</' + name.toLowerCase();
-  let p = start;
-  while (p < source.length) {
-    const idx = lower.indexOf(needle, p);
-    if (idx < 0) return -1;
-    const after = source.charAt(idx + needle.length);
-    if (after === '' || after === '>' || after === '/' || /\s/.test(after)) return idx;
-    p = idx + needle.length;
-  }
-  return -1;
-}
-
-type InspectSpliceScan = {
-  out: string;
-  // Position in `out` immediately after the first top-level `<head ...>`
-  // open tag, or -1 if no head was found outside raw-text content.
-  headOpenEnd: number;
-  // Position in `out` at the first top-level `</head>` close tag, or -1.
-  headCloseStart: number;
-  // Raw inner-text of every real `<style data-od-inspect-overrides>` element
-  // discovered during the walk, in source order. Excludes occurrences inside
-  // raw-text element contents and HTML comments. Hydration parses these
-  // bodies for the host map; the splicer ignores them.
-  bodies: string[];
-};
-
-// Walk `source` and produce a copy with every existing
-// `<style data-od-inspect-overrides>...</style>` block removed, while
-// remembering where the real (non-raw-text) `<head>` boundaries land in
-// the output. The walker honours HTML comment, doctype/processing
-// instruction, and raw-text element boundaries so the splicer can ignore
-// tag-shaped literals inside scripts/styles/textareas/titles. Pure string
-// transform — no DOM dependency, safe to run during SSR/tests.
-function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
-  const parts: string[] = [];
-  const bodies: string[] = [];
-  let outLen = 0;
-  let headOpenEnd = -1;
-  let headCloseStart = -1;
-  let i = 0;
-  function emit(text: string): void {
-    if (!text) return;
-    parts.push(text);
-    outLen += text.length;
-  }
-  while (i < source.length) {
-    const lt = source.indexOf('<', i);
-    if (lt < 0) {
-      emit(source.slice(i));
-      break;
-    }
-    if (lt > i) emit(source.slice(i, lt));
-    i = lt;
-    if (source.startsWith('<!--', i)) {
-      const end = source.indexOf('-->', i + 4);
-      const stop = end < 0 ? source.length : end + 3;
-      emit(source.slice(i, stop));
-      i = stop;
-      continue;
-    }
-    if (source.startsWith('<!', i) || source.startsWith('<?', i)) {
-      const end = source.indexOf('>', i + 2);
-      const stop = end < 0 ? source.length : end + 1;
-      emit(source.slice(i, stop));
-      i = stop;
-      continue;
-    }
-    const tagEnd = source.indexOf('>', i + 1);
-    if (tagEnd < 0) {
-      emit(source.slice(i));
-      break;
-    }
-    const tagText = source.slice(i, tagEnd + 1);
-    const closeMatch = /^<\/([a-zA-Z][a-zA-Z0-9-]*)/.exec(tagText);
-    if (closeMatch) {
-      const name = closeMatch[1]!.toLowerCase();
-      if (name === 'head' && headCloseStart < 0) headCloseStart = outLen;
-      emit(tagText);
-      i = tagEnd + 1;
-      continue;
-    }
-    const openMatch = /^<([a-zA-Z][a-zA-Z0-9-]*)/.exec(tagText);
-    if (!openMatch) {
-      emit(tagText);
-      i = tagEnd + 1;
-      continue;
-    }
-    const name = openMatch[1]!.toLowerCase();
-    const isSelfClose = /\/\s*>$/.test(tagText);
-    if (name === 'head' && headOpenEnd < 0) headOpenEnd = outLen + tagText.length;
-    if (name === 'style' && styleTagIsInspectOverrideBlock(tagText)) {
-      // Strip the entire override block. A self-closing <style /> is a
-      // degenerate authoring case; treat it as nothing to skip past.
-      if (isSelfClose) {
-        i = tagEnd + 1;
-        continue;
-      }
-      const closeStart = findInspectRawTextEnd(source, tagEnd + 1, 'style');
-      if (closeStart < 0) {
-        // Unterminated override block — drop the rest of the document
-        // rather than silently reflowing later content into a dangling
-        // <style>. Matches the "stop" behaviour of the previous regex.
-        i = source.length;
-        continue;
-      }
-      bodies.push(source.slice(tagEnd + 1, closeStart));
-      const closeEnd = source.indexOf('>', closeStart);
-      let stop = closeEnd < 0 ? source.length : closeEnd + 1;
-      while (stop < source.length && /\s/.test(source.charAt(stop))) stop++;
-      i = stop;
-      continue;
-    }
-    if (!isSelfClose && RAW_TEXT_INSPECT_ELEMENTS.has(name)) {
-      const closeStart = findInspectRawTextEnd(source, tagEnd + 1, name);
-      if (closeStart < 0) {
-        emit(source.slice(i));
-        i = source.length;
-        continue;
-      }
-      const closeEnd = source.indexOf('>', closeStart);
-      const stop = closeEnd < 0 ? source.length : closeEnd + 1;
-      // Copy the entire raw-text element (open tag, body, close tag) to
-      // the output verbatim so its contents pass through unmodified.
-      emit(source.slice(i, stop));
-      i = stop;
-      continue;
-    }
-    emit(tagText);
-    i = tagEnd + 1;
-  }
-  return { out: parts.join(''), headOpenEnd, headCloseStart, bodies };
-}
-
-// Splice (or remove) the inspect overrides <style> block in an HTML
-// document. Idempotent: calling with the same css produces the same
-// document. Empty css strips the block entirely.
-//
-// HTML-aware: the underlying scan ignores comments and raw-text element
-// contents (script / style / textarea / title), so a literal `</head>` or
-// `<style data-od-inspect-overrides>` written inside an inline script or
-// style block does not trick the splicer into stripping user code or
-// inserting the override block in the middle of JavaScript/CSS.
-//
-// Exported (via the module) so a unit test can drive it without a live
-// browser. Pure string transform — no DOM, no parser dependency.
-export function applyInspectOverridesToSource(source: string, css: string): string {
-  const trimmed = css.trim();
-  const { out, headOpenEnd, headCloseStart } = stripInspectOverridesAndIndex(source);
-  if (!trimmed) return out;
-  const block = `<style data-od-inspect-overrides>\n${trimmed}\n</style>\n`;
-  if (headCloseStart >= 0) {
-    return out.slice(0, headCloseStart) + block + out.slice(headCloseStart);
-  }
-  if (headOpenEnd >= 0) {
-    return out.slice(0, headOpenEnd) + block + out.slice(headOpenEnd);
-  }
-  return block + out;
-}
-
-function summarizeMember(member: PreviewCommentMember): string {
-  const text = String(member.text || '').trim();
-  if (text) {
-    const trimmed = text.length > 24 ? `${text.slice(0, 21)}...` : text;
-    return `${member.label || member.elementId} · ${trimmed}`;
-  }
-  return member.label || member.elementId;
 }
 
 function CommentPreviewOverlays({
@@ -2092,18 +209,14 @@ function CommentPreviewOverlays({
   liveTargets,
   hoveredTarget,
   activeTarget,
-  boardTool,
   scale,
-  strokePoints,
   onOpenComment,
 }: {
   comments: PreviewComment[];
   liveTargets: Map<string, PreviewCommentSnapshot>;
   hoveredTarget: PreviewCommentSnapshot | null;
   activeTarget: PreviewCommentSnapshot | null;
-  boardTool: BoardTool;
   scale: number;
-  strokePoints: StrokePoint[];
   onOpenComment: (comment: PreviewComment, snapshot: PreviewCommentSnapshot) => void;
 }) {
   const visibleComments = comments
@@ -2152,13 +265,6 @@ function CommentPreviewOverlays({
           selected={Boolean(activeTarget)}
         />
       ) : null}
-      {boardTool === 'pod' && strokePoints.length > 1 ? (
-        <svg className="board-pod-stroke">
-          <polyline
-            points={strokePoints.map((point) => `${point.x * scale},${point.y * scale}`).join(' ')}
-          />
-        </svg>
-      ) : null}
     </div>
   );
 }
@@ -2172,44 +278,9 @@ function CommentTargetOverlay({
   scale: number;
   selected: boolean;
 }) {
-  const displayMembers = podDisplayMembers(snapshot);
-  if (displayMembers.length > 0) {
-    const overlayWeights = podOverlayWeights(displayMembers);
-    return (
-      <>
-        {displayMembers.map((member, index) => {
-          const bounds = overlayBoundsFromSnapshot(member, scale);
-          const width = Math.round(member.position.width);
-          const height = Math.round(member.position.height);
-          const overlayWeight = overlayWeights[index] ?? {
-            backgroundOpacity: 0.24,
-            outlineOpacity: 0.72,
-            ringOpacity: 0.18,
-          };
-          const overlayStyle: CSSProperties & Record<string, string | number> = {
-            left: bounds.left,
-            top: bounds.top,
-            width: bounds.width,
-            height: bounds.height,
-            '--comment-overlay-bg': `rgba(22, 119, 255, ${overlayWeight.backgroundOpacity})`,
-            '--comment-overlay-ring': `rgba(22, 119, 255, ${overlayWeight.ringOpacity})`,
-            '--comment-overlay-border': `rgba(22, 119, 255, ${overlayWeight.outlineOpacity})`,
-          };
-          return (
-            <div
-              key={`${member.elementId}-${index}`}
-              className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}`}
-              style={overlayStyle}
-              data-testid="comment-target-overlay"
-            >
-              <span className="comment-target-overlay-label">{snapshot.elementId}</span>
-            </div>
-          );
-        })}
-      </>
-    );
-  }
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
+  const width = Math.round(snapshot.position.width);
+  const height = Math.round(snapshot.position.height);
   return (
     <div
       className={`comment-target-overlay${selected ? ' selected' : ''}`}
@@ -2221,278 +292,13 @@ function CommentTargetOverlay({
       }}
       data-testid="comment-target-overlay"
     >
-      <span className="comment-target-overlay-label">{snapshot.elementId}</span>
+      <div className="comment-target-tooltip">
+        <strong>{snapshot.elementId}</strong>
+        <span>{snapshot.label}</span>
+        <span>{width} × {height}</span>
+      </div>
     </div>
   );
-}
-
-function podDisplayMembers(snapshot: PreviewCommentSnapshot): PreviewCommentSnapshot[] {
-  if (snapshot.selectionKind !== 'pod' || !Array.isArray(snapshot.podMembers)) return [];
-  const memberSnapshots = snapshot.podMembers.map((member) => ({
-    filePath: snapshot.filePath,
-    elementId: member.elementId,
-    selector: member.selector,
-    label: member.label,
-    text: member.text,
-    position: member.position,
-    htmlHint: member.htmlHint,
-    selectionKind: 'element' as const,
-  }));
-  const refined = pruneContainerSelections(memberSnapshots);
-  return refined.length > 0 ? refined : memberSnapshots;
-}
-
-function podOverlayWeights(
-  members: PreviewCommentSnapshot[],
-): Array<{ backgroundOpacity: number; outlineOpacity: number; ringOpacity: number }> {
-  const areas = members.map((member) =>
-    Math.max(1, member.position.width * member.position.height),
-  );
-  const maxArea = Math.max(...areas);
-  const minArea = Math.min(...areas);
-  return areas.map((area) => {
-    const normalized =
-      maxArea === minArea ? 1 : 1 - (area - minArea) / (maxArea - minArea);
-    const emphasis = Math.pow(normalized, 0.9);
-    return {
-      backgroundOpacity: roundOverlayOpacity(0.1 + emphasis * 0.6),
-      outlineOpacity: roundOverlayOpacity(0.34 + emphasis * 0.36),
-      ringOpacity: roundOverlayOpacity(0.08 + emphasis * 0.18),
-    };
-  });
-}
-
-function roundOverlayOpacity(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function buildPodSnapshot(input: {
-  filePath: string;
-  strokePoints: StrokePoint[];
-  liveTargets: Map<string, PreviewCommentSnapshot>;
-}): PreviewCommentSnapshot | null {
-  if (input.strokePoints.length < 2) return null;
-  const closedLoop = isClosedLoop(input.strokePoints);
-  const intersected = Array.from(input.liveTargets.values()).filter((snapshot) =>
-    selectionHitsSnapshot({
-      points: input.strokePoints,
-      snapshot,
-      closedLoop,
-    }),
-  );
-  const refined = pruneContainerSelections(intersected);
-  const selected = refined.length > 0 ? refined : intersected;
-  if (selected.length === 0) return null;
-  const bounds = selected.reduce(
-    (acc, snapshot) => {
-      const rect = snapshot.position;
-      return {
-        left: Math.min(acc.left, rect.x),
-        top: Math.min(acc.top, rect.y),
-        right: Math.max(acc.right, rect.x + rect.width),
-        bottom: Math.max(acc.bottom, rect.y + rect.height),
-      };
-    },
-    {
-      left: Number.POSITIVE_INFINITY,
-      top: Number.POSITIVE_INFINITY,
-      right: Number.NEGATIVE_INFINITY,
-      bottom: Number.NEGATIVE_INFINITY,
-    },
-  );
-  const podMembers: PreviewCommentMember[] = selected.map((snapshot) => ({
-    elementId: snapshot.elementId,
-    selector: snapshot.selector,
-    label: snapshot.label,
-    text: snapshot.text,
-    position: snapshot.position,
-    htmlHint: snapshot.htmlHint,
-  }));
-  const summary = selected
-    .slice(0, 3)
-    .map((snapshot) => summarizeSnapshot(snapshot))
-    .join(' · ');
-  const htmlHint = selected
-    .slice(0, 4)
-    .map((snapshot) => snapshot.htmlHint)
-    .filter(Boolean)
-    .join(' ');
-  const combinedSelector = selected
-    .slice(0, 8)
-    .map((snapshot) => snapshot.selector)
-    .filter(Boolean)
-    .join(', ');
-  return {
-    filePath: input.filePath,
-    elementId: `pod-${Date.now()}`,
-    selector: combinedSelector || 'body *',
-    label: summary || `Pod of ${intersected.length} items`,
-    text: intersected
-      .slice(0, 4)
-      .map((snapshot) => snapshot.text)
-      .filter(Boolean)
-      .join(' · '),
-    position: {
-      x: Math.round(bounds.left),
-      y: Math.round(bounds.top),
-      width: Math.max(1, Math.round(bounds.right - bounds.left)),
-      height: Math.max(1, Math.round(bounds.bottom - bounds.top)),
-    },
-    htmlHint: htmlHint.slice(0, 180),
-    selectionKind: 'pod',
-    memberCount: selected.length,
-    podMembers,
-  };
-}
-
-function pruneContainerSelections(
-  snapshots: PreviewCommentSnapshot[],
-): PreviewCommentSnapshot[] {
-  if (snapshots.length < 2) return snapshots;
-  return snapshots.filter((candidate) => {
-    const candidateArea = Math.max(1, candidate.position.width * candidate.position.height);
-    const contained = snapshots.filter(
-      (other) =>
-        other.elementId !== candidate.elementId &&
-        rectContains(candidate.position, other.position),
-    );
-    if (contained.length === 0) return true;
-    const union = contained.reduce(
-      (acc, other) => ({
-        left: Math.min(acc.left, other.position.x),
-        top: Math.min(acc.top, other.position.y),
-        right: Math.max(acc.right, other.position.x + other.position.width),
-        bottom: Math.max(acc.bottom, other.position.y + other.position.height),
-      }),
-      {
-        left: Number.POSITIVE_INFINITY,
-        top: Number.POSITIVE_INFINITY,
-        right: Number.NEGATIVE_INFINITY,
-        bottom: Number.NEGATIVE_INFINITY,
-      },
-    );
-    const unionArea = Math.max(1, (union.right - union.left) * (union.bottom - union.top));
-    return !(contained.length >= 2 && candidateArea > unionArea * 2.4);
-  });
-}
-
-function summarizeSnapshot(snapshot: PreviewCommentSnapshot): string {
-  const text = snapshot.text.trim();
-  if (text) {
-    const trimmed = text.length > 28 ? `${text.slice(0, 25)}...` : text;
-    return `${snapshot.label || snapshot.elementId} · ${trimmed}`;
-  }
-  return snapshot.label || snapshot.elementId;
-}
-
-function selectionHitsSnapshot(input: {
-  points: StrokePoint[];
-  snapshot: PreviewCommentSnapshot;
-  closedLoop: boolean;
-}): boolean {
-  const bounds = {
-    left: input.snapshot.position.x,
-    top: input.snapshot.position.y,
-    width: input.snapshot.position.width,
-    height: input.snapshot.position.height,
-  };
-  if (pathIntersectsRect(input.points, bounds)) return true;
-  if (!input.closedLoop) return false;
-  const center = {
-    x: bounds.left + bounds.width / 2,
-    y: bounds.top + bounds.height / 2,
-  };
-  if (pointInPolygon(center, input.points)) return true;
-  const corners = [
-    { x: bounds.left, y: bounds.top },
-    { x: bounds.left + bounds.width, y: bounds.top },
-    { x: bounds.left + bounds.width, y: bounds.top + bounds.height },
-    { x: bounds.left, y: bounds.top + bounds.height },
-  ];
-  return corners.some((corner) => pointInPolygon(corner, input.points));
-}
-
-function isClosedLoop(points: StrokePoint[]): boolean {
-  if (points.length < 4) return false;
-  const first = points[0]!;
-  const last = points[points.length - 1]!;
-  return Math.hypot(first.x - last.x, first.y - last.y) <= 28;
-}
-
-function rectContains(
-  outer: { x: number; y: number; width: number; height: number },
-  inner: { x: number; y: number; width: number; height: number },
-): boolean {
-  return (
-    outer.x <= inner.x &&
-    outer.y <= inner.y &&
-    outer.x + outer.width >= inner.x + inner.width &&
-    outer.y + outer.height >= inner.y + inner.height
-  );
-}
-
-function pathIntersectsRect(
-  points: StrokePoint[],
-  rect: { left: number; top: number; width: number; height: number },
-): boolean {
-  if (points.length === 0) return false;
-  const x1 = rect.left;
-  const y1 = rect.top;
-  const x2 = rect.left + rect.width;
-  const y2 = rect.top + rect.height;
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index]!;
-    if (point.x >= x1 && point.x <= x2 && point.y >= y1 && point.y <= y2) {
-      return true;
-    }
-    const next = points[index + 1];
-    if (!next) continue;
-    if (
-      lineIntersectsLine(point, next, { x: x1, y: y1 }, { x: x2, y: y1 }) ||
-      lineIntersectsLine(point, next, { x: x2, y: y1 }, { x: x2, y: y2 }) ||
-      lineIntersectsLine(point, next, { x: x2, y: y2 }, { x: x1, y: y2 }) ||
-      lineIntersectsLine(point, next, { x: x1, y: y2 }, { x: x1, y: y1 })
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function pointInPolygon(point: StrokePoint, polygon: StrokePoint[]): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const pi = polygon[i]!;
-    const pj = polygon[j]!;
-    const intersects =
-      pi.y > point.y !== pj.y > point.y &&
-      point.x <
-        ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || Number.EPSILON) + pi.x;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function lineIntersectsLine(a1: StrokePoint, a2: StrokePoint, b1: StrokePoint, b2: StrokePoint): boolean {
-  const denominator =
-    (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
-  if (denominator === 0) return false;
-  const ua =
-    ((b2.x - b1.x) * (a1.y - b1.y) - (b2.y - b1.y) * (a1.x - b1.x)) / denominator;
-  const ub =
-    ((a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x)) / denominator;
-  return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
-}
-
-function finiteBridgeInteger(value: unknown): number | undefined {
-  if (!Number.isFinite(value)) return undefined;
-  return clampBridgeCoordinate(value);
-}
-
-function clampBridgeCoordinate(value: unknown): number {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
 function ReactComponentViewer({
@@ -2776,8 +582,6 @@ function HtmlViewer({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
-  onSendBoardCommentAttachments,
-  onFileSaved,
 }: {
   projectId: string;
   file: ProjectFile;
@@ -2788,8 +592,6 @@ function HtmlViewer({
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
-  onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -2802,142 +604,26 @@ function HtmlViewer({
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateNote, setTemplateNote] = useState<string | null>(null);
-  const [templateModalOpen, setTemplateModalOpen] = useState(false);
-  const [templateName, setTemplateName] = useState('');
-  const [templateDescription, setTemplateDescription] = useState('');
-  const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
-  const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
-  const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
+  const [deployment, setDeployment] = useState<DeployProjectFileResponse | null>(null);
   const [deployModalOpen, setDeployModalOpen] = useState(false);
-  const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
+  const [deployConfig, setDeployConfig] = useState<DeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
-  const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
+  const [deployResult, setDeployResult] = useState<DeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState(false);
-  const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
-  const [deployToken, setDeployToken] = useState('');
+  const [vercelToken, setVercelToken] = useState('');
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
-  const [cloudflareAccountId, setCloudflareAccountId] = useState('');
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [boardMode, setBoardMode] = useState(false);
-  const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
-  const [inspectMode, setInspectMode] = useState(false);
-  const [manualEditMode, setManualEditMode] = useState(false);
-  const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
-  const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
-  const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
-  const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
-  const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
-  const [manualEditError, setManualEditError] = useState<string | null>(null);
-  const [manualEditSaving, setManualEditSaving] = useState(false);
-  const manualEditSavingRef = useRef(false);
-  const templateNameId = useId();
-  const templateDescriptionId = useId();
-  // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
-  // on the host page. Lets users escape-hatch around the URL-load default
-  // for non-deck HTML that depends on the in-iframe localStorage shim.
-  const forceInline = useMemo(
-    () => (typeof window === 'undefined' ? false : parseForceInline(window.location.search)),
-    [],
-  );
+  const [commentMode, setCommentMode] = useState(false);
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
-  const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
-  // Inspect mode shares the iframe selection bridge with comment mode but
-  // routes the picked element to a side panel that mutates per-element CSS
-  // overrides via postMessage. The host owns the authoritative override map:
-  // it is hydrated from the artifact's persisted <style> block on load and
-  // mutated only by host-driven onApply / reset actions. Save-to-source
-  // serializes that host map directly — iframe od:inspect-overrides messages
-  // are preview acknowledgements and never feed save input, so artifact JS
-  // forging a postMessage cannot tamper with what gets persisted.
-  const [activeInspectTarget, setActiveInspectTarget] = useState<InspectTarget | null>(null);
-  const [inspectOverrides, setInspectOverrides] = useState<InspectOverrideMap>(() =>
-    typeof source === 'string' ? parseInspectOverridesFromSource(source) : {},
-  );
-  // Track which `source` value the host map was last hydrated from so the
-  // setState-during-render hydration below only fires when the artifact
-  // text actually changes (file switch, save round-trip, live edits). The
-  // ref is initialised to `source` so the matching useState initialiser
-  // above counts as the first hydration.
-  const inspectHydratedSourceRef = useRef<string | null | undefined>(source);
-  const [savingInspect, setSavingInspect] = useState(false);
-  const [inspectSavedAt, setInspectSavedAt] = useState<number | null>(null);
-  const [inspectError, setInspectError] = useState<string | null>(null);
-  const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
-  const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
-  const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
-  const previewScale = zoom / 100;
-
-  function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
-    const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
-    for (const option of DEPLOY_PROVIDER_OPTIONS) {
-      const deploymentForProvider = items.find(
-        (item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim(),
-      );
-      if (deploymentForProvider) next[option.id] = deploymentForProvider;
-    }
-    return next;
-  }
-
-  function syncDeployFormFromConfig(
-    providerId: WebDeployProviderId,
-    config: WebDeployConfigResponse | null,
-  ) {
-    const matchingConfig = config?.providerId === providerId ? config : null;
-    setDeployProviderId(providerId);
-    setDeployConfig(matchingConfig);
-    setDeployToken(matchingConfig?.tokenMask || '');
-    setTeamId(matchingConfig?.teamId || '');
-    setTeamSlug(matchingConfig?.teamSlug || '');
-    setCloudflareAccountId(matchingConfig?.accountId || '');
-  }
-
-  function buildDeployConfigRequest(providerId: WebDeployProviderId): WebUpdateDeployConfigRequest {
-    const token = deployToken.trim();
-    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
-      return {
-        providerId,
-        token,
-        accountId: cloudflareAccountId.trim(),
-      };
-    }
-    return {
-      providerId,
-      token,
-      teamId: teamId.trim(),
-      teamSlug: teamSlug.trim(),
-    };
-  }
-
-  async function loadDeployProvider(
-    providerId: WebDeployProviderId,
-    options?: { fallbackToExisting?: boolean },
-  ) {
-    const deployments = await fetchProjectDeployments(projectId);
-    const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
-    const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
-    const fallbackDeployment = options?.fallbackToExisting
-      ? Object.values(nextDeploymentsByProvider)[0] ?? null
-      : null;
-    const currentDeployment = exactDeployment ?? fallbackDeployment;
-    // Use the explicit providerId for config/form so a fallback deployment from
-    // another provider only fills the existing-URL display, never the form/credentials.
-    const config = await fetchDeployConfig(providerId);
-    syncDeployFormFromConfig(providerId, config);
-    setDeploymentsByProvider(nextDeploymentsByProvider);
-    setDeployment(currentDeployment ?? null);
-    setDeployResult(currentDeployment ?? null);
-    return { config, currentDeployment };
-  }
-
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
   // controls in the toolbar and reflects the count beside them.
@@ -2947,10 +633,6 @@ function HtmlViewer({
   const previewBodyRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    liveCommentTargetsRef.current = liveCommentTargets;
-  }, [liveCommentTargets]);
 
   useEffect(() => {
     if (liveHtml !== undefined) {
@@ -2975,16 +657,16 @@ function HtmlViewer({
     setDeployPhase('idle');
     void fetchProjectDeployments(projectId).then((items) => {
       if (cancelled) return;
-      const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
-      const current = nextDeploymentsByProvider[deployProviderId] ?? null;
-      setDeploymentsByProvider(nextDeploymentsByProvider);
+      const current = items.find(
+        (item) => item.fileName === file.name && item.providerId === 'vercel-self',
+      );
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, deployProviderId]);
+  }, [projectId, file.name]);
 
   // Detect deck-shaped HTML even when the project's skill didn't declare
   // `mode: deck`. Freeform projects often produce a deck because the user
@@ -2996,24 +678,9 @@ function HtmlViewer({
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const previewSource = inlinedSource ?? source;
-  // When we URL-load the iframe directly, skip every in-host inlining /
-  // srcDoc-rebuilding step. The browser does the asset resolution itself,
-  // which is the whole point of the URL-load path.
-  const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
-    mode,
-    isDeck: effectiveDeck,
-    commentMode: boardMode || manualEditMode,
-    inspectMode,
-    forceInline,
-  });
-  const previewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
-    [projectId, file.name, file.mtime, reloadKey],
-  );
 
   useEffect(() => {
     setInlinedSource(null);
-    if (useUrlLoadPreview) return;
     if (!source || effectiveDeck || !hasRelativeAssetRefs(source)) return;
     let cancelled = false;
     void inlineRelativeAssets(source, projectId, file.name).then((next) => {
@@ -3022,18 +689,16 @@ function HtmlViewer({
     return () => {
       cancelled = true;
     };
-  }, [source, effectiveDeck, projectId, file.name, useUrlLoadPreview]);
+  }, [source, effectiveDeck, projectId, file.name]);
 
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-      commentBridge: boardMode && !manualEditMode,
-      inspectBridge: inspectMode,
-      editBridge: manualEditMode,
+      commentBridge: commentMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode, inspectMode],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, commentMode],
   );
 
   useEffect(() => {
@@ -3050,7 +715,7 @@ function HtmlViewer({
       if (!data || data.type !== 'od:slide-state') return;
       if (typeof data.active !== 'number' || typeof data.count !== 'number') return;
       const next = { active: data.active, count: data.count };
-      setSlideStateCached(previewStateKey, next);
+      htmlPreviewSlideState.set(previewStateKey, next);
       setSlideState(next);
     }
     window.addEventListener('message', onMessage);
@@ -3060,91 +725,21 @@ function HtmlViewer({
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
-  }, [boardMode, boardTool, srcDoc]);
-
-  useEffect(() => {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
-  }, [manualEditMode, srcDoc]);
-
-  function syncBridgeModes() {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
-    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
-  }
-
-  useEffect(() => {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
-  }, [inspectMode, srcDoc]);
+    win.postMessage({ type: 'od:comment-mode', enabled: commentMode }, '*');
+  }, [commentMode, srcDoc]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
     setCommentDraft('');
-    setActiveInspectTarget(null);
-    setInspectOverrides({});
-    setInspectSavedAt(null);
-    setInspectError(null);
-    setQueuedBoardNotes([]);
-    setStrokePoints([]);
-    setManualEditTargets([]);
-    setSelectedManualEditTarget(null);
-    setManualEditDraft(emptyManualEditDraft());
-    setManualEditHistory([]);
-    setManualEditUndone([]);
-    setManualEditError(null);
   }, [file.name]);
 
-  // Selecting a new file or turning inspect off resets the panel target.
   useEffect(() => {
-    if (!inspectMode) {
-      setActiveInspectTarget(null);
-      setInspectError(null);
-    }
-  }, [inspectMode]);
-
-  // Hydrate the host-authoritative override map from the artifact source
-  // synchronously, *before* React commits a render that carries a new
-  // `srcDoc` to the iframe. A `useEffect([source])` would commit the new
-  // source first and only re-render with the parsed map afterwards — if
-  // the iframe finishes loading the new srcDoc in that window, its
-  // `onLoad` handler captures the previous file's empty/stale map in its
-  // closure and posts that map back over the bridge's freshly DOM-hydrated
-  // overrides, leaving the preview without saved inspect styles until the
-  // next reload or mode toggle. Setting state during render is React's
-  // documented escape hatch for "store a value derived from props"
-  // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes):
-  // the in-flight render is discarded and React re-renders with the
-  // updated state before commit, so the new `srcDoc` and the new
-  // `inspectOverrides` always commit together. After hydration the map
-  // only mutates from host-driven onApply / reset callbacks below, so
-  // artifact JS forging an od:inspect-overrides message cannot tamper
-  // with what saveInspectToSource will persist.
-  if (inspectHydratedSourceRef.current !== source) {
-    inspectHydratedSourceRef.current = source;
-    setInspectOverrides(typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
-  }
-
-  useEffect(() => {
-    if (source == null) return;
-    setManualEditDraft((current) => (
-      current.fullSource === source ? current : { ...current, fullSource: source }
-    ));
-  }, [source]);
-
-  useEffect(() => {
-    if (!boardMode) {
-      setActiveCommentTarget((current) => (current ? null : current));
-      setHoveredCommentTarget((current) => (current ? null : current));
-      setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
-      setQueuedBoardNotes((current) => (current.length > 0 ? [] : current));
-      setStrokePoints((current) => (current.length > 0 ? [] : current));
+    if (!commentMode) {
+      setActiveCommentTarget(null);
+      setHoveredCommentTarget(null);
+      setLiveCommentTargets(new Map());
       return;
     }
     const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot => ({
@@ -3154,22 +749,18 @@ function HtmlViewer({
       label: String(data.label || ''),
       text: String(data.text || ''),
       position: {
-        x: clampBridgeCoordinate(data.position?.x),
-        y: clampBridgeCoordinate(data.position?.y),
-        width: clampBridgeCoordinate(data.position?.width),
-        height: clampBridgeCoordinate(data.position?.height),
+        x: Number(data.position?.x) || 0,
+        y: Number(data.position?.y) || 0,
+        width: Number(data.position?.width) || 0,
+        height: Number(data.position?.height) || 0,
       },
       htmlHint: String(data.htmlHint || ''),
-      selectionKind: data.selectionKind === 'pod' ? 'pod' : 'element',
-      memberCount: finiteBridgeInteger(data.memberCount),
-      podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
     });
     function onMessage(ev: MessageEvent) {
       if (ev.source !== iframeRef.current?.contentWindow) return;
       const data = ev.data as (Partial<PreviewCommentSnapshot> & {
         type?: string;
         targets?: Array<Partial<PreviewCommentSnapshot>>;
-        points?: StrokePoint[];
       }) | null;
       if (!data?.type) return;
       if (data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
@@ -3180,18 +771,10 @@ function HtmlViewer({
         });
         setLiveCommentTargets(next);
         setActiveCommentTarget((current) => (
-          current
-            ? current.selectionKind === 'pod'
-              ? current
-              : next.get(current.elementId) ?? null
-            : null
+          current ? next.get(current.elementId) ?? null : null
         ));
         setHoveredCommentTarget((current) => (
-          current
-            ? current.selectionKind === 'pod'
-              ? current
-              : next.get(current.elementId) ?? null
-            : null
+          current ? next.get(current.elementId) ?? null : null
         ));
         return;
       }
@@ -3214,325 +797,16 @@ function HtmlViewer({
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
         setCommentDraft(existing?.note ?? '');
-        setQueuedBoardNotes([]);
-        return;
-      }
-      if (data.type === 'od:pod-clear') {
-        setStrokePoints([]);
-        return;
-      }
-      if (data.type === 'od:pod-stroke' && Array.isArray(data.points)) {
-        setStrokePoints(
-          data.points.map((point) => ({
-            x: clampBridgeCoordinate(point.x),
-            y: clampBridgeCoordinate(point.y),
-          })),
-        );
-        return;
-      }
-      if (data.type === 'od:pod-select' && Array.isArray(data.points)) {
-        const points = data.points.map((point) => ({
-          x: clampBridgeCoordinate(point.x),
-          y: clampBridgeCoordinate(point.y),
-        }));
-        setStrokePoints(points);
-        const nextTarget = buildPodSnapshot({
-          filePath: file.name,
-          strokePoints: points,
-          liveTargets: liveCommentTargetsRef.current,
-        });
-        if (!nextTarget) {
-          setStrokePoints([]);
-          return;
-        }
-        setActiveCommentTarget(nextTarget);
-        setHoveredCommentTarget(nextTarget);
-        setQueuedBoardNotes([]);
-        setCommentDraft('');
-        setStrokePoints([]);
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [boardMode, file.name, previewComments]);
-
-  useEffect(() => {
-    if (!manualEditMode) {
-      setManualEditTargets([]);
-      setSelectedManualEditTarget(null);
-      setManualEditError(null);
-      return;
-    }
-    function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
-      const data = ev.data as ManualEditBridgeMessage | null;
-      if (!data?.type) return;
-      if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
-        setManualEditTargets(data.targets);
-        setSelectedManualEditTarget((current) =>
-          current ? data.targets.find((target) => target.id === current.id) ?? null : current,
-        );
-        return;
-      }
-      if (data.type === 'od-edit-select') {
-        selectManualEditTarget(data.target);
-      }
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [manualEditMode, source]);
-
-  function selectManualEditTarget(target: ManualEditTarget) {
-    const base = source ?? '';
-    const fields = readManualEditFields(base, target.id);
-    setSelectedManualEditTarget(target);
-    setManualEditDraft({
-      text: fields.text ?? target.fields.text ?? target.text,
-      href: fields.href ?? target.fields.href ?? '',
-      src: fields.src ?? target.fields.src ?? '',
-      alt: fields.alt ?? target.fields.alt ?? '',
-      styles: readManualEditStyles(base, target.id),
-      attributesText: JSON.stringify(readManualEditAttributes(base, target.id), null, 2),
-      outerHtml: readManualEditOuterHtml(base, target.id) || target.outerHtml,
-      fullSource: base,
-    });
-    setManualEditError(null);
-  }
-
-  async function applyManualEdit(patch: ManualEditPatch, label: string) {
-    if (manualEditSavingRef.current) return;
-    if (source == null) return;
-    manualEditSavingRef.current = true;
-    setManualEditSaving(true);
-    setManualEditError(null);
-    try {
-      const baseSource = source;
-      const result = applyManualEditPatch(baseSource, patch);
-      if (!result.ok) {
-        setManualEditError(result.error ?? 'Could not apply edit.');
-        return;
-      }
-      if (!(await confirmManualEditHistorySource(
-        baseSource,
-        'The file changed outside manual edit mode. Refreshing before applying manual edits.',
-      ))) return;
-      const saved = await writeProjectTextFile(projectId, file.name, result.source, {
-        artifactManifest: file.artifactManifest,
-      });
-      if (!saved) {
-        setManualEditError('Could not save the edited file.');
-        return;
-      }
-      const entry: ManualEditHistoryEntry = {
-        id: `${Date.now()}-${manualEditHistory.length}`,
-        label,
-        patch,
-        beforeSource: baseSource,
-        afterSource: result.source,
-        createdAt: Date.now(),
-      };
-      setSource(result.source);
-      setInlinedSource(null);
-      setManualEditHistory((current) => [entry, ...current]);
-      setManualEditUndone([]);
-      setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
-      await onFileSaved?.();
-    } finally {
-      manualEditSavingRef.current = false;
-      setManualEditSaving(false);
-    }
-  }
-
-  async function confirmManualEditHistorySource(expectedSource: string, message: string): Promise<boolean> {
-    const persisted = await fetchProjectFileText(projectId, file.name, {
-      cache: 'no-store',
-      cacheBustKey: Date.now(),
-    });
-    if (persisted == null || persisted === expectedSource) return true;
-    setSource(persisted);
-    setInlinedSource(null);
-    setManualEditHistory([]);
-    setManualEditUndone([]);
-    setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
-    setManualEditError(message);
-    return false;
-  }
-
-  async function undoManualEdit() {
-    if (manualEditSavingRef.current) return;
-    const [latest, ...rest] = manualEditHistory;
-    if (!latest) return;
-    manualEditSavingRef.current = true;
-    setManualEditSaving(true);
-    try {
-      if (!(await confirmManualEditHistorySource(
-        latest.afterSource,
-        'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
-      ))) return;
-      const saved = await writeProjectTextFile(projectId, file.name, latest.beforeSource, {
-        artifactManifest: file.artifactManifest,
-      });
-      if (!saved) {
-        setManualEditError('Could not save the undo result.');
-        return;
-      }
-      setSource(latest.beforeSource);
-      setInlinedSource(null);
-      setManualEditHistory(rest);
-      setManualEditUndone((current) => [latest, ...current]);
-      setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
-      await onFileSaved?.();
-    } finally {
-      manualEditSavingRef.current = false;
-      setManualEditSaving(false);
-    }
-  }
-
-  async function redoManualEdit() {
-    if (manualEditSavingRef.current) return;
-    const [latest, ...rest] = manualEditUndone;
-    if (!latest) return;
-    manualEditSavingRef.current = true;
-    setManualEditSaving(true);
-    try {
-      if (!(await confirmManualEditHistorySource(
-        latest.beforeSource,
-        'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
-      ))) return;
-      const saved = await writeProjectTextFile(projectId, file.name, latest.afterSource, {
-        artifactManifest: file.artifactManifest,
-      });
-      if (!saved) {
-        setManualEditError('Could not save the redo result.');
-        return;
-      }
-      setSource(latest.afterSource);
-      setInlinedSource(null);
-      setManualEditUndone(rest);
-      setManualEditHistory((current) => [latest, ...current]);
-      setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
-      await onFileSaved?.();
-    } finally {
-      manualEditSavingRef.current = false;
-      setManualEditSaving(false);
-    }
-  }
-
-  // Inspect-mode picker: same `od:comment-target` payload, different sink.
-  // The bridge tags the message with a computed-style snapshot so the panel
-  // can show real starting values for color / typography / spacing / radius.
-  useEffect(() => {
-    if (!inspectMode) return;
-    function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
-      const data = ev.data as
-        | { type?: string; elementId?: string; selector?: string; label?: string; text?: string; style?: InspectStyleSnapshot }
-        | null;
-      if (!data || data.type !== 'od:comment-target') return;
-      if (!data.elementId || !data.selector) return;
-      setActiveInspectTarget({
-        elementId: String(data.elementId),
-        selector: String(data.selector),
-        label: String(data.label || ''),
-        text: String(data.text || ''),
-        style: data.style && typeof data.style === 'object' ? data.style : {},
-      });
-      setInspectError(null);
-      setInspectSavedAt(null);
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode]);
+  }, [commentMode, file.name, previewComments]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od:slide', action }, '*');
-  }
-
-  function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage(
-      { type: 'od:inspect-set', elementId, selector, prop, value },
-      '*',
-    );
-  }
-
-  function postInspectReset(elementId?: string) {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ type: 'od:inspect-reset', elementId }, '*');
-  }
-
-  // Replay the host's authoritative override map into the freshly loaded
-  // iframe. The bridge inside the iframe only sees rules persisted in the
-  // artifact source via its own hydrateOverridesFromDom() — any unsaved
-  // edit lives on the host side until Save-to-source. Without this replay,
-  // toggling Inspect off/on, switching to Comment mode, or any other
-  // srcdoc rebuild reloads the iframe from previewSource without the
-  // unsaved style block, so the preview drops the live edits while
-  // saveInspectToSource() can still persist them later from the stale
-  // host map. The bridge re-validates each entry under its own allow-list,
-  // so a parent that posted a hostile replay can only land overrides the
-  // bridge would also have accepted via od:inspect-set.
-  //
-  // The render-time hydration above keeps `inspectOverrides` aligned with
-  // the current `source` whenever React commits, but the iframe `onLoad`
-  // callback fires from a separate event-loop turn after the new srcDoc
-  // is parsed; if it ever races a stale closure (e.g. an interleaved
-  // remount), reading React state would post the previous file's map over
-  // the bridge's DOM-hydrated one and silently strip the persisted styles
-  // from preview. Re-derive synchronously from `source` whenever the
-  // hydration ref disagrees so onLoad never sends a stale snapshot.
-  function replayInspectOverridesToIframe() {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    const overrides = inspectHydratedSourceRef.current === source
-      ? inspectOverrides
-      : (typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
-    win.postMessage({ type: 'od:inspect-replay', overrides }, '*');
-  }
-
-  // Persist accumulated inspect overrides into the artifact source: replace
-  // (or insert) a single <style data-od-inspect-overrides> block in <head>.
-  // The CSS body is serialized from the host's own override map, hydrated
-  // from source on load and updated only by host-driven onApply / reset
-  // callbacks. We deliberately do NOT round-trip through the iframe at save
-  // time: artifact JS rendered inside the preview shares the same
-  // contentWindow as the bridge and could forge an od:inspect-overrides
-  // reply that flips allow-listed properties on elements the user never
-  // touched. POSTing to /api/projects/:id/files upserts the file via
-  // writeProjectFile (multipart-or-JSON; we use JSON).
-  async function saveInspectToSource() {
-    if (!source) return;
-    setSavingInspect(true);
-    setInspectError(null);
-    try {
-      const css = serializeInspectOverrides(inspectOverrides).trim();
-      const next = applyInspectOverridesToSource(source, css);
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: file.name, content: next }),
-      });
-      if (!resp.ok) {
-        const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
-        throw new Error(payload?.error || payload?.message || `Save failed (${resp.status})`);
-      }
-      setSource(next);
-      setInspectSavedAt(Date.now());
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
-      setInspectError(msg);
-      // The error banner inside the inspect panel is easy to miss when the
-      // user is focused on the iframe preview — surface failures in the
-      // console as well so quota/network errors aren't silently lost.
-      console.error('[inspect] saveToSource failed:', err);
-    } finally {
-      setSavingInspect(false);
-    }
   }
 
   // Keyboard nav on the host, so the user can press ←/→ even when focus
@@ -3610,11 +884,10 @@ function HtmlViewer({
 
   function openInNewTab() {
     if (!source) return;
-    openSandboxedPreviewInNewTab(source, exportTitle, {
-      deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
-      initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-    });
+    const blob = new Blob([source], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   // Snapshot this project as a reusable template. The daemon snapshots
@@ -3622,124 +895,107 @@ function HtmlViewer({
   // the viewer), so the template captures the whole design, not a single
   // page. Surfaced here in the Share menu because that's where the user's
   // share / export mental model already lives.
-  function openSaveAsTemplateModal() {
+  async function handleSaveAsTemplate() {
     setShareMenuOpen(false);
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
-    setTemplateName(defaultName);
-    setTemplateDescription('');
-    setTemplateSaveError(null);
-    setTemplateModalOpen(true);
-  }
-
-  async function handleSaveAsTemplate() {
-    const name = templateName.trim();
-    if (!name) return;
+    const name = window.prompt(t('fileViewer.templateNamePrompt'), defaultName);
+    if (!name || !name.trim()) return;
+    const description = window.prompt(
+      t('fileViewer.templateDescPrompt'),
+      '',
+    );
     setSavingTemplate(true);
     setTemplateNote(null);
-    setTemplateSaveError(null);
-    let savedName: string | null = null;
     try {
       const tpl = await saveTemplate({
-        name,
-        description: templateDescription.trim() || undefined,
+        name: name.trim(),
+        description: description?.trim() || undefined,
         sourceProjectId: projectId,
       });
-      if (!tpl) {
-        setTemplateSaveError(t('fileViewer.savedTemplateFail'));
-        return;
-      }
-      savedName = tpl.name;
-      setTemplateModalOpen(false);
-      setTemplateName('');
-      setTemplateDescription('');
-      setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
+      setTemplateNote(
+        tpl
+          ? t('fileViewer.savedTemplate', { name: tpl.name })
+          : t('fileViewer.savedTemplateFail'),
+      );
     } finally {
       setSavingTemplate(false);
-      if (savedName) {
-        // Auto-clear the note so the menu doesn't keep stale state next open.
-        setTimeout(() => setTemplateNote(null), 4000);
-      }
+      // Auto-clear the note so the menu doesn't keep stale state next open.
+      setTimeout(() => setTemplateNote(null), 4000);
     }
   }
 
-  async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
+  async function openDeployModal() {
     setShareMenuOpen(false);
     setDeployModalOpen(true);
     setDeployError(null);
     setCopiedDeployLink(false);
     setDeployPhase('idle');
-    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
-  }
-
-  async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
-    if (nextProviderId === deployProviderId) return;
-    setDeployError(null);
-    setDeployPhase('idle');
-    await loadDeployProvider(nextProviderId);
+    const [config, deployments] = await Promise.all([
+      fetchDeployConfig(),
+      fetchProjectDeployments(projectId),
+    ]);
+    if (config) {
+      setDeployConfig(config);
+      setVercelToken(config.tokenMask || '');
+      setTeamId(config.teamId || '');
+      setTeamSlug(config.teamSlug || '');
+    }
+    const current = deployments.find(
+      (item) => item.fileName === file.name && item.providerId === 'vercel-self',
+    );
+    setDeployment(current ?? null);
+    setDeployResult(current ?? null);
   }
 
   async function saveDeployConfig() {
     setSavingDeployConfig(true);
     setDeployError(null);
     try {
-      if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
-        if (!deployToken.trim()) {
-          throw new Error(t('fileViewer.cloudflareApiTokenRequired'));
-        }
-        if (!cloudflareAccountId.trim()) {
-          throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
-        }
-      }
-      const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
-      if (!config || config.providerId !== deployProviderId) {
-        throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
-      }
-      syncDeployFormFromConfig(deployProviderId, config);
+      const config = await updateDeployConfig({
+        token: vercelToken,
+        teamId,
+        teamSlug,
+      });
+      if (!config) throw new Error(t('fileViewer.deployConfigSaveFailed'));
+      setDeployConfig(config);
+      setVercelToken(config.tokenMask || '');
+      setTeamId(config.teamId || '');
+      setTeamSlug(config.teamSlug || '');
       return config;
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
+      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployConfigSaveFailed'));
       return null;
     } finally {
       setSavingDeployConfig(false);
     }
   }
 
-  async function deployToSelectedProvider() {
+  async function deployToVercel() {
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
     setCopiedDeployLink(false);
     try {
-      const typedToken = deployToken.trim();
+      const typedToken = vercelToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
       const needsConfigSave =
         hasNewToken ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
-        cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
-        if (!nextConfig) return;
         if (!nextConfig?.configured) {
-          const option = getDeployProviderOption(deployProviderId);
-          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
+          throw new Error(t('fileViewer.vercelTokenRequired'));
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name, deployProviderId);
-      setDeploymentsByProvider((current) => ({
-        ...current,
-        [next.providerId]: next,
-      }));
+      const next = await deployProjectFile(projectId, file.name);
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
-      const option = getDeployProviderOption(deployProviderId);
-      setDeployError(
-        err instanceof Error ? err.message : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) }),
-      );
+      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployFailed'));
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -3753,10 +1009,6 @@ function HtmlViewer({
     setDeployPhase('preparing-link');
     try {
       const next = await checkDeploymentLink(projectId, current.id);
-      setDeploymentsByProvider((items) => ({
-        ...items,
-        [next.providerId]: next,
-      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
@@ -3810,99 +1062,20 @@ function HtmlViewer({
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
   }
 
-  function clearBoardComposer() {
-    setActiveCommentTarget(null);
-    setHoveredCommentTarget(null);
-    setCommentDraft('');
-    setQueuedBoardNotes([]);
-    setStrokePoints([]);
-  }
-
-  function activateBoard(nextTool?: BoardTool) {
-    setMode('preview');
-    setBoardMode(true);
-    if (nextTool) {
-      setBoardTool(nextTool);
-    }
-  }
-
-  function queueCurrentDraft() {
-    const note = commentDraft.trim();
-    if (!note) return;
-    setQueuedBoardNotes((current) => [...current, note]);
-    setCommentDraft('');
-  }
-
-  async function sendBoardBatch() {
-    if (!activeCommentTarget || !onSendBoardCommentAttachments) return;
-    const nextNotes = [...queuedBoardNotes];
-    if (commentDraft.trim()) nextNotes.push(commentDraft.trim());
-    if (nextNotes.length === 0) return;
-    setSendingBoardBatch(true);
-    try {
-      await onSendBoardCommentAttachments(
-        buildBoardCommentAttachments({
-          target: targetFromSnapshot(activeCommentTarget),
-          notes: nextNotes,
-        }),
-      );
-      clearBoardComposer();
-    } finally {
-      setSendingBoardBatch(false);
-    }
-  }
-
-  async function savePersistentComment() {
-    if (!activeCommentTarget || !commentDraft.trim() || !onSavePreviewComment) return;
-    const saved = await onSavePreviewComment(
-      targetFromSnapshot(activeCommentTarget),
-      commentDraft.trim(),
-      false,
-    );
-    if (saved) {
-      setCommentDraft('');
-    }
-  }
-
   const showPresent = effectiveDeck && source !== null;
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
-  const boardAvailable = source !== null;
+  const previewScale = zoom / 100;
   const activeDeployment = deployResult || deployment;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentReady = activeDeployment?.status === 'ready';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
   const activeDeploymentNeedsRetry = activeDeploymentDelayed || activeDeploymentProtected;
-  const deployProvider = getDeployProviderOption(deployProviderId);
-  const deployProviderLabel = t(deployProvider.labelKey);
-  const deployActionLabelFor = (providerId: WebDeployProviderId) => {
-    const option = getDeployProviderOption(providerId);
-    const label = t(option.labelKey);
-    const hasActiveDeploymentForProvider = Boolean(deploymentsByProvider[providerId]?.url?.trim());
-    return hasActiveDeploymentForProvider
-      ? t('fileViewer.redeployToProvider', { provider: label })
-      : t('fileViewer.deployToProvider', { provider: label });
-  };
-  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
-    providerId: option.id,
-    providerLabel: t(option.labelKey),
-    url: deploymentsByProvider[option.id]?.url?.trim() || '',
-  })).filter((item) => item.url);
-  const deployButtonLabel =
-    deployPhase === 'deploying'
-      ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
-      : deployPhase === 'preparing-link'
-        ? t('fileViewer.preparingPublicLink')
-        : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
   const copyDeployLabel = copiedDeployLink
     ? t('fileViewer.copied')
     : t('fileViewer.copyDeployLink');
-  const copyDeployMenuLabel = (providerLabel: string) =>
-    copiedDeployLink
-      ? t('fileViewer.copied')
-      : `${t('fileViewer.copyDeployLink')} · ${providerLabel}`;
 
   return (
     <div className="viewer html-viewer">
@@ -3955,20 +1128,12 @@ function HtmlViewer({
           ) : null}
           <button
             type="button"
-            className={`viewer-toggle${boardMode ? ' active' : ''}`}
-            data-testid="board-mode-toggle"
+            className="viewer-toggle"
+            disabled
+            data-coming-soon="true"
             title={t('fileViewer.tweaks')}
-            aria-pressed={boardMode}
-            disabled={!boardAvailable}
-            onClick={() => {
-              if (boardMode) {
-                setBoardMode(false);
-                clearBoardComposer();
-                return;
-              }
-              setManualEditMode(false);
-              activateBoard(boardTool);
-            }}
+            aria-pressed={false}
+            onClick={(e) => e.preventDefault()}
           >
             <Icon name="tweaks" size={13} />
             <span>{t('fileViewer.tweaks')}</span>
@@ -3991,74 +1156,35 @@ function HtmlViewer({
             </button>
           </div>
           <span className="viewer-divider" aria-hidden />
-          {boardMode ? (
-            <>
-              <button
-                className={`viewer-action${boardTool === 'inspect' ? ' active' : ''}`}
-                type="button"
-                data-testid="comment-mode-toggle"
-                disabled={!boardAvailable}
-                title="Pick one element"
-                aria-label="Picker"
-                aria-pressed={boardTool === 'inspect'}
-                onClick={() => activateBoard('inspect')}
-              >
-                <Icon name="edit" size={13} />
-                <span>Picker</span>
-              </button>
-              <button
-                className={`viewer-action${boardTool === 'pod' ? ' active' : ''}`}
-                type="button"
-                disabled={!boardAvailable}
-                title="Draw a pod selection"
-                aria-label="Pods"
-                aria-pressed={boardTool === 'pod'}
-                onClick={() => activateBoard('pod')}
-              >
-                <Icon name="draw" size={13} />
-                <span>Pods</span>
-              </button>
-            </>
-          ) : null}
           <button
-            className={`viewer-action${inspectMode ? ' active' : ''}`}
+            className={`viewer-action${commentMode ? ' active' : ''}`}
             type="button"
-            data-testid="inspect-mode-toggle"
-            title="Inspect"
-            aria-pressed={inspectMode}
-            onClick={() => {
-              setInspectMode((v) => {
-                const next = !v;
-                if (next) {
-                  setBoardMode(false);
-                  clearBoardComposer();
-                  setManualEditMode(false);
-                }
-                return next;
-              });
-            }}
+            data-testid="comment-mode-toggle"
+            title={t('fileViewer.comment')}
+            onClick={() => setCommentMode((v) => !v)}
           >
-            <Icon name="tweaks" size={13} />
-            <span>Inspect</span>
+            <Icon name="comment" size={13} />
+            <span>{t('fileViewer.comment')}</span>
           </button>
           <button
-            className={`viewer-action${manualEditMode ? ' active' : ''}`}
+            className="viewer-action"
             type="button"
-            data-testid="manual-edit-mode-toggle"
+            disabled
+            data-coming-soon="true"
             title={t('fileViewer.edit')}
-            aria-pressed={manualEditMode}
-            onClick={() => {
-              if (!manualEditMode) {
-                setBoardMode(false);
-                clearBoardComposer();
-                setInspectMode(false);
-                setMode('preview');
-              }
-              setManualEditMode((value) => !value);
-            }}
           >
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
+          </button>
+          <button
+            className="viewer-action"
+            type="button"
+            disabled
+            data-coming-soon="true"
+            title={t('fileViewer.draw')}
+          >
+            <Icon name="draw" size={13} />
+            <span>{t('fileViewer.draw')}</span>
           </button>
           <span className="viewer-divider" aria-hidden />
           <button
@@ -4175,12 +1301,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      void exportProjectAsZip({
-                        projectId,
-                        filePath: file.name,
-                        fallbackHtml: source ?? '',
-                        fallbackTitle: exportTitle,
-                      });
+                      exportAsZip(source ?? '', exportTitle);
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="download" size={14} /></span>
@@ -4198,24 +1319,6 @@ function HtmlViewer({
                     <span className="share-menu-icon"><Icon name="file-code" size={14} /></span>
                     <span>{t('fileViewer.exportHtml')}</span>
                   </button>
-                  {/* Export as Markdown — pass-through download of the
-                      artifact source with a `.md` extension. No conversion
-                      runs; the file body is identical to the Source view.
-                      Useful for piping the artifact into markdown-aware
-                      tooling (LLM context windows, vault apps). See
-                      issue #279. */}
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      exportAsMd(source ?? '', exportTitle);
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="file" size={14} /></span>
-                    <span>{t('fileViewer.exportMd')}</span>
-                  </button>
                   <div className="share-menu-divider" />
                   <button
                     type="button"
@@ -4223,7 +1326,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      openSaveAsTemplateModal();
+                      void handleSaveAsTemplate();
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
@@ -4236,38 +1339,36 @@ function HtmlViewer({
                     </span>
                   </button>
                   <div className="share-menu-divider" />
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        void openDeployModal(option.id);
-                      }}
-                    >
-                      <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
-                      <span>{deployActionLabelFor(option.id)}</span>
-                    </button>
-                  ))}
-                  {deployCopyLinks.length > 0 ? (
-                    <div className="share-menu-divider" />
-                  ) : null}
-                  {deployCopyLinks.map((item) => (
-                    <button
-                      key={`copy-${item.providerId}`}
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setShareMenuOpen(false);
-                        void copyDeployLink(item.url);
-                      }}
-                    >
-                      <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
-                      <span>{copyDeployMenuLabel(item.providerLabel)}</span>
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    className="share-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      void openDeployModal();
+                    }}
+                  >
+                    <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
+                    <span>
+                      {activeDeployedUrl
+                        ? t('fileViewer.redeployToVercel')
+                        : t('fileViewer.deployToVercel')}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="share-menu-item"
+                    role="menuitem"
+                    disabled={!activeDeployedUrl}
+                    onClick={() => {
+                      setShareMenuOpen(false);
+                      void copyDeployLink(activeDeployedUrl);
+                    }}
+                  >
+                    <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
+                    <span>
+                      {copyDeployLabel}
+                    </span>
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -4278,150 +1379,56 @@ function HtmlViewer({
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
-          <div className={manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'}>
-            {manualEditMode ? (
-              <ManualEditPanel
-                targets={manualEditTargets}
-                selectedTarget={selectedManualEditTarget}
-                draft={manualEditDraft}
-                history={manualEditHistory}
-                error={manualEditError}
-                canUndo={manualEditHistory.length > 0}
-                canRedo={manualEditUndone.length > 0}
-                busy={manualEditSaving}
-                onSelectTarget={selectManualEditTarget}
-                onDraftChange={setManualEditDraft}
-                onApplyPatch={(patch, label) => {
-                  void applyManualEdit(patch, label);
-                }}
-                onError={setManualEditError}
-                onCancelDraft={() => {
-                  if (selectedManualEditTarget) selectManualEditTarget(selectedManualEditTarget);
-                }}
-                onUndo={() => {
-                  void undoManualEdit();
-                }}
-                onRedo={() => {
-                  void redoManualEdit();
-                }}
+          <div className="comment-preview-layer">
+            <div
+              style={{
+                width: `${100 / previewScale}%`,
+                height: `${100 / previewScale}%`,
+                transform: `scale(${previewScale})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              <iframe
+                ref={iframeRef}
+                data-testid="artifact-preview-frame"
+                title={file.name}
+                sandbox="allow-scripts"
+                srcDoc={srcDoc}
               />
-            ) : null}
-            <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
-              <div
-                style={{
-                  width: `${100 / previewScale}%`,
-                  height: `${100 / previewScale}%`,
-                  transform: `scale(${previewScale})`,
-                  transformOrigin: '0 0',
-                }}
-              >
-                {useUrlLoadPreview ? (
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="artifact-preview-frame"
-                    data-od-render-mode="url-load"
-                    title={file.name}
-                    sandbox="allow-scripts"
-                    src={previewSrcUrl}
-                    onLoad={syncBridgeModes}
-                  />
-                ) : (
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="artifact-preview-frame"
-                    data-od-render-mode="srcdoc"
-                    title={file.name}
-                    sandbox="allow-scripts"
-                    srcDoc={srcDoc}
-                    // Re-seeds the iframe-side bridge with the host's
-                    // authoritative inspect override map after each srcdoc
-                    // rebuild, then syncs comment/edit bridge modes.
-                    // URL-loaded iframes have no inspect bridge, so the
-                    // replay handler is intentionally only on the srcDoc
-                    // branch.
-                    onLoad={() => {
-                      replayInspectOverridesToIframe();
-                      syncBridgeModes();
-                    }}
-                  />
-                )}
-              </div>
             </div>
-            {boardMode ? (
+            {commentMode ? (
               <CommentPreviewOverlays
                 comments={previewComments}
                 liveTargets={liveCommentTargets}
                 hoveredTarget={hoveredCommentTarget}
                 activeTarget={activeCommentTarget}
-                boardTool={boardTool}
                 scale={previewScale}
-                strokePoints={strokePoints}
                 onOpenComment={(comment, snapshot) => {
                   setActiveCommentTarget(snapshot);
                   setHoveredCommentTarget(snapshot);
                   setCommentDraft(comment.note);
-                  setQueuedBoardNotes([]);
                 }}
               />
             ) : null}
-            {boardMode && activeCommentTarget ? (
-              <BoardComposerPopover
+            {commentMode && activeCommentTarget ? (
+              <CommentPopover
                 target={activeCommentTarget}
                 existing={previewComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
                 draft={commentDraft}
-                notes={queuedBoardNotes}
                 onDraft={setCommentDraft}
-                onAddDraft={queueCurrentDraft}
-                onRemoveQueuedNote={(index) =>
-                  setQueuedBoardNotes((current) => current.filter((_, currentIndex) => currentIndex !== index))
-                }
-                onClose={clearBoardComposer}
-                onSaveComment={savePersistentComment}
-                onSendBatch={sendBoardBatch}
+                onClose={() => setActiveCommentTarget(null)}
+                onSave={async (attach) => {
+                  if (!commentDraft.trim() || !onSavePreviewComment) return;
+                  const saved = await onSavePreviewComment(targetFromSnapshot(activeCommentTarget), commentDraft.trim(), attach);
+                  if (saved) setActiveCommentTarget(null);
+                }}
                 onRemove={async (commentId) => {
                   if (!onRemovePreviewComment) return;
                   await onRemovePreviewComment(commentId);
-                  clearBoardComposer();
+                  setActiveCommentTarget(null);
                 }}
-                sending={sendingBoardBatch || streaming}
                 t={t}
               />
-            ) : null}
-            {inspectMode && activeInspectTarget ? (
-              <InspectPanel
-                target={activeInspectTarget}
-                onApply={(prop, value) => {
-                  const target = activeInspectTarget;
-                  setInspectOverrides((current) =>
-                    updateInspectOverride(current, target.elementId, target.selector, prop, value),
-                  );
-                  postInspectSet(target.elementId, target.selector, prop, value);
-                }}
-                onResetElement={(elementId) => {
-                  setInspectOverrides((current) => {
-                    if (!(elementId in current)) return current;
-                    const next = { ...current };
-                    delete next[elementId];
-                    return next;
-                  });
-                  postInspectReset(elementId);
-                  setActiveInspectTarget((current) => current && current.elementId === elementId
-                    ? current
-                    : current);
-                }}
-                onSaveToSource={() => {
-                  void saveInspectToSource();
-                }}
-                onClose={() => setActiveInspectTarget(null)}
-                saving={savingInspect}
-                savedAt={inspectSavedAt}
-                error={inspectError}
-              />
-            ) : null}
-            {inspectMode && !activeInspectTarget ? (
-              <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
-                Click any element with <code>data-od-id</code> to tune its style.
-              </div>
             ) : null}
           </div>
         ) : (
@@ -4441,121 +1448,34 @@ function HtmlViewer({
           >
             <Icon name="close" size={13} /> {t('fileViewer.exitPresentation')}
           </button>
-          {useUrlLoadPreview ? (
-            <iframe
-              title="present"
-              sandbox="allow-scripts"
-              data-od-render-mode="url-load"
-              src={previewSrcUrl}
-            />
-          ) : (
-            <iframe
-              title="present"
-              sandbox="allow-scripts"
-              data-od-render-mode="srcdoc"
-              srcDoc={srcDoc}
-            />
-          )}
-        </div>
-      ) : null}
-      {templateModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal deploy-modal" role="dialog" aria-modal="true">
-            <div className="modal-head">
-              <div className="kicker">TEMPLATE</div>
-              <h2>{t('fileViewer.saveAsTemplate')}</h2>
-              <p className="subtitle">{t('fileViewer.templateDescPrompt')}</p>
-            </div>
-            <div className="deploy-form">
-              <label className="field" htmlFor={templateNameId}>
-                <span className="field-label">{t('fileViewer.templateNamePrompt')}</span>
-                <input
-                  id={templateNameId}
-                  type="text"
-                  value={templateName}
-                  placeholder={t('fileViewer.templateNameDefault')}
-                  autoFocus
-                  onChange={(e) => setTemplateName(e.target.value)}
-                />
-              </label>
-              <label className="field" htmlFor={templateDescriptionId}>
-                <span className="field-label">{t('fileViewer.templateDescPrompt')}</span>
-                <textarea
-                  id={templateDescriptionId}
-                  rows={3}
-                  value={templateDescription}
-                  placeholder={t('fileViewer.optional')}
-                  onChange={(e) => setTemplateDescription(e.target.value)}
-                />
-              </label>
-              {templateSaveError ? <p className="deploy-error">{templateSaveError}</p> : null}
-            </div>
-            <div className="modal-foot">
-              <button
-                type="button"
-                className="ghost-link button-like"
-                disabled={savingTemplate}
-                onClick={() => {
-                  setTemplateModalOpen(false);
-                  setTemplateSaveError(null);
-                }}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="viewer-action primary"
-                disabled={savingTemplate || !templateName.trim()}
-                onClick={() => {
-                  void handleSaveAsTemplate();
-                }}
-              >
-                {savingTemplate ? t('fileViewer.savingTemplate') : t('common.save')}
-              </button>
-            </div>
-          </div>
+          <iframe title="present" sandbox="allow-scripts" srcDoc={srcDoc} />
         </div>
       ) : null}
       {deployModalOpen ? (
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div className="kicker">{deployProviderLabel}</div>
-              <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
+              <div className="kicker">VERCEL</div>
+              <h2>{t('fileViewer.deployModalTitle')}</h2>
               <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
             </div>
             <div className="deploy-form">
-              <label className="deploy-provider-field">
-                <span>{t('fileViewer.deployProviderLabel')}</span>
-                <select
-                  value={deployProviderId}
-                  onChange={(e) => {
-                    void changeDeployProvider(e.target.value as WebDeployProviderId);
-                  }}
-                >
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {t(option.labelKey)}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <div className="field-label-row">
-                <label htmlFor="deploy-token">{t(deployProvider.tokenLabelKey)}</label>
+                <label htmlFor="vercel-token">{t('fileViewer.vercelToken')}</label>
                 <a
-                  href={deployProvider.tokenLink}
+                  href="https://vercel.com/account/settings/tokens"
                   target="_blank"
                   rel="noreferrer noopener"
                 >
-                  {t(deployProvider.tokenLinkKey)}
+                  {t('fileViewer.vercelTokenGetLink')}
                 </a>
               </div>
               <input
-                id="deploy-token"
+                id="vercel-token"
                 type="password"
-                value={deployToken}
-                placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
-                onChange={(e) => setDeployToken(e.target.value)}
+                value={vercelToken}
+                placeholder={t('fileViewer.vercelTokenPlaceholder')}
+                onChange={(e) => setVercelToken(e.target.value)}
               />
               <div className="deploy-config-actions">
                 <button
@@ -4570,43 +1490,27 @@ function HtmlViewer({
                 </button>
               </div>
               {deployConfig?.configured ? (
-                <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                <p className="hint">{t('fileViewer.vercelTokenReuseHint')}</p>
               ) : null}
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-              ) : null}
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <div className="deploy-field-grid single-field">
-                  <label>
-                    <span>{t('fileViewer.cloudflareAccountId')}</span>
-                    <input
-                      value={cloudflareAccountId}
-                      onChange={(e) => setCloudflareAccountId(e.target.value)}
-                    />
-                    <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
-                  </label>
-                </div>
-              ) : (
-                <div className="deploy-field-grid">
-                  <label>
-                    <span>{t('fileViewer.vercelTeamId')}</span>
-                    <input
-                      value={teamId}
-                      placeholder={t('fileViewer.optional')}
-                      onChange={(e) => setTeamId(e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>{t('fileViewer.vercelTeamSlug')}</span>
-                    <input
-                      value={teamSlug}
-                      placeholder={t('fileViewer.optional')}
-                      onChange={(e) => setTeamSlug(e.target.value)}
-                    />
-                  </label>
-                </div>
-              )}
-              <p className="hint">{t(deployProvider.previewHintKey)}</p>
+              <div className="deploy-field-grid">
+                <label>
+                  <span>{t('fileViewer.vercelTeamId')}</span>
+                  <input
+                    value={teamId}
+                    placeholder={t('fileViewer.optional')}
+                    onChange={(e) => setTeamId(e.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>{t('fileViewer.vercelTeamSlug')}</span>
+                  <input
+                    value={teamSlug}
+                    placeholder={t('fileViewer.optional')}
+                    onChange={(e) => setTeamSlug(e.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="hint">{t('fileViewer.vercelPreviewOnly')}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {activeDeployedUrl ? (
                 <div
@@ -4655,16 +1559,16 @@ function HtmlViewer({
                     >
                       <Icon name="copy" size={14} />
                       <span>{copyDeployLabel}</span>
-                      </button>
-                      <a
-                        className={`ghost-link ${activeDeploymentProtected ? 'disabled' : ''}`}
-                        href={activeDeploymentProtected ? undefined : activeDeployedUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        aria-disabled={activeDeploymentProtected}
-                      >
-                        <Icon name="upload" size={14} />
-                        {t('fileViewer.open')}
+                    </button>
+                    <a
+                      className={`ghost-link ${activeDeploymentReady ? '' : 'disabled'}`}
+                      href={activeDeploymentReady ? activeDeployedUrl : undefined}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      aria-disabled={!activeDeploymentReady}
+                    >
+                      <Icon name="upload" size={14} />
+                      {t('fileViewer.open')}
                     </a>
                   </div>
                 </div>
@@ -4683,10 +1587,14 @@ function HtmlViewer({
                 className="viewer-action primary"
                 disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
-                  void deployToSelectedProvider();
+                  void deployToVercel();
                 }}
               >
-                {deployButtonLabel}
+                {deployPhase === 'deploying'
+                  ? t('fileViewer.deployingToVercel')
+                  : deployPhase === 'preparing-link'
+                    ? t('fileViewer.preparingPublicLink')
+                    : t('fileViewer.deployToVercel')}
               </button>
             </div>
           </div>
@@ -4761,7 +1669,7 @@ async function inlineRelativeAssets(
   const resolved = (await Promise.all(replacements)).filter(
     (item): item is { from: string; to: string } => item !== null,
   );
-  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+  return resolved.reduce((next, { from, to }) => next.replace(from, to), html);
 }
 
 async function fetchProjectRelativeText(
@@ -5126,20 +2034,12 @@ function MarkdownViewer({
   const [text, setText] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
-  const markdownArticleRef = useRef<HTMLElement | null>(null);
-  const copyBlockTimerRef = useRef<number | null>(null);
-  const copiedMarkdownBlockRef = useRef<HTMLElement | null>(null);
   const status = file.artifactManifest?.status ?? 'complete';
   const isStreaming = status === 'streaming';
   const isError = status === 'error';
 
   useEffect(() => {
     setText(null);
-    copiedMarkdownBlockRef.current = null;
-    if (copyBlockTimerRef.current) {
-      window.clearTimeout(copyBlockTimerRef.current);
-      copyBlockTimerRef.current = null;
-    }
     let cancelled = false;
     void fetchProjectFileText(projectId, file.name).then((next) => {
       if (!cancelled) setText(next ?? '');
@@ -5149,66 +2049,34 @@ function MarkdownViewer({
     };
   }, [projectId, file.name, file.mtime, reloadKey]);
 
-  useEffect(() => {
-    return () => {
-      copiedMarkdownBlockRef.current = null;
-      if (copyBlockTimerRef.current) {
-        window.clearTimeout(copyBlockTimerRef.current);
-      }
-    };
-  }, []);
-
   async function copy() {
     if (text == null) return;
-    const didCopy = await copyTextToClipboard(text);
-    if (didCopy) {
+    try {
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      } finally {
+        document.body.removeChild(ta);
+      }
     }
   }
 
   const html = useMemo(() => {
     if (text === null) return null;
     const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
-    return decorateMarkdownCodeBlocks(renderPartial(text));
+    return renderPartial(text);
   }, [text]);
-
-  useEffect(() => {
-    const article = markdownArticleRef.current;
-    if (!article) return;
-    ensureMarkdownCodeBlockControls(article, t);
-    if (copiedMarkdownBlockRef.current?.isConnected) {
-      setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, true, t);
-    }
-  }, [html, t]);
-
-  async function handleMarkdownBodyClick(event: ReactMouseEvent<HTMLElement>) {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const button = target.closest<HTMLButtonElement>(`button[${MARKDOWN_COPY_BLOCK_ATTR}]`);
-    if (!button) return;
-    const block = button.closest('.markdown-code-block');
-    if (!(block instanceof HTMLElement)) return;
-    const pre = block.querySelector('pre');
-    if (!pre) return;
-    const didCopy = await copyTextToClipboard(pre.textContent ?? '');
-    if (!didCopy) return;
-    if (copiedMarkdownBlockRef.current && copiedMarkdownBlockRef.current !== block) {
-      setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, false, t);
-    }
-    copiedMarkdownBlockRef.current = block;
-    setMarkdownCodeBlockCopiedState(block, true, t);
-    if (copyBlockTimerRef.current) {
-      window.clearTimeout(copyBlockTimerRef.current);
-    }
-    copyBlockTimerRef.current = window.setTimeout(() => {
-      if (copiedMarkdownBlockRef.current) {
-        setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, false, t);
-      }
-      copiedMarkdownBlockRef.current = null;
-      copyBlockTimerRef.current = null;
-    }, 1800);
-  }
 
   return (
     <div className="viewer text-viewer">
@@ -5247,9 +2115,7 @@ function MarkdownViewer({
             {isError ? <div className="markdown-status markdown-status-error">{t('fileViewer.markdownErrorStatus')}</div> : null}
             {/* Safe by contract: renderMarkdownToSafeHtml escapes raw HTML and rejects unsafe link protocols. */}
             <article
-              ref={markdownArticleRef}
               className="markdown-rendered"
-              onClick={(event) => void handleMarkdownBodyClick(event)}
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </>

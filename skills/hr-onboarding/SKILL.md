@@ -21,8 +21,6 @@ od:
   design_system:
     requires: true
     sections: [color, typography, layout, components]
-  craft:
-    requires: [accessibility-baseline]
   example_prompt: "Build a 30-day onboarding plan for a new product designer joining a 40-person startup."
 ---
 

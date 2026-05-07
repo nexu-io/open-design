@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useLayoutEffect,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
@@ -22,26 +13,16 @@ import {
   deletePreviewComment,
   fetchPreviewComments,
   fetchDesignSystem,
-  fetchLiveArtifacts,
   fetchProjectFiles,
   fetchSkill,
   patchPreviewCommentStatus,
   upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
-import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { composeSystemPrompt } from '@open-design/contracts';
 import { navigate } from '../router';
-import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
-import {
-  apiProtocolAgentId,
-  apiProtocolModelLabel,
-} from '../utils/apiProtocol';
-import { playSound, showCompletionNotification } from '../utils/notifications';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import { agentDisplayName } from '../utils/agentLabels';
 import type { TodoItem } from '../runtime/todos';
-import { appendErrorStatusEvent } from '../runtime/chat-events';
-import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -70,8 +51,6 @@ import type {
   PreviewCommentTarget,
   ProjectFile,
   ProjectTemplate,
-  LiveArtifactEventItem,
-  LiveArtifactSummary,
   SkillSummary,
 } from '../types';
 import {
@@ -83,9 +62,7 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
-import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
-import { CenteredLoader } from './Loading';
 
 interface Props {
   project: Project;
@@ -103,111 +80,11 @@ interface Props {
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: () => void;
-  // Pet wiring forwarded to the chat composer so users can adopt /
-  // wake / tuck a pet without leaving the project view.
-  onAdoptPetInline?: (petId: string) => void;
-  onTogglePet?: () => void;
-  onOpenPetSettings?: () => void;
   onBack: () => void;
   onClearPendingPrompt: () => void;
   onTouchProject: () => void;
   onProjectChange: (next: Project) => void;
   onProjectsRefresh: () => void;
-}
-
-let liveArtifactEventSequence = 0;
-const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
-const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 320;
-const MAX_CHAT_PANEL_WIDTH = 720;
-const MIN_WORKSPACE_PANEL_WIDTH = 400;
-const SPLIT_RESIZE_HANDLE_WIDTH = 8;
-const CHAT_PANEL_KEYBOARD_STEP = 16;
-const MIN_NORMAL_SPLIT_WIDTH =
-  MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
-
-function workspacePanelMinWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MIN_WORKSPACE_PANEL_WIDTH;
-  return splitWidth < MIN_NORMAL_SPLIT_WIDTH ? 0 : MIN_WORKSPACE_PANEL_WIDTH;
-}
-
-function maxChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MAX_CHAT_PANEL_WIDTH;
-  const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
-  const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
-  return Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(viewportAwareMax)));
-}
-
-function clampPreferredChatPanelWidth(width: number): number {
-  return Math.min(MAX_CHAT_PANEL_WIDTH, Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width)));
-}
-
-function clampChatPanelWidth(width: number, maxWidth = MAX_CHAT_PANEL_WIDTH): number {
-  const effectiveMax = Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(maxWidth)));
-  const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
-  return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
-}
-
-function readSavedChatPanelWidth(): number {
-  if (typeof window === 'undefined') return DEFAULT_CHAT_PANEL_WIDTH;
-  try {
-    const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    return Number.isFinite(parsed)
-      ? clampPreferredChatPanelWidth(parsed)
-      : DEFAULT_CHAT_PANEL_WIDTH;
-  } catch {
-    return DEFAULT_CHAT_PANEL_WIDTH;
-  }
-}
-
-function saveChatPanelWidth(width: number): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      CHAT_PANEL_WIDTH_STORAGE_KEY,
-      String(clampPreferredChatPanelWidth(width)),
-    );
-  } catch {
-    // localStorage can be unavailable in hardened browser contexts.
-  }
-}
-
-function appendLiveArtifactEventItem(
-  prev: LiveArtifactEventItem[],
-  event: LiveArtifactEventItem['event'],
-): LiveArtifactEventItem[] {
-  liveArtifactEventSequence += 1;
-  const next = [...prev, { id: liveArtifactEventSequence, event }];
-  return next.length > 50 ? next.slice(next.length - 50) : next;
-}
-
-export function projectSplitClassName(workspaceFocused: boolean): string {
-  return workspaceFocused ? 'split split-focus' : 'split';
-}
-
-function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
-  if (evt.type === 'file-changed') return null;
-  if (evt.type === 'live_artifact') {
-    return {
-      kind: 'live_artifact',
-      action: evt.action,
-      projectId: evt.projectId,
-      artifactId: evt.artifactId,
-      title: evt.title,
-      refreshStatus: evt.refreshStatus,
-    };
-  }
-  return {
-    kind: 'live_artifact_refresh',
-    phase: evt.phase,
-    projectId: evt.projectId,
-    artifactId: evt.artifactId,
-    refreshId: evt.refreshId,
-    title: evt.title,
-    refreshedSourceCount: evt.refreshedSourceCount,
-    error: evt.error,
-  };
 }
 
 export function ProjectView({
@@ -223,9 +100,6 @@ export function ProjectView({
   onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
-  onAdoptPetInline,
-  onTogglePet,
-  onOpenPetSettings,
   onBack,
   onClearPendingPrompt,
   onTouchProject,
@@ -237,7 +111,6 @@ export function ProjectView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
-  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
@@ -246,27 +119,6 @@ export function ProjectView({
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
-  const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
-  const [workspaceFocused, setWorkspaceFocused] = useState(false);
-  const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
-  const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
-  const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
-  const [resizingChatPanel, setResizingChatPanel] = useState(false);
-  const splitRef = useRef<HTMLDivElement | null>(null);
-  const chatPanelWidthRef = useRef(chatPanelWidth);
-  const preferredChatPanelWidthRef = useRef(chatPanelWidth);
-  const resizeStartPreferredWidthRef = useRef(chatPanelWidth);
-  const chatPanelMaxWidthRef = useRef(chatPanelMaxWidth);
-  const resizeStateRef = useRef<{
-    startClientX: number;
-    startWidth: number;
-    isRtl: boolean;
-    hasMoved: boolean;
-  } | null>(null);
-  const pointerCleanupRef = useRef<(() => void) | null>(null);
-  const pointerFrameRef = useRef<number | null>(null);
-  const pendingPointerClientXRef = useRef<number | null>(null);
   // The persisted set of open tabs + active tab. Persisted via PUT on every
   // change; loaded once when the project mounts.
   const [openTabsState, setOpenTabsState] = useState<OpenTabsState>({
@@ -281,8 +133,6 @@ export function ProjectView({
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
-  const sendTextBufferRef = useRef<BufferedTextUpdates | null>(null);
-  const reattachTextBuffersRef = useRef<Set<BufferedTextUpdates>>(new Set());
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
   const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
@@ -306,40 +156,24 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
-    setConversationLoadError(null);
     (async () => {
-      try {
-        const list = await listConversations(project.id);
+      const list = await listConversations(project.id);
+      if (cancelled) return;
+      if (list.length === 0) {
+        const fresh = await createConversation(project.id);
         if (cancelled) return;
-        if (list.length === 0) {
-          const fresh = await createConversation(project.id);
-          if (cancelled) return;
-          if (fresh) {
-            setConversations([fresh]);
-            setActiveConversationId(fresh.id);
-          } else {
-            throw new Error('Could not create a conversation for this project.');
-          }
-        } else {
-          setConversations(list);
-          setActiveConversationId(list[0]!.id);
+        if (fresh) {
+          setConversations([fresh]);
+          setActiveConversationId(fresh.id);
         }
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Could not load conversations for this project.';
-        setConversations([]);
-        setActiveConversationId(null);
-        setConversationLoadError(message);
-        setError(message);
+      } else {
+        setConversations(list);
+        setActiveConversationId(list[0]!.id);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
-
-  useEffect(() => {
-    setWorkspaceFocused(false);
   }, [project.id]);
 
   // Load messages whenever the active conversation changes. This happens
@@ -374,10 +208,6 @@ export function ProjectView({
 
   useEffect(() => {
     return () => {
-      sendTextBufferRef.current?.cancel();
-      sendTextBufferRef.current = null;
-      for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
-      reattachTextBuffersRef.current.clear();
       for (const controller of reattachControllersRef.current.values()) {
         controller.abort();
       }
@@ -388,70 +218,6 @@ export function ProjectView({
       reattachCancelControllersRef.current.clear();
     };
   }, [project.id, activeConversationId]);
-
-  const cancelSendTextBuffer = useCallback((flushPending = false) => {
-    if (flushPending) sendTextBufferRef.current?.flush();
-    sendTextBufferRef.current?.cancel();
-    sendTextBufferRef.current = null;
-  }, []);
-
-  const cancelReattachTextBuffers = useCallback((flushPending = false) => {
-    for (const textBuffer of reattachTextBuffersRef.current) {
-      if (flushPending) textBuffer.flush();
-      textBuffer.cancel();
-    }
-    reattachTextBuffersRef.current.clear();
-  }, []);
-
-  // Detect the streaming `true → false` edge so we can fire the optional
-  // completion sound / desktop notification exactly once per turn. Initial
-  // mount keeps `prevStreamingRef.current = false`, so loading historical
-  // conversations (where `streaming` is also false) never triggers a stray
-  // ding. `messages` is on the dep array so the latest assistant message's
-  // runStatus is visible at the moment we edge-detect; the early-return
-  // guarantees only the edge actually does anything.
-  const prevStreamingRef = useRef(false);
-  useEffect(() => {
-    const wasStreaming = prevStreamingRef.current;
-    prevStreamingRef.current = streaming;
-    if (!(wasStreaming && !streaming)) return;
-
-    const last = [...messages].reverse().find((m) => m.role === 'assistant');
-    if (!last) return;
-    const status = last.runStatus;
-    if (status !== 'succeeded' && status !== 'failed') return;
-
-    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
-    if (cfg.soundEnabled) {
-      playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
-    }
-
-    if (cfg.desktopEnabled) {
-      // Successes only interrupt when the user is on another tab/window.
-      // Failures alert regardless — losing a long agent run silently is
-      // worse than a small interruption when the page is in focus.
-      const isHidden = typeof document !== 'undefined' && document.hidden;
-      const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
-      if (status === 'failed' || isHidden || !isFocused) {
-        const title = status === 'succeeded'
-          ? t('notify.successTitle')
-          : t('notify.failureTitle');
-        const fallbackBody = status === 'succeeded'
-          ? t('notify.successBody')
-          : t('notify.failureBody');
-        const trimmed = (last.content ?? '').trim();
-        const body = trimmed ? trimmed.slice(0, 80) : fallbackBody;
-        void showCompletionNotification({
-          status,
-          title,
-          body,
-          onClick: () => {
-            if (typeof window !== 'undefined') window.focus();
-          },
-        });
-      }
-    }
-  }, [streaming, messages, config.notifications, t]);
 
   // Hydrate the open-tabs state once per project. After this initial
   // load, every mutation flows through saveTabsState() which keeps DB +
@@ -486,17 +252,6 @@ export function ProjectView({
     return next;
   }, [project.id]);
 
-  const refreshLiveArtifacts = useCallback(async (): Promise<LiveArtifactSummary[]> => {
-    const next = await fetchLiveArtifacts(project.id);
-    setLiveArtifacts(next);
-    return next;
-  }, [project.id]);
-
-  const refreshWorkspaceItems = useCallback(async (): Promise<ProjectFile[]> => {
-    const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
-    return nextFiles;
-  }, [refreshLiveArtifacts, refreshProjectFiles]);
-
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
@@ -520,25 +275,8 @@ export function ProjectView({
   // agent has written anything still see the user's pasted images.
   useEffect(() => {
     if (!daemonLive) return;
-    void refreshWorkspaceItems();
-  }, [daemonLive, refreshWorkspaceItems, filesRefresh]);
-
-  // Live-reload: when the daemon's chokidar watcher reports a file change,
-  // bump filesRefresh so the file list refetches with new mtimes — which
-  // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
-  // cache-bust, triggering an automatic preview reload without a click.
-  const handleProjectEvent = useCallback((evt: ProjectEvent) => {
-    if (evt.type === 'file-changed') {
-      setFilesRefresh((n) => n + 1);
-      return;
-    }
-    const agentEvent = projectEventToAgentEvent(evt);
-    if (!agentEvent) return;
-    setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
-    void refreshLiveArtifacts();
-    onProjectsRefresh();
-  }, [onProjectsRefresh, refreshLiveArtifacts]);
-  useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
+    void refreshProjectFiles();
+  }, [daemonLive, refreshProjectFiles, filesRefresh]);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
@@ -553,9 +291,7 @@ export function ProjectView({
   // history stack doesn't fill with every tab click.
   const lastSyncedFileRef = useRef<string | null>(null);
   useEffect(() => {
-    const target = openTabsState.active && (
-      projectFileNames.has(openTabsState.active) || isLiveArtifactTabId(openTabsState.active)
-    )
+    const target = openTabsState.active && projectFileNames.has(openTabsState.active)
       ? openTabsState.active
       : null;
     if (target === lastSyncedFileRef.current) return;
@@ -676,18 +412,6 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
-  const appendAssistantErrorEvent = useCallback(
-    (messageId: string, message: string) => {
-      if (!message) return;
-      updateMessageById(
-        messageId,
-        (prev) => appendErrorStatusEvent(prev, message),
-        true,
-      );
-    },
-    [updateMessageById],
-  );
-
   const refreshPreviewComments = useCallback(async () => {
     if (!activeConversationId) return;
     const next = await fetchPreviewComments(project.id, activeConversationId);
@@ -738,19 +462,15 @@ export function ProjectView({
   const patchAttachedStatuses = useCallback(
     async (attachments: ChatCommentAttachment[], status: PreviewComment['status']) => {
       if (!activeConversationId || attachments.length === 0) return;
-      const persistedAttachments = attachments.filter(
-        (attachment) => attachment.source !== 'board-batch',
-      );
-      if (persistedAttachments.length === 0) return;
       setPreviewComments((current) =>
         current.map((comment) =>
-          persistedAttachments.some((attachment) => attachment.id === comment.id)
+          attachments.some((attachment) => attachment.id === comment.id)
             ? { ...comment, status }
             : comment,
         ),
       );
       await Promise.all(
-        persistedAttachments.map((attachment) =>
+        attachments.map((attachment) =>
           patchPreviewCommentStatus(project.id, activeConversationId, attachment.id, status),
         ),
       );
@@ -834,16 +554,7 @@ export function ProjectView({
             clearTimeout(persistTimer);
             persistTimer = null;
           }
-          textBuffer.flush();
           persistMessageById(message.id);
-        };
-        const textBuffer = createBufferedTextUpdates({
-          updateMessage: (updater) => updateMessageById(message.id, updater),
-          persistSoon,
-        });
-        reattachTextBuffersRef.current.add(textBuffer);
-        const unregisterTextBuffer = () => {
-          reattachTextBuffersRef.current.delete(textBuffer);
         };
 
         void reattachDaemonRun({
@@ -853,15 +564,14 @@ export function ProjectView({
           initialLastEventId: message.lastRunEventId ?? null,
           handlers: {
             onDelta: (delta) => {
-              textBuffer.appendContent(delta);
+              updateMessageById(message.id, (prev) => ({ ...prev, content: prev.content + delta }));
+              persistSoon();
             },
             onAgentEvent: (ev) => {
-              textBuffer.appendEvent(ev);
+              updateMessageById(message.id, (prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
+              persistSoon();
             },
             onDone: () => {
-              textBuffer.flush();
-              textBuffer.cancel();
-              unregisterTextBuffer();
               updateMessageById(
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'succeeded', endedAt: prev.endedAt ?? Date.now() }),
@@ -878,11 +588,7 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: (err) => {
-              textBuffer.flush();
-              textBuffer.cancel();
-              unregisterTextBuffer();
               setError(err.message);
-              appendAssistantErrorEvent(message.id, err.message);
               updateMessageById(
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
@@ -898,7 +604,6 @@ export function ProjectView({
             },
           },
           onRunStatus: (runStatus) => {
-            textBuffer.flush();
             updateMessageById(
               message.id,
               (prev) => ({
@@ -909,8 +614,6 @@ export function ProjectView({
               true,
             );
             if (runStatus === 'canceled') {
-              textBuffer.cancel();
-              unregisterTextBuffer();
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -921,27 +624,16 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
-            textBuffer.flush();
             updateMessageById(message.id, (prev) => ({ ...prev, lastRunEventId }));
             persistSoon();
           },
         })
           .catch((err) => {
             if ((err as Error).name !== 'AbortError') {
-              const msg = err instanceof Error ? err.message : String(err);
-              setError(msg);
-              appendAssistantErrorEvent(message.id, msg);
-              updateMessageById(
-                message.id,
-                (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
-                true,
-              );
+              setError(err instanceof Error ? err.message : String(err));
             }
           })
           .finally(() => {
-            textBuffer.flush();
-            textBuffer.cancel();
-            unregisterTextBuffer();
             if (persistTimer) clearTimeout(persistTimer);
             reattachControllersRef.current.delete(runId);
             reattachCancelControllersRef.current.delete(runId);
@@ -974,7 +666,6 @@ export function ProjectView({
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
     ) => {
       if (!activeConversationId) return;
-      if (streaming) return;
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
@@ -990,22 +681,12 @@ export function ProjectView({
         config.mode === 'daemon' && config.agentId
           ? agentsById.get(config.agentId)
           : null;
-      const selectedAgentChoice =
-        config.mode === 'daemon' && config.agentId
-          ? config.agentModels?.[config.agentId]
-          : undefined;
       const assistantAgentId =
-        config.mode === 'daemon'
-          ? config.agentId ?? undefined
-          : apiProtocolAgentId(config.apiProtocol);
+        config.mode === 'daemon' ? config.agentId ?? undefined : 'anthropic-api';
       const assistantAgentName =
         config.mode === 'daemon'
-          ? agentModelDisplayName(
-              config.agentId,
-              selectedAgent?.name,
-              selectedAgentChoice?.model,
-            )
-          : apiProtocolModelLabel(config.apiProtocol, config.model);
+          ? assistantAgentDisplayName(config.agentId, selectedAgent?.name)
+          : 'Anthropic API';
       const assistantId = crypto.randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
@@ -1067,23 +748,7 @@ export function ProjectView({
         }, 500);
       };
       const pushEvent = (ev: AgentEvent) => {
-        textBuffer.flush();
         updateAssistant((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
-        if (ev.kind === 'live_artifact') {
-          setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
-          void refreshLiveArtifacts().then(() => {
-            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId));
-          });
-          onProjectsRefresh();
-          return;
-        }
-        if (ev.kind === 'live_artifact_refresh') {
-          setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
-          void refreshLiveArtifacts();
-          onProjectsRefresh();
-          return;
-        }
-        persistAssistantSoon();
         persistAssistantSoon();
         // Track Write tool invocations so we can auto-open the destination
         // file the moment the agent finishes writing it. The file-creating
@@ -1092,36 +757,28 @@ export function ProjectView({
         if (ev.kind === 'tool_use' && (ev.name === 'Write' || ev.name === 'Edit')) {
           const filePath = (ev.input as { file_path?: unknown } | null)?.file_path;
           if (typeof filePath === 'string' && filePath.length > 0) {
-            // Preserve the full path so decideAutoOpenAfterWrite can do a
-            // path-suffix match against the project's relative file paths.
-            // Reducing to a basename here would lose the segment alignment
-            // we need to disambiguate same-basename collisions across the
-            // project tree and outside it.
-            pendingWritesRef.current.set(ev.id, filePath);
+            const base = filePath.split('/').pop() || filePath;
+            pendingWritesRef.current.set(ev.id, base);
           }
         }
         if (ev.kind === 'tool_result') {
-          const filePath = pendingWritesRef.current.get(ev.toolUseId);
-          if (filePath) {
+          const base = pendingWritesRef.current.get(ev.toolUseId);
+          if (base) {
             pendingWritesRef.current.delete(ev.toolUseId);
             if (!ev.isError) {
               // Refresh first so FileWorkspace's file list (and the tab
               // body) sees the new content before we ask it to focus.
-              // Only auto-open if the file actually landed in the project's
-              // file list — otherwise an out-of-project Write (e.g. an
-              // upstream repo edit) would spawn a permanent placeholder tab.
-              void refreshProjectFiles().then((nextFiles) => {
-                const decision = decideAutoOpenAfterWrite(filePath, nextFiles);
-                if (decision.shouldOpen && decision.fileName) {
-                  requestOpenFile(decision.fileName);
-                }
+              void refreshProjectFiles().then(() => {
+                requestOpenFile(base);
               });
             }
           }
         }
       };
 
-      const applyContentDelta = (delta: string) => {
+      const appendContent = (delta: string) => {
+        updateAssistant((prev) => ({ ...prev, content: prev.content + delta }));
+        persistAssistantSoon();
         for (const ev of parser.feed(delta)) {
           if (ev.type === 'artifact:start') {
             liveHtml = '';
@@ -1148,27 +805,14 @@ export function ProjectView({
         }
       };
 
-      const textBuffer = createBufferedTextUpdates({
-        updateMessage: updateAssistant,
-        persistSoon: persistAssistantSoon,
-        onContentDelta: applyContentDelta,
-      });
-      sendTextBufferRef.current = textBuffer;
-
       const controller = new AbortController();
       const cancelController = new AbortController();
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
-        onDelta: textBuffer.appendContent,
-        onAgentEvent: (ev: AgentEvent) => {
-          if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
-          else pushEvent(ev);
-        },
+        onDelta: appendContent,
+        onAgentEvent: pushEvent,
         onDone: () => {
-          textBuffer.flush();
-          textBuffer.cancel();
-          cancelSendTextBuffer();
           for (const ev of parser.flush()) {
             if (ev.type === 'artifact:end') {
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
@@ -1177,7 +821,7 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
+            runStatus: prev.runId ? 'succeeded' : prev.runStatus,
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
@@ -1214,17 +858,11 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: (err: Error) => {
-          textBuffer.flush();
-          textBuffer.cancel();
-          cancelSendTextBuffer();
           setError(err.message);
-          appendAssistantErrorEvent(assistantId, err.message);
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
-              ? 'failed'
-              : prev.runStatus,
+            runStatus: prev.runId || isActiveRunStatus(prev.runStatus) ? 'failed' : prev.runStatus,
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'failed');
@@ -1246,7 +884,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
-        const choice = selectedAgentChoice;
+        const choice = config.agentModels?.[config.agentId];
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -1299,7 +937,6 @@ export function ProjectView({
     [
       attachedComments,
       activeConversationId,
-      streaming,
       messages,
       config,
       agentsById,
@@ -1308,22 +945,12 @@ export function ProjectView({
       project.id,
       projectFiles,
       refreshProjectFiles,
-      refreshLiveArtifacts,
-      requestOpenFile,
       persistMessage,
       persistMessageById,
       patchAttachedStatuses,
       updateMessageById,
       onProjectsRefresh,
     ],
-  );
-
-  const handleSendBoardCommentAttachments = useCallback(
-    async (commentAttachments: ChatCommentAttachment[]) => {
-      if (streaming || commentAttachments.length === 0) return;
-      await handleSend('', [], commentAttachments);
-    },
-    [handleSend, streaming],
   );
 
   const persistArtifact = useCallback(
@@ -1411,33 +1038,11 @@ export function ProjectView({
       const baseTitle = fileName.replace(/\.html?$/i, '') || fileName;
       const prompt =
         `Export @${fileName} as an editable PPTX file titled "${baseTitle}".\n\n` +
-        `**Generate.** Use python-pptx (preferred — full XML control). Apply the ` +
-        `footer-rail + cursor-flow discipline from \`skills/pptx-html-fidelity-audit/SKILL.md\` ` +
-        `Step 4 from the start: define \`CONTENT_MAX_Y = 6.70"\` and \`FOOTER_TOP = 6.85"\` ` +
-        `as constants, route every content block through a \`Cursor\` that refuses to cross ` +
-        `the rail, and use budget centering (not \`MARGIN_TOP\`) for hero/cover slides. ` +
-        `Preserve \`<em>\` / \`<i>\` as \`italic=True\` on Latin runs only — never on CJK. ` +
-        `Set the \`<a:latin>\` and \`<a:ea>\` typeface slots explicitly so Chinese runs ` +
-        `don't fall back to Microsoft JhengHei.\n\n` +
-        `**Verify (mandatory gate).** After writing, run ` +
-        `\`python skills/pptx-html-fidelity-audit/scripts/verify_layout.py "${baseTitle}.pptx"\` ` +
-        `(quote the path — filenames may contain spaces). Zero rail violations is the gate ` +
-        `for "shippable". If violations remain, walk Steps 2-4 of the SKILL.md ` +
-        `(extract dump → audit table → re-export) — do not declare done by eyeballing the ` +
-        `deck. If 🟡 typography issues surface (italic missing, unexpected \`Calibri\` / ` +
-        `\`Microsoft JhengHei\` in the XML), consult ` +
-        `\`skills/pptx-html-fidelity-audit/references/font-discipline.md\` for the ` +
-        `five-layer font audit.\n\n` +
-        `**Customizing rails.** The default \`CONTENT_MAX_Y = 6.70"\` / ` +
-        `\`FOOTER_TOP = 6.85"\` constants suit a 16:9 canvas with a slim footer. If the ` +
-        `design system needs different rails (wider footer, 4:3 canvas), pass ` +
-        `\`--content-max-y\` / \`--canvas-h\` to \`verify_layout.py\` and update the matching ` +
-        `constants in the export script — see \`references/layout-discipline.md\` §1.\n\n` +
-        `If \`python-pptx\` or the verifier is unavailable in this environment, say so ` +
-        `explicitly — don't claim fidelity is correct without evidence.\n\n` +
-        `Save into the current project folder (this conversation's working directory) as ` +
-        `\`${baseTitle}.pptx\`. Report the on-disk path and a 1-line fidelity summary ` +
-        `(e.g. "0 rail violations across 14 slides") when done.`;
+        `Use a PPTX skill (e.g. python-pptx) to produce a real .pptx — one slide per ` +
+        `top-level section/page in the HTML. Preserve text content, headings, and the ` +
+        `general layout intent. Save the file directly into the current project folder ` +
+        `(this conversation's working directory) as \`${baseTitle}.pptx\` so it shows ` +
+        `up in the file list, and report the on-disk path when done.`;
       const attachment: ChatAttachment = {
         path: fileName,
         name: fileName,
@@ -1450,8 +1055,6 @@ export function ProjectView({
 
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
-    cancelSendTextBuffer(true);
-    cancelReattachTextBuffers(true);
     cancelRef.current?.abort();
     cancelRef.current = null;
     for (const controller of reattachCancelControllersRef.current.values()) {
@@ -1484,21 +1087,13 @@ export function ProjectView({
       for (const message of finalized) persistMessage(message);
       return next;
     });
-  }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
+  }, [persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
-    setConversationLoadError(null);
-    try {
-      const fresh = await createConversation(project.id);
-      if (!fresh) throw new Error('Could not create a conversation for this project.');
-      setConversations((curr) => [fresh, ...curr]);
-      setActiveConversationId(fresh.id);
-      setError(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
-      setConversationLoadError(message);
-      setError(message);
-    }
+    const fresh = await createConversation(project.id);
+    if (!fresh) return;
+    setConversations((curr) => [fresh, ...curr]);
+    setActiveConversationId(fresh.id);
   }, [project.id]);
 
   const handleSelectConversation = useCallback((id: string) => {
@@ -1561,175 +1156,6 @@ export function ProjectView({
     () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
     [skills, project.skillId],
   );
-  const chatResizeLabel = t('project.resizeChatPanel');
-  const workspacePanelTrack =
-    workspacePanelMinWidth === 0
-      ? 'minmax(0, 1fr)'
-      : `minmax(${workspacePanelMinWidth}px, 1fr)`;
-  const chatPanelAriaMinWidth = Math.min(MIN_CHAT_PANEL_WIDTH, chatPanelMaxWidth);
-
-  const renderPreferredChatPanelWidth = useCallback((
-    preferredWidth: number,
-    maxWidth = chatPanelMaxWidthRef.current,
-  ): number => {
-    const next = clampChatPanelWidth(preferredWidth, maxWidth);
-    chatPanelWidthRef.current = next;
-    setChatPanelWidth(next);
-    return next;
-  }, []);
-
-  const applyChatPanelWidth = useCallback((width: number): number => {
-    const nextPreferred = clampPreferredChatPanelWidth(
-      clampChatPanelWidth(width, chatPanelMaxWidthRef.current),
-    );
-    preferredChatPanelWidthRef.current = nextPreferred;
-    return renderPreferredChatPanelWidth(nextPreferred);
-  }, [renderPreferredChatPanelWidth]);
-
-  const finishChatPanelResize = useCallback((saveFinalWidth = true) => {
-    pointerCleanupRef.current?.();
-    pointerCleanupRef.current = null;
-    if (pointerFrameRef.current !== null) {
-      cancelAnimationFrame(pointerFrameRef.current);
-      pointerFrameRef.current = null;
-    }
-    pendingPointerClientXRef.current = null;
-    resizeStateRef.current = null;
-    setResizingChatPanel(false);
-    if (saveFinalWidth) saveChatPanelWidth(preferredChatPanelWidthRef.current);
-  }, []);
-
-  useEffect(() => {
-    chatPanelWidthRef.current = chatPanelWidth;
-  }, [chatPanelWidth]);
-
-  useEffect(() => {
-    chatPanelMaxWidthRef.current = chatPanelMaxWidth;
-  }, [chatPanelMaxWidth]);
-
-  useLayoutEffect(() => {
-    const split = splitRef.current;
-    if (!split) return undefined;
-
-    const updateAllowedWidth = () => {
-      const splitWidth = split.clientWidth;
-      const nextWorkspaceMin = workspacePanelMinWidthForSplit(splitWidth);
-      const nextMax = maxChatPanelWidthForSplit(splitWidth);
-      chatPanelMaxWidthRef.current = nextMax;
-      setWorkspacePanelMinWidth(nextWorkspaceMin);
-      setChatPanelMaxWidth(nextMax);
-      renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current, nextMax);
-    };
-
-    updateAllowedWidth();
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(updateAllowedWidth);
-      observer.observe(split);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener('resize', updateAllowedWidth);
-    return () => window.removeEventListener('resize', updateAllowedWidth);
-  }, [renderPreferredChatPanelWidth]);
-
-  useEffect(() => () => finishChatPanelResize(false), [finishChatPanelResize]);
-
-  const handleChatResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const split = splitRef.current;
-    if (!split) return;
-    event.preventDefault();
-    event.currentTarget.focus();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointerCleanupRef.current?.();
-    setResizingChatPanel(true);
-    resizeStartPreferredWidthRef.current = preferredChatPanelWidthRef.current;
-
-    const updateWidthFromClientX = (clientX: number) => {
-      const state = resizeStateRef.current;
-      if (!state) return;
-      const delta = clientX - state.startClientX;
-      if (delta === 0 && !state.hasMoved) return;
-      state.hasMoved = true;
-      const rawWidth = state.startWidth + (state.isRtl ? -delta : delta);
-      applyChatPanelWidth(rawWidth);
-    };
-
-    const flushPendingPointerMove = () => {
-      if (pointerFrameRef.current !== null) {
-        cancelAnimationFrame(pointerFrameRef.current);
-        pointerFrameRef.current = null;
-      }
-      const clientX = pendingPointerClientXRef.current;
-      pendingPointerClientXRef.current = null;
-      if (clientX !== null) updateWidthFromClientX(clientX);
-    };
-
-    resizeStateRef.current = {
-      startClientX: event.clientX,
-      startWidth: chatPanelWidthRef.current,
-      isRtl: window.getComputedStyle(split).direction === 'rtl',
-      hasMoved: false,
-    };
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      pendingPointerClientXRef.current = moveEvent.clientX;
-      if (pointerFrameRef.current !== null) return;
-      pointerFrameRef.current = requestAnimationFrame(() => {
-        pointerFrameRef.current = null;
-        flushPendingPointerMove();
-      });
-    };
-    const handlePointerEnd = () => {
-      flushPendingPointerMove();
-      finishChatPanelResize(true);
-    };
-    const handlePointerCancel = () => {
-      flushPendingPointerMove();
-      preferredChatPanelWidthRef.current = resizeStartPreferredWidthRef.current;
-      renderPreferredChatPanelWidth(resizeStartPreferredWidthRef.current);
-      finishChatPanelResize(false);
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerEnd);
-      window.removeEventListener('pointercancel', handlePointerCancel);
-      window.removeEventListener('blur', handlePointerCancel);
-    };
-
-    pointerCleanupRef.current = cleanup;
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerEnd);
-    window.addEventListener('pointercancel', handlePointerCancel);
-    window.addEventListener('blur', handlePointerCancel);
-  }, [applyChatPanelWidth, finishChatPanelResize, renderPreferredChatPanelWidth]);
-
-  const handleChatResizeBlur = useCallback(() => {
-    if (!pointerCleanupRef.current) return;
-    preferredChatPanelWidthRef.current = resizeStartPreferredWidthRef.current;
-    renderPreferredChatPanelWidth(resizeStartPreferredWidthRef.current);
-    finishChatPanelResize(false);
-  }, [finishChatPanelResize, renderPreferredChatPanelWidth]);
-
-  const handleChatResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let nextWidth: number | null = null;
-    const split = splitRef.current;
-    const isRtl = split ? window.getComputedStyle(split).direction === 'rtl' : false;
-    if (event.key === 'ArrowLeft') {
-      nextWidth = chatPanelWidthRef.current + (isRtl ? 1 : -1) * CHAT_PANEL_KEYBOARD_STEP;
-    } else if (event.key === 'ArrowRight') {
-      nextWidth = chatPanelWidthRef.current + (isRtl ? -1 : 1) * CHAT_PANEL_KEYBOARD_STEP;
-    } else if (event.key === 'Home') {
-      nextWidth = MIN_CHAT_PANEL_WIDTH;
-    } else if (event.key === 'End') {
-      nextWidth = chatPanelMaxWidthRef.current;
-    }
-    if (nextWidth === null) return;
-    event.preventDefault();
-    const next = applyChatPanelWidth(nextWidth);
-    saveChatPanelWidth(next);
-  }, [applyChatPanelWidth]);
 
   // Hand the pending prompt to ChatPane exactly once. We snapshot the value
   // into local state on mount so it survives the ChatPane remount triggered
@@ -1791,104 +1217,55 @@ export function ProjectView({
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
         </div>
       </AppChromeHeader>
-      <div
-        ref={splitRef}
-        className={[
-          projectSplitClassName(workspaceFocused),
-          resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
-        ].filter(Boolean).join(' ')}
-        style={workspaceFocused
-          ? undefined
-          : {
-              gridTemplateColumns:
-                `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
-            }}
-      >
-        <div className="split-chat-slot" hidden={workspaceFocused}>
-          {activeConversationId || conversationLoadError ? (
-            <ChatPane
-              // The conversation id is part of the key so switching conversations
-              // resets internal scroll/draft state inside ChatPane and ChatComposer.
-              key={activeConversationId ?? 'conversation-unavailable'}
-              messages={messages}
-              streaming={streaming}
-              error={conversationLoadError ?? error}
-              projectId={project.id}
-              projectFiles={projectFiles}
-              projectFileNames={projectFileNames}
-              onEnsureProject={handleEnsureProject}
-              previewComments={previewComments}
-              attachedComments={attachedComments}
-              onAttachComment={attachPreviewComment}
-              onDetachComment={detachPreviewComment}
-              onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-              onSend={handleSend}
-              onStop={handleStop}
-              onRequestOpenFile={requestOpenFile}
-              initialDraft={initialDraft}
-              onSubmitForm={(text) => {
-                if (streaming) return;
-                void handleSend(text, [], []);
-              }}
-              onContinueRemainingTasks={handleContinueRemainingTasks}
-              onNewConversation={handleNewConversation}
-              conversations={conversations}
-              activeConversationId={activeConversationId}
-              onSelectConversation={handleSelectConversation}
-              onDeleteConversation={handleDeleteConversation}
-              onRenameConversation={handleRenameConversation}
-              onOpenSettings={onOpenSettings}
-              petConfig={config.pet}
-              onAdoptPet={onAdoptPetInline}
-              onTogglePet={onTogglePet}
-              onOpenPetSettings={onOpenPetSettings}
-              projectMetadata={project.metadata}
-              onProjectMetadataChange={(metadata) => {
-                onProjectChange({ ...project, metadata });
-              }}
-            />
-          ) : (
-            <div className="pane" data-testid="chat-pane-loading">
-              <CenteredLoader />
-            </div>
-          )}
-        </div>
-        {!workspaceFocused ? (
-          <div
-            className="split-resize-handle"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={chatResizeLabel}
-            aria-valuemin={chatPanelAriaMinWidth}
-            aria-valuemax={chatPanelMaxWidth}
-            aria-valuenow={chatPanelWidth}
-            tabIndex={0}
-            title={chatResizeLabel}
-            onPointerDown={handleChatResizePointerDown}
-            onKeyDown={handleChatResizeKeyDown}
-            onBlur={handleChatResizeBlur}
-          />
-        ) : null}
+      <div className="split">
+        <ChatPane
+          // The conversation id is part of the key so switching conversations
+          // resets internal scroll/draft state inside ChatPane and ChatComposer.
+          key={activeConversationId ?? 'no-conv'}
+          messages={messages}
+          streaming={streaming}
+          error={error}
+          projectId={project.id}
+          projectFiles={projectFiles}
+          projectFileNames={projectFileNames}
+          onEnsureProject={handleEnsureProject}
+          previewComments={previewComments}
+          attachedComments={attachedComments}
+          onAttachComment={attachPreviewComment}
+          onDetachComment={detachPreviewComment}
+          onDeleteComment={(commentId) => void removePreviewComment(commentId)}
+          onSend={handleSend}
+          onStop={handleStop}
+          onRequestOpenFile={requestOpenFile}
+          initialDraft={initialDraft}
+          onSubmitForm={(text) => {
+            if (streaming) return;
+            void handleSend(text, [], []);
+          }}
+          onContinueRemainingTasks={handleContinueRemainingTasks}
+          onNewConversation={handleNewConversation}
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
+          onOpenSettings={onOpenSettings}
+        />
         <FileWorkspace
           projectId={project.id}
           files={projectFiles}
-          liveArtifacts={liveArtifacts}
           onRefreshFiles={() => {
-            void refreshWorkspaceItems();
+            void refreshProjectFiles();
           }}
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
           streaming={streaming}
           openRequest={openRequest}
-          liveArtifactEvents={liveArtifactEvents}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
           previewComments={previewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
-          onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
-          focusMode={workspaceFocused}
-          onFocusModeChange={setWorkspaceFocused}
         />
       </div>
     </div>
@@ -1918,129 +1295,4 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
-}
-
-type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;
-
-function createBufferedTextUpdates({
-  updateMessage,
-  persistSoon,
-  onContentDelta,
-}: {
-  updateMessage: (updater: (prev: ChatMessage) => ChatMessage) => void;
-  persistSoon: () => void;
-  onContentDelta?: (delta: string) => void;
-}) {
-  let pendingContentDelta = '';
-  let pendingTextEventDelta = '';
-  let flushFrame: number | null = null;
-  let flushTimer: ReturnType<typeof setTimeout> | null = null;
-  let disposed = false;
-  let flushing = false;
-  let needsFlush = false;
-  const hasDocument = typeof document !== 'undefined';
-
-  const cancelScheduledFlush = () => {
-    if (flushFrame !== null) {
-      cancelAnimationFrame(flushFrame);
-      flushFrame = null;
-    }
-    if (flushTimer !== null) {
-      clearTimeout(flushTimer);
-      flushTimer = null;
-    }
-  };
-
-  const flush = () => {
-    if (disposed) return;
-    if (flushing) {
-      needsFlush = true;
-      return;
-    }
-    cancelScheduledFlush();
-    if (!pendingContentDelta && !pendingTextEventDelta && !needsFlush) return;
-    flushing = true;
-    needsFlush = false;
-    const contentDelta = pendingContentDelta;
-    const textEventDelta = pendingTextEventDelta;
-    pendingContentDelta = '';
-    pendingTextEventDelta = '';
-    try {
-      updateMessage((prev) => ({
-        ...prev,
-        content: prev.content + contentDelta,
-        events: textEventDelta
-          ? [...(prev.events ?? []), { kind: 'text', text: textEventDelta }]
-          : prev.events,
-      }));
-      persistSoon();
-      if (contentDelta) onContentDelta?.(contentDelta);
-    } finally {
-      flushing = false;
-    }
-    if (pendingContentDelta || pendingTextEventDelta || needsFlush) {
-      needsFlush = false;
-      scheduleFlush();
-    }
-  };
-
-  const scheduleFlush = () => {
-    if (disposed || flushFrame !== null || flushTimer !== null) return;
-    flushFrame = requestAnimationFrame(() => {
-      flushFrame = null;
-      flush();
-    });
-    flushTimer = setTimeout(() => {
-      flushTimer = null;
-      flush();
-    }, 250);
-  };
-
-  const appendContent = (delta: string) => {
-    if (disposed) return;
-    pendingContentDelta += delta;
-    needsFlush = true;
-    scheduleFlush();
-  };
-
-  const appendTextEvent = (delta: string) => {
-    if (disposed) return;
-    pendingTextEventDelta += delta;
-    needsFlush = true;
-    scheduleFlush();
-  };
-
-  const appendEvent = (ev: AgentEvent) => {
-    if (disposed) return;
-    if (ev.kind === 'text') {
-      appendTextEvent(ev.text);
-      return;
-    }
-    flush();
-    updateMessage((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
-    persistSoon();
-  };
-
-  const cancel = () => {
-    disposed = true;
-    cancelScheduledFlush();
-    pendingContentDelta = '';
-    pendingTextEventDelta = '';
-    needsFlush = false;
-    if (hasDocument) {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    }
-  };
-
-  function onVisibilityChange() {
-    if (document.visibilityState === 'hidden') {
-      flush();
-    }
-  }
-
-  if (hasDocument) {
-    document.addEventListener('visibilitychange', onVisibilityChange);
-  }
-
-  return { appendContent, appendTextEvent, appendEvent, flush, cancel };
 }

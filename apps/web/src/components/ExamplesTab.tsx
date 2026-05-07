@@ -9,7 +9,6 @@ import { fetchSkillExample } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { SkillSummary, Surface } from '../types';
-import { Icon } from './Icon';
 import { PreviewModal } from './PreviewModal';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -19,7 +18,7 @@ interface Props {
   onUsePrompt: (skill: SkillSummary) => void;
 }
 
-type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document' | 'orbit';
+type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document';
 type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
 
@@ -37,7 +36,6 @@ const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'prototype-mobile', labelKey: 'examples.modePrototypeMobile' },
   { value: 'deck', labelKey: 'examples.modeDeck' },
   { value: 'document', labelKey: 'examples.modeDocument' },
-  { value: 'orbit', labelKey: 'examples.modeOrbit' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {
@@ -86,7 +84,6 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
   if (filter === 'prototype-mobile')
     return skill.mode === 'prototype' && skill.platform === 'mobile';
   if (filter === 'document') return skill.mode === 'template';
-  if (filter === 'orbit') return skill.scenario === 'orbit';
   return true;
 }
 
@@ -111,10 +108,6 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
-  // Free-text search filters by skill name + description + prompt so users
-  // can find a known example by typing any associated word ("airbnb",
-  // "wireframe", "deck") without having to click through filter pills first.
-  const [search, setSearch] = useState('');
   const [previewSkillId, setPreviewSkillId] = useState<string | null>(null);
 
   const loadPreview = useCallback(
@@ -149,14 +142,12 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       'prototype-mobile': 0,
       deck: 0,
       document: 0,
-      orbit: 0,
     };
     for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
       if (matchesMode(s, 'prototype-mobile')) c['prototype-mobile']++;
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
-      if (matchesMode(s, 'orbit')) c.orbit++;
     }
     return c;
   }, [skills, surfaceFilter]);
@@ -186,15 +177,10 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   }, [scenarioCounts]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const matched = skills.filter((s) => {
       if (!matchesSurface(s, surfaceFilter) || !matchesMode(s, modeFilter)) return false;
-      if (scenarioFilter !== 'all' && (s.scenario || 'general') !== scenarioFilter) return false;
-      if (!q) return true;
-      const desc = localizeSkillDescription(locale, s);
-      const prompt = localizeSkillPrompt(locale, s) || '';
-      const haystack = `${s.name} ${desc} ${prompt} ${s.scenario ?? ''}`.toLowerCase();
-      return haystack.includes(q);
+      if (scenarioFilter === 'all') return true;
+      return (s.scenario || 'general') === scenarioFilter;
     });
     // Featured magazine-style examples float to the top (lower priority
     // number wins). Non-featured skills keep their server-side order so
@@ -208,7 +194,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
         return a.idx - b.idx;
       })
       .map(({ s }) => s);
-  }, [skills, surfaceFilter, modeFilter, scenarioFilter, search, locale]);
+  }, [skills, surfaceFilter, modeFilter, scenarioFilter]);
 
   if (skills.length === 0) {
     return <div className="tab-empty">{t('examples.emptyNoSkills')}</div>;
@@ -217,18 +203,6 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   return (
     <div className="tab-panel examples-panel">
       <div className="examples-toolbar">
-        <div className="examples-search">
-          <span className="search-icon" aria-hidden>
-            <Icon name="search" size={13} />
-          </span>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('examples.searchPlaceholder')}
-            aria-label={t('examples.searchAria')}
-          />
-        </div>
         <div
           className="examples-filter-row"
           role="tablist"
@@ -334,7 +308,6 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               id: 'preview',
               label: t('examples.previewLabel'),
               html: previews[previewSkill.id],
-              deck: previewSkill.mode === 'deck',
             },
           ]}
           exportTitleFor={() => previewSkill.name}
@@ -361,41 +334,7 @@ function ExampleCard({
   const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [intersected, setIntersected] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
-  const cardRef = useRef<HTMLDivElement | null>(null);
-
-  // Eagerly request the preview HTML once the card scrolls near the viewport.
-  // The 800px bottom rootMargin prefetches cards that are about to be
-  // scrolled into view so the iframe is ready by the time the user reaches
-  // it. Hover (below) is kept as a fallback for environments that lack
-  // IntersectionObserver or for cards already visible on first paint that
-  // somehow miss the initial observation.
-  useEffect(() => {
-    if (intersected) return;
-    const node = cardRef.current;
-    if (!node) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      setIntersected(true);
-      onLoad();
-      return;
-    }
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setIntersected(true);
-            onLoad();
-            obs.disconnect();
-            break;
-          }
-        }
-      },
-      { rootMargin: '0px 0px 800px 0px' },
-    );
-    obs.observe(node);
-    return () => obs.disconnect();
-  }, [intersected, onLoad]);
 
   useEffect(() => {
     if (!shareOpen) return;
@@ -422,7 +361,6 @@ function ExampleCard({
 
   return (
     <div
-      ref={cardRef}
       className="example-card"
       data-testid={`example-card-${skill.id}`}
       onMouseEnter={() => {
@@ -458,7 +396,7 @@ function ExampleCard({
           </>
         ) : (
           <div className="example-preview-placeholder">
-            {hovered || intersected
+            {hovered
               ? t('examples.loadingPreview')
               : t('examples.hoverPreview')}
           </div>

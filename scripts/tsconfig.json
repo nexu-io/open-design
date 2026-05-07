@@ -13,6 +13,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "typeRoots": ["../e2e/node_modules/@types"],
     "types": ["node"]
   },
   "include": ["./**/*.ts"]

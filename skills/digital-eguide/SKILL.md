@@ -22,7 +22,7 @@ od:
   mode: prototype
   platform: desktop
   scenario: marketing
-  featured: 6
+  featured: 2
   preview:
     type: html
     entry: index.html

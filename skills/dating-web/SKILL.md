@@ -20,7 +20,7 @@ od:
   mode: prototype
   platform: desktop
   scenario: personal
-  featured: 5
+  featured: 1
   preview:
     type: html
     entry: index.html

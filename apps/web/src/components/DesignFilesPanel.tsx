@@ -1,22 +1,18 @@
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
-import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import type { ProjectFile, ProjectFileKind } from '../types';
 import { Icon } from './Icon';
-import { LiveArtifactBadges } from './LiveArtifactBadges';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 interface Props {
   projectId: string;
   files: ProjectFile[];
-  liveArtifacts: LiveArtifactWorkspaceEntry[];
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
-  onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
   onDeleteFile: (name: string) => void;
-  onDeleteFiles: (names: string[]) => Promise<void> | void;
   onUpload: () => void;
   onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
@@ -34,8 +30,6 @@ const SECTION_LABEL_KEY: Record<Section, keyof Dict> = {
 };
 
 const SECTION_ORDER: Section[] = ['pages', 'sketches', 'scripts', 'images', 'other'];
-const INITIAL_SECTION_FILE_LIMIT = 30;
-const SECTION_FILE_LIMIT_INCREMENT = 200;
 
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
@@ -46,12 +40,9 @@ const SECTION_FILE_LIMIT_INCREMENT = 200;
 export function DesignFilesPanel({
   projectId,
   files,
-  liveArtifacts,
   onRefreshFiles,
   onOpenFile,
-  onOpenLiveArtifact,
   onDeleteFile,
-  onDeleteFiles,
   onUpload,
   onUploadFiles,
   onPaste,
@@ -63,13 +54,7 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
-  const MENU_ESTIMATED_HEIGHT = 115;
-  const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
-  const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
-  const [isSectionExpansionPending, startSectionExpansion] = useTransition();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [deleting, setDeleting] = useState(false);
 
   const grouped = useMemo(() => {
     const groups: Record<Section, ProjectFile[]> = {
@@ -84,26 +69,6 @@ export function DesignFilesPanel({
       groups[sectionFor(f)].push(f);
     }
     return groups;
-  }, [files]);
-
-  // Prune selections that no longer exist in the current file list
-  // (e.g. after a refresh or delete within the same project).
-  // Cross-project leaks are handled by the parent remounting this
-  // component via key={projectId}.
-  useEffect(() => {
-    setSelected((prev) => {
-      if (prev.size === 0) return prev;
-      const names = new Set(files.map((f) => f.name));
-      const next = new Set(prev);
-      let changed = false;
-      for (const n of next) {
-        if (!names.has(n)) {
-          next.delete(n);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
   }, [files]);
 
   const previewFile = useMemo(
@@ -132,87 +97,6 @@ export function DesignFilesPanel({
       await onRefreshFiles();
     } finally {
       setRefreshing(false);
-    }
-  }
-
-  function toggleSelect(name: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  }
-
-  function selectAllInSection(sectionFiles: ProjectFile[]) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const f of sectionFiles) next.add(f.name);
-      return next;
-    });
-  }
-
-  function clearSection(sectionFiles: ProjectFile[]) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const f of sectionFiles) next.delete(f.name);
-      return next;
-    });
-  }
-
-  async function handleBatchDelete() {
-    if (deleting) return;
-    const fileList = [...selected];
-    if (fileList.length === 0) return;
-    setDeleting(true);
-    try {
-      await onDeleteFiles(fileList);
-      // Don't clear `selected` here: confirm-cancel and all-fail paths
-      // should leave the user's selection intact for retry. The
-      // `useEffect` above prunes successfully-deleted names automatically
-      // once `files` refreshes.
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  async function handleBatchDownload() {
-    const fileList = [...selected];
-    if (fileList.length === 0) return;
-    try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: fileList }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => null);
-        throw new Error(err?.message || `request failed (${resp.status})`);
-      }
-      const blob = await resp.blob();
-      const header = resp.headers.get('content-disposition') || '';
-      const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
-      let filename = 'project.zip';
-      if (star && star[1]) {
-        try {
-          filename = decodeURIComponent(star[1]);
-        } catch {
-          filename = star[1];
-        }
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err) {
-      console.warn('[batchDownload] failed:', err);
     }
   }
 
@@ -248,29 +132,7 @@ export function DesignFilesPanel({
             <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
           </button>
           <span className="crumbs">{t('designFiles.crumbs')}</span>
-          {selected.size > 0 ? (
-            <div className="df-actions">
-              <button
-                type="button"
-                onClick={() => void handleBatchDownload()}
-                title={t('designFiles.downloadSelected', { n: selected.size })}
-              >
-                <Icon name="download" size={13} />
-                <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
-              </button>
-              <button
-                type="button"
-                className="danger"
-                data-testid="design-files-batch-delete"
-                disabled={deleting}
-                onClick={() => void handleBatchDelete()}
-                title={t('designFiles.deleteSelected', { n: selected.size })}
-              >
-                <span>{t('designFiles.deleteSelected', { n: selected.size })}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="df-actions">
+          <div className="df-actions">
             <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
               <Icon name="pencil" size={13} />
               <span>{t('designFiles.newSketch')}</span>
@@ -289,195 +151,63 @@ export function DesignFilesPanel({
               <span>{t('designFiles.upload.label')}</span>
             </button>
           </div>
-          )}
         </div>
         <div className="df-body">
-          {files.length === 0 && liveArtifacts.length === 0 ? (
+          {files.length === 0 ? (
             <div className="df-empty">{t('designFiles.empty')}</div>
           ) : (
-            <>
-              {liveArtifacts.length > 0 ? (
-                <div className="df-section" key="live-artifacts">
-                  <div className="df-section-label">{t('designFiles.sectionLiveArtifacts')}</div>
-                  {liveArtifacts.map((artifact) => (
+            SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => (
+              <div className="df-section" key={section}>
+                <div className="df-section-label">
+                  {t(SECTION_LABEL_KEY[section])}
+                </div>
+                {grouped[section].map((f) => {
+                  const active = preview === f.name;
+                  const isHovered = hover === f.name;
+                  return (
                     <button
-                      key={artifact.artifactId}
+                      key={f.name}
                       type="button"
-                      data-testid={`design-file-row-${artifact.tabId}`}
-                      className="df-row"
-                      onDoubleClick={() => onOpenLiveArtifact(artifact.tabId)}
-                      onClick={() => onOpenLiveArtifact(artifact.tabId)}
+                      data-testid={`design-file-row-${f.name}`}
+                      className={`df-row ${active ? 'active' : ''}`}
+                      onMouseEnter={() => setHover(f.name)}
+                      onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+                      onClick={() => setPreview(f.name)}
+                      onDoubleClick={() => onOpenFile(f.name)}
                     >
-                      <span className="df-row-icon" data-kind="live-artifact" aria-hidden>
-                        ◉
+                      <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+                        {kindGlyph(f.kind)}
                       </span>
                       <span className="df-row-name-wrap">
-                        <span className="df-row-name">{artifact.title}</span>
-                        <span className="df-row-sub">
-                          <span>{t('designFiles.kindLiveArtifact')}</span>
-                          <LiveArtifactBadges
-                            compact
-                            status={artifact.status}
-                            refreshStatus={artifact.refreshStatus}
-                          />
-                        </span>
+                        <span className="df-row-name">{f.name}</span>
+                        <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
                       </span>
-                      <span className="df-row-time">
-                        {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {SECTION_ORDER.filter((s) => grouped[s].length > 0).map((section) => {
-                const sectionFiles = grouped[section];
-                const visibleLimit = sectionLimits[section] ?? INITIAL_SECTION_FILE_LIMIT;
-                const visibleFiles = sectionFiles.slice(0, visibleLimit);
-                const hiddenCount = sectionFiles.length - visibleFiles.length;
-                return (
-                <div className="df-section" key={section}>
-                  <div className="df-section-label">
-                    {t(SECTION_LABEL_KEY[section])}
-                    <span className="df-section-count">{sectionFiles.length}</span>
-                    <button
-                      type="button"
-                      className="df-select-all"
-                      title={t('designFiles.selectAll')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectAllInSection(sectionFiles);
-                      }}
-                    >
-                      {t('designFiles.selectAll')}
-                    </button>
-                    {sectionFiles.some((f) => selected.has(f.name)) ? (
-                      <button
-                        type="button"
-                        className="df-select-all"
-                        title={t('designFiles.clearSelection')}
+                      <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
+                      <span
+                        data-testid={`design-file-menu-${f.name}`}
+                        className="df-row-menu"
+                        style={isHovered || active ? { opacity: 1 } : undefined}
+                        role="button"
+                        aria-label={t('designFiles.rowMenu')}
                         onClick={(e) => {
                           e.stopPropagation();
-                          clearSection(sectionFiles);
+                          const rect = (e.target as HTMLElement)
+                            .closest('.df-row-menu')
+                            ?.getBoundingClientRect();
+                          setMenuPos({
+                            name: f.name,
+                            top: (rect?.bottom ?? 0) + 4,
+                            left: (rect?.right ?? 0) - 160,
+                          });
                         }}
                       >
-                        {t('designFiles.clearSelection')}
-                      </button>
-                    ) : null}
-                  </div>
-                  {visibleFiles.map((f) => {
-                    const active = preview === f.name;
-                    const isHovered = hover === f.name;
-                    return (
-                      <button
-                        key={f.name}
-                        type="button"
-                        data-testid={`design-file-row-${f.name}`}
-                        className={`df-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
-                        onMouseEnter={() => setHover(f.name)}
-                        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                        onClick={() => setPreview(f.name)}
-                        onDoubleClick={() => onOpenFile(f.name)}
-                      >
-                        <span
-                          className="df-row-check"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSelect(f.name);
-                          }}
-                          role="checkbox"
-                          aria-checked={selected.has(f.name)}
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleSelect(f.name);
-                            }
-                          }}
-                        >
-                          {selected.has(f.name) ? '☑' : '☐'}
-                        </span>
-                        <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-                          {kindGlyph(f.kind)}
-                        </span>
-                        <span className="df-row-name-wrap">
-                          <span className="df-row-name">{f.name}</span>
-                          <span className="df-row-sub">{kindLabel(f.kind, t)}</span>
-                        </span>
-                        <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
-                        <span
-                          data-testid={`design-file-menu-${f.name}`}
-                          className="df-row-menu"
-                          style={isHovered || active ? { opacity: 1 } : undefined}
-                          role="button"
-                          aria-label={t('designFiles.rowMenu')}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const rect = (e.target as HTMLElement)
-                              .closest('.df-row-menu')
-                              ?.getBoundingClientRect();
-                            if (!rect) return;
-
-                            const viewportHeight = window.innerHeight;
-                            const spaceBelow = viewportHeight - rect.bottom;
-                            const spaceAbove = rect.top;
-
-                            let top: number;
-                            if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                              top = rect.bottom + 4;
-                            } else if (spaceAbove >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
-                              top = rect.top - MENU_ESTIMATED_HEIGHT - 4;
-                            } else {
-                              top = Math.max(
-                                MENU_SAFE_PADDING,
-                                viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
-                              );
-                            }
-
-                            const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
-
-                            setMenuPos({
-                              name: f.name,
-                              top,
-                              left,
-                            });
-                          }}
-                        >
-                          ⋯
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {hiddenCount > 0 ? (
-                    <button
-                      type="button"
-                      className="df-section-more"
-                      disabled={isSectionExpansionPending}
-                      aria-busy={isSectionExpansionPending}
-                      onClick={() =>
-                        startSectionExpansion(() => {
-                          setSectionLimits((curr) => ({
-                            ...curr,
-                            [section]: Math.min(
-                              sectionFiles.length,
-                              visibleLimit + SECTION_FILE_LIMIT_INCREMENT,
-                            ),
-                          }));
-                        })
-                      }
-                    >
-                      <Icon name={isSectionExpansionPending ? 'spinner' : 'plus'} size={12} />
-                      <span>
-                        {t('designFiles.showMore', {
-                          n: Math.min(hiddenCount, SECTION_FILE_LIMIT_INCREMENT),
-                        })}
+                        ⋯
                       </span>
                     </button>
-                  ) : null}
-                </div>
-                );
-              })}
-            </>
+                  );
+                })}
+              </div>
+            ))
           )}
           <div
             className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
@@ -520,12 +250,10 @@ export function DesignFilesPanel({
           className="df-row-popover"
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={() => {
               const name = menuPos.name;
               setMenuPos(null);
               onOpenFile(name);
@@ -538,13 +266,7 @@ export function DesignFilesPanel({
             download={menuPos.name}
             style={{ textDecoration: 'none' }}
           >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuPos(null);
-              }}
-            >
+            <button type="button" onClick={() => setMenuPos(null)}>
               {t('designFiles.download')}
             </button>
           </a>
@@ -552,9 +274,7 @@ export function DesignFilesPanel({
             type="button"
             className="danger"
             data-testid={`design-file-delete-${menuPos.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
+            onClick={() => {
               const name = menuPos.name;
               setMenuPos(null);
               onDeleteFile(name);

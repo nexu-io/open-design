@@ -4,7 +4,6 @@ import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import { renderModelOptions } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
-import { apiProtocolLabel } from '../utils/apiProtocol';
 
 interface Props {
   config: AppConfig;
@@ -97,7 +96,7 @@ export function AvatarMenu({
             <span className="who">
               {config.mode === 'daemon'
                 ? t('avatar.localCli')
-                : apiProtocolLabel(config.apiProtocol)}
+                : t('avatar.anthropicApi')}
             </span>
             <span className="where">
               {config.mode === 'api'

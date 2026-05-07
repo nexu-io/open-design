@@ -1,64 +1,36 @@
 // @ts-nocheck
 import express from 'express';
 import multer from 'multer';
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import net from 'node:net';
-import {
-  composeSystemPrompt,
-  renderCodexImagegenOverride,
-  shouldRenderCodexImagegenOverride,
-} from './prompts/system.js';
-import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
+import { composeSystemPrompt } from './prompts/system.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
-  buildLiveArtifactsMcpServersForAgent,
-  checkPromptArgvBudget,
-  checkWindowsCmdShimCommandLineBudget,
-  checkWindowsDirectExeCommandLineBudget,
   detectAgents,
   getAgentDef,
   isKnownModel,
   resolveAgentBin,
   sanitizeCustomModel,
-  spawnEnvForAgent,
 } from './agents.js';
-import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
-import { findSkillById, listSkills } from './skills.js';
-import { validateLinkedDirs } from './linked-dirs.js';
-import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
-import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
-import { syncCommunityPets } from './community-pets-sync.js';
+import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
-import { loadCritiqueConfigFromEnv } from './critique/config.js';
-import { reconcileStaleRuns } from './critique/persistence.js';
-import { runOrchestrator } from './critique/orchestrator.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
-import { createQoderStreamHandler } from './qoder-stream.js';
-import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
-import {
-  testAgentConnection,
-  testProviderConnection,
-  validateBaseUrl,
-} from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
-import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -70,21 +42,15 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
-import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import {
-  buildProjectArchive,
-  buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
-  detectEntryFile,
   ensureProject,
   listFiles,
-  mimeFor,
   projectDir,
   readProjectFile,
   removeProjectDir,
   sanitizeName,
-  searchProjectFiles,
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
@@ -121,39 +87,14 @@ import {
   upsertPreviewComment,
 } from './db.js';
 import {
-  createLiveArtifact,
-  deleteLiveArtifact,
-  ensureLiveArtifactPreview,
-  getLiveArtifact,
-  LiveArtifactRefreshLockError,
-  LiveArtifactStoreValidationError,
-  listLiveArtifacts,
-  listLiveArtifactRefreshLogEntries,
-  readLiveArtifactCode,
-  recoverStaleLiveArtifactRefreshes,
-  updateLiveArtifact,
-} from './live-artifacts/store.js';
-import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
-import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
-import { registerConnectorRoutes } from './connectors/routes.js';
-import { configureConnectorCredentialStore, ConnectorServiceError, deleteConnectorCredentialsByProvider, FileConnectorCredentialStore } from './connectors/service.js';
-import { composioConnectorProvider } from './connectors/composio.js';
-import { configureComposioConfigStore, readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './connectors/composio-config.js';
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
-import {
   buildDeployFileSet,
   checkDeploymentUrl,
-  CLOUDFLARE_PAGES_PROVIDER_ID,
-  cloudflarePagesProjectNameForProject,
   DeployError,
-  deployToCloudflarePages,
   deployToVercel,
-  isDeployProviderId,
-  prepareDeployPreflight,
-  publicDeployConfigForProvider,
-  readDeployConfig,
+  publicDeployConfig,
+  readVercelConfig,
   VERCEL_PROVIDER_ID,
-  writeDeployConfig,
+  writeVercelConfig,
 } from './deploy.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
@@ -166,292 +107,16 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const require = createRequire(import.meta.url);
-const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
-  const daemonDir =
-    base === 'dist' || base === 'src' ? path.dirname(moduleDir) : moduleDir;
+  const daemonDir = base === 'dist' || base === 'src'
+    ? path.dirname(moduleDir)
+    : moduleDir;
   return path.resolve(daemonDir, '../..');
-}
-
-function cleanOptionalPath(value: string | undefined): string | null {
-  return typeof value === 'string' && value.trim().length > 0
-    ? path.resolve(value)
-    : null;
-}
-
-export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
-  if (configured) return configured;
-
-  const packageJsonPath = require.resolve('@open-design/daemon/package.json');
-  return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
-
-export function composeLiveInstructionPrompt({
-  daemonSystemPrompt,
-  runtimeToolPrompt,
-  clientSystemPrompt,
-  finalPromptOverride,
-}) {
-  const override =
-    typeof finalPromptOverride === 'string'
-      ? finalPromptOverride.trim()
-      : '';
-  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
-    .map((part) => (typeof part === 'string' ? part.trim() : ''))
-    .map((part) =>
-      override && part.includes(override)
-        ? part.split(override).join('').trim()
-        : part,
-    )
-    .filter(Boolean);
-  if (override) {
-    parts.push(override);
-  }
-  return parts.join('\n\n---\n\n');
-}
-
-export function resolveCodexGeneratedImagesDir(
-  agentId,
-  metadata,
-  env = process.env,
-  homeDir = os.homedir(),
-) {
-  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
-  const rawCodexHome =
-    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
-      ? env.CODEX_HOME.trim()
-      : path.join(homeDir, '.codex');
-  const codexHome = rawCodexHome.startsWith('~/')
-    ? path.join(homeDir, rawCodexHome.slice(2))
-    : rawCodexHome;
-  return path.resolve(codexHome, 'generated_images');
-}
-
-type DirectoryStat = {
-  isDirectory(): boolean;
-  isSymbolicLink(): boolean;
-};
-
-type CodexGeneratedImagesDirValidationOptions = {
-  protectedDirs?: Array<string | null | undefined>;
-  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
-  lstatSync?: (target: string) => DirectoryStat;
-  statSync?: (target: string) => DirectoryStat;
-  realpathSync?: (target: string) => string;
-  warn?: (message: string) => void;
-};
-
-function isMissingPathError(err: unknown): boolean {
-  return (
-    err &&
-    typeof err === 'object' &&
-    'code' in err &&
-    err.code === 'ENOENT'
-  );
-}
-
-function collectProtectedDirRoots(
-  protectedDirs: Array<string | null | undefined>,
-  {
-    realpathSync,
-    statSync,
-  }: {
-    realpathSync: (target: string) => string;
-    statSync: (target: string) => DirectoryStat;
-  },
-): string[] {
-  const roots = [];
-  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
-    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
-    const resolved = path.resolve(raw);
-    roots.push(resolved);
-    try {
-      const canonical = realpathSync(resolved);
-      try {
-        if (statSync(canonical).isDirectory()) roots.push(canonical);
-      } catch {
-        roots.push(canonical);
-      }
-    } catch {
-      // A missing protected root cannot be the canonical target of a symlink.
-    }
-  }
-  return Array.from(new Set(roots));
-}
-
-function findContainingProtectedRoot(
-  candidate: string,
-  protectedRoots: string[],
-): string | null {
-  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
-}
-
-export function validateCodexGeneratedImagesDir(
-  codexGeneratedImagesDir: string | null | undefined,
-  {
-    protectedDirs = [],
-    mkdirSync = fs.mkdirSync,
-    lstatSync = fs.lstatSync,
-    statSync = fs.statSync,
-    realpathSync = fs.realpathSync.native,
-    warn = console.warn,
-  }: CodexGeneratedImagesDirValidationOptions = {},
-): string | null {
-  if (
-    typeof codexGeneratedImagesDir !== 'string' ||
-    codexGeneratedImagesDir.trim().length === 0
-  ) {
-    return null;
-  }
-
-  const resolved = path.resolve(codexGeneratedImagesDir);
-  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
-    realpathSync,
-    statSync,
-  });
-  const warnSkipped = (reason: string) =>
-    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
-
-  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
-  if (protectedRoot) {
-    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
-    return null;
-  }
-
-  try {
-    let existingTargetStat = null;
-    try {
-      existingTargetStat = lstatSync(resolved);
-    } catch (err) {
-      if (!isMissingPathError(err)) throw err;
-    }
-    if (existingTargetStat?.isSymbolicLink()) {
-      warnSkipped(`${resolved} is a symlink`);
-      return null;
-    }
-    if (existingTargetStat && !existingTargetStat.isDirectory()) {
-      warnSkipped(`${resolved} is not a directory`);
-      return null;
-    }
-
-    const parent = path.dirname(resolved);
-    const protectedParentRoot = findContainingProtectedRoot(
-      parent,
-      protectedRoots,
-    );
-    if (protectedParentRoot) {
-      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
-      return null;
-    }
-
-    mkdirSync(parent, { recursive: true });
-    const canonicalParent = realpathSync(parent);
-    const canonicalCandidate = path.join(
-      canonicalParent,
-      path.basename(resolved),
-    );
-    const protectedCanonicalParentRoot = findContainingProtectedRoot(
-      canonicalCandidate,
-      protectedRoots,
-    );
-    if (protectedCanonicalParentRoot) {
-      warnSkipped(
-        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
-      );
-      return null;
-    }
-
-    mkdirSync(resolved, { recursive: true });
-    if (lstatSync(resolved).isSymbolicLink()) {
-      warnSkipped(`${resolved} is a symlink`);
-      return null;
-    }
-    if (!statSync(resolved).isDirectory()) {
-      warnSkipped(`${resolved} is not a directory`);
-      return null;
-    }
-    const canonicalDir = realpathSync(resolved);
-    const protectedCanonicalRoot = findContainingProtectedRoot(
-      canonicalDir,
-      protectedRoots,
-    );
-    if (protectedCanonicalRoot) {
-      warnSkipped(
-        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
-      );
-      return null;
-    }
-
-    return canonicalDir;
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : String(err ?? 'unknown error');
-    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
-    return null;
-  }
-}
-
-export function resolveChatExtraAllowedDirs({
-  agentId,
-  skillsDir,
-  designSystemsDir,
-  linkedDirs = [],
-  codexGeneratedImagesDir,
-  existsSync = fs.existsSync,
-}: {
-  agentId?: string | null;
-  skillsDir?: string | null;
-  designSystemsDir?: string | null;
-  linkedDirs?: Array<string | null | undefined>;
-  codexGeneratedImagesDir?: string | null;
-  existsSync?: (path: string) => boolean;
-}): string[] {
-  const isCodex =
-    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
-  const candidates = isCodex
-    ? [codexGeneratedImagesDir]
-    : [
-        skillsDir,
-        designSystemsDir,
-        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
-      ];
-  return Array.from(
-    new Set(
-      candidates.filter(
-        (d) =>
-          typeof d === 'string' && d.length > 0 && existsSync(d),
-      ),
-    ),
-  );
-}
-
-export function resolveGrantedCodexImagegenOverride({
-  agentId,
-  metadata,
-  codexGeneratedImagesDir,
-  extraAllowedDirs = [],
-}: {
-  agentId?: string | null;
-  metadata?: unknown;
-  codexGeneratedImagesDir?: string | null;
-  extraAllowedDirs?: string[];
-}): string | null {
-  if (
-    typeof codexGeneratedImagesDir !== 'string' ||
-    codexGeneratedImagesDir.length === 0 ||
-    !Array.isArray(extraAllowedDirs) ||
-    !extraAllowedDirs.includes(codexGeneratedImagesDir)
-  ) {
-    return null;
-  }
-  return renderCodexImagegenOverride(agentId, metadata);
-}
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -464,21 +129,9 @@ export function normalizeCommentAttachments(input) {
       const label = cleanString(raw.label);
       const comment = cleanString(raw.comment);
       if (!filePath || !elementId || !selector || !comment) return null;
-      const selectionKind = raw.selectionKind === 'pod' ? 'pod' : 'element';
-      const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
-      const memberCount =
-        selectionKind === 'pod'
-          ? (podMembers.length > 0
-              ? podMembers.length
-              : Number.isFinite(raw.memberCount)
-                ? Math.max(0, Math.round(raw.memberCount))
-                : 0)
-          : 0;
       return {
         id: cleanString(raw.id) || `comment-${index + 1}`,
-        order: Number.isFinite(raw.order)
-          ? Math.max(1, Math.round(raw.order))
-          : index + 1,
+        order: Number.isFinite(raw.order) ? Math.max(1, Math.round(raw.order)) : index + 1,
         filePath,
         elementId,
         selector,
@@ -487,10 +140,6 @@ export function normalizeCommentAttachments(input) {
         currentText: compactString(raw.currentText, 160),
         pagePosition: normalizeAttachmentPosition(raw.pagePosition),
         htmlHint: compactString(raw.htmlHint, 180),
-        selectionKind,
-        memberCount,
-        podMembers,
-        source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
       };
     })
     .filter(Boolean)
@@ -503,14 +152,12 @@ export function renderCommentAttachmentHint(commentAttachments) {
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: treat each attachment as the default refinement target. For single elements, edit the target element first. For pods, coordinate the captured group as one design region and preserve unrelated areas.',
+    'Scope: edit the target element by default. Use the smallest necessary parent wrapper only if the target cannot satisfy the comment. Preserve stable ids and unrelated siblings.',
   ];
   for (const item of commentAttachments) {
-    const targetKind = item.selectionKind === 'pod' ? 'pod' : 'element';
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
-      `targetKind: ${targetKind}`,
       `file: ${item.filePath}`,
       `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
@@ -519,14 +166,6 @@ export function renderCommentAttachmentHint(commentAttachments) {
       `htmlHint: ${item.htmlHint || '(none)'}`,
       `comment: ${item.comment}`,
     );
-    if (targetKind === 'pod') {
-      lines.push(`memberCount: ${item.memberCount || item.podMembers.length || 0}`);
-      item.podMembers.slice(0, 8).forEach((member, memberIndex) => {
-        lines.push(
-          `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
-        );
-      });
-    }
   }
   lines.push('</attached-preview-comments>');
   return lines.join('\n');
@@ -551,27 +190,6 @@ function normalizeAttachmentPosition(input) {
   };
 }
 
-function normalizeAttachmentPodMembers(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((member) => {
-      if (!member || typeof member !== 'object') return null;
-      const elementId = cleanString(member.elementId);
-      const selector = cleanString(member.selector);
-      const label = cleanString(member.label);
-      if (!elementId || !selector) return null;
-      return {
-        elementId,
-        selector,
-        label,
-        text: compactString(member.text, 160),
-        position: normalizeAttachmentPosition(member.position),
-        htmlHint: compactString(member.htmlHint, 180),
-      };
-    })
-    .filter(Boolean);
-}
-
 function finiteAttachmentNumber(value) {
   return Number.isFinite(value) ? Math.round(value) : 0;
 }
@@ -582,19 +200,11 @@ function formatAttachmentPosition(position) {
 
 function isPathWithin(base, target) {
   const relativePath = path.relative(path.resolve(base), path.resolve(target));
-  return (
-    relativePath === '' ||
-    (relativePath.length > 0 &&
-      !relativePath.startsWith('..') &&
-      !path.isAbsolute(relativePath))
-  );
+  return relativePath === '' || (relativePath.length > 0 && !relativePath.startsWith('..') && !path.isAbsolute(relativePath));
 }
 
 function resolveProcessResourcesPath() {
-  if (
-    typeof process.resourcesPath === 'string' &&
-    process.resourcesPath.length > 0
-  ) {
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
     return process.resourcesPath;
   }
 
@@ -608,16 +218,10 @@ function resolveProcessResourcesPath() {
   }
 
   const normalizedExecPath = process.execPath.toLowerCase();
-  const windowsResourceBinMarker =
-    `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
-  const windowsMarkerIndex = normalizedExecPath.indexOf(
-    windowsResourceBinMarker,
-  );
+  const windowsResourceBinMarker = `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
+  const windowsMarkerIndex = normalizedExecPath.indexOf(windowsResourceBinMarker);
   if (windowsMarkerIndex !== -1) {
-    return process.execPath.slice(
-      0,
-      windowsMarkerIndex + `${path.sep}resources`.length,
-    );
+    return process.execPath.slice(0, windowsMarkerIndex + `${path.sep}resources`.length);
   }
 
   return null;
@@ -635,9 +239,7 @@ export function resolveDaemonResourceRoot({
     .map((base) => path.resolve(base));
 
   if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
-    throw new Error(
-      `${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
-    );
+    throw new Error(`${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`);
   }
 
   return resolved;
@@ -653,8 +255,7 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
 // when this project shipped with Vite; the daemon serves whatever the
 // frontend toolchain emits, no further config needed.
 const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
-const OD_BIN = resolveDaemonCliPath();
-const OD_NODE_BIN = process.execPath;
+const OD_BIN = path.join(PROJECT_ROOT, 'apps', 'daemon', 'dist', 'cli.js');
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -675,190 +276,26 @@ const FRAMES_DIR = resolveDaemonResourceDir(
   'frames',
   path.join(PROJECT_ROOT, 'assets', 'frames'),
 );
-// Curated pets baked into the repo via `scripts/bake-community-pets.ts`.
-// `listCodexPets` scans this in addition to `~/.codex/pets/` so the
-// "Recently hatched" grid is non-empty out-of-the-box and users do not
-// need to hit the "Download community pets" button to try a few pets.
-const BUNDLED_PETS_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
-  'community-pets',
-  path.join(PROJECT_ROOT, 'assets', 'community-pets'),
-);
 const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'prompt-templates',
   path.join(PROJECT_ROOT, 'prompt-templates'),
 );
-export function resolveDataDir(raw, projectRoot) {
-  if (!raw) return path.join(projectRoot, '.od');
-  // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
-  // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
-  // Some launchers (systemd unit files, NixOS modules, certain Docker
-  // entrypoints, Windows scheduled tasks) pass OD_DATA_DIR with literal
-  // $HOME or ${HOME} because the variable is never expanded by a shell;
-  // expandHomePrefix turns those (and the ~ shorthand, with both / and \
-  // separators) into os.homedir() before path.resolve runs so launch
-  // surfaces stay consistent.
-  const resolved = resolveProjectRelativePath(raw, projectRoot);
-  try {
-    fs.mkdirSync(resolved, { recursive: true });
-    fs.accessSync(resolved, fs.constants.W_OK);
-  } catch (err) {
-    const e = err;
-    throw new Error(
-      `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
-    );
-  }
-  // Canonicalize via realpath so that any callers comparing user-supplied
-  // realpath() output against RUNTIME_DATA_DIR get a stable result. On
-  // macOS, /var is itself a symlink to /private/var, so a user's import
-  // realpath would land in /private/var/... and would never start-with
-  // a non-canonicalized RUNTIME_DATA_DIR.
-  try {
-    return fs.realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
-}
-const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
-// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
-// new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
-// across before SQLite opens. Synchronous on purpose: openDatabase below
-// would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
-// and https://github.com/nexu-io/open-design/issues/710.
-migrateLegacyDataDirSync({
-  legacyDir: process.env.OD_LEGACY_DATA_DIR,
-  dataDir: RUNTIME_DATA_DIR,
-});
+const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
+  ? path.resolve(PROJECT_ROOT, process.env.OD_DATA_DIR)
+  : path.join(PROJECT_ROOT, '.od');
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
-const activeChatAgentEventSinks = new Map();
-const activeProjectEventSinks = new Map();
-
-function emitChatAgentEvent(runId, payload) {
-  const sink = activeChatAgentEventSinks.get(runId);
-  if (!sink) return false;
-  return sink(payload);
-}
-
-function emitLiveArtifactEvent(grant, action, artifact) {
-  if (!artifact?.id) return false;
-  const payload = {
-    type: 'live_artifact',
-    action,
-    projectId: artifact.projectId ?? grant.projectId,
-    artifactId: artifact.id,
-    title: artifact.title ?? artifact.id,
-    refreshStatus: artifact.refreshStatus,
-  };
-  let emitted = emitProjectLiveArtifactEvent(payload.projectId, payload);
-  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
-  return emitted;
-}
-
-function emitLiveArtifactRefreshEvent(grant, payload) {
-  if (!payload?.artifactId) return false;
-  const event = {
-    type: 'live_artifact_refresh',
-    projectId: grant.projectId,
-    ...payload,
-  };
-  let emitted = emitProjectLiveArtifactEvent(grant.projectId, event);
-  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
-  return emitted;
-}
-
-function emitProjectLiveArtifactEvent(projectId, payload) {
-  const sinks = activeProjectEventSinks.get(projectId);
-  if (!sinks || sinks.size === 0) return false;
-  for (const sink of Array.from(sinks)) {
-    try {
-      sink(payload);
-    } catch {
-      sinks.delete(sink);
-    }
-  }
-  if (sinks.size === 0) activeProjectEventSinks.delete(projectId);
-  return true;
-}
-
-// Windows ENAMETOOLONG mitigation constants
-const CMD_BAT_RE = /\.(cmd|bat)$/i;
-const PROMPT_TEMP_FILE = () =>
-  '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
-const promptFileBootstrap = (fp) =>
-  `Your full instructions are stored in the file: ${fp.replace(/\\/g, '/')}. ` +
-  'Open that file first and follow every instruction in it exactly — ' +
-  'it contains the system prompt, design system, skill workflow, and user request. ' +
-  'Do not begin your response until you have read the entire file.';
-
-// Load Critique Theater config once at startup so a bad OD_CRITIQUE_* value
-// surfaces immediately as a boot-time RangeError instead of silently at
-// run time. Default: enabled=false (M0 dark launch).
-const critiqueCfg = loadCritiqueConfigFromEnv();
-// Tracks adapter streamFormat values that have already received a one-time
-// warning explaining why the Critique Theater orchestrator was bypassed.
-// Adapter denylist for orchestrator routing is implicit: anything that is
-// not the 'plain' streamFormat falls through to legacy single-pass.
-const critiqueWarnedAdapters = new Set<string>();
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
-
-export function createAgentRuntimeEnv(
-  baseEnv: NodeJS.ProcessEnv | Record<string, string | undefined>,
-  daemonUrl: string,
-  toolTokenGrant: { token?: string } | null = null,
-  nodeBin: string = process.execPath,
-): NodeJS.ProcessEnv {
-  const env = {
-    ...baseEnv,
-    OD_DAEMON_URL: daemonUrl,
-    OD_NODE_BIN: nodeBin,
-  };
-
-  if (toolTokenGrant?.token) {
-    env.OD_TOOL_TOKEN = toolTokenGrant.token;
-  } else {
-    delete env.OD_TOOL_TOKEN;
-  }
-
-  return env;
-}
-
-export function createAgentRuntimeToolPrompt(
-  daemonUrl: string,
-  toolTokenGrant: { token?: string } | null = null,
-): string {
-  const tokenLine = toolTokenGrant?.token
-    ? '- `OD_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
-    : '- `OD_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
-
-  return [
-    '## Runtime tool environment',
-    '',
-    `- Daemon URL: \`${daemonUrl}\` (also available as \`OD_DAEMON_URL\`).`,
-    '- `OD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
-    '- `OD_BIN` is the absolute path to the Open Design CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
-    '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
-    tokenLine,
-    '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
-  ].join('\n');
-}
 
 export function normalizeProjectDisplayStatus(status) {
   return status === 'starting' || status === 'queued' ? 'running' : status;
 }
 
-export function composeProjectDisplayStatus(
-  baseStatus,
-  awaitingInputProjects,
-  projectId,
-) {
-  if (
-    baseStatus.value === 'succeeded' &&
-    awaitingInputProjects.has(projectId)
-  ) {
+export function composeProjectDisplayStatus(baseStatus, awaitingInputProjects, projectId) {
+  if (baseStatus.value === 'succeeded' && awaitingInputProjects.has(projectId)) {
     return { ...baseStatus, value: 'awaiting_input' };
   }
   return {
@@ -895,280 +332,7 @@ export function createCompatApiErrorResponse(code, message, init = {}) {
  * @param {Omit<ApiError, 'code' | 'message'>} [init]
  */
 function sendApiError(res, status, code, message, init = {}) {
-  return res
-    .status(status)
-    .json(createCompatApiErrorResponse(code, message, init));
-}
-
-const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
-
-function cloudflarePagesDeploymentMetadata(projectName) {
-  const normalized = typeof projectName === 'string' ? projectName.trim() : '';
-  return normalized
-    ? { [CLOUDFLARE_PAGES_PROJECT_METADATA_KEY]: normalized }
-    : undefined;
-}
-
-function cloudflarePagesProjectNameFromDeployment(deployment) {
-  const value = deployment?.providerMetadata?.[CLOUDFLARE_PAGES_PROJECT_METADATA_KEY];
-  if (typeof value === 'string' && value.trim()) return value.trim();
-  return cloudflarePagesProjectNameFromUrl(deployment?.url);
-}
-
-function cloudflarePagesProjectNameFromUrl(rawUrl) {
-  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return '';
-  try {
-    const host = new URL(rawUrl).hostname.toLowerCase();
-    if (!host.endsWith('.pages.dev')) return '';
-    const labels = host.slice(0, -'.pages.dev'.length).split('.').filter(Boolean);
-    return labels.at(-1) || '';
-  } catch {
-    return '';
-  }
-}
-
-function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
-  const priorName = cloudflarePagesProjectNameFromDeployment(prior);
-  if (priorName) return priorName;
-
-  for (const deployment of listDeployments(db, projectId)) {
-    if (deployment.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) continue;
-    const stableName = cloudflarePagesProjectNameFromDeployment(deployment);
-    if (stableName) return stableName;
-  }
-
-  return cloudflarePagesProjectNameForProject(projectId, projectName);
-}
-
-// Filename slug for the Content-Disposition header on archive downloads.
-// Browsers reject quotes and control bytes; we keep Unicode letters/digits
-// so a project name with non-ASCII characters (e.g. "café-design")
-// survives instead of becoming a row of underscores.
-function sanitizeArchiveFilename(raw) {
-  const cleaned = String(raw ?? '')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return cleaned;
-}
-
-function sendLiveArtifactRouteError(res, err) {
-  if (err instanceof LiveArtifactStoreValidationError) {
-    return sendApiError(res, 400, 'LIVE_ARTIFACT_INVALID', err.message, {
-      details: { kind: 'validation', issues: err.issues },
-    });
-  }
-  if (err instanceof LiveArtifactRefreshLockError) {
-    return sendApiError(res, 409, 'REFRESH_LOCKED', err.message, {
-      details: { artifactId: err.artifactId },
-    });
-  }
-  if (err instanceof LiveArtifactRefreshUnavailableError) {
-    return sendApiError(res, 400, 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE', err.message);
-  }
-  if (err instanceof LiveArtifactRefreshAbortError) {
-    return sendApiError(res, err.kind === 'cancelled' ? 499 : 504, 'LIVE_ARTIFACT_REFRESH_TIMEOUT', err.message, {
-      details: { kind: err.kind, timeoutMs: err.timeoutMs ?? null, step: err.step ?? null },
-    });
-  }
-  if (err instanceof ConnectorServiceError) {
-    return sendApiError(res, err.status, err.code, err.message, err.details === undefined ? {} : { details: err.details });
-  }
-  if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
-    return sendApiError(res, 404, 'LIVE_ARTIFACT_NOT_FOUND', 'live artifact not found');
-  }
-  return sendApiError(res, 500, 'LIVE_ARTIFACT_STORAGE_FAILED', String(err));
-}
-
-function normalizeLocalAuthority(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || /[\s/@]/.test(trimmed) || trimmed.includes(',')) return null;
-
-  try {
-    const parsed = new URL(`http://${trimmed}`);
-    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
-    if (!hostname || parsed.username || parsed.password || parsed.pathname !== '/') return null;
-    return { hostname, port: parsed.port };
-  } catch {
-    return null;
-  }
-}
-
-function isLoopbackHostname(hostname) {
-  const normalized = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  if (normalized === 'localhost') return true;
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
-  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
-  return false;
-}
-
-function isLoopbackPeerAddress(address) {
-  if (typeof address !== 'string') return false;
-  const normalized = address.trim().toLowerCase().replace(/^\[|\]$/g, '');
-  if (!normalized) return false;
-  if (normalized.startsWith('::ffff:')) return isLoopbackPeerAddress(normalized.slice('::ffff:'.length));
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
-  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
-  return false;
-}
-
-function localOriginFromHeader(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === 'null' || trimmed.includes(',')) return null;
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
-    if (!isLoopbackHostname(parsed.hostname)) return null;
-    return parsed.origin;
-  } catch {
-    return null;
-  }
-}
-
-function validateLocalDaemonRequest(req) {
-  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) {
-    return {
-      ok: false,
-      message: 'request peer must be a loopback address',
-      details: { peer: 'remoteAddress' },
-    };
-  }
-
-  const host = normalizeLocalAuthority(req.get('host'));
-  if (!host || !isLoopbackHostname(host.hostname)) {
-    return {
-      ok: false,
-      message: 'request host must be a loopback daemon address',
-      details: { header: 'host' },
-    };
-  }
-
-  const originHeader = req.get('origin');
-  if (originHeader !== undefined && !localOriginFromHeader(originHeader)) {
-    return {
-      ok: false,
-      message: 'request origin must be a loopback daemon origin',
-      details: { header: 'origin' },
-    };
-  }
-
-  return { ok: true, origin: localOriginFromHeader(originHeader) };
-}
-
-function requireLocalDaemonRequest(req, res, next) {
-  const validation = validateLocalDaemonRequest(req);
-  if (!validation.ok) {
-    return sendApiError(res, 403, 'FORBIDDEN', validation.message, validation.details ? { details: validation.details } : {});
-  }
-
-  res.setHeader('Vary', 'Origin');
-  if (validation.origin) {
-    res.setHeader('Access-Control-Allow-Origin', validation.origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Max-Age', '600');
-  next();
-}
-
-function setLiveArtifactPreviewHeaders(res) {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader(
-    'Content-Security-Policy',
-    [
-      "default-src 'none'",
-      "base-uri 'none'",
-      "script-src 'none'",
-      "object-src 'none'",
-      "connect-src 'none'",
-      "form-action 'none'",
-      "frame-ancestors 'self'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "style-src 'unsafe-inline'",
-      'sandbox allow-same-origin',
-    ].join('; '),
-  );
-}
-
-function setLiveArtifactCodeHeaders(res) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-}
-
-function bearerTokenFromRequest(req) {
-  const header = req.get('authorization');
-  if (typeof header !== 'string') return undefined;
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1];
-}
-
-function authorizeToolRequest(req, res, operation) {
-  const endpoint = req.path;
-  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), { endpoint, operation });
-  if (!validation.ok) {
-    const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
-    sendApiError(res, status, validation.code, validation.message, {
-      details: { endpoint, operation },
-    });
-    return null;
-  }
-  return validation.grant;
-}
-
-function requestProjectOverride(projectId, tokenProjectId) {
-  return typeof projectId === 'string' && projectId.length > 0 && projectId !== tokenProjectId;
-}
-
-function requestRunOverride(runId, tokenRunId) {
-  return typeof runId === 'string' && runId.length > 0 && runId !== tokenRunId;
-}
-
-function openNativeFolderDialog() {
-  return new Promise((resolve) => {
-    const platform = process.platform;
-    if (platform === 'darwin') {
-      execFile(
-        'osascript',
-        ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
-        { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim().replace(/\/$/, '');
-          resolve(p || null);
-        },
-      );
-    } else if (platform === 'linux') {
-      execFile(
-        'zenity',
-        ['--file-selection', '--directory', '--title=Select a code folder to link'],
-        { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim();
-          resolve(p || null);
-        },
-      );
-    } else if (platform === 'win32') {
-      const command = buildWindowsFolderDialogCommand();
-      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
-        resolve(parseFolderDialogStdout(err, stdout));
-      });
-    } else {
-      resolve(null);
-    }
-  });
+  return res.status(status).json(createCompatApiErrorResponse(code, message, init));
 }
 
 /**
@@ -1190,10 +354,7 @@ const upload = multer({
     filename: (_req, file, cb) => {
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(
-        null,
-        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`,
-      );
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -1205,10 +366,7 @@ const importUpload = multer({
     filename: (_req, file, cb) => {
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(
-        null,
-        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`,
-      );
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
     },
   }),
   limits: { fileSize: 100 * 1024 * 1024 },
@@ -1218,25 +376,11 @@ const importUpload = multer({
 // folder (flat — same shape FileWorkspace expects), so the composer's
 // pasted/dropped/picked images become referenceable filenames the agent
 // can Read or @-mention without any cross-folder gymnastics.
-// Bridge between the multer upload-storage destination (built at module
-// init) and the per-process project DB (instantiated inside startServer).
-// startServer() sets this so the upload destination can route attachments
-// into the right project root, including folder-imported projects whose
-// files live under metadata.baseDir.
-let projectMetadataLookup: ((id: string) => Record<string, unknown> | null) | null = null;
-
 const projectUpload = multer({
   storage: multer.diskStorage({
     destination: async (req, _file, cb) => {
       try {
-        // Route uploads into the project's actual root: for folder-imported
-        // projects (metadata.baseDir set) attachments need to land alongside
-        // the user's files so the agent can read them via the same path
-        // it sees. projectMetadataLookup is populated at startServer() boot
-        // and keyed by project id; null fallback gives the standard
-        // .od/projects/<id>/ behavior for non-imported projects.
-        const meta = projectMetadataLookup?.(req.params.id) ?? null;
-        const dir = await ensureProject(PROJECTS_DIR, req.params.id, meta);
+        const dir = await ensureProject(PROJECTS_DIR, req.params.id);
         cb(null, dir);
       } catch (err) {
         cb(err, '');
@@ -1253,7 +397,7 @@ const projectUpload = multer({
       cb(null, `${Date.now().toString(36)}-${safe}`);
     },
   }),
-  limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
 function handleProjectUpload(req, res, next) {
@@ -1350,10 +494,7 @@ function notifyTaskWaiters(task) {
   }
 }
 
-export function createSseResponse(
-  res,
-  { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {},
-) {
+export function createSseResponse(res, { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {}) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -1405,109 +546,11 @@ export function createSseResponse(
   };
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
+export async function startServer({ port = 7456, returnServer = false } = {}) {
   let resolvedPort = port;
   const app = express();
   app.use(express.json({ limit: '4mb' }));
-
-  // Build the set of allowed browser origins for the current bind config.
-  // Shared by the global origin middleware and isLocalSameOrigin() so
-  // both use the same policy (loopback + explicit bind host, HTTP + HTTPS,
-  // OD_WEB_PORT support).
-  function buildAllowedOrigins() {
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        // When bound to a specific non-loopback address (e.g. Tailscale,
-        // LAN IP, or 0.0.0.0), allow browser requests from that address
-        // too so the documented --host escape hatch remains usable.
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
-  }
-
-  // Portless loopback origins (e.g. http://127.0.0.1 without a port).
-  // Chrome may strip the port from the Origin header on same-origin GET
-  // requests. Only used as a fallback for safe, idempotent GET requests;
-  // mutating routes (POST/PUT/PATCH/DELETE) always require an exact
-  // port-match via buildAllowedOrigins() or isLocalSameOrigin() to
-  // prevent local CSRF from a page on the default port (80).
-  function isPortlessLoopbackOrigin(origin) {
-    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
-  }
-
-  // Routes that serve content to sandboxed iframes (Origin: null) for
-  // read-only purposes.  All other /api routes reject Origin: null.
-  const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
-
-  // Reject cross-origin requests to API endpoints.
-  // Health/version remain open for monitoring probes.
-  // Non-browser clients (no Origin header) are always allowed.
-  app.use('/api', (req, res, next) => {
-    // Live artifact previews have stricter local-daemon validation and
-    // loopback CORS handling on the route itself. Let that middleware produce
-    // the structured error shape and preflight headers for preview embeds.
-    if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
-
-    const origin = req.headers.origin;
-    // Non-browser client → allow.
-    if (origin == null || origin === '') return next();
-
-    // Origin: null (sandboxed iframes).  Only allowed for safe, read-only
-    // routes that set their own CORS headers for canvas drawing.
-    if (origin === 'null') {
-      const isSafeReadOnly =
-        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
-      if (!isSafeReadOnly) {
-        return res.status(403).json({ error: 'Origin: null not allowed for this route' });
-      }
-      return next();
-    }
-
-    // Fail-closed: block all browser origins until port is resolved.
-    if (!resolvedPort) {
-      return res.status(403).json({ error: 'Server initializing' });
-    }
-
-    if (!buildAllowedOrigins().has(String(origin))) {
-      // Fallback: Chrome may strip the port from the Origin header on
-      // same-origin requests (e.g. http://127.0.0.1 instead of
-      // http://127.0.0.1:6313). Allow portless loopback origins only
-      // for GET requests, which are idempotent and safe from CSRF.
-      // Mutating methods (POST/PUT/PATCH/DELETE) always require an
-      // exact port-match to prevent a page on the default port (80)
-      // from triggering state-changing operations.
-      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
-        return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
-      }
-    }
-    next();
-  });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
-  // Wire the upload-destination bridge to this db so multer can route
-  // file uploads into baseDir-rooted projects' actual folders.
-  projectMetadataLookup = (id) => {
-    try { return getProject(db, id)?.metadata ?? null; } catch { return null; }
-  };
-  configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
-  configureComposioConfigStore(RUNTIME_DATA_DIR);
-  let daemonUrl = `http://127.0.0.1:${port}`;
-
-  // Boot reconcile: any critique_runs row left in 'running' state by a prior
-  // daemon crash gets flipped to 'interrupted' with rounds_json.recoveryReason
-  // = 'daemon_restart' so the spec's daemon-restart-mid-run failure mode is
-  // honored on every boot. staleAfterMs comes from CritiqueConfig, not a
-  // hardcoded constant.
-  const reconciledStaleRuns = reconcileStaleRuns(db, { staleAfterMs: critiqueCfg.totalTimeoutMs });
-  if (reconciledStaleRuns > 0) {
-    console.warn(`[critique] reconcileStaleRuns flipped ${reconciledStaleRuns} stale running row(s) to interrupted`);
-  }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
     console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
@@ -1516,13 +559,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
-  void readAppConfig(RUNTIME_DATA_DIR)
-    .then((config) => detectAgents(config.agentCliEnv ?? {}))
-    .catch(() => detectAgents().catch(() => {}));
-
-  await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
-    console.warn('[od] Failed to recover stale live artifact refreshes:', error);
-  });
+  void detectAgents().catch(() => {});
 
   if (fs.existsSync(STATIC_DIR)) {
     app.use(express.static(STATIC_DIR));
@@ -1538,153 +575,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     res.json({ version });
   });
 
-  registerConnectorRoutes(app, { sendApiError, authorizeToolRequest, projectsRoot: PROJECTS_DIR, requireLocalDaemonRequest });
-
-  app.get('/api/connectors/composio/config', (_req, res) => {
-    try {
-      res.json(readPublicComposioConfig());
-    } catch (err) {
-      res.status(500).json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.put('/api/connectors/composio/config', requireLocalDaemonRequest, (req, res) => {
-    try {
-      const before = readComposioConfig();
-      const cfg = writeComposioConfig(req.body);
-      const after = readComposioConfig();
-      composioConnectorProvider.clearDiscoveryCache();
-      if (!cfg.configured || (before.apiKey && before.apiKey !== after.apiKey)) {
-        deleteConnectorCredentialsByProvider('composio');
-      }
-      res.json(cfg);
-    } catch (err) {
-      res.status(400).json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
   // ---- Projects (DB-backed) -------------------------------------------------
-
-  // Soft "what is the user looking at right now in Open Design?" channel. The
-  // web UI POSTs the current project + file on every route change;
-  // the MCP surface reads it so a coding agent in another repo can
-  // resolve "the design I have open" without the user typing the
-  // project id. In-memory only - daemon restart clears it.
-  /** @type {{ projectId: string; fileName: string | null; ts: number } | null} */
-  let activeContext = null;
-  const ACTIVE_CONTEXT_TTL_MS = 5 * 60 * 1000;
-
-  // Active context is private to the local machine. The daemon binds
-  // 0.0.0.0 by default, so without an origin check a peer on the LAN
-  // could read what the user is currently looking at (GET) or spoof
-  // it to redirect MCP fallbacks (POST). The web proxies same-origin
-  // and the MCP runs in-process via 127.0.0.1, so both legitimate
-  // callers pass the check.
-  app.post('/api/active', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const body = req.body || {};
-      if (body.active === false) {
-        activeContext = null;
-        res.json({ active: false });
-        return;
-      }
-      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
-      if (!projectId) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
-        return;
-      }
-      const fileName =
-        typeof body.fileName === 'string' && body.fileName.length > 0
-          ? body.fileName
-          : null;
-      activeContext = { projectId, fileName, ts: Date.now() };
-      res.json({ active: true, ...activeContext });
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  app.get('/api/active', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    if (!activeContext || Date.now() - activeContext.ts > ACTIVE_CONTEXT_TTL_MS) {
-      activeContext = null;
-      res.json({ active: false });
-      return;
-    }
-    const project = getProject(db, activeContext.projectId);
-    res.json({
-      active: true,
-      projectId: activeContext.projectId,
-      projectName: project?.name ?? null,
-      fileName: activeContext.fileName,
-      ts: activeContext.ts,
-      ageMs: Date.now() - activeContext.ts,
-    });
-  });
-
-  // Surfaces the absolute paths to the daemon's Node-compatible runtime and
-  // CLI entry so the Settings → MCP server panel can render snippets that work
-  // even when `od` isn't on the user's PATH (the common case for source clones
-  // - and macOS/Linux ship a /usr/bin/od octal-dump tool that shadows ours
-  // anyway). Cached for 5s because the panel pings on every open and these
-  // paths cannot change without a daemon restart.
-  const INSTALL_INFO_TTL_MS = 5000;
-  let installInfoCache: { t: number; payload: object } | null = null;
-
-  app.get('/api/mcp/install-info', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const now = Date.now();
-    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
-      return res.json(installInfoCache.payload);
-    }
-    const cliPath = OD_BIN;
-    const cliExists = fs.existsSync(cliPath);
-    // process.execPath is the absolute path to the Node-compatible runtime
-    // that is running the daemon RIGHT NOW. In packaged builds this may be
-    // Electron running with ELECTRON_RUN_AS_NODE=1 rather than a separate
-    // bundled Node binary; surface the env requirement with the command so
-    // IDE-spawned MCP clients can reproduce the same mode from a minimal OS
-    // launcher environment.
-    const nodeExists = fs.existsSync(process.execPath);
-    const hints: string[] = [];
-    if (!cliExists) {
-      hints.push(
-        `Open Design CLI entry is missing at ${cliPath}. Rebuild the daemon or packaged app and refresh.`,
-      );
-    }
-    if (!nodeExists) {
-      hints.push(
-        `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
-      );
-    }
-    const commandEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
-      ? { ELECTRON_RUN_AS_NODE: '1' }
-      : null;
-    const payload = {
-      command: process.execPath,
-      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
-      ...(commandEnv == null ? {} : { env: commandEnv }),
-      daemonUrl: `http://127.0.0.1:${resolvedPort}`,
-      // Surface platform so the install panel can localize path hints
-      // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
-      // (Cmd vs Ctrl). One of 'darwin' | 'linux' | 'win32' in
-      // practice; the panel falls back to POSIX wording for anything
-      // else.
-      platform: process.platform,
-      cliExists,
-      nodeExists,
-      buildHint: hints.length ? hints.join(' ') : null,
-    };
-    installInfoCache = { t: now, payload };
-    res.json(payload);
-  });
 
   app.get('/api/projects', (_req, res) => {
     try {
@@ -1711,8 +602,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         projects: listProjects(db).map((project) => ({
           ...project,
           status: composeProjectDisplayStatus(
-            activeRunStatuses.get(project.id) ??
-              latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+            activeRunStatuses.get(project.id) ?? latestRunStatuses.get(project.id) ?? { value: 'not_started' },
             awaitingInputProjects,
             project.id,
           ),
@@ -1742,22 +632,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
-      // baseDir is privileged: it lets a project root directly inside the
-      // user's filesystem. The /api/import/folder endpoint is the only
-      // path that's allowed to set it, because that's where realpath() +
-      // RUNTIME_DATA_DIR reentry checks live. Block client-supplied
-      // metadata.baseDir on this generic create endpoint so an attacker
-      // can't smuggle e.g. /etc through here. Same rule for
-      // originalBaseDir / importedFrom='folder' — only the import path
-      // owns those state fields.
-      if (metadata && typeof metadata === 'object') {
-        if ('baseDir' in metadata) {
-          return sendApiError(
-            res, 400, 'BAD_REQUEST',
-            'baseDir can only be set via POST /api/import/folder',
-          );
-        }
-      }
       const now = Date.now();
       const project = insertProject(db, {
         id,
@@ -1765,18 +639,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId: skillId ?? null,
         designSystemId: designSystemId ?? null,
         pendingPrompt: pendingPrompt || null,
-        metadata:
-          metadata && typeof metadata === 'object'
-            ? {
-                ...metadata,
-                ...(Array.isArray(metadata.linkedDirs)
-                  ? (() => {
-                      const v = validateLinkedDirs(metadata.linkedDirs);
-                      return v.error ? {} : { linkedDirs: v.dirs };
-                    })()
-                  : {}),
-              }
-            : null,
+        metadata: metadata && typeof metadata === 'object' ? metadata : null,
         createdAt: now,
         updatedAt: now,
       });
@@ -1803,11 +666,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
           await ensureProject(PROJECTS_DIR, id);
           for (const f of tpl.files) {
-            if (
-              !f ||
-              typeof f.name !== 'string' ||
-              typeof f.content !== 'string'
-            ) {
+            if (!f || typeof f.name !== 'string' || typeof f.content !== 'string') {
               continue;
             }
             try {
@@ -1832,158 +691,59 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.post(
-    '/api/import/claude-design',
-    importUpload.single('file'),
-    async (req, res) => {
-      try {
-        if (!req.file)
-          return res.status(400).json({ error: 'zip file required' });
-        const originalName =
-          req.file.originalname || 'Claude Design export.zip';
-        if (!/\.zip$/i.test(originalName)) {
-          fs.promises.unlink(req.file.path).catch(() => {});
-          return res.status(400).json({ error: 'expected a .zip file' });
-        }
-        const id = randomId();
-        const now = Date.now();
-        const baseName =
-          originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
-        const imported = await importClaudeDesignZip(
-          req.file.path,
-          projectDir(PROJECTS_DIR, id),
-        );
-        fs.promises.unlink(req.file.path).catch(() => {});
-
-        const project = insertProject(db, {
-          id,
-          name: baseName,
-          skillId: null,
-          designSystemId: null,
-          pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
-          metadata: {
-            kind: 'prototype',
-            importedFrom: 'claude-design',
-            entryFile: imported.entryFile,
-            sourceFileName: originalName,
-          },
-          createdAt: now,
-          updatedAt: now,
-        });
-        const cid = randomId();
-        insertConversation(db, {
-          id: cid,
-          projectId: id,
-          title: 'Imported Claude Design project',
-          createdAt: now,
-          updatedAt: now,
-        });
-        setTabs(db, id, [imported.entryFile], imported.entryFile);
-        res.json({
-          project,
-          conversationId: cid,
-          entryFile: imported.entryFile,
-          files: imported.files,
-        });
-      } catch (err) {
-        if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
-        res.status(400).json({ error: String(err) });
-      }
-    },
-  );
-
-  // Import an existing local folder as a project. The user picks a folder
-  // and OD works inside it directly: every write goes to metadata.baseDir.
-  // No copy, no shadow tree — the user owns the workspace and is
-  // responsible for their own version control (git, time machine, etc.),
-  // mirroring how Cursor / Claude Code / Aider behave.
-  app.post('/api/import/folder', async (req, res) => {
+  app.post('/api/import/claude-design', importUpload.single('file'), async (req, res) => {
     try {
-      const { baseDir, name, skillId, designSystemId } = req.body || {};
-      if (typeof baseDir !== 'string' || !baseDir.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      if (!req.file) return res.status(400).json({ error: 'zip file required' });
+      const originalName = req.file.originalname || 'Claude Design export.zip';
+      if (!/\.zip$/i.test(originalName)) {
+        fs.promises.unlink(req.file.path).catch(() => {});
+        return res.status(400).json({ error: 'expected a .zip file' });
       }
-      const trimmedInput = baseDir.trim();
-      if (!path.isAbsolute(path.normalize(trimmedInput))) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
-      }
-      // Resolve symlinks once at import and persist the canonical path.
-      // Without this, a user-controlled symlink (e.g. ~/sneaky → /etc) at
-      // baseDir would let writeProjectFile escape the project sandbox at
-      // every later call: resolveSafe checks the *literal* baseDir, but
-      // the OS follows the symlink at write time. realpath() collapses
-      // the chain so the stored baseDir == what the kernel will write to.
-      let normalizedPath: string;
-      try {
-        normalizedPath = await fs.promises.realpath(trimmedInput);
-      } catch {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
-      }
-      // realpath resolved → lstat the canonical path to ensure it's a
-      // real directory, not another symlink (defense-in-depth).
-      let dirStat;
-      try {
-        dirStat = await fs.promises.lstat(normalizedPath);
-      } catch {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
-      }
-      if (!dirStat.isDirectory()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
-      }
-      // Prevent importing the data directory into itself (post-realpath so
-      // a symlink pointing into RUNTIME_DATA_DIR is also caught).
-      if (
-        normalizedPath === RUNTIME_DATA_DIR ||
-        normalizedPath.startsWith(RUNTIME_DATA_DIR + path.sep)
-      ) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
-      }
-
       const id = randomId();
       const now = Date.now();
-      const projectName =
-        typeof name === 'string' && name.trim()
-          ? name.trim()
-          : path.basename(normalizedPath);
-      const entryFile = await detectEntryFile(normalizedPath);
+      const baseName = originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
+      const imported = await importClaudeDesignZip(req.file.path, projectDir(PROJECTS_DIR, id));
+      fs.promises.unlink(req.file.path).catch(() => {});
 
       const project = insertProject(db, {
         id,
-        name: projectName,
-        skillId: skillId ?? null,
-        designSystemId: designSystemId ?? null,
-        pendingPrompt: null,
+        name: baseName,
+        skillId: null,
+        designSystemId: null,
+        pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
         metadata: {
           kind: 'prototype',
-          baseDir: normalizedPath,
-          importedFrom: 'folder',
-          entryFile,
+          importedFrom: 'claude-design',
+          entryFile: imported.entryFile,
+          sourceFileName: originalName,
         },
         createdAt: now,
         updatedAt: now,
       });
-
       const cid = randomId();
       insertConversation(db, {
         id: cid,
         projectId: id,
-        title: `Imported from ${projectName}`,
+        title: 'Imported Claude Design project',
         createdAt: now,
         updatedAt: now,
       });
-      if (entryFile) setTabs(db, id, [entryFile], entryFile);
-      /** @type {import('@open-design/contracts').ImportFolderResponse} */
-      const body = { project, conversationId: cid, entryFile };
-      res.json(body);
+      setTabs(db, id, [imported.entryFile], imported.entryFile);
+      res.json({
+        project,
+        conversationId: cid,
+        entryFile: imported.entryFile,
+        files: imported.files,
+      });
     } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
+      res.status(400).json({ error: String(err) });
     }
   });
 
   app.get('/api/projects/:id', (req, res) => {
     const project = getProject(db, req.params.id);
-    if (!project)
-      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project };
     res.json(body);
@@ -1992,55 +752,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
-      // baseDir / folder-import state is privileged: it's set only by the
-      // import endpoint and otherwise immutable. Two failure modes to
-      // guard against here:
-      //   1. Explicit attempt to change baseDir → reject with 400.
-      //   2. A regular metadata patch that *omits* baseDir (e.g. a UI
-      //      that only edits linkedDirs sends `{ metadata: { kind, linkedDirs } }`).
-      //      updateProject() replaces metadata wholesale, so without
-      //      preservation the existing baseDir gets wiped and the project
-      //      detaches from the user's folder — subsequent reads/writes
-      //      silently fall back to .od/projects/<id>.
-      // For case 2 we re-stamp the immutable fields from the existing
-      // project record onto the incoming patch so the user can keep
-      // patching other metadata without ever losing their import root.
-      if (patch.metadata && typeof patch.metadata === 'object') {
-        const existing = getProject(db, req.params.id);
-        const existingMeta = existing?.metadata;
-        if (existingMeta?.baseDir) {
-          if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
-            return sendApiError(
-              res, 400, 'BAD_REQUEST',
-              'baseDir is immutable after import; use a new import to change it',
-            );
-          }
-          patch.metadata = {
-            ...patch.metadata,
-            baseDir: existingMeta.baseDir,
-            ...(existingMeta.importedFrom === 'folder'
-              ? { importedFrom: 'folder' }
-              : {}),
-          };
-        } else if ('baseDir' in patch.metadata) {
-          // Non-imported project trying to acquire a baseDir → reject (only
-          // /api/import/folder can set it).
-          return sendApiError(
-            res, 400, 'BAD_REQUEST',
-            'baseDir can only be set via POST /api/import/folder',
-          );
-        }
-      }
-      if (patch.metadata?.linkedDirs) {
-        const validated = validateLinkedDirs(patch.metadata.linkedDirs);
-        if (validated.error) {
-          return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
-        }
-        patch.metadata.linkedDirs = validated.dirs;
-      }
       const project = updateProject(db, req.params.id, patch);
-      if (!project)
-        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       /** @type {import('@open-design/contracts').ProjectResponse} */
       const body = { project };
       res.json(body);
@@ -2058,52 +771,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // SSE stream of file-changed events for a project. Drives preview live-reload.
-  // Receipt of a `file-changed` event triggers a file-list refresh, which
-  // propagates new mtimes through to FileViewer iframes (the URL-load
-  // `?v=${mtime}` cache-bust from PR #384 then reloads the iframe automatically).
-  // Subscribers come and go as users open/close project tabs; the underlying
-  // chokidar watcher is refcounted in project-watchers.ts so we never hold
-  // descriptors for projects no UI is looking at.
-  app.get('/api/projects/:id/events', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    }
-    let sub;
-    try {
-      const sse = createSseResponse(res);
-      const projectEventSink = (payload) => {
-        sse.send(payload.type, payload);
-      };
-      let sinks = activeProjectEventSinks.get(req.params.id);
-      if (!sinks) {
-        sinks = new Set();
-        activeProjectEventSinks.set(req.params.id, sinks);
-      }
-      sinks.add(projectEventSink);
-      const watchProject = getProject(db, req.params.id);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
-        sse.send('file-changed', evt);
-      }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
-      const cleanup = () => {
-        if (sub) {
-          const { unsubscribe } = sub;
-          sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
-        }
-        const currentSinks = activeProjectEventSinks.get(req.params.id);
-        currentSinks?.delete(projectEventSink);
-        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
-      };
-      res.on('close', cleanup);
-      res.on('finish', cleanup);
-    } catch (err) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
-      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
@@ -2152,62 +819,64 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Messages -------------------------------------------------------------
 
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({ messages: listMessages(db, req.params.cid) });
-  });
+  app.get(
+    '/api/projects/:id/conversations/:cid/messages',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      res.json({ messages: listMessages(db, req.params.cid) });
+    },
+  );
 
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    const m = req.body || {};
-    if (m.id && m.id !== req.params.mid) {
-      return res.status(400).json({ error: 'id mismatch' });
-    }
-    const saved = upsertMessage(db, req.params.cid, {
-      ...m,
-      id: req.params.mid,
-    });
-    // Bump the parent project's updatedAt so the project list re-orders.
-    updateProject(db, req.params.id, {});
-    res.json({ message: saved });
-  });
+  app.put(
+    '/api/projects/:id/conversations/:cid/messages/:mid',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      const m = req.body || {};
+      if (m.id && m.id !== req.params.mid) {
+        return res.status(400).json({ error: 'id mismatch' });
+      }
+      const saved = upsertMessage(db, req.params.cid, { ...m, id: req.params.mid });
+      // Bump the parent project's updatedAt so the project list re-orders.
+      updateProject(db, req.params.id, {});
+      res.json({ message: saved });
+    },
+  );
 
   // ---- Preview comments ----------------------------------------------------
 
-  app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({
-      comments: listPreviewComments(db, req.params.id, req.params.cid),
-    });
-  });
+  app.get(
+    '/api/projects/:id/conversations/:cid/comments',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      res.json({ comments: listPreviewComments(db, req.params.id, req.params.cid) });
+    },
+  );
 
-  app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    try {
-      const comment = upsertPreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.body || {},
-      );
-      updateProject(db, req.params.id, {});
-      res.json({ comment });
-    } catch (err) {
-      res.status(400).json({ error: String(err?.message || err) });
-    }
-  });
+  app.post(
+    '/api/projects/:id/conversations/:cid/comments',
+    (req, res) => {
+      const conv = getConversation(db, req.params.cid);
+      if (!conv || conv.projectId !== req.params.id) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
+      try {
+        const comment = upsertPreviewComment(db, req.params.id, req.params.cid, req.body || {});
+        updateProject(db, req.params.id, {});
+        res.json({ comment });
+      } catch (err) {
+        res.status(400).json({ error: String(err?.message || err) });
+      }
+    },
+  );
 
   app.patch(
     '/api/projects/:id/conversations/:cid/comments/:commentId',
@@ -2224,8 +893,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           req.params.commentId,
           req.body?.status,
         );
-        if (!comment)
-          return res.status(404).json({ error: 'comment not found' });
+        if (!comment) return res.status(404).json({ error: 'comment not found' });
         updateProject(db, req.params.id, {});
         res.json({ comment });
       } catch (err) {
@@ -2241,12 +909,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!conv || conv.projectId !== req.params.id) {
         return res.status(404).json({ error: 'conversation not found' });
       }
-      const ok = deletePreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.params.commentId,
-      );
+      const ok = deletePreviewComment(db, req.params.id, req.params.cid, req.params.commentId);
       if (!ok) return res.status(404).json({ error: 'comment not found' });
       updateProject(db, req.params.id, {});
       res.json({ ok: true });
@@ -2305,31 +968,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
-      const sourceProject = getProject(db, sourceProjectId);
-      if (!sourceProject) {
+      if (!getProject(db, sourceProjectId)) {
         return res.status(404).json({ error: 'source project not found' });
       }
       // Snapshot every HTML / sketch / text file in the source project.
       // We deliberately skip binary uploads — templates are about the
       // generated design, not the user's reference imagery.
-      const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
-        metadata: sourceProject.metadata,
-      });
+      const files = await listFiles(PROJECTS_DIR, sourceProjectId);
       const snapshot = [];
       for (const f of files) {
-        if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
-          continue;
-        const entry = await readProjectFile(
-          PROJECTS_DIR,
-          sourceProjectId,
-          f.name,
-          sourceProject.metadata,
-        );
+        if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code') continue;
+        const entry = await readProjectFile(PROJECTS_DIR, sourceProjectId, f.name);
         if (entry && Buffer.isBuffer(entry.buffer)) {
-          snapshot.push({
-            name: f.name,
-            content: entry.buffer.toString('utf8'),
-          });
+          snapshot.push({ name: f.name, content: entry.buffer.toString('utf8') });
         }
       }
       const t = insertTemplate(db, {
@@ -2353,8 +1004,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/agents', async (_req, res) => {
     try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
-      const list = await detectAgents(config.agentCliEnv ?? {});
+      const list = await detectAgents();
       res.json({ agents: list });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -2380,86 +1030,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/skills/:id', async (req, res) => {
     try {
       const skills = await listSkills(SKILLS_DIR);
-      const skill = findSkillById(skills, req.params.id);
+      const skill = skills.find((s) => s.id === req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
       res.json(serializable);
     } catch (err) {
       res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Codex hatch-pet registry — pets packaged by the upstream `hatch-pet`
-  // skill under `${CODEX_HOME:-$HOME/.codex}/pets/`. Surfaced so the web
-  // pet settings can offer one-click adoption of recently-hatched pets.
-  app.get('/api/codex-pets', async (_req, res) => {
-    try {
-      const result = await listCodexPets({
-        baseUrl: '',
-        bundledRoot: BUNDLED_PETS_DIR,
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // One-click community sync. Hits the Codex Pet Share + j20 Hatchery
-  // catalogs and drops every pet into `${CODEX_HOME:-$HOME/.codex}/pets/`
-  // so `GET /api/codex-pets` (and the web Pet settings) pick them up
-  // immediately. The body is intentionally tiny — we keep the heavier
-  // tuning knobs (`--limit`, `--concurrency`) on the CLI script and
-  // only surface `force` + `source` here.
-  app.post('/api/codex-pets/sync', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const sourceRaw = typeof body.source === 'string' ? body.source : 'all';
-      const source =
-        sourceRaw === 'petshare' || sourceRaw === 'hatchery'
-          ? sourceRaw
-          : 'all';
-      const result = await syncCommunityPets({
-        source,
-        force: Boolean(body.force),
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/codex-pets/:id/spritesheet', async (req, res) => {
-    try {
-      const sheet = await readCodexPetSpritesheet(req.params.id, {
-        bundledRoot: BUNDLED_PETS_DIR,
-      });
-      if (!sheet) {
-        return res
-          .status(404)
-          .type('text/plain')
-          .send('codex pet spritesheet not found');
-      }
-      const mime =
-        sheet.ext === 'webp'
-          ? 'image/webp'
-          : sheet.ext === 'gif'
-            ? 'image/gif'
-            : 'image/png';
-      res.type(mime);
-      // Same-origin callers (the web app proxies `/api/*` through to
-      // the daemon, so PetSettings adoption fetches arrive same-origin)
-      // do not need any CORS header here. We only echo
-      // `Access-Control-Allow-Origin` for sandboxed iframes / data:
-      // URIs (Origin: null) which need it to draw the bytes onto a
-      // canvas without tainting. Local pet bytes should not be exposed
-      // to arbitrary third-party origins via a wildcard ACAO.
-      if (req.headers.origin === 'null') {
-        res.setHeader('Access-Control-Allow-Origin', 'null');
-      }
-      res.setHeader('Cache-Control', 'no-store');
-      res.sendFile(sheet.absPath);
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
     }
   });
 
@@ -2477,8 +1053,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
       const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null)
-        return res.status(404).json({ error: 'design system not found' });
+      if (body === null) return res.status(404).json({ error: 'design system not found' });
       res.json({ id: req.params.id, body });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -2503,8 +1078,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         req.params.surface,
         req.params.id,
       );
-      if (!tpl)
-        return res.status(404).json({ error: 'prompt template not found' });
+      if (!tpl) return res.status(404).json({ error: 'prompt template not found' });
       res.json({ promptTemplate: tpl });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -2518,8 +1092,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
       const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null)
-        return res.status(404).type('text/plain').send('not found');
+      if (body === null) return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
       res.type('text/html').send(html);
     } catch (err) {
@@ -2533,8 +1106,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
       const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null)
-        return res.status(404).type('text/plain').send('not found');
+      if (body === null) return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
       res.type('text/html').send(html);
     } catch (err) {
@@ -2562,17 +1134,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/skills/:id/example', async (req, res) => {
     try {
       const skills = await listSkills(SKILLS_DIR);
-      const skill = findSkillById(skills, req.params.id);
+      const skill = skills.find((s) => s.id === req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
 
       const baked = path.join(skill.dir, 'example.html');
       if (fs.existsSync(baked)) {
-        const html = await fs.promises.readFile(baked, 'utf8');
-        return res
-          .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+        return res.type('text/html').sendFile(baked);
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -2582,67 +1151,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           const tplHtml = await fs.promises.readFile(tpl, 'utf8');
           const slidesHtml = await fs.promises.readFile(slides, 'utf8');
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
-          return res
-            .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id));
+          return res.type('text/html').send(assembled);
         } catch {
           // Fall through to raw template on read failure.
         }
       }
       if (fs.existsSync(tpl)) {
-        const html = await fs.promises.readFile(tpl, 'utf8');
-        return res
-          .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+        return res.type('text/html').sendFile(tpl);
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
-        const html = await fs.promises.readFile(idx, 'utf8');
-        return res
-          .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+        return res.type('text/html').sendFile(idx);
       }
       res
         .status(404)
         .type('text/plain')
-        .send(
-          'no example.html, assets/template.html, or assets/index.html for this skill',
-        );
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
-  // Static assets shipped beside a skill's example/template HTML. Lets the
-  // example HTML reference `./assets/foo.png`-style paths that resolve
-  // correctly when the response is loaded into a sandboxed `srcdoc` iframe
-  // (where relative URLs would otherwise resolve against `about:srcdoc`).
-  // The example response above rewrites `./assets/<file>` into a request
-  // against this route; we still keep the on-disk paths human-friendly so
-  // contributors can preview `example.html` straight from disk.
-  app.get('/api/skills/:id/assets/*', async (req, res) => {
-    try {
-      const skills = await listSkills(SKILLS_DIR);
-      const skill = findSkillById(skills, req.params.id);
-      if (!skill) {
-        return res.status(404).type('text/plain').send('skill not found');
-      }
-      const relPath = String(req.params[0] || '');
-      const assetsRoot = path.resolve(skill.dir, 'assets');
-      const target = path.resolve(assetsRoot, relPath);
-      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
-        return res.status(400).type('text/plain').send('invalid asset path');
-      }
-      if (!fs.existsSync(target)) {
-        return res.status(404).type('text/plain').send('asset not found');
-      }
-      // The example HTML is rendered inside a sandboxed iframe (Origin: null).
-      // Mirror the project /raw route's allowance so the iframe can fetch the
-      // image bytes; same-origin web callers do not need this header.
-      if (req.headers.origin === 'null') {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
-      res.type(mimeFor(target)).sendFile(target);
+        .send('no example.html, assets/template.html, or assets/index.html for this skill');
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -2704,323 +1228,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/live-artifacts', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-      });
-      res.json({ artifacts });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.options('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, (_req, res) => {
-    res.status(204).end();
-  });
-
-  app.get('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
-      if (variant === 'template' || variant === 'rendered-source') {
-        const html = await readLiveArtifactCode({
-          projectsRoot: PROJECTS_DIR,
-          projectId,
-          artifactId: req.params.artifactId,
-          variant: variant === 'template' ? 'template' : 'rendered',
-        });
-        setLiveArtifactCodeHeaders(res);
-        return res.status(200).send(html);
-      }
-      if (variant !== 'rendered') {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'variant must be rendered, template, or rendered-source');
-      }
-
-      const record = await ensureLiveArtifactPreview({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      setLiveArtifactPreviewHeaders(res);
-      res.status(200).send(record.html);
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.get('/api/live-artifacts/:artifactId', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const record = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.get('/api/live-artifacts/:artifactId/refreshes', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const refreshes = await listLiveArtifactRefreshLogEntries({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      res.json({ refreshes });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.post('/api/tools/live-artifacts/create', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:create');
-      if (!toolGrant) return;
-      const { projectId, input, templateHtml, provenanceJson, createdByRunId } = req.body || {};
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-      if (requestRunOverride(createdByRunId, toolGrant.runId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'createdByRunId is derived from the tool token', {
-          details: { suppliedRunId: createdByRunId },
-        });
-      }
-
-      const record = await createLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-        input: input ?? {},
-        templateHtml,
-        provenanceJson,
-        createdByRunId: toolGrant.runId,
-      });
-      emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.get('/api/tools/live-artifacts/list', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:list');
-      if (!toolGrant) return;
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-      });
-      res.json({ artifacts });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.post('/api/tools/live-artifacts/update', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:update');
-      if (!toolGrant) return;
-      const { projectId, artifactId, input, templateHtml, provenanceJson } = req.body || {};
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-      if (typeof artifactId !== 'string' || artifactId.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
-      }
-
-      const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-        artifactId,
-        input: input ?? {},
-        templateHtml,
-        provenanceJson,
-      });
-      emitLiveArtifactEvent(toolGrant, 'updated', record.artifact);
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.post('/api/tools/live-artifacts/refresh', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:refresh');
-      if (!toolGrant) return;
-      const { projectId, artifactId } = req.body || {};
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-      if (typeof artifactId !== 'string' || artifactId.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
-      }
-
-      let result;
-      try {
-        result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
-          projectId: toolGrant.projectId,
-          artifactId,
-          onStarted: ({ refreshId }) => {
-            emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
-          },
-        });
-      } catch (refreshErr) {
-        emitLiveArtifactRefreshEvent(toolGrant, {
-          phase: 'failed',
-          artifactId,
-          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
-        });
-        throw refreshErr;
-      }
-      emitLiveArtifactRefreshEvent(toolGrant, {
-        phase: 'succeeded',
-        artifactId,
-        refreshId: result.refresh.id,
-        title: result.artifact.title,
-        refreshedSourceCount: result.refresh.refreshedSourceCount,
-      });
-      res.json(result);
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.patch('/api/live-artifacts/:artifactId', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-        input: req.body ?? {},
-      });
-      emitLiveArtifactEvent({ projectId }, 'updated', record.artifact);
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.delete('/api/live-artifacts/:artifactId', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const existing = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      await deleteLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      updateProject(db, projectId, {});
-      emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
-      res.json({ ok: true });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.options('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, (_req, res) => {
-    res.status(204).end();
-  });
-
-  app.post('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      let result;
-      try {
-        result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
-          projectId,
-          artifactId: req.params.artifactId,
-          onStarted: ({ refreshId }) => {
-            emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
-          },
-        });
-      } catch (refreshErr) {
-        emitLiveArtifactRefreshEvent({ projectId }, {
-          phase: 'failed',
-          artifactId: req.params.artifactId,
-          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
-        });
-        throw refreshErr;
-      }
-      emitLiveArtifactRefreshEvent({ projectId }, {
-        phase: 'succeeded',
-        artifactId: req.params.artifactId,
-        refreshId: result.refresh.id,
-        title: result.artifact.title,
-        refreshedSourceCount: result.refresh.refreshedSourceCount,
-      });
-      res.json(result);
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
   app.use('/artifacts', express.static(ARTIFACTS_DIR));
 
   // ---- Deploy --------------------------------------------------------------
 
-  app.get('/api/deploy/config', async (req, res) => {
+  app.get('/api/deploy/config', async (_req, res) => {
     try {
-      const providerId =
-        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
-      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
+      const body = publicDeployConfig(await readVercelConfig());
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -3029,14 +1244,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.put('/api/deploy/config', async (req, res) => {
     try {
-      const input = req.body || {};
-      const providerId =
-        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
-      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeDeployConfig(providerId, input);
+      const body = await writeVercelConfig(req.body || {});
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -3056,45 +1265,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'unsupported deploy provider',
-        );
+      if (providerId !== VERCEL_PROVIDER_ID) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
       }
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const deployProject = getProject(db, req.params.id);
-      const files = await buildDeployFileSet(
-        PROJECTS_DIR,
-        req.params.id,
-        fileName,
-        { metadata: deployProject?.metadata },
-      );
-      const project = getProject(db, req.params.id);
-      const cloudflarePagesProjectName =
-        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
-          : '';
-      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-        ? await deployToCloudflarePages({
-            config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
-              projectName: cloudflarePagesProjectName,
-            },
-            files,
-            projectId: req.params.id,
-          })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+      const files = await buildDeployFileSet(PROJECTS_DIR, req.params.id, fileName);
+      const result = await deployToVercel({
+        config: await readVercelConfig(),
+        files,
+        projectId: req.params.id,
+      });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -3109,115 +1293,40 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
-        providerMetadata:
-          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-            ? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName)
-            : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
       res.json(body);
     } catch (err) {
       const status = err instanceof DeployError ? err.status : 400;
-      const init =
-        err instanceof DeployError && err.details
-          ? { details: err.details }
-          : {};
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-        init,
-      );
+      const init = err instanceof DeployError && err.details ? { details: err.details } : {};
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err), init);
     }
   });
 
-  app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
+  app.post('/api/projects/:id/deployments/:deploymentId/check-link', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'unsupported deploy provider',
-        );
+      const existing = getDeploymentById(db, req.params.id, req.params.deploymentId);
+      if (!existing) {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'deployment not found');
       }
-      if (typeof fileName !== 'string' || !fileName.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
-      }
-      const preflightProject = getProject(db, req.params.id);
-      /** @type {import('@open-design/contracts').DeployPreflightResponse} */
-      const body = await prepareDeployPreflight(
-        PROJECTS_DIR,
-        req.params.id,
-        fileName,
-        { metadata: preflightProject?.metadata, providerId },
-      );
+      const result = await checkDeploymentUrl(existing.url);
+      const now = Date.now();
+      /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+      const body = upsertDeployment(db, {
+        ...existing,
+        status: result.reachable ? 'ready' : (result.status || 'link-delayed'),
+        statusMessage: result.reachable
+          ? 'Public link is ready.'
+          : (result.statusMessage || 'Vercel is still preparing the public link.'),
+        reachableAt: result.reachable ? now : existing.reachableAt,
+        updatedAt: now,
+      });
       res.json(body);
     } catch (err) {
-      // DeployError is a known/expected outcome (validation, missing file).
-      // Anything else points at a bug or an unexpected runtime state, so
-      // surface it in the daemon log without leaking internals to the
-      // client which still gets a generic 400.
-      if (!(err instanceof DeployError)) {
-        console.error('[deploy/preflight]', err);
-      }
-      const status = err instanceof DeployError ? err.status : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
-
-  app.post(
-    '/api/projects/:id/deployments/:deploymentId/check-link',
-    async (req, res) => {
-      try {
-        const existing = getDeploymentById(
-          db,
-          req.params.id,
-          req.params.deploymentId,
-        );
-        if (!existing) {
-          return sendApiError(
-            res,
-            404,
-            'FILE_NOT_FOUND',
-            'deployment not found',
-          );
-        }
-        const stableCloudflareProjectName =
-          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-            ? cloudflarePagesProjectNameFromDeployment(existing)
-            : '';
-        const checkUrl = stableCloudflareProjectName
-          ? `https://${stableCloudflareProjectName}.pages.dev`
-          : existing.url;
-        const result = await checkDeploymentUrl(checkUrl);
-        const now = Date.now();
-        /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
-        const body = upsertDeployment(db, {
-          ...existing,
-          url: checkUrl || existing.url,
-          status: result.reachable ? 'ready' : result.status || 'link-delayed',
-          statusMessage: result.reachable
-            ? 'Public link is ready.'
-            : result.statusMessage ||
-              'Vercel is still preparing the public link.',
-          reachableAt: result.reachable ? now : existing.reachableAt,
-          updatedAt: now,
-        });
-        res.json(body);
-      } catch (err) {
-        sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-      }
-    },
-  );
 
   // Shared device frames (iPhone, Android, iPad, MacBook, browser chrome).
   // Skills can compose multi-screen / multi-device layouts by pointing at
@@ -3231,117 +1340,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // project's own folder (see apps/daemon/src/projects.ts).
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
-      const since = Number(req.query?.since);
-      const project = getProject(db, req.params.id);
-      const files = await listFiles(PROJECTS_DIR, req.params.id, {
-        since: Number.isFinite(since) ? since : undefined,
-        metadata: project?.metadata,
-      });
+      const files = await listFiles(PROJECTS_DIR, req.params.id);
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  app.get('/api/projects/:id/search', async (req, res) => {
-    try {
-      const query = String(req.query.q ?? '');
-      if (!query) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
-        return;
-      }
-      const pattern = req.query.pattern ? String(req.query.pattern) : null;
-      const max = Math.min(Number(req.query.max) || 200, 1000);
-      const searchProject = getProject(db, req.params.id);
-      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
-        pattern,
-        max,
-        metadata: searchProject?.metadata,
-      });
-      res.json({ query, matches });
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
-  // share menu can hand the user the actual files they uploaded — e.g. the
-  // imported `ui-design/` folder — instead of a one-file snapshot of the
-  // rendered HTML. `root` scopes the archive to a subdirectory; without
-  // it, the whole project is packed.
-  app.get('/api/projects/:id/archive', async (req, res) => {
-    try {
-      const root = typeof req.query?.root === 'string' ? req.query.root : '';
-      const project = getProject(db, req.params.id);
-      const { buffer, baseName } = await buildProjectArchive(
-        PROJECTS_DIR,
-        req.params.id,
-        root,
-        project?.metadata,
-      );
-      const fallbackName = project?.name || req.params.id;
-      const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
-      const filename = `${fileSlug}.zip`;
-      // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
-      // `filename*=UTF-8''…` lets modern browsers pick up project names
-      // with non-ASCII characters (accents, CJK, etc.) without mojibake.
-      const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
-      res.send(buffer);
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
-  // Batch archive: accepts a list of file names and returns a ZIP of just
-  // those files. Used by the Design Files panel multi-select download.
-  app.post('/api/projects/:id/archive/batch', async (req, res) => {
-    try {
-      const { files } = req.body || {};
-      if (!Array.isArray(files) || files.length === 0) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
-        return;
-      }
-      const project = getProject(db, req.params.id);
-      const { buffer } = await buildBatchArchive(
-        PROJECTS_DIR,
-        req.params.id,
-        files,
-        project?.metadata,
-      );
-      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
-      const filename = `${fileSlug}.zip`;
-      const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
-      res.send(buffer);
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
     }
   });
 
@@ -3360,8 +1364,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/raw/*', async (req, res) => {
     try {
       const relPath = req.params[0];
-      const project = getProject(db, req.params.id);
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -3372,78 +1375,40 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
   app.delete('/api/projects/:id/raw/*', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0], project?.metadata);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0]);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
-      const file = await readProjectFile(
-        PROJECTS_DIR,
-        req.params.id,
-        req.params.name,
-        project?.metadata,
-      );
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
       const preview = await buildDocumentPreview(file);
       res.json(preview);
     } catch (err) {
-      const status =
-        err && err.statusCode
-          ? err.statusCode
-          : err && err.code === 'ENOENT'
-            ? 404
-            : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        err?.message || 'preview unavailable',
-      );
+      const status = err && err.statusCode ? err.statusCode : err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', err?.message || 'preview unavailable');
     }
   });
 
-  app.get('/api/projects/:id/files/*', async (req, res) => {
+  app.get('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
-      const file = await readProjectFile(
-        PROJECTS_DIR,
-        req.params.id,
-        req.params[0],
-        project?.metadata,
-      );
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
@@ -3460,20 +1425,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     },
     async (req, res) => {
       try {
-        const uploadProject = getProject(db, req.params.id);
-        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
+        await ensureProject(PROJECTS_DIR, req.params.id);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
-          const desiredName = sanitizeName(
-            req.body?.name || req.file.originalname,
-          );
+          const desiredName = sanitizeName(req.body?.name || req.file.originalname);
           const meta = await writeProjectFile(
             PROJECTS_DIR,
             req.params.id,
             desiredName,
             buf,
-            {},
-            uploadProject?.metadata,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
@@ -3482,39 +1442,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         }
         const { name, content, encoding, artifactManifest } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
-          return sendApiError(
-            res,
-            400,
-            'BAD_REQUEST',
-            'name and content required',
-          );
+          return sendApiError(res, 400, 'BAD_REQUEST', 'name and content required');
         }
         if (artifactManifest !== undefined && artifactManifest !== null) {
-          const validated = validateArtifactManifestInput(
-            artifactManifest,
-            name,
-          );
+          const validated = validateArtifactManifestInput(artifactManifest, name);
           if (!validated.ok) {
-            return sendApiError(
-              res,
-              400,
-              'BAD_REQUEST',
-              `invalid artifactManifest: ${validated.error}`,
-            );
+            return sendApiError(res, 400, 'BAD_REQUEST', `invalid artifactManifest: ${validated.error}`);
           }
         }
         const buf =
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = await writeProjectFile(
-          PROJECTS_DIR,
-          req.params.id,
-          name,
-          buf,
-          { artifactManifest },
-          uploadProject?.metadata,
-        );
+        const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf, {
+          artifactManifest,
+        });
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
         res.json(body);
@@ -3526,19 +1468,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      const delProject = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
+      sendApiError(res, status, status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST', String(err));
     }
   });
 
@@ -3559,9 +1495,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const cfg = await readMaskedConfig(PROJECT_ROOT);
       res.json(cfg);
     } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
     }
   });
 
@@ -3571,60 +1505,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.json(cfg);
     } catch (err) {
       const status = typeof err?.status === 'number' ? err.status : 400;
-      res
-        .status(status)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.get('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
-      res.json({ config });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.put('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
-      res.json({ config });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  // Native OS folder picker dialog. Returns { path: string | null }.
-  app.post('/api/dialog/open-folder', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const selected = await openNativeFolderDialog();
-      res.json({ path: selected });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
+      res.status(status).json({ error: String(err && err.message ? err.message : err) });
     }
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({
-        error:
-          'cross-origin request rejected: media generation is restricted to the local UI / CLI',
+        error: 'cross-origin request rejected: media generation is restricted to the local UI / CLI',
       });
     }
 
@@ -3655,12 +1543,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         prompt: req.body?.prompt,
         output: req.body?.output,
         aspect: req.body?.aspect,
-        length:
-          typeof req.body?.length === 'number' ? req.body.length : undefined,
+        length: typeof req.body?.length === 'number' ? req.body.length : undefined,
         duration:
-          typeof req.body?.duration === 'number'
-            ? req.body.duration
-            : undefined,
+          typeof req.body?.duration === 'number' ? req.body.duration : undefined,
         voice: req.body?.voice,
         audioKind: req.body?.audioKind,
         compositionDir: req.body?.compositionDir,
@@ -3824,42 +1709,23 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
 
-  const composeDaemonSystemPrompt = async ({
-    agentId,
-    projectId,
-    skillId,
-    designSystemId,
-    streamFormat,
-  }) => {
-    const project =
-      typeof projectId === 'string' && projectId
-        ? getProject(db, projectId)
-        : null;
-    const effectiveSkillId =
-      typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const effectiveDesignSystemId =
-      typeof designSystemId === 'string' && designSystemId
-        ? designSystemId
-        : project?.designSystemId;
+  const composeDaemonSystemPrompt = async ({ projectId, skillId, designSystemId }) => {
+    const project = typeof projectId === 'string' && projectId ? getProject(db, projectId) : null;
+    const effectiveSkillId = typeof skillId === 'string' && skillId ? skillId : project?.skillId;
+    const effectiveDesignSystemId = typeof designSystemId === 'string' && designSystemId ? designSystemId : project?.designSystemId;
     const metadata = project?.metadata;
 
     let skillBody;
     let skillName;
     let skillMode;
     let skillCraftRequires = [];
-    let activeSkillDir = null;
     if (effectiveSkillId) {
-      const skill = findSkillById(
-        await listSkills(SKILLS_DIR),
-        effectiveSkillId,
-      );
+      const skill = (await listSkills(SKILLS_DIR)).find((s) => s.id === effectiveSkillId);
       if (skill) {
         skillBody = skill.body;
         skillName = skill.name;
         skillMode = skill.mode;
-        activeSkillDir = skill.dir;
-        if (Array.isArray(skill.craftRequires))
-          skillCraftRequires = skill.craftRequires;
+        if (Array.isArray(skill.craftRequires)) skillCraftRequires = skill.craftRequires;
       }
     }
 
@@ -3879,64 +1745,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
       const summary = systems.find((s) => s.id === effectiveDesignSystemId);
       designSystemTitle = summary?.title;
-      designSystemBody =
-        (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
-        undefined;
+      designSystemBody = await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId) ?? undefined;
     }
 
-    const template =
-      metadata?.kind === 'template' && typeof metadata.templateId === 'string'
-        ? (getTemplate(db, metadata.templateId) ?? undefined)
-        : undefined;
+    const template = metadata?.kind === 'template' && typeof metadata.templateId === 'string'
+      ? getTemplate(db, metadata.templateId) ?? undefined
+      : undefined;
 
-    // Thread the critique config plus the active design-system / skill data
-    // into the composer when critique is enabled. Without this the spawned
-    // child receives the legacy single-pass prompt and the parser waits for
-    // <CRITIQUE_RUN> tags the model was never told to emit. The composer
-    // itself ignores these fields when cfg.enabled is false, so the legacy
-    // path stays untouched.
-    const critiqueBrand = critiqueCfg.enabled
-      && typeof designSystemTitle === 'string'
-      && typeof designSystemBody === 'string'
-      ? { name: designSystemTitle, design_md: designSystemBody }
-      : undefined;
-    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
-      ? { id: effectiveSkillId }
-      : undefined;
-    // Single-source-of-truth eligibility check. The composer downstream
-    // appends <CRITIQUE_RUN> instructions only when this check passes, and
-    // the spawn path routes runs through runOrchestrator(...) only when the
-    // SAME flag is true, so prompt and orchestrator stay in lockstep.
-    //
-    // Non-plain adapters (claude-stream-json, copilot-stream-json,
-    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
-    // protocol; the v1 critique parser only understands plain stdout. The
-    // spawn path falls through to legacy generation for those, so the
-    // panel addendum has to be suppressed here too: otherwise the model
-    // is instructed to emit Critique Theater tags that no orchestrator
-    // consumes.
-    const isMediaSurface =
-      skillMode === 'image' ||
-      skillMode === 'video' ||
-      skillMode === 'audio' ||
-      metadata?.kind === 'image' ||
-      metadata?.kind === 'video' ||
-      metadata?.kind === 'audio';
-    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueCfg.enabled
-      && critiqueBrand !== undefined
-      && critiqueSkill !== undefined
-      && !isMediaSurface
-      && isPlainAdapter;
-    // Only thread the critique fields when the run is actually eligible;
-    // otherwise the composer's own internal eligibility check (cfg.enabled
-    // && brand && skill && !isMediaSurface) might still fire on
-    // non-plain adapters and we'd emit the panel for a run the orchestrator
-    // skips. Gating the threading itself keeps composer + orchestrator in
-    // exact lockstep regardless of which side enforces eligibility.
-    const prompt = composeSystemPrompt({
-      agentId,
-      includeCodexImagegenOverride: false,
+    return composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
@@ -3946,17 +1762,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       craftSections,
       metadata,
       template,
-      critique: critiqueShouldRun ? critiqueCfg : undefined,
-      critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
-      critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
     });
-    // The chat handler also needs to know where the active skill lives
-    // on disk so it can stage a per-project copy of its side files
-    // before spawning the agent. Returning that here avoids a second
-    // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
-    // the same panel-eligibility decision down to the spawn-path
-    // orchestrator gate so prompt and orchestrator stay in lockstep.
-    return { prompt, activeSkillDir, critiqueShouldRun };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -3979,24 +1785,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       reasoning,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
-    if (typeof conversationId === 'string' && conversationId)
-      run.conversationId = conversationId;
-    if (typeof assistantMessageId === 'string' && assistantMessageId)
-      run.assistantMessageId = assistantMessageId;
-    if (typeof clientRequestId === 'string' && clientRequestId)
-      run.clientRequestId = clientRequestId;
+    if (typeof conversationId === 'string' && conversationId) run.conversationId = conversationId;
+    if (typeof assistantMessageId === 'string' && assistantMessageId) run.assistantMessageId = assistantMessageId;
+    if (typeof clientRequestId === 'string' && clientRequestId) run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
     const def = getAgentDef(agentId);
-    if (!def)
-      return design.runs.fail(
-        run,
-        'AGENT_UNAVAILABLE',
-        `unknown agent: ${agentId}`,
-      );
-    if (!def.bin)
-      return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
-    const safeCommentAttachments =
-      normalizeCommentAttachments(commentAttachments);
+    if (!def) return design.runs.fail(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
+    if (!def.bin) return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    const safeCommentAttachments = normalizeCommentAttachments(commentAttachments);
     if (
       (typeof message !== 'string' || !message.trim()) &&
       safeCommentAttachments.length === 0
@@ -4004,27 +1800,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-    const runId = run.id;
 
     // Resolve the project working directory (creating the folder if it
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
     // agent then runs in whatever inherited dir, which still lets API
     // mode work but loses file-tool addressability.
-    // For git-linked projects (metadata.baseDir), use that folder directly
-    // so the agent writes back to the user's original source tree.
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
       try {
-        const chatProject = getProject(db, projectId);
-        const chatMeta = chatProject?.metadata;
-        if (chatMeta?.baseDir) {
-          cwd = path.normalize(chatMeta.baseDir);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        } else {
-          cwd = await ensureProject(PROJECTS_DIR, projectId);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
-        }
+        cwd = await ensureProject(PROJECTS_DIR, projectId);
+        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
       } catch {
         cwd = null;
       }
@@ -4034,9 +1820,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Sanitise supplied image paths: must live under UPLOAD_DIR.
     const safeImages = imagePaths.filter((p) => {
       const resolved = path.resolve(p);
-      return (
-        resolved.startsWith(UPLOAD_DIR + path.sep) && fs.existsSync(resolved)
-      );
+      return resolved.startsWith(UPLOAD_DIR + path.sep) && fs.existsSync(resolved);
     });
 
     // Project-scoped attachments: project-relative paths inside cwd. Each
@@ -4046,18 +1830,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // to Read it.
     const safeAttachments = cwd
       ? (Array.isArray(attachments) ? attachments : [])
-          .filter((p) => typeof p === 'string' && p.length > 0)
-          .filter((p) => {
-            try {
-              const abs = path.resolve(cwd, p);
-              return (
-                (abs === cwd || abs.startsWith(cwd + path.sep)) &&
-                fs.existsSync(abs)
-              );
-            } catch {
-              return false;
-            }
-          })
+        .filter((p) => typeof p === 'string' && p.length > 0)
+        .filter((p) => {
+          try {
+            const abs = path.resolve(cwd, p);
+            return (
+              (abs === cwd || abs.startsWith(cwd + path.sep)) &&
+              fs.existsSync(abs)
+            );
+          } catch {
+            return false;
+          }
+        })
       : [];
 
     // Local code agents don't accept a separate "system" channel the way the
@@ -4073,143 +1857,38 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           .map((f) => `- ${f.name}`)
           .join('\n')}`
       : '\nThis folder is empty. Choose a clear, descriptive filename for whatever you create.';
-    const projectRecord =
-      typeof projectId === 'string' && projectId
-        ? getProject(db, projectId)
-        : null;
-    const linkedDirs = (() => {
-      if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
-      const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
-      return v.dirs ?? [];
-    })();
     const cwdHint = cwd
       ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}`
-      : '';
-    const linkedDirsHint = linkedDirs.length > 0
-      ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
-          linkedDirs.map((d) => `- \`${d}\``).join('\n')
-        }`
       : '';
     const attachmentHint = safeAttachments.length
       ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
       : '';
-    const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
-      ? toolTokenRegistry.mint({
-          runId,
-          projectId,
-          allowedEndpoints: CHAT_TOOL_ENDPOINTS,
-          allowedOperations: CHAT_TOOL_OPERATIONS,
-        })
-      : null;
-    let toolTokenRevoked = false;
-    const revokeToolToken = (reason) => {
-      if (toolTokenRevoked || !toolTokenGrant) return;
-      toolTokenRevoked = true;
-      toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
-    };
-    const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
-      await composeDaemonSystemPrompt({
-        agentId,
-        projectId,
-        skillId,
-        designSystemId,
-        streamFormat: def?.streamFormat ?? 'plain',
-      });
-
-    // Make skill side files reachable through three layers, in order of
-    // preference. The skill preamble emitted by `withSkillRootPreamble()`
-    // advertises both the cwd-relative path (1) and the absolute path
-    // (2/3) so the agent can pick whichever works.
-    //
-    //   1. CWD-relative copy. Stage the *active* skill into
-    //      `<cwd>/.od-skills/<folder>/` so any agent CLI — not just the
-    //      ones that honour `--add-dir` — can reach those files via a
-    //      path inside its working directory. We copy (not symlink) so
-    //      the staged directory is a true write barrier — agents cannot
-    //      mutate the shipped repo resource through their cwd.
-    //   2. `--add-dir` allowlist. For non-Codex agents, pass `SKILLS_DIR`
-    //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
-    //      preamble is reachable when staging fails (e.g. the project has
-    //      no on-disk cwd, or fs.cp errored). Codex treats `--add-dir`
-    //      entries as writable, so Codex receives only the narrow
-    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder
-    //      for allowlisted gpt-image image projects.
-    //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
-    //      `cwd: PROJECT_ROOT` — there the absolute path is already an
-    //      in-cwd path, so neither (1) nor (2) is required for it to
-    //      resolve.
-    //
-    // Design systems are *not* staged here. Their bodies are read by the
-    // daemon and folded into the system prompt directly (see
-    // `readDesignSystem`), so an agent never has to open them via the
-    // filesystem.
-    if (cwd && activeSkillDir) {
-      const result = await stageActiveSkill(
-        cwd,
-        path.basename(activeSkillDir),
-        activeSkillDir,
-        (msg) => console.warn(msg),
-      );
-      if (!result.staged) {
-        console.warn(
-          `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
-        );
-      }
-    }
-    // Resolve the agent's effective working directory once and use it
-    // everywhere the agent could read it (buildArgs runtimeContext, spawn
-    // cwd, ACP session new). Falling back to PROJECT_ROOT — rather than
-    // letting `spawn` inherit the daemon process cwd — is what makes the
-    // absolute-path fallback in the skill preamble actually in-cwd for
-    // no-project runs (packaged daemons / service launches do not start
-    // their working directory from the workspace root).
-    const effectiveCwd = cwd ?? PROJECT_ROOT;
-    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
-      agentId,
-      projectRecord?.metadata,
-    );
-    if (codexGeneratedImagesDir) {
-      codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
-        codexGeneratedImagesDir,
-        {
-          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
-        },
-      );
-    }
-    const extraAllowedDirs = resolveChatExtraAllowedDirs({
-      agentId,
-      skillsDir: SKILLS_DIR,
-      designSystemsDir: DESIGN_SYSTEMS_DIR,
-      linkedDirs,
-      codexGeneratedImagesDir,
-    });
-    const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
-      agentId,
-      metadata: projectRecord?.metadata,
-      codexGeneratedImagesDir,
-      extraAllowedDirs,
-    });
-    const instructionPrompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt,
-      runtimeToolPrompt,
-      clientSystemPrompt: systemPrompt,
-      finalPromptOverride: codexImagegenOverride,
-    });
+    const daemonSystemPrompt = await composeDaemonSystemPrompt({ projectId, skillId, designSystemId });
+    const instructionPrompt = [daemonSystemPrompt, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
     const composed = [
       instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}\n\n---\n`
         : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
-          : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
-            : '',
+          ? `# Instructions${cwdHint}\n\n---\n`
+          : '',
       `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
-      safeImages.length
-        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
-        : '',
+      safeImages.length ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}` : '',
     ].join('');
+
+    // Skill seeds (`skills/<id>/assets/template.html`) and design-system
+    // specs (`design-systems/<id>/DESIGN.md`) live outside the project cwd.
+    // The composed system prompt asks the agent to Read them via absolute
+    // paths in the skill-root preamble — without an explicit allowlist,
+    // Claude Code blocks those reads (issue #6: "no permission to read
+    // skills template"). We surface both roots so any agent that honours
+    // `--add-dir` can resolve those side files.
+    const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter(
+      (d) => fs.existsSync(d),
+    );
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -4223,126 +1902,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : null;
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+        ? def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
-    const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
-      enabled: Boolean(toolTokenGrant?.token),
-      command: process.execPath,
-      argsPrefix: [OD_BIN],
-    });
 
-    // Pre-flight the composed prompt against any argv-byte budget the
-    // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
-    // a `-` stdin sentinel, so the prompt has to ride argv). Doing this
-    // before bin resolution means the test harness pins the guard
-    // independently of whether the adapter binary happens to be on PATH
-    // in the CI environment, and the user gets the actionable
-    // adapter-named error even if /api/agents hadn't refreshed yet.
-    const promptBudgetError = checkPromptArgvBudget(def, composed);
-    if (promptBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          promptBudgetError.code,
-          promptBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
+    const resolvedBin = resolveAgentBin(agentId);
 
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-
-    const resolvedBin = resolveAgentBin(agentId, configuredAgentEnv);
-
-    const args = def.buildArgs(
-      composed,
-      safeImages,
-      extraAllowedDirs,
-      agentOptions,
-      { cwd: effectiveCwd },
-    );
-
-    // Second-pass budget check that knows about the Windows `.cmd` shim
-    // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
-    // raw composed prompt; on Windows an npm-installed adapter resolves
-    // to e.g. `deepseek.cmd`, the spawn path goes through `cmd.exe /d /s
-    // /c "<inner>"`, and `quoteForWindowsCmdShim` doubles every embedded
-    // `"` plus wraps any whitespace/special-char arg in outer quotes —
-    // so a quote-heavy prompt that fit under `maxPromptArgBytes` can
-    // still expand past CreateProcess's 32_767-char cap. Fail fast with
-    // the same `AGENT_PROMPT_TOO_LARGE` shape so the SSE error path
-    // doesn't have to special-case it.
-    const cmdShimBudgetError = checkWindowsCmdShimCommandLineBudget(
-      def,
-      resolvedBin,
-      args,
-    );
-    if (cmdShimBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          cmdShimBudgetError.code,
-          cmdShimBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
-
-    // Companion guard for non-shim Windows installs (e.g. a cargo-built
-    // `deepseek.exe` rather than the npm `.cmd` shim). Direct `.exe`
-    // spawns skip the cmd.exe wrap above, but Node/libuv still composes
-    // a CreateProcess `lpCommandLine` by walking each argv element
-    // through `quote_cmd_arg`, which escapes every embedded `"` as `\"`
-    // and doubles backslashes adjacent to quotes. A quote-heavy prompt
-    // under `maxPromptArgBytes` can expand past the 32_767-char kernel
-    // cap there too, so the cmd-shim early-return alone would let those
-    // users hit a generic `spawn ENAMETOOLONG`.
-    const directExeBudgetError = checkWindowsDirectExeCommandLineBudget(
-      def,
-      resolvedBin,
-      args,
-    );
-    if (directExeBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          directExeBudgetError.code,
-          directExeBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
-    }
-
-    const send = (event, data) => design.runs.emit(run, event, data);
-    const unregisterChatAgentEventSink = () => {
-      activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
-    };
-    if (toolTokenGrant?.runId) {
-      activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) =>
-        send('agent', payload),
-      );
-    }
     // If detection can't find the binary, surface a friendly SSE error
     // pointing at /api/agents instead of silently falling back to
     // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
     // from issue #10.
     if (!resolvedBin) {
-      revokeToolToken('child_exit');
-      unregisterChatAgentEventSink();
-      send('error', createSseErrorPayload(
+      design.runs.emit(run, 'error', createSseErrorPayload(
         'AGENT_UNAVAILABLE',
         `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
           'Install it and refresh the agent list (GET /api/agents) before retrying.',
@@ -4350,10 +1921,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       ));
       return design.runs.finish(run, 'failed', 1, null);
     }
+
+    const args = def.buildArgs(composed, safeImages, extraAllowedDirs, agentOptions, { cwd });
+    const send = (event, data) => design.runs.emit(run, event, data);
+
     const odMediaEnv = {
       OD_BIN,
-      OD_NODE_BIN,
-      OD_DAEMON_URL: daemonUrl,
+      OD_DAEMON_URL: `http://127.0.0.1:${resolvedPort}`,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
             OD_PROJECT_ID: projectId,
@@ -4361,16 +1935,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
-    if (run.cancelRequested || design.runs.isTerminal(run.status)) {
-      revokeToolToken('child_exit');
-      unregisterChatAgentEventSink();
-      return;
-    }
+
+    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
 
     run.status = 'running';
     run.updatedAt = Date.now();
     send('start', {
-      runId,
+      runId: run.id,
       agentId,
       bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
@@ -4378,30 +1949,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       cwd,
       model: safeModel,
       reasoning: safeReasoning,
-      toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
 
     let child;
     let acpSession = null;
-    let writePromptToChildStdin = false;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
-      const stdinMode =
-        def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
-          ? 'pipe'
-          : 'ignore';
-      const env = {
-        ...spawnEnvForAgent(
-          def.id,
-          {
-            ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
-            ...(def.env || {}),
-          },
-          configuredAgentEnv,
-        ),
-        ...odMediaEnv,
-      };
+      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      const env = { ...process.env, ...odMediaEnv };
       const invocation = createCommandInvocation({
         command: resolvedBin,
         args,
@@ -4410,12 +1966,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
-        cwd: effectiveCwd,
+        cwd: cwd || undefined,
         shell: false,
-        // Required when invocation wraps a Windows .cmd/.bat shim through
-        // cmd.exe; without this, Node re-escapes the inner command line and
-        // breaks paths containing spaces (issue #315).
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       run.child = child;
       if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
@@ -4425,282 +1977,65 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         // below already route the underlying failure to SSE via stderr.
         child.stdin.on('error', (err) => {
           if (err.code !== 'EPIPE') {
-            send(
-              'error',
-              createSseErrorPayload(
-                'AGENT_EXECUTION_FAILED',
-                `stdin: ${err.message}`,
-              ),
-            );
+            send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `stdin: ${err.message}`));
           }
         });
-        writePromptToChildStdin = true;
+        child.stdin.end(composed, 'utf8');
       }
     } catch (err) {
-      revokeToolToken('child_exit');
-      unregisterChatAgentEventSink();
-      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
-      design.runs.finish(run, 'failed', 1, null);
-      return;
+      design.runs.emit(run, 'error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      return design.runs.finish(run, 'failed', 1, null);
     }
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
-    // Critique Theater branch (M0 dark launch, default disabled).
-    // Only plain-stream adapters are routed through runOrchestrator in v1.
-    // Adapters that emit structured wrappers (claude-stream-json,
-    // qoder-stream-json, copilot-stream-json, json-event-stream,
-    // acp-json-rpc, pi-rpc) fall
-    // through to the legacy single-pass code path below with a one-time
-    // stderr warning so the parser never sees wrapper bytes. Per-format
-    // decoding into the orchestrator is a v2 concern.
-    //
-    // Use critiqueShouldRun (computed in the prompt builder) instead of just
-    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
-    // panel addendum. Media surfaces and runs missing brand/skill context
-    // never get the panel prompt, so they must also skip the orchestrator
-    // and fall through to legacy generation; otherwise the parser waits for
-    // <CRITIQUE_RUN> tags the model was never told to emit.
-    if (critiqueShouldRun) {
-      const adapterStreamFormat: string = def.streamFormat ?? 'plain';
-      if (adapterStreamFormat !== 'plain') {
-        if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
-          critiqueWarnedAdapters.add(adapterStreamFormat);
-          console.warn(`[critique] adapter format=${adapterStreamFormat} is not plain-stream; skipping orchestrator and falling through to legacy generation`);
-        }
-      } else {
-        const critiqueRunId = run.id;
-        // Per-run artifact directory keeps concurrent or sequential runs in the
-        // same project from overwriting each other's transcript or final HTML.
-        // Spec: artifacts/<projectId>/<runId>/transcript.ndjson(.gz).
-        const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
-        const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
-        const stdoutIterable = (async function* () {
-          for await (const chunk of child.stdout) yield String(chunk);
-        })();
-        // Forward each CritiqueSseEvent on its own contract-defined channel
-        // (critique.run_started, critique.ship, critique.failed, ...) rather
-        // than wrapping the frame inside the legacy 'agent' channel. Clients
-        // that subscribe to the new event names see them directly with the
-        // contract payload as event.data.
-        const critiqueBus = { emit: (e) => send(e.event, e.data) };
-
-        // Stderr forwarding and child.on('error') must be wired BEFORE the
-        // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
-        // fill the OS pipe and deadlock the run until the total timeout, and
-        // an early child error fired before the orchestrator returns has no
-        // listener. Both registrations are idempotent and the run lifecycle
-        // is owned solely by the orchestrator's awaited result below.
-        child.stderr.on('data', (chunk) => send('stderr', { chunk }));
-        child.on('error', (err) => {
-          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
-        });
-
-        // Wrap the child's close event so the orchestrator can race child
-        // exit against parser completion, abort, and timeouts in one awaited
-        // flow. Without this the orchestrator can't tell a non-zero exit
-        // apart from a clean ship and may misclassify failures.
-        const childExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-          child.once('close', (code, signal) => resolve({ code, signal }));
-        });
-        try {
-          const orchestratorResult = await runOrchestrator({
-            runId: critiqueRunId,
-            projectId: typeof projectId === 'string' ? projectId : '',
-            conversationId: typeof conversationId === 'string' ? conversationId : null,
-            artifactId: critiqueRunId,
-            artifactDir: critiqueArtifactDir,
-            adapter: typeof agentId === 'string' ? agentId : 'unknown',
-            cfg: critiqueCfg,
-            db,
-            bus: critiqueBus,
-            stdout: stdoutIterable,
-            child,
-            childExitPromise,
-          });
-          // Map the critique terminal status to the chat run lifecycle.
-          // 'shipped' and 'below_threshold' both ran to a ship decision and
-          // finalize as 'succeeded'; every other status (timed_out,
-          // interrupted, degraded, failed, legacy) is a failure path so the
-          // run reflects the real outcome instead of a misleading success.
-          const succeeded = orchestratorResult.status === 'shipped'
-            || orchestratorResult.status === 'below_threshold';
-          if (run.cancelRequested) {
-            design.runs.finish(run, 'canceled', 1, null);
-          } else if (succeeded) {
-            design.runs.finish(run, 'succeeded', 0, null);
-          } else {
-            design.runs.finish(run, 'failed', 1, null);
-          }
-        } catch (err) {
-          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
-          design.runs.finish(run, 'failed', 1, null);
-        }
-        return;
-      }
-    }
-
     // Structured streams (Claude Code) go through a line-delimited JSON
     // parser that turns stream_event objects into UI-friendly events. For
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
-    let agentStreamError = null;
-    // Tracks whether any stream the run is using actually emitted user-
-    // visible content. Only the streams routed through `sendAgentEvent`
-    // contribute to this flag; ACP sessions and plain stdout streams are
-    // covered by their own success/failure paths and the empty-output
-    // guard below skips them via `trackingSubstantiveOutput`.
-    let agentProducedOutput = false;
-    let trackingSubstantiveOutput = false;
-    // Event types that count as "the agent actually produced something the
-    // user can see." Lifecycle markers (`status`) and meter readings
-    // (`usage`) deliberately do NOT count — a model can emit token-usage
-    // numbers for an empty completion (issue #691), and a `status:running`
-    // banner without any follow-up is exactly the silent-failure shape we
-    // want to surface as failed instead of succeeded.
-    const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
-      'text_delta',
-      'thinking_delta',
-      'tool_use',
-      'tool_result',
-      'artifact',
-    ]);
-    const sendAgentEvent = (ev) => {
-      if (ev?.type === 'error') {
-        if (agentStreamError) return;
-        agentStreamError = String(ev.message || 'Agent stream error');
-        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
-          details: ev.raw ? { raw: ev.raw } : undefined,
-          retryable: false,
-        }));
-        return;
-      }
-      if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
-        agentProducedOutput = true;
-      }
-      send('agent', ev);
-    };
-
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
-    } else if (def.streamFormat === 'qoder-stream-json') {
-      trackingSubstantiveOutput = true;
-      const qoder = createQoderStreamHandler(sendAgentEvent);
-      child.stdout.on('data', (chunk) => qoder.feed(chunk));
-      child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
-      // Route through sendAgentEvent so that pi-rpc's error events
-      // (extension_error, auto_retry_end with success=false, and the
-      // message_update error delta) set agentStreamError and flip the
-      // run to `failed` on close — same path as qoder-stream-json and
-      // json-event-stream after issue #691. Also enables the
-      // substantive-output guard (agentProducedOutput) so a pi run
-      // that exits 0 without producing visible content is caught.
-      //
-      // attachPiRpcSession invokes its send callback with the two-arg
-      // channel/payload shape: send('agent', payload) for normal events
-      // and send('error', {message}) from fail(). sendAgentEvent
-      // expects a single event object, so we adapt at the call site:
-      //   - 'agent' channel → relay payload through sendAgentEvent
-      //   - 'error' channel → route through the daemon's error path
-      //     (createSseErrorPayload + send SSE + set agentStreamError)
-      trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
-        cwd: effectiveCwd,
+        cwd: cwd || PROJECT_ROOT,
         model: safeModel,
-        send: (channel, payload) => {
-          if (channel === 'agent') {
-            sendAgentEvent(payload);
-          } else if (channel === 'error') {
-            if (agentStreamError) return;
-            agentStreamError = String(payload?.message || 'Pi session error');
-            send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              agentStreamError,
-              { retryable: false },
-            ));
-          } else {
-            send(channel, payload);
-          }
-        },
-        imagePaths: def.supportsImagePaths ? safeImages : [],
-        uploadRoot: UPLOAD_DIR,
+        send,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({
         child,
         prompt: composed,
-        cwd: effectiveCwd,
+        cwd: cwd || PROJECT_ROOT,
         model: safeModel,
-        mcpServers,
         send,
       });
     } else if (def.streamFormat === 'json-event-stream') {
-      // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
-      // (now emitted as a real error event by json-event-stream.ts after
-      // #691) actually triggers `agentStreamError` instead of being
-      // forwarded as a no-op `agent` SSE event. This also wires the
-      // substantive-output tracking the close handler reads below.
-      trackingSubstantiveOutput = true;
-      const handler = createJsonEventStreamHandler(
-        def.eventParser || def.id,
-        sendAgentEvent,
+      const handler = createJsonEventStreamHandler(def.eventParser || def.id, (ev) =>
+        send('agent', ev),
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
-    // Wire the acpSession onto the run so cancel() can call abort()
-    // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
-    run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
-      revokeToolToken('child_exit');
-      unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
-      revokeToolToken('child_exit');
-      unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
-      }
-      if (agentStreamError) {
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
-      }
-      // Empty-output guard: a clean `code === 0` exit on a stream we are
-      // tracking, with no error frame and no substantive event, means the
-      // run silently finished without producing anything visible. That used
-      // to be marked `succeeded` and rendered as an empty assistant turn —
-      // see issue #691, where OpenCode runs were ending in ~3s with no
-      // chat content and no error banner. Surface an explicit failure
-      // instead so the chat shows a clear reason. ACP sessions and plain
-      // stdout streams are gated out via `trackingSubstantiveOutput`;
-      // their success/failure determination lives elsewhere.
-      if (
-        code === 0 &&
-        !run.cancelRequested &&
-        trackingSubstantiveOutput &&
-        !agentProducedOutput
-      ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code, signal);
       }
       const status = run.cancelRequested
         ? 'canceled'
@@ -4709,9 +2044,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : 'failed';
       design.runs.finish(run, status, code, signal);
     });
-    if (writePromptToChildStdin && child.stdin) {
-      child.stdin.end(composed, 'utf8');
-    }
   };
 
   app.post('/api/runs', (req, res) => {
@@ -4757,318 +2089,55 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
-  // ---- Connection tests (single-shot JSON; no SSE) ------------------------
-  // Settings dialog uses these to verify a config works without sending a
-  // real chat. Always return HTTP 200 with `ok: false` on upstream-caused
-  // failures so the web layer can render a categorized inline status without
-  // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
-  // request or daemon bug.
-  app.post('/api/test/connection', async (req, res) => {
-    const controller = new AbortController();
-    const abortIfRequestAborted = () => {
-      if ((req.aborted || !req.complete) && !res.writableEnded) {
-        controller.abort();
-      }
-    };
-    const abortIfResponseClosed = () => {
-      if (!res.writableEnded) controller.abort();
-    };
-    req.on('close', abortIfRequestAborted);
-    res.on('close', abortIfResponseClosed);
-    const body = req.body || {};
-    try {
-      if (body.mode === 'provider') {
-        const protocol = body.protocol;
-        if (
-          typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
-        ) {
-          return sendApiError(
-            res,
-            400,
-            'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google',
-          );
-        }
-        if (
-          typeof body.baseUrl !== 'string' ||
-          typeof body.apiKey !== 'string' ||
-          typeof body.model !== 'string' ||
-          !body.baseUrl.trim() ||
-          !body.apiKey.trim() ||
-          !body.model.trim()
-        ) {
-          return sendApiError(
-            res,
-            400,
-            'BAD_REQUEST',
-            'baseUrl, apiKey, and model are required',
-          );
-        }
-        try {
-          const result = await testProviderConnection({
-            protocol,
-            baseUrl: body.baseUrl,
-            apiKey: body.apiKey,
-            model: body.model,
-            apiVersion:
-              typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
-            signal: controller.signal,
-          });
-          return res.json(result);
-        } catch (err) {
-          console.warn(
-            `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
-        }
-      }
-
-      if (body.mode === 'agent') {
-        if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
-        }
-        try {
-          const def = getAgentDef(body.agentId);
-          const testStart = Date.now();
-          const safeModel =
-            def && typeof body.model === 'string'
-              ? isKnownModel(def, body.model)
-                ? body.model
-                : sanitizeCustomModel(body.model)
-              : undefined;
-          if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
-            return res.json({
-              ok: false,
-              kind: 'invalid_model_id',
-              latencyMs: Date.now() - testStart,
-              model: body.model.trim(),
-              agentName: def.name,
-              detail: 'Invalid custom model id. Use a model id that starts with a letter or number and contains no spaces.',
-            });
-          }
-          const safeReasoning =
-            def &&
-            typeof body.reasoning === 'string' &&
-            Array.isArray(def.reasoningOptions)
-              ? (def.reasoningOptions.find((r) => r.id === body.reasoning)?.id ?? undefined)
-              : undefined;
-          const result = await testAgentConnection({
-            agentId: body.agentId,
-            model: safeModel ?? undefined,
-            reasoning: safeReasoning,
-            agentCliEnv:
-              body.agentCliEnv && typeof body.agentCliEnv === 'object'
-                ? body.agentCliEnv
-                : undefined,
-            signal: controller.signal,
-          });
-          return res.json(result);
-        } catch (err) {
-          console.warn(
-            `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
-        }
-      }
-
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'mode must be one of provider|agent',
-      );
-    } finally {
-      req.off('close', abortIfRequestAborted);
-      res.off('close', abortIfResponseClosed);
-    }
-  });
-
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
   // one local streaming hop through the daemon.
 
-  const redactAuthTokens = (text) =>
-    text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
+  const redactAuthTokens = (text) => text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
   const validateExternalApiBaseUrl = (baseUrl) => {
-    return validateBaseUrl(baseUrl);
-  };
-
-  const proxyErrorCode = (status) => {
-    if (status === 401) return 'UNAUTHORIZED';
-    if (status === 403) return 'FORBIDDEN';
-    if (status === 404) return 'NOT_FOUND';
-    if (status === 429) return 'RATE_LIMITED';
-    return 'UPSTREAM_UNAVAILABLE';
-  };
-
-  const sendProxyError = (sse, message, init = {}) => {
-    sse.send('error', {
-      message,
-      error: {
-        code: init.code || 'UPSTREAM_UNAVAILABLE',
-        message,
-        ...(init.details === undefined ? {} : { details: init.details }),
-        ...(init.retryable === undefined ? {} : { retryable: init.retryable }),
-      },
-    });
-  };
-
-  const appendVersionedApiPath = (baseUrl, path) => {
-    const url = new URL(baseUrl);
-    // `URL.pathname` setter normalizes an empty string back to "/", so
-    // we work in a local string to detect the no-path and no-version
-    // cases.
-    const trimmed = url.pathname.replace(/\/+$/, '');
-    // Auto-inject `/v1` whenever the supplied path doesn't already
-    // contain a `/vN` segment. This handles all four preset shapes:
-    //   bare host                            → /v1/<route>            (api.openai.com, api.anthropic.com)
-    //   ends in /vN                          → no inject              (api.openai.com/v1, /v1)
-    //   /vN sub-path                         → no inject              (api.deepinfra.com/v1/openai, openrouter.ai/api/v1)
-    //   non-versioned compat sub-path        → /v1/<route>            (api.deepseek.com/anthropic, api.minimaxi.com/anthropic)
-    // Previously the check was end-of-path only, which broke the
-    // /v1/openai sub-path case. A naive "non-empty path → respect"
-    // would break the /anthropic sub-path case. Matching `/vN` as a
-    // segment anywhere in the path threads both correctly.
-    url.pathname = /\/v\d+(\/|$)/.test(trimmed)
-      ? `${trimmed}${path}`
-      : `${trimmed}/v1${path}`;
-    return url.toString();
-  };
-
-  const collectSseFrame = (frame) => {
-    const lines = frame.replace(/\r/g, '').split('\n');
-    const dataLines = [];
-    let event = 'message';
-    for (const line of lines) {
-      if (line.startsWith('event:')) {
-        event = line.slice(6).trim();
-        continue;
-      }
-      if (!line.startsWith('data:')) continue;
-      let value = line.slice(5);
-      if (value.startsWith(' ')) value = value.slice(1);
-      dataLines.push(value);
-    }
-    const payload = dataLines.join('\n');
-    if (!payload) return { event, payload: '', data: null };
-    if (payload === '[DONE]') return { event, payload, data: null };
+    let parsed;
     try {
-      return { event, payload, data: JSON.parse(payload) };
+      parsed = new URL(baseUrl.replace(/\/+$/, ''));
     } catch {
-      return { event, payload, data: null };
+      return { error: 'Invalid baseUrl' };
     }
-  };
-
-  const streamUpstreamSse = async (response, onFrame) => {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      while (true) {
-        const match = buffer.match(/\r?\n\r?\n/);
-        if (!match || match.index === undefined) break;
-        const frame = buffer.slice(0, match.index);
-        buffer = buffer.slice(match.index + match[0].length);
-        if (await onFrame(collectSseFrame(frame))) return;
-      }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return { error: 'Only http/https allowed' };
     }
-
-    const tail = buffer.trim();
-    if (tail) await onFrame(collectSseFrame(tail));
-  };
-
-  const extractOpenAIText = (data) => {
-    const choices = data?.choices;
-    if (!Array.isArray(choices) || choices.length === 0) return '';
-    const first = choices[0];
-    if (typeof first?.delta?.content === 'string') return first.delta.content;
-    if (typeof first?.text === 'string') return first.text;
-    return '';
-  };
-
-  const extractStreamErrorMessage = (data) => {
-    const err = data?.error;
-    if (!err) return '';
-    if (typeof err === 'string') return err;
-    if (typeof err?.message === 'string') return err.message;
-    try {
-      return JSON.stringify(err);
-    } catch {
-      return 'unspecified provider error';
+    if (
+      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
+      parsed.hostname.startsWith('169.254.') ||
+      parsed.hostname.startsWith('10.') ||
+      /^192\.168\./.test(parsed.hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)
+    ) {
+      return { error: 'Internal IPs blocked', forbidden: true };
     }
-  };
-
-  const extractGeminiText = (data) => {
-    const candidates = data?.candidates;
-    if (!Array.isArray(candidates) || candidates.length === 0) return '';
-    const parts = candidates[0]?.content?.parts;
-    if (!Array.isArray(parts)) return '';
-    return parts.map((part) => part?.text).filter((text) => typeof text === 'string').join('');
-  };
-
-  const benignGeminiFinishReasons = new Set(['', 'STOP', 'MAX_TOKENS', 'FINISH_REASON_UNSPECIFIED']);
-  const extractGeminiBlockMessage = (data) => {
-    const feedback = data?.promptFeedback;
-    if (typeof feedback?.blockReason === 'string' && feedback.blockReason) {
-      const tail = typeof feedback.blockReasonMessage === 'string' && feedback.blockReasonMessage
-        ? ` — ${feedback.blockReasonMessage}`
-        : '';
-      return `Gemini blocked the prompt (${feedback.blockReason})${tail}.`;
-    }
-    const candidates = data?.candidates;
-    if (!Array.isArray(candidates)) return '';
-    for (const candidate of candidates) {
-      const reason = candidate?.finishReason;
-      if (typeof reason !== 'string' || benignGeminiFinishReasons.has(reason)) continue;
-      const tail = typeof candidate?.finishMessage === 'string' && candidate.finishMessage
-        ? ` — ${candidate.finishMessage}`
-        : '';
-      return `Gemini stopped the response (${reason})${tail}.`;
-    }
-    return '';
+    return { parsed };
   };
 
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
-      proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'baseUrl, apiKey, and model are required',
-      );
+      return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
 
     const validated = validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
-      return sendApiError(
-        res,
-        validated.forbidden ? 403 : 400,
-        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-        validated.error,
-      );
+      return sendApiError(res, validated.forbidden ? 403 : 400, validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST', validated.error);
     }
 
-    const url = appendVersionedApiPath(baseUrl, '/messages');
-    console.log(
-      `[proxy:anthropic] ${req.method} ${validated.parsed.hostname} model=${model}`,
-    );
+    const clean = baseUrl.replace(/\/+$/, '');
+    const url = /\/v\d+$/.test(clean) ? `${clean}/messages` : `${clean}/v1/messages`;
+    console.log(`[proxy:anthropic] ${req.method} ${validated.parsed.hostname} model=${model}`);
 
     const payload = {
       model,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       messages: Array.isArray(messages) ? messages : [],
       stream: true,
     };
@@ -5077,7 +2146,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -5091,41 +2159,41 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
-          `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
+        console.error(`[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+        sse.send('error', { message: `Upstream error: ${response.status}`, details: errorText });
         return sse.end();
       }
 
-      let ended = false;
-      await streamUpstreamSse(response, ({ event, data }) => {
-        if (!data) return false;
-        if (event === 'error' || data.type === 'error') {
-          const message = data.error?.message || data.message || 'Anthropic upstream error';
-          sendProxyError(sse, message, { details: data });
-          ended = true;
-          return true;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            const event = line.slice(7).trim();
+            const dataLine = lines[lines.indexOf(line) + 1];
+            if (dataLine && dataLine.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(dataLine.slice(6));
+                sse.send(event, data);
+              } catch (e) {
+                // ignore parse errors for partial chunks
+              }
+            }
+          }
         }
-        if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
-          sse.send('delta', { delta: data.delta.text });
-        }
-        if (event === 'message_stop') {
-          sse.send('end', {});
-          ended = true;
-          return true;
-        }
-        return false;
-      });
-      if (!ended) sse.send('end', {});
+      }
       sse.end();
     } catch (err) {
       console.error(`[proxy:anthropic] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.send('error', { message: err.message });
       sse.end();
     }
   });
@@ -5133,31 +2201,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/proxy/openai/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
-      proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!baseUrl || !apiKey || !model) {
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'baseUrl, apiKey, and model are required',
-      );
+      return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl, apiKey, and model are required');
     }
 
     const validated = validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
-      return sendApiError(
-        res,
-        validated.forbidden ? 403 : 400,
-        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-        validated.error,
-      );
+      return sendApiError(res, validated.forbidden ? 403 : 400, validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST', validated.error);
     }
 
-    const url = appendVersionedApiPath(baseUrl, '/chat/completions');
-    console.log(
-      `[proxy:openai] ${req.method} ${validated.parsed.hostname} model=${model}`,
-    );
+    const clean = baseUrl.replace(/\/+$/, '');
+    const url = /\/v\d+$/.test(clean) ? `${clean}/chat/completions` : `${clean}/v1/chat/completions`;
+    console.log(`[proxy:openai] ${req.method} ${validated.parsed.hostname} model=${model}`);
 
     const payloadMessages = Array.isArray(messages) ? [...messages] : [];
     if (typeof systemPrompt === 'string' && systemPrompt) {
@@ -5167,256 +2223,56 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const payload = {
       model,
       messages: payloadMessages,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      max_tokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
     };
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
-          `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
+        console.error(`[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+        sse.send('error', { message: `Upstream error: ${response.status}`, details: errorText });
         return sse.end();
       }
 
-      let ended = false;
-      await streamUpstreamSse(response, ({ payload, data }) => {
-        if (payload === '[DONE]') {
-          sse.send('end', {});
-          ended = true;
-          return true;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') break;
+            try {
+              const data = JSON.parse(dataStr);
+              sse.send('message', data);
+            } catch (e) {
+              // ignore parse errors for partial chunks
+            }
+          }
         }
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
-        }
-        const delta = extractOpenAIText(data);
-        if (delta) sse.send('delta', { delta });
-        return false;
-      });
-      if (!ended) sse.send('end', {});
+      }
       sse.end();
     } catch (err) {
       console.error(`[proxy:openai] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
-  });
-
-  app.post('/api/proxy/azure/stream', async (req, res) => {
-    /** @type {Partial<ProxyStreamRequest>} */
-    const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, apiVersion } =
-      proxyBody;
-    if (!baseUrl || !apiKey || !model) {
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'baseUrl, apiKey, and model are required',
-      );
-    }
-
-    const validated = validateExternalApiBaseUrl(baseUrl);
-    if (validated.error) {
-      return sendApiError(
-        res,
-        validated.forbidden ? 403 : 400,
-        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-        validated.error,
-      );
-    }
-
-    const version =
-      typeof apiVersion === 'string' && apiVersion.trim()
-        ? apiVersion.trim()
-        : '2024-10-21';
-    const url = new URL(baseUrl);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
-    url.searchParams.set('api-version', version);
-    console.log(
-      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version}`,
-    );
-
-    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
-    if (typeof systemPrompt === 'string' && systemPrompt) {
-      payloadMessages.unshift({ role: 'system', content: systemPrompt });
-    }
-
-    const payload = {
-      messages: payloadMessages,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      stream: true,
-    };
-
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': apiKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
-      }
-
-      let ended = false;
-      await streamUpstreamSse(response, ({ payload: ssePayload, data }) => {
-        if (ssePayload === '[DONE]') {
-          sse.send('end', {});
-          ended = true;
-          return true;
-        }
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
-        }
-        const delta = extractOpenAIText(data);
-        if (delta) sse.send('delta', { delta });
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err) {
-      console.error(`[proxy:azure] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
-  });
-
-  app.post('/api/proxy/google/stream', async (req, res) => {
-    /** @type {Partial<ProxyStreamRequest>} */
-    const proxyBody = req.body || {};
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
-    if (!apiKey || !model) {
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'apiKey and model are required',
-      );
-    }
-
-    const effectiveBaseUrl = baseUrl || 'https://generativelanguage.googleapis.com';
-    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
-    if (validated.error) {
-      return sendApiError(
-        res,
-        validated.forbidden ? 403 : 400,
-        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-        validated.error,
-      );
-    }
-
-    const clean = effectiveBaseUrl.replace(/\/+$/, '');
-    const url = `${clean}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
-    console.log(
-      `[proxy:google] ${req.method} ${validated.parsed.hostname} model=${model}`,
-    );
-
-    const contents = (Array.isArray(messages) ? messages : []).map((message) => ({
-      role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: message.content }],
-    }));
-    const payload = {
-      contents,
-      generationConfig: {
-        maxOutputTokens:
-          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      },
-    };
-    if (typeof systemPrompt === 'string' && systemPrompt) {
-      payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-    }
-
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:google] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
-      }
-
-      let ended = false;
-      await streamUpstreamSse(response, ({ data }) => {
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Gemini error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
-        }
-        const delta = extractGeminiText(data);
-        if (delta) sse.send('delta', { delta });
-        const blockMessage = extractGeminiBlockMessage(data);
-        if (blockMessage) {
-          sendProxyError(sse, blockMessage, { details: data });
-          ended = true;
-          return true;
-        }
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err) {
-      console.error(`[proxy:google] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.send('error', { message: err.message });
       sse.end();
     }
   });
@@ -5429,32 +2285,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    const server = app.listen(port, host, () => {
+    const server = app.listen(port, () => {
       const address = server.address();
       // `address()` can in theory return `string | AddressInfo | null`. For
       // a TCP listener it's always `AddressInfo` with a `.port` — the guard
       // is belt-and-braces so an unexpected null never silently produces a
       // `http://127.0.0.1:0` URL that callers would then try to fetch.
-      const boundPort =
-        address && typeof address === 'object' ? address.port : null;
+      const boundPort = address && typeof address === 'object' ? address.port : null;
       if (!boundPort) {
-        reject(
-          new Error(
-            `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
-          ),
-        );
+        reject(new Error(`[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`));
         return;
       }
       resolvedPort = boundPort;
-      // When binding to all interfaces report localhost for local callers;
-      // when binding to a specific address (e.g. a Tailscale IP) report that
-      // address so remote callers and the sidecar use the correct URL.
-      const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
-      const url = `http://${reportHost}:${resolvedPort}`;
+      const url = `http://127.0.0.1:${resolvedPort}`;
       if (!returnServer) {
         console.log(`[od] daemon listening on ${url}`);
       }
-      daemonUrl = url;
       resolve(returnServer ? { url, server } : url);
     });
     // `app.listen` throws synchronously when the port is already in use on
@@ -5481,69 +2327,19 @@ function sanitizeSlug(text) {
 function assembleExample(templateHtml, slidesHtml, title) {
   return templateHtml
     .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(
-      /<title>.*?<\/title>/,
-      `<title>${title} | Open Design Example</title>`,
-    );
+    .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
 }
 
-// Skill example HTML often references shipped images via relative paths
-// like `./assets/hero.png`. Those resolve correctly when the file is
-// opened from disk, but the web app loads the example into a sandboxed
-// iframe via `srcdoc`, where the document URL is `about:srcdoc` and
-// relative URLs cannot find the assets. Rewriting them to an absolute
-// `/api/skills/<id>/assets/...` URL lets the same HTML render in both
-// places — the disk preview keeps working, and the in-app preview now
-// fetches assets through the matching route below.
-export function rewriteSkillAssetUrls(html: string, skillId: string): string {
-  if (typeof html !== 'string' || html.length === 0) return html;
-  // Match src/href attributes whose values point at the current skill's
-  // assets (`./assets/...` or `assets/...`) or a sibling skill's assets
-  // (`../other-skill/assets/...`). Quote style is preserved so we do not
-  // disturb the surrounding markup.
-  return html.replace(
-    /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
-    (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
-      const resolvedSkillId = siblingSkillId || skillId;
-      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
-      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
-    },
-  );
-}
-
-export function isLocalSameOrigin(req, port) {
-  // Accepts http + https, loopback hosts, OD_WEB_PORT, and the explicit
-  // bind host — matching the global origin middleware policy exactly.
-  const host = String(req.headers.host || '');
+function isLocalSameOrigin(req, port) {
   const origin = req.headers.origin;
-
-  // Build allowed set inline (same logic as buildAllowedOrigins in
-  // startServer, but self-contained so the exported helper works
-  // without closing over server-scoped variables).
-  const ports = [port];
-  const webPort = Number(process.env.OD_WEB_PORT);
-  if (webPort && webPort !== port) ports.push(webPort);
-  const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
-  const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-  const allowedHosts = new Set(
-    ports.flatMap((p) => [
-      ...loopbackHosts.map((h) => `${h}:${p}`),
-      `${bindHost}:${p}`,
-    ]),
-  );
-
-  // Reject unknown Host first (DNS rebinding / Host header attack)
-  if (!allowedHosts.has(host)) return false;
-
-  // Non-browser client with valid Host → allow
-  if (origin == null || origin === '') return true;
-
-  const schemes = ['http', 'https'];
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
-      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
-    ]),
-  );
-  return allowedOrigins.has(String(origin));
+  if (!origin) return true; // Direct non-browser calls are trusted
+  try {
+    const url = new URL(origin);
+    return (
+      (url.hostname === '127.0.0.1' || url.hostname === 'localhost') &&
+      url.port === String(port)
+    );
+  } catch {
+    return false;
+  }
 }

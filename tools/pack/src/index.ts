@@ -1,17 +1,16 @@
 import { cac } from "cac";
 import type { CAC } from "cac";
 
-import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
+import { resolveToolPackConfig, type ToolPackCliOptions } from "./config.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
-  inspectPackedMacApp,
   packMac,
   readPackedMacLogs,
   startPackedMacApp,
   stopPackedMacApp,
   uninstallPackedMacApp,
-} from "./mac/index.js";
+} from "./mac.js";
 import {
   cleanupPackedWinNamespace,
   installPackedWinApp,
@@ -23,19 +22,7 @@ import {
   startPackedWinApp,
   stopPackedWinApp,
   uninstallPackedWinApp,
-} from "./win/index.js";
-import {
-  cleanupPackedLinuxNamespace,
-  installPackedLinuxApp,
-  installPackedLinuxHeadless,
-  packLinux,
-  readPackedLinuxLogs,
-  startPackedLinuxApp,
-  startPackedLinuxHeadless,
-  stopPackedLinuxApp,
-  stopPackedLinuxHeadless,
-  uninstallPackedLinuxApp,
-} from "./linux.js";
+} from "./win.js";
 
 type CliOptions = ToolPackCliOptions;
 
@@ -59,7 +46,6 @@ type CacCommand = ReturnType<CAC["command"]>;
 
 function addSharedOptions(command: CacCommand) {
   return command
-    .option("--cache-dir <path>", "tools-pack cache directory")
     .option("--dir <path>", "tools-pack root directory")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
@@ -67,25 +53,11 @@ function addSharedOptions(command: CacCommand) {
     .option("--path <path>", "desktop inspect screenshot path");
 }
 
-// Per-platform `--to` help text mirroring resolveToolPackBuildOutput in
-// config.ts. Keep these in sync: the resolver throws on any value not listed
-// here for the given platform.
-const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
-  linux: "build target: all|appimage|dir (default: all)",
-  mac: "build target: all|app|dmg|zip (default: all)",
-  win: "build target: all|dir|nsis (default: nsis)",
-};
-
-function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
+function addBuildOptions(command: CacCommand) {
   return command
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--signed", "build a signed/notarized mac artifact")
-    .option("--to <target>", TO_HELP_BY_PLATFORM[platform]);
-}
-
-function addMacBuildOptions(command: CacCommand) {
-  return addBuildOptions(command, "mac")
-    .option("--mac-compression <mode>", "mac artifact compression: normal|maximum|store (default: normal)");
+    .option("--to <target>", "build target: all|app|dmg|zip (default: all)");
 }
 
 function addWinLifecycleOptions(command: CacCommand) {
@@ -99,7 +71,7 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
-addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
+addBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup"))).action(
   async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("mac", options);
     switch (action) {
@@ -117,9 +89,6 @@ addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging c
         return;
       case "logs":
         printLogs(await readPackedMacLogs(config), options);
-        return;
-      case "inspect":
-        printJson(await inspectPackedMacApp(config, options));
         return;
       case "uninstall":
         printJson(await uninstallPackedMacApp(config));
@@ -141,7 +110,6 @@ addWinLifecycleOptions(
         "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect",
       ),
     ),
-    "win",
   ),
 ).action(async (action: string, options: CliOptions) => {
   const config = resolveToolPackConfig("win", options);
@@ -180,38 +148,6 @@ addWinLifecycleOptions(
       throw new Error(`unsupported win action: ${action}`);
   }
 });
-
-addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "linux")
-  .option("--containerized", "build inside electronuserland/builder Docker for distro-agnostic glibc compat")
-  .option("--headless", "install/start/stop the headless (no-Electron) entry instead of the full desktop app")
-  .action(async (action: string, options: CliOptions) => {
-    const config = resolveToolPackConfig("linux", options);
-    switch (action) {
-      case "build":
-        printJson(await packLinux(config));
-        return;
-      case "install":
-        printJson(await (options.headless ? installPackedLinuxHeadless(config) : installPackedLinuxApp(config)));
-        return;
-      case "start":
-        printJson(await (options.headless ? startPackedLinuxHeadless(config) : startPackedLinuxApp(config)));
-        return;
-      case "stop":
-        printJson(await (options.headless ? stopPackedLinuxHeadless(config) : stopPackedLinuxApp(config)));
-        return;
-      case "logs":
-        printLogs(await readPackedLinuxLogs(config), options);
-        return;
-      case "uninstall":
-        printJson(await uninstallPackedLinuxApp(config));
-        return;
-      case "cleanup":
-        printJson(await cleanupPackedLinuxNamespace(config));
-        return;
-      default:
-        throw new Error(`unsupported linux action: ${action}`);
-    }
-  });
 
 cli.help();
 cli.parse();

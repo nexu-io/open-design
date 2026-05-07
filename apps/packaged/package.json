@@ -1,6 +1,6 @@
 {
   "name": "@open-design/packaged",
-  "version": "0.4.2",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -10,9 +10,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./headless": {
-      "default": "./dist/headless.mjs"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -20,23 +17,21 @@
   ],
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@open-design/daemon": "workspace:*",
-    "@open-design/desktop": "workspace:*",
-    "@open-design/platform": "workspace:*",
-    "@open-design/sidecar": "workspace:*",
-    "@open-design/sidecar-proto": "workspace:*",
-    "@open-design/web": "workspace:*"
+    "@open-design/daemon": "workspace:0.2.0",
+    "@open-design/desktop": "workspace:0.2.0",
+    "@open-design/platform": "workspace:0.2.0",
+    "@open-design/sidecar": "workspace:0.2.0",
+    "@open-design/sidecar-proto": "workspace:0.2.0",
+    "@open-design/web": "workspace:0.2.0"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.27.7",
-    "typescript": "6.0.3",
-    "vitest": "^2.1.8"
+    "typescript": "6.0.3"
   },
   "engines": {
     "node": "~24"

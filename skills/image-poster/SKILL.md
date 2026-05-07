@@ -74,7 +74,7 @@ Use the unified dispatcher — do **not** call upstream provider APIs by
 hand. Run from your shell tool:
 
 ```bash
-"$OD_NODE_BIN" "$OD_BIN" media generate \
+node "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
   --surface image \
   --model "<imageModel from metadata>" \

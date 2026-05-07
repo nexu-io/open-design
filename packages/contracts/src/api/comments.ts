@@ -15,17 +15,6 @@ export interface PreviewCommentPosition {
   height: number;
 }
 
-export type PreviewCommentSelectionKind = 'element' | 'pod';
-
-export interface PreviewCommentMember {
-  elementId: string;
-  selector: string;
-  label: string;
-  text: string;
-  position: PreviewCommentPosition;
-  htmlHint: string;
-}
-
 export interface PreviewCommentTarget {
   filePath: string;
   elementId: string;
@@ -34,9 +23,6 @@ export interface PreviewCommentTarget {
   text: string;
   position: PreviewCommentPosition;
   htmlHint: string;
-  selectionKind?: PreviewCommentSelectionKind;
-  memberCount?: number;
-  podMembers?: PreviewCommentMember[];
 }
 
 export interface PreviewComment {
@@ -50,9 +36,6 @@ export interface PreviewComment {
   text: string;
   position: PreviewCommentPosition;
   htmlHint: string;
-  selectionKind?: PreviewCommentSelectionKind;
-  memberCount?: number;
-  podMembers?: PreviewCommentMember[];
   note: string;
   status: PreviewCommentStatus;
   createdAt: number;
@@ -77,3 +60,4 @@ export interface PreviewCommentsResponse {
 }
 
 export interface PreviewCommentDeleteResponse extends OkResponse {}
+
