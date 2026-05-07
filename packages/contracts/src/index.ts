@@ -6,6 +6,7 @@ export * from './api/artifacts';
 export * from './api/chat';
 export * from './api/connectors';
 export * from './api/comments';
+export * from './api/connectionTest';
 export * from './api/files';
 export * from './api/live-artifacts';
 export * from './api/projects';

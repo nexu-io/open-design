@@ -20,6 +20,7 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
 export type ToolPackCliOptions = {
+  cacheDir?: string;
   containerized?: boolean;
   dir?: string;
   expr?: string;
@@ -49,6 +50,7 @@ export type ToolPackRoots = {
     namespaceBaseRoot: string;
     namespaceRoot: string;
   };
+  cacheRoot: string;
   toolPackRoot: string;
 };
 
@@ -88,8 +90,9 @@ function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCo
 }
 
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
-  // Standalone web output is wired for mac first; other platforms fall back to server mode until their paths are enabled.
-  if (platform !== "mac") return "server";
+  // Standalone web output is wired for desktop packaged platforms; Linux stays on
+  // the existing server output until its AppImage resource path is optimized.
+  if (platform === "linux") return "server";
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
@@ -128,6 +131,7 @@ export function resolveToolPackConfig(
     namespace: options.namespace ?? SIDECAR_DEFAULTS.namespace,
   });
   const toolPackRoot = resolve(options.dir ?? join(WORKSPACE_ROOT, ".tmp", "tools-pack"));
+  const cacheRoot = resolve(options.cacheDir ?? join(toolPackRoot, "cache"));
   const outputRoot = join(toolPackRoot, "out");
   const outputPlatformRoot = join(outputRoot, platform);
   const outputNamespaceRoot = join(outputPlatformRoot, "namespaces", namespace);
@@ -153,6 +157,7 @@ export function resolveToolPackConfig(
         namespaceBaseRoot: runtimeNamespaceBaseRoot,
         namespaceRoot: join(runtimeNamespaceBaseRoot, namespace),
       },
+      cacheRoot,
       toolPackRoot,
     },
     removeData: options.removeData === true,

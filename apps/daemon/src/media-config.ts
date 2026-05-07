@@ -18,10 +18,11 @@
 // apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
 // the Home Manager / NixOS modules) get media-config there too without
 // any extra plumbing. Both env values are resolved with the same
-// semantics as OD_DATA_DIR in server.ts:resolveDataDir() — `~/` expands
-// to the user's home, and relative paths anchor to <projectRoot> (NOT
-// process.cwd, which is unrelated to the workspace when systemd or
-// launchd starts the daemon).
+// semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared
+// expandHomePrefix() helper handles `~`, `$HOME`, and `${HOME}` (with
+// either `/` or `\` separator), then relative paths anchor to
+// <projectRoot> (NOT process.cwd, which is unrelated to the workspace
+// when systemd or launchd starts the daemon).
 //
 // Migration note: a workspace install that sets a custom OD_DATA_DIR
 // AND has a pre-existing `<projectRoot>/.od/media-config.json` will
@@ -36,9 +37,10 @@
 // echo secrets back into the DOM.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
+import { expandHomePrefix } from './home-expansion.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 
@@ -75,18 +77,24 @@ const ENV_KEYS = {
 };
 
 // Resolve an `OD_*_DIR` env override using the same semantics as
-// `resolveDataDir()` in server.ts: leading `~/` expands to the user's
-// home, and relative paths anchor to <projectRoot> (NOT process.cwd —
+// `resolveDataDir()` in server.ts: expandHomePrefix() handles the `~`,
+// `$HOME`, and `${HOME}` shorthands (with either `/` or `\` separator),
+// then relative paths anchor to <projectRoot>, not process.cwd, since
 // the daemon is often launched from a directory that has nothing to do
-// with the workspace, e.g. systemd's `/`). The writability check that
+// with the workspace, e.g. systemd's `/`. The writability check that
 // resolveDataDir does on startup is intentionally NOT replicated here:
 // configFile() is on the read path and a missing/unwritable directory
 // is a normal "no config yet" condition handled by readStored(); the
 // write path's mkdir(recursive) creates the directory on first use.
 function resolveOverrideDir(raw, projectRoot) {
-  const expanded = raw.startsWith('~/')
-    ? path.join(homedir(), raw.slice(2))
-    : raw;
+  // Share expandHomePrefix with resolveDataDir (server.ts) so OD_DATA_DIR
+  // and OD_MEDIA_CONFIG_DIR cannot split state under a $HOME-style value.
+  // A launcher passing OD_DATA_DIR=$HOME/.open-design without a shell to
+  // expand it would otherwise route SQLite/projects/artifacts to the
+  // expanded path while media-config.json stayed under
+  // <projectRoot>/$HOME/.open-design, leaving stored credentials
+  // unreachable on the next read.
+  const expanded = expandHomePrefix(raw);
   return path.isAbsolute(expanded)
     ? expanded
     : path.resolve(projectRoot, expanded);
@@ -193,7 +201,7 @@ function tokenFromCodexAuth(data) {
 }
 
 async function resolveOpenAIOAuthCredential() {
-  const home = homedir();
+  const home = os.homedir();
   const hermesAuth = await readJsonIfPresent(
     path.join(home, '.hermes', 'auth.json'),
   );

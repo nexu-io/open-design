@@ -16,7 +16,7 @@ const skills: SkillSummary[] = [
     mode: 'prototype',
     surface: 'web',
     previewType: 'html',
-    designSystemRequired: false,
+    designSystemRequired: true,
     defaultFor: ['prototype'],
     triggers: [],
     upstream: null,
