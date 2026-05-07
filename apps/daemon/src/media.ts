@@ -210,6 +210,7 @@ function clampWithWarning(value, allowed, flagName) {
  * @param {number} [args.duration]
  * @param {string} [args.voice]
  * @param {string} [args.audioKind]
+ * @param {string} [args.language]
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
  */
 export async function generateMedia(args) {
@@ -226,6 +227,7 @@ export async function generateMedia(args) {
     duration,
     voice,
     audioKind,
+    language,
     compositionDir,
     image,
   } = args;
@@ -309,6 +311,7 @@ export async function generateMedia(args) {
     duration: clampedDuration,
     voice: voice || '',
     audioKind: resolvedAudioKind,
+    language: language || '',
     // Project-relative path to the directory the agent scaffolded with
     // hyperframes.json / meta.json / index.html. Only consumed by the
     // hyperframes renderer; null/empty for every other provider.
@@ -1357,6 +1360,7 @@ async function renderMinimaxTTS(ctx, credentials) {
     model: wireModel,
     text,
     stream: false,
+    ...(ctx.language ? { language_boost: ctx.language } : {}),
     voice_setting: {
       voice_id: voiceId,
       speed: 1.0,
