@@ -1582,7 +1582,7 @@ pnpm --filter @open-design/web test discovery.test.ts
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/prompts
+git add apps/daemon/src/prompts
 git commit -m "feat(web): wire panel prompt addendum into discovery composer"
 ```
 
