@@ -8,24 +8,59 @@
 // namespace import (`import * as fs from 'node:fs'`) gives a frozen
 // Module Namespace Object that `vi.spyOn` cannot mutate.
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  closeDatabase,
+  insertProject,
+  openDatabase,
+} from '../src/db.js';
+import { writeProjectFile } from '../src/projects.js';
+import {
   finalizeDesignPackage,
   FinalizePackageLockedError,
   FinalizeUpstreamError,
+  resolveCurrentArtifact,
   truncateTranscriptForPrompt,
 } from '../src/finalize-design.js';
 
 // Touch the imports so the unused-import linter stays quiet on the scaffold.
-void fs;
-void os;
-void path;
 void finalizeDesignPackage;
 void FinalizePackageLockedError;
 void FinalizeUpstreamError;
+
+const PROJECT_ID = 'project-1';
+let tempDir: string | null = null;
+let projectsRoot: string | null = null;
+
+afterEach(() => {
+  closeDatabase();
+  if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+  tempDir = null;
+  projectsRoot = null;
+});
+
+function setupResolverFixture(): { db: any; projectsRoot: string } {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-finalize-'));
+  const db = openDatabase(tempDir);
+  insertProject(db, {
+    id: PROJECT_ID,
+    name: 'Project',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  projectsRoot = path.join(tempDir, 'projects');
+  fs.mkdirSync(path.join(projectsRoot, PROJECT_ID), { recursive: true });
+  return { db, projectsRoot };
+}
+
+function setActiveTab(db: any, name: string) {
+  db.prepare(
+    `INSERT INTO tabs (project_id, name, position, is_active) VALUES (?, ?, ?, 1)`,
+  ).run(PROJECT_ID, name, 0);
+}
 
 const HEADER = JSON.stringify({
   kind: 'header',
@@ -104,8 +139,80 @@ describe('truncateTranscriptForPrompt', () => {
   });
 });
 
-describe.skip('finalizeDesignPackage (phases E-I land remaining bodies)', () => {
+describe('resolveCurrentArtifact', () => {
+  it('returns the active-tab artifact when its sidecar is present, even if a newer artifact exists elsewhere', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+
+    // Older artifact - active tab points here.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'pinned.html', '<p>pinned body</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Pinned',
+        entry: 'pinned.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      },
+    });
+    // Newer artifact - NOT in the active tab.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'newer.html', '<p>newer body</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Newer',
+        entry: 'newer.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-07T00:00:00.000Z',
+      },
+    });
+    setActiveTab(db, 'pinned.html');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('pinned.html');
+    expect(out!.body).toBe('<p>pinned body</p>');
+  });
+
+  it('falls through to newest .artifact.json when active tab points at a non-artifact file', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+
+    // README.md - no artifact sidecar - active tab points here.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'README.md', '# notes\n');
+    // The actual artifact - NOT in active tab.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'design.html', '<p>design</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Design',
+        entry: 'design.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-07T00:00:00.000Z',
+      },
+    });
+    setActiveTab(db, 'README.md');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('design.html');
+    expect(out!.body).toBe('<p>design</p>');
+  });
+
+  it('returns null when no active tab and no .artifact.json sidecars exist', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+
+    // README.md only - no artifact sidecars anywhere.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'README.md', '# notes\n');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+    expect(out).toBeNull();
+  });
+});
+
+describe.skip('finalizeDesignPackage (phases F-I land remaining bodies)', () => {
   it('placeholder', () => {
-    /* phases E-I add real cases here */
+    /* phases F-I add real cases here */
   });
 });

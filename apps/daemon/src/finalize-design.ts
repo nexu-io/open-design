@@ -23,7 +23,13 @@
 // export — verified during PR #493). Schema-mismatch tests in the test
 // file would catch any drift between this restated union and the contract.
 
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
+import {
+  listFiles,
+  projectDir,
+  readProjectFile,
+} from './projects.js';
 
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_MAX_TOKENS = 16000;
@@ -93,6 +99,85 @@ interface Db {
     get(...args: unknown[]): unknown;
     run(...args: unknown[]): unknown;
   };
+}
+
+interface ResolvedArtifact {
+  name: string;
+  body: string;
+  manifest: { kind?: string; updatedAt?: string; title?: string; entry?: string } | null;
+}
+
+/**
+ * Resolve the project's "current artifact" for the synthesis prompt.
+ *
+ * Priority order:
+ *   1. The file referenced by `tabs.is_active = 1` IF it has an
+ *      `<name>.artifact.json` sidecar present on disk. "Sidecar
+ *      presence" is the discriminator: an inferred manifest (e.g. for
+ *      a bare `.html` file with no sidecar) does NOT count, and an
+ *      active tab pointing at a non-artifact file (`.md`, `.txt`)
+ *      falls through.
+ *   2. The newest project file with a real `.artifact.json` sidecar,
+ *      sorted by `manifest.updatedAt` descending. Files without an
+ *      `updatedAt` (legacy pre-streaming manifests) sort last.
+ *   3. `null` — no artifact in scope. Caller emits `artifact: null`
+ *      in the response and the prompt's "Current artifact" section
+ *      reads "none".
+ *
+ * Sidecar presence is checked via `existsSync` on the on-disk path so
+ * the resolver does not depend on `inferLegacyManifest`'s heuristic.
+ */
+export async function resolveCurrentArtifact(
+  db: Db,
+  projectsRoot: string,
+  projectId: string,
+): Promise<ResolvedArtifact | null> {
+  const dir = projectDir(projectsRoot, projectId);
+
+  const activeTabRow = db
+    .prepare(`SELECT name FROM tabs WHERE project_id = ? AND is_active = 1 LIMIT 1`)
+    .get(projectId) as { name?: unknown } | undefined;
+  const activeTabName =
+    activeTabRow && typeof activeTabRow.name === 'string' ? activeTabRow.name : null;
+
+  if (activeTabName) {
+    const sidecarPath = path.join(dir, `${activeTabName}.artifact.json`);
+    if (existsSync(sidecarPath)) {
+      const file = await readProjectFile(projectsRoot, projectId, activeTabName);
+      return {
+        name: file.name,
+        body: file.buffer.toString('utf8'),
+        manifest: file.artifactManifest ?? null,
+      };
+    }
+    // Active tab points at a non-artifact file — fall through to step 2.
+  }
+
+  const files = await listFiles(projectsRoot, projectId);
+  const candidates = files
+    .filter((f: { name: string; artifactManifest?: { updatedAt?: string } | null }) => {
+      // Require a real sidecar on disk; an inferred manifest does not count.
+      return existsSync(path.join(dir, `${f.name}.artifact.json`));
+    })
+    .map((f: { name: string; artifactManifest?: { updatedAt?: string } | null }) => ({
+      name: f.name,
+      updatedAt:
+        f.artifactManifest && typeof f.artifactManifest.updatedAt === 'string'
+          ? f.artifactManifest.updatedAt
+          : '',
+    }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); // descending; '' sorts last
+
+  if (candidates.length > 0) {
+    const newest = await readProjectFile(projectsRoot, projectId, candidates[0]!.name);
+    return {
+      name: newest.name,
+      body: newest.buffer.toString('utf8'),
+      manifest: newest.artifactManifest ?? null,
+    };
+  }
+
+  return null;
 }
 
 export async function finalizeDesignPackage(
