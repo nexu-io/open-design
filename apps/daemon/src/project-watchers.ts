@@ -2,7 +2,7 @@
 import path from 'node:path';
 import chokidar from 'chokidar';
 
-import { projectDir } from './projects.js';
+import { projectDir, resolveProjectDir } from './projects.js';
 
 /**
  * Refcounted per-project file watcher registry.
@@ -17,7 +17,24 @@ import { projectDir } from './projects.js';
 // against the path *relative to the watch root* so that ancestor directories
 // (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
 // not accidentally match and silence every event in the tree.
-const IGNORE_NAMES = new Set(['.git', 'node_modules', '.od', 'debug', '.DS_Store']);
+const IGNORE_NAMES = new Set([
+  '.git',
+  'node_modules',
+  '.od',
+  'debug',
+  '.DS_Store',
+  // Python virtual environments and caches — can contain tens of thousands of
+  // files, exhausting the process fd table and breaking child-process spawning.
+  // These names are safe to match at any path depth: a directory named `.venv`
+  // or `__pycache__` is never legitimate authored source in a project tree.
+  '.venv',
+  'venv',
+  '__pycache__',
+  '.mypy_cache',
+  '.pytest_cache',
+  '.tox',
+  '.ruff_cache',
+]);
 export function makeIgnored(rootDir) {
   return (absPath) => {
     const rel = path.relative(rootDir, absPath);
@@ -104,7 +121,14 @@ function makeEntry(dir, opts) {
  *   last; `ready` resolves once chokidar has finished its initial scan.
  */
 export function subscribe(projectsRoot, projectId, onEvent, opts = {}) {
-  const dir = projectDir(projectsRoot, projectId);
+  // Resolve to the project's actual root: for folder-imported projects
+  // (metadata.baseDir set) we watch the user's folder so the live-reload
+  // SSE stream actually fires when their files change. The registry is
+  // keyed by the resolved directory, not the project id, so two
+  // projects pointing at the same folder share one watcher.
+  const dir = opts.metadata
+    ? resolveProjectDir(projectsRoot, projectId, opts.metadata)
+    : projectDir(projectsRoot, projectId);
   const key = dir;
 
   let entry = registry.get(key);

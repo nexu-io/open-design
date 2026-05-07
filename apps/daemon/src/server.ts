@@ -9,7 +9,12 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { composeSystemPrompt } from './prompts/system.js';
+import {
+  composeSystemPrompt,
+  renderCodexImagegenOverride,
+  shouldRenderCodexImagegenOverride,
+} from './prompts/system.js';
+import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -23,8 +28,10 @@ import {
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
+import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import { findSkillById, listSkills } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
+import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
@@ -36,10 +43,16 @@ import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import {
+  testAgentConnection,
+  testProviderConnection,
+  validateBaseUrl,
+} from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
@@ -57,12 +70,13 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
-import { readAppConfig, writeAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
+  detectEntryFile,
   ensureProject,
   listFiles,
   mimeFor,
@@ -129,13 +143,17 @@ import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './
 import {
   buildDeployFileSet,
   checkDeploymentUrl,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesProjectNameForProject,
   DeployError,
+  deployToCloudflarePages,
   deployToVercel,
+  isDeployProviderId,
   prepareDeployPreflight,
-  publicDeployConfig,
-  readVercelConfig,
+  publicDeployConfigForProvider,
+  readDeployConfig,
   VERCEL_PROVIDER_ID,
-  writeVercelConfig,
+  writeDeployConfig,
 } from './deploy.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
@@ -149,6 +167,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
+const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
   const daemonDir =
@@ -156,13 +175,283 @@ export function resolveProjectRoot(moduleDir: string): string {
   return path.resolve(daemonDir, '../..');
 }
 
-export function resolveDaemonCliPath(): string {
+function cleanOptionalPath(value: string | undefined): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? path.resolve(value)
+    : null;
+}
+
+export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
+  if (configured) return configured;
+
   const packageJsonPath = require.resolve('@open-design/daemon/package.json');
   return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+export function composeLiveInstructionPrompt({
+  daemonSystemPrompt,
+  runtimeToolPrompt,
+  clientSystemPrompt,
+  finalPromptOverride,
+}) {
+  const override =
+    typeof finalPromptOverride === 'string'
+      ? finalPromptOverride.trim()
+      : '';
+  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
+    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+    .map((part) =>
+      override && part.includes(override)
+        ? part.split(override).join('').trim()
+        : part,
+    )
+    .filter(Boolean);
+  if (override) {
+    parts.push(override);
+  }
+  return parts.join('\n\n---\n\n');
+}
+
+export function resolveCodexGeneratedImagesDir(
+  agentId,
+  metadata,
+  env = process.env,
+  homeDir = os.homedir(),
+) {
+  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
+  const rawCodexHome =
+    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
+      ? env.CODEX_HOME.trim()
+      : path.join(homeDir, '.codex');
+  const codexHome = rawCodexHome.startsWith('~/')
+    ? path.join(homeDir, rawCodexHome.slice(2))
+    : rawCodexHome;
+  return path.resolve(codexHome, 'generated_images');
+}
+
+type DirectoryStat = {
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+};
+
+type CodexGeneratedImagesDirValidationOptions = {
+  protectedDirs?: Array<string | null | undefined>;
+  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
+  lstatSync?: (target: string) => DirectoryStat;
+  statSync?: (target: string) => DirectoryStat;
+  realpathSync?: (target: string) => string;
+  warn?: (message: string) => void;
+};
+
+function isMissingPathError(err: unknown): boolean {
+  return (
+    err &&
+    typeof err === 'object' &&
+    'code' in err &&
+    err.code === 'ENOENT'
+  );
+}
+
+function collectProtectedDirRoots(
+  protectedDirs: Array<string | null | undefined>,
+  {
+    realpathSync,
+    statSync,
+  }: {
+    realpathSync: (target: string) => string;
+    statSync: (target: string) => DirectoryStat;
+  },
+): string[] {
+  const roots = [];
+  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
+    const resolved = path.resolve(raw);
+    roots.push(resolved);
+    try {
+      const canonical = realpathSync(resolved);
+      try {
+        if (statSync(canonical).isDirectory()) roots.push(canonical);
+      } catch {
+        roots.push(canonical);
+      }
+    } catch {
+      // A missing protected root cannot be the canonical target of a symlink.
+    }
+  }
+  return Array.from(new Set(roots));
+}
+
+function findContainingProtectedRoot(
+  candidate: string,
+  protectedRoots: string[],
+): string | null {
+  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
+}
+
+export function validateCodexGeneratedImagesDir(
+  codexGeneratedImagesDir: string | null | undefined,
+  {
+    protectedDirs = [],
+    mkdirSync = fs.mkdirSync,
+    lstatSync = fs.lstatSync,
+    statSync = fs.statSync,
+    realpathSync = fs.realpathSync.native,
+    warn = console.warn,
+  }: CodexGeneratedImagesDirValidationOptions = {},
+): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.trim().length === 0
+  ) {
+    return null;
+  }
+
+  const resolved = path.resolve(codexGeneratedImagesDir);
+  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
+    realpathSync,
+    statSync,
+  });
+  const warnSkipped = (reason: string) =>
+    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
+
+  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
+  if (protectedRoot) {
+    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
+    return null;
+  }
+
+  try {
+    let existingTargetStat = null;
+    try {
+      existingTargetStat = lstatSync(resolved);
+    } catch (err) {
+      if (!isMissingPathError(err)) throw err;
+    }
+    if (existingTargetStat?.isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (existingTargetStat && !existingTargetStat.isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+
+    const parent = path.dirname(resolved);
+    const protectedParentRoot = findContainingProtectedRoot(
+      parent,
+      protectedRoots,
+    );
+    if (protectedParentRoot) {
+      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
+      return null;
+    }
+
+    mkdirSync(parent, { recursive: true });
+    const canonicalParent = realpathSync(parent);
+    const canonicalCandidate = path.join(
+      canonicalParent,
+      path.basename(resolved),
+    );
+    const protectedCanonicalParentRoot = findContainingProtectedRoot(
+      canonicalCandidate,
+      protectedRoots,
+    );
+    if (protectedCanonicalParentRoot) {
+      warnSkipped(
+        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
+      );
+      return null;
+    }
+
+    mkdirSync(resolved, { recursive: true });
+    if (lstatSync(resolved).isSymbolicLink()) {
+      warnSkipped(`${resolved} is a symlink`);
+      return null;
+    }
+    if (!statSync(resolved).isDirectory()) {
+      warnSkipped(`${resolved} is not a directory`);
+      return null;
+    }
+    const canonicalDir = realpathSync(resolved);
+    const protectedCanonicalRoot = findContainingProtectedRoot(
+      canonicalDir,
+      protectedRoots,
+    );
+    if (protectedCanonicalRoot) {
+      warnSkipped(
+        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
+      );
+      return null;
+    }
+
+    return canonicalDir;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : String(err ?? 'unknown error');
+    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
+    return null;
+  }
+}
+
+export function resolveChatExtraAllowedDirs({
+  agentId,
+  skillsDir,
+  designSystemsDir,
+  linkedDirs = [],
+  codexGeneratedImagesDir,
+  existsSync = fs.existsSync,
+}: {
+  agentId?: string | null;
+  skillsDir?: string | null;
+  designSystemsDir?: string | null;
+  linkedDirs?: Array<string | null | undefined>;
+  codexGeneratedImagesDir?: string | null;
+  existsSync?: (path: string) => boolean;
+}): string[] {
+  const isCodex =
+    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
+  const candidates = isCodex
+    ? [codexGeneratedImagesDir]
+    : [
+        skillsDir,
+        designSystemsDir,
+        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
+      ];
+  return Array.from(
+    new Set(
+      candidates.filter(
+        (d) =>
+          typeof d === 'string' && d.length > 0 && existsSync(d),
+      ),
+    ),
+  );
+}
+
+export function resolveGrantedCodexImagegenOverride({
+  agentId,
+  metadata,
+  codexGeneratedImagesDir,
+  extraAllowedDirs = [],
+}: {
+  agentId?: string | null;
+  metadata?: unknown;
+  codexGeneratedImagesDir?: string | null;
+  extraAllowedDirs?: string[];
+}): string | null {
+  if (
+    typeof codexGeneratedImagesDir !== 'string' ||
+    codexGeneratedImagesDir.length === 0 ||
+    !Array.isArray(extraAllowedDirs) ||
+    !extraAllowedDirs.includes(codexGeneratedImagesDir)
+  ) {
+    return null;
+  }
+  return renderCodexImagegenOverride(agentId, metadata);
+}
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -402,12 +691,15 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
 );
 export function resolveDataDir(raw, projectRoot) {
   if (!raw) return path.join(projectRoot, '.od');
-  const expanded = raw.startsWith('~/')
-    ? path.join(os.homedir(), raw.slice(2))
-    : raw;
-  const resolved = path.isAbsolute(expanded)
-    ? expanded
-    : path.resolve(projectRoot, expanded);
+  // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
+  // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
+  // Some launchers (systemd unit files, NixOS modules, certain Docker
+  // entrypoints, Windows scheduled tasks) pass OD_DATA_DIR with literal
+  // $HOME or ${HOME} because the variable is never expanded by a shell;
+  // expandHomePrefix turns those (and the ~ shorthand, with both / and \
+  // separators) into os.homedir() before path.resolve runs so launch
+  // surfaces stay consistent.
+  const resolved = resolveProjectRelativePath(raw, projectRoot);
   try {
     fs.mkdirSync(resolved, { recursive: true });
     fs.accessSync(resolved, fs.constants.W_OK);
@@ -417,9 +709,27 @@ export function resolveDataDir(raw, projectRoot) {
       `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
     );
   }
-  return resolved;
+  // Canonicalize via realpath so that any callers comparing user-supplied
+  // realpath() output against RUNTIME_DATA_DIR get a stable result. On
+  // macOS, /var is itself a symlink to /private/var, so a user's import
+  // realpath would land in /private/var/... and would never start-with
+  // a non-canonicalized RUNTIME_DATA_DIR.
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
+// new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
+// across before SQLite opens. Synchronous on purpose: openDatabase below
+// would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
+// and https://github.com/nexu-io/open-design/issues/710.
+migrateLegacyDataDirSync({
+  legacyDir: process.env.OD_LEGACY_DATA_DIR,
+  dataDir: RUNTIME_DATA_DIR,
+});
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
@@ -588,6 +898,46 @@ function sendApiError(res, status, code, message, init = {}) {
   return res
     .status(status)
     .json(createCompatApiErrorResponse(code, message, init));
+}
+
+const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
+
+function cloudflarePagesDeploymentMetadata(projectName) {
+  const normalized = typeof projectName === 'string' ? projectName.trim() : '';
+  return normalized
+    ? { [CLOUDFLARE_PAGES_PROJECT_METADATA_KEY]: normalized }
+    : undefined;
+}
+
+function cloudflarePagesProjectNameFromDeployment(deployment) {
+  const value = deployment?.providerMetadata?.[CLOUDFLARE_PAGES_PROJECT_METADATA_KEY];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return cloudflarePagesProjectNameFromUrl(deployment?.url);
+}
+
+function cloudflarePagesProjectNameFromUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return '';
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    if (!host.endsWith('.pages.dev')) return '';
+    const labels = host.slice(0, -'.pages.dev'.length).split('.').filter(Boolean);
+    return labels.at(-1) || '';
+  } catch {
+    return '';
+  }
+}
+
+function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
+  const priorName = cloudflarePagesProjectNameFromDeployment(prior);
+  if (priorName) return priorName;
+
+  for (const deployment of listDeployments(db, projectId)) {
+    if (deployment.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) continue;
+    const stableName = cloudflarePagesProjectNameFromDeployment(deployment);
+    if (stableName) return stableName;
+  }
+
+  return cloudflarePagesProjectNameForProject(projectId, projectName);
 }
 
 // Filename slug for the Content-Disposition header on archive downloads.
@@ -811,11 +1161,9 @@ function openNativeFolderDialog() {
         },
       );
     } else if (platform === 'win32') {
-      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a code folder to link'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }";
-      execFile('powershell.exe', ['-NoProfile', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
-        if (err) return resolve(null);
-        const p = stdout.trim();
-        resolve(p || null);
+      const command = buildWindowsFolderDialogCommand();
+      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
+        resolve(parseFolderDialogStdout(err, stdout));
       });
     } else {
       resolve(null);
@@ -870,11 +1218,25 @@ const importUpload = multer({
 // folder (flat — same shape FileWorkspace expects), so the composer's
 // pasted/dropped/picked images become referenceable filenames the agent
 // can Read or @-mention without any cross-folder gymnastics.
+// Bridge between the multer upload-storage destination (built at module
+// init) and the per-process project DB (instantiated inside startServer).
+// startServer() sets this so the upload destination can route attachments
+// into the right project root, including folder-imported projects whose
+// files live under metadata.baseDir.
+let projectMetadataLookup: ((id: string) => Record<string, unknown> | null) | null = null;
+
 const projectUpload = multer({
   storage: multer.diskStorage({
     destination: async (req, _file, cb) => {
       try {
-        const dir = await ensureProject(PROJECTS_DIR, req.params.id);
+        // Route uploads into the project's actual root: for folder-imported
+        // projects (metadata.baseDir set) attachments need to land alongside
+        // the user's files so the agent can read them via the same path
+        // it sees. projectMetadataLookup is populated at startServer() boot
+        // and keyed by project id; null fallback gives the standard
+        // .od/projects/<id>/ behavior for non-imported projects.
+        const meta = projectMetadataLookup?.(req.params.id) ?? null;
+        const dir = await ensureProject(PROJECTS_DIR, req.params.id, meta);
         cb(null, dir);
       } catch (err) {
         cb(err, '');
@@ -1069,6 +1431,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     );
   }
 
+  // Portless loopback origins (e.g. http://127.0.0.1 without a port).
+  // Chrome may strip the port from the Origin header on same-origin GET
+  // requests. Only used as a fallback for safe, idempotent GET requests;
+  // mutating routes (POST/PUT/PATCH/DELETE) always require an exact
+  // port-match via buildAllowedOrigins() or isLocalSameOrigin() to
+  // prevent local CSRF from a page on the default port (80).
+  function isPortlessLoopbackOrigin(origin) {
+    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
+  }
+
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
@@ -1104,11 +1476,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     if (!buildAllowedOrigins().has(String(origin))) {
-      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      // Fallback: Chrome may strip the port from the Origin header on
+      // same-origin requests (e.g. http://127.0.0.1 instead of
+      // http://127.0.0.1:6313). Allow portless loopback origins only
+      // for GET requests, which are idempotent and safe from CSRF.
+      // Mutating methods (POST/PUT/PATCH/DELETE) always require an
+      // exact port-match to prevent a page on the default port (80)
+      // from triggering state-changing operations.
+      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
+        return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      }
     }
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  // Wire the upload-destination bridge to this db so multer can route
+  // file uploads into baseDir-rooted projects' actual folders.
+  projectMetadataLookup = (id) => {
+    try { return getProject(db, id)?.metadata ?? null; } catch { return null; }
+  };
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
   let daemonUrl = `http://127.0.0.1:${port}`;
@@ -1130,7 +1516,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
-  void detectAgents().catch(() => {});
+  void readAppConfig(RUNTIME_DATA_DIR)
+    .then((config) => detectAgents(config.agentCliEnv ?? {}))
+    .catch(() => detectAgents().catch(() => {}));
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -1239,16 +1627,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
   });
 
-  // Surfaces the absolute paths to `node` + `apps/daemon/dist/cli.js`
-  // so the Settings → MCP server panel can render snippets that work
-  // even when `od` isn't on the user's PATH (the common case for
-  // source clones - and macOS/Linux ship a /usr/bin/od octal-dump
-  // tool that shadows ours anyway). Computed from import.meta.url so
-  // both src/ (tsx dev) and dist/ (built) launches resolve to the
-  // same dist/cli.js path. Cached for 5s because the panel pings on
-  // every open and the path lookup + two existsSync calls are cheap
-  // but not free, and these paths cannot change without a daemon
-  // restart anyway.
+  // Surfaces the absolute paths to the daemon's Node-compatible runtime and
+  // CLI entry so the Settings → MCP server panel can render snippets that work
+  // even when `od` isn't on the user's PATH (the common case for source clones
+  // - and macOS/Linux ship a /usr/bin/od octal-dump tool that shadows ours
+  // anyway). Cached for 5s because the panel pings on every open and these
+  // paths cannot change without a daemon restart.
   const INSTALL_INFO_TTL_MS = 5000;
   let installInfoCache: { t: number; payload: object } | null = null;
 
@@ -1260,35 +1644,33 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
       return res.json(installInfoCache.payload);
     }
-    let cliPath;
-    try {
-      cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-    } catch (err) {
-      return sendApiError(res, 500, 'CLI_RESOLVE_FAILED', String(err));
-    }
+    const cliPath = OD_BIN;
     const cliExists = fs.existsSync(cliPath);
-    // process.execPath is the absolute path to the node binary that
-    // is running the daemon RIGHT NOW. We prefer it over bare `node`
-    // because IDE-spawned MCP clients inherit a minimal PATH from the
-    // OS launcher (Spotlight, Dock, etc.) that often does not see
-    // user-level node installs (nvm, fnm, asdf). On rare occasions
-    // (uninstall mid-session, exotic embeds) the path may not exist
-    // by the time the user copies the snippet; catch that and warn.
+    // process.execPath is the absolute path to the Node-compatible runtime
+    // that is running the daemon RIGHT NOW. In packaged builds this may be
+    // Electron running with ELECTRON_RUN_AS_NODE=1 rather than a separate
+    // bundled Node binary; surface the env requirement with the command so
+    // IDE-spawned MCP clients can reproduce the same mode from a minimal OS
+    // launcher environment.
     const nodeExists = fs.existsSync(process.execPath);
     const hints: string[] = [];
     if (!cliExists) {
       hints.push(
-        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
+        `Open Design CLI entry is missing at ${cliPath}. Rebuild the daemon or packaged app and refresh.`,
       );
     }
     if (!nodeExists) {
       hints.push(
-        `Node binary at ${process.execPath} no longer exists. Reinstall Node and restart the daemon.`,
+        `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
       );
     }
+    const commandEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
+      ? { ELECTRON_RUN_AS_NODE: '1' }
+      : null;
     const payload = {
       command: process.execPath,
       args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
+      ...(commandEnv == null ? {} : { env: commandEnv }),
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
       // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
@@ -1359,6 +1741,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
+      }
+      // baseDir is privileged: it lets a project root directly inside the
+      // user's filesystem. The /api/import/folder endpoint is the only
+      // path that's allowed to set it, because that's where realpath() +
+      // RUNTIME_DATA_DIR reentry checks live. Block client-supplied
+      // metadata.baseDir on this generic create endpoint so an attacker
+      // can't smuggle e.g. /etc through here. Same rule for
+      // originalBaseDir / importedFrom='folder' — only the import path
+      // owns those state fields.
+      if (metadata && typeof metadata === 'object') {
+        if ('baseDir' in metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'baseDir can only be set via POST /api/import/folder',
+          );
+        }
       }
       const now = Date.now();
       const project = insertProject(db, {
@@ -1494,6 +1892,94 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     },
   );
 
+  // Import an existing local folder as a project. The user picks a folder
+  // and OD works inside it directly: every write goes to metadata.baseDir.
+  // No copy, no shadow tree — the user owns the workspace and is
+  // responsible for their own version control (git, time machine, etc.),
+  // mirroring how Cursor / Claude Code / Aider behave.
+  app.post('/api/import/folder', async (req, res) => {
+    try {
+      const { baseDir, name, skillId, designSystemId } = req.body || {};
+      if (typeof baseDir !== 'string' || !baseDir.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      const trimmedInput = baseDir.trim();
+      if (!path.isAbsolute(path.normalize(trimmedInput))) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+      }
+      // Resolve symlinks once at import and persist the canonical path.
+      // Without this, a user-controlled symlink (e.g. ~/sneaky → /etc) at
+      // baseDir would let writeProjectFile escape the project sandbox at
+      // every later call: resolveSafe checks the *literal* baseDir, but
+      // the OS follows the symlink at write time. realpath() collapses
+      // the chain so the stored baseDir == what the kernel will write to.
+      let normalizedPath: string;
+      try {
+        normalizedPath = await fs.promises.realpath(trimmedInput);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      // realpath resolved → lstat the canonical path to ensure it's a
+      // real directory, not another symlink (defense-in-depth).
+      let dirStat;
+      try {
+        dirStat = await fs.promises.lstat(normalizedPath);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      if (!dirStat.isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
+      }
+      // Prevent importing the data directory into itself (post-realpath so
+      // a symlink pointing into RUNTIME_DATA_DIR is also caught).
+      if (
+        normalizedPath === RUNTIME_DATA_DIR ||
+        normalizedPath.startsWith(RUNTIME_DATA_DIR + path.sep)
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
+      }
+
+      const id = randomId();
+      const now = Date.now();
+      const projectName =
+        typeof name === 'string' && name.trim()
+          ? name.trim()
+          : path.basename(normalizedPath);
+      const entryFile = await detectEntryFile(normalizedPath);
+
+      const project = insertProject(db, {
+        id,
+        name: projectName,
+        skillId: skillId ?? null,
+        designSystemId: designSystemId ?? null,
+        pendingPrompt: null,
+        metadata: {
+          kind: 'prototype',
+          baseDir: normalizedPath,
+          importedFrom: 'folder',
+          entryFile,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const cid = randomId();
+      insertConversation(db, {
+        id: cid,
+        projectId: id,
+        title: `Imported from ${projectName}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (entryFile) setTabs(db, id, [entryFile], entryFile);
+      /** @type {import('@open-design/contracts').ImportFolderResponse} */
+      const body = { project, conversationId: cid, entryFile };
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
   app.get('/api/projects/:id', (req, res) => {
     const project = getProject(db, req.params.id);
     if (!project)
@@ -1506,6 +1992,45 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
+      // baseDir / folder-import state is privileged: it's set only by the
+      // import endpoint and otherwise immutable. Two failure modes to
+      // guard against here:
+      //   1. Explicit attempt to change baseDir → reject with 400.
+      //   2. A regular metadata patch that *omits* baseDir (e.g. a UI
+      //      that only edits linkedDirs sends `{ metadata: { kind, linkedDirs } }`).
+      //      updateProject() replaces metadata wholesale, so without
+      //      preservation the existing baseDir gets wiped and the project
+      //      detaches from the user's folder — subsequent reads/writes
+      //      silently fall back to .od/projects/<id>.
+      // For case 2 we re-stamp the immutable fields from the existing
+      // project record onto the incoming patch so the user can keep
+      // patching other metadata without ever losing their import root.
+      if (patch.metadata && typeof patch.metadata === 'object') {
+        const existing = getProject(db, req.params.id);
+        const existingMeta = existing?.metadata;
+        if (existingMeta?.baseDir) {
+          if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
+            return sendApiError(
+              res, 400, 'BAD_REQUEST',
+              'baseDir is immutable after import; use a new import to change it',
+            );
+          }
+          patch.metadata = {
+            ...patch.metadata,
+            baseDir: existingMeta.baseDir,
+            ...(existingMeta.importedFrom === 'folder'
+              ? { importedFrom: 'folder' }
+              : {}),
+          };
+        } else if ('baseDir' in patch.metadata) {
+          // Non-imported project trying to acquire a baseDir → reject (only
+          // /api/import/folder can set it).
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'baseDir can only be set via POST /api/import/folder',
+          );
+        }
+      }
       if (patch.metadata?.linkedDirs) {
         const validated = validateLinkedDirs(patch.metadata.linkedDirs);
         if (validated.error) {
@@ -1559,9 +2084,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         activeProjectEventSinks.set(req.params.id, sinks);
       }
       sinks.add(projectEventSink);
+      const watchProject = getProject(db, req.params.id);
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
-      });
+      }, { metadata: watchProject?.metadata });
       sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
       const cleanup = () => {
         if (sub) {
@@ -1779,13 +2305,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
-      if (!getProject(db, sourceProjectId)) {
+      const sourceProject = getProject(db, sourceProjectId);
+      if (!sourceProject) {
         return res.status(404).json({ error: 'source project not found' });
       }
       // Snapshot every HTML / sketch / text file in the source project.
       // We deliberately skip binary uploads — templates are about the
       // generated design, not the user's reference imagery.
-      const files = await listFiles(PROJECTS_DIR, sourceProjectId);
+      const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
+        metadata: sourceProject.metadata,
+      });
       const snapshot = [];
       for (const f of files) {
         if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
@@ -1794,6 +2323,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           PROJECTS_DIR,
           sourceProjectId,
           f.name,
+          sourceProject.metadata,
         );
         if (entry && Buffer.isBuffer(entry.buffer)) {
           snapshot.push({
@@ -1823,7 +2353,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/agents', async (_req, res) => {
     try {
-      const list = await detectAgents();
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const list = await detectAgents(config.agentCliEnv ?? {});
       res.json({ agents: list });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -2481,10 +3012,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Deploy --------------------------------------------------------------
 
-  app.get('/api/deploy/config', async (_req, res) => {
+  app.get('/api/deploy/config', async (req, res) => {
     try {
+      const providerId =
+        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfig(await readVercelConfig());
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -2493,8 +3029,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.put('/api/deploy/config', async (req, res) => {
     try {
+      const input = req.body || {};
+      const providerId =
+        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeVercelConfig(req.body || {});
+      const body = await writeDeployConfig(providerId, input);
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -2514,7 +3056,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2527,16 +3069,32 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
+      const deployProject = getProject(db, req.params.id);
       const files = await buildDeployFileSet(
         PROJECTS_DIR,
         req.params.id,
         fileName,
+        { metadata: deployProject?.metadata },
       );
-      const result = await deployToVercel({
-        config: await readVercelConfig(),
-        files,
-        projectId: req.params.id,
-      });
+      const project = getProject(db, req.params.id);
+      const cloudflarePagesProjectName =
+        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
+          : '';
+      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? await deployToCloudflarePages({
+            config: {
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              projectName: cloudflarePagesProjectName,
+            },
+            files,
+            projectId: req.params.id,
+          })
+        : await deployToVercel({
+            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -2551,6 +3109,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
+        providerMetadata:
+          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName)
+            : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
@@ -2574,7 +3136,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2585,11 +3147,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const preflightProject = getProject(db, req.params.id);
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
         PROJECTS_DIR,
         req.params.id,
         fileName,
+        { metadata: preflightProject?.metadata, providerId },
       );
       res.json(body);
     } catch (err) {
@@ -2627,11 +3191,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             'deployment not found',
           );
         }
-        const result = await checkDeploymentUrl(existing.url);
+        const stableCloudflareProjectName =
+          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesProjectNameFromDeployment(existing)
+            : '';
+        const checkUrl = stableCloudflareProjectName
+          ? `https://${stableCloudflareProjectName}.pages.dev`
+          : existing.url;
+        const result = await checkDeploymentUrl(checkUrl);
         const now = Date.now();
         /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
         const body = upsertDeployment(db, {
           ...existing,
+          url: checkUrl || existing.url,
           status: result.reachable ? 'ready' : result.status || 'link-delayed',
           statusMessage: result.reachable
             ? 'Public link is ready.'
@@ -2660,8 +3232,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
       const since = Number(req.query?.since);
+      const project = getProject(db, req.params.id);
       const files = await listFiles(PROJECTS_DIR, req.params.id, {
         since: Number.isFinite(since) ? since : undefined,
+        metadata: project?.metadata,
       });
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
@@ -2680,9 +3254,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
       const pattern = req.query.pattern ? String(req.query.pattern) : null;
       const max = Math.min(Number(req.query.max) || 200, 1000);
+      const searchProject = getProject(db, req.params.id);
       const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
         pattern,
         max,
+        metadata: searchProject?.metadata,
       });
       res.json({ query, matches });
     } catch (err) {
@@ -2698,12 +3274,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/archive', async (req, res) => {
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      const project = getProject(db, req.params.id);
       const { buffer, baseName } = await buildProjectArchive(
         PROJECTS_DIR,
         req.params.id,
         root,
+        project?.metadata,
       );
-      const project = getProject(db, req.params.id);
       const fallbackName = project?.name || req.params.id;
       const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
       const filename = `${fileSlug}.zip`;
@@ -2739,12 +3316,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
         return;
       }
+      const project = getProject(db, req.params.id);
       const { buffer } = await buildBatchArchive(
         PROJECTS_DIR,
         req.params.id,
         files,
+        project?.metadata,
       );
-      const project = getProject(db, req.params.id);
       const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
       const filename = `${fileSlug}.zip`;
       const asciiFallback =
@@ -2782,7 +3360,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/raw/*', async (req, res) => {
     try {
       const relPath = req.params[0];
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath);
+      const project = getProject(db, req.params.id);
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -2804,7 +3383,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.delete('/api/projects/:id/raw/*', async (req, res) => {
     try {
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0]);
+      const project = getProject(db, req.params.id);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0], project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -2821,10 +3401,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
+      const project = getProject(db, req.params.id);
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
         req.params.name,
+        project?.metadata,
       );
       const preview = await buildDocumentPreview(file);
       res.json(preview);
@@ -2846,10 +3428,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/projects/:id/files/*', async (req, res) => {
     try {
+      const project = getProject(db, req.params.id);
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
         req.params[0],
+        project?.metadata,
       );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
@@ -2876,7 +3460,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     },
     async (req, res) => {
       try {
-        await ensureProject(PROJECTS_DIR, req.params.id);
+        const uploadProject = getProject(db, req.params.id);
+        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
           const desiredName = sanitizeName(
@@ -2887,6 +3472,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             req.params.id,
             desiredName,
             buf,
+            {},
+            uploadProject?.metadata,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
@@ -2925,9 +3512,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           req.params.id,
           name,
           buf,
-          {
-            artifactManifest,
-          },
+          { artifactManifest },
+          uploadProject?.metadata,
         );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
@@ -2940,7 +3526,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      const delProject = getProject(db, req.params.id);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -3238,9 +3825,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   };
 
   const composeDaemonSystemPrompt = async ({
+    agentId,
     projectId,
     skillId,
     designSystemId,
+    streamFormat,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -3300,7 +3889,54 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
+    // Thread the critique config plus the active design-system / skill data
+    // into the composer when critique is enabled. Without this the spawned
+    // child receives the legacy single-pass prompt and the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit. The composer
+    // itself ignores these fields when cfg.enabled is false, so the legacy
+    // path stays untouched.
+    const critiqueBrand = critiqueCfg.enabled
+      && typeof designSystemTitle === 'string'
+      && typeof designSystemBody === 'string'
+      ? { name: designSystemTitle, design_md: designSystemBody }
+      : undefined;
+    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+      ? { id: effectiveSkillId }
+      : undefined;
+    // Single-source-of-truth eligibility check. The composer downstream
+    // appends <CRITIQUE_RUN> instructions only when this check passes, and
+    // the spawn path routes runs through runOrchestrator(...) only when the
+    // SAME flag is true, so prompt and orchestrator stay in lockstep.
+    //
+    // Non-plain adapters (claude-stream-json, copilot-stream-json,
+    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
+    // protocol; the v1 critique parser only understands plain stdout. The
+    // spawn path falls through to legacy generation for those, so the
+    // panel addendum has to be suppressed here too: otherwise the model
+    // is instructed to emit Critique Theater tags that no orchestrator
+    // consumes.
+    const isMediaSurface =
+      skillMode === 'image' ||
+      skillMode === 'video' ||
+      skillMode === 'audio' ||
+      metadata?.kind === 'image' ||
+      metadata?.kind === 'video' ||
+      metadata?.kind === 'audio';
+    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
+    const critiqueShouldRun = critiqueCfg.enabled
+      && critiqueBrand !== undefined
+      && critiqueSkill !== undefined
+      && !isMediaSurface
+      && isPlainAdapter;
+    // Only thread the critique fields when the run is actually eligible;
+    // otherwise the composer's own internal eligibility check (cfg.enabled
+    // && brand && skill && !isMediaSurface) might still fire on
+    // non-plain adapters and we'd emit the panel for a run the orchestrator
+    // skips. Gating the threading itself keeps composer + orchestrator in
+    // exact lockstep regardless of which side enforces eligibility.
     const prompt = composeSystemPrompt({
+      agentId,
+      includeCodexImagegenOverride: false,
       skillBody,
       skillName,
       skillMode,
@@ -3310,12 +3946,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       craftSections,
       metadata,
       template,
+      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
+      critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
-    // `listSkills()` scan in `startChatRun`.
-    return { prompt, activeSkillDir };
+    // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
+    // the same panel-eligibility decision down to the spawn-path
+    // orchestrator gate so prompt and orchestrator stay in lockstep.
+    return { prompt, activeSkillDir, critiqueShouldRun };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -3369,12 +4010,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
     // agent then runs in whatever inherited dir, which still lets API
     // mode work but loses file-tool addressability.
+    // For git-linked projects (metadata.baseDir), use that folder directly
+    // so the agent writes back to the user's original source tree.
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
       try {
-        cwd = await ensureProject(PROJECTS_DIR, projectId);
-        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        const chatProject = getProject(db, projectId);
+        const chatMeta = chatProject?.metadata;
+        if (chatMeta?.baseDir) {
+          cwd = path.normalize(chatMeta.baseDir);
+          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+        } else {
+          cwd = await ensureProject(PROJECTS_DIR, projectId);
+          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        }
       } catch {
         cwd = null;
       }
@@ -3459,29 +4109,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const { prompt: daemonSystemPrompt, activeSkillDir } =
+    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
       await composeDaemonSystemPrompt({
+        agentId,
         projectId,
         skillId,
         designSystemId,
+        streamFormat: def?.streamFormat ?? 'plain',
       });
-    const instructionPrompt = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
-      .map((part) => (typeof part === 'string' ? part.trim() : ''))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-    const composed = [
-      instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
-        : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
-          : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
-            : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
-      safeImages.length
-        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
-        : '',
-    ].join('');
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -3494,10 +4129,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     //      path inside its working directory. We copy (not symlink) so
     //      the staged directory is a true write barrier — agents cannot
     //      mutate the shipped repo resource through their cwd.
-    //   2. `--add-dir` allowlist. Pass `SKILLS_DIR` and
-    //      `DESIGN_SYSTEMS_DIR` to Claude/Copilot so the absolute fallback
-    //      path in the preamble is reachable when staging fails (e.g. the
-    //      project has no on-disk cwd, or fs.cp errored).
+    //   2. `--add-dir` allowlist. For non-Codex agents, pass `SKILLS_DIR`
+    //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
+    //      preamble is reachable when staging fails (e.g. the project has
+    //      no on-disk cwd, or fs.cp errored). Codex treats `--add-dir`
+    //      entries as writable, so Codex receives only the narrow
+    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder
+    //      for allowlisted gpt-image image projects.
     //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
     //      `cwd: PROJECT_ROOT` — there the absolute path is already an
     //      in-cwd path, so neither (1) nor (2) is required for it to
@@ -3528,11 +4166,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
-    const extraAllowedDirs = [
-      SKILLS_DIR,
-      DESIGN_SYSTEMS_DIR,
-      ...linkedDirs,
-    ].filter((d) => fs.existsSync(d));
+    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
+      agentId,
+      projectRecord?.metadata,
+    );
+    if (codexGeneratedImagesDir) {
+      codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
+        codexGeneratedImagesDir,
+        {
+          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
+        },
+      );
+    }
+    const extraAllowedDirs = resolveChatExtraAllowedDirs({
+      agentId,
+      skillsDir: SKILLS_DIR,
+      designSystemsDir: DESIGN_SYSTEMS_DIR,
+      linkedDirs,
+      codexGeneratedImagesDir,
+    });
+    const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
+      agentId,
+      metadata: projectRecord?.metadata,
+      codexGeneratedImagesDir,
+      extraAllowedDirs,
+    });
+    const instructionPrompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt,
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+      finalPromptOverride: codexImagegenOverride,
+    });
+    const composed = [
+      instructionPrompt
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        : cwdHint
+          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          : linkedDirsHint
+            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            : '',
+      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      safeImages.length
+        ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
+        : '',
+    ].join('');
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -3576,7 +4253,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const resolvedBin = resolveAgentBin(agentId);
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
+
+    const resolvedBin = resolveAgentBin(agentId, configuredAgentEnv);
 
     const args = def.buildArgs(
       composed,
@@ -3676,7 +4361,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
-
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -3699,6 +4383,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     let child;
     let acpSession = null;
+    let writePromptToChildStdin = false;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -3713,6 +4398,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
             ...(def.env || {}),
           },
+          configuredAgentEnv,
         ),
         ...odMediaEnv,
       };
@@ -3748,7 +4434,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             );
           }
         });
-        child.stdin.end(composed, 'utf8');
+        writePromptToChildStdin = true;
       }
     } catch (err) {
       revokeToolToken('child_exit');
@@ -3764,11 +4450,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
     // Adapters that emit structured wrappers (claude-stream-json,
-    // copilot-stream-json, json-event-stream, acp-json-rpc, pi-rpc) fall
+    // qoder-stream-json, copilot-stream-json, json-event-stream,
+    // acp-json-rpc, pi-rpc) fall
     // through to the legacy single-pass code path below with a one-time
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
-    if (critiqueCfg.enabled) {
+    //
+    // Use critiqueShouldRun (computed in the prompt builder) instead of just
+    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
+    // panel addendum. Media surfaces and runs missing brand/skill context
+    // never get the panel prompt, so they must also skip the orchestrator
+    // and fall through to legacy generation; otherwise the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit.
+    if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
         if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
@@ -3785,7 +4479,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
-        const critiqueBus = { emit: (e) => send('agent', e) };
+        // Forward each CritiqueSseEvent on its own contract-defined channel
+        // (critique.run_started, critique.ship, critique.failed, ...) rather
+        // than wrapping the frame inside the legacy 'agent' channel. Clients
+        // that subscribe to the new event names see them directly with the
+        // contract payload as event.data.
+        const critiqueBus = { emit: (e) => send(e.event, e.data) };
 
         // Stderr forwarding and child.on('error') must be wired BEFORE the
         // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
@@ -3846,21 +4545,95 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // parser that turns stream_event objects into UI-friendly events. For
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
+    let agentStreamError = null;
+    // Tracks whether any stream the run is using actually emitted user-
+    // visible content. Only the streams routed through `sendAgentEvent`
+    // contribute to this flag; ACP sessions and plain stdout streams are
+    // covered by their own success/failure paths and the empty-output
+    // guard below skips them via `trackingSubstantiveOutput`.
+    let agentProducedOutput = false;
+    let trackingSubstantiveOutput = false;
+    // Event types that count as "the agent actually produced something the
+    // user can see." Lifecycle markers (`status`) and meter readings
+    // (`usage`) deliberately do NOT count — a model can emit token-usage
+    // numbers for an empty completion (issue #691), and a `status:running`
+    // banner without any follow-up is exactly the silent-failure shape we
+    // want to surface as failed instead of succeeded.
+    const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
+      'text_delta',
+      'thinking_delta',
+      'tool_use',
+      'tool_result',
+      'artifact',
+    ]);
+    const sendAgentEvent = (ev) => {
+      if (ev?.type === 'error') {
+        if (agentStreamError) return;
+        agentStreamError = String(ev.message || 'Agent stream error');
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
+          details: ev.raw ? { raw: ev.raw } : undefined,
+          retryable: false,
+        }));
+        return;
+      }
+      if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
+        agentProducedOutput = true;
+      }
+      send('agent', ev);
+    };
+
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'qoder-stream-json') {
+      trackingSubstantiveOutput = true;
+      const qoder = createQoderStreamHandler(sendAgentEvent);
+      child.stdout.on('data', (chunk) => qoder.feed(chunk));
+      child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
+      // Route through sendAgentEvent so that pi-rpc's error events
+      // (extension_error, auto_retry_end with success=false, and the
+      // message_update error delta) set agentStreamError and flip the
+      // run to `failed` on close — same path as qoder-stream-json and
+      // json-event-stream after issue #691. Also enables the
+      // substantive-output guard (agentProducedOutput) so a pi run
+      // that exits 0 without producing visible content is caught.
+      //
+      // attachPiRpcSession invokes its send callback with the two-arg
+      // channel/payload shape: send('agent', payload) for normal events
+      // and send('error', {message}) from fail(). sendAgentEvent
+      // expects a single event object, so we adapt at the call site:
+      //   - 'agent' channel → relay payload through sendAgentEvent
+      //   - 'error' channel → route through the daemon's error path
+      //     (createSseErrorPayload + send SSE + set agentStreamError)
+      trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        send,
+        send: (channel, payload) => {
+          if (channel === 'agent') {
+            sendAgentEvent(payload);
+          } else if (channel === 'error') {
+            if (agentStreamError) return;
+            agentStreamError = String(payload?.message || 'Pi session error');
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              agentStreamError,
+              { retryable: false },
+            ));
+          } else {
+            send(channel, payload);
+          }
+        },
+        imagePaths: def.supportsImagePaths ? safeImages : [],
+        uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({
@@ -3872,15 +4645,24 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         send,
       });
     } else if (def.streamFormat === 'json-event-stream') {
+      // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
+      // (now emitted as a real error event by json-event-stream.ts after
+      // #691) actually triggers `agentStreamError` instead of being
+      // forwarded as a no-op `agent` SSE event. This also wires the
+      // substantive-output tracking the close handler reads below.
+      trackingSubstantiveOutput = true;
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        (ev) => send('agent', ev),
+        sendAgentEvent,
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
+    // Wire the acpSession onto the run so cancel() can call abort()
+    // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
+    run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => send('stderr', { chunk }));
 
     child.on('error', (err) => {
@@ -3895,6 +4677,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (acpSession?.hasFatalError()) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
+      if (agentStreamError) {
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      // Empty-output guard: a clean `code === 0` exit on a stream we are
+      // tracking, with no error frame and no substantive event, means the
+      // run silently finished without producing anything visible. That used
+      // to be marked `succeeded` and rendered as an empty assistant turn —
+      // see issue #691, where OpenCode runs were ending in ~3s with no
+      // chat content and no error banner. Surface an explicit failure
+      // instead so the chat shows a clear reason. ACP sessions and plain
+      // stdout streams are gated out via `trackingSubstantiveOutput`;
+      // their success/failure determination lives elsewhere.
+      if (
+        code === 0 &&
+        !run.cancelRequested &&
+        trackingSubstantiveOutput &&
+        !agentProducedOutput
+      ) {
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code, signal);
+      }
       const status = run.cancelRequested
         ? 'canceled'
         : code === 0
@@ -3902,6 +4709,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : 'failed';
       design.runs.finish(run, status, code, signal);
     });
+    if (writePromptToChildStdin && child.stdin) {
+      child.stdin.end(composed, 'utf8');
+    }
   };
 
   app.post('/api/runs', (req, res) => {
@@ -3947,6 +4757,133 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
+  // ---- Connection tests (single-shot JSON; no SSE) ------------------------
+  // Settings dialog uses these to verify a config works without sending a
+  // real chat. Always return HTTP 200 with `ok: false` on upstream-caused
+  // failures so the web layer can render a categorized inline status without
+  // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
+  // request or daemon bug.
+  app.post('/api/test/connection', async (req, res) => {
+    const controller = new AbortController();
+    const abortIfRequestAborted = () => {
+      if ((req.aborted || !req.complete) && !res.writableEnded) {
+        controller.abort();
+      }
+    };
+    const abortIfResponseClosed = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    req.on('close', abortIfRequestAborted);
+    res.on('close', abortIfResponseClosed);
+    const body = req.body || {};
+    try {
+      if (body.mode === 'provider') {
+        const protocol = body.protocol;
+        if (
+          typeof protocol !== 'string' ||
+          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'protocol must be one of anthropic|openai|azure|google',
+          );
+        }
+        if (
+          typeof body.baseUrl !== 'string' ||
+          typeof body.apiKey !== 'string' ||
+          typeof body.model !== 'string' ||
+          !body.baseUrl.trim() ||
+          !body.apiKey.trim() ||
+          !body.model.trim()
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'baseUrl, apiKey, and model are required',
+          );
+        }
+        try {
+          const result = await testProviderConnection({
+            protocol,
+            baseUrl: body.baseUrl,
+            apiKey: body.apiKey,
+            model: body.model,
+            apiVersion:
+              typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
+        }
+      }
+
+      if (body.mode === 'agent') {
+        if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
+        }
+        try {
+          const def = getAgentDef(body.agentId);
+          const testStart = Date.now();
+          const safeModel =
+            def && typeof body.model === 'string'
+              ? isKnownModel(def, body.model)
+                ? body.model
+                : sanitizeCustomModel(body.model)
+              : undefined;
+          if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
+            return res.json({
+              ok: false,
+              kind: 'invalid_model_id',
+              latencyMs: Date.now() - testStart,
+              model: body.model.trim(),
+              agentName: def.name,
+              detail: 'Invalid custom model id. Use a model id that starts with a letter or number and contains no spaces.',
+            });
+          }
+          const safeReasoning =
+            def &&
+            typeof body.reasoning === 'string' &&
+            Array.isArray(def.reasoningOptions)
+              ? (def.reasoningOptions.find((r) => r.id === body.reasoning)?.id ?? undefined)
+              : undefined;
+          const result = await testAgentConnection({
+            agentId: body.agentId,
+            model: safeModel ?? undefined,
+            reasoning: safeReasoning,
+            agentCliEnv:
+              body.agentCliEnv && typeof body.agentCliEnv === 'object'
+                ? body.agentCliEnv
+                : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
+        }
+      }
+
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'mode must be one of provider|agent',
+      );
+    } finally {
+      req.off('close', abortIfRequestAborted);
+      res.off('close', abortIfResponseClosed);
+    }
+  });
+
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
@@ -3956,28 +4893,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
   const validateExternalApiBaseUrl = (baseUrl) => {
-    let parsed;
-    try {
-      parsed = new URL(baseUrl.replace(/\/+$/, ''));
-    } catch {
-      return { error: 'Invalid baseUrl' };
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return { error: 'Only http/https allowed' };
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    const isLoopback =
-      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-    if (
-      !isLoopback &&
-      (hostname.startsWith('169.254.') ||
-        hostname.startsWith('10.') ||
-        /^192\.168\./.test(hostname) ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
-    ) {
-      return { error: 'Internal IPs blocked', forbidden: true };
-    }
-    return { parsed };
+    return validateBaseUrl(baseUrl);
   };
 
   const proxyErrorCode = (status) => {

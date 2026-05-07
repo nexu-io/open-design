@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      pickFolder: () => Promise<string | null>;
+    };
+  }
+}
+
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
@@ -57,6 +66,7 @@ interface Props {
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -75,6 +85,28 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   other: 'newproj.tabOther',
 };
 
+export function defaultDesignSystemSelection(
+  defaultDesignSystemId: string | null,
+  designSystems: DesignSystemSummary[],
+): string[] {
+  if (!defaultDesignSystemId) return [];
+  return designSystems.some((d) => d.id === defaultDesignSystemId)
+    ? [defaultDesignSystemId]
+    : [];
+}
+
+export function buildDesignSystemCreateSelection(
+  showDesignSystemPicker: boolean,
+  selectedIds: string[],
+): { primary: string | null; inspirations: string[] } {
+  return showDesignSystemPicker
+    ? {
+        primary: selectedIds[0] ?? null,
+        inspirations: selectedIds.slice(1),
+      }
+    : { primary: null, inspirations: [] };
+}
+
 export function NewProjectPanel({
   skills,
   designSystems,
@@ -83,6 +115,7 @@ export function NewProjectPanel({
   promptTemplates,
   onCreate,
   onImportClaudeDesign,
+  onImportFolder,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -92,6 +125,8 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [baseDir, setBaseDir] = useState('');
+  const [importingFolder, setImportingFolder] = useState(false);
   const [tab, setTab] = useState<CreateTab>('prototype');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
@@ -99,7 +134,14 @@ export function NewProjectPanel({
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
   // duplicating state. Single-select coerces to length 0/1.
-  const [selectedDsIds, setSelectedDsIds] = useState<string[]>([]);
+  const initialDefaultDsSelection = useMemo(
+    () => defaultDesignSystemSelection(defaultDesignSystemId, designSystems),
+    [defaultDesignSystemId, designSystems],
+  );
+  const [selectedDsIds, setSelectedDsIds] = useState<string[]>(
+    () => initialDefaultDsSelection,
+  );
+  const [dsSelectionTouched, setDsSelectionTouched] = useState(false);
   const [dsMulti, setDsMulti] = useState(false);
 
   // Per-tab metadata. Tracked independently so switching tabs preserves
@@ -135,11 +177,41 @@ export function NewProjectPanel({
   // media surfaces use prompt templates instead — design tokens don't map
   // onto image/video/audio generations, and the picker just adds noise
   // there. Keep this list explicit so future tabs declare their intent.
-  const showDesignSystemPicker =
+  const tabSupportsDesignSystem =
     tab === 'prototype' ||
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
+  // Some skills (e.g. the Orbit briefings) ship their own complete visual
+  // language baked into example.html and explicitly opt out of DESIGN.md
+  // injection via `od.design_system.requires: false`. When such a skill is
+  // the active default for the current tab, hide the picker entirely so
+  // the user isn't asked to attach a brand we'll then ignore.
+  const tabDefaultSkillForcesNoDs = useMemo(() => {
+    const tabSkillId = ((): string | null => {
+      if (tab === 'prototype' || tab === 'live-artifact') {
+        const list = skills.filter((s) => s.mode === 'prototype');
+        return list.find((s) => s.defaultFor.includes('prototype'))?.id
+          ?? list[0]?.id ?? null;
+      }
+      if (tab === 'deck') {
+        const list = skills.filter((s) => s.mode === 'deck');
+        return list.find((s) => s.defaultFor.includes('deck'))?.id
+          ?? list[0]?.id ?? null;
+      }
+      return null;
+    })();
+    if (!tabSkillId) return false;
+    const s = skills.find((x) => x.id === tabSkillId);
+    return s ? s.designSystemRequired === false : false;
+  }, [tab, skills]);
+  const showDesignSystemPicker =
+    tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
+
+  useEffect(() => {
+    if (dsSelectionTouched) return;
+    setSelectedDsIds(initialDefaultDsSelection);
+  }, [dsSelectionTouched, initialDefaultDsSelection]);
 
   // When entering the template tab, snap to the first user-saved template
   // if there is one (and we don't already have a valid pick). The template
@@ -217,6 +289,11 @@ export function NewProjectPanel({
     });
   }
 
+  function handleDesignSystemChange(ids: string[]) {
+    setDsSelectionTouched(true);
+    setSelectedDsIds(ids);
+  }
+
   useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
@@ -244,8 +321,8 @@ export function NewProjectPanel({
     // and inspiration ids to empty there so the New Project panel can't
     // accidentally bind a stale DS that the user can no longer see in the
     // form (the picker is hidden for image/video/audio).
-    const primaryDs = showDesignSystemPicker ? selectedDsIds[0] ?? null : null;
-    const inspirations = showDesignSystemPicker ? selectedDsIds.slice(1) : [];
+    const { primary: primaryDs, inspirations } =
+      buildDesignSystemCreateSelection(showDesignSystemPicker, selectedDsIds);
     const promptTemplatePick =
       tab === 'image'
         ? imagePromptTemplate
@@ -289,6 +366,29 @@ export function NewProjectPanel({
       await onImportClaudeDesign(file);
     } finally {
       setImporting(false);
+    }
+  }
+
+  const hasElectronPicker =
+    typeof window !== 'undefined' && typeof window.electronAPI?.pickFolder === 'function';
+
+  async function handleOpenFolder() {
+    if (!onImportFolder) return;
+    let pathToOpen: string;
+    if (hasElectronPicker) {
+      const picked = await window.electronAPI!.pickFolder();
+      if (!picked) return;
+      pathToOpen = picked;
+    } else {
+      const trimmed = baseDir.trim();
+      if (!trimmed) return;
+      pathToOpen = trimmed;
+    }
+    setImportingFolder(true);
+    try {
+      await onImportFolder(pathToOpen);
+    } finally {
+      setImportingFolder(false);
     }
   }
 
@@ -354,7 +454,7 @@ export function NewProjectPanel({
             selectedIds={selectedDsIds}
             multi={dsMulti}
             onChangeMulti={setDsMulti}
-            onChange={setSelectedDsIds}
+            onChange={handleDesignSystemChange}
             loading={loading}
           />
         ) : null}
@@ -502,6 +602,30 @@ export function NewProjectPanel({
               </span>
             </button>
           </>
+        ) : null}
+        {onImportFolder ? (
+          <div className="newproj-open-folder">
+            {!hasElectronPicker ? (
+              <input
+                type="text"
+                className="newproj-folder-input"
+                placeholder="/path/to/project"
+                value={baseDir}
+                onChange={(e) => setBaseDir(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
+                disabled={importingFolder}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="ghost newproj-import"
+              disabled={(!hasElectronPicker && !baseDir.trim()) || importingFolder}
+              onClick={() => void handleOpenFolder()}
+            >
+              <Icon name="folder" size={13} />
+              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+            </button>
+          </div>
         ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
@@ -1592,9 +1716,9 @@ function MediaProjectOptions(props:
   );
 }
 
-function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
+export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
     video: new Set(['volcengine', 'hyperframes', 'grok']),
     audio: new Set(['minimax', 'fishaudio']),
   };

@@ -23,6 +23,7 @@ export type SidecarSource = (typeof SIDECAR_SOURCES)[keyof typeof SIDECAR_SOURCE
 
 export const SIDECAR_ENV = Object.freeze({
   BASE: "OD_SIDECAR_BASE",
+  DAEMON_CLI_PATH: "OD_DAEMON_CLI_PATH",
   DAEMON_PORT: "OD_PORT",
   IPC_BASE: "OD_SIDECAR_IPC_BASE",
   IPC_PATH: "OD_SIDECAR_IPC_PATH",

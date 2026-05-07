@@ -35,11 +35,14 @@ export const macResources = {
   icon: join(resourcesRoot, "mac", "icon.icns"),
   iconPng: join(resourcesRoot, "mac", "icon.png"),
   notarizeHook: join(resourcesRoot, "mac", "notarize.cjs"),
-  webStandaloneAfterPackHook: join(resourcesRoot, "mac", "web-standalone-after-pack.cjs"),
+  webStandaloneAfterPackHook: join(resourcesRoot, "web-standalone-after-pack.cjs"),
 } as const;
 
 export const winResources = {
   icon: join(resourcesRoot, "win", "icon.ico"),
+  sevenZipDll: join(resourcesRoot, "win", "7zip", "7z.dll"),
+  sevenZipExe: join(resourcesRoot, "win", "7zip", "7z.exe"),
+  webStandaloneAfterPackHook: join(resourcesRoot, "web-standalone-after-pack.cjs"),
 } as const;
 
 export const linuxResources = {

@@ -85,6 +85,20 @@ describe('resolveStandaloneServerEntry', () => {
       await rm(copiedRoot, { force: true, recursive: true });
     }
   });
+
+  it('can resolve a copied standalone resource without a web package root', async () => {
+    const copiedRoot = await mkdtemp(join(tmpdir(), 'open-design-web-copied-only-'));
+    const copiedWebRoot = join(copiedRoot, 'apps', 'web');
+
+    try {
+      await mkdir(copiedWebRoot, { recursive: true });
+      await writeFile(join(copiedWebRoot, 'server.js'), '', 'utf8');
+
+      expect(resolveStandaloneServerEntry(null, copiedRoot)).toBe(join(copiedWebRoot, 'server.js'));
+    } finally {
+      await rm(copiedRoot, { force: true, recursive: true });
+    }
+  });
 });
 
 describe('createStandaloneServerArgs', () => {

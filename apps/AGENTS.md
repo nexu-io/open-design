@@ -20,6 +20,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - App tests live in each app's `tests/` directory, sibling to `src/`; preserve source-relative subpaths inside `tests/` when useful.
 - Keep app `src/` directories source-only; do not add new `*.test.ts` or `*.test.tsx` files under `src/`.
+- `apps/web/tests/` contains web-owned Vitest tests and uses `*.test.ts` / `*.test.tsx`.
+- Playwright UI automation belongs in `e2e/ui/`; do not add Playwright suites or UI automation helper scripts under `apps/web`.
 
 ## Sidecar awareness
 

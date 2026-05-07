@@ -6,7 +6,7 @@ This doc describes the system topology, runtime modes, data flow, and file layou
 
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [acd]: https://github.com/VoltAgent/awesome-claude-design
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 
 ---
@@ -263,11 +263,38 @@ GET  /api/skills
 GET  /api/design-systems
 GET  /api/projects
 POST /api/projects
+POST /api/import/folder                    # see Folder import
 GET  /api/projects/:id/files
 POST /api/projects/:id/upload
 POST /api/chat              -> text/event-stream
 POST /api/artifacts/save
 ```
+
+### Folder import
+
+`POST /api/import/folder` creates a project rooted at an existing local
+folder instead of the default `.od/projects/<id>/`. The submitted
+`baseDir` is stored on `metadata.baseDir` and OD reads / writes directly
+inside it — there is no copy or shadow tree. The user owns the workspace
+and is responsible for their own version control (git, time machine,
+etc.), mirroring how Cursor / Claude Code / Aider behave.
+
+Safety:
+
+- The submitted `baseDir` is canonicalized via `realpath()` before
+  storage, so user-controlled symlinks cannot redirect later writes.
+- Standard `resolveSafe` / `sanitizePath` checks apply on every write —
+  `metadata.baseDir` only changes the project root, not the bounds check.
+- Imports inside `RUNTIME_DATA_DIR` (the daemon's own data directory) are
+  refused after symlink resolution.
+- The file panel hides the conventional build / install dirs
+  (`node_modules .git dist build .next .nuxt .turbo .cache .output out
+  coverage __pycache__ .venv vendor target .od .tmp`) so the listing
+  stays focused on design content.
+
+Request / response types: `ImportFolderRequest`, `ImportFolderResponse`
+in `@open-design/contracts`.
+
 
 Full schema in [`schemas/protocol.md`](schemas/protocol.md) (TODO: write).
 

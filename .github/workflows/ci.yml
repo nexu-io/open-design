@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browsers
+        run: pnpm -C e2e exec playwright install --with-deps chromium
+
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
       # sidecar/platform imports. It intentionally skips app outputs because
@@ -55,8 +58,8 @@ jobs:
       # app build, even when a developer only needs packages/tools.
       #
       # Fresh CI typecheck/test still need these specific generated declarations:
-      #   - `apps/daemon/dist/*.d.ts` for e2e runtime-adapter tests that import
-      #     daemon runtime modules
+      #   - `apps/daemon/dist/*.d.ts` for packaged/runtime consumers of the daemon
+      #     package export
       #   - `apps/desktop/dist/main/index.d.ts` for `apps/packaged` imports of
       #     `@open-design/desktop/main`
       #   - `apps/web/dist/sidecar/index.d.ts` for `apps/packaged` imports of
@@ -75,9 +78,14 @@ jobs:
       - name: Check repository layout policies
         run: pnpm guard
 
+      - name: Check i18n structure
+        run: pnpm i18n:check
+
       - name: Test
         run: |
           pnpm --filter @open-design/e2e test
+          pnpm -C e2e exec tsx scripts/playwright.ts clean
+          pnpm -C e2e exec playwright test -c playwright.config.ts
           pnpm --filter @open-design/contracts test
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
