@@ -1356,11 +1356,13 @@ async function renderMinimaxTTS(ctx, credentials) {
   // platform.minimaxi.com under voice management.
   const voiceId = (ctx.voice && ctx.voice.trim()) || 'male-qn-qingse';
 
+  const languageBoost = typeof ctx.language === 'string' ? ctx.language.trim() : '';
+
   const body = {
     model: wireModel,
     text,
     stream: false,
-    ...(ctx.language ? { language_boost: ctx.language } : {}),
+    ...(languageBoost ? { language_boost: languageBoost } : {}),
     voice_setting: {
       voice_id: voiceId,
       speed: 1.0,
