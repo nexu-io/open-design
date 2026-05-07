@@ -108,9 +108,11 @@ first is widened:
 services.open-design.webFrontend = {
   enable = true;
   host = "0.0.0.0";  # caddy listener
-  # Every external origin browsers will load the SPA from. Mode-the-
-  # daemon's same-origin gate matches the browser's Origin header
-  # verbatim, so list each scheme + hostname combo you actually use.
+  # Every external origin browsers will load the SPA from. The daemon
+  # matches each entry against the browser's `Origin` header AND adds
+  # its host:port to the `Host`-header allowlist (Caddy v2 reverse_proxy
+  # preserves the original Host upstream by default), so list each
+  # scheme + hostname combo you actually use.
   allowedOrigins = [
     "http://laptop.local:5174"
     "https://laptop.local:5174"

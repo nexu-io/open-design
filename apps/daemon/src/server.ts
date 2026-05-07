@@ -935,11 +935,19 @@ function isLoopbackPeerAddress(address) {
 // (`scheme://host[:port]`) the daemon should treat as same-site for
 // /api/* requests. Populated by Nix module deployments where caddy
 // fronts the SPA on a non-loopback host (services.open-design.webFrontend
-// .host + .allowedOrigins). Each entry is parsed via `new URL()` and
-// normalized with `.origin` so the stored value matches the canonical
-// form browsers put on the Origin header. Malformed entries are dropped
-// with a warning rather than failing the boot — this is a defense in
-// depth allowlist, not a primary auth surface.
+// .host + .allowedOrigins). Returns an array of {origin, host} records:
+//   * `origin` matches the browser's `Origin` header (canonical form
+//     produced by `URL.origin`, e.g. `http://laptop.local:5174`).
+//   * `host` matches the upstream `Host` authority (`URL.host`, e.g.
+//     `laptop.local:5174`). Caddy v2's reverse_proxy preserves the
+//     original Host header by default, so the daemon receives the
+//     browser-side authority — without widening allowedHosts in
+//     isLocalSameOrigin() the request is 403'd at the Host check
+//     before the Origin check runs.
+//
+// Malformed entries are dropped with a warning rather than failing
+// boot — this is a defense-in-depth allowlist, not a primary auth
+// surface.
 //
 // Scope note: this widens only buildAllowedOrigins() and
 // isLocalSameOrigin(). It does NOT widen requireLocalDaemonRequest()
@@ -967,7 +975,7 @@ function parseAllowedWebOrigins(envValue) {
         console.warn(`[od] OD_WEB_ORIGINS: ignoring "${trimmed}" — must be a bare scheme://host[:port] origin`);
         continue;
       }
-      out.push(parsed.origin);
+      out.push({ origin: parsed.origin, host: parsed.host });
     } catch {
       console.warn(`[od] OD_WEB_ORIGINS: ignoring "${trimmed}" — failed to parse as URL`);
     }
@@ -1380,7 +1388,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       // Origins explicitly declared by an operator who fronts the SPA
       // on a non-loopback host (e.g. caddy bound to 0.0.0.0 reachable
       // via http://laptop.local:5174). Sourced from OD_WEB_ORIGINS.
-      ...extraOrigins,
+      ...extraOrigins.map((e) => e.origin),
     ]);
   }
 
@@ -4989,12 +4997,14 @@ export function isLocalSameOrigin(req, port) {
   if (webPort && webPort !== port) ports.push(webPort);
   const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
   const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-  const allowedHosts = new Set(
-    ports.flatMap((p) => [
+  const extraOrigins = parseAllowedWebOrigins(process.env.OD_WEB_ORIGINS);
+  const allowedHosts = new Set([
+    ...ports.flatMap((p) => [
       ...loopbackHosts.map((h) => `${h}:${p}`),
       `${bindHost}:${p}`,
     ]),
-  );
+    ...extraOrigins.map((e) => e.host),
+  ]);
 
   // Reject unknown Host first (DNS rebinding / Host header attack)
   if (!allowedHosts.has(host)) return false;
@@ -5003,13 +5013,12 @@ export function isLocalSameOrigin(req, port) {
   if (origin == null || origin === '') return true;
 
   const schemes = ['http', 'https'];
-  const extraOrigins = parseAllowedWebOrigins(process.env.OD_WEB_ORIGINS);
   const allowedOrigins = new Set([
     ...ports.flatMap((p) => [
       ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
       ...schemes.map((s) => `${s}://${bindHost}:${p}`),
     ]),
-    ...extraOrigins,
+    ...extraOrigins.map((e) => e.origin),
   ]);
   return allowedOrigins.has(String(origin));
 }

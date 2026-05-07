@@ -196,12 +196,15 @@ in {
         without being 403'd by the daemon's CSRF-style gate.
 
         Each entry is forwarded to the daemon via the `OD_WEB_ORIGINS`
-        env var and matched against the browser's `Origin` header
-        verbatim, so list every hostname/scheme combo a user might
-        access (LAN IP, mDNS name, Tailscale name, http and https
-        separately if both are reachable). Loopback origins are
-        already accepted unconditionally — do not bother listing
-        them here.
+        env var. The daemon both compares it verbatim against the
+        browser's `Origin` header AND admits its host:port to the
+        `Host`-header allowlist (Caddy v2 reverse_proxy preserves the
+        original Host upstream by default, so widening only the Origin
+        check would still 403 same-site GETs at the Host check). List
+        every hostname/scheme combo a user might access (LAN IP, mDNS
+        name, Tailscale name, http and https separately if both are
+        reachable). Loopback origins are already accepted
+        unconditionally — do not bother listing them here.
       '';
       example = ["http://laptop.local:5174" "https://laptop.local:5174"];
     };

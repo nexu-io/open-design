@@ -178,8 +178,10 @@ Environment:
                    the daemon should accept as same-site for /api/* requests, in
                    addition to its built-in loopback set. Required when a non-loopback
                    static server fronts the SPA — without it, browsers will see 403s on
-                   PUT/POST. Each entry must be a bare origin (no path/query/credentials)
-                   and is matched verbatim against the browser's Origin header.
+                   PUT/POST. Each entry must be a bare origin (no path/query/credentials);
+                   the daemon both compares it verbatim against the browser's \`Origin\`
+                   header AND admits its host:port to the \`Host\`-header allowlist (Caddy v2
+                   reverse_proxy preserves the original Host upstream by default).
                    Example: OD_WEB_ORIGINS=http://laptop.local:5174,https://laptop.local:5174
                    Note: this widens only the general /api gate. Connector-credential and
                    live-artifact preview/refresh routes remain strictly loopback-only.
