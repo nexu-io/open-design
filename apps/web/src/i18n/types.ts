@@ -93,6 +93,23 @@ export interface Dict {
   'settings.rescanRunning': string;
   'settings.rescanSuccess': string;
   'settings.rescanFailed': string;
+  'settings.test': string;
+  'settings.testTitle': string;
+  'settings.testRunning': string;
+  'settings.testCancel': string;
+  'settings.testSuccessApi': string;
+  'settings.testSuccessCli': string;
+  'settings.testAuthFailed': string;
+  'settings.testForbidden': string;
+  'settings.testNotFoundModel': string;
+  'settings.testInvalidModelId': string;
+  'settings.testInvalidBaseUrl': string;
+  'settings.testRateLimited': string;
+  'settings.testUpstream': string;
+  'settings.testTimeout': string;
+  'settings.testAgentMissing': string;
+  'settings.testAgentSpawn': string;
+  'settings.testUnknown': string;
   'settings.noAgentsDetected': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
@@ -349,6 +366,8 @@ export interface Dict {
   'promptTemplates.openSource': string;
   'promptTemplates.openFullscreen': string;
   'promptTemplates.closeFullscreen': string;
+  'promptTemplates.allSources': string;
+  'promptTemplates.sourceFilterAria': string;
   'promptTemplates.retry': string;
 
   // Designs tab
@@ -396,6 +415,7 @@ export interface Dict {
   'examples.modePrototypeMobile': string;
   'examples.modeDeck': string;
   'examples.modeDocument': string;
+  'examples.modeOrbit': string;
   'examples.scenarioGeneral': string;
   'examples.scenarioEngineering': string;
   'examples.scenarioProduct': string;

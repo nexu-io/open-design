@@ -21,6 +21,7 @@ import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
+import { AppChromeHeader } from './AppChromeHeader';
 import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
@@ -438,28 +439,69 @@ export function EntryView({
     };
   }, [avatarMenuOpen]);
 
-  return (
-    <div
-      className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
-      style={{
-        gridTemplateColumns: petRailHidden
-          ? `${sidebarWidth}px 1fr`
-          : `${sidebarWidth}px 1fr auto`,
-      }}
-    >
-      <aside className="entry-side" style={{ width: sidebarWidth }}>
-        <div className="entry-brand">
-          <span className="entry-brand-mark" aria-hidden>
-            <img src="/logo.svg" alt="" className="brand-mark-img" draggable={false} />
-          </span>
-          <div className="entry-brand-text">
-            <div className="entry-brand-title-row">
-              <span className="entry-brand-title">{t('app.brand')}</span>
-              <span className="entry-brand-pill">{t('app.brandPill')}</span>
-            </div>
-            <div className="entry-brand-subtitle">{t('app.brandSubtitle')}</div>
-          </div>
+  const avatarMenu = (
+    <div className="avatar-menu" ref={avatarMenuRef}>
+      <button
+        type="button"
+        className="settings-icon-btn"
+        onClick={() => setAvatarMenuOpen((v) => !v)}
+        title={t('entry.openSettingsTitle')}
+        aria-label={t('entry.openSettingsAria')}
+        aria-haspopup="menu"
+        aria-expanded={avatarMenuOpen}
+      >
+        <Icon name="settings" size={17} />
+      </button>
+      {avatarMenuOpen ? (
+        <div className="avatar-popover" role="menu">
+          <button
+            type="button"
+            className="avatar-item"
+            onClick={() => {
+              setPetRailHidden(!petRailHidden);
+              setAvatarMenuOpen(false);
+            }}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
+            </span>
+            <span>
+              {petRailHidden
+                ? t('pet.railShow')
+                : t('pet.railHide')}
+            </span>
+          </button>
+          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
+          <button
+            type="button"
+            className="avatar-item"
+            onClick={() => {
+              setAvatarMenuOpen(false);
+              onOpenSettings();
+            }}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <Icon name="settings" size={14} />
+            </span>
+            <span>{t('avatar.settings')}</span>
+          </button>
         </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div className="entry-shell">
+      <AppChromeHeader actions={avatarMenu} />
+      <div
+        className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
+        style={{
+          gridTemplateColumns: petRailHidden
+            ? `${sidebarWidth}px 1fr`
+            : `${sidebarWidth}px 1fr auto`,
+        }}
+      >
+      <aside className="entry-side" style={{ width: sidebarWidth }}>
         <NewProjectPanel
           skills={skills}
           designSystems={designSystems}
@@ -516,6 +558,17 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
+          <a
+            className="foot-pill"
+            href="https://x.com/nexudotio"
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Follow @nexudotio on X for releases and milestones"
+            aria-label="Follow @nexudotio on X"
+          >
+            <Icon name="external-link" size={12} />
+            <span>Follow @nexudotio</span>
+          </a>
           <LanguageMenu />
         </div>
         <button
@@ -554,65 +607,6 @@ export function EntryView({
               label={t('entry.tabVideoTemplates')}
               onClick={setTopTab}
             />
-          </div>
-          <div className="entry-header-right">
-            {/* Avatar dropdown — mirrors the project-view AvatarMenu so
-                users get the same anchor for cross-cutting options
-                (open settings, hide / show the pet rail). */}
-            <div className="avatar-menu" ref={avatarMenuRef}>
-              <button
-                type="button"
-                className="avatar-btn"
-                onClick={() => setAvatarMenuOpen((v) => !v)}
-                title={t('entry.openSettingsTitle')}
-                aria-label={t('entry.openSettingsAria')}
-                aria-haspopup="menu"
-                aria-expanded={avatarMenuOpen}
-              >
-                <img
-                  src="/avatar.png"
-                  alt=""
-                  aria-hidden
-                  draggable={false}
-                  className="avatar-btn-photo"
-                />
-              </button>
-              {avatarMenuOpen ? (
-                <div className="avatar-popover" role="menu">
-                  <button
-                    type="button"
-                    className="avatar-item"
-                    onClick={() => {
-                      setPetRailHidden(!petRailHidden);
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span className="avatar-item-icon" aria-hidden>
-                      <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
-                    </span>
-                    <span>
-                      {petRailHidden
-                        ? t('pet.railShow')
-                        : t('pet.railHide')}
-                    </span>
-                  </button>
-                  <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-                  <button
-                    type="button"
-                    className="avatar-item"
-                    onClick={() => {
-                      setAvatarMenuOpen(false);
-                      onOpenSettings();
-                    }}
-                  >
-                    <span className="avatar-item-icon" aria-hidden>
-                      <Icon name="settings" size={14} />
-                    </span>
-                    <span>{t('avatar.settings')}</span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
           </div>
         </div>
         <div className="entry-tab-content">
@@ -680,6 +674,7 @@ export function EntryView({
           onHide={() => setPetRailHidden(true)}
         />
       )}
+      </div>
       {previewSystem ? (
         <DesignSystemPreviewModal
           system={previewSystem}

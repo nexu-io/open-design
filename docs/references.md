@@ -23,7 +23,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 - **What it is:** The main open-source Claude Design alternative. MIT-licensed. Electron desktop app. React 19 + Vite + Tailwind v4. [`@mariozechner/pi-ai`][piai] for multi-provider. SQLite for version history. 12 built-in design skill modules. HTML/JSX sandboxed iframe preview. Exports HTML/PDF/PPTX/ZIP/MD. 15 templates. Comment mode + slider controls + multi-frame preview.
 
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 - **Why it matters:** Direct competitor; most overlap with what we're building.
 - **What we borrow:**
   - UI concepts: **comment mode** (click-to-pin element edits), **tweak sliders** (agent-emitted parameters), **multi-frame preview** (desktop/tablet/phone).

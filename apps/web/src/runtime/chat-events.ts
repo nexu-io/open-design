@@ -15,4 +15,3 @@ export function appendErrorStatusEvent(message: ChatMessage, detail: string): Ch
     events: [...events, { kind: 'status', label: 'error', detail }],
   };
 }
-

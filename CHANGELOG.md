@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-06
+
+0.4.1 is the startup hotfix for the broken 0.4.0 desktop packages. It restores packaged app startup on macOS and Windows, adds release validation so the failure mode is caught before publication, and includes the small UI, agent, documentation, i18n, and craft updates that landed while the hotfix was being verified.
+
+### Added
+
+#### Web / UI
+- **Manual edit mode** for direct artifact edits. ([#620])
+- **Cmd/Ctrl+P quick file switcher** for faster project navigation. ([#556])
+- Resizable chat panel. ([#563])
+
+#### Daemon and agents
+- Added model name to PI initial status and RPC abort on cancel. ([#618])
+
+#### Craft and i18n
+- Craft `accessibility-baseline` module with opt-ins for dashboard, HR onboarding, and mobile onboarding. ([#587])
+- Craft `rtl-and-bidi` module so artifacts handle Arabic, Hebrew, and Persian content more reliably. ([#595])
+- Added i18n structure checks. ([#608])
+
+### Changed
+
+- Updated README first-PR links so `help-wanted` issues are surfaced alongside `good-first-issue`. ([#605])
+
+### Fixed
+
+#### Packaging
+- Fixed packaged desktop startup by building `@open-design/contracts` to `dist/*.mjs` + `.d.ts`, pointing its exports at compiled JavaScript, and building contracts before all packaged lanes pack workspace tarballs. ([#577])
+- Added packaged runtime beta gating so release candidates install, start, inspect `/api/health`, collect logs, stop, and uninstall before promotion. ([#637])
+
+#### Daemon and agents
+- Added the required stdio MCP server env field and recover from `-32602` on `session/set_model`. ([#627])
+- Normalized ACP `mcpServers` to the stdio shape for Kimi/Hermes ACP. ([#612])
+- Fixed agent CLI configuration and workspace focus mode. ([#604])
+
+#### Web and desktop
+- Preserved error messages across conversation reloads. ([#623])
+- Kept chat recoverable after conversation load failures. ([#637])
+- Honored native macOS quit behavior in the packaged desktop shell. ([#637])
+
+### Documentation
+
+- Documented `OD_DATA_DIR` and migration from `.od/` to the Desktop app. ([#570])
+- Added Chinese (Simplified) QUICKSTART. ([#578])
+- Backported missing zh-TW README sections from the English README. ([#586])
+- Synced and improved the Korean README. ([#619])
+
+### Internal
+
+- Refined release workflows, CI scope, e2e layout, and packaged runtime smoke coverage for beta validation. ([#637])
+- Refreshed generated GitHub metrics. ([#592])
+
 ## [0.4.0] - 2026-05-05
 
 A multi-protocol leap: Open Design now ships as an MCP server, ships Critique Theater (Design Jury) Phase 4, gains live-reload + Tweaks mode + live artifacts in the preview pane, and adds five new agent / runtime adapters. 71 merged PRs from 40+ contributors over two days. Linux AppImage packaging landed in tooling, but the stable Linux artifact is deferred from 0.4.0 while containerized release packaging is hardened.
@@ -365,7 +416,8 @@ First public release of Open Design — a local-first, open-source alternative t
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])
 
-[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.4.0...HEAD
+[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.4.1...HEAD
+[0.4.1]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.4.1
 [0.4.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.4.0
 [0.3.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.3.0
 [0.2.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.2.0
@@ -609,3 +661,22 @@ First public release of Open Design — a local-first, open-source alternative t
 [#535]: https://github.com/nexu-io/open-design/pull/535
 [#548]: https://github.com/nexu-io/open-design/pull/548
 [#549]: https://github.com/nexu-io/open-design/pull/549
+[#556]: https://github.com/nexu-io/open-design/pull/556
+[#563]: https://github.com/nexu-io/open-design/pull/563
+[#570]: https://github.com/nexu-io/open-design/pull/570
+[#577]: https://github.com/nexu-io/open-design/pull/577
+[#578]: https://github.com/nexu-io/open-design/pull/578
+[#586]: https://github.com/nexu-io/open-design/pull/586
+[#587]: https://github.com/nexu-io/open-design/pull/587
+[#592]: https://github.com/nexu-io/open-design/pull/592
+[#595]: https://github.com/nexu-io/open-design/pull/595
+[#604]: https://github.com/nexu-io/open-design/pull/604
+[#605]: https://github.com/nexu-io/open-design/pull/605
+[#608]: https://github.com/nexu-io/open-design/pull/608
+[#612]: https://github.com/nexu-io/open-design/pull/612
+[#618]: https://github.com/nexu-io/open-design/pull/618
+[#619]: https://github.com/nexu-io/open-design/pull/619
+[#620]: https://github.com/nexu-io/open-design/pull/620
+[#623]: https://github.com/nexu-io/open-design/pull/623
+[#627]: https://github.com/nexu-io/open-design/pull/627
+[#637]: https://github.com/nexu-io/open-design/pull/637

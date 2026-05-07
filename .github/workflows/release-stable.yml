@@ -73,8 +73,8 @@ jobs:
       # `scripts/postinstall.mjs` auto-builds `packages/*` and `tools/*`, but
       # `apps/daemon` and `apps/desktop` are not in that list. On a fresh clone
       # (every CI run), workspace typecheck fails because:
-      #   - `e2e/scripts/runtime-adapter.e2e.live.test.ts` imports types from
-      #     `apps/daemon/dist/*.js`
+      #   - packaged/runtime consumers resolve the daemon package export through
+      #     generated `apps/daemon/dist/*.d.ts`
       #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
       #     which resolves to `apps/desktop/dist/main/index.d.ts`
       # Build them explicitly here. Keeps the root `typecheck` script untouched.

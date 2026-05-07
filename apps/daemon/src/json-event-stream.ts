@@ -20,6 +20,32 @@ function stringifyContent(value) {
   }
 }
 
+function extractErrorMessage(value, fallback) {
+  if (typeof value === 'string') {
+    const parsed = safeParseJson(value);
+    if (parsed && typeof parsed === 'object') {
+      return extractErrorMessage(parsed, value);
+    }
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    if (typeof value.detail === 'string' && value.detail) return value.detail;
+    if (typeof value.message === 'string' && value.message) {
+      return extractErrorMessage(value.message, value.message);
+    }
+    if (typeof value.error === 'string' && value.error) return value.error;
+    if (value.error && typeof value.error === 'object') {
+      return extractErrorMessage(value.error, fallback);
+    }
+    if (value.data && typeof value.data === 'object') {
+      const dataMessage = extractErrorMessage(value.data, '');
+      if (dataMessage) return dataMessage;
+    }
+    if (typeof value.name === 'string' && value.name) return value.name;
+  }
+  return fallback;
+}
+
 function formatOpenCodeUsage(tokens) {
   if (!tokens || typeof tokens !== 'object') return null;
   const usage = {};
@@ -83,11 +109,22 @@ function handleOpenCodeEvent(obj, onEvent, state) {
   }
 
   if (obj.type === 'error') {
-    const message =
-      (obj.error && typeof obj.error === 'object' && obj.error.data?.message) ||
-      (obj.error && typeof obj.error === 'object' && obj.error.name) ||
-      'OpenCode error';
-    onEvent({ type: 'raw', line: stringifyContent({ type: 'error', message }) });
+    // OpenCode emits structured error frames on stdout (e.g. provider auth
+    // failures, network errors, schema mismatches) and still exits 0. Surface
+    // them as proper `error` events so server.ts's `sendAgentEvent` wrapper
+    // can flip the run to `failed` and forward a visible SSE error to the
+    // chat UI. Previously we downgraded these to `type:'raw'`, which is not
+    // rendered as an assistant message — the run looked like a fast clean
+    // success while the user actually got nothing back. See issue #691.
+    //
+    // Shape mirrors the qoder-stream contract (`{type, message, raw}`) so
+    // the daemon's existing error-handling path recognises it without
+    // further wiring.
+    const message = extractErrorMessage(
+      obj.error ?? obj.message,
+      'OpenCode error',
+    );
+    onEvent({ type: 'error', message, raw: stringifyContent(obj) });
     return true;
   }
 
@@ -206,6 +243,28 @@ function handleCursorEvent(obj, onEvent, state) {
 function handleCodexEvent(obj, onEvent, state) {
   if (!obj || typeof obj !== 'object') return false;
 
+  if (obj.type === 'error') {
+    if (!state.codexErrorEmitted) {
+      state.codexErrorEmitted = true;
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.message ?? obj.error, 'Codex error'),
+      });
+    }
+    return true;
+  }
+
+  if (obj.type === 'turn.failed') {
+    if (!state.codexErrorEmitted) {
+      state.codexErrorEmitted = true;
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.error ?? obj.message, 'Codex turn failed'),
+      });
+    }
+    return true;
+  }
+
   if (obj.type === 'thread.started') {
     onEvent({ type: 'status', label: 'initializing' });
     return true;
@@ -290,6 +349,7 @@ export function createJsonEventStreamHandler(kind, onEvent) {
     cursorTextSoFar: '',
     openCodeToolUses: new Set(),
     codexToolUses: new Set(),
+    codexErrorEmitted: false,
   };
 
   function handleLine(line) {

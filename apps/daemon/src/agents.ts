@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
+import { wellKnownUserToolchainBins } from '@open-design/platform';
 import { detectAcpModels } from './acp.js';
 import { parsePiModels } from './pi-rpc.js';
 
@@ -44,15 +45,19 @@ const agentCapabilities = new Map();
 // user's local CLI config wins.
 //
 // `extraAllowedDirs` is a list of absolute directories the agent must be
-// permitted to read files from (skill seeds, design-system specs) that live
-// outside the project cwd. Currently only Claude Code wires this through
-// (`--add-dir`); other agents either inherit broader access or run with cwd
-// boundaries we can't widen via flags.
+// permitted to read files from (skill seeds, design-system specs, narrowly
+// scoped tool output dirs) that live outside the project cwd. Agents with a
+// documented access-widening flag wire this through (`--add-dir`); the rest
+// either inherit broader access or run with cwd boundaries we can't widen via
+// flags.
 //
 // `streamFormat` hints to the daemon how to interpret stdout:
 //   - 'claude-stream-json' : line-delimited JSON emitted by Claude Code's
 //     `--output-format stream-json`. Daemon parses it into typed events
 //     (text / thinking / tool_use / tool_result / status) for the UI.
+//   - 'qoder-stream-json' : line-delimited JSON emitted by Qoder CLI's
+//     `--output-format stream-json`. Daemon parses Qoder's wrappers into
+//     typed events while preserving Qoder-specific result metadata.
 //   - 'acp-json-rpc'       : ACP JSON-RPC over stdio. Daemon drives the
 //     initialize/session/new/session/prompt lifecycle and maps updates into
 //     typed UI events.
@@ -214,7 +219,7 @@ export const AGENT_DEFS = [
     buildArgs: (
       _prompt,
       _imagePaths,
-      _extra,
+      extraAllowedDirs = [],
       options = {},
       runtimeContext = {},
     ) => {
@@ -232,6 +237,12 @@ export const AGENT_DEFS = [
       }
       if (runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && d.length > 0,
+      );
+      for (const d of dirs) {
+        args.push('--add-dir', d);
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
@@ -488,6 +499,60 @@ export const AGENT_DEFS = [
     streamFormat: 'plain',
   },
   {
+    id: 'qoder',
+    name: 'Qoder CLI',
+    bin: 'qodercli',
+    versionArgs: ['--version'],
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'lite', label: 'Lite' },
+      { id: 'efficient', label: 'Efficient' },
+      { id: 'auto', label: 'Auto' },
+      { id: 'performance', label: 'Performance' },
+      { id: 'ultimate', label: 'Ultimate' },
+    ],
+    // Qoder print mode exits after the turn. Deliver the composed prompt via
+    // stdin to avoid argv length limits, while using stream-json so the daemon
+    // can surface text and usage incrementally. `--yolo` is Qoder's documented
+    // non-interactive approval flag, and `-w` selects the workspace.
+    // Authentication remains Qoder CLI-owned: users can rely on persisted
+    // `qodercli login` state, or launch the daemon with
+    // QODER_PERSONAL_ACCESS_TOKEN for automation. Do not add that token to
+    // static adapter env; unlike Gemini's workspace trust flag it is a user
+    // secret and already flows through the inherited process environment.
+    buildArgs: (
+      _prompt,
+      imagePaths,
+      extraAllowedDirs = [],
+      options = {},
+      runtimeContext = {},
+    ) => {
+      const args = [
+        '-p',
+        '--output-format',
+        'stream-json',
+        '--yolo',
+      ];
+      if (runtimeContext.cwd) {
+        args.push('-w', runtimeContext.cwd);
+      }
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && path.isAbsolute(d),
+      );
+      const attachments = (imagePaths || []).filter(
+        (p) => typeof p === 'string' && path.isAbsolute(p),
+      );
+      for (const d of dirs) args.push('--add-dir', d);
+      for (const p of attachments) args.push('--attachment', p);
+      return args;
+    },
+    promptViaStdin: true,
+    streamFormat: 'qoder-stream-json',
+  },
+  {
     id: 'copilot',
     name: 'GitHub Copilot CLI',
     bin: 'copilot',
@@ -719,22 +784,12 @@ export const AGENT_DEFS = [
   },
 ];
 
-function existingDirsUnder(root, segments = []) {
-  const dirs = [];
-  let entries = [];
-  try {
-    entries = readdirSync(root, { withFileTypes: true });
-  } catch {
-    return dirs;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const full = path.join(root, entry.name, ...segments);
-    if (existsSync(full)) dirs.push(full);
-  }
-  return dirs;
-}
-
+// Toolchain dir computation lives in @open-design/platform so the daemon
+// resolver and the packaged sidecar PATH builder can never drift again
+// (issue #442). See @open-design/platform's wellKnownUserToolchainBins
+// for the canonical search list. The wrapper here just preserves the
+// OD_AGENT_HOME test hook and the per-home cache that reduces
+// filesystem scans on every resolveOnPath() call.
 const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
 let cachedToolchainHome = null;
 let cachedToolchainDirs = null;
@@ -753,27 +808,17 @@ function userToolchainDirs() {
   }
   cachedToolchainHome = home;
   cachedToolchainDirsAt = now;
-  cachedToolchainDirs = [
-    path.join(home, '.local', 'bin'),
-    path.join(home, '.opencode', 'bin'),
-    path.join(home, '.bun', 'bin'),
-    path.join(home, '.volta', 'bin'),
-    path.join(home, '.asdf', 'shims'),
-    path.join(home, 'Library', 'pnpm'),
-    path.join(home, '.cargo', 'bin'),
-    ...(process.platform !== 'win32' && !homeOverride
-      ? ['/opt/homebrew/bin', '/usr/local/bin']
-      : []),
-    ...existingDirsUnder(
-      path.join(home, '.local', 'share', 'mise', 'installs', 'node'),
-      ['bin'],
-    ),
-    ...existingDirsUnder(path.join(home, '.nvm', 'versions', 'node'), ['bin']),
-    ...existingDirsUnder(
-      path.join(home, '.local', 'share', 'fnm', 'node-versions'),
-      ['installation', 'bin'],
-    ),
-  ];
+  // When OD_AGENT_HOME is set, scope the search strictly to the override
+  // home: skip Homebrew / /usr/local *and* pass an empty env so that a
+  // developer or CI runner with NPM_CONFIG_PREFIX / npm_config_prefix
+  // exported can't leak the real machine's <prefix>/bin into a sandboxed
+  // detection run. Without this the agents.test.ts cases that build a
+  // tmp home would be machine-environment-dependent.
+  cachedToolchainDirs = wellKnownUserToolchainBins({
+    home,
+    includeSystemBins: process.platform !== 'win32' && !homeOverride,
+    env: homeOverride ? {} : process.env,
+  });
   return cachedToolchainDirs;
 }
 

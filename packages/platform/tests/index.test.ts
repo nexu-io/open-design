@@ -1,3 +1,7 @@
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +10,7 @@ import {
   createProcessStampArgs,
   matchesStampedProcess,
   readProcessStampFromCommand,
+  wellKnownUserToolchainBins,
   type ProcessStampContract,
 } from "../src/index.js";
 
@@ -296,5 +301,198 @@ describe("createPackageManagerInvocation", () => {
       "/c",
       '"pnpm --filter @open-design/desktop build"',
     ]);
+  });
+});
+
+describe("wellKnownUserToolchainBins", () => {
+  // Filesystem-backed cases use a sandboxed home so we don't depend on the
+  // real machine's toolchain layout. PATHEXT-style Windows quirks aren't
+  // relevant here — the helper returns directories, not resolved binaries.
+  it("returns the documented user-level CLI install locations under home", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-home-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".local", "bin"));
+      expect(dirs).toContain(join(home, ".opencode", "bin"));
+      expect(dirs).toContain(join(home, ".bun", "bin"));
+      expect(dirs).toContain(join(home, ".volta", "bin"));
+      expect(dirs).toContain(join(home, ".asdf", "shims"));
+      expect(dirs).toContain(join(home, "Library", "pnpm"));
+      expect(dirs).toContain(join(home, ".cargo", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Regression for #442. The two dominant non-canonical npm prefixes used
+  // by sudo-free tutorials (~/.npm-global, ~/.npm-packages) must always
+  // appear, otherwise GUI-launched daemons miss `npm i -g`'d CLIs.
+  it("includes both ~/.npm-global/bin and ~/.npm-packages/bin (issue #442)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-npm-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".npm-global", "bin"));
+      expect(dirs).toContain(join(home, ".npm-packages", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("appends $NPM_CONFIG_PREFIX/bin when set so corporate prefixes resolve", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(customPrefix, "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to lower-case npm_config_prefix when NPM_CONFIG_PREFIX is absent", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-lc-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-lc-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { npm_config_prefix: customPrefix },
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(customPrefix, "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it("does not append a prefix entry when neither env var is set", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-noprefix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      // The bare `/bin` suffix would be ambiguous, but we can at least
+      // confirm nothing equal to "/bin" leaked in from a `join(undefined,
+      // "bin")`-style bug.
+      expect(dirs).not.toContain("/bin");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // PR #614 review (mrcfps): npm's own resolution order is env > .npmrc
+  // > default, so when the user has explicitly configured a prefix via
+  // $NPM_CONFIG_PREFIX, that location holds the *current* `npm i -g`
+  // installs and should outrank every conventional location below —
+  // including ~/.local/bin (which is also a shared pip --user / cargo
+  // install dumping ground). Conventional locations frequently retain
+  // *stale* binaries from an older prefix.
+  it("places $NPM_CONFIG_PREFIX/bin before every conventional location, including ~/.local/bin", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-order-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-order-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      const explicitIdx = dirs.indexOf(join(customPrefix, "bin"));
+      const localBinIdx = dirs.indexOf(join(home, ".local", "bin"));
+      const npmGlobalIdx = dirs.indexOf(join(home, ".npm-global", "bin"));
+      const npmPackagesIdx = dirs.indexOf(join(home, ".npm-packages", "bin"));
+      // Explicit prefix must be present and ahead of every conventional
+      // sibling. The first hit wins inside resolveOnPath() and the
+      // packaged PATH builder, so this ordering propagates verbatim.
+      expect(explicitIdx).toBe(0);
+      expect(localBinIdx).toBeGreaterThan(explicitIdx);
+      expect(npmGlobalIdx).toBeGreaterThan(explicitIdx);
+      expect(npmPackagesIdx).toBeGreaterThan(explicitIdx);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores whitespace-only npm prefix values rather than emitting a `/bin` entry", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-whitespace-prefix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: "   " },
+        includeSystemBins: false,
+      });
+      // Whitespace-only must not produce a bogus `<whitespace>/bin` entry
+      // nor a bare `/bin` (the join("   ", "bin") shape).
+      for (const dir of dirs) {
+        expect(dir.trim()).not.toBe("/bin");
+        expect(dir).not.toMatch(/^\s+\/bin$/);
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("includes /opt/homebrew/bin and /usr/local/bin when includeSystemBins is true", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-sys-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: true });
+      expect(dirs).toContain("/opt/homebrew/bin");
+      expect(dirs).toContain("/usr/local/bin");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("omits /opt/homebrew/bin and /usr/local/bin when includeSystemBins is false", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nosys-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).not.toContain("/opt/homebrew/bin");
+      expect(dirs).not.toContain("/usr/local/bin");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("expands per-version Node toolchains for mise / nvm / fnm", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-versioned-"));
+    try {
+      const miseBin = join(home, ".local", "share", "mise", "installs", "node", "24.14.1", "bin");
+      const nvmBin = join(home, ".nvm", "versions", "node", "v22.10.0", "bin");
+      const fnmBin = join(home, ".local", "share", "fnm", "node-versions", "v20.11.1", "installation", "bin");
+      mkdirSync(miseBin, { recursive: true });
+      mkdirSync(nvmBin, { recursive: true });
+      mkdirSync(fnmBin, { recursive: true });
+      writeFileSync(join(miseBin, "marker"), "");
+      writeFileSync(join(nvmBin, "marker"), "");
+      writeFileSync(join(fnmBin, "marker"), "");
+      chmodSync(join(miseBin, "marker"), 0o644);
+      chmodSync(join(nvmBin, "marker"), 0o644);
+      chmodSync(join(fnmBin, "marker"), 0o644);
+
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(miseBin);
+      expect(dirs).toContain(nvmBin);
+      expect(dirs).toContain(fnmBin);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("returns an empty version slice when toolchain root is absent", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-empty-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      // No mise/nvm/fnm directories were created — none of the per-version
+      // bins should appear.
+      expect(dirs.some((dir) => dir.includes(join(".nvm", "versions", "node")))).toBe(false);
+      expect(dirs.some((dir) => dir.includes(join("fnm", "node-versions")))).toBe(false);
+      expect(dirs.some((dir) => dir.includes(join("mise", "installs", "node")))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
