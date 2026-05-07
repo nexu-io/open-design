@@ -590,7 +590,7 @@ La boucle chat / artifact est la plus visible, mais plusieurs capacités moins e
 
 ## Anti-AI-slop machinery
 
-Tout le mécanisme ci-dessous vient du playbook [`huashu-design`](https://github.com/alchaincyf/huashu-design), porté dans le prompt stack d’OD et rendu vérifiable par Skill via le pre-flight des side files :
+Tout le mécanisme ci-dessous est le playbook [`huashu-design`](https://github.com/alchaincyf/huashu-design), porté dans le prompt-stack d'OD et rendu vérifiable par Skill via le pre-flight des side files. Lisez [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) pour le texte actuel :
 
 - **Question form first.** Le tour 1 est seulement `<question-form>`, sans thinking, outils ni narration. L’utilisateur choisit des valeurs par défaut à la vitesse de boutons radio.
 - **Brand-spec extraction.** Quand l’utilisateur attache un screenshot ou une URL, l’agent suit un protocole en cinq étapes (locate · download · grep hex · codify `brand-spec.md` · vocalise) avant d’écrire du CSS. **Il ne devine jamais les couleurs de marque depuis la mémoire.**
@@ -665,7 +665,7 @@ Chaque projet externe dont ce repo s’inspire. Chaque lien pointe vers la sourc
 | Projet | Rôle ici |
 |---|---|
 | [`Claude Design`][cd] | Le produit fermé dont ce repo est l’alternative open source. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | Le cœur philosophie design. Workflow Junior-Designer, protocole brand-asset en 5 étapes, checklist anti-AI-slop, self-critique 5 dimensions et bibliothèque « 5 écoles × 20 philosophies design ». |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | Le cœur philosophie design. Workflow Junior-Designer, protocole brand-asset en 5 étapes, checklist anti-AI-slop, self-critique 5 dimensions et bibliothèque « 5 écoles × 20 philosophies design » — tout distillé dans [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) et [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Skill Magazine-web-PPT inclus tel quel sous [`skills/guizang-ppt/`](skills/guizang-ppt/). Défaut pour le mode deck. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Architecture daemon + adapter. Détection PATH, daemon local comme seul processus privilégié, vision agent-as-teammate. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | Première alternative open source à Claude Design et pair le plus proche. Patterns UX adoptés : streaming-artifact loop, preview iframe sandboxée, panneau agent live, cinq exports, storage hub local, goût injecté par `SKILL.md`. |
