@@ -367,7 +367,17 @@ describe('migrateLegacyDataDirSync', () => {
         legacyDir,
         dataDir,
         logger: makeLogger(),
-        writeMarker: () => {
+        // Simulate the worst case: writeMarker has already written a
+        // partial .migrated-from file before the underlying syscall
+        // fails. Without defensive cleanup the next boot's
+        // fs.existsSync(markerPath) check would short-circuit as
+        // `skipped` and the user would be stranded.
+        writeMarker: (markerDataDir) => {
+          fs.writeFileSync(
+            path.join(markerDataDir, '.migrated-from'),
+            'partial bytes before crash',
+            'utf8',
+          );
           const e = new Error('synthetic ENOSPC writing marker') as NodeJS.ErrnoException;
           e.code = 'ENOSPC';
           throw e;
@@ -381,8 +391,9 @@ describe('migrateLegacyDataDirSync', () => {
     // Every payload entry that promoteStaged placed into dataDir must
     // be gone so the next boot is not refused under data_dir_not_empty.
     expect(dataDirHasExistingPayload(dataDir)).toEqual([]);
-    // And no real marker was written, so the idempotency check on the
-    // next boot does not falsely short-circuit.
+    // And the partial marker the seam wrote must have been cleaned up,
+    // so the idempotency check on the next boot does not falsely
+    // short-circuit and strand the user.
     expect(fs.existsSync(path.join(dataDir, '.migrated-from'))).toBe(false);
 
     // Once the underlying disk/permissions issue is fixed, a clean

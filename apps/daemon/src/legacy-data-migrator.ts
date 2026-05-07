@@ -272,11 +272,25 @@ function rollbackPromoted(dataDir: string, promoted: readonly string[]): void {
 
 function writeMarker(dataDir: string, legacyDir: string): void {
   const marker = path.join(dataDir, MARKER_FILE);
+  // Write to a sibling tmp path then atomically rename into place.
+  // Without this, a writeFileSync that gets partway through and then
+  // fails (ENOSPC mid-write, EIO on flush, etc.) would leave a partial
+  // .migrated-from at marker. The next boot's fs.existsSync(marker)
+  // returns true, the migrator short-circuits as `skipped`, and the
+  // user is stranded with an empty dataDir. Temp + rename guarantees
+  // the marker either fully exists or does not.
+  const temp = `${marker}.tmp-${process.pid}-${Date.now()}`;
   const payload = JSON.stringify({
     legacyDir: path.resolve(legacyDir),
     migratedAt: new Date().toISOString(),
   }, null, 2);
-  fs.writeFileSync(marker, payload + '\n', 'utf8');
+  try {
+    fs.writeFileSync(temp, payload + '\n', 'utf8');
+    fs.renameSync(temp, marker);
+  } catch (err) {
+    fs.rmSync(temp, { force: true });
+    throw err;
+  }
 }
 
 /**
@@ -356,6 +370,12 @@ export function migrateLegacyDataDirSync(
     (options.writeMarker ?? writeMarker)(dataDir, legacyDir);
   } catch (err) {
     rollbackPromoted(dataDir, promoted);
+    // Defensive marker cleanup: even though the production writeMarker
+    // is atomic (temp + rename), a partial file at markerPath could
+    // still exist if some non-atomic variant ran. Without this, the
+    // next boot's fs.existsSync(markerPath) check would short-circuit
+    // as `skipped` and the user would be stranded.
+    fs.rmSync(markerPath, { force: true });
     fs.rmSync(stagingDir, { recursive: true, force: true });
     throw err;
   }
