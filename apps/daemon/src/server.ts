@@ -112,6 +112,7 @@ import {
   deleteProjectFile,
   detectEntryFile,
   ensureProject,
+  isSafeId,
   listFiles,
   mimeFor,
   projectDir,
@@ -3777,11 +3778,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
     const { apiKey, baseUrl, model, maxTokens } = req.body || {};
     try {
-      // Path-traversal guard on :id mirrors the isSafeId regex at
-      // apps/daemon/src/projects.ts:556-558. Reject early so unsafe ids
-      // cannot reach getProject (which would 404) or the function (which
-      // would throw an internal "invalid project id" mapped to 500).
-      if (!/^[A-Za-z0-9._-]{1,128}$/.test(String(req.params.id))) {
+      // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
+      // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
+      // the char-class regex and resolve to the parent directory under
+      // path.join. Express decodes percent-encoded `%2e%2e` to `..` before
+      // we see it, so this check covers both URL-supplied and stored-row
+      // attack vectors.
+      if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
 

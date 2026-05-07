@@ -553,8 +553,20 @@ function toProjectPath(raw) {
   return raw.split(path.sep).join('/');
 }
 
-function isSafeId(id) {
-  return typeof id === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(id);
+// Validates an id string for use as a path segment under a daemon-managed
+// directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
+// class allows dots so ids like `my-project.v2` work, but pure-dot ids
+// (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
+// resolve to the parent directory when fed into `path.join`. Without the
+// pure-dot guard, an attacker could create a project row with id `..` (or
+// reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
+// which Express decodes before the route handler sees it) and steer
+// finalize / write operations outside `.od/projects/`.
+export function isSafeId(id) {
+  if (typeof id !== 'string') return false;
+  if (id.length === 0 || id.length > 128) return false;
+  if (/^\.+$/.test(id)) return false; // reject `.`, `..`, `...`, etc.
+  return /^[A-Za-z0-9._-]+$/.test(id);
 }
 
 const EXT_MIME = {

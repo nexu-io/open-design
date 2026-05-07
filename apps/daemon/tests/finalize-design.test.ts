@@ -20,7 +20,7 @@ import {
   openDatabase,
   upsertMessage,
 } from '../src/db.js';
-import { writeProjectFile } from '../src/projects.js';
+import { isSafeId, writeProjectFile } from '../src/projects.js';
 import {
   appendVersionedApiPath,
   buildSynthesisPrompt,
@@ -698,9 +698,8 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
   });
 
   it('400 BAD_REQUEST when :id contains characters outside the safe-id regex (test #16)', async () => {
-    // The isSafeId regex at apps/daemon/src/projects.ts:556-558 allows only
-    // [A-Za-z0-9._-]{1,128}. An id like `bad!id` contains `!` and must
-    // be rejected before any DB or filesystem work.
+    // isSafeId allows only [A-Za-z0-9._-]{1,128}. An id like `bad!id`
+    // contains `!` and must be rejected before any DB or filesystem work.
     const res = await postJson('bad!id', {
       apiKey: 'sk-test',
       baseUrl: 'https://api.anthropic.com',
@@ -710,5 +709,56 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
     const body = await res.json();
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('project id');
+  });
+
+});
+
+// Path-traversal regression coverage flagged by @lefarcen on PR #832.
+//
+// The threat: pre-fix `isSafeId` regex `/^[A-Za-z0-9._-]{1,128}$/` allowed
+// pure-dot ids (`.`, `..`, `...`) because `.` is in the character class.
+// `projectDir` and `resolveProjectDir` both delegated to `isSafeId` so they
+// inherited the hole; an id of `..` would resolve to the PARENT of
+// `.od/projects/` via `path.join`. The HTTP layer happens to reject this
+// today because Express normalizes `%2e%2e` to `..` and collapses the
+// path before the route handler sees it (yielding 404), but a direct CLI
+// or scripted caller would still reach the function and trigger the
+// traversal — and a stored project row whose id is `..` would also slip
+// past `isSafeId` checks downstream of the handler.
+//
+// Unit-test isSafeId directly so the hole stays closed regardless of
+// which call site is exercised.
+describe('isSafeId — path-traversal regression', () => {
+  it('rejects a single dot', () => {
+    expect(isSafeId('.')).toBe(false);
+  });
+  it('rejects a double dot (parent-traversal)', () => {
+    expect(isSafeId('..')).toBe(false);
+  });
+  it('rejects three or more dots', () => {
+    expect(isSafeId('...')).toBe(false);
+    expect(isSafeId('....')).toBe(false);
+  });
+  it('rejects characters outside [A-Za-z0-9._-]', () => {
+    expect(isSafeId('bad!id')).toBe(false);
+    expect(isSafeId('a/b')).toBe(false);
+    expect(isSafeId('a\\b')).toBe(false);
+    expect(isSafeId(' leading-space')).toBe(false);
+  });
+  it('rejects empty string and >128 chars', () => {
+    expect(isSafeId('')).toBe(false);
+    expect(isSafeId('a'.repeat(129))).toBe(false);
+  });
+  it('rejects non-string inputs', () => {
+    expect(isSafeId(null as any)).toBe(false);
+    expect(isSafeId(undefined as any)).toBe(false);
+    expect(isSafeId(42 as any)).toBe(false);
+  });
+  it('accepts valid ids including dots in the middle', () => {
+    expect(isSafeId('project-1')).toBe(true);
+    expect(isSafeId('my-project.v2')).toBe(true);
+    expect(isSafeId('818cf7a8-8399-4220-a507-07802d8842a8')).toBe(true);
+    expect(isSafeId('a')).toBe(true);
+    expect(isSafeId('a.b.c')).toBe(true); // mixed-content with dots is fine
   });
 });
