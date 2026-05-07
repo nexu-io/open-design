@@ -155,9 +155,21 @@ in {
           Note: by default both the daemon and the bundled web frontend
           bind to loopback only, so opening the firewall has no effect
           until you also widen the bind address — set
-          `services.open-design.webFrontend.host = "0.0.0.0"` (and pass
-          `--host 0.0.0.0` to the daemon if you need its API exposed)
-          to actually accept inbound LAN traffic.
+          `services.open-design.webFrontend.host = "0.0.0.0"` and
+          declare `services.open-design.webFrontend.allowedOrigins` so
+          the daemon's CSRF gate accepts the externally reachable
+          origin the SPA is loaded from.
+
+          If you also need the daemon's `/api` exposed directly (i.e.
+          without the bundled caddy in front), set
+          `extraEnv.OD_BIND_HOST` to the externally reachable address
+          (e.g. a LAN IP or Tailscale host) — not `0.0.0.0`, since the
+          daemon's `Origin` allowlist is built from the literal bind
+          host and browsers send `Origin: http://<actual-host>:<port>`,
+          not `http://0.0.0.0:<port>`. Alternatively keep
+          `OD_BIND_HOST = "0.0.0.0"` and add the externally reachable
+          origin (e.g. `http://laptop.local:7456`) to
+          `webFrontend.allowedOrigins`, which feeds `OD_WEB_ORIGINS`.
         '';
       };
     };
