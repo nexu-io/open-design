@@ -416,9 +416,10 @@ export const RU_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Product: 'Продукт',
   'Short Form': 'Короткий формат',
   Travel: 'Путешествия',
+  'Live Artifact': 'Live-артефакт',
 };
 
-export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [] as const;
+export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = ['notion-team-dashboard-live-artifact'] as const;
 
 export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
