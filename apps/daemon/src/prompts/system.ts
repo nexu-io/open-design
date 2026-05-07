@@ -34,6 +34,8 @@ import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
+import { renderPanelPrompt } from './panel.js';
+import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 
 type ProjectMetadata = {
   kind?: string;
@@ -108,6 +110,16 @@ export interface ComposeInput {
   // Snapshot of HTML files that the agent should treat as a starting
   // reference rather than a fixed deliverable.
   template?: ProjectTemplate | undefined;
+  // When present and enabled, the Critique Theater protocol addendum is
+  // concatenated to the end of the composed prompt. Omitting this field
+  // (or passing cfg.enabled === false) preserves legacy behavior unchanged.
+  critique?: CritiqueConfig | undefined;
+  // Brand name and DESIGN.md body. Required when critique is enabled;
+  // ignored when critique is disabled or omitted.
+  critiqueBrand?: { name: string; design_md: string } | undefined;
+  // Skill identifier. Required when critique is enabled;
+  // ignored when critique is disabled or omitted.
+  critiqueSkill?: { id: string } | undefined;
 }
 
 export function composeSystemPrompt({
@@ -122,6 +134,9 @@ export function composeSystemPrompt({
   craftSections,
   metadata,
   template,
+  critique,
+  critiqueBrand,
+  critiqueSkill,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -201,6 +216,21 @@ export function composeSystemPrompt({
     if (codexImagegenOverride) {
       parts.push(codexImagegenOverride);
     }
+  }
+
+  // Critique Theater addendum. When cfg.enabled is true the panel protocol
+  // is pinned last so it overrides any softer critique wording earlier in the
+  // stack. When disabled (the default) this block is a no-op so no consumer
+  // needs to opt in.
+  //
+  // The panel block requires <ARTIFACT mime="text/html"> inside <CRITIQUE_RUN>,
+  // which conflicts with MEDIA_GENERATION_CONTRACT (image/video/audio surfaces
+  // explicitly forbid HTML output). Skip the addendum on media surfaces so
+  // the critique flag is a no-op there until a media-aware panel template
+  // lands.
+  const cfg = critique ?? defaultCritiqueConfig();
+  if (cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface) {
+    parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 
   return parts.join('');

@@ -14,6 +14,7 @@ import {
   renderCodexImagegenOverride,
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
+import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -27,8 +28,10 @@ import {
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
+import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import { findSkillById, listSkills } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
+import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
@@ -45,6 +48,11 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import {
+  testAgentConnection,
+  testProviderConnection,
+  validateBaseUrl,
+} from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
@@ -134,13 +142,17 @@ import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './
 import {
   buildDeployFileSet,
   checkDeploymentUrl,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesProjectNameForProject,
   DeployError,
+  deployToCloudflarePages,
   deployToVercel,
+  isDeployProviderId,
   prepareDeployPreflight,
-  publicDeployConfig,
-  readVercelConfig,
+  publicDeployConfigForProvider,
+  readDeployConfig,
   VERCEL_PROVIDER_ID,
-  writeVercelConfig,
+  writeDeployConfig,
 } from './deploy.js';
 import {
   allowedBrowserPorts,
@@ -160,6 +172,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
+const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
   const daemonDir =
@@ -167,7 +180,16 @@ export function resolveProjectRoot(moduleDir: string): string {
   return path.resolve(daemonDir, '../..');
 }
 
-export function resolveDaemonCliPath(): string {
+function cleanOptionalPath(value: string | undefined): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? path.resolve(value)
+    : null;
+}
+
+export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
+  if (configured) return configured;
+
   const packageJsonPath = require.resolve('@open-design/daemon/package.json');
   return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
@@ -674,12 +696,15 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
 );
 export function resolveDataDir(raw, projectRoot) {
   if (!raw) return path.join(projectRoot, '.od');
-  const expanded = raw.startsWith('~/')
-    ? path.join(os.homedir(), raw.slice(2))
-    : raw;
-  const resolved = path.isAbsolute(expanded)
-    ? expanded
-    : path.resolve(projectRoot, expanded);
+  // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
+  // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
+  // Some launchers (systemd unit files, NixOS modules, certain Docker
+  // entrypoints, Windows scheduled tasks) pass OD_DATA_DIR with literal
+  // $HOME or ${HOME} because the variable is never expanded by a shell;
+  // expandHomePrefix turns those (and the ~ shorthand, with both / and \
+  // separators) into os.homedir() before path.resolve runs so launch
+  // surfaces stay consistent.
+  const resolved = resolveProjectRelativePath(raw, projectRoot);
   try {
     fs.mkdirSync(resolved, { recursive: true });
     fs.accessSync(resolved, fs.constants.W_OK);
@@ -692,6 +717,15 @@ export function resolveDataDir(raw, projectRoot) {
   return resolved;
 }
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
+// new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
+// across before SQLite opens. Synchronous on purpose: openDatabase below
+// would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
+// and https://github.com/nexu-io/open-design/issues/710.
+migrateLegacyDataDirSync({
+  legacyDir: process.env.OD_LEGACY_DATA_DIR,
+  dataDir: RUNTIME_DATA_DIR,
+});
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
@@ -860,6 +894,46 @@ function sendApiError(res, status, code, message, init = {}) {
   return res
     .status(status)
     .json(createCompatApiErrorResponse(code, message, init));
+}
+
+const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
+
+function cloudflarePagesDeploymentMetadata(projectName) {
+  const normalized = typeof projectName === 'string' ? projectName.trim() : '';
+  return normalized
+    ? { [CLOUDFLARE_PAGES_PROJECT_METADATA_KEY]: normalized }
+    : undefined;
+}
+
+function cloudflarePagesProjectNameFromDeployment(deployment) {
+  const value = deployment?.providerMetadata?.[CLOUDFLARE_PAGES_PROJECT_METADATA_KEY];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return cloudflarePagesProjectNameFromUrl(deployment?.url);
+}
+
+function cloudflarePagesProjectNameFromUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return '';
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    if (!host.endsWith('.pages.dev')) return '';
+    const labels = host.slice(0, -'.pages.dev'.length).split('.').filter(Boolean);
+    return labels.at(-1) || '';
+  } catch {
+    return '';
+  }
+}
+
+function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
+  const priorName = cloudflarePagesProjectNameFromDeployment(prior);
+  if (priorName) return priorName;
+
+  for (const deployment of listDeployments(db, projectId)) {
+    if (deployment.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) continue;
+    const stableName = cloudflarePagesProjectNameFromDeployment(deployment);
+    if (stableName) return stableName;
+  }
+
+  return cloudflarePagesProjectNameForProject(projectId, projectName);
 }
 
 // Filename slug for the Content-Disposition header on archive downloads.
@@ -1083,11 +1157,9 @@ function openNativeFolderDialog() {
         },
       );
     } else if (platform === 'win32') {
-      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a code folder to link'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }";
-      execFile('powershell.exe', ['-NoProfile', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
-        if (err) return resolve(null);
-        const p = stdout.trim();
-        resolve(p || null);
+      const command = buildWindowsFolderDialogCommand();
+      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
+        resolve(parseFolderDialogStdout(err, stdout));
       });
     } else {
       resolve(null);
@@ -1321,6 +1393,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const app = express();
   app.use(express.json({ limit: '4mb' }));
 
+  // Chrome may strip the port from the Origin header on same-origin GET
+  // requests. Only use this as a fallback for safe, idempotent GET requests;
+  // mutating routes always require an exact origin/host match.
+  function isPortlessLoopbackOrigin(origin) {
+    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
+  }
+
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
@@ -1357,7 +1436,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const ports = allowedBrowserPorts(resolvedPort);
     if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
-      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
+        return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      }
     }
     next();
   });
@@ -1494,16 +1575,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
   });
 
-  // Surfaces the absolute paths to `node` + `apps/daemon/dist/cli.js`
-  // so the Settings → MCP server panel can render snippets that work
-  // even when `od` isn't on the user's PATH (the common case for
-  // source clones - and macOS/Linux ship a /usr/bin/od octal-dump
-  // tool that shadows ours anyway). Computed from import.meta.url so
-  // both src/ (tsx dev) and dist/ (built) launches resolve to the
-  // same dist/cli.js path. Cached for 5s because the panel pings on
-  // every open and the path lookup + two existsSync calls are cheap
-  // but not free, and these paths cannot change without a daemon
-  // restart anyway.
+  // Surfaces the absolute paths to the daemon's Node-compatible runtime and
+  // CLI entry so the Settings → MCP server panel can render snippets that work
+  // even when `od` isn't on the user's PATH (the common case for source clones
+  // - and macOS/Linux ship a /usr/bin/od octal-dump tool that shadows ours
+  // anyway). Cached for 5s because the panel pings on every open and these
+  // paths cannot change without a daemon restart.
   const INSTALL_INFO_TTL_MS = 5000;
   let installInfoCache: { t: number; payload: object } | null = null;
 
@@ -1515,35 +1592,33 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
       return res.json(installInfoCache.payload);
     }
-    let cliPath;
-    try {
-      cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-    } catch (err) {
-      return sendApiError(res, 500, 'CLI_RESOLVE_FAILED', String(err));
-    }
+    const cliPath = OD_BIN;
     const cliExists = fs.existsSync(cliPath);
-    // process.execPath is the absolute path to the node binary that
-    // is running the daemon RIGHT NOW. We prefer it over bare `node`
-    // because IDE-spawned MCP clients inherit a minimal PATH from the
-    // OS launcher (Spotlight, Dock, etc.) that often does not see
-    // user-level node installs (nvm, fnm, asdf). On rare occasions
-    // (uninstall mid-session, exotic embeds) the path may not exist
-    // by the time the user copies the snippet; catch that and warn.
+    // process.execPath is the absolute path to the Node-compatible runtime
+    // that is running the daemon RIGHT NOW. In packaged builds this may be
+    // Electron running with ELECTRON_RUN_AS_NODE=1 rather than a separate
+    // bundled Node binary; surface the env requirement with the command so
+    // IDE-spawned MCP clients can reproduce the same mode from a minimal OS
+    // launcher environment.
     const nodeExists = fs.existsSync(process.execPath);
     const hints: string[] = [];
     if (!cliExists) {
       hints.push(
-        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
+        `Open Design CLI entry is missing at ${cliPath}. Rebuild the daemon or packaged app and refresh.`,
       );
     }
     if (!nodeExists) {
       hints.push(
-        `Node binary at ${process.execPath} no longer exists. Reinstall Node and restart the daemon.`,
+        `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
       );
     }
+    const commandEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
+      ? { ELECTRON_RUN_AS_NODE: '1' }
+      : null;
     const payload = {
       command: process.execPath,
       args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
+      ...(commandEnv == null ? {} : { env: commandEnv }),
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
       // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
@@ -2737,10 +2812,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Deploy --------------------------------------------------------------
 
-  app.get('/api/deploy/config', async (_req, res) => {
+  app.get('/api/deploy/config', async (req, res) => {
     try {
+      const providerId =
+        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfig(await readVercelConfig());
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -2749,8 +2829,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.put('/api/deploy/config', async (req, res) => {
     try {
+      const input = req.body || {};
+      const providerId =
+        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeVercelConfig(req.body || {});
+      const body = await writeDeployConfig(providerId, input);
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -2770,7 +2856,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2788,11 +2874,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         req.params.id,
         fileName,
       );
-      const result = await deployToVercel({
-        config: await readVercelConfig(),
-        files,
-        projectId: req.params.id,
-      });
+      const project = getProject(db, req.params.id);
+      const cloudflarePagesProjectName =
+        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
+          : '';
+      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? await deployToCloudflarePages({
+            config: {
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              projectName: cloudflarePagesProjectName,
+            },
+            files,
+            projectId: req.params.id,
+          })
+        : await deployToVercel({
+            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -2807,6 +2907,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
+        providerMetadata:
+          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName)
+            : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
@@ -2830,7 +2934,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2846,6 +2950,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         PROJECTS_DIR,
         req.params.id,
         fileName,
+        { providerId },
       );
       res.json(body);
     } catch (err) {
@@ -2883,11 +2988,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             'deployment not found',
           );
         }
-        const result = await checkDeploymentUrl(existing.url);
+        const stableCloudflareProjectName =
+          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesProjectNameFromDeployment(existing)
+            : '';
+        const checkUrl = stableCloudflareProjectName
+          ? `https://${stableCloudflareProjectName}.pages.dev`
+          : existing.url;
+        const result = await checkDeploymentUrl(checkUrl);
         const now = Date.now();
         /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
         const body = upsertDeployment(db, {
           ...existing,
+          url: checkUrl || existing.url,
           status: result.reachable ? 'ready' : result.status || 'link-delayed',
           statusMessage: result.reachable
             ? 'Public link is ready.'
@@ -3498,6 +3611,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     projectId,
     skillId,
     designSystemId,
+    streamFormat,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -3557,6 +3671,51 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
+    // Thread the critique config plus the active design-system / skill data
+    // into the composer when critique is enabled. Without this the spawned
+    // child receives the legacy single-pass prompt and the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit. The composer
+    // itself ignores these fields when cfg.enabled is false, so the legacy
+    // path stays untouched.
+    const critiqueBrand = critiqueCfg.enabled
+      && typeof designSystemTitle === 'string'
+      && typeof designSystemBody === 'string'
+      ? { name: designSystemTitle, design_md: designSystemBody }
+      : undefined;
+    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+      ? { id: effectiveSkillId }
+      : undefined;
+    // Single-source-of-truth eligibility check. The composer downstream
+    // appends <CRITIQUE_RUN> instructions only when this check passes, and
+    // the spawn path routes runs through runOrchestrator(...) only when the
+    // SAME flag is true, so prompt and orchestrator stay in lockstep.
+    //
+    // Non-plain adapters (claude-stream-json, copilot-stream-json,
+    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
+    // protocol; the v1 critique parser only understands plain stdout. The
+    // spawn path falls through to legacy generation for those, so the
+    // panel addendum has to be suppressed here too: otherwise the model
+    // is instructed to emit Critique Theater tags that no orchestrator
+    // consumes.
+    const isMediaSurface =
+      skillMode === 'image' ||
+      skillMode === 'video' ||
+      skillMode === 'audio' ||
+      metadata?.kind === 'image' ||
+      metadata?.kind === 'video' ||
+      metadata?.kind === 'audio';
+    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
+    const critiqueShouldRun = critiqueCfg.enabled
+      && critiqueBrand !== undefined
+      && critiqueSkill !== undefined
+      && !isMediaSurface
+      && isPlainAdapter;
+    // Only thread the critique fields when the run is actually eligible;
+    // otherwise the composer's own internal eligibility check (cfg.enabled
+    // && brand && skill && !isMediaSurface) might still fire on
+    // non-plain adapters and we'd emit the panel for a run the orchestrator
+    // skips. Gating the threading itself keeps composer + orchestrator in
+    // exact lockstep regardless of which side enforces eligibility.
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
@@ -3569,12 +3728,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       craftSections,
       metadata,
       template,
+      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
+      critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
-    // `listSkills()` scan in `startChatRun`.
-    return { prompt, activeSkillDir };
+    // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
+    // the same panel-eligibility decision down to the spawn-path
+    // orchestrator gate so prompt and orchestrator stay in lockstep.
+    return { prompt, activeSkillDir, critiqueShouldRun };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -3718,12 +3882,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const { prompt: daemonSystemPrompt, activeSkillDir } =
+    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
       await composeDaemonSystemPrompt({
         agentId,
         projectId,
         skillId,
         designSystemId,
+        streamFormat: def?.streamFormat ?? 'plain',
       });
 
     // Make skill side files reachable through three layers, in order of
@@ -3861,7 +4026,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const resolvedBin = resolveAgentBin(agentId);
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
+
+    const resolvedBin = resolveAgentBin(agentId, configuredAgentEnv);
 
     const args = def.buildArgs(
       composed,
@@ -3961,14 +4134,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -3991,6 +4156,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     let child;
     let acpSession = null;
+    let writePromptToChildStdin = false;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -4041,7 +4207,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             );
           }
         });
-        child.stdin.end(composed, 'utf8');
+        writePromptToChildStdin = true;
       }
     } catch (err) {
       revokeToolToken('child_exit');
@@ -4062,7 +4228,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // through to the legacy single-pass code path below with a one-time
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
-    if (critiqueCfg.enabled) {
+    //
+    // Use critiqueShouldRun (computed in the prompt builder) instead of just
+    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
+    // panel addendum. Media surfaces and runs missing brand/skill context
+    // never get the panel prompt, so they must also skip the orchestrator
+    // and fall through to legacy generation; otherwise the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit.
+    if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
         if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
@@ -4079,7 +4252,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
-        const critiqueBus = { emit: (e) => send('agent', e) };
+        // Forward each CritiqueSseEvent on its own contract-defined channel
+        // (critique.run_started, critique.ship, critique.failed, ...) rather
+        // than wrapping the frame inside the legacy 'agent' channel. Clients
+        // that subscribe to the new event names see them directly with the
+        // contract payload as event.data.
+        const critiqueBus = { emit: (e) => send(e.event, e.data) };
 
         // Stderr forwarding and child.on('error') must be wired BEFORE the
         // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
@@ -4191,12 +4369,44 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
+      // Route through sendAgentEvent so that pi-rpc's error events
+      // (extension_error, auto_retry_end with success=false, and the
+      // message_update error delta) set agentStreamError and flip the
+      // run to `failed` on close — same path as qoder-stream-json and
+      // json-event-stream after issue #691. Also enables the
+      // substantive-output guard (agentProducedOutput) so a pi run
+      // that exits 0 without producing visible content is caught.
+      //
+      // attachPiRpcSession invokes its send callback with the two-arg
+      // channel/payload shape: send('agent', payload) for normal events
+      // and send('error', {message}) from fail(). sendAgentEvent
+      // expects a single event object, so we adapt at the call site:
+      //   - 'agent' channel → relay payload through sendAgentEvent
+      //   - 'error' channel → route through the daemon's error path
+      //     (createSseErrorPayload + send SSE + set agentStreamError)
+      trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        send,
+        send: (channel, payload) => {
+          if (channel === 'agent') {
+            sendAgentEvent(payload);
+          } else if (channel === 'error') {
+            if (agentStreamError) return;
+            agentStreamError = String(payload?.message || 'Pi session error');
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              agentStreamError,
+              { retryable: false },
+            ));
+          } else {
+            send(channel, payload);
+          }
+        },
+        imagePaths: def.supportsImagePaths ? safeImages : [],
+        uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({
@@ -4272,6 +4482,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : 'failed';
       design.runs.finish(run, status, code, signal);
     });
+    if (writePromptToChildStdin && child.stdin) {
+      child.stdin.end(composed, 'utf8');
+    }
   };
 
   app.post('/api/runs', (req, res) => {
@@ -4317,6 +4530,133 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
+  // ---- Connection tests (single-shot JSON; no SSE) ------------------------
+  // Settings dialog uses these to verify a config works without sending a
+  // real chat. Always return HTTP 200 with `ok: false` on upstream-caused
+  // failures so the web layer can render a categorized inline status without
+  // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
+  // request or daemon bug.
+  app.post('/api/test/connection', async (req, res) => {
+    const controller = new AbortController();
+    const abortIfRequestAborted = () => {
+      if ((req.aborted || !req.complete) && !res.writableEnded) {
+        controller.abort();
+      }
+    };
+    const abortIfResponseClosed = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    req.on('close', abortIfRequestAborted);
+    res.on('close', abortIfResponseClosed);
+    const body = req.body || {};
+    try {
+      if (body.mode === 'provider') {
+        const protocol = body.protocol;
+        if (
+          typeof protocol !== 'string' ||
+          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'protocol must be one of anthropic|openai|azure|google',
+          );
+        }
+        if (
+          typeof body.baseUrl !== 'string' ||
+          typeof body.apiKey !== 'string' ||
+          typeof body.model !== 'string' ||
+          !body.baseUrl.trim() ||
+          !body.apiKey.trim() ||
+          !body.model.trim()
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'baseUrl, apiKey, and model are required',
+          );
+        }
+        try {
+          const result = await testProviderConnection({
+            protocol,
+            baseUrl: body.baseUrl,
+            apiKey: body.apiKey,
+            model: body.model,
+            apiVersion:
+              typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
+        }
+      }
+
+      if (body.mode === 'agent') {
+        if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
+        }
+        try {
+          const def = getAgentDef(body.agentId);
+          const testStart = Date.now();
+          const safeModel =
+            def && typeof body.model === 'string'
+              ? isKnownModel(def, body.model)
+                ? body.model
+                : sanitizeCustomModel(body.model)
+              : undefined;
+          if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
+            return res.json({
+              ok: false,
+              kind: 'invalid_model_id',
+              latencyMs: Date.now() - testStart,
+              model: body.model.trim(),
+              agentName: def.name,
+              detail: 'Invalid custom model id. Use a model id that starts with a letter or number and contains no spaces.',
+            });
+          }
+          const safeReasoning =
+            def &&
+            typeof body.reasoning === 'string' &&
+            Array.isArray(def.reasoningOptions)
+              ? (def.reasoningOptions.find((r) => r.id === body.reasoning)?.id ?? undefined)
+              : undefined;
+          const result = await testAgentConnection({
+            agentId: body.agentId,
+            model: safeModel ?? undefined,
+            reasoning: safeReasoning,
+            agentCliEnv:
+              body.agentCliEnv && typeof body.agentCliEnv === 'object'
+                ? body.agentCliEnv
+                : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
+        }
+      }
+
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'mode must be one of provider|agent',
+      );
+    } finally {
+      req.off('close', abortIfRequestAborted);
+      res.off('close', abortIfResponseClosed);
+    }
+  });
+
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
@@ -4326,28 +4666,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
   const validateExternalApiBaseUrl = (baseUrl) => {
-    let parsed;
-    try {
-      parsed = new URL(baseUrl.replace(/\/+$/, ''));
-    } catch {
-      return { error: 'Invalid baseUrl' };
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return { error: 'Only http/https allowed' };
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    const isLoopback =
-      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-    if (
-      !isLoopback &&
-      (hostname.startsWith('169.254.') ||
-        hostname.startsWith('10.') ||
-        /^192\.168\./.test(hostname) ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
-    ) {
-      return { error: 'Internal IPs blocked', forbidden: true };
-    }
-    return { parsed };
+    return validateBaseUrl(baseUrl);
   };
 
   const proxyErrorCode = (status) => {

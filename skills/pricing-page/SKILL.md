@@ -22,6 +22,8 @@ od:
   design_system:
     requires: true
     sections: [color, typography, layout, components]
+  craft:
+    requires: [laws-of-ux]
 ---
 
 # Pricing Page Skill

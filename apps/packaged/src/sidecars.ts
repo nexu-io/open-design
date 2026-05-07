@@ -74,33 +74,90 @@ async function openLog(path: string): Promise<FileHandle> {
   return await open(path, "w");
 }
 
-async function waitForStatus<T>(
+const DAEMON_STATUS_TIMEOUT_MS = 35_000;
+const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Daemon status wait budget. The default 35s is fine for normal cold
+ * boots, but the OD_LEGACY_DATA_DIR one-shot recovery flow can synch-
+ * copy a multi-GB legacy `.od/` payload before SQLite even opens, and
+ * killing the child mid-migration can leave dataDir half-promoted.
+ * When the env var is set, use a 30-minute budget so the parent will
+ * not tear the daemon down before the migration can complete.
+ *
+ * @see apps/daemon/src/legacy-data-migrator.ts
+ * @see https://github.com/nexu-io/open-design/issues/710
+ */
+export function resolveDaemonStatusTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.OD_LEGACY_DATA_DIR;
+  if (raw != null && raw.length > 0) return DAEMON_MIGRATION_STATUS_TIMEOUT_MS;
+  return DAEMON_STATUS_TIMEOUT_MS;
+}
+
+/**
+ * Waits for the sidecar to report a ready status over IPC.
+ *
+ * When `watch` is provided, the polling loop also races the spawned
+ * child's `exit` event so a daemon that throws at startup (e.g. the
+ * #710 migrator's LegacyMigrationError on invalid OD_LEGACY_DATA_DIR,
+ * existing target payload, symlink in payload, or marker write
+ * failure) surfaces immediately instead of leaving the packaged app
+ * waiting the full DAEMON_MIGRATION_STATUS_TIMEOUT_MS for a process
+ * that already exited. The error message includes the daemon log path
+ * so the user can read the actual failure reason.
+ */
+export async function waitForStatus<T>(
   ipcPath: string,
   isReady: (status: T) => boolean,
-  timeoutMs = 35_000,
+  timeoutMs = DAEMON_STATUS_TIMEOUT_MS,
+  watch: { child: { exitCode: number | null; signalCode: NodeJS.Signals | null; once: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void; off: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void }; logPath: string } | null = null,
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
+  let childExited: { code: number | null; signal: NodeJS.Signals | null } | null = null;
 
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const status = await requestJsonIpc<T>(
-        ipcPath,
-        { type: SIDECAR_MESSAGES.STATUS },
-        { timeoutMs: 800 },
-      );
-      if (isReady(status)) return status;
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(150);
+  // Cover the race between spawn-resolved and now: if the child has
+  // already exited by the time we got here, the 'exit' event is gone,
+  // so seed childExited from the synchronous status fields.
+  if (watch != null && watch.child.exitCode !== null) {
+    childExited = { code: watch.child.exitCode, signal: watch.child.signalCode };
   }
 
-  throw new Error(
-    `timed out waiting for sidecar status at ${ipcPath}${
-      lastError instanceof Error ? ` (${lastError.message})` : ""
-    }`,
-  );
+  const onChildExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+    childExited = { code, signal };
+  };
+  watch?.child.once('exit', onChildExit);
+
+  try {
+    while (Date.now() - startedAt < timeoutMs) {
+      if (childExited !== null) {
+        throw new Error(
+          `daemon exited before reporting status (code=${childExited.code}, signal=${childExited.signal ?? 'none'}); see ${watch?.logPath ?? '<no log path>'} for details`,
+        );
+      }
+      try {
+        const status = await requestJsonIpc<T>(
+          ipcPath,
+          { type: SIDECAR_MESSAGES.STATUS },
+          { timeoutMs: 800 },
+        );
+        if (isReady(status)) return status;
+      } catch (error) {
+        lastError = error;
+      }
+      await sleep(150);
+    }
+
+    throw new Error(
+      `timed out waiting for sidecar status at ${ipcPath}${
+        lastError instanceof Error ? ` (${lastError.message})` : ""
+      }`,
+    );
+  } finally {
+    watch?.child.off('exit', onChildExit);
+  }
 }
 
 function extractPort(url: string): string {
@@ -216,7 +273,10 @@ export async function startPackagedSidecars(
   paths: PackagedNamespacePaths,
   options: {
     appVersion: string | null;
+    daemonCliEntry: string | null;
+    daemonSidecarEntry: string | null;
     nodeCommand: string | null;
+    webSidecarEntry: string | null;
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
   },
@@ -235,15 +295,25 @@ export async function startPackagedSidecars(
   try {
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: "0",
+        ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
         // Packaged daemon managed paths are deliberately delivered through
         // the sidecar launch environment. The daemon may keep its own default
         // fallback, but packaged runtime must not rely on path inference from
         // Electron userData, bundle names, or ports.
         ...createPackagedDaemonManagedPathEnv(paths),
         ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+        // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
+        // upgrading from 0.3.x .od/ layouts. The daemon's startup
+        // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
+        // for packaged children would otherwise drop it. Forward only
+        // when set so we do not invent an empty string and trigger the
+        // daemon's "env set but path invalid" error path.
+        ...(process.env.OD_LEGACY_DATA_DIR == null || process.env.OD_LEGACY_DATA_DIR.length === 0
+          ? {}
+          : { OD_LEGACY_DATA_DIR: process.env.OD_LEGACY_DATA_DIR }),
       },
       nodeCommand: options.nodeCommand,
       paths,
@@ -253,12 +323,19 @@ export async function startPackagedSidecars(
     const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
       daemon.ipcPath,
       (status) => status.url != null,
+      resolveDaemonStatusTimeoutMs(),
+      // Race the IPC polling against the daemon child's exit. Without
+      // this, a daemon that throws at startup (LegacyMigrationError on
+      // invalid OD_LEGACY_DATA_DIR, existing target payload, symlink,
+      // marker write failure) leaves the packaged app waiting the full
+      // 30-minute migration budget for a process that already died.
+      { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
 
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",

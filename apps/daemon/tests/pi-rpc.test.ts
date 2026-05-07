@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { parsePiModels, mapPiRpcEvent, attachPiRpcSession } from '../src/pi-rpc.js';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -581,6 +582,416 @@ test('attachPiRpcSession abort() is idempotent and no-op after stdin close', () 
   const buffered = child.stdin.read();
   assert.equal(buffered, null, 'no bytes should be written after abort on closed stdin');
 });
+
+// ─── extension_error event handling ─────────────────────────────────────────
+
+test('pi RPC: extension_error maps to error event', () => {
+  const events = simulateRpcSession([
+    { type: 'extension_error', extensionPath: '/path/to/ext.ts', event: 'tool_call', error: 'Something broke' },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'Something broke');
+});
+
+test('pi RPC: extension_error with non-string error uses fallback', () => {
+  const events = simulateRpcSession([
+    { type: 'extension_error', extensionPath: '/path/to/ext.ts', error: { message: 'nested' } },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'Extension error');
+});
+
+test('pi RPC: extension_error with missing error uses fallback', () => {
+  const events = simulateRpcSession([
+    { type: 'extension_error', extensionPath: '/path/to/ext.ts' },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'Extension error');
+});
+
+// ─── message_update error delta handling ────────────────────────────────────
+
+test('pi RPC: message_update with error delta maps to error event', () => {
+  const events = simulateRpcSession([
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'error', reason: 'aborted' },
+    },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'aborted');
+});
+
+test('pi RPC: message_update error delta falls back to delta text', () => {
+  const events = simulateRpcSession([
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'error', delta: 'Connection reset' },
+    },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'Connection reset');
+});
+
+test('pi RPC: message_update error delta with no reason or delta uses fallback', () => {
+  const events = simulateRpcSession([
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'error' },
+    },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'Agent error');
+});
+
+test('pi RPC: message_update error after partial output still emits error', () => {
+  // Even after text deltas have been emitted (agentProducedOutput = true
+  // on the server side), a subsequent error delta should still surface
+  // so the run flips to failed rather than succeeding with a partial
+  // response.
+  const events = simulateRpcSession([
+    { type: 'agent_start' },
+    { type: 'turn_start' },
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Partial output' },
+    },
+    {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'error', reason: 'context_overflow' },
+    },
+  ]);
+
+  // status:working, status:thinking, status:streaming, text_delta, error
+  assert.equal(events.length, 5);
+  const errorEvent = events.find((e) => e.type === 'error');
+  assert.ok(errorEvent, 'should emit an error event after partial output');
+  assert.equal(errorEvent.message, 'context_overflow');
+});
+
+// ─── auto_retry_end failure event handling ────────────────────────────────────
+
+test('pi RPC: auto_retry_end with success=false maps to error event', () => {
+  const events = simulateRpcSession([
+    { type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 1000, errorMessage: 'overloaded' },
+    { type: 'auto_retry_end', success: false, attempt: 3, finalError: '529 overloaded_error: Overloaded' },
+  ]);
+
+  // auto_retry_start → status:retrying, auto_retry_end → error
+  assert.equal(events.length, 2);
+  assert.equal(events[0].type, 'status');
+  assert.equal(events[0].label, 'retrying');
+  assert.equal(events[1].type, 'error');
+  assert.equal(events[1].message, '529 overloaded_error: Overloaded');
+});
+
+test('pi RPC: auto_retry_end with success=true does not emit error', () => {
+  const events = simulateRpcSession([
+    { type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 1000, errorMessage: 'overloaded' },
+    { type: 'auto_retry_end', success: true, attempt: 2 },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'status');
+  assert.equal(events[0].label, 'retrying');
+});
+
+test('pi RPC: auto_retry_end failure with missing finalError uses fallback', () => {
+  const events = simulateRpcSession([
+    { type: 'auto_retry_end', success: false, attempt: 3 },
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.equal(events[0].message, 'Auto-retry exhausted');
+});
+
+// ─── imagePaths forwarding in attachPiRpcSession ─────────────────────────────
+
+test('attachPiRpcSession sends prompt with images when imagePaths provided', async () => {
+  const { child } = createSession();
+
+  // Create a small test image file.
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const tmpFile = path.join(tmpDir, `pi-rpc-test-${Date.now()}.png`);
+  await import('node:fs/promises').then((fsp) =>
+    fsp.writeFile(tmpFile, Buffer.from('iVBORw0KGgo=', 'base64')),
+  );
+
+  try {
+    const events2 = [];
+    const send2 = (channel, payload) => events2.push({ channel, ...payload });
+    const child2 = createMockChild();
+
+    attachPiRpcSession({
+      child: child2,
+      prompt: 'describe this image',
+      cwd: '/tmp',
+      model: null,
+      send: send2,
+      imagePaths: [tmpFile],
+    });
+
+    // Read the stdin data to find the prompt command.
+    const chunks = [];
+    child2.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const buffered = child2.stdin.read();
+    if (buffered) chunks.push(buffered.toString());
+
+    const lines = chunks.join('').trim().split('\n');
+    const promptLine = lines.find((l) => {
+      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    });
+    assert.ok(promptLine, 'should send a prompt command');
+    const parsed = JSON.parse(promptLine);
+    assert.ok(parsed.images, 'prompt should include images array');
+    assert.equal(parsed.images.length, 1);
+    assert.equal(parsed.images[0].type, 'image');
+    assert.equal(parsed.images[0].mimeType, 'image/png');
+    assert.ok(typeof parsed.images[0].data === 'string' && parsed.images[0].data.length > 0);
+  } finally {
+    await import('node:fs/promises').then((fsp) => fsp.unlink(tmpFile).catch(() => {}));
+  }
+});
+
+test('attachPiRpcSession sends prompt without images when imagePaths is empty', () => {
+  const events = [];
+  const send = (channel, payload) => events.push({ channel, ...payload });
+  const child = createMockChild();
+
+  attachPiRpcSession({
+    child,
+    prompt: 'hello',
+    cwd: '/tmp',
+    model: null,
+    send,
+    imagePaths: [],
+  });
+
+  const chunks = [];
+  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const buffered = child.stdin.read();
+  if (buffered) chunks.push(buffered.toString());
+
+  const lines = chunks.join('').trim().split('\n');
+  const promptLine = lines.find((l) => {
+    try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+  });
+  assert.ok(promptLine, 'should send a prompt command');
+  const parsed = JSON.parse(promptLine);
+  assert.equal(parsed.images, undefined, 'prompt should not include images when none provided');
+});
+
+test('attachPiRpcSession skips unreadable image paths gracefully', () => {
+  const events = [];
+  const send = (channel, payload) => events.push({ channel, ...payload });
+  const child = createMockChild();
+
+  attachPiRpcSession({
+    child,
+    prompt: 'check this',
+    cwd: '/tmp',
+    model: null,
+    send,
+    imagePaths: ['/nonexistent/path/fake-image.png'],
+  });
+
+  const chunks = [];
+  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const buffered = child.stdin.read();
+  if (buffered) chunks.push(buffered.toString());
+
+  const lines = chunks.join('').trim().split('\n');
+  const promptLine = lines.find((l) => {
+    try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+  });
+  assert.ok(promptLine, 'should send a prompt command');
+  const parsed = JSON.parse(promptLine);
+  assert.equal(parsed.images, undefined, 'prompt should not include images for unreadable paths');
+});
+
+test('attachPiRpcSession rejects non-file image paths (directories)', async () => {
+  const fsp = await import('node:fs/promises');
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const dirPath = path.join(tmpDir, `pi-rpc-test-dir-${Date.now()}`);
+  await fsp.mkdir(dirPath);
+  try {
+    const events = [];
+    const send = (channel, payload) => events.push({ channel, ...payload });
+    const child = createMockChild();
+
+    attachPiRpcSession({
+      child,
+      prompt: 'check this dir',
+      cwd: '/tmp',
+      model: null,
+      send,
+      imagePaths: [dirPath],
+    });
+
+    const chunks = [];
+    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const buffered = child.stdin.read();
+    if (buffered) chunks.push(buffered.toString());
+
+    const lines = chunks.join('').trim().split('\n');
+    const promptLine = lines.find((l) => {
+      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    });
+    assert.ok(promptLine);
+    const parsed = JSON.parse(promptLine);
+    assert.equal(parsed.images, undefined, 'directories should not be forwarded as images');
+  } finally {
+    await fsp.rmdir(dirPath);
+  }
+});
+
+test('attachPiRpcSession rejects disallowed image extensions', async () => {
+  const fsp = await import('node:fs/promises');
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const tmpFile = path.join(tmpDir, `pi-rpc-test-${Date.now()}.txt`);
+  await fsp.writeFile(tmpFile, 'not an image');
+  try {
+    const events = [];
+    const send = (channel, payload) => events.push({ channel, ...payload });
+    const child = createMockChild();
+
+    attachPiRpcSession({
+      child,
+      prompt: 'what is this',
+      cwd: '/tmp',
+      model: null,
+      send,
+      imagePaths: [tmpFile],
+    });
+
+    const chunks = [];
+    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const buffered = child.stdin.read();
+    if (buffered) chunks.push(buffered.toString());
+
+    const lines = chunks.join('').trim().split('\n');
+    const promptLine = lines.find((l) => {
+      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    });
+    assert.ok(promptLine);
+    const parsed = JSON.parse(promptLine);
+    assert.equal(parsed.images, undefined, '.txt files should not be forwarded as images');
+  } finally {
+    await fsp.unlink(tmpFile);
+  }
+});
+
+test('attachPiRpcSession rejects symlink escape outside uploadRoot', async () => {
+  const fsp = await import('node:fs/promises');
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  // Create a real image file outside the upload root.
+  const outsideDir = path.join(tmpDir, `pi-rpc-test-outside-${Date.now()}`);
+  await fsp.mkdir(outsideDir);
+  const outsideFile = path.join(outsideDir, 'real.jpg');
+  await fsp.writeFile(outsideFile, Buffer.from('fake-jpg-content'));
+  // Create the upload root and a symlink inside it pointing outside.
+  const uploadRoot = path.join(tmpDir, `pi-rpc-test-uploads-${Date.now()}`);
+  await fsp.mkdir(uploadRoot);
+  const symlinkPath = path.join(uploadRoot, 'escape.jpg');
+  await fsp.symlink(outsideFile, symlinkPath);
+  try {
+    const events = [];
+    const send = (channel, payload) => events.push({ channel, ...payload });
+    const child = createMockChild();
+
+    attachPiRpcSession({
+      child,
+      prompt: 'check this',
+      cwd: '/tmp',
+      model: null,
+      send,
+      imagePaths: [symlinkPath],
+      uploadRoot,
+    });
+
+    const chunks = [];
+    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const buffered = child.stdin.read();
+    if (buffered) chunks.push(buffered.toString());
+
+    const lines = chunks.join('').trim().split('\n');
+    const promptLine = lines.find((l) => {
+      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    });
+    assert.ok(promptLine);
+    const parsed = JSON.parse(promptLine);
+    assert.equal(parsed.images, undefined, 'symlinks resolving outside uploadRoot should not be forwarded as images');
+  } finally {
+    await fsp.unlink(symlinkPath);
+    await fsp.rmdir(uploadRoot);
+    await fsp.unlink(outsideFile);
+    await fsp.rmdir(outsideDir);
+  }
+});
+
+test('attachPiRpcSession allows symlink inside uploadRoot', async () => {
+  const fsp = await import('node:fs/promises');
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  // Create a real image file inside the upload root.
+  const uploadRoot = path.join(tmpDir, `pi-rpc-test-uploads-in-${Date.now()}`);
+  await fsp.mkdir(uploadRoot);
+  const realFile = path.join(uploadRoot, 'real.png');
+  // Minimal valid PNG header + IHDR so the content isn't empty.
+  await fsp.writeFile(realFile, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  // Create a symlink inside the same root pointing to the real file.
+  const symlinkPath = path.join(uploadRoot, 'link.png');
+  await fsp.symlink(realFile, symlinkPath);
+  try {
+    const events = [];
+    const send = (channel, payload) => events.push({ channel, ...payload });
+    const child = createMockChild();
+
+    attachPiRpcSession({
+      child,
+      prompt: 'check this',
+      cwd: '/tmp',
+      model: null,
+      send,
+      imagePaths: [symlinkPath],
+      uploadRoot,
+    });
+
+    const chunks = [];
+    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const buffered = child.stdin.read();
+    if (buffered) chunks.push(buffered.toString());
+
+    const lines = chunks.join('').trim().split('\n');
+    const promptLine = lines.find((l) => {
+      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    });
+    assert.ok(promptLine);
+    const parsed = JSON.parse(promptLine);
+    assert.ok(Array.isArray(parsed.images), 'symlink inside uploadRoot should be forwarded as image');
+    assert.equal(parsed.images.length, 1);
+    assert.equal(parsed.images[0].type, 'image');
+    assert.equal(parsed.images[0].mimeType, 'image/png');
+  } finally {
+    await fsp.unlink(symlinkPath);
+    await fsp.unlink(realFile);
+    await fsp.rmdir(uploadRoot);
+  }
+});
+
+// ─── original test continues ────────────────────────────────────────────────
 
 test('attachPiRpcSession: no agent events emitted after abort()', () => {
   const { child, events, session } = createSession();
