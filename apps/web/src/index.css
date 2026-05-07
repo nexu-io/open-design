@@ -5948,6 +5948,15 @@ button.connector-action.is-loading {
   justify-content: space-between;
   gap: 10px;
 }
+.inspect-panel-head > button {
+  /* Without an explicit shrink-floor, a long selected-component label
+     in the title can squeeze the Close button so narrowly that the
+     "x" glyph stacks into a vertical layout on some font/zoom
+     combinations. Pinning flex-shrink: 0 keeps the close affordance
+     on a stable single-line size regardless of label length. Issue
+     #785. */
+  flex-shrink: 0;
+}
 .inspect-panel-title {
   display: grid;
   gap: 2px;
