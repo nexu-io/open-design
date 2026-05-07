@@ -699,6 +699,7 @@ Always use Pakistani Rupee (₨), not generic rupee (₹):
 <p dir="rtl">
   Check our website <bdi dir="ltr">example.com</bdi> for more details.
 </p>
+```
 
 ### ❌ Typography
 
@@ -767,10 +768,7 @@ Here's a complete, production-ready example:
   <title>Urdu Modern - Quick Start</title>
   
   <!-- Google Fonts: Noto Nastaliq Urdu -->
-  <link 
-    href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" 
-    rel="stylesheet"
-  >
+  <link href="[https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap](https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap)" rel="stylesheet">
   
   <style>
     :root {
@@ -974,7 +972,7 @@ language: Urdu (ur) + English
 rtl_primary: true
 fonts:
   - name: Noto Nastaliq Urdu
-    url: https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700
+    url: https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700
   - name: Inter
     url: system
 primary_color: "#0F595E"
@@ -986,7 +984,7 @@ target_audience: Pakistani startups, news, education, government, global Urdu co
 
 ## Resources & References
 
-- **Noto Nastaliq Urdu Font:** https://fonts.google.com/noto/specimen/Noto+Naskh+Arabic
+- **Noto Nastaliq Urdu Font:** https://fonts.google.com/noto/specimen/Noto+Nastaliq+Urdu
 - **WCAG Accessibility Guidelines:** https://www.w3.org/WAI/WCAG21/quickref/
 - **CSS Logical Properties:** https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Logical_Properties
 - **RTL Best Practices:** https://www.w3.org/International/questions/qa-html-dir
