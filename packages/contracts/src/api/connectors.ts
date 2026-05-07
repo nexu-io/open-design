@@ -32,17 +32,25 @@ export interface ConnectorDetail {
   accountLabel?: string;
   tools: ConnectorToolDetail[];
   /**
-   * Names of tools that this connector permits agents to call. Subset of
-   * `tools` — populated from the catalog's static curation plus any
-   * provider-discovered tools that are read-only with auto approval.
-   * UIs that surface a single "N tools" count (e.g. the connector card
-   * badge) should prefer `allowedToolNames.length` over `tools.length`
-   * because `tools` includes the entire provider inventory once a
-   * Composio API key is configured (going from ~2 hardcoded fallback
-   * tools to several hundred provider tools), while `allowedToolNames`
-   * is the stable subset the agent can actually invoke. See issue #748.
+   * Runtime execution allowlist. Subset of `tools` — the catalog's
+   * static curation plus any provider-discovered tools that are
+   * read-only with auto approval. Used by the agent layer to gate
+   * which tools are invocable. Note: this list **grows** on Composio
+   * hydration (a GitHub-style provider can add tens of read tools to
+   * the catalog baseline of 2), so it is not the right anchor for a
+   * stable UI summary count — see `curatedToolNames` for that.
    */
   allowedToolNames: string[];
+  /**
+   * Hand-curated catalog subset. Stable across hydration: never
+   * extended by provider discovery, only the static catalog names.
+   * UIs surfacing a single "N tools" summary (the connector card and
+   * drawer header badges) should read this so the displayed count
+   * doesn't lurch when an API key flips on (issue #748). The full
+   * provider inventory is still discoverable in the drawer's tools
+   * section, which renders `tools` directly.
+   */
+  curatedToolNames: string[];
   featuredToolNames?: string[];
   minimumApproval?: ConnectorToolApproval;
   lastError?: string;

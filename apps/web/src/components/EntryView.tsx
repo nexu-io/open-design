@@ -153,26 +153,33 @@ function scoreConnectorText(value: string | undefined, query: string, baseScore:
  * Tool count rendered in the connector card badge and the drawer
  * header badge — the "N tools" summary the user sees at a glance.
  *
- * Tracks the curated `allowedToolNames` size so the badge stays close
- * to "tools the agent can actually invoke" instead of the raw provider
- * inventory: pre-Composio-hydration GitHub ships ~2 hardcoded tools,
- * post-hydration `connector.tools` swells to ≈868 raw provider tools,
- * but `allowedToolNames` only grows with read-only auto-approval
- * additions (issue #748).
+ * Reads `curatedToolNames` first: that's the hand-curated catalog
+ * subset, **stable across Composio hydration** because it never
+ * picks up provider-discovered tools. This is the count users want
+ * for "what does this connector ship with" (issue #748).
  *
- * Falls back to `connector.tools.length` when `allowedToolNames` is
- * missing — tolerant of older daemon builds that haven't shipped the
- * field yet.
+ * Falls back to `allowedToolNames` and then `connector.tools.length`
+ * for tolerance against older daemon builds that haven't yet
+ * shipped one or both fields. The order matters: a daemon that has
+ * `allowedToolNames` but not `curatedToolNames` predates the #767
+ * review fix and still produces a more meaningful number than the
+ * raw inventory; only when both are missing do we fall back to
+ * `connector.tools.length` (which is the original buggy behaviour
+ * the issue reports).
  *
  * **Do not** reuse this for drawer empty-state / loading-gate
  * decisions: those surfaces render `connector.tools` directly, so
  * they need `connector.tools.length` instead. Mixing the two is the
- * regression #767 review caught — a connector with an empty
+ * regression the #767 review caught — a connector with an empty
  * allowlist but a non-empty inventory would render "no tools
  * available" while the actual inventory was suppressed.
  */
 export function getConnectorBadgeToolCount(connector: ConnectorDetail): number {
-  return connector.allowedToolNames?.length ?? connector.tools.length;
+  return (
+    connector.curatedToolNames?.length
+      ?? connector.allowedToolNames?.length
+      ?? connector.tools.length
+  );
 }
 
 export function getConnectorSearchScore(connector: ConnectorDetail, query: string): number | null {

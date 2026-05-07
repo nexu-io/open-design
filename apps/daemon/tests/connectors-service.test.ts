@@ -559,4 +559,64 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
     expect(Array.isArray(detail.allowedToolNames)).toBe(true);
     expect(detail.allowedToolNames.length).toBe(0);
   });
+
+  it('exposes curatedToolNames on the wire and falls it back to allowedToolNames for non-Composio connectors (#767 review)', async () => {
+    // Non-Composio connectors don't have a discovery layer that grows
+    // allowedToolNames at runtime, so curatedToolNames is equivalent
+    // to allowedToolNames. The wire field should still be present
+    // (badge consumers expect it) and equal to the catalog set.
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    expect(Array.isArray(detail.curatedToolNames)).toBe(true);
+    expect(detail.curatedToolNames).toEqual(['docs.search']);
+    // For a non-Composio connector with no curatedToolNames override,
+    // the two fields are intentionally identical.
+    expect(detail.curatedToolNames).toEqual(detail.allowedToolNames);
+  });
+
+  it('keeps curatedToolNames at the catalog size even when allowedToolNames is dynamically extended (#748 / #767 stability guarantee)', async () => {
+    // Simulate the Composio post-hydration shape that motivated the
+    // #767 review: the catalog ships 1 curated tool, but the live
+    // discovery layer auto-allows ~50 read+auto-approval tools, so
+    // `allowedToolNames` swells. The badge should pin to the catalog
+    // size; only the runtime execution gate sees the wider list.
+    const autoAllowedReadTools = Array.from({ length: 50 }, (_, index) => `docs.read_op_${index}`);
+    const definition: ConnectorCatalogDefinition = {
+      ...readOnlyDefinition(),
+      // `curatedToolNames` is the source of truth for the badge.
+      curatedToolNames: ['docs.search'],
+      // `allowedToolNames` is the runtime execution gate — extended
+      // by the (simulated) auto-allow path.
+      allowedToolNames: ['docs.search', ...autoAllowedReadTools],
+    };
+    const statusService = new ConnectorStatusService();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+
+    // The "N tools" badge surface: catalog size only, no growth.
+    expect(detail.curatedToolNames.length).toBe(1);
+    // The agent execution allowlist: full grown set.
+    expect(detail.allowedToolNames.length).toBe(51);
+    // Sanity: the two arrays are intentionally diverging on this
+    // shape; that divergence is exactly what the badge stability
+    // depends on.
+    expect(detail.curatedToolNames).not.toEqual(detail.allowedToolNames);
+  });
+
+  it('returns curatedToolNames as a defensive copy (mutating the wire result must not affect the source)', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    detail.curatedToolNames.push('docs.evil_inject');
+    expect(definition.allowedToolNames).toEqual(['docs.search']);
+
+    const detailAgain = await service.getConnector('external_docs');
+    expect(detailAgain.curatedToolNames).toEqual(['docs.search']);
+  });
 });

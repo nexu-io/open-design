@@ -143,6 +143,7 @@ export const exampleConnectorDetail: ConnectorDetail = {
   ],
   auth: { provider: 'composio', configured: false },
   allowedToolNames: ['github.search_issues_and_pull_requests'],
+  curatedToolNames: ['github.search_issues_and_pull_requests'],
   featuredToolNames: ['github.search_issues_and_pull_requests'],
   minimumApproval: 'auto',
 };
