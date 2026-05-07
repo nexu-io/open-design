@@ -45,8 +45,8 @@ import { exportProjectTranscript } from './transcript-export.js';
 // Re-export the request/response types so existing daemon-internal
 // imports (and the route handler) keep their referenced names. The
 // canonical definitions live in @open-design/contracts/api/finalize
-// per @lefarcen's P2 review feedback on PR #832 (drift risk between
-// daemon and web client otherwise).
+// per @lefarcen's P2 review feedback on PR #832, with a real runtime
+// entrypoint per @mrcfps's review feedback on the same PR.
 export type {
   FinalizeAnthropicRequest,
   FinalizeAnthropicResponse,

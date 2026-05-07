@@ -4,6 +4,14 @@
 // (`/finalize/openai` etc.) can reuse the request/response shape.
 
 /**
+ * Bumped when the finalize request/response shape changes incompatibly.
+ * Also serves as a real runtime export so esbuild emits a `.mjs` for
+ * this module (without it, the file is type-only and NodeNext-resolved
+ * consumers cannot resolve the re-export from the package root).
+ */
+export const FINALIZE_SCHEMA_VERSION = 1;
+
+/**
  * Request body for `POST /api/projects/:id/finalize/anthropic`.
  *
  * Field names mirror `ProxyStreamRequest` (./proxy.ts) so a caller that
