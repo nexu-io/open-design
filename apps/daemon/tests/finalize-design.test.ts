@@ -14,8 +14,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   closeDatabase,
+  insertConversation,
   insertProject,
   openDatabase,
+  upsertMessage,
 } from '../src/db.js';
 import { writeProjectFile } from '../src/projects.js';
 import {
@@ -43,6 +45,7 @@ let projectsRoot: string | null = null;
 
 afterEach(() => {
   closeDatabase();
+  vi.restoreAllMocks();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
   projectsRoot = null;
@@ -384,8 +387,243 @@ describe('extractDesignMd', () => {
   });
 });
 
-describe.skip('finalizeDesignPackage (phases H-I land remaining bodies)', () => {
-  it('placeholder', () => {
-    /* phases H-I add real cases here */
+describe('finalizeDesignPackage (pipeline integration)', () => {
+  function setupPipeline(
+    opts: { designSystemId?: string | null; designSystemBody?: string | null } = {},
+  ): { db: any; projectsRoot: string; designSystemsRoot: string } {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-finalize-pipe-'));
+    const designSystemsRoot = path.join(tempDir, 'design-systems');
+    fs.mkdirSync(designSystemsRoot, { recursive: true });
+    if (opts.designSystemId && opts.designSystemBody !== null) {
+      fs.mkdirSync(path.join(designSystemsRoot, opts.designSystemId), { recursive: true });
+      fs.writeFileSync(
+        path.join(designSystemsRoot, opts.designSystemId, 'DESIGN.md'),
+        opts.designSystemBody ?? '# default DESIGN.md\n',
+      );
+    }
+
+    const db = openDatabase(tempDir);
+    insertProject(db, {
+      id: PROJECT_ID,
+      name: 'Project',
+      designSystemId: opts.designSystemId === undefined ? 'shadcn' : opts.designSystemId,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    projectsRoot = path.join(tempDir, 'projects');
+    fs.mkdirSync(path.join(projectsRoot, PROJECT_ID), { recursive: true });
+
+    insertConversation(db, {
+      id: 'c1',
+      projectId: PROJECT_ID,
+      title: 'Greeting',
+      createdAt: 100,
+      updatedAt: 100,
+    });
+    upsertMessage(db, 'c1', {
+      id: 'm1',
+      role: 'user',
+      content: '',
+      events: [{ kind: 'text', text: 'design me a landing page' }],
+    });
+    upsertMessage(db, 'c1', {
+      id: 'm2',
+      role: 'assistant',
+      content: '',
+      events: [{ kind: 'text', text: 'here is the html' }],
+    });
+
+    return { db, projectsRoot, designSystemsRoot };
+  }
+
+  function happyFetch(designMd: string): typeof globalThis.fetch {
+    return vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: 'text', text: designMd }],
+          usage: { input_tokens: 1234, output_tokens: 567 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    ) as any;
+  }
+
+  it('writes DESIGN.md atomically on the happy path', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n## tone\nminimal, opinionated.\n',
+    });
+
+    const fetchImpl = happyFetch('# DESIGN.md\n## Summary\nA landing page.\n');
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+      fetchImpl,
+    } as any);
+
+    expect(result.designMdPath).toBe(path.join(projectsRoot, PROJECT_ID, 'DESIGN.md'));
+    expect(fs.existsSync(result.designMdPath)).toBe(true);
+    expect(fs.readFileSync(result.designMdPath, 'utf8')).toBe(
+      '# DESIGN.md\n## Summary\nA landing page.\n',
+    );
+    // No leftover .tmp files.
+    const dirEntries = fs.readdirSync(path.join(projectsRoot, PROJECT_ID));
+    expect(dirEntries.filter((n) => n.startsWith('DESIGN.md.tmp.'))).toEqual([]);
+    // Lock is released.
+    expect(dirEntries).not.toContain('.finalize.lock');
+  });
+
+  it('response carries every documented field with correct types', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+    });
+    const fetchImpl = happyFetch('# DESIGN.md\nbody\n');
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+      fetchImpl,
+    } as any);
+
+    expect(typeof result.designMdPath).toBe('string');
+    expect(typeof result.bytesWritten).toBe('number');
+    expect(result.bytesWritten).toBeGreaterThan(0);
+    expect(result.model).toBe('claude-opus-4-7');
+    expect(result.inputTokens).toBe(1234);
+    expect(result.outputTokens).toBe(567);
+    expect(result.artifact).toBeNull(); // no artifact seeded
+    expect(result.transcriptMessageCount).toBe(2);
+    expect(result.designSystemId).toBe('shadcn');
+  });
+
+  it('emits design system "none" in the prompt when no design_system_id is set', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: null,
+    });
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      // Capture the body for assertion.
+      const body = JSON.parse(init.body as string);
+      expect(body.system).toContain('# DESIGN.md');
+      expect(body.messages[0].content).toContain('## Active design system: none');
+      expect(body.messages[0].content).toContain(
+        '(no design system selected for this project)',
+      );
+      return new Response(
+        JSON.stringify({
+          content: [{ type: 'text', text: '# DESIGN.md\nbody\n' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+      fetchImpl: fetchImpl as any,
+    } as any);
+    expect(result.designSystemId).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws FinalizePackageLockedError when .finalize.lock is already held', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline();
+    const lockPath = path.join(projectsRoot, PROJECT_ID, '.finalize.lock');
+    fs.writeFileSync(lockPath, '');
+    const fetchImpl = happyFetch('# DESIGN.md\nbody\n');
+
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-opus-4-7',
+        fetchImpl,
+      } as any),
+    ).rejects.toBeInstanceOf(FinalizePackageLockedError);
+
+    // DESIGN.md must NOT have been written; the pre-existing lock prevented it.
+    expect(fs.existsSync(path.join(projectsRoot, PROJECT_ID, 'DESIGN.md'))).toBe(false);
+
+    // The pre-existing lock must remain — we did not own it, so we must not unlink.
+    expect(fs.existsSync(lockPath)).toBe(true);
+  });
+
+  it('replaces an existing DESIGN.md atomically on a second finalize', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline();
+    const finalPath = path.join(projectsRoot, PROJECT_ID, 'DESIGN.md');
+
+    await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+      fetchImpl: happyFetch('# DESIGN.md\nfirst run\n'),
+    } as any);
+    expect(fs.readFileSync(finalPath, 'utf8')).toBe('# DESIGN.md\nfirst run\n');
+
+    // Inject a sentinel between finalize calls.
+    fs.writeFileSync(finalPath, 'sentinel\n');
+    expect(fs.readFileSync(finalPath, 'utf8')).toBe('sentinel\n');
+
+    await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-7',
+      fetchImpl: happyFetch('# DESIGN.md\nsecond run\n'),
+    } as any);
+    expect(fs.readFileSync(finalPath, 'utf8')).toBe('# DESIGN.md\nsecond run\n');
+  });
+
+  it('cleans up tmp file AND lock file on every error path', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline();
+
+    // Force a crash mid-write: spy on writeFileSync and throw on the
+    // DESIGN.md.tmp.* path. Other writeFileSync usages (e.g. transcript-
+    // export within this same call) must continue to work.
+    const realWrite = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((p: any, ...rest: any[]) => {
+      if (typeof p === 'string' && p.includes('DESIGN.md.tmp.')) {
+        throw new Error('disk full');
+      }
+      return (realWrite as any)(p, ...rest);
+    });
+
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-opus-4-7',
+        fetchImpl: happyFetch('# DESIGN.md\nbody\n'),
+      } as any),
+    ).rejects.toThrow(/disk full/);
+
+    const dirEntries = fs.readdirSync(path.join(projectsRoot, PROJECT_ID));
+    expect(dirEntries.filter((n) => n.startsWith('DESIGN.md.tmp.'))).toEqual([]);
+    expect(dirEntries).not.toContain('DESIGN.md');
+    expect(dirEntries).not.toContain('.finalize.lock');
+  });
+
+  it('uses the default https://api.anthropic.com baseUrl when baseUrl is omitted', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline();
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url.startsWith('https://api.anthropic.com/v1/messages')).toBe(true);
+      return new Response(
+        JSON.stringify({
+          content: [{ type: 'text', text: '# DESIGN.md\n' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      // baseUrl deliberately omitted
+      model: 'claude-opus-4-7',
+      fetchImpl: fetchImpl as any,
+    } as any);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

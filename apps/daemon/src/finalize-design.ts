@@ -23,13 +23,18 @@
 // export — verified during PR #493). Schema-mismatch tests in the test
 // file would catch any drift between this restated union and the contract.
 
-import { existsSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
 import * as path from 'node:path';
+import Database from 'better-sqlite3';
+import { getProject } from './db.js';
+import { readDesignSystem } from './design-systems.js';
 import {
   listFiles,
   projectDir,
   readProjectFile,
 } from './projects.js';
+import { exportProjectTranscript } from './transcript-export.js';
 
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_MAX_TOKENS = 16000;
@@ -93,13 +98,7 @@ export class FinalizeUpstreamError extends Error {
   }
 }
 
-interface Db {
-  prepare(sql: string): {
-    all(...args: unknown[]): unknown[];
-    get(...args: unknown[]): unknown;
-    run(...args: unknown[]): unknown;
-  };
-}
+type Db = Database.Database;
 
 interface ResolvedArtifact {
   name: string;
@@ -142,7 +141,7 @@ export async function resolveCurrentArtifact(
 
   if (activeTabName) {
     const sidecarPath = path.join(dir, `${activeTabName}.artifact.json`);
-    if (existsSync(sidecarPath)) {
+    if (fs.existsSync(sidecarPath)) {
       const file = await readProjectFile(projectsRoot, projectId, activeTabName);
       return {
         name: file.name,
@@ -157,7 +156,7 @@ export async function resolveCurrentArtifact(
   const candidates = files
     .filter((f: { name: string; artifactManifest?: { updatedAt?: string } | null }) => {
       // Require a real sidecar on disk; an inferred manifest does not count.
-      return existsSync(path.join(dir, `${f.name}.artifact.json`));
+      return fs.existsSync(path.join(dir, `${f.name}.artifact.json`));
     })
     .map((f: { name: string; artifactManifest?: { updatedAt?: string } | null }) => ({
       name: f.name,
@@ -181,18 +180,162 @@ export async function resolveCurrentArtifact(
 }
 
 export async function finalizeDesignPackage(
-  _db: Db,
-  _projectsRoot: string,
-  _designSystemsRoot: string,
-  _projectId: string,
-  _options: FinalizeOptions,
+  db: Db,
+  projectsRoot: string,
+  designSystemsRoot: string,
+  projectId: string,
+  options: FinalizeOptions,
 ): Promise<FinalizeAnthropicResponse> {
-  // Phase H wires the full pipeline. Path constants referenced here stay
-  // reachable for the route-handler imports across incremental phases.
-  void DEFAULT_BASE_URL;
-  void LOCK_FILENAME;
-  void OUTPUT_FILENAME;
-  throw new Error('finalizeDesignPackage not yet implemented (phase G scaffold)');
+  const project = getProject(db, projectId);
+  if (!project) {
+    // Defensive — the route handler validates this and returns 404 before
+    // reaching here. Kept for direct (non-HTTP) callers, e.g. CLI scripts.
+    throw new Error(`project not found: ${projectId}`);
+  }
+
+  const dir = projectDir(projectsRoot, projectId);
+  fs.mkdirSync(dir, { recursive: true });
+  const finalPath = path.join(dir, OUTPUT_FILENAME);
+  const lockPath = path.join(dir, LOCK_FILENAME);
+  const tmpPath = path.join(
+    dir,
+    `${OUTPUT_FILENAME}.tmp.${process.pid}.${randomBytes(4).toString('hex')}`,
+  );
+  const now = options.now ?? (() => new Date());
+  const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+
+  let lockFd: number | null = null;
+  try {
+    lockFd = fs.openSync(lockPath, 'wx');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') {
+      throw new FinalizePackageLockedError(
+        `finalize is already in progress for project ${projectId}`,
+      );
+    }
+    throw err;
+  }
+
+  try {
+    // Phase 3: export transcript via the PR #493 primitive. Returns the
+    // disk path; we read the body and run it through the truncation
+    // policy so a 4 MB transcript does not blow Anthropic's context.
+    const transcriptResult = exportProjectTranscript(db, projectsRoot, projectId, { now });
+    const transcriptJsonl = fs.readFileSync(transcriptResult.path, 'utf8');
+    const truncatedJsonl = truncateTranscriptForPrompt(transcriptJsonl);
+
+    // Phase 4: design system. Project may not have one selected; readDesignSystem
+    // returns null on missing DESIGN.md so the prompt's design-system section
+    // gracefully falls back to "(no design system selected for this project)".
+    const designSystemId =
+      typeof (project as { designSystemId?: unknown }).designSystemId === 'string'
+        ? ((project as { designSystemId: string }).designSystemId)
+        : null;
+    const designSystemBody = designSystemId
+      ? await readDesignSystem(designSystemsRoot, designSystemId)
+      : null;
+
+    // Phase 5: current artifact (active tab → newest .artifact.json → null).
+    const artifact = await resolveCurrentArtifact(db, projectsRoot, projectId);
+
+    // Phase 6: build prompt.
+    const { systemPrompt, userPrompt } = buildSynthesisPrompt({
+      projectId,
+      transcriptJsonl: truncatedJsonl,
+      transcriptMessageCount: transcriptResult.messageCount,
+      designSystemId,
+      designSystemBody,
+      artifact,
+      now: now(),
+    });
+
+    // Phase 7: Anthropic call with bounded blocking timeout. We use our own
+    // AbortController if the caller did not pass one; either way the call
+    // bounds at DEFAULT_TIMEOUT_MS.
+    const ownController = options.signal ? null : new AbortController();
+    const timeoutId = ownController
+      ? setTimeout(() => ownController.abort(), DEFAULT_TIMEOUT_MS)
+      : null;
+    let response: Response;
+    try {
+      const callParams: AnthropicCallParams = {
+        apiKey: options.apiKey,
+        baseUrl,
+        model: options.model,
+        maxTokens,
+        systemPrompt,
+        userPrompt,
+      };
+      const signalToUse = options.signal ?? ownController?.signal;
+      if (signalToUse) callParams.signal = signalToUse;
+      if (options.fetchImpl) callParams.fetchImpl = options.fetchImpl;
+      response = await callAnthropicWithRetry(callParams);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+
+    // Phase 8: extract DESIGN.md body and usage counters.
+    const payload: unknown = await response.json();
+    const designMd = extractDesignMd(payload);
+    const usage = (payload as { usage?: { input_tokens?: number; output_tokens?: number } }).usage ?? {};
+    const inputTokens = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
+    const outputTokens = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
+
+    // Phase 9: atomic write. Mirror PR #493: writeFileSync({flag:'wx'}) →
+    // reopen for fsync → rename. On any failure unlink tmp; rethrow so the
+    // route handler maps the error.
+    const encoded = Buffer.from(designMd, 'utf8');
+    try {
+      fs.writeFileSync(tmpPath, encoded, { flag: 'wx' });
+      const fsyncFd = fs.openSync(tmpPath, 'r+');
+      try {
+        fs.fsyncSync(fsyncFd);
+      } finally {
+        fs.closeSync(fsyncFd);
+      }
+      fs.renameSync(tmpPath, finalPath);
+    } catch (err) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch {
+        // tmp may not exist if writeFileSync threw before creating it
+      }
+      throw err;
+    }
+
+    return {
+      designMdPath: finalPath,
+      bytesWritten: encoded.length,
+      model: options.model,
+      inputTokens,
+      outputTokens,
+      artifact: artifact
+        ? {
+            name: artifact.name,
+            updatedAt:
+              artifact.manifest && typeof artifact.manifest.updatedAt === 'string'
+                ? artifact.manifest.updatedAt
+                : null,
+          }
+        : null,
+      transcriptMessageCount: transcriptResult.messageCount,
+      designSystemId,
+    };
+  } finally {
+    if (lockFd !== null) {
+      try {
+        fs.closeSync(lockFd);
+      } catch {
+        // ignore close-after-error
+      }
+      try {
+        fs.unlinkSync(lockPath);
+      } catch {
+        // lock may already be gone if disk vanished; not fatal
+      }
+    }
+  }
 }
 
 /**
