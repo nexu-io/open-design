@@ -1,6 +1,17 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const id: Dict = {
+  // Default to English for any key not yet translated. This protects
+  // the locale against typecheck regressions when a feature lands new
+  // strings in a separate PR (the Cloudflare Pages deploy keys
+  // shipped before this locale was fully populated, leaving 18
+  // properties unset on `Dict` and turning `tsc -b` red on every
+  // other open PR's CI). Existing Indonesian translations below
+  // override these fallbacks; new translators can replace English
+  // fallbacks one key at a time. Mirrors the `...en` pattern already
+  // used by de / es-ES / fr / hu / ja / ko / pl / tr.
+  ...en,
   'common.cancel': 'Batal',
   'common.save': 'Simpan',
   'common.close': 'Tutup',
