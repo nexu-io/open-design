@@ -542,8 +542,12 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
     // refreshEligible classification stays a property of the definition,
     // not of the badge surface — confirm the helper still agrees so a
     // future refactor can't quietly let write tools into the allowlist
-    // via a different code path.
-    expect(isRefreshEligibleConnectorToolSafety(provisionedTools[0].safety)).toBe(false);
+    // via a different code path. Bind through a defined-checked local so
+    // the daemon's `noUncheckedIndexedAccess` strict tsconfig doesn't
+    // type the index access as `T | undefined`.
+    const firstProvisionedTool = provisionedTools[0];
+    expect(firstProvisionedTool).toBeDefined();
+    expect(isRefreshEligibleConnectorToolSafety(firstProvisionedTool!.safety)).toBe(false);
   });
 
   it('treats an empty allowedToolNames as a real "0 tools" badge value (not a missing field)', async () => {

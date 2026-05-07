@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ConnectorDetail, ConnectorToolDetail } from '@open-design/contracts';
+
 import {
+  getConnectorBadgeToolCount,
   isTrustedConnectorCallbackOrigin,
   sortConnectorsForDisplay,
   sortConnectorsForSearch,
@@ -95,5 +98,76 @@ describe('connector display sorting', () => {
       'slack',
       'linear',
     ]);
+  });
+});
+
+// Issue #748 + #767 review: the connector card / drawer header badge
+// must track the curated allowlist size (so the number stays close to
+// "tools the agent can actually invoke" instead of jumping from ≈2 to
+// ≈868 when Composio hydrates the full provider inventory). Crucially,
+// this curated count must NOT be reused for drawer empty-state /
+// loading-gate decisions, because the drawer renders the full
+// inventory — a connector with an empty allowlist but a non-empty
+// inventory must still show the list.
+describe('getConnectorBadgeToolCount (issue #748)', () => {
+  function makeRawTool(overrides: Partial<ConnectorToolDetail> = {}): ConnectorToolDetail {
+    return {
+      name: 'docs.bulk_op',
+      title: 'Bulk op',
+      safety: { sideEffect: 'write', approval: 'confirm', reason: 'Write op.' },
+      refreshEligible: false,
+      ...overrides,
+    };
+  }
+  function makeConnector(overrides: Partial<ConnectorDetail> = {}): ConnectorDetail {
+    return {
+      id: 'docs',
+      name: 'Docs',
+      provider: 'composio',
+      category: 'docs',
+      status: 'available',
+      tools: [],
+      allowedToolNames: [],
+      ...overrides,
+    };
+  }
+
+  it('uses the curated allowedToolNames length for the badge', () => {
+    const connector = makeConnector({
+      tools: [makeRawTool({ name: 'docs.search' }), makeRawTool({ name: 'docs.fetch' })],
+      allowedToolNames: ['docs.search', 'docs.fetch'],
+    });
+    expect(getConnectorBadgeToolCount(connector)).toBe(2);
+  });
+
+  it('falls back to tools.length when allowedToolNames is missing (older daemon, defensive)', () => {
+    const connector = makeConnector({
+      tools: [makeRawTool({ name: 'docs.search' })],
+    });
+    // Strip the field to simulate a wire payload from a daemon build
+    // that hasn't shipped allowedToolNames yet — the badge must still
+    // render some count instead of NaN/crash.
+    delete (connector as Partial<ConnectorDetail>).allowedToolNames;
+    expect(getConnectorBadgeToolCount(connector)).toBe(1);
+  });
+
+  it('returns 0 when the allowlist is empty even if the inventory is huge — drawer empty-state is the inventory caller\'s job', () => {
+    // The exact #767-review regression: a hydrated connector with 800
+    // raw provider tools (e.g. write-only Composio surface) but no
+    // execution-safe tools auto-allowed yet. The badge correctly
+    // reports 0 — but the drawer still has 800 tools to enumerate, so
+    // it must NOT pipe this number into its empty-state branch.
+    const inventory = Array.from({ length: 800 }, (_, index) =>
+      makeRawTool({ name: `docs.bulk_op_${index}` }),
+    );
+    const connector = makeConnector({ tools: inventory, allowedToolNames: [] });
+    expect(getConnectorBadgeToolCount(connector)).toBe(0);
+    // Sanity: the drawer's inventory-side number stays at the full
+    // count. These two numbers being different is the contract.
+    expect(connector.tools.length).toBe(800);
+  });
+
+  it('treats an empty inventory + empty allowlist as a real "0 tools" badge (not loading)', () => {
+    expect(getConnectorBadgeToolCount(makeConnector())).toBe(0);
   });
 });

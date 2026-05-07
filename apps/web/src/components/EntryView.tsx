@@ -149,6 +149,32 @@ function scoreConnectorText(value: string | undefined, query: string, baseScore:
   return null;
 }
 
+/**
+ * Tool count rendered in the connector card badge and the drawer
+ * header badge — the "N tools" summary the user sees at a glance.
+ *
+ * Tracks the curated `allowedToolNames` size so the badge stays close
+ * to "tools the agent can actually invoke" instead of the raw provider
+ * inventory: pre-Composio-hydration GitHub ships ~2 hardcoded tools,
+ * post-hydration `connector.tools` swells to ≈868 raw provider tools,
+ * but `allowedToolNames` only grows with read-only auto-approval
+ * additions (issue #748).
+ *
+ * Falls back to `connector.tools.length` when `allowedToolNames` is
+ * missing — tolerant of older daemon builds that haven't shipped the
+ * field yet.
+ *
+ * **Do not** reuse this for drawer empty-state / loading-gate
+ * decisions: those surfaces render `connector.tools` directly, so
+ * they need `connector.tools.length` instead. Mixing the two is the
+ * regression #767 review caught — a connector with an empty
+ * allowlist but a non-empty inventory would render "no tools
+ * available" while the actual inventory was suppressed.
+ */
+export function getConnectorBadgeToolCount(connector: ConnectorDetail): number {
+  return connector.allowedToolNames?.length ?? connector.tools.length;
+}
+
 export function getConnectorSearchScore(connector: ConnectorDetail, query: string): number | null {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return 0;
@@ -933,14 +959,9 @@ function ConnectorCard({
   const isConnected = connector.status === 'connected';
   const canConnect = !disabled && !isPending && connector.status === 'available';
   const canDisconnect = !disabled && !isPending && isConnected;
-  // Use the curated allowedToolNames count rather than connector.tools.length
-  // so the badge stays close to "tools the agent can actually invoke" instead
-  // of jumping from ~2 hardcoded fallback tools to several hundred raw
-  // provider tools the moment a Composio API key is configured (issue #748).
-  // Fall back to tools.length for safety: older daemon builds (or any
-  // connector that hasn't migrated yet) won't ship allowedToolNames over
-  // the wire.
-  const toolCount = connector.allowedToolNames?.length ?? connector.tools.length;
+  // Card has no inventory section, just the summary badge — see
+  // `getConnectorBadgeToolCount` for the curated-vs-inventory split.
+  const toolCount = getConnectorBadgeToolCount(connector);
   const showToolsBadge = toolsLoaded;
   const toolsBadgeLabel = formatToolsBadge(toolCount, t);
 
@@ -1093,12 +1114,19 @@ function ConnectorDetailDrawer({
   const canConnect = !disabled && !isPending && connector.status === 'available';
   const canDisconnect = !disabled && !isPending && isConnected;
   const accountLabel = getDisplayableConnectorAccountLabel(connector);
-  // Mirror the connector card: badge count tracks the curated allowlist
-  // (issue #748). The drawer below still iterates over connector.tools to
-  // show the full inventory — the count and the list are intentionally
-  // different surfaces.
-  const toolCount = connector.allowedToolNames?.length ?? connector.tools.length;
-  const isLoadingTools = !toolsLoaded || (toolsLoading && toolCount === 0);
+  // Two distinct counts in this drawer (issue #748, refined per #767
+  // review):
+  //   - badgeToolCount: curated allowlist size, mirrors the connector
+  //     card summary. Stable across Composio hydration.
+  //   - inventoryToolCount: full provider inventory size. Drives the
+  //     loading gate, the section count, and the empty-state branch —
+  //     the section below renders the entire `connector.tools` array,
+  //     so a connector with an empty allowlist but a non-empty
+  //     inventory (e.g. write-only provider tools) must still render
+  //     the list, not collapse to "no tools available".
+  const badgeToolCount = getConnectorBadgeToolCount(connector);
+  const inventoryToolCount = connector.tools.length;
+  const isLoadingTools = !toolsLoaded || (toolsLoading && inventoryToolCount === 0);
   const showToolsBadge = toolsLoaded;
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -1153,9 +1181,9 @@ function ConnectorDetailDrawer({
                 {statusLabel(connector.status, t)}
               </span>
               {showToolsBadge ? (
-                <span className="connector-tools-badge is-ready" title={formatToolsBadge(toolCount, t)}>
+                <span className="connector-tools-badge is-ready" title={formatToolsBadge(badgeToolCount, t)}>
                   <Icon name="settings" size={10} />
-                  <span>{formatToolsBadge(toolCount, t)}</span>
+                  <span>{formatToolsBadge(badgeToolCount, t)}</span>
                 </span>
               ) : null}
             </div>
@@ -1212,11 +1240,11 @@ function ConnectorDetailDrawer({
 
           <section className="connector-drawer-section">
             <h3 className="connector-drawer-section-title">
-              {t('connectors.toolsSection')} <span className="connector-drawer-count">{toolCount}</span>
+              {t('connectors.toolsSection')} <span className="connector-drawer-count">{inventoryToolCount}</span>
             </h3>
             {isLoadingTools ? (
               <p className="connector-drawer-empty"><Icon name="spinner" size={12} /> {t('connectors.toolsLoading')}</p>
-            ) : toolCount === 0 ? (
+            ) : inventoryToolCount === 0 ? (
               <p className="connector-drawer-empty">{t('connectors.noToolsAvailable')}</p>
             ) : (
               <ul className="connector-drawer-tools">
