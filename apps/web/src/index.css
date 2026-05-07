@@ -4516,6 +4516,9 @@ button.connector-action.is-loading {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
+  /* thinner scrollbar to avoid overlap */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .ws-tab {
