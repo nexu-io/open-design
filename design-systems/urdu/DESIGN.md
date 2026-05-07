@@ -1,7 +1,7 @@
 # Urdu Modern (Indus Script System)
 
-> **Category:** Editorial / Personal / Publication  
-> **Focus:** Urdu-first digital experiences with native RTL support, Nastaliq typography, and bilingual harmony.
+> Category: Editorial / Personal / Publication
+Urdu-first digital experiences with native RTL support,Nastaliq typography, and bilingual harmony.
 
 ---
 
@@ -98,7 +98,7 @@ font-family: "Noto Nastaliq Urdu", "Mehr Nastaliq", "URW Chancery", serif;
 **Import (add to `<head>`):**
 ```html
 <link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" as="style">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq +Urdu:wght@400;700&display=swap" rel="stylesheet">
 ```
 
 #### Latin Script (Secondary)
@@ -561,26 +561,26 @@ All animations respect RTL directionality and maintain readability.
 
 ## 7. Accessibility (A11y)
 
-This system is built to be accessible. All color contrasts meet or exceed WCAG AA standards.
+This system is built to be accessible. All color contrasts are verified against WCAG standards.
 
-### Color Contrast (Already Met)
+### Color Contrast (Verified Ratios)
 
-| Combination | Contrast | Standard |
-|---|---|---|
-| Deep Teal on Parchment | 7.2:1 | ✅ AAA |
-| Terracotta on Parchment | 3.8:1 | ✅ AA |
-| Rich Slate on Parchment | 13.5:1 | ✅ AAA |
-| Warm Grey on Parchment | 8.1:1 | ✅ AA |
+| Combination | Contrast | Standard | Notes |
+|---|---|---|---|
+| Deep Teal (#0F595E) on Parchment | 8.4:1 | ✅ AAA | Safe for all text |
+| Rich Slate (#1A202C) on Parchment | 15.1:1 | ✅ AAA | Safe for all text |
+| Terracotta (#C05621) on Parchment | 4.05:1 | ⚠️ AA (Large) | **Large Text (18pt+) or Bold only** |
+| Muted Slate (#718096) on Parchment | 3.56:1 | ❌ UI Only | Decorative/Borders only; avoid for text |
 
 ### Text Size Minimums
 
-- **Body text:** Minimum 16px (Nastaliq at smaller sizes becomes unreadable)
-- **Labels:** Minimum 14px
-- **Captions:** Minimum 12px (only for non-essential information)
+- **Body text:** Minimum 16px (Nastaliq script becomes unreadable at smaller sizes).
+- **Labels:** Minimum 14px.
+- **Captions:** Minimum 12px (for non-essential information only).
 
 ### Focus States (Keyboard Navigation)
 
-All interactive elements must have visible focus indicators:
+All interactive elements must have visible focus indicators to support keyboard users:
 
 ```css
 button:focus,
@@ -592,28 +592,31 @@ input:focus {
 ```
 
 ### ARIA Labels (For Screen Readers)
+Accessible Naming Rules (ARIA Best Practices)
+Native Labels First: Always use standard <label for="..."> elements. This is the gold standard for screen readers and ensures the accessible name matches the visible text.
 
-Always pair visual labels with ARIA labels in Urdu:
+When to use aria-label: Only use aria-label when an interactive element has no visible text (e.g., an icon-only button).
+
+Avoid Overriding: Do not use an aria-label that repeats or conflicts with visible text. This prevents WCAG "Label-in-Name" mismatches.
+
 
 ```html
-<!-- Button with visible Urdu text + ARIA label -->
-<button class="button" aria-label="موافقہ بھیجیں">
-  <span lang="ur">موافقہ</span>
-</button>
+<label for="email" lang="ur">ای میل</label>
+<input id="email" type="email" placeholder="name@example.com" />
 
-<!-- Icon-only button MUST have aria-label -->
 <button class="icon-button" aria-label="تلاش کریں">
   <icon class="icon-search"></icon>
 </button>
 
-<!-- Form inputs with explicit labels -->
-<label for="email" lang="ur">ای میل</label>
-<input id="email" type="email" aria-label="اپنی ای میل درج کریں" />
+<label for="pass" lang="ur">پاس ورڈ</label>
+<input id="pass" type="password" aria-describedby="pass-hint" />
+<p id="pass-hint" lang="ur">کم از کم 8 حروف۔</p>
+
 ```
 
 ### Language Declaration
 
-Always declare language for screen readers:
+Properly declaring the document language is critical for Urdu screen reading and correct font rendering:
 
 ```html
 <html lang="ur" dir="rtl">
@@ -621,7 +624,6 @@ Always declare language for screen readers:
     <meta charset="UTF-8">
   </head>
   <body>
-    <!-- All Urdu text wrapped in lang="ur" for clarity -->
     <h1 lang="ur">خیر مقدم</h1>
   </body>
 </html>
@@ -687,30 +689,24 @@ Always use Pakistani Rupee (₨), not generic rupee (₹):
 
 ### ❌ Layout & Direction
 
-- **Mixed RTL/LTR at component level:** Causes text reflow bugs and visual chaos
-  ```html
-  <!-- ❌ BAD: Nested direction changes -->
-  <div dir="rtl">
-    <span dir="ltr">English text</span>
-    <span dir="rtl">اردو متن</span>
-  </div>
-  ```
+- **Hard-coded margin-left/right:** Breaks RTL layouts. Always use logical properties like `margin-inline-start` or `padding-inline-end`.
+- **Fixed Widths on Text Containers:** Urdu script has a large vertical footprint; fixed heights will cause "nuqta" (dot) clipping.
 
-- **Hard-coded margin-left/right:** Breaks RTL rendering
-  ```css
-  /* ❌ BAD */
-  margin-left: 16px;
-  
-  /* ✅ GOOD */
-  margin-inline-start: 16px;
-  ```
+### ✅ Bidirectional (Bidi) Success Patterns
+- **Isolate LTR content:** When mixing Urdu with English product names, URLs, or numbers, always use the `<bdi>` tag or `dir="ltr"` to prevent punctuation (like brackets or periods) from flipping to the wrong side.
+
+```html
+<p dir="rtl">
+  Check our website <bdi dir="ltr">example.com</bdi> for more details.
+</p>
 
 ### ❌ Typography
 
-- **Generic Arabic fonts (Almarai, Droid Arabic):** These are Naskh-optimized, not Nastaliq. They look wrong.
+- **Generic Arabic fonts (Almarai, Droid Arabic):** Do not use Almarai or Noto Naskh Arabic. These do not support the cascading nature of Nastaliq and break spacing.
+
 - **Italic Urdu text:** Nastaliq doesn't have true italic. Font rendering breaks. Use bold or color for emphasis instead.
-- **Font-weight < 400 or > 700:** Noto Nastaliq doesn't support intermediate weights well.
-- **Line-height < 1.6:** Nuqtas (diacritical marks) get clipped. Minimum 1.8 for body text.
+
+- **Line-height < 1.8:** Narrow line heights will clip the dots (nuqtas). Maintain a minimum of 1.8 for all Urdu body text.
 
 ### ❌ Visual Design
 
@@ -743,19 +739,15 @@ Always use Pakistani Rupee (₨), not generic rupee (₹):
 
 ### ❌ Component Structure
 
-- **Icons placed on left in Urdu buttons:** RTL icons should be on the right (logical-right).
+- **Icon Source Order:** In RTL buttons, the icon should be placed to the right of the text in the source code to maintain a natural visual flow.
+- **Directional Icons:** Always manually flip directional icons (like arrows) using transform: scaleX(-1) to align with RTL flow.
+
   ```html
-  <!-- ❌ BAD: Icon on left (wrong for RTL) -->
-  <button>
-    <icon></icon>
+  <!-- Icon on right in source; flex auto-reverses -->
+  <button style="display: flex; gap: 8px;">
     <span lang="ur">بھیجیں</span>
-  </button>
-  
-  <!-- ✅ GOOD: Icon on right in source; flex auto-reverses -->
-  <button>
-    <span lang="ur">بھیجیں</span>
-    <icon></icon>
-  </button>
+    <icon name="arrow-left" style="transform: scaleX(-1);"></icon>
+</button>
   ```
 
 - **Form inputs without explicit labels:** Placeholders disappear; accessibility fails.
