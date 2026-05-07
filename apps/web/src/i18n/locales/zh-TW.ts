@@ -535,6 +535,7 @@ export const zhTW: Dict = {
   'designFiles.downloadSelected': '下載選中的 {n} 個檔案為 ZIP',
   'designFiles.deleteSelected': '刪除 {n} 個',
   'designFiles.clearSelection': '取消選擇',
+  'designFiles.selectPage': '全選此頁',
   'designFiles.selectAll': '全選',
   'designFiles.dropTitle': '⤓ 把檔案拖到這裡',
   'designFiles.dropDesc': '圖片、文件、參考資料或資料夾 — 智慧體都會用作上下文。',

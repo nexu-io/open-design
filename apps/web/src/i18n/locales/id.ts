@@ -534,6 +534,7 @@ export const id: Dict = {
   'designFiles.downloadSelected': 'Unduh {n} sebagai ZIP',
   'designFiles.deleteSelected': 'Hapus {n}',
   'designFiles.clearSelection': 'Bersihkan',
+  'designFiles.selectPage': 'Pilih semua di halaman',
   'designFiles.selectAll': 'Pilih semua',
   'designFiles.dropTitle': 'Lepaskan file di sini',
   'designFiles.dropDesc': 'Upload file desain, gambar, dokumen, atau aset lain ke proyek ini.',

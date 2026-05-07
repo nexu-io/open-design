@@ -604,6 +604,7 @@ export interface Dict {
   'designFiles.downloadSelected': string;
   'designFiles.deleteSelected': string;
   'designFiles.clearSelection': string;
+  'designFiles.selectPage': string;
   'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
   'designFiles.dropDesc': string;

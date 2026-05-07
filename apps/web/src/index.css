@@ -4970,16 +4970,20 @@ button.connector-action.is-loading {
 .df-row-check:hover { background: var(--border); color: var(--text); }
 .df-row-check[aria-checked="true"] { color: var(--accent-strong); }
 
+.df-select-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .df-select-all {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-faint);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
   font-weight: 500;
-  margin-left: auto;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   transition: background 120ms ease, color 120ms ease;
 }

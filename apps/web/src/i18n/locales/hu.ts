@@ -533,6 +533,7 @@ export const hu: Dict = {
   'designFiles.download': 'Letöltés',
   'designFiles.downloadSelected': '{n} fájl letöltése ZIP-ként',
   'designFiles.clearSelection': 'Kijelölés törlése',
+  'designFiles.selectPage': 'Összes kijelölése az oldalon',
   'designFiles.selectAll': 'Összes kijelölése',
   'designFiles.deleteSelected': '{n} törlése',
   'designFiles.dropTitle': '⤓ Húzd ide a fájlokat',

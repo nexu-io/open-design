@@ -74,6 +74,8 @@ export function DesignFilesPanel({
   const pageFiles = sortedFiles.slice(safePage * effectivePageSize, (safePage + 1) * effectivePageSize);
   const rangeStart = safePage * effectivePageSize + 1;
   const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
+  const allPageSelected = pageFiles.every((f) => selected.has(f.name));
+  const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
 
   useEffect(() => {
     setPage(0);
@@ -148,6 +150,26 @@ export function DesignFilesPanel({
       }
       return next;
     });
+  }
+
+  function toggleSelectPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        for (const f of pageFiles) next.delete(f.name);
+      } else {
+        for (const f of pageFiles) next.add(f.name);
+      }
+      return next;
+    });
+  }
+
+  function selectAllFiles() {
+    setSelected(new Set(sortedFiles.map((f) => f.name)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
   }
 
   function openMenuFor(name: string, el: HTMLElement) {
@@ -354,6 +376,21 @@ export function DesignFilesPanel({
                     <span className="df-page-info">
                       {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
                     </span>
+                    <div className="df-select-bar">
+                      <button type="button" className="df-select-all" onClick={toggleSelectPage}>
+                        {t('designFiles.selectPage')}
+                      </button>
+                      {selected.size < sortedFiles.length ? (
+                        <button type="button" className="df-select-all" onClick={selectAllFiles}>
+                          {t('designFiles.selectAll', { n: sortedFiles.length })}
+                        </button>
+                      ) : null}
+                      {selected.size > 0 ? (
+                        <button type="button" className="df-select-all" onClick={clearSelection}>
+                          {t('designFiles.clearSelection')}
+                        </button>
+                      ) : null}
+                    </div>
                     <div className="df-pagination-right">
                       <button
                         type="button"
@@ -376,7 +413,26 @@ export function DesignFilesPanel({
                   <table className="df-table">
                     <thead>
                       <tr>
-                        <th className="df-th-check" />
+                        <th className="df-th-check">
+                          <span
+                            className="df-row-check"
+                            onClick={toggleSelectPage}
+                            role="checkbox"
+                            aria-checked={allPageSelected}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleSelectPage();
+                              }
+                            }}
+                            ref={(el) => {
+                              if (el) (el as HTMLElement).ariaChecked = allPageSelected ? 'true' : somePageSelected ? 'mixed' : 'false';
+                            }}
+                          >
+                            {allPageSelected ? '\u2611' : somePageSelected ? '\u25A3' : '\u2610'}
+                          </span>
+                        </th>
                         <th className="df-th-icon" />
                         <th
                           className="df-th-name df-th-sortable"

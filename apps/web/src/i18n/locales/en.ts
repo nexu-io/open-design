@@ -545,7 +545,8 @@ export const en: Dict = {
   'designFiles.downloadSelected': 'Download {n} as ZIP',
   'designFiles.deleteSelected': 'Delete {n}',
   'designFiles.clearSelection': 'Clear',
-  'designFiles.selectAll': 'Select all',
+  'designFiles.selectPage': 'Select all on page',
+  'designFiles.selectAll': 'Select everything',
   'designFiles.dropTitle': '⤓ Drop files here',
   'designFiles.dropDesc':
     'Images, docs, references, or folders — the agent will use them as context.',

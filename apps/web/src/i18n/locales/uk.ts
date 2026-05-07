@@ -544,6 +544,7 @@ export const uk: Dict = {
   'designFiles.download': 'Завантажити',
   'designFiles.downloadSelected': 'Завантажити {n} як ZIP',
   'designFiles.clearSelection': 'Очистити виділення',
+  'designFiles.selectPage': 'Вибрати все на сторінці',
   'designFiles.selectAll': 'Вибрати все',
   'designFiles.deleteSelected': 'Видалити {n}',
   'designFiles.dropTitle': '⤓ Перенесіть файли сюди',

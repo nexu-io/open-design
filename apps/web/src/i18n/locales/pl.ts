@@ -533,6 +533,7 @@ export const pl: Dict = {
   'designFiles.download': 'Pobierz',
   'designFiles.downloadSelected': 'Pobierz {n} jako ZIP',
   'designFiles.clearSelection': 'Wyczyść zaznaczenie',
+  'designFiles.selectPage': 'Zaznacz wszystko na stronie',
   'designFiles.selectAll': 'Zaznacz wszystko',
   'designFiles.deleteSelected': 'Usuń {n}',
   'designFiles.dropTitle': '⤓ Upuść pliki tutaj',
