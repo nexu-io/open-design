@@ -746,8 +746,8 @@ Always use Pakistani Rupee (₨), not generic rupee (₹):
   ```html
   <!-- Icon on right in source; flex auto-reverses -->
   <button style="display: flex; gap: 8px;">
-    <span lang="ur">بھیجیں</span>
     <icon name="arrow-left" style="transform: scaleX(-1);"></icon>
+    <span lang="ur">بھیجیں</span>
 </button>
   ```
 
@@ -768,7 +768,7 @@ Here's a complete, production-ready example:
   <title>Urdu Modern - Quick Start</title>
   
   <!-- Google Fonts: Noto Nastaliq Urdu -->
-  <link href="[https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap](https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap)" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" rel="stylesheet">
   
   <style>
     :root {
