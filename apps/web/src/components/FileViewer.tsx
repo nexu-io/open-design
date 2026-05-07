@@ -2191,6 +2191,8 @@ function HtmlViewer({
       ? Object.values(nextDeploymentsByProvider)[0] ?? null
       : null;
     const currentDeployment = exactDeployment ?? fallbackDeployment;
+    // Use the explicit providerId for config/form so a fallback deployment from
+    // another provider only fills the existing-URL display, never the form/credentials.
     const config = await fetchDeployConfig(providerId);
     syncDeployFormFromConfig(providerId, config);
     setDeploymentsByProvider(nextDeploymentsByProvider);
