@@ -55,9 +55,9 @@ USER oduser
 
 EXPOSE 7456
 
-ENV OD_BIND_HOST=0.0.0.0
+# Default to loopback-only — the daemon is local-first with no auth.
+# To bind broadly, explicitly set OD_BIND_HOST=0.0.0.0 at runtime.
+ENV OD_BIND_HOST=127.0.0.1
 
-# Bind host is controlled by OD_BIND_HOST env var (default 0.0.0.0).
-# Do NOT add --host here — the CLI flag overrides the env, preventing
-# Compose users from changing OD_BIND_HOST without also replacing CMD.
+# Do NOT add --host here — the CLI flag overrides OD_BIND_HOST env.
 CMD ["node", "apps/daemon/dist/cli.js", "--no-open"]
