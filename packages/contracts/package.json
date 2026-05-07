@@ -14,6 +14,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./api/connectionTest": {
+      "types": "./dist/api/connectionTest.d.ts",
+      "default": "./dist/api/connectionTest.mjs"
+    },
     "./critique": {
       "types": "./dist/critique.d.ts",
       "default": "./dist/critique.mjs"

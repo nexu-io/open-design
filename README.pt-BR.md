@@ -220,7 +220,7 @@ Adicionar uma skill leva uma pasta. Leia [`docs/skills-protocol.md`](docs/skills
 
 ### 1 · Não despachamos um agente. O seu já basta.
 
-O daemon escaneia seu `PATH` por [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) e [`vibe-acp`](https://github.com/mistralai/mistral-vibe) na inicialização. Os que ele encontrar viram engines de design candidatas — dirigidas via stdio com um adapter por CLI, trocáveis pelo picker de modelo. Inspirado em [`multica`](https://github.com/multica-ai/multica) e [`cc-switch`](https://github.com/farion1231/cc-switch). Sem CLI instalado? O modo API é o mesmo pipeline menos o spawn — escolha Anthropic, OpenAI-compatible, Azure OpenAI ou Google Gemini, e o daemon repassa chunks SSE normalizados, com destinos loopback / link-local / RFC1918 rejeitados na borda.
+O daemon escaneia seu `PATH` por [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) e [`vibe-acp`](https://github.com/mistralai/mistral-vibe) na inicialização. Os que ele encontrar viram engines de design candidatas — dirigidas via stdio com um adapter por CLI, trocáveis pelo picker de modelo. Inspirado em [`multica`](https://github.com/multica-ai/multica) e [`cc-switch`](https://github.com/farion1231/cc-switch). Sem CLI instalado? O modo API é o mesmo pipeline menos o spawn — escolha Anthropic, OpenAI-compatible, Azure OpenAI ou Google Gemini, e o daemon repassa chunks SSE normalizados, com destinos loopback / link-local / RFC1918 rejeitados na borda.
 
 ### 2 · Skills são arquivos, não plugins.
 
@@ -319,6 +319,8 @@ pnpm install
 pnpm tools-dev run web
 # open the web URL printed by tools-dev
 ```
+
+Inicializador do Windows: compile `OpenDesign.exe` com as instruções em `tools/launcher/README.md` ou baixe-o pelo GitHub Releases. Depois coloque-o na raiz do repo e dê dois cliques para executar `pnpm install` se necessário e iniciar o Open Design com `pnpm tools-dev`.
 
 Requisitos de ambiente: Node `~24` e pnpm `10.33.x`. `nvm`/`fnm` são apenas helpers opcionais; se você usa um, rode `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` antes do `pnpm install`.
 
@@ -624,7 +626,7 @@ Toda a maquinaria abaixo é o playbook do [`huashu-design`](https://github.com/a
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -650,7 +652,7 @@ Detectados automaticamente do `PATH` no boot do daemon. Sem config necessária. 
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt enviado como comando RPC `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt enviado como comando RPC `prompt`) |
 | **BYOK multi-provider** | n/a | Normalização SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini; com guarda SSRF contra loopback / link-local / RFC1918 |
 
 Adicionar um novo CLI é uma entrada em [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). O formato de stream é um de `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (com `eventParser` por CLI), `acp-json-rpc`, `pi-rpc` ou `plain`.
@@ -719,7 +721,7 @@ Walkthrough completo, barra para mergear, estilo de código e o que não aceitam
 Obrigado a todas as pessoas que ajudaram a empurrar o Open Design pra frente — via código, docs, feedback, novas skills, novos design systems ou até uma issue afiada. Toda contribuição real conta, e a parede abaixo é a forma mais simples de dizer isso em voz alta.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Contribuidoras e contribuidores do Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-07" alt="Contribuidoras e contribuidores do Open Design" />
 </a>
 
 Se você acabou de mandar seu primeiro PR — bem-vindo. A label [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) é o ponto de entrada.
@@ -736,9 +738,9 @@ O SVG acima é regenerado diariamente por [`.github/workflows/metrics.yml`](.git
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Histórico de estrelas do Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-07" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
+    <img alt="Histórico de estrelas do Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
   </picture>
 </a>
 

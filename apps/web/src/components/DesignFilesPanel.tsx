@@ -231,7 +231,11 @@ export function DesignFilesPanel({
           <span className="crumbs">{t('designFiles.crumbs')}</span>
           {selected.size > 0 ? (
             <div className="df-actions">
-              <button type="button" onClick={() => void handleBatchDownload()}>
+              <button
+                type="button"
+                onClick={() => void handleBatchDownload()}
+                title={t('designFiles.downloadSelected', { n: selected.size })}
+              >
                 <Icon name="download" size={13} />
                 <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
               </button>
@@ -309,6 +313,7 @@ export function DesignFilesPanel({
                     <button
                       type="button"
                       className="df-select-all"
+                      title={t('designFiles.selectAll')}
                       onClick={(e) => {
                         e.stopPropagation();
                         selectAllInSection(sectionFiles);
@@ -320,6 +325,7 @@ export function DesignFilesPanel({
                       <button
                         type="button"
                         className="df-select-all"
+                        title={t('designFiles.clearSelection')}
                         onClick={(e) => {
                           e.stopPropagation();
                           clearSection(sectionFiles);
@@ -382,11 +388,11 @@ export function DesignFilesPanel({
                               .closest('.df-row-menu')
                               ?.getBoundingClientRect();
                             if (!rect) return;
-                            
+
                             const viewportHeight = window.innerHeight;
                             const spaceBelow = viewportHeight - rect.bottom;
                             const spaceAbove = rect.top;
-                            
+
                             let top: number;
                             if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
                               top = rect.bottom + 4;
@@ -398,9 +404,9 @@ export function DesignFilesPanel({
                                 viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
                               );
                             }
-                            
+
                             const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
-                            
+
                             setMenuPos({
                               name: f.name,
                               top,

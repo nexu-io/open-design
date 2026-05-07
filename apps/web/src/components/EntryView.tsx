@@ -558,6 +558,17 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
+          <a
+            className="foot-pill"
+            href="https://x.com/nexudotio"
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Follow @nexudotio on X for releases and milestones"
+            aria-label="Follow @nexudotio on X"
+          >
+            <Icon name="external-link" size={12} />
+            <span>Follow @nexudotio</span>
+          </a>
           <LanguageMenu />
         </div>
         <button

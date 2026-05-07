@@ -56,8 +56,8 @@ const residualAllowedExactPaths = new Set([
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
-  // electron-builder hook path; CJS compatibility entry used by tools-pack mac builds.
-  "tools/pack/resources/mac/web-standalone-after-pack.cjs",
+  // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
+  "tools/pack/resources/web-standalone-after-pack.cjs",
 ]);
 
 const residualAllowedPathPrefixes = [

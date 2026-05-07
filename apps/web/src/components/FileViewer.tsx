@@ -77,6 +77,33 @@ type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
 const MAX_BRIDGE_COORDINATE = 1_000_000;
 
+// The five basic style facets the inspect panel exposes. Kept narrow on
+// purpose — open-slide's design tokens panel only edits global tokens, so
+// the per-element delta is small + obvious + cheap to read back from
+// getComputedStyle on the iframe side.
+type InspectStyleSnapshot = {
+  color?: string;
+  backgroundColor?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  paddingTop?: string;
+  paddingRight?: string;
+  paddingBottom?: string;
+  paddingLeft?: string;
+  borderRadius?: string;
+  textAlign?: string;
+  fontFamily?: string;
+  lineHeight?: string;
+};
+
+type InspectTarget = {
+  elementId: string;
+  selector: string;
+  label: string;
+  text: string;
+  style: InspectStyleSnapshot;
+};
+
 const MAX_CACHED_SLIDE_STATES = 64;
 const htmlPreviewSlideState = new Map<string, SlideState>();
 const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
@@ -1310,6 +1337,694 @@ function BoardComposerPopover({
   );
 }
 
+// Maps a CSS computed value (e.g. "rgb(40, 50, 60)" or "16px") to a form
+// input value. Browsers return colors as rgb()/rgba(); HTML <input type=color>
+// only accepts "#rrggbb". Lengths come back as "12px" or "0px"; we strip
+// units for slider binding and re-append on emit.
+//
+// Note: <input type=color> has no alpha channel, so an rgba() with alpha < 1
+// is collapsed to its opaque RGB equivalent here. Most agent-generated HTML
+// uses opaque colors, so this is a known cosmetic limitation — a
+// semi-transparent source value will display in the panel as fully opaque.
+function rgbToHex(value: string | undefined): string {
+  if (!value) return '#000000';
+  const v = value.trim();
+  if (v.startsWith('#') && (v.length === 7 || v.length === 4)) {
+    if (v.length === 4) {
+      return '#' + [1, 2, 3].map((i) => {
+        const c = v.charAt(i);
+        return c + c;
+      }).join('');
+    }
+    return v;
+  }
+  const m = v.match(/rgba?\(\s*([0-9.]+)[ ,]+([0-9.]+)[ ,]+([0-9.]+)/i);
+  if (!m) return '#000000';
+  const toHex = (n: string) => {
+    const x = Math.max(0, Math.min(255, Math.round(Number(n))));
+    return x.toString(16).padStart(2, '0');
+  };
+  return '#' + toHex(m[1] ?? '0') + toHex(m[2] ?? '0') + toHex(m[3] ?? '0');
+}
+
+// Parse a CSS length to a number. Inspect's current sliders all clamp to a
+// non-negative range (padding, font-size, border-radius), so we reject
+// negatives at parse time too — otherwise a `-12px` source value would be
+// silently floored to 0 by the slider clamp without the regex agreeing.
+// If a future control needs negative values (e.g. margin), thread an
+// explicit `allowNegative` flag rather than reintroducing `-?` here.
+function pxToNumber(value: string | undefined): number {
+  if (!value) return 0;
+  const m = value.trim().match(/^(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function InspectPanel({
+  target,
+  onApply,
+  onResetElement,
+  onSaveToSource,
+  onClose,
+  saving,
+  savedAt,
+  error,
+}: {
+  target: InspectTarget;
+  onApply: (prop: string, value: string) => void;
+  onResetElement: (elementId: string) => void;
+  onSaveToSource: () => void;
+  onClose: () => void;
+  saving: boolean;
+  savedAt: number | null;
+  error: string | null;
+}) {
+  // Local "draft" mirror of the most recent value the user picked, so
+  // sliders/colors keep responding even before the iframe echoes back the
+  // computed result. Reset whenever the selected element changes.
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setDraft({});
+  }, [target.elementId]);
+
+  const value = (prop: string, fallback: string): string =>
+    draft[prop] ?? fallback;
+
+  function setVal(prop: string, raw: string) {
+    setDraft((d) => ({ ...d, [prop]: raw }));
+    onApply(prop, raw);
+  }
+
+  // Padding is exposed as a single shared slider that emits the `padding`
+  // shorthand; the browser fans the value out to all four sides internally.
+  // When per-side control becomes useful, switch to emitting explicit
+  // padding-top / padding-right / padding-bottom / padding-left props
+  // (the bridge already allow-lists those long-hand names).
+  const initialPadding = pxToNumber(target.style.paddingTop);
+  const initialFontSize = pxToNumber(target.style.fontSize);
+  const initialRadius = pxToNumber(target.style.borderRadius);
+
+  // Color / length controls all read through `draft` first so the input
+  // tracks the most recent user pick even before getComputedStyle catches
+  // up. Without this the picker would snap back to the initial computed
+  // snapshot on every change and feel non-editable.
+  const colorHex = value('color', rgbToHex(target.style.color));
+  const bgHex = value('background-color', rgbToHex(target.style.backgroundColor));
+  const padding = value('padding', String(initialPadding));
+  const fontSize = value('font-size', String(initialFontSize));
+  const radius = value('border-radius', String(initialRadius));
+  const textAlign = value('text-align', target.style.textAlign || 'left');
+  const fontWeight = value('font-weight', target.style.fontWeight || '400');
+  // Parse once: `pxToNumber(...) || initial...` would treat a legitimate
+  // `0px` draft as missing and snap the slider back to the original
+  // computed value, making it impossible to remove padding/radius from an
+  // element whose initial value is nonzero. `pxToNumber` already returns
+  // 0 for unparseable input, so its result is safe to consume directly
+  // and zero is preserved.
+  const paddingNum = pxToNumber(padding);
+  const fontSizeNum = pxToNumber(fontSize);
+  const radiusNum = pxToNumber(radius);
+
+  const justSaved = savedAt && Date.now() - savedAt < 4000;
+
+  return (
+    <aside className="inspect-panel" data-testid="inspect-panel">
+      <header className="inspect-panel-head">
+        <div className="inspect-panel-title">
+          <strong>{target.label || target.elementId}</strong>
+          <code title={target.selector}>{target.elementId}</code>
+        </div>
+        <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">
+          ×
+        </button>
+      </header>
+
+      <section className="inspect-section">
+        <div className="inspect-section-label">Colors</div>
+        <div className="inspect-row">
+          <label htmlFor="ip-color">Text</label>
+          <input
+            id="ip-color"
+            data-testid="inspect-color"
+            type="color"
+            value={colorHex}
+            onChange={(e) => setVal('color', e.target.value)}
+          />
+          <input
+            type="text"
+            value={colorHex}
+            onChange={(e) => setVal('color', e.target.value)}
+            spellCheck={false}
+          />
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-bg">Background</label>
+          <input
+            id="ip-bg"
+            data-testid="inspect-bg"
+            type="color"
+            value={bgHex}
+            onChange={(e) => setVal('background-color', e.target.value)}
+          />
+          <input
+            type="text"
+            value={bgHex}
+            onChange={(e) => setVal('background-color', e.target.value)}
+            spellCheck={false}
+          />
+        </div>
+      </section>
+
+      <section className="inspect-section">
+        <div className="inspect-section-label">Typography</div>
+        <div className="inspect-row">
+          <label htmlFor="ip-fs">Size</label>
+          <input
+            id="ip-fs"
+            data-testid="inspect-font-size"
+            type="range"
+            min={8}
+            max={160}
+            step={1}
+            value={clamp(fontSizeNum, 8, 160)}
+            onChange={(e) => setVal('font-size', `${e.target.value}px`)}
+          />
+          <span className="inspect-row-value">{Math.round(fontSizeNum)}px</span>
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-fw">Weight</label>
+          <select
+            id="ip-fw"
+            value={fontWeight}
+            onChange={(e) => setVal('font-weight', e.target.value)}
+          >
+            {['100', '300', '400', '500', '600', '700', '800', '900'].map((w) => (
+              <option key={w} value={w}>{w}</option>
+            ))}
+          </select>
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-ta">Align</label>
+          <select
+            id="ip-ta"
+            value={textAlign}
+            onChange={(e) => setVal('text-align', e.target.value)}
+          >
+            {['left', 'center', 'right', 'justify'].map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      <section className="inspect-section">
+        <div className="inspect-section-label">Spacing &amp; Shape</div>
+        <div className="inspect-row">
+          <label htmlFor="ip-pad">Padding</label>
+          <input
+            id="ip-pad"
+            data-testid="inspect-padding"
+            type="range"
+            min={0}
+            max={120}
+            step={1}
+            value={clamp(paddingNum, 0, 120)}
+            onChange={(e) => setVal('padding', `${e.target.value}px`)}
+          />
+          <span className="inspect-row-value">{Math.round(paddingNum)}px</span>
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-rad">Radius</label>
+          <input
+            id="ip-rad"
+            data-testid="inspect-radius"
+            type="range"
+            min={0}
+            max={120}
+            step={1}
+            value={clamp(radiusNum, 0, 120)}
+            onChange={(e) => setVal('border-radius', `${e.target.value}px`)}
+          />
+          <span className="inspect-row-value">{Math.round(radiusNum)}px</span>
+        </div>
+      </section>
+
+      <footer className="inspect-panel-footer">
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            setDraft({});
+            onResetElement(target.elementId);
+          }}
+        >
+          Reset element
+        </button>
+        <button
+          type="button"
+          className="primary"
+          data-testid="inspect-save"
+          disabled={saving}
+          onClick={onSaveToSource}
+        >
+          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save to source'}
+        </button>
+      </footer>
+      {error ? <div className="inspect-panel-error">{error}</div> : null}
+    </aside>
+  );
+}
+
+// Inspect-mode override entry as held in the host's authoritative map and as
+// it travels in od:inspect-overrides messages. The host's persisted map is
+// owned and mutated only by host-driven onApply / reset actions plus the
+// initial parse of the source's <style data-od-inspect-overrides> block;
+// inbound iframe messages are treated as preview acknowledgements, never as
+// save input. Artifact code rendered with scripts enabled can call
+// window.parent.postMessage with a forged payload — ev.source still points
+// at iframe.contentWindow — so any field arriving from the iframe is
+// untrusted. Even the structured `overrides` field could be tampered with
+// to flip allow-listed properties on elements the user never edited, which
+// is why we no longer ingest it on save.
+type InspectOverridePayload = {
+  selector?: unknown;
+  props?: unknown;
+};
+
+// Authoritative host-side override map: elementId → { selector, props }.
+// Mirrors the in-iframe shape so serializeInspectOverrides can consume it.
+export type InspectOverrideEntry = {
+  selector: string;
+  props: Record<string, string>;
+};
+export type InspectOverrideMap = Record<string, InspectOverrideEntry>;
+
+// Allow-list of CSS properties the host will persist on Save. Mirrors the
+// in-iframe ALLOWED_PROPS list so the host doesn't accept properties that
+// the bridge itself would reject.
+const HOST_ALLOWED_INSPECT_PROPS = new Set([
+  'color',
+  'background-color',
+  'font-size',
+  'font-weight',
+  'font-family',
+  'line-height',
+  'text-align',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'border-radius',
+]);
+
+// Reject values that could break out of `prop: value` and into the
+// surrounding <style> block — semicolons, braces, angle brackets, and
+// newlines. Mirrors the bridge's UNSAFE_VALUE regex.
+const HOST_UNSAFE_INSPECT_VALUE = /[;{}<>\n\r]/;
+
+// Reject elementIds whose characters could break out of `[attr="..."]`
+// inside a <style> block. Forbidden:
+//   - `"` and `\` would close the attribute string or smuggle CSS
+//     escapes the host didn't pre-process;
+//   - `<` and `>` would close the surrounding <style> tag;
+//   - C0/C1 controls (newline, etc.) end the CSS rule under string
+//     tokenization — kept in as defense-in-depth against parser quirks.
+// Everything else — including ASCII whitespace and leading digits — is
+// allowed, so deck labels like `01 Cover` survive instead of being
+// dropped on the way to the persisted overrides block.
+const HOST_UNSAFE_INSPECT_ID = /["\\<>\u0000-\u001f\u007f]/;
+
+// Build the inspect overrides CSS body the host will persist, from the
+// structured `overrides` field of an od:inspect-overrides message. The host
+// MUST NOT trust the sibling `css` string — it is attacker-controlled when
+// artifact JS forges the message. The selector is re-derived from each
+// elementId; only allow-listed properties with safe values survive.
+//
+// Exported so unit tests can exercise the validator with hostile payloads.
+export function serializeInspectOverrides(overrides: unknown): string {
+  if (!overrides || typeof overrides !== 'object') return '';
+  const map = overrides as Record<string, unknown>;
+  const lines: string[] = [];
+  for (const elementId of Object.keys(map)) {
+    if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
+    const entry = map[elementId] as InspectOverridePayload | null | undefined;
+    if (!entry || typeof entry !== 'object') continue;
+    const props = entry.props;
+    if (!props || typeof props !== 'object') continue;
+    // Trust only the *kind* of selector the bridge built, not the value
+    // it carried. The bridge runs CSS.escape over the elementId, so a raw
+    // equality check against `[data-screen-label="${elementId}"]` would
+    // miss legitimate deck labels like `01 Cover` (whitespace, leading
+    // digit) and silently downgrade them to `[data-od-id="..."]`. The
+    // elementId itself was sanitized above, so embedding it verbatim into
+    // the re-derived selector is safe inside an attribute value string.
+    const inboundSelector = typeof entry.selector === 'string' ? entry.selector : '';
+    const attr = inboundSelector.startsWith('[data-screen-label="')
+      ? 'data-screen-label'
+      : 'data-od-id';
+    const safeSelector = `[${attr}="${elementId}"]`;
+    const decls: string[] = [];
+    for (const [rawName, rawValue] of Object.entries(props as Record<string, unknown>)) {
+      if (typeof rawName !== 'string' || typeof rawValue !== 'string') continue;
+      const name = rawName.toLowerCase();
+      if (!HOST_ALLOWED_INSPECT_PROPS.has(name)) continue;
+      const value = rawValue.trim();
+      if (!value || HOST_UNSAFE_INSPECT_VALUE.test(value)) continue;
+      decls.push(`${name}: ${value} !important`);
+    }
+    if (!decls.length) continue;
+    lines.push(`${safeSelector} { ${decls.join('; ')} }`);
+  }
+  return lines.join('\n');
+}
+
+// Apply a single host-driven prop change to the authoritative override map.
+// Returns a new map (or the same reference if no-op so React skips renders).
+// Empty value clears the prop; clearing the last prop drops the elementId.
+// Mirrors the iframe bridge's applyOverride sanitization so the host map and
+// the live preview stay in lock-step under the same rules.
+export function updateInspectOverride(
+  map: InspectOverrideMap,
+  elementId: string,
+  selector: string,
+  prop: string,
+  value: string,
+): InspectOverrideMap {
+  if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) return map;
+  const propName = String(prop || '').toLowerCase();
+  if (!HOST_ALLOWED_INSPECT_PROPS.has(propName)) return map;
+  const trimmed = String(value ?? '').trim();
+  if (trimmed && HOST_UNSAFE_INSPECT_VALUE.test(trimmed)) return map;
+  const existing = map[elementId];
+  const nextProps: Record<string, string> = { ...(existing?.props ?? {}) };
+  if (!trimmed) {
+    if (!(propName in nextProps)) return map;
+    delete nextProps[propName];
+  } else if (nextProps[propName] === trimmed && existing?.selector === selector) {
+    return map;
+  } else {
+    nextProps[propName] = trimmed;
+  }
+  const nextMap: InspectOverrideMap = { ...map };
+  if (Object.keys(nextProps).length === 0) {
+    delete nextMap[elementId];
+  } else {
+    nextMap[elementId] = { selector: selector || existing?.selector || '', props: nextProps };
+  }
+  return nextMap;
+}
+
+// Parse any persisted <style data-od-inspect-overrides> blocks in the
+// artifact source into the host's authoritative override map. The host owns
+// this map and only mutates it from onApply / reset actions plus this
+// initial hydration step — inbound iframe od:inspect-overrides messages are
+// not ingested. Without this step, opening a file that already carries an
+// override block would leave the host map empty, so a Save-to-source after
+// any subsequent edit could splice a CSS body that drops every previously
+// saved rule for elements the user did not touch in this session.
+//
+// Mirrors the iframe bridge's hydrateOverridesFromDom: same allow-list,
+// same value sanitizer, same selector kinds, so what the iframe applies and
+// what the host persists stay in lock-step. Pure string transform; no DOM.
+//
+// HTML-aware: enumerates `<style data-od-inspect-overrides>` elements via
+// the same walker used by the splicer, so a `<style data-od-inspect-overrides>`
+// literal living inside a `<script>`, `<style>` (e.g. CSS comment), `<textarea>`,
+// `<title>`, or HTML comment is not mistaken for a real override block. Without
+// that exclusion, useEffect would seed the host map from forged/quoted text and
+// a later Save-to-source would persist phantom CSS the user never created.
+export function parseInspectOverridesFromSource(source: string): InspectOverrideMap {
+  const map: InspectOverrideMap = {};
+  if (!source) return map;
+  for (const body of stripInspectOverridesAndIndex(source).bodies) {
+    const ruleRe = /(\[data-(?:od-id|screen-label)="([^"]*)"\])\s*\{\s*([^}]*)\}/g;
+    let ruleMatch: RegExpExecArray | null;
+    while ((ruleMatch = ruleRe.exec(body)) !== null) {
+      const selector = ruleMatch[1] ?? '';
+      const elementId = ruleMatch[2] ?? '';
+      const declBody = ruleMatch[3] ?? '';
+      if (!selector || !elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
+      const props: Record<string, string> = {};
+      for (const raw of declBody.split(';')) {
+        if (!raw) continue;
+        const colon = raw.indexOf(':');
+        if (colon <= 0) continue;
+        const name = raw.slice(0, colon).trim().toLowerCase();
+        if (!HOST_ALLOWED_INSPECT_PROPS.has(name)) continue;
+        const value = raw.slice(colon + 1).replace(/!important/gi, '').trim();
+        if (!value || HOST_UNSAFE_INSPECT_VALUE.test(value)) continue;
+        props[name] = value;
+      }
+      if (Object.keys(props).length) {
+        map[elementId] = { selector, props };
+      }
+    }
+  }
+  return map;
+}
+
+// HTML5 raw-text and escapable-raw-text elements: the parser does not
+// interpret markup inside their contents, so a literal `</head>` or
+// `<style data-od-inspect-overrides>` written as text inside one of them
+// must NOT be treated as a real tag. Without this exclusion, a regex-only
+// splicer can match `</head>` inside an inline <script> string literal or
+// a CSS comment and inject the override block into the middle of
+// JavaScript/CSS instead of the actual document head, corrupting the
+// artifact on Save to source.
+const RAW_TEXT_INSPECT_ELEMENTS = new Set(['script', 'style', 'textarea', 'title']);
+
+// Decide whether a `<style ...>` opening tag actually carries a real
+// `data-od-inspect-overrides` attribute, as opposed to merely mentioning
+// the marker text inside another attribute name or value. The naive
+// `\bdata-od-inspect-overrides\b` test against the whole tag text is
+// over-broad in two cases:
+//
+//   1. A longer attribute name that has the marker as a prefix, e.g.
+//      `<style data-od-inspect-overrides-note="docs">`. The `-` after
+//      `overrides` is a non-word character, so `\b` matches and the tag
+//      gets mis-stripped on save / mis-parsed on hydration.
+//   2. The marker spelled inside an attribute value, e.g.
+//      `<style title="data-od-inspect-overrides">`. The whole tag text
+//      contains the literal, so the regex matches even though the actual
+//      attribute names are `title` only.
+//
+// Both shapes occur in real artifacts (notes, documentation, fixtures)
+// and would either silently drop the user's CSS on save or seed phantom
+// overrides into the host map even though the artifact has no real
+// override block. So we walk attributes proper, lower-casing each name
+// and skipping any quoted value, and report a hit only when one of those
+// names is exactly `data-od-inspect-overrides` (boolean attribute or
+// assigned value, both legal HTML for our marker).
+function styleTagIsInspectOverrideBlock(tagText: string): boolean {
+  const start = /^<style/i.exec(tagText);
+  if (!start) return false;
+  let i = start[0].length;
+  const end = tagText.length;
+  while (i < end) {
+    const ch = tagText.charAt(i);
+    if (ch === '>') return false;
+    if (ch === '/' || /\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    const nameStart = i;
+    while (i < end) {
+      const c = tagText.charAt(i);
+      if (c === '=' || c === '/' || c === '>' || /\s/.test(c)) break;
+      i++;
+    }
+    const name = tagText.slice(nameStart, i).toLowerCase();
+    while (i < end && /\s/.test(tagText.charAt(i))) i++;
+    if (i < end && tagText.charAt(i) === '=') {
+      i++;
+      while (i < end && /\s/.test(tagText.charAt(i))) i++;
+      const quote = tagText.charAt(i);
+      if (quote === '"' || quote === "'") {
+        i++;
+        const close = tagText.indexOf(quote, i);
+        i = close < 0 ? end : close + 1;
+      } else {
+        while (i < end) {
+          const c = tagText.charAt(i);
+          if (c === '>' || /\s/.test(c)) break;
+          i++;
+        }
+      }
+    }
+    if (name === 'data-od-inspect-overrides') return true;
+  }
+  return false;
+}
+
+// Find the start (`<` position) of the matching close tag for a raw-text
+// element, scanning case-insensitively. The close tag must be followed by
+// a tag-name boundary (whitespace, `/`, or `>`) so a longer name like
+// `</scripted>` doesn't accidentally close a `<script>`.
+function findInspectRawTextEnd(source: string, start: number, name: string): number {
+  const lower = source.toLowerCase();
+  const needle = '</' + name.toLowerCase();
+  let p = start;
+  while (p < source.length) {
+    const idx = lower.indexOf(needle, p);
+    if (idx < 0) return -1;
+    const after = source.charAt(idx + needle.length);
+    if (after === '' || after === '>' || after === '/' || /\s/.test(after)) return idx;
+    p = idx + needle.length;
+  }
+  return -1;
+}
+
+type InspectSpliceScan = {
+  out: string;
+  // Position in `out` immediately after the first top-level `<head ...>`
+  // open tag, or -1 if no head was found outside raw-text content.
+  headOpenEnd: number;
+  // Position in `out` at the first top-level `</head>` close tag, or -1.
+  headCloseStart: number;
+  // Raw inner-text of every real `<style data-od-inspect-overrides>` element
+  // discovered during the walk, in source order. Excludes occurrences inside
+  // raw-text element contents and HTML comments. Hydration parses these
+  // bodies for the host map; the splicer ignores them.
+  bodies: string[];
+};
+
+// Walk `source` and produce a copy with every existing
+// `<style data-od-inspect-overrides>...</style>` block removed, while
+// remembering where the real (non-raw-text) `<head>` boundaries land in
+// the output. The walker honours HTML comment, doctype/processing
+// instruction, and raw-text element boundaries so the splicer can ignore
+// tag-shaped literals inside scripts/styles/textareas/titles. Pure string
+// transform — no DOM dependency, safe to run during SSR/tests.
+function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
+  const parts: string[] = [];
+  const bodies: string[] = [];
+  let outLen = 0;
+  let headOpenEnd = -1;
+  let headCloseStart = -1;
+  let i = 0;
+  function emit(text: string): void {
+    if (!text) return;
+    parts.push(text);
+    outLen += text.length;
+  }
+  while (i < source.length) {
+    const lt = source.indexOf('<', i);
+    if (lt < 0) {
+      emit(source.slice(i));
+      break;
+    }
+    if (lt > i) emit(source.slice(i, lt));
+    i = lt;
+    if (source.startsWith('<!--', i)) {
+      const end = source.indexOf('-->', i + 4);
+      const stop = end < 0 ? source.length : end + 3;
+      emit(source.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    if (source.startsWith('<!', i) || source.startsWith('<?', i)) {
+      const end = source.indexOf('>', i + 2);
+      const stop = end < 0 ? source.length : end + 1;
+      emit(source.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    const tagEnd = source.indexOf('>', i + 1);
+    if (tagEnd < 0) {
+      emit(source.slice(i));
+      break;
+    }
+    const tagText = source.slice(i, tagEnd + 1);
+    const closeMatch = /^<\/([a-zA-Z][a-zA-Z0-9-]*)/.exec(tagText);
+    if (closeMatch) {
+      const name = closeMatch[1]!.toLowerCase();
+      if (name === 'head' && headCloseStart < 0) headCloseStart = outLen;
+      emit(tagText);
+      i = tagEnd + 1;
+      continue;
+    }
+    const openMatch = /^<([a-zA-Z][a-zA-Z0-9-]*)/.exec(tagText);
+    if (!openMatch) {
+      emit(tagText);
+      i = tagEnd + 1;
+      continue;
+    }
+    const name = openMatch[1]!.toLowerCase();
+    const isSelfClose = /\/\s*>$/.test(tagText);
+    if (name === 'head' && headOpenEnd < 0) headOpenEnd = outLen + tagText.length;
+    if (name === 'style' && styleTagIsInspectOverrideBlock(tagText)) {
+      // Strip the entire override block. A self-closing <style /> is a
+      // degenerate authoring case; treat it as nothing to skip past.
+      if (isSelfClose) {
+        i = tagEnd + 1;
+        continue;
+      }
+      const closeStart = findInspectRawTextEnd(source, tagEnd + 1, 'style');
+      if (closeStart < 0) {
+        // Unterminated override block — drop the rest of the document
+        // rather than silently reflowing later content into a dangling
+        // <style>. Matches the "stop" behaviour of the previous regex.
+        i = source.length;
+        continue;
+      }
+      bodies.push(source.slice(tagEnd + 1, closeStart));
+      const closeEnd = source.indexOf('>', closeStart);
+      let stop = closeEnd < 0 ? source.length : closeEnd + 1;
+      while (stop < source.length && /\s/.test(source.charAt(stop))) stop++;
+      i = stop;
+      continue;
+    }
+    if (!isSelfClose && RAW_TEXT_INSPECT_ELEMENTS.has(name)) {
+      const closeStart = findInspectRawTextEnd(source, tagEnd + 1, name);
+      if (closeStart < 0) {
+        emit(source.slice(i));
+        i = source.length;
+        continue;
+      }
+      const closeEnd = source.indexOf('>', closeStart);
+      const stop = closeEnd < 0 ? source.length : closeEnd + 1;
+      // Copy the entire raw-text element (open tag, body, close tag) to
+      // the output verbatim so its contents pass through unmodified.
+      emit(source.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    emit(tagText);
+    i = tagEnd + 1;
+  }
+  return { out: parts.join(''), headOpenEnd, headCloseStart, bodies };
+}
+
+// Splice (or remove) the inspect overrides <style> block in an HTML
+// document. Idempotent: calling with the same css produces the same
+// document. Empty css strips the block entirely.
+//
+// HTML-aware: the underlying scan ignores comments and raw-text element
+// contents (script / style / textarea / title), so a literal `</head>` or
+// `<style data-od-inspect-overrides>` written inside an inline script or
+// style block does not trick the splicer into stripping user code or
+// inserting the override block in the middle of JavaScript/CSS.
+//
+// Exported (via the module) so a unit test can drive it without a live
+// browser. Pure string transform — no DOM, no parser dependency.
+export function applyInspectOverridesToSource(source: string, css: string): string {
+  const trimmed = css.trim();
+  const { out, headOpenEnd, headCloseStart } = stripInspectOverridesAndIndex(source);
+  if (!trimmed) return out;
+  const block = `<style data-od-inspect-overrides>\n${trimmed}\n</style>\n`;
+  if (headCloseStart >= 0) {
+    return out.slice(0, headCloseStart) + block + out.slice(headCloseStart);
+  }
+  if (headOpenEnd >= 0) {
+    return out.slice(0, headOpenEnd) + block + out.slice(headOpenEnd);
+  }
+  return block + out;
+}
+
 function summarizeMember(member: PreviewCommentMember): string {
   const text = String(member.text || '').trim();
   if (text) {
@@ -1434,14 +2149,7 @@ function CommentTargetOverlay({
               style={overlayStyle}
               data-testid="comment-target-overlay"
             >
-              {index === 0 ? (
-                <div className="comment-target-tooltip">
-                  <strong>{snapshot.elementId}</strong>
-                  <span>{selectionKindLabel(snapshot.selectionKind, snapshot.memberCount)}</span>
-                  <span>{displayMembers.length} visible</span>
-                  <span>{width} × {height}</span>
-                </div>
-              ) : null}
+              <span className="comment-target-overlay-label">{snapshot.elementId}</span>
             </div>
           );
         })}
@@ -1449,8 +2157,6 @@ function CommentTargetOverlay({
     );
   }
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
-  const width = Math.round(snapshot.position.width);
-  const height = Math.round(snapshot.position.height);
   return (
     <div
       className={`comment-target-overlay${selected ? ' selected' : ''}`}
@@ -1462,12 +2168,7 @@ function CommentTargetOverlay({
       }}
       data-testid="comment-target-overlay"
     >
-      <div className="comment-target-tooltip">
-        <strong>{snapshot.elementId}</strong>
-        <span>{snapshot.label}</span>
-        <span>{selectionKindLabel(snapshot.selectionKind, snapshot.memberCount)}</span>
-        <span>{width} × {height}</span>
-      </div>
+      <span className="comment-target-overlay-label">{snapshot.elementId}</span>
     </div>
   );
 }
@@ -2048,6 +2749,10 @@ function HtmlViewer({
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateNote, setTemplateNote] = useState<string | null>(null);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<DeployProjectFileResponse | null>(null);
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [deployConfig, setDeployConfig] = useState<DeployConfigResponse | null>(null);
@@ -2064,6 +2769,7 @@ function HtmlViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
+  const [inspectMode, setInspectMode] = useState(false);
   const [manualEditMode, setManualEditMode] = useState(false);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
@@ -2073,6 +2779,8 @@ function HtmlViewer({
   const [manualEditError, setManualEditError] = useState<string | null>(null);
   const [manualEditSaving, setManualEditSaving] = useState(false);
   const manualEditSavingRef = useRef(false);
+  const templateNameId = useId();
+  const templateDescriptionId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -2085,6 +2793,27 @@ function HtmlViewer({
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
+  // Inspect mode shares the iframe selection bridge with comment mode but
+  // routes the picked element to a side panel that mutates per-element CSS
+  // overrides via postMessage. The host owns the authoritative override map:
+  // it is hydrated from the artifact's persisted <style> block on load and
+  // mutated only by host-driven onApply / reset actions. Save-to-source
+  // serializes that host map directly — iframe od:inspect-overrides messages
+  // are preview acknowledgements and never feed save input, so artifact JS
+  // forging a postMessage cannot tamper with what gets persisted.
+  const [activeInspectTarget, setActiveInspectTarget] = useState<InspectTarget | null>(null);
+  const [inspectOverrides, setInspectOverrides] = useState<InspectOverrideMap>(() =>
+    typeof source === 'string' ? parseInspectOverridesFromSource(source) : {},
+  );
+  // Track which `source` value the host map was last hydrated from so the
+  // setState-during-render hydration below only fires when the artifact
+  // text actually changes (file switch, save round-trip, live edits). The
+  // ref is initialised to `source` so the matching useState initialiser
+  // above counts as the first hydration.
+  const inspectHydratedSourceRef = useRef<string | null | undefined>(source);
+  const [savingInspect, setSavingInspect] = useState(false);
+  const [inspectSavedAt, setInspectSavedAt] = useState<number | null>(null);
+  const [inspectError, setInspectError] = useState<string | null>(null);
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -2155,6 +2884,7 @@ function HtmlViewer({
     mode,
     isDeck: effectiveDeck,
     commentMode: boardMode || manualEditMode,
+    inspectMode,
     forceInline,
   });
   const previewSrcUrl = useMemo(
@@ -2181,9 +2911,10 @@ function HtmlViewer({
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       commentBridge: boardMode && !manualEditMode,
+      inspectBridge: inspectMode,
       editBridge: manualEditMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode, inspectMode],
   );
 
   useEffect(() => {
@@ -2227,10 +2958,20 @@ function HtmlViewer({
   }
 
   useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
+  }, [inspectMode, srcDoc]);
+
+  useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
     setCommentDraft('');
+    setActiveInspectTarget(null);
+    setInspectOverrides({});
+    setInspectSavedAt(null);
+    setInspectError(null);
     setQueuedBoardNotes([]);
     setStrokePoints([]);
     setManualEditTargets([]);
@@ -2240,6 +2981,36 @@ function HtmlViewer({
     setManualEditUndone([]);
     setManualEditError(null);
   }, [file.name]);
+
+  // Selecting a new file or turning inspect off resets the panel target.
+  useEffect(() => {
+    if (!inspectMode) {
+      setActiveInspectTarget(null);
+      setInspectError(null);
+    }
+  }, [inspectMode]);
+
+  // Hydrate the host-authoritative override map from the artifact source
+  // synchronously, *before* React commits a render that carries a new
+  // `srcDoc` to the iframe. A `useEffect([source])` would commit the new
+  // source first and only re-render with the parsed map afterwards — if
+  // the iframe finishes loading the new srcDoc in that window, its
+  // `onLoad` handler captures the previous file's empty/stale map in its
+  // closure and posts that map back over the bridge's freshly DOM-hydrated
+  // overrides, leaving the preview without saved inspect styles until the
+  // next reload or mode toggle. Setting state during render is React's
+  // documented escape hatch for "store a value derived from props"
+  // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes):
+  // the in-flight render is discarded and React re-renders with the
+  // updated state before commit, so the new `srcDoc` and the new
+  // `inspectOverrides` always commit together. After hydration the map
+  // only mutates from host-driven onApply / reset callbacks below, so
+  // artifact JS forging an od:inspect-overrides message cannot tamper
+  // with what saveInspectToSource will persist.
+  if (inspectHydratedSourceRef.current !== source) {
+    inspectHydratedSourceRef.current = source;
+    setInspectOverrides(typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
+  }
 
   useEffect(() => {
     if (source == null) return;
@@ -2528,10 +3299,121 @@ function HtmlViewer({
     }
   }
 
+  // Inspect-mode picker: same `od:comment-target` payload, different sink.
+  // The bridge tags the message with a computed-style snapshot so the panel
+  // can show real starting values for color / typography / spacing / radius.
+  useEffect(() => {
+    if (!inspectMode) return;
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as
+        | { type?: string; elementId?: string; selector?: string; label?: string; text?: string; style?: InspectStyleSnapshot }
+        | null;
+      if (!data || data.type !== 'od:comment-target') return;
+      if (!data.elementId || !data.selector) return;
+      setActiveInspectTarget({
+        elementId: String(data.elementId),
+        selector: String(data.selector),
+        label: String(data.label || ''),
+        text: String(data.text || ''),
+        style: data.style && typeof data.style === 'object' ? data.style : {},
+      });
+      setInspectError(null);
+      setInspectSavedAt(null);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [inspectMode]);
+
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od:slide', action }, '*');
+  }
+
+  function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(
+      { type: 'od:inspect-set', elementId, selector, prop, value },
+      '*',
+    );
+  }
+
+  function postInspectReset(elementId?: string) {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:inspect-reset', elementId }, '*');
+  }
+
+  // Replay the host's authoritative override map into the freshly loaded
+  // iframe. The bridge inside the iframe only sees rules persisted in the
+  // artifact source via its own hydrateOverridesFromDom() — any unsaved
+  // edit lives on the host side until Save-to-source. Without this replay,
+  // toggling Inspect off/on, switching to Comment mode, or any other
+  // srcdoc rebuild reloads the iframe from previewSource without the
+  // unsaved style block, so the preview drops the live edits while
+  // saveInspectToSource() can still persist them later from the stale
+  // host map. The bridge re-validates each entry under its own allow-list,
+  // so a parent that posted a hostile replay can only land overrides the
+  // bridge would also have accepted via od:inspect-set.
+  //
+  // The render-time hydration above keeps `inspectOverrides` aligned with
+  // the current `source` whenever React commits, but the iframe `onLoad`
+  // callback fires from a separate event-loop turn after the new srcDoc
+  // is parsed; if it ever races a stale closure (e.g. an interleaved
+  // remount), reading React state would post the previous file's map over
+  // the bridge's DOM-hydrated one and silently strip the persisted styles
+  // from preview. Re-derive synchronously from `source` whenever the
+  // hydration ref disagrees so onLoad never sends a stale snapshot.
+  function replayInspectOverridesToIframe() {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    const overrides = inspectHydratedSourceRef.current === source
+      ? inspectOverrides
+      : (typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
+    win.postMessage({ type: 'od:inspect-replay', overrides }, '*');
+  }
+
+  // Persist accumulated inspect overrides into the artifact source: replace
+  // (or insert) a single <style data-od-inspect-overrides> block in <head>.
+  // The CSS body is serialized from the host's own override map, hydrated
+  // from source on load and updated only by host-driven onApply / reset
+  // callbacks. We deliberately do NOT round-trip through the iframe at save
+  // time: artifact JS rendered inside the preview shares the same
+  // contentWindow as the bridge and could forge an od:inspect-overrides
+  // reply that flips allow-listed properties on elements the user never
+  // touched. POSTing to /api/projects/:id/files upserts the file via
+  // writeProjectFile (multipart-or-JSON; we use JSON).
+  async function saveInspectToSource() {
+    if (!source) return;
+    setSavingInspect(true);
+    setInspectError(null);
+    try {
+      const css = serializeInspectOverrides(inspectOverrides).trim();
+      const next = applyInspectOverridesToSource(source, css);
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, content: next }),
+      });
+      if (!resp.ok) {
+        const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
+        throw new Error(payload?.error || payload?.message || `Save failed (${resp.status})`);
+      }
+      setSource(next);
+      setInspectSavedAt(Date.now());
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      setInspectError(msg);
+      // The error banner inside the inspect panel is easy to miss when the
+      // user is focused on the iframe preview — surface failures in the
+      // console as well so quota/network errors aren't silently lost.
+      console.error('[inspect] saveToSource failed:', err);
+    } finally {
+      setSavingInspect(false);
+    }
   }
 
   // Keyboard nav on the host, so the user can press ←/→ even when focus
@@ -2621,33 +3503,44 @@ function HtmlViewer({
   // the viewer), so the template captures the whole design, not a single
   // page. Surfaced here in the Share menu because that's where the user's
   // share / export mental model already lives.
-  async function handleSaveAsTemplate() {
+  function openSaveAsTemplateModal() {
     setShareMenuOpen(false);
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
-    const name = window.prompt(t('fileViewer.templateNamePrompt'), defaultName);
-    if (!name || !name.trim()) return;
-    const description = window.prompt(
-      t('fileViewer.templateDescPrompt'),
-      '',
-    );
+    setTemplateName(defaultName);
+    setTemplateDescription('');
+    setTemplateSaveError(null);
+    setTemplateModalOpen(true);
+  }
+
+  async function handleSaveAsTemplate() {
+    const name = templateName.trim();
+    if (!name) return;
     setSavingTemplate(true);
     setTemplateNote(null);
+    setTemplateSaveError(null);
+    let savedName: string | null = null;
     try {
       const tpl = await saveTemplate({
-        name: name.trim(),
-        description: description?.trim() || undefined,
+        name,
+        description: templateDescription.trim() || undefined,
         sourceProjectId: projectId,
       });
-      setTemplateNote(
-        tpl
-          ? t('fileViewer.savedTemplate', { name: tpl.name })
-          : t('fileViewer.savedTemplateFail'),
-      );
+      if (!tpl) {
+        setTemplateSaveError(t('fileViewer.savedTemplateFail'));
+        return;
+      }
+      savedName = tpl.name;
+      setTemplateModalOpen(false);
+      setTemplateName('');
+      setTemplateDescription('');
+      setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
     } finally {
       setSavingTemplate(false);
-      // Auto-clear the note so the menu doesn't keep stale state next open.
-      setTimeout(() => setTemplateNote(null), 4000);
+      if (savedName) {
+        // Auto-clear the note so the menu doesn't keep stale state next open.
+        setTimeout(() => setTemplateNote(null), 4000);
+      }
     }
   }
 
@@ -2974,6 +3867,27 @@ function HtmlViewer({
             </>
           ) : null}
           <button
+            className={`viewer-action${inspectMode ? ' active' : ''}`}
+            type="button"
+            data-testid="inspect-mode-toggle"
+            title="Inspect"
+            aria-pressed={inspectMode}
+            onClick={() => {
+              setInspectMode((v) => {
+                const next = !v;
+                if (next) {
+                  setBoardMode(false);
+                  clearBoardComposer();
+                  setManualEditMode(false);
+                }
+                return next;
+              });
+            }}
+          >
+            <Icon name="tweaks" size={13} />
+            <span>Inspect</span>
+          </button>
+          <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
             data-testid="manual-edit-mode-toggle"
@@ -2983,6 +3897,7 @@ function HtmlViewer({
               if (!manualEditMode) {
                 setBoardMode(false);
                 clearBoardComposer();
+                setInspectMode(false);
                 setMode('preview');
               }
               setManualEditMode((value) => !value);
@@ -3154,7 +4069,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      void handleSaveAsTemplate();
+                      openSaveAsTemplateModal();
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
@@ -3262,7 +4177,16 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     srcDoc={srcDoc}
-                    onLoad={syncBridgeModes}
+                    // Re-seeds the iframe-side bridge with the host's
+                    // authoritative inspect override map after each srcdoc
+                    // rebuild, then syncs comment/edit bridge modes.
+                    // URL-loaded iframes have no inspect bridge, so the
+                    // replay handler is intentionally only on the srcDoc
+                    // branch.
+                    onLoad={() => {
+                      replayInspectOverridesToIframe();
+                      syncBridgeModes();
+                    }}
                   />
                 )}
               </div>
@@ -3307,6 +4231,42 @@ function HtmlViewer({
                 t={t}
               />
             ) : null}
+            {inspectMode && activeInspectTarget ? (
+              <InspectPanel
+                target={activeInspectTarget}
+                onApply={(prop, value) => {
+                  const target = activeInspectTarget;
+                  setInspectOverrides((current) =>
+                    updateInspectOverride(current, target.elementId, target.selector, prop, value),
+                  );
+                  postInspectSet(target.elementId, target.selector, prop, value);
+                }}
+                onResetElement={(elementId) => {
+                  setInspectOverrides((current) => {
+                    if (!(elementId in current)) return current;
+                    const next = { ...current };
+                    delete next[elementId];
+                    return next;
+                  });
+                  postInspectReset(elementId);
+                  setActiveInspectTarget((current) => current && current.elementId === elementId
+                    ? current
+                    : current);
+                }}
+                onSaveToSource={() => {
+                  void saveInspectToSource();
+                }}
+                onClose={() => setActiveInspectTarget(null)}
+                saving={savingInspect}
+                savedAt={inspectSavedAt}
+                error={inspectError}
+              />
+            ) : null}
+            {inspectMode && !activeInspectTarget ? (
+              <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
+                Click any element with <code>data-od-id</code> to tune its style.
+              </div>
+            ) : null}
           </div>
         ) : (
           <pre className="viewer-source">{source}</pre>
@@ -3340,6 +4300,64 @@ function HtmlViewer({
               srcDoc={srcDoc}
             />
           )}
+        </div>
+      ) : null}
+      {templateModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal deploy-modal" role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <div className="kicker">TEMPLATE</div>
+              <h2>{t('fileViewer.saveAsTemplate')}</h2>
+              <p className="subtitle">{t('fileViewer.templateDescPrompt')}</p>
+            </div>
+            <div className="deploy-form">
+              <label className="field" htmlFor={templateNameId}>
+                <span className="field-label">{t('fileViewer.templateNamePrompt')}</span>
+                <input
+                  id={templateNameId}
+                  type="text"
+                  value={templateName}
+                  placeholder={t('fileViewer.templateNameDefault')}
+                  autoFocus
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+              </label>
+              <label className="field" htmlFor={templateDescriptionId}>
+                <span className="field-label">{t('fileViewer.templateDescPrompt')}</span>
+                <textarea
+                  id={templateDescriptionId}
+                  rows={3}
+                  value={templateDescription}
+                  placeholder={t('fileViewer.optional')}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                />
+              </label>
+              {templateSaveError ? <p className="deploy-error">{templateSaveError}</p> : null}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={savingTemplate}
+                onClick={() => {
+                  setTemplateModalOpen(false);
+                  setTemplateSaveError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={savingTemplate || !templateName.trim()}
+                onClick={() => {
+                  void handleSaveAsTemplate();
+                }}
+              >
+                {savingTemplate ? t('fileViewer.savingTemplate') : t('common.save')}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {deployModalOpen ? (
