@@ -4642,6 +4642,26 @@ button.connector-action.is-loading {
 .ws-tab.design-files-tab {
   font-weight: 500;
   color: var(--text);
+  /* Pin the Design Files entry to the left edge of the horizontally
+     scrollable tab strip so the user always has a way back to the file
+     list even when many tabs overflow. Without sticky positioning,
+     Design Files sits at flex index 0 and scrolls off the left edge
+     once the strip is wide enough to require horizontal scrolling.
+     Issue #775. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  /* Solid panel surface so other tabs that scroll past underneath the
+     sticky element do not visibly bleed through. */
+  background: var(--bg-panel);
+  /* Subtle right-edge shadow signals the visual separation when other
+     tabs are scrolled beneath it. */
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+.ws-tab.design-files-tab.active {
+  /* Active state should still read as selected; layer the active tint
+     over the sticky panel surface. */
+  background: var(--bg-subtle);
 }
 
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
