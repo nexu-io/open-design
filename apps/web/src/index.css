@@ -1154,7 +1154,12 @@ code {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.55;
-  max-width: 50ch;
+  /* 72ch lets typical one-sentence English subtitles fit on a single
+   * line inside the 920px settings modal while still wrapping cleanly
+   * on narrow viewports (the modal width clamps to 100vw - 48px) and
+   * for the longest locales (German, French). 50ch was forcing even
+   * the English subtitle onto two lines. See nexu-io/open-design#743. */
+  max-width: 72ch;
 }
 .modal-foot {
   display: flex;
