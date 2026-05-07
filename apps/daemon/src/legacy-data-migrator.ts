@@ -318,6 +318,18 @@ export function migrateLegacyDataDirSync(
     return { status: 'noop', reason: 'OD_LEGACY_DATA_DIR equals OD_DATA_DIR' };
   }
 
+  // Marker check runs before legacyDirHasPayload on purpose: once a
+  // migration has succeeded, the marker is the canonical "do not
+  // touch" signal. The user may leave OD_LEGACY_DATA_DIR set and then
+  // delete or move the old repo `.od/` later; without this ordering
+  // the next boot would re-validate a source that is no longer needed
+  // and throw legacy_dir_invalid, breaking the marker contract that
+  // says "after success, future boots no-op."
+  const markerPath = path.join(dataDir, MARKER_FILE);
+  if (fs.existsSync(markerPath)) {
+    return { status: 'skipped', reason: 'migration marker already present' };
+  }
+
   if (!legacyDirHasPayload(legacyDir)) {
     // Loud: env was set but the path doesn't look like an OD data dir.
     // The user typo'd, deleted the source, or pointed at the wrong
@@ -327,11 +339,6 @@ export function migrateLegacyDataDirSync(
       'legacy_dir_invalid',
       `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Design, fix the path, and relaunch.`,
     );
-  }
-
-  const markerPath = path.join(dataDir, MARKER_FILE);
-  if (fs.existsSync(markerPath)) {
-    return { status: 'skipped', reason: 'migration marker already present' };
   }
 
   // Refuse to merge on top of any existing payload entry. SQLite/WAL

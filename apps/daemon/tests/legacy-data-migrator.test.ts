@@ -217,6 +217,35 @@ describe('migrateLegacyDataDirSync', () => {
     expect(fs.existsSync(path.join(dataDir, 'app.sqlite'))).toBe(false);
   });
 
+  it('marker beats a missing legacyDir on the next boot', async () => {
+    // mrcfps round-6: the marker is the canonical "do not touch"
+    // signal once a migration has succeeded. If the user leaves
+    // OD_LEGACY_DATA_DIR set after success and then deletes or moves
+    // the old `.od/` (which is the documented launchctl setenv path),
+    // the next boot must still no-op via the marker rather than
+    // throwing legacy_dir_invalid for re-validating a source the
+    // marker contract says is no longer needed.
+    seedLegacyDir(legacyDir);
+    const first = migrateLegacyDataDirSync({
+      legacyDir,
+      dataDir,
+      logger: makeLogger(),
+    });
+    expect(first.status).toBe('migrated');
+
+    // Simulate the user removing the old repo `.od/` after the
+    // successful migration but leaving OD_LEGACY_DATA_DIR set.
+    await rm(legacyDir, { recursive: true, force: true });
+
+    const second = migrateLegacyDataDirSync({
+      legacyDir,
+      dataDir,
+      logger: makeLogger(),
+    });
+    expect(second.status).toBe('skipped');
+    expect(second.reason).toMatch(/marker/);
+  });
+
   it('migrates even when dataDir does not exist yet', async () => {
     seedLegacyDir(legacyDir);
     await rm(dataDir, { recursive: true, force: true });
