@@ -435,9 +435,19 @@ function e(v) {
 /* Tween + flash hooks for the live-refresh pass — wired to .flash /
    .feed-row.new / .db-row.changed in the CSS above. renderKpi(prev) is
    the public entry; pass the previous KPI snapshot in to get tween +
-   highlight on changed values. */
+   highlight on changed values. Both helpers honor
+   prefers-reduced-motion: reduce — the CSS @media block already
+   neutralizes animations/transitions, but tweenText() schedules JS rAF
+   updates and flash() toggles a highlight class, so we short-circuit
+   them here for reduced-motion users (P0 row in checklist.md). */
+function reduceMotion() {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 function tweenText(el, from, to, ms = 600) {
-  if (!el || from === to) { if (el) el.textContent = String(to); return; }
+  if (!el) return;
+  if (from === to || reduceMotion()) { el.textContent = String(to); return; }
   const start = performance.now();
   function step(now) {
     const t = Math.min(1, (now - start) / ms);
@@ -448,7 +458,7 @@ function tweenText(el, from, to, ms = 600) {
   requestAnimationFrame(step);
 }
 function flash(el) {
-  if (!el) return;
+  if (!el || reduceMotion()) return;
   el.classList.add("flash");
   setTimeout(() => el.classList.remove("flash"), 700);
 }
@@ -526,9 +536,12 @@ const STATUS_LABEL = { done: "Done", progress: "In progress", blocked: "Blocked"
    titles, activity descriptors, person names). Every dynamic value
    below goes through e() before it lands in innerHTML. */
 function renderFeed(highlightId) {
+  // Drop the transient .new highlight under reduced-motion so the row
+  // doesn't get a coloured background pulse for users who opted out.
+  const effectiveHighlight = reduceMotion() ? null : highlightId;
   $("feed").innerHTML = feed.slice(0,6).map(it=>{
     const init = String(it.who||"").split(" ").map(s=>s[0]).join("").slice(0,2).toUpperCase();
-    const cls = it.id===highlightId ? "feed-row new" : "feed-row";
+    const cls = it.id===effectiveHighlight ? "feed-row new" : "feed-row";
     const suffixHtml = it.suffix ? `<span class="what"> ${e(it.suffix)}</span>` : "";
     return `<div class="${cls}">
       <span class="av" style="background:${e(pcolor(it.who))}">${e(init)}</span>
@@ -544,10 +557,13 @@ function personChip(id) {
   return `<span class="person"><span class="av" style="background:${e(p.color||"#888")}">${e(p.id||"")}</span><span>${e(p.name||"")}</span></span>`;
 }
 function renderRows(changedId) {
+  // Same reduced-motion gate as renderFeed: skip the .changed row-flash
+  // class so we don't paint a transient highlight for opted-out users.
+  const effectiveChanged = reduceMotion() ? null : changedId;
   const db=$("db"); [...db.querySelectorAll(".db-row")].forEach(n=>n.remove());
   [...rows].sort((a,b)=>b.updated-a.updated).forEach(r=>{
     const div=document.createElement("div");
-    div.className="db-row"+(r.id===changedId?" changed":"");
+    div.className="db-row"+(r.id===effectiveChanged?" changed":"");
     const statusKey = STATUS_CSS[r.status] ? r.status : "todo";
     const lbl = STATUS_LABEL[statusKey];
     div.innerHTML=`<div class="db-cell">${e(r.icon)}</div>

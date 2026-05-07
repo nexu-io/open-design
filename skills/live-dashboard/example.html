@@ -643,7 +643,21 @@
            " · " + d.toLocaleDateString([], { month: "short", day: "numeric" });
   }
   function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  // Reduced-motion gate. The CSS @media block above already neutralizes
+  // CSS animations/transitions, but tweenText() schedules JS rAF updates
+  // and flash() toggles a transient highlight class — both keep moving
+  // for opted-out users unless we short-circuit them here.
+  function reduceMotion() {
+    return typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
   function tween(el, from, to, ms = 600) {
+    if (!el) return;
+    if (from === to || reduceMotion()) {
+      el.firstChild ? (el.childNodes[0].nodeValue = to) : (el.textContent = to);
+      return;
+    }
     const start = performance.now();
     function step(now) {
       const t = Math.min(1, (now - start) / ms);
@@ -657,7 +671,11 @@
 
   // ---------- Render: KPI ----------
   function renderKpi(prev) {
-    const flash = (el) => { el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 700); };
+    const flash = (el) => {
+      if (!el || reduceMotion()) return;
+      el.classList.add("flash");
+      setTimeout(() => el.classList.remove("flash"), 700);
+    };
     if (prev) {
       tweenText($("kTotal"),  prev.total,  kpi.total);   if (prev.total  !== kpi.total)  flash($("kTotal"));
       tweenText($("kDone"),   prev.done,   kpi.done);    if (prev.done   !== kpi.done)   flash($("kDone"));
@@ -675,6 +693,8 @@
     }
   }
   function tweenText(el, from, to, ms = 600) {
+    if (!el) return;
+    if (from === to || reduceMotion()) { el.textContent = String(to); return; }
     const start = performance.now();
     function step(now) {
       const t = Math.min(1, (now - start) / ms);
@@ -718,10 +738,13 @@
   function cryptoRandomId() { return "f" + Math.random().toString(36).slice(2, 9); }
   function renderFeed(highlightId) {
     const el = $("feed");
+    // Drop the transient .new highlight under reduced-motion so the row
+    // doesn't get a coloured background pulse for users who opted out.
+    const effectiveHighlight = reduceMotion() ? null : highlightId;
     el.innerHTML = feed.slice(0, 6).map(item => {
       const initials = String(item.who||"").split(" ").map(s => s[0]).join("").slice(0,2).toUpperCase();
       const color = personColor(item.who);
-      const cls = item.id === highlightId ? "feed-row new" : "feed-row";
+      const cls = item.id === effectiveHighlight ? "feed-row new" : "feed-row";
       const suffixHtml = item.suffix ? `<span class="what"> ${e(item.suffix)}</span>` : "";
       return `
         <div class="${cls}" data-id="${e(item.id)}">
@@ -749,9 +772,15 @@
     [...db.querySelectorAll(".db-row")].forEach(n => n.remove());
     const sorted = [...rows].sort((a,b) => b.updated - a.updated);
     const STATUS_LABEL = { done: "Done", progress: "In progress", blocked: "Blocked", todo: "To do", review: "In review" };
+    // Same reduced-motion gate as renderFeed: skip the .changed
+    // row-flash class so we don't paint a transient highlight for
+    // opted-out users (the rowflash CSS animation is already neutralized
+    // by the prefers-reduced-motion @media block above, but the class
+    // would still imply intent).
+    const effectiveChanged = reduceMotion() ? null : changedId;
     sorted.forEach(r => {
       const div = document.createElement("div");
-      div.className = "db-row" + (r.id === changedId ? " changed" : "");
+      div.className = "db-row" + (r.id === effectiveChanged ? " changed" : "");
       div.dataset.id = r.id;
       const statusKey = STATUS_LABEL[r.status] ? r.status : "todo";
       const statusLabel = STATUS_LABEL[statusKey];
