@@ -494,7 +494,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       };
     }
     case 'ollama': {
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
+      const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
       return {
         url: `${trimmedBase}/api/chat`,
         headers: {

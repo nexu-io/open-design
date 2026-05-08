@@ -331,6 +331,14 @@ export function loadConfig(): AppConfig {
       // legacy config can be migrated when it is loaded.
       if (!parsedHasApiProtocol) {
         merged.apiProtocol = inferApiProtocol(merged.model, merged.baseUrl);
+        // Ollama Cloud legacy configs may carry a base URL that includes
+        // /api or /api/ — normalize to the host root so the daemon's own
+        // /api/chat appending doesn't double up.
+        if (merged.apiProtocol === 'ollama') {
+          merged.baseUrl = merged.baseUrl
+            .replace(/\/api\/?$/, '')
+            .replace(/\/+$/, '');
+        }
         // Also set apiProviderBaseUrl so setApiProtocol() can correctly identify
         // whether the user is on a known provider and switch defaults appropriately.
         // null means "custom/unknown provider" so the protocol switch won't override

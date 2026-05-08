@@ -251,6 +251,26 @@ describe('loadConfig', () => {
     const config = loadConfig();
 
     expect(config.apiProtocol).toBe('ollama');
+    // /api suffix must be stripped so the daemon doesn't build /api/api/chat.
+    expect(config.baseUrl).toBe('https://ollama.com');
+  });
+
+  it('migrates legacy ollama.com configs with a trailing /api/ suffix', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'ollama-key',
+      baseUrl: 'https://ollama.com/api/',
+      model: 'glm-5',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('ollama');
+    expect(config.baseUrl).toBe('https://ollama.com');
   });
 
   it('does not overwrite an already explicit apiProtocol', () => {

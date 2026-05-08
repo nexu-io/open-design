@@ -5867,7 +5867,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
     }
 
-    const clean = effectiveBaseUrl.replace(/\/+$/, '');
+    const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
     const url = `${clean}/api/chat`;
     console.log(
       `[proxy:ollama] ${req.method} ${validated.parsed.hostname} model=${model}`,
