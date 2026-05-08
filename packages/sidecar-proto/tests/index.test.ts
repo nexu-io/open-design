@@ -66,6 +66,35 @@ describe("open-design sidecar contract", () => {
     expect(() => normalizeDaemonSidecarMessage({ input: {}, type: SIDECAR_MESSAGES.EVAL })).toThrow();
   });
 
+  it("accepts a base64 register-desktop-auth payload", () => {
+    const message = {
+      input: { secret: "AAECAwQFBgcICQoLDA0ODw==" },
+      type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+    };
+    expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
+  });
+
+  it("rejects register-desktop-auth payloads that are not base64-shaped", () => {
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { secret: "not base64!" },
+        type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+      }),
+    ).toThrow(/base64/i);
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { secret: "" },
+        type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+      }),
+    ).toThrow();
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: {},
+        type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+      }),
+    ).toThrow();
+  });
+
   it("validates desktop IPC message inputs", () => {
     expect(normalizeDesktopSidecarMessage({ input: { expression: "location.href" }, type: SIDECAR_MESSAGES.EVAL })).toEqual({
       input: { expression: "location.href" },

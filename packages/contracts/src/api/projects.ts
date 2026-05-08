@@ -70,6 +70,18 @@ export interface ProjectMetadata {
   // directly inside the user's folder. Stored as the realpath() result so
   // symlinks can't redirect writes after import time.
   baseDir?: string;
+  // PR #974: marker stamped by the daemon's HMAC-gated import handler
+  // when a folder import passed the desktop-main-process trust gate.
+  // Only set on folder-imported projects (`baseDir` set) and only when
+  // the import request carried a valid `X-OD-Desktop-Import-Token`
+  // signed with the secret the desktop main process registered with the
+  // daemon at startup. The desktop `shell.openPath` IPC refuses to
+  // forward folder-imported projects whose metadata lacks this marker,
+  // so a renderer cannot launder an attacker-chosen baseDir into a
+  // file-manager reveal even if a future codepath inadvertently lets
+  // it set `baseDir` outside the trusted flow. Privileged: rejected
+  // by `POST /api/projects` and `PATCH /api/projects/:id`.
+  fromTrustedPicker?: true;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
