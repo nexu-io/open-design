@@ -1011,7 +1011,14 @@ setInterval(() => {}, 1000);
             agentId: 'codex',
             signal: controller.signal,
           });
-          await waitForFile(pidFile);
+          await Promise.race([
+            waitForFile(pidFile, 15_000),
+            pending.then((result) => {
+              throw new Error(
+                `Agent probe finished before fake agent wrote pid: ${JSON.stringify(result)}`,
+              );
+            }),
+          ]);
           controller.abort();
           await expect(pending).resolves.toMatchObject({
             ok: false,

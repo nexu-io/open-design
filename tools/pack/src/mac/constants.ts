@@ -49,4 +49,3 @@ export const MAC_ELECTRON_LANGUAGES = [
   "uk",
   "tr",
 ] as const;
-

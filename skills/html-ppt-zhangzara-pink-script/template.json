@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-pink-script",
+  "name": "Pink Script — After Hours",
+  "tagline": "Black canvas, hot pink accent, pearl-cream paper, Instrument Serif headlines: late-night editorial luxury.",
+  "mood": [
+    "nocturnal",
+    "moody",
+    "intentional",
+    "luxe",
+    "expressive"
+  ],
+  "occasion": [
+    "fashion brand deck",
+    "creator personal brand",
+    "after-hours product (nightlife / dating / spirits)",
+    "luxury launch",
+    "editorial feature"
+  ],
+  "tone": [
+    "literary",
+    "sultry",
+    "considered",
+    "magazine"
+  ],
+  "formality": "medium-high",
+  "density": "low",
+  "palette": {
+    "ink": "#060507",
+    "paper": "#F5EDF1",
+    "pink": "#ED3D8C",
+    "pink_2": "#FF66A8",
+    "pink_deep": "#B81D67",
+    "description": "near-black canvas with one saturated hot pink accent and a pearl-cream paper for content; the whole system runs on a single accent + restraint"
+  },
+  "typography": {
+    "display": "Instrument Serif",
+    "body": "Inter",
+    "mono": "JetBrains Mono",
+    "style": "sharp transitional serif headlines + clean sans body + technical mono labels"
+  },
+  "scheme": "dark",
+  "best_for": "Anything that should feel nocturnal, intentional, and a little luxe: fashion brand decks, creator personal brands, after-hours / nightlife / spirits launches, luxury product reveals, editorial features. Also a striking unexpected pick for a tech keynote, research synthesis, or business pitch that wants to land with magnetic confidence.",
+  "avoid_for": "Daytime corporate-professional and traditional B2B contexts where the dark canvas with hot-pink accent reads as too styled or too expressive.",
+  "slide_count": 9,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/pink-script"
+}

@@ -1,8 +1,11 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import type { BoundedJsonObject, BoundedJsonValue } from '../live-artifacts/schema.js';
 import { defineConnectorTool, type ConnectorCatalogDefinition, type ConnectorCatalogToolDefinition } from './catalog.js';
 import { readComposioConfig } from './composio-config.js';
+import { COMPOSIO_CURATION_OVERLAY } from './composio-curation.js';
 import { getComposioToolkitMetadata } from './composio-descriptions.js';
 import { ConnectorServiceError, type ConnectorCredentialMaterial } from './service.js';
 
@@ -11,12 +14,22 @@ const DEFAULT_COMPOSIO_TIMEOUT_MS = 30_000;
 const DEFAULT_COMPOSIO_USER_ID = 'open-design-local-user';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const DISCOVERY_CACHE_TTL_MS = 60_000;
+const PERSISTED_CATALOG_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 interface ComposioToolkitCatalogEntry {
   name: string;
   slug: string;
   category?: string;
 }
+
+interface PersistedComposioCatalogCache {
+  schemaVersion: 1;
+  fetchedAt: string;
+  provider: 'composio';
+  definitions: ConnectorCatalogDefinition[];
+}
+
+let composioCatalogCacheFilePath = path.join(process.cwd(), '.od', 'connectors', 'composio-catalog-cache.json');
 
 const FEATURED_COMPOSIO_CATALOG: ConnectorCatalogDefinition[] = [
   {
@@ -404,6 +417,10 @@ export class ComposioConnectorProvider {
   private definitionsGeneration = 0;
   private readonly authConfigCreationPromises = new Map<string, Promise<string | undefined>>();
   private readonly pendingConnections = new Map<string, ComposioPendingConnection>();
+  private persistedDefinitions: ConnectorCatalogDefinition[] | undefined;
+  private persistedFetchedAt: string | undefined;
+  private refreshTimer: NodeJS.Timeout | undefined;
+  private refreshTimeout: NodeJS.Timeout | undefined;
 
   isConfigured(definition: ConnectorCatalogDefinition): boolean {
     return Boolean(this.getApiKey() && this.discoveredAuthConfigIds?.[definition.id]);
@@ -414,6 +431,51 @@ export class ComposioConnectorProvider {
     this.locallyCreatedAuthConfigs.clear();
     this.invalidateDefinitionsCache();
     this.authConfigCreationPromises.clear();
+  }
+
+  configureCatalogCache(dataDir: string): void {
+    composioCatalogCacheFilePath = path.join(dataDir, 'connectors', 'composio-catalog-cache.json');
+    this.loadPersistedCatalogCache();
+  }
+
+  startCatalogRefreshLoop(): void {
+    this.stopCatalogRefreshLoop();
+    if (this.isPersistedCatalogStale()) this.scheduleCatalogRefresh(0);
+    this.refreshTimer = setInterval(() => {
+      void this.refreshCatalogInBackground();
+    }, PERSISTED_CATALOG_REFRESH_MS);
+    this.refreshTimer.unref?.();
+  }
+
+  stopCatalogRefreshLoop(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = undefined;
+    }
+  }
+
+  getFastDefinitions(): ConnectorCatalogDefinition[] {
+    return this.persistedDefinitions && this.persistedDefinitions.length > 0
+      ? this.persistedDefinitions
+      : getStaticComposioCatalogDefinitions();
+  }
+
+  getPersistedCatalogMetadata(): { fetchedAt?: string; stale: boolean } {
+    return {
+      ...(this.persistedFetchedAt === undefined ? {} : { fetchedAt: this.persistedFetchedAt }),
+      stale: this.isPersistedCatalogStale(),
+    };
+  }
+
+  async refreshCatalog(signal?: AbortSignal): Promise<ConnectorCatalogDefinition[]> {
+    this.invalidateDefinitionsCache();
+    const definitions = await this.listDefinitions(signal);
+    this.setPersistedDefinitions(definitions, new Date().toISOString());
+    return definitions;
   }
 
   private invalidateDefinitionsCache(): void {
@@ -435,6 +497,7 @@ export class ComposioConnectorProvider {
         if (this.definitionsGeneration === generation) {
           this.definitionsCache = { definitions, expiresAtMs: Date.now() + DISCOVERY_CACHE_TTL_MS };
         }
+        this.setPersistedDefinitions(definitions, new Date().toISOString());
         return definitions;
       })
       .finally(() => {
@@ -472,6 +535,58 @@ export class ComposioConnectorProvider {
       return this.definitionFromToolkit(staticDefinition, toolkitSlug, toolkit, Boolean(apiKey), signal);
     });
     return definitions;
+  }
+
+  private scheduleCatalogRefresh(delayMs: number): void {
+    if (this.refreshTimeout) clearTimeout(this.refreshTimeout);
+    const timeout = setTimeout(() => {
+      if (this.refreshTimeout === timeout) this.refreshTimeout = undefined;
+      void this.refreshCatalogInBackground();
+    }, delayMs);
+    this.refreshTimeout = timeout;
+    timeout.unref?.();
+  }
+
+  private async refreshCatalogInBackground(): Promise<void> {
+    if (!this.getApiKey()) return;
+    try {
+      await this.refreshCatalog();
+    } catch {
+      // Keep startup and background refresh best-effort only.
+    }
+  }
+
+  private isPersistedCatalogStale(now = Date.now()): boolean {
+    if (!this.persistedFetchedAt) return true;
+    const fetchedAtMs = Date.parse(this.persistedFetchedAt);
+    return !Number.isFinite(fetchedAtMs) || now - fetchedAtMs >= PERSISTED_CATALOG_REFRESH_MS;
+  }
+
+  private loadPersistedCatalogCache(): void {
+    const parsed = readPersistedComposioCatalogCache(composioCatalogCacheFilePath);
+    if (!parsed) {
+      this.persistedDefinitions = undefined;
+      this.persistedFetchedAt = undefined;
+      return;
+    }
+    this.persistedDefinitions = parsed.definitions.map((definition) => cloneConnectorDefinition(definition));
+    this.persistedFetchedAt = parsed.fetchedAt;
+    if (this.isPersistedCatalogStale() && this.getApiKey()) this.scheduleCatalogRefresh(0);
+  }
+
+  private setPersistedDefinitions(definitions: ConnectorCatalogDefinition[], fetchedAt: string): void {
+    this.persistedDefinitions = definitions.map((definition) => cloneConnectorDefinition(definition));
+    this.persistedFetchedAt = fetchedAt;
+    try {
+      writePersistedComposioCatalogCache(composioCatalogCacheFilePath, {
+        schemaVersion: 1,
+        fetchedAt,
+        provider: 'composio',
+        definitions: this.persistedDefinitions,
+      });
+    } catch (error) {
+      console.warn('[connectors] Failed to persist Composio catalog cache:', error);
+    }
   }
 
   async getDefinition(connectorId: string, signal?: AbortSignal): Promise<ConnectorCatalogDefinition | undefined> {
@@ -782,7 +897,7 @@ export class ComposioConnectorProvider {
     const providerToolId = getString(tool.slug) ?? getString(tool.name) ?? `${connectorId.toUpperCase()}_TOOL`;
     const description = getString(tool.description) ?? getString(tool.human_description) ?? getString(tool.humanDescription) ?? '';
     const requiredScopes = getStringArray(tool.scopes ?? tool.oauth_scopes ?? tool.oauthScopes ?? tool.auth_scopes ?? tool.authScopes ?? tool.tags);
-    return defineConnectorTool({
+    return applyComposioToolCuration(defineConnectorTool({
       name: `${connectorId}.${normalizeToolName(providerToolId)}`,
       providerToolId,
       title: getString(tool.name) ?? titleFromSlug(providerToolId),
@@ -790,7 +905,7 @@ export class ComposioConnectorProvider {
       inputSchemaJson: toBoundedJsonObject(tool.input_parameters ?? tool.inputParameters) ?? { type: 'object', additionalProperties: true },
       outputSchemaJson: { type: 'object', additionalProperties: true },
       requiredScopes,
-    });
+    }), connectorId, providerToolId);
   }
 
   private connectionToCredentials(_definition: ConnectorCatalogDefinition, providerConnectionId: string, response: ComposioConnectedAccountResponse): ComposioConnectionCompletion {
@@ -868,6 +983,7 @@ function mergeToolDefinition(staticTool: ConnectorCatalogToolDefinition, liveToo
     requiredScopes: liveTool.requiredScopes.length > 0 ? liveTool.requiredScopes : staticTool.requiredScopes,
     safety: liveTool.safety,
     refreshEligible: liveTool.refreshEligible,
+    ...((liveTool.curation ?? staticTool.curation) === undefined ? {} : { curation: liveTool.curation ?? staticTool.curation }),
   };
 }
 
@@ -875,7 +991,12 @@ export const composioConnectorProvider = new ComposioConnectorProvider();
 
 function buildStaticComposioCatalog(): ConnectorCatalogDefinition[] {
   const definitions = new Map<string, ConnectorCatalogDefinition>();
-  for (const definition of FEATURED_COMPOSIO_CATALOG) definitions.set(definition.id, definition);
+  for (const definition of FEATURED_COMPOSIO_CATALOG) {
+    definitions.set(definition.id, {
+      ...definition,
+      tools: definition.tools.map((tool) => applyComposioToolCuration(tool, definition.providerConnectorId ?? definition.id, tool.providerToolId)),
+    });
+  }
   for (const toolkit of DOCUMENTED_COMPOSIO_TOOLKITS) {
     const id = connectorIdForToolkitSlug(toolkit.slug);
     if (definitions.has(id)) continue;
@@ -907,6 +1028,12 @@ function createComposioCatalogDefinition(toolkit: ComposioToolkitCatalogEntry): 
 
 export function getStaticComposioCatalogDefinitions(): ConnectorCatalogDefinition[] {
   return STATIC_COMPOSIO_CATALOG.map((definition) => ({
+    ...cloneConnectorDefinition(definition),
+  }));
+}
+
+function cloneConnectorDefinition(definition: ConnectorCatalogDefinition): ConnectorCatalogDefinition {
+  return {
     ...definition,
     tools: definition.tools.map((tool) => ({
       name: tool.name,
@@ -916,12 +1043,101 @@ export function getStaticComposioCatalogDefinitions(): ConnectorCatalogDefinitio
       ...(tool.outputSchemaJson === undefined ? {} : { outputSchemaJson: toBoundedJsonObject(tool.outputSchemaJson)! }),
       safety: { ...tool.safety },
       refreshEligible: tool.refreshEligible,
+      ...(tool.curation === undefined ? {} : { curation: { ...(tool.curation.useCases === undefined ? {} : { useCases: [...tool.curation.useCases] }), ...(tool.curation.reason === undefined ? {} : { reason: tool.curation.reason }) } }),
       requiredScopes: [...tool.requiredScopes],
       ...(tool.providerToolId === undefined ? {} : { providerToolId: tool.providerToolId }),
     })),
     allowedToolNames: [...definition.allowedToolNames],
     ...(definition.featuredToolNames === undefined ? {} : { featuredToolNames: [...definition.featuredToolNames] }),
-  }));
+  };
+}
+
+function normalizePersistedConnectorDefinition(value: unknown): ConnectorCatalogDefinition | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== 'string' || typeof record.name !== 'string' || typeof record.provider !== 'string' || typeof record.category !== 'string') return undefined;
+  const tools = Array.isArray(record.tools)
+    ? record.tools.map(normalizePersistedConnectorToolDefinition).filter((tool): tool is ConnectorCatalogToolDefinition => tool !== undefined)
+    : [];
+  const definition: ConnectorCatalogDefinition = {
+    id: record.id,
+    name: record.name,
+    provider: record.provider,
+    category: record.category,
+    tools,
+    allowedToolNames: Array.isArray(record.allowedToolNames) ? record.allowedToolNames.filter((item): item is string => typeof item === 'string') : [],
+  };
+  if (typeof record.description === 'string') definition.description = record.description;
+  if (record.authentication === 'local' || record.authentication === 'none' || record.authentication === 'oauth' || record.authentication === 'composio') {
+    definition.authentication = record.authentication;
+  }
+  if (typeof record.providerConnectorId === 'string') definition.providerConnectorId = record.providerConnectorId;
+  if (Array.isArray(record.featuredToolNames)) definition.featuredToolNames = record.featuredToolNames.filter((item): item is string => typeof item === 'string');
+  if (record.minimumApproval === 'auto' || record.minimumApproval === 'confirm' || record.minimumApproval === 'disabled') {
+    definition.minimumApproval = record.minimumApproval;
+  }
+  if (typeof record.disabled === 'boolean') definition.disabled = record.disabled;
+  return definition;
+}
+
+function normalizePersistedConnectorToolDefinition(value: unknown): ConnectorCatalogToolDefinition | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.name !== 'string' || typeof record.title !== 'string') return undefined;
+  if (!record.safety || typeof record.safety !== 'object' || Array.isArray(record.safety)) return undefined;
+  const safetyRecord = record.safety as Record<string, unknown>;
+  if (typeof safetyRecord.sideEffect !== 'string' || typeof safetyRecord.approval !== 'string' || typeof safetyRecord.reason !== 'string') return undefined;
+  return {
+    name: record.name,
+    title: record.title,
+    ...(typeof record.description === 'string' ? { description: record.description } : {}),
+    ...(toBoundedJsonObject(record.inputSchemaJson) === undefined ? {} : { inputSchemaJson: toBoundedJsonObject(record.inputSchemaJson)! }),
+    ...(toBoundedJsonObject(record.outputSchemaJson) === undefined ? {} : { outputSchemaJson: toBoundedJsonObject(record.outputSchemaJson)! }),
+    safety: {
+      sideEffect: safetyRecord.sideEffect as ConnectorCatalogToolDefinition['safety']['sideEffect'],
+      approval: safetyRecord.approval as ConnectorCatalogToolDefinition['safety']['approval'],
+      reason: safetyRecord.reason,
+    },
+    refreshEligible: Boolean(record.refreshEligible),
+    ...(record.curation && typeof record.curation === 'object' && !Array.isArray(record.curation)
+      ? {
+        curation: {
+          ...(((record.curation as Record<string, unknown>).useCases && Array.isArray((record.curation as Record<string, unknown>).useCases))
+            ? { useCases: ((record.curation as Record<string, unknown>).useCases as unknown[]).filter((item): item is 'personal_daily_digest' => item === 'personal_daily_digest') }
+            : {}),
+          ...(typeof (record.curation as Record<string, unknown>).reason === 'string' ? { reason: (record.curation as Record<string, unknown>).reason as string } : {}),
+        },
+      }
+      : {}),
+    requiredScopes: Array.isArray(record.requiredScopes) ? record.requiredScopes.filter((item): item is string => typeof item === 'string') : [],
+    ...(typeof record.providerToolId === 'string' ? { providerToolId: record.providerToolId } : {}),
+  };
+}
+
+function readPersistedComposioCatalogCache(filePath: string): PersistedComposioCatalogCache | undefined {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const record = parsed as Record<string, unknown>;
+    if (record.schemaVersion !== 1 || record.provider !== 'composio' || typeof record.fetchedAt !== 'string' || !Array.isArray(record.definitions)) return undefined;
+    return {
+      schemaVersion: 1,
+      provider: 'composio',
+      fetchedAt: record.fetchedAt,
+      definitions: record.definitions.map(normalizePersistedConnectorDefinition).filter((definition): definition is ConnectorCatalogDefinition => definition !== undefined),
+    };
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return undefined;
+    return undefined;
+  }
+}
+
+function writePersistedComposioCatalogCache(filePath: string, cache: PersistedComposioCatalogCache): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(cache, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tempPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 function getString(value: unknown): string | undefined {
@@ -1003,6 +1219,22 @@ function normalizeComposioSlug(value: string): string {
 
 function normalizeToolName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'tool';
+}
+
+function normalizeProviderToolId(value: string): string {
+  return normalizeToolName(value);
+}
+
+function applyComposioToolCuration(
+  tool: ConnectorCatalogToolDefinition,
+  connectorId: string,
+  providerToolId: string | undefined,
+): ConnectorCatalogToolDefinition {
+  const connectorKey = normalizeComposioSlug(connectorId);
+  const overlay = COMPOSIO_CURATION_OVERLAY[connectorKey];
+  const toolKey = providerToolId ? normalizeProviderToolId(providerToolId) : undefined;
+  const curation = toolKey ? overlay?.[toolKey] : undefined;
+  return curation === undefined ? tool : { ...tool, curation: { ...(tool.curation ?? {}), ...curation } };
 }
 
 function titleFromSlug(value: string): string {

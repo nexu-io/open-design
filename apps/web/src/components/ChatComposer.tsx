@@ -11,6 +11,7 @@ import type { Dict } from '../i18n/types';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata } from "../types";
+import type { ResearchOptions } from '@open-design/contracts';
 import { Icon } from "./Icon";
 import { BUILT_IN_PETS, CUSTOM_PET_ID, resolveActivePet } from "./pet/pets";
 
@@ -44,7 +45,7 @@ interface Props {
   onEnsureProject: () => Promise<string | null>;
   commentAttachments?: ChatCommentAttachment[];
   onRemoveCommentAttachment?: (id: string) => void;
-  onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[]) => void;
+  onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[], meta?: ChatSendMeta) => void;
   onStop: () => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
@@ -58,6 +59,7 @@ interface Props {
   onAdoptPet?: (petId: string) => void;
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
+  researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
 }
@@ -67,6 +69,10 @@ interface Props {
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
   focus: () => void;
+}
+
+export interface ChatSendMeta {
+  research?: ResearchOptions;
 }
 
 /**
@@ -95,6 +101,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onAdoptPet,
       onTogglePet,
       onOpenPetSettings,
+      researchAvailable = false,
       projectMetadata,
       onProjectMetadataChange,
     },
@@ -193,6 +200,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // ready for an argument.
     const slashCommands = useMemo<SlashCommand[]>(() => {
       const list: SlashCommand[] = [];
+      if (researchAvailable) {
+        list.push({
+          id: 'search',
+          label: '/search',
+          insert: '/search ',
+          descKey: 'pet.slashSearch',
+          icon: 'sparkles',
+          argHint: t('pet.slashSearchArg'),
+        });
+      }
       if (petEnabled) {
         list.push(
           {
@@ -228,7 +245,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         );
       }
       return list;
-    }, [petEnabled, t]);
+    }, [petEnabled, researchAvailable, t]);
 
     const filteredSlash = useMemo(() => {
       if (!slash) return [] as SlashCommand[];
@@ -278,6 +295,35 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         '',
         'When the spritesheet is saved, tell me the absolute path and the pet folder name. I will adopt it from Settings → Pets → Recently hatched.',
       ].join('\n');
+    }
+
+    function expandSearchCommand(input: string): { prompt: string; query: string } | null {
+      const m = /^\/search(?:\s+([\s\S]*))?$/i.exec(input.trim());
+      if (!m) return null;
+      const query = m[1]?.trim() ?? '';
+      if (!query) return null;
+      return {
+        query,
+        prompt: [
+          `Search for: ${query}`,
+          '',
+          'Before answering, your first tool action must be the OD research command for your shell.',
+          'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
+          'PowerShell: & $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 5',
+          'cmd.exe: "%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 5',
+          'Use the canonical query below as the exact search query, with safe quoting for your shell.',
+          '',
+          'Canonical query:',
+          '',
+          '```text',
+          query.replace(/```/g, '`\u200b`\u200b`'),
+          '```',
+          'If the OD command fails because Tavily is not configured or unavailable, report that error, then use your own search capability as fallback and label the fallback clearly.',
+          'After the command returns JSON or fallback search results, write a reusable Markdown report into Design Files at `research/<safe-query-slug>.md` or another fresh project-relative path.',
+          'The report must include the query, fetched time, short summary, key findings, source list with [1], [2] citations, and a note that source content is external untrusted evidence.',
+          'Then summarize the findings with citations by source index and mention the Markdown report path.',
+        ].join('\n'),
+      };
     }
 
     // Parse a `/pet [arg]` slash command out of the draft. Recognized
@@ -490,6 +536,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         onSend(hatched, staged, commentAttachments);
+        reset();
+        return;
+      }
+      const search = researchAvailable ? expandSearchCommand(prompt) : null;
+      if (search) {
+        if (streaming) return;
+        onSend(search.prompt, staged, commentAttachments, {
+          research: { enabled: true, query: search.query },
+        });
         reset();
         return;
       }

@@ -1,15 +1,25 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
+import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
   renderModelOptions,
 } from './modelOptions';
-import { DEFAULT_NOTIFICATIONS, KNOWN_PROVIDERS } from '../state/config';
+import {
+  DEFAULT_NOTIFICATIONS,
+  DEFAULT_ORBIT,
+  KNOWN_PROVIDERS,
+  hasAnyConfiguredProvider,
+  syncComposioConfigToDaemon,
+  syncConfigToDaemon,
+  syncMediaProvidersToDaemon,
+} from '../state/config';
 import type { KnownProvider } from '../state/config';
+import { navigate as navigateRoute } from '../router';
 import {
   MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
@@ -24,12 +34,15 @@ import type {
   AppVersionInfo,
   ConnectionTestResponse,
   ExecMode,
+  SkillSummary,
 } from '../types';
 import { testAgent, testApiProvider } from '../providers/connection-test';
+import { fetchConnectors, fetchSkills } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
 import { LibrarySection } from './LibrarySection';
+import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
   normalizeAccentColor,
@@ -47,6 +60,7 @@ export type SettingsSection =
   | 'execution'
   | 'media'
   | 'composio'
+  | 'orbit'
   | 'integrations'
   | 'language'
   | 'appearance'
@@ -62,7 +76,31 @@ interface Props {
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   initialSection?: SettingsSection;
-  onSave: (cfg: AppConfig, closeModal?: boolean) => Promise<{ success: boolean }> | void;
+  /**
+   * Persist the current draft. Invoked by the dialog's autosave loop on
+   * every committed edit. Returns a promise that resolves once both
+   * localStorage and the daemon have caught up so the footer status
+   * indicator can flip from "Saving…" to "Saved". Should NOT close the
+   * dialog and should NOT mutate onboarding state — it represents an
+   * incremental save, not a final commit.
+   */
+  onPersist: (cfg: AppConfig, options?: { forceMediaProviderSync?: boolean }) => Promise<void> | void;
+  /**
+   * Persist the Composio API key separately from the broader autosave
+   * loop. Composio secrets need an explicit user gesture so half-typed
+   * keys never leave the browser, so this is wired to a section-local
+   * "Save key" button rather than the autosave channel.
+   */
+  onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
+  /**
+   * True while the daemon-backed Composio config is still hydrating on
+   * first paint after a dev-server / app restart. The Connectors section
+   * renders a skeleton over the input + buttons during this window so
+   * the user does not mistake the temporarily empty input for "no key
+   * saved" and so accidental Save/Clear clicks cannot overwrite the
+   * saved state with `''` before the daemon's response lands.
+   */
+  composioConfigLoading?: boolean;
   onClose: () => void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
@@ -452,6 +490,78 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   };
 }
 
+/**
+ * Returns whether the modal's footer Save button should be enabled for the
+ * currently active sidebar section.
+ *
+ * The mode-completeness check (BYOK requires apiKey + model + valid baseUrl;
+ * Local CLI requires a selected available agent) is only meaningful on the
+ * execution-mode section, where the user is actively editing those fields.
+ * On every other sidebar section (language, appearance, composio, media,
+ * integrations, notifications, pet, library, about), partial state from a
+ * draft mode toggle (e.g. user clicked BYOK on the execution section without
+ * filling in fields, then navigated to language) must NOT block saving
+ * changes the user is making in those unrelated sections. Issue #739.
+ */
+export function shouldEnableSettingsSave(
+  cfg: AppConfig,
+  activeSection: SettingsSection,
+  agents: ReadonlyArray<{ id: string; available: boolean }>,
+  isBaseUrlValid: boolean,
+): boolean {
+  if (activeSection !== 'execution') return true;
+  if (cfg.mode === 'daemon') {
+    return Boolean(
+      cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available,
+    );
+  }
+  return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
+}
+
+/**
+ * Returns the config that should actually be persisted by `onSave`.
+ *
+ * Counterpart to {@link shouldEnableSettingsSave}: when Save is enabled on a
+ * non-execution sidebar section but the user's draft execution config is
+ * incomplete (e.g. they toggled BYOK on the execution section, never filled
+ * in apiKey, then navigated to Language and clicked Save), the raw `cfg`
+ * still carries that broken draft. Persisting it would leave the app in an
+ * unusable execution state after the modal closes. This helper reverts the
+ * execution-related fields to their `initial` values in that case, so saving
+ * an unrelated section change never silently commits an incomplete execution
+ * mode.
+ *
+ * Within the execution section, or when execution is already valid, the
+ * config passes through unchanged. Issue #739.
+ */
+export function sanitizeSettingsSavePayload(
+  cfg: AppConfig,
+  initial: AppConfig,
+  activeSection: SettingsSection,
+  agents: ReadonlyArray<{ id: string; available: boolean }>,
+  isBaseUrlValid: boolean,
+): AppConfig {
+  if (activeSection === 'execution') return cfg;
+  // Reuse the existing execution-section validity gate so the two helpers
+  // share one source of truth for "execution config is complete enough."
+  const executionValid = shouldEnableSettingsSave(cfg, 'execution', agents, isBaseUrlValid);
+  if (executionValid) return cfg;
+  return {
+    ...cfg,
+    mode: initial.mode,
+    apiKey: initial.apiKey,
+    apiProtocol: initial.apiProtocol,
+    apiVersion: initial.apiVersion,
+    apiProtocolConfigs: initial.apiProtocolConfigs,
+    apiProviderBaseUrl: initial.apiProviderBaseUrl,
+    baseUrl: initial.baseUrl,
+    model: initial.model,
+    agentId: initial.agentId,
+    agentCliEnv: initial.agentCliEnv,
+    maxTokens: initial.maxTokens,
+  };
+}
+
 export function switchApiProtocolConfig(
   config: AppConfig,
   protocol: ApiProtocol,
@@ -486,7 +596,9 @@ export function SettingsDialog({
   appVersionInfo,
   welcome,
   initialSection = 'execution',
-  onSave,
+  onPersist,
+  onPersistComposioKey,
+  composioConfigLoading = false,
   onClose,
   onRefreshAgents,
 }: Props) {
@@ -791,14 +903,148 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
-  const canSave =
-    cfg.mode === 'daemon'
-      ? Boolean(cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available)
-      : Boolean(
-          cfg.apiKey.trim() &&
-          cfg.model.trim() &&
-          baseUrlValid,
-        );
+  // Autosave loop. Every committed edit to `cfg` schedules a debounced
+  // sync to localStorage + the daemon. We keep a 400ms debounce so rapid
+  // typing in text fields doesn't flood the daemon with PUTs while still
+  // feeling near-instant for toggles/selects (which fire once and settle).
+  // The Composio API key field is intentionally excluded from this loop —
+  // see ConnectorSection for the explicit "Save key" gesture.
+  // The status here drives the footer indicator: 'idle' = no draft to
+  // flush, 'pending' = scheduled, 'saving' = request in flight, 'saved'
+  // = recent successful sync, 'error' = recent failure.
+  const [autosaveStatus, setAutosaveStatus] =
+    useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
+  // Skip the very first effect tick so just opening the dialog doesn't
+  // appear to "save" anything before the user has touched a field.
+  const autosaveSkipFirstRef = useRef(true);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const autosaveSavedTimerRef = useRef<number | null>(null);
+  const autosaveRetryTimerRef = useRef<number | null>(null);
+  const autosavePendingFlushRef = useRef(false);
+  const autosaveLatestRef = useRef<AppConfig>(cfg);
+  const mediaProvidersChangeVersionRef = useRef(0);
+  const lastSyncedMediaProvidersVersionRef = useRef(0);
+  const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
+  autosaveLatestRef.current = cfg;
+  useEffect(() => {
+    if (autosaveSkipFirstRef.current) {
+      autosaveSkipFirstRef.current = false;
+      return;
+    }
+    setAutosaveStatus('pending');
+    if (autosaveSavedTimerRef.current != null) {
+      window.clearTimeout(autosaveSavedTimerRef.current);
+      autosaveSavedTimerRef.current = null;
+    }
+    if (autosaveRetryTimerRef.current != null) {
+      window.clearTimeout(autosaveRetryTimerRef.current);
+      autosaveRetryTimerRef.current = null;
+    }
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+    autosavePendingFlushRef.current = true;
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosavePendingFlushRef.current = false;
+      autosaveTimerRef.current = null;
+      const snapshot = autosaveLatestRef.current;
+      const mediaProvidersVersion = mediaProvidersChangeVersionRef.current;
+      const persistOptions = {
+        forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
+      };
+      setAutosaveStatus('saving');
+      void (async () => {
+        try {
+          await onPersist(snapshot, persistOptions);
+          if (persistOptions.forceMediaProviderSync) {
+            lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
+          }
+          // If a newer edit landed while the request was in flight,
+          // leave the status as 'pending' so the next debounce tick
+          // owns the indicator instead of flashing "Saved".
+          if (autosaveLatestRef.current !== snapshot) {
+            setAutosaveStatus('pending');
+            return;
+          }
+          setAutosaveStatus('saved');
+          autosaveSavedTimerRef.current = window.setTimeout(() => {
+            autosaveSavedTimerRef.current = null;
+            // Settle to idle after a moment so the indicator doesn't
+            // stay on "Saved" forever and become noise.
+            setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
+          }, 1800);
+        } catch {
+          if (
+            persistOptions.forceMediaProviderSync
+            && autosaveLatestRef.current === snapshot
+            && mediaProvidersChangeVersionRef.current === mediaProvidersVersion
+            && lastSyncedMediaProvidersVersionRef.current < mediaProvidersVersion
+          ) {
+            setAutosaveStatus('pending');
+            autosaveRetryTimerRef.current = window.setTimeout(() => {
+              autosaveRetryTimerRef.current = null;
+              if (
+                autosaveLatestRef.current !== snapshot
+                || mediaProvidersChangeVersionRef.current !== mediaProvidersVersion
+                || lastSyncedMediaProvidersVersionRef.current >= mediaProvidersVersion
+              ) {
+                return;
+              }
+              setAutosaveRetryTick((tick) => tick + 1);
+            }, 1500);
+            return;
+          }
+          setAutosaveStatus('error');
+        }
+      })();
+    }, 400);
+    return () => {
+      if (autosaveTimerRef.current != null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [cfg, onPersist, autosaveRetryTick]);
+  // Flush any pending autosave on unmount so a fast-closing dialog
+  // never strands an in-flight edit. We also clear the "Saved" toast
+  // timer to avoid setState after unmount.
+  useEffect(() => {
+    return () => {
+      if (autosavePendingFlushRef.current) {
+        const mediaProvidersVersion = mediaProvidersChangeVersionRef.current;
+        // Best-effort flush; if it rejects, localStorage already has
+        // the latest copy from the synchronous saveConfig call inside
+        // onPersist.
+        autosavePendingFlushRef.current = false;
+        void Promise.resolve(onPersist(autosaveLatestRef.current, {
+          forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
+        })).catch(() => undefined);
+      }
+      if (autosaveSavedTimerRef.current != null) {
+        window.clearTimeout(autosaveSavedTimerRef.current);
+        autosaveSavedTimerRef.current = null;
+      }
+      if (autosaveRetryTimerRef.current != null) {
+        window.clearTimeout(autosaveRetryTimerRef.current);
+        autosaveRetryTimerRef.current = null;
+      }
+    };
+  }, [onPersist]);
+
+  // Global Escape closes the dialog. With no footer button anymore the
+  // close affordances are: top-right X · backdrop click · Escape. We
+  // skip the handler when an inline popover (e.g. the language menu
+  // listbox) is open, because that menu owns its own Escape handling
+  // and closing the dialog out from under it would be jarring.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (languageOpen) return;
+      onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose, languageOpen]);
 
   const protocolProviders = useMemo(
     () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
@@ -835,9 +1081,58 @@ export function SettingsDialog({
         className="modal modal-settings"
         role="dialog"
         aria-modal="true"
+        aria-labelledby="settings-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="modal-head">
+        {/* Top-right chrome strip — anchored to the modal corner so the
+            autosave indicator and the close button float above the
+            sidebar/content rhythm without competing with the title.
+            We use `position: absolute` instead of putting these inside
+            `.modal-head` so the welcome variant's tall hero (kicker /
+            title / subtitle / pet teaser) keeps its centred reading
+            measure, and the close button always lands at the same
+            optical location regardless of how much copy the header
+            renders. */}
+        <div className="settings-chrome" aria-hidden={false}>
+          {/* Autosave status pill. Only renders something while a save
+              is in flight or has just completed — idle = invisible so
+              first-open feels calm. The chrome strip itself stays
+              mounted so the close button never shifts when the pill
+              appears, and the pill is announced via aria-live for
+              assistive tech. */}
+          <div
+            className={`settings-autosave is-${autosaveStatus}`}
+            role="status"
+            aria-live="polite"
+          >
+            {autosaveStatus === 'saving' || autosaveStatus === 'pending' ? (
+              <>
+                <Icon name="spinner" size={12} className="icon-spin" />
+                <span>{t('settings.autosaveSaving')}</span>
+              </>
+            ) : autosaveStatus === 'saved' ? (
+              <>
+                <Icon name="check" size={12} />
+                <span>{t('settings.autosaveSaved')}</span>
+              </>
+            ) : autosaveStatus === 'error' ? (
+              <>
+                <Icon name="close" size={12} />
+                <span>{t('settings.autosaveError')}</span>
+              </>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="settings-close"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+          >
+            <Icon name="close" size={16} strokeWidth={2} />
+          </button>
+        </div>
+        <header className="modal-head" id="settings-dialog-title">
           {welcome ? (
             <>
               <span className="kicker">{t('settings.welcomeKicker')}</span>
@@ -904,8 +1199,19 @@ export function SettingsDialog({
             >
               <Icon name="sliders" size={18} />
               <span>
-                <strong>Connectors</strong>
-                <small>External system connections</small>
+                <strong>{t('connectors.title')}</strong>
+                <small>{t('settings.connectorsNavHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'orbit' ? ' active' : ''}`}
+              onClick={() => setActiveSection('orbit')}
+            >
+              <Icon name="orbit" size={18} />
+              <span>
+                <strong>{t('settings.orbit.title')}</strong>
+                <small>{t('settings.orbit.navHint')}</small>
               </span>
             </button>
             <button
@@ -1535,10 +1841,44 @@ export function SettingsDialog({
             </>
           ) : null}
 
-          {activeSection === 'media' ? <MediaProvidersSection cfg={cfg} setCfg={setCfg} /> : null}
+          {activeSection === 'media' ? (
+            <MediaProvidersSection
+              cfg={cfg}
+              setCfg={setCfg}
+              onChange={() => {
+                mediaProvidersChangeVersionRef.current += 1;
+              }}
+            />
+          ) : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
-          {activeSection === 'composio' ? <ComposioSection cfg={cfg} setCfg={setCfg} /> : null}
+          {activeSection === 'composio' ? (
+            <ConnectorSection
+              cfg={cfg}
+              setCfg={setCfg}
+              composioConfigLoading={composioConfigLoading}
+              onPersistComposioKey={onPersistComposioKey}
+            />
+          ) : null}
+
+          {activeSection === 'orbit' ? (
+            <OrbitSection
+              cfg={cfg}
+              setCfg={setCfg}
+              composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
+              onOpenComposioSection={() => setActiveSection('composio')}
+              onLeaveForOrbitProject={(runConfig) => {
+                // Persist any in-flight Orbit edits (toggle / time) before
+                // navigating away so they aren't silently lost. The autosave
+                // loop is best-effort; this synchronous flush guarantees the
+                // run-config landed on the daemon before we tear the dialog
+                // down. Closing the dialog drops the user on the
+                // /projects/orbit view where the agent run streams in.
+                void onPersist(runConfig);
+                onClose();
+              }}
+            />
+          ) : null}
 
           {activeSection === 'language' ? (
           <section className="settings-section">
@@ -1677,20 +2017,6 @@ export function SettingsDialog({
           ) : null}
           </div>
         </div>
-
-        <footer className="modal-foot">
-          <button type="button" className="ghost" onClick={onClose}>
-            {welcome ? t('settings.skipForNow') : t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="primary"
-            disabled={!canSave}
-            onClick={() => onSave(cfg, activeSection !== 'composio')}
-          >
-            {welcome ? t('settings.getStarted') : t('common.save')}
-          </button>
-        </footer>
       </div>
     </div>
   );
@@ -1724,13 +2050,26 @@ export function deriveComposioCredentialState(
   return 'empty';
 }
 
-function ComposioSection({
+function ConnectorSection({
   cfg,
   setCfg,
+  composioConfigLoading = false,
+  onPersistComposioKey,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  /** True while the daemon-backed Composio config is still hydrating on
+   *  first paint. The credentials surface renders a skeleton over the
+   *  input + buttons so the user does not mistake the temporarily empty
+   *  input for "no saved key", and so accidental Save/Clear clicks
+   *  cannot overwrite the saved state with `''` before hydration lands. */
+  composioConfigLoading?: boolean;
+  /** Persist the freshly typed Composio API key to the daemon. Returns
+   *  once both localStorage and the daemon have caught up so the
+   *  section-local Save button can flip from "Saving…" back to idle. */
+  onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
 }) {
+  const { t } = useI18n();
   const composio = cfg.composio ?? {};
 
   const updateComposio = (patch: NonNullable<AppConfig['composio']>) => {
@@ -1738,24 +2077,165 @@ function ComposioSection({
   };
   const credentialState = deriveComposioCredentialState(composio);
   const hasSavedKey = credentialState === 'saved' || credentialState === 'saved-pending';
+  const hasPendingEdit = credentialState === 'pending-new' || credentialState === 'saved-pending';
   const apiKeyConfigured = credentialState !== 'empty';
+  const savedApiKeyConfigured = Boolean(composio.apiKeyConfigured || hasSavedKey);
   const tail = composio.apiKeyTail?.trim();
 
+  // Section-local save state. The Composio key bypasses the dialog's
+  // global autosave loop because it is a secret — we don't want
+  // partial-typed keys leaving the browser on every keystroke. The
+  // user explicitly clicks "Save key" when they're ready, the request
+  // completes, the daemon returns a tail-only echo, and we land in
+  // the saved state with the same UI as a key loaded from disk.
+  const [keySaveStatus, setKeySaveStatus] =
+    useState<'idle' | 'saving' | 'error'>('idle');
+  const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  const handleSaveKey = async () => {
+    if (keySaveStatus === 'saving') return;
+    if (!hasPendingEdit) return;
+    if (composioConfigLoading) return;
+    const pendingKey = composio.apiKey ?? '';
+    setKeySaveStatus('saving');
+    try {
+      await onPersistComposioKey(cfg.composio);
+      // Mirror the parent's normalization so the local draft moves
+      // into the saved state immediately: drop the secret from the
+      // input, mark configured, and store the last-4 tail for the
+      // status badge. The parent's setConfig won't propagate back to
+      // the dialog because `initial` is read once at mount.
+      updateComposio({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: pendingKey.trim().slice(-4),
+      });
+      setCatalogRefreshNonce((nonce) => nonce + 1);
+      setKeySaveStatus('idle');
+    } catch {
+      setKeySaveStatus('error');
+    }
+  };
+
+  // Action gating during hydration. Both Save and Clear are dangerous
+  // before the daemon's response lands: Save would push whatever the
+  // user typed (or didn't type) over the saved key, and Clear would
+  // unconditionally wipe it. The skeleton state below makes this
+  // visually obvious; the disabled flags here are the safety net.
+  const actionsLocked = composioConfigLoading || keySaveStatus === 'saving';
+  const saveDisabled = actionsLocked || !hasPendingEdit;
+  const clearDisabled = actionsLocked || !apiKeyConfigured;
+
+  // Two-stage destructive confirmation for "Clear". Clearing the saved
+  // Composio API key cascades into disconnecting every connector that
+  // depends on it, which is irreversible from the UI's standpoint —
+  // accounts, OAuth grants, and tool access all unwind. To stop that
+  // from happening on a stray click we gate the existing wipe behind
+  //   1. an inline warning panel (must click "Continue"), then
+  //   2. a final destructive confirmation panel with a brief arming
+  //      window so the destructive button cannot be hit by reflex
+  //      double-click, then
+  //   3. the original clear behavior fires.
+  // The panel collapses on Cancel, when the saved key disappears for
+  // any other reason, or when the user navigates away from the section.
+  const [clearStage, setClearStage] = useState<'idle' | 'confirm' | 'final'>('idle');
+  const [clearArmed, setClearArmed] = useState(false);
+  const finalConfirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  // Reset the flow if the underlying state stops being clearable
+  // (e.g. the daemon reloaded and there's nothing saved anymore, or
+  // hydration started). This avoids a stale confirmation panel sitting
+  // open over a key that no longer exists.
+  useEffect(() => {
+    if (!apiKeyConfigured || composioConfigLoading) {
+      setClearStage('idle');
+      setClearArmed(false);
+    }
+  }, [apiKeyConfigured, composioConfigLoading]);
+  // Arm the destructive button after a short delay once the user
+  // reaches the final stage. Until then the button is visually hot
+  // but inert — this is the "hold on a sec" moment that keeps a
+  // reflex Enter / double-click from blowing through both stages.
+  useEffect(() => {
+    if (clearStage !== 'final') {
+      setClearArmed(false);
+      return;
+    }
+    setClearArmed(false);
+    const timer = window.setTimeout(() => setClearArmed(true), 700);
+    // Pull focus to the final confirm button so keyboard users can
+    // see the arming animation finish and choose deliberately rather
+    // than tabbing through stale focus state.
+    const focusTimer = window.setTimeout(() => {
+      finalConfirmButtonRef.current?.focus({ preventScroll: true });
+    }, 720);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(focusTimer);
+    };
+  }, [clearStage]);
+  const handleClearRequest = () => {
+    if (clearDisabled) return;
+    setClearStage('confirm');
+  };
+  const handleClearAbort = () => {
+    setClearStage('idle');
+    setClearArmed(false);
+  };
+  const handleClearContinue = () => {
+    setClearStage('final');
+  };
+  const handleClearCommit = async () => {
+    if (keySaveStatus === 'saving') return;
+    if (!clearArmed) return;
+    setKeySaveStatus('saving');
+    try {
+      const cleared = {
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+      };
+      await onPersistComposioKey(cleared);
+      updateComposio(cleared);
+      setCatalogRefreshNonce((nonce) => nonce + 1);
+      setClearStage('idle');
+      setClearArmed(false);
+      setKeySaveStatus('idle');
+    } catch {
+      setKeySaveStatus('error');
+    }
+  };
+
   return (
-    <section className="settings-section">
+    <section className="settings-section settings-section-connectors">
       <div className="section-head">
         <div>
-          <h3>Connectors</h3>
-          <p className="hint">Manage connector and tool provider settings for this device.</p>
+          <h3>{t('connectors.title')}</h3>
+          <p className="hint">{t('settings.connectorsHint')}</p>
         </div>
       </div>
-      <label className="field">
+
+      <label
+        className={`field settings-section-connectors-credentials${composioConfigLoading ? ' is-loading' : ''}`}
+        aria-busy={composioConfigLoading || undefined}
+      >
         <span className="field-label-row">
           <span className="field-label-group">
-            <span className="field-label">Composio API Key</span>
-            {hasSavedKey ? (
-              <span className="field-status-badge" title="Saved to local daemon">
-                {tail ? `Saved · ••••${tail}` : 'Saved'}
+            <span className="field-label">{t('settings.connectorsComposioApiKey')}</span>
+            {composioConfigLoading ? (
+              // Skeleton chip stands in for the "Saved · ••••XXXX" badge
+              // while we wait for the daemon. Same footprint as the real
+              // chip so the row geometry doesn't jump on resolve.
+              <span
+                className="field-status-badge field-status-badge-skeleton"
+                aria-hidden="true"
+              />
+            ) : hasSavedKey ? (
+              <span
+                className="field-status-badge"
+                title={t('settings.connectorsSavedTitle')}
+              >
+                {tail
+                  ? t('settings.connectorsSavedWithTail', { tail })
+                  : t('settings.connectorsSaved')}
               </span>
             ) : null}
           </span>
@@ -1765,37 +2245,1018 @@ function ComposioSection({
             target="_blank"
             rel="noreferrer"
           >
-            Get API Key
+            {t('settings.connectorsGetApiKey')}
             <Icon name="external-link" size={11} />
           </a>
         </span>
         <div className="field-row">
-          <input
-            type="password"
-            value={composio.apiKey ?? ''}
-            placeholder={hasSavedKey ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
-            onChange={(e) => updateComposio({ apiKey: e.target.value })}
-            aria-describedby="composio-api-key-help"
-          />
+          {/* Wrap the password input so the shimmer overlay can sit on
+              top of it without affecting layout. The input itself stays
+              mounted (rather than swapped for a placeholder div) so the
+              browser keeps any in-progress autofill, focus, and
+              accessibility tree intact when hydration completes. */}
+          <span className="field-input-skeleton-wrap">
+            <input
+              type="password"
+              value={composio.apiKey ?? ''}
+              placeholder={
+                composioConfigLoading
+                  ? t('settings.connectorsLoadingSavedKey')
+                  : hasSavedKey
+                    ? t('settings.connectorsReplaceKeyPlaceholder')
+                    : t('settings.connectorsApiKeyPlaceholder')
+              }
+              onChange={(e) => updateComposio({ apiKey: e.target.value })}
+              onKeyDown={(e) => {
+                // Enter from the password field commits the key — the
+                // most common save gesture for credential fields, and
+                // it removes the need to mouse over to the button.
+                if (
+                  e.key === 'Enter'
+                  && hasPendingEdit
+                  && keySaveStatus !== 'saving'
+                  && !composioConfigLoading
+                ) {
+                  e.preventDefault();
+                  void handleSaveKey();
+                }
+              }}
+              disabled={composioConfigLoading}
+              aria-describedby="composio-api-key-help"
+            />
+            {composioConfigLoading ? (
+              <span className="field-input-skeleton-shimmer" aria-hidden="true" />
+            ) : null}
+          </span>
           <button
             type="button"
-            className="ghost"
-            disabled={!apiKeyConfigured}
-            onClick={() => updateComposio({ apiKey: '', apiKeyConfigured: false, apiKeyTail: '' })}
+            className={'primary settings-connectors-save' + (keySaveStatus === 'saving' ? ' is-busy' : '')}
+            disabled={saveDisabled}
+            onClick={() => void handleSaveKey()}
+            title={
+              composioConfigLoading
+                ? t('settings.connectorsLoadingSavedKey')
+                : t('settings.connectorsSaveKeyTitle')
+            }
           >
-            Clear
+            {keySaveStatus === 'saving' ? (
+              <>
+                <Icon name="spinner" size={12} className="icon-spin" />
+                <span>{t('settings.connectorsKeySaving')}</span>
+              </>
+            ) : (
+              t('settings.connectorsSaveKey')
+            )}
+          </button>
+          <button
+            type="button"
+            className={
+              'ghost settings-connectors-clear'
+              + (clearStage !== 'idle' ? ' is-arming' : '')
+            }
+            disabled={clearDisabled}
+            title={
+              composioConfigLoading
+                ? t('settings.connectorsLoadingSavedKey')
+                : undefined
+            }
+            aria-expanded={clearStage !== 'idle'}
+            aria-controls="composio-clear-confirm"
+            onClick={handleClearRequest}
+          >
+            {t('settings.connectorsClear')}
           </button>
         </div>
-        <span id="composio-api-key-help" className="hint">
-          {credentialState === 'saved-pending'
-            ? 'Unsaved replacement. Click Save to overwrite the saved key, or Clear to discard the draft and the saved key.'
-            : credentialState === 'saved'
-              ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
-              : credentialState === 'pending-new'
-                ? 'Unsaved changes. Click Save to store this key in the local daemon.'
-                : 'Keys are stored locally in the daemon and never sent through environment variables.'}
+        {/* Two-stage destructive confirmation panel. Lives inside the
+            credentials field so it visually grows out of the row that
+            owns the action, instead of floating disconnected at the
+            bottom of the section. The panel is destructive-styled
+            (red border + soft red bg) and uses an alertdialog role so
+            screen readers treat it as a modal blocker for the field. */}
+        {clearStage !== 'idle' ? (
+          <div
+            id="composio-clear-confirm"
+            className={
+              'settings-connectors-clear-confirm is-' + clearStage
+              + (clearStage === 'final' && clearArmed ? ' is-armed' : '')
+            }
+            role="alertdialog"
+            aria-modal="false"
+            aria-labelledby="composio-clear-confirm-title"
+            aria-describedby="composio-clear-confirm-body"
+          >
+            <div className="settings-connectors-clear-confirm-icon" aria-hidden="true">
+              <span className="settings-connectors-clear-confirm-glyph">!</span>
+            </div>
+            <div className="settings-connectors-clear-confirm-copy">
+              <strong id="composio-clear-confirm-title">
+                {clearStage === 'final'
+                  ? t('settings.connectorsClearFinalTitle')
+                  : t('settings.connectorsClearConfirmTitle')}
+              </strong>
+              <span id="composio-clear-confirm-body">
+                {clearStage === 'final'
+                  ? t('settings.connectorsClearFinalBody')
+                  : t('settings.connectorsClearConfirmBody')}
+              </span>
+            </div>
+            <div className="settings-connectors-clear-confirm-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={handleClearAbort}
+              >
+                {t('settings.connectorsClearCancel')}
+              </button>
+              {clearStage === 'confirm' ? (
+                <button
+                  type="button"
+                  className="settings-connectors-clear-step"
+                  onClick={handleClearContinue}
+                >
+                  {t('settings.connectorsClearConfirmContinue')}
+                  <Icon name="chevron-right" size={12} />
+                </button>
+              ) : (
+                <button
+                  ref={finalConfirmButtonRef}
+                  type="button"
+                  className={
+                    'settings-connectors-clear-commit'
+                    + (clearArmed ? ' is-armed' : '')
+                  }
+                  onClick={handleClearCommit}
+                  disabled={!clearArmed}
+                  aria-disabled={!clearArmed}
+                >
+                  <span className="settings-connectors-clear-commit-arm" aria-hidden="true" />
+                  <span className="settings-connectors-clear-commit-label">
+                    {clearArmed ? (
+                      t('settings.connectorsClearFinalConfirm')
+                    ) : (
+                      <>
+                        <Icon name="spinner" size={12} className="icon-spin" />
+                        {t('settings.connectorsClearArming')}
+                      </>
+                    )}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+        <span
+          id="composio-api-key-help"
+          className={`hint${composioConfigLoading ? ' field-hint-loading' : ''}`}
+          role={composioConfigLoading ? 'status' : undefined}
+          aria-live={composioConfigLoading ? 'polite' : undefined}
+        >
+          {composioConfigLoading ? (
+            <>
+              <Icon name="spinner" size={11} className="icon-spin" />
+              <span>{t('settings.connectorsLoadingSavedKey')}</span>
+            </>
+          ) : keySaveStatus === 'error'
+            ? t('settings.connectorsKeyError')
+            : hasSavedKey
+              ? t('settings.connectorsHelpSaved')
+              : apiKeyConfigured
+                ? t('settings.connectorsHelpUnsaved')
+                : t('settings.connectorsHelpEmpty')}
         </span>
       </label>
+
+      <ConnectorsBrowser
+        composioConfigured={savedApiKeyConfigured}
+        catalogRefreshKey={`${savedApiKeyConfigured ? 'configured' : 'empty'}:${tail ?? ''}:${catalogRefreshNonce}`}
+      />
+    </section>
+  );
+}
+
+interface OrbitRunSummary {
+  id?: string;
+  startedAt?: string;
+  completedAt: string;
+  trigger?: 'manual' | 'scheduled';
+  connectorsChecked: number;
+  connectorsSucceeded: number;
+  connectorsFailed: number;
+  connectorsSkipped: number;
+  artifactId?: string | null;
+  artifactProjectId?: string | null;
+  /** Identifier of the daemon run that produced this summary. Useful for log correlation. */
+  agentRunId?: string | null;
+  markdown: string;
+}
+
+interface OrbitRunStartResponse {
+  projectId: string;
+  agentRunId: string;
+}
+
+export async function persistConfigAndRunOrbit(
+  config: AppConfig,
+): Promise<OrbitRunStartResponse> {
+  await syncMediaProvidersToDaemon(config.mediaProviders);
+  await syncConfigToDaemon(config, { throwOnError: true });
+  const response = await fetch('/api/orbit/run', { method: 'POST' });
+  if (!response.ok) throw new Error('Orbit run failed');
+  return await response.json() as OrbitRunStartResponse;
+}
+
+export function configForManualOrbitRun(config: AppConfig): AppConfig {
+  const effectiveTemplateSkillId = config.orbit?.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+  if (!effectiveTemplateSkillId) return config;
+  return {
+    ...config,
+    orbit: {
+      ...(config.orbit ?? DEFAULT_ORBIT),
+      templateSkillId: effectiveTemplateSkillId,
+    },
+  };
+}
+
+export function isOrbitRunDisabled(isBusy: boolean, connectedCount: number | null): boolean {
+  return isBusy || connectedCount === null || connectedCount === 0;
+}
+
+interface OrbitStatusResponse {
+  running?: boolean;
+  nextRunAt?: string | null;
+  lastRun?: OrbitRunSummary | null;
+}
+
+function formatRelative(
+  iso: string | undefined | null,
+  t: (key: keyof Dict, vars?: Record<string, string | number>) => string,
+): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const diffMs = Date.now() - then;
+  const absMin = Math.round(Math.abs(diffMs) / 60_000);
+  if (absMin < 1) return t('common.justNow');
+  if (absMin < 60) return t('common.minutesAgo', { n: absMin });
+  const absHr = Math.round(absMin / 60);
+  if (absHr < 24) return t('common.hoursAgo', { n: absHr });
+  const absDay = Math.round(absHr / 24);
+  return t('common.daysAgo', { n: absDay });
+}
+
+function OrbitSection({
+  cfg,
+  setCfg,
+  composioApiKeyConfigured,
+  onOpenComposioSection,
+  onLeaveForOrbitProject,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+  /** Whether the user has already saved a Composio API key. Drives the
+   *  Orbit configuration gate's copy/CTA. When false the gate explains
+   *  that Orbit needs Composio first; when true (key present, just no
+   *  connectors yet) it nudges the user toward the connector catalog. */
+  composioApiKeyConfigured: boolean;
+  /** Switch the parent settings dialog to the Connectors (Composio) tab.
+   *  Used by the Orbit gate's primary CTA so the user can fix the
+   *  prerequisite without leaving the dialog. */
+  onOpenComposioSection: () => void;
+  /** Called right before navigating to the generated Orbit project so the
+   *  parent dialog can persist any unsaved Orbit edits and close itself. */
+  onLeaveForOrbitProject: (runConfig: AppConfig) => void;
+}) {
+  const { t } = useI18n();
+  const orbit = cfg.orbit ?? DEFAULT_ORBIT;
+  const [status, setStatus] = useState<OrbitStatusResponse | null>(null);
+  const [running, setRunning] = useState(false);
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  // Orbit-scenario skill templates fetched from /api/skills. We fetch on mount
+  // and keep three states for graceful UX: `null` = still loading, `[]` =
+  // loaded with no orbit templates available, `SkillSummary[]` = ready. If
+  // the daemon is offline the call resolves with [] (see fetchSkills) so the
+  // section never throws — the rest of the Orbit controls keep working.
+  const [orbitTemplates, setOrbitTemplates] = useState<SkillSummary[] | null>(null);
+  // Connector presence drives the configuration gate at the top of the Orbit
+  // tab. We track three states: `null` = still loading (skip rendering the
+  // gate so it doesn't flash before data arrives), `0` = no connectors
+  // present (gate is shown), `>0` = at least one connected integration
+  // (gate is hidden). We only count connectors with `status === 'connected'`
+  // because the catalog itself ships hundreds of available rows — what
+  // matters for Orbit is whether anything has actually been wired up.
+  const [connectedCount, setConnectedCount] = useState<number | null>(null);
+  // Once the user clicks Generate we close Settings and navigate away. The ref
+  // lets late-arriving handlers no-op without React warnings.
+  const isMountedRef = useRef(true);
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
+
+  const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {
+    setCfg((curr) => ({
+      ...curr,
+      orbit: { ...(curr.orbit ?? DEFAULT_ORBIT), ...patch },
+    }));
+  };
+
+  const refreshStatus = async () => {
+    try {
+      const response = await fetch('/api/orbit/status');
+      if (!response.ok) return;
+      if (!isMountedRef.current) return;
+      setStatus(await response.json() as OrbitStatusResponse);
+    } catch {
+      // Daemon may be offline in API-only development; keep local controls usable.
+    }
+  };
+
+  useEffect(() => {
+    void refreshStatus();
+  }, []);
+
+  useEffect(() => {
+    if (!status?.running) return undefined;
+    const interval = window.setInterval(() => {
+      void refreshStatus();
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [status?.running]);
+
+  // Fetch the skills registry once on mount and filter to scenario === 'orbit'.
+  // We tolerate fetch failure: fetchSkills already swallows errors and returns
+  // []. The component then transitions from "loading" → "empty" and the rest
+  // of the Orbit panel stays fully functional.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const all = await fetchSkills();
+      if (!alive) return;
+      const filtered = all.filter((s) => s.scenario === 'orbit');
+      // Stable order: featured first (higher number = more featured), then by name.
+      filtered.sort((a, b) => {
+        const af = a.featured ?? 0;
+        const bf = b.featured ?? 0;
+        if (af !== bf) return bf - af;
+        return a.name.localeCompare(b.name);
+      });
+      setOrbitTemplates(filtered);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const refreshConnectedCount = useCallback(async () => {
+    const list = await fetchConnectors();
+    if (!isMountedRef.current) return;
+    const connected = list.filter((c) => c.status === 'connected').length;
+    setConnectedCount(connected);
+  }, []);
+
+  // Fetch the connector catalog on mount to determine whether the Orbit
+  // configuration gate should render. fetchConnectors swallows errors and
+  // returns []; if the daemon is offline we treat that as "0 connected" and
+  // surface the gate so the user has a clear path forward instead of being
+  // dropped into a broken Orbit configuration.
+  useEffect(() => {
+    void refreshConnectedCount();
+  }, [refreshConnectedCount]);
+
+  // Connector auth often completes in another window. Re-check when focus
+  // returns so the Orbit gate reflects newly connected accounts without
+  // requiring the user to close and reopen Settings.
+  useEffect(() => {
+    const onFocus = () => {
+      void refreshConnectedCount();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshConnectedCount]);
+
+  // The id used to drive the prompt template — coalesces a null/empty
+  // saved value to the built-in default (DEFAULT_ORBIT.templateSkillId,
+  // currently 'orbit-general'). The select no longer offers a "no template"
+  // option, so legacy configs that stored null are presented as if they
+  // were on the default. Manual runs persist this effective value before
+  // launching so the daemon uses the same template the UI displays.
+  const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+
+  const selectedTemplate = useMemo(() => {
+    if (!effectiveTemplateSkillId || !orbitTemplates) return null;
+    return orbitTemplates.find((s) => s.id === effectiveTemplateSkillId) ?? null;
+  }, [effectiveTemplateSkillId, orbitTemplates]);
+
+  const triggerNow = () => {
+    if (running) return;
+    setRunning(true);
+    setNotice(null);
+
+    void (async () => {
+      try {
+        const runConfig = configForManualOrbitRun(cfg);
+        const payload = await persistConfigAndRunOrbit(runConfig);
+        if (!payload.projectId) throw new Error('Orbit run did not return a project');
+
+        onLeaveForOrbitProject(runConfig);
+        navigateRoute({
+          kind: 'project',
+          projectId: payload.projectId,
+          fileName: null,
+        });
+      } catch {
+        if (!isMountedRef.current) return;
+        setNotice({
+          kind: 'error',
+          message: t('settings.orbit.runError'),
+        });
+      } finally {
+        if (!isMountedRef.current) return;
+        setRunning(false);
+        void refreshStatus();
+      }
+    })();
+  };
+
+  const lastRun = status?.lastRun ?? null;
+  const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
+  const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
+  const lastRunRel = formatRelative(lastRun?.completedAt, t);
+  const liveArtifactHref = lastRun?.artifactId && lastRun?.artifactProjectId
+    ? `/api/live-artifacts/${encodeURIComponent(lastRun.artifactId)}/preview?projectId=${encodeURIComponent(lastRun.artifactProjectId)}`
+    : null;
+  const isBusy = running || Boolean(status?.running);
+
+  const copyMarkdown = async () => {
+    if (!lastRun?.markdown) return;
+    try {
+      await navigator.clipboard.writeText(lastRun.markdown);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard access may be denied in some browsing contexts; silently skip.
+    }
+  };
+
+  // Proportional widths for the run-result meter. We avoid showing 0-width
+  // segments by falling back to a tiny sliver when a category has hits but
+  // rounds to 0% — the visual "something happened here" cue matters more
+  // than exact proportion at low counts.
+  const total = lastRun
+    ? Math.max(
+        lastRun.connectorsSucceeded + lastRun.connectorsSkipped + lastRun.connectorsFailed,
+        1,
+      )
+    : 1;
+  const segPct = (n: number) => {
+    if (!lastRun || n <= 0) return 0;
+    const pct = (n / total) * 100;
+    return pct < 3 ? 3 : pct;
+  };
+  const meterSucceeded = lastRun ? segPct(lastRun.connectorsSucceeded) : 0;
+  const meterSkipped = lastRun ? segPct(lastRun.connectorsSkipped) : 0;
+  const meterFailed = lastRun ? segPct(lastRun.connectorsFailed) : 0;
+
+  const automationState = orbit.enabled ? 'active' : 'off';
+  const triggerLabel = lastRun?.trigger === 'manual'
+    ? t('settings.orbit.triggerManual')
+    : t('settings.orbit.triggerScheduled');
+
+  // Surface the configuration gate when we know for sure that the user has
+  // no connected integrations. While `connectedCount === null` we are still
+  // loading and intentionally hide the gate so the panel doesn't flash an
+  // empty-state warning before data arrives. Once resolved, `0` triggers
+  // the gate. The gate's copy + CTA branch on whether a Composio API key
+  // has been saved: missing key → push toward configuring Composio first;
+  // key present, no connections → push toward picking an integration.
+  const showConfigGate = connectedCount === 0;
+  const gateBodyKey = composioApiKeyConfigured
+    ? 'settings.orbit.gateBody'
+    : 'settings.orbit.gateBodyNoKey';
+  const gateActionKey = composioApiKeyConfigured
+    ? 'settings.orbit.gateAction'
+    : 'settings.orbit.gateActionNoKey';
+  // Disable the hero's "Run it now" CTA while the gate is visible: running
+  // without any connector wired up surfaces a cryptic backend error. We
+  // keep the button mounted so layout stays stable; a tooltip and the
+  // adjacent gate make the disabled reason obvious.
+  const runDisabled = isOrbitRunDisabled(isBusy, connectedCount);
+  const runDisabledTitle = showConfigGate
+    ? t('settings.orbit.gateTitle')
+    : t('settings.orbit.runTitle');
+
+  // When the configuration gate is visible (no connector available) we
+  // also lock down every secondary control on the panel — schedule
+  // toggle, time input, prompt template select, and the missing-template
+  // Reset button. Touching any of them before a connector exists either
+  // produces a no-op or persists state the user can't actually exercise.
+  // Locking them keeps the panel honest, prevents "ghost configuration",
+  // and reinforces the gate's CTA as the only meaningful next step.
+  const controlsLocked = showConfigGate;
+  const controlsLockedHint = controlsLocked
+    ? t('settings.orbit.controlsLockedHint')
+    : undefined;
+
+  return (
+    <section className="settings-section orbit-section">
+      {/* ---------- 1. HEADER ZONE ---------- */}
+      <header className="orbit-hero">
+        <div className="orbit-hero-mark" aria-hidden="true">
+          <Icon name="refresh" size={20} />
+        </div>
+        <div className="orbit-hero-copy">
+          <span className="orbit-hero-eyebrow">{t('settings.orbit.eyebrow')}</span>
+          <h3 className="orbit-hero-title">{t('settings.orbit.title')}</h3>
+          <p className="orbit-hero-lede">
+            {t('settings.orbit.lede')}
+          </p>
+        </div>
+        <div className="orbit-hero-actions">
+          <span
+            className={`orbit-state-pill orbit-state-${automationState}`}
+            title={
+              orbit.enabled
+                ? t('settings.orbit.statusOnTitle')
+                : t('settings.orbit.statusOffTitle')
+            }
+          >
+            <span className="orbit-state-dot" aria-hidden="true" />
+            {orbit.enabled
+              ? t('settings.orbit.statusActive')
+              : t('settings.orbit.statusOff')}
+          </span>
+          <button
+            type="button"
+            className={'orbit-run-cta' + (isBusy ? ' is-busy' : '')}
+            onClick={() => void triggerNow()}
+            disabled={runDisabled}
+            title={runDisabledTitle}
+          >
+            {isBusy ? (
+              <>
+                <Icon name="spinner" size={14} className="icon-spin" />
+                <span>{t('settings.orbit.running')}</span>
+              </>
+            ) : (
+              <>
+                <Icon name="play" size={14} />
+                <span>{t('settings.orbit.runOpen')}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* ---------- 1b. CONFIGURATION GATE ----------
+          Renders when no connected integrations are present. Orbit's job is
+          to summarize connector activity, so without any wired-up
+          connector there is literally nothing for it to report on.
+          The gate uses the same orbit-themed accent surface as the
+          automation card to feel like a first-class part of the panel
+          rather than an inline error, and routes the user back to the
+          Connectors tab inside the same settings dialog (no navigation
+          off the page). The copy/CTA branch on whether a Composio API
+          key has been saved already, because the prerequisite chain is:
+          API key → connector connected → Orbit can run. */}
+      {showConfigGate ? (
+        <div
+          className="orbit-config-gate"
+          role="region"
+          aria-label={t('settings.orbit.gateAriaLabel')}
+          data-testid="orbit-config-gate"
+        >
+          <div className="orbit-config-gate-glyph" aria-hidden="true">
+            <span className="orbit-config-gate-ring orbit-config-gate-ring-outer" />
+            <span className="orbit-config-gate-ring orbit-config-gate-ring-inner" />
+            <span className="orbit-config-gate-icon">
+              <Icon name="link" size={16} />
+            </span>
+          </div>
+          <div className="orbit-config-gate-copy">
+            <span className="orbit-config-gate-eyebrow">
+              {t('settings.orbit.gateEyebrow')}
+            </span>
+            <h4 className="orbit-config-gate-title">
+              {t('settings.orbit.gateTitle')}
+            </h4>
+            <p className="orbit-config-gate-body">
+              {t(gateBodyKey)}
+            </p>
+          </div>
+          <div className="orbit-config-gate-actions">
+            <button
+              type="button"
+              className="orbit-config-gate-action"
+              onClick={onOpenComposioSection}
+              data-testid="orbit-config-gate-action"
+            >
+              <span>{t(gateActionKey)}</span>
+              <Icon name="chevron-right" size={13} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ---------- 2. AUTOMATION CARD ----------
+          Single unified configuration surface for Orbit: the daily-summary
+          switch, the run-time schedule, and the prompt-template selection
+          all live inside one card, separated by hairline dividers. The
+          template row was previously a parallel card; folding it in here
+          collapses the "two paired panels" pattern into one cohesive
+          stack so users configure Orbit in one place. */}
+      <div
+        className={`orbit-automation${orbit.enabled ? ' is-on' : ''}${selectedTemplate ? ' has-template' : ''}${controlsLocked ? ' is-locked' : ''}`}
+        aria-busy={orbitTemplates === null || undefined}
+        aria-disabled={controlsLocked || undefined}
+        data-testid="orbit-automation-card"
+      >
+        {controlsLocked ? (
+          <div
+            className="orbit-automation-lock-banner"
+            role="note"
+            aria-label={t('settings.orbit.controlsLockedHint')}
+          >
+            <Icon name="link" size={12} />
+            <span className="orbit-automation-lock-badge">
+              {t('settings.orbit.controlsLockedBadge')}
+            </span>
+            <span className="orbit-automation-lock-text">
+              {t('settings.orbit.controlsLockedHint')}
+            </span>
+          </div>
+        ) : null}
+        <div className="orbit-automation-row orbit-automation-switch-row">
+          <div className="orbit-automation-label">
+            <span className="orbit-automation-title">{t('settings.orbit.dailySummaryTitle')}</span>
+            <span className="orbit-automation-sub">
+              {t('settings.orbit.dailySummarySub')}
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={orbit.enabled}
+            aria-disabled={controlsLocked || undefined}
+            className={`orbit-switch${orbit.enabled ? ' is-on' : ''}${controlsLocked ? ' is-locked' : ''}`}
+            disabled={controlsLocked}
+            title={controlsLockedHint}
+            onClick={() => updateOrbit({ enabled: !orbit.enabled })}
+          >
+            <span className="orbit-switch-track" aria-hidden="true">
+              <span className="orbit-switch-thumb" />
+            </span>
+            <span className="orbit-switch-text">
+              {orbit.enabled ? t('settings.orbit.on') : t('settings.orbit.off')}
+            </span>
+          </button>
+        </div>
+
+        <div className="orbit-automation-divider" aria-hidden="true" />
+
+        <div className="orbit-automation-row orbit-automation-schedule-row">
+          <div className="orbit-automation-label">
+            <span className="orbit-automation-title">{t('settings.orbit.runTimeTitle')}</span>
+            <span className="orbit-automation-sub">
+              {t('settings.orbit.runTimeSub')}
+            </span>
+          </div>
+          <div className="orbit-automation-schedule-controls">
+            <input
+              type="time"
+              className="orbit-time-input"
+              value={orbit.time}
+              onChange={(e) => updateOrbit({ time: e.target.value || DEFAULT_ORBIT.time })}
+              aria-label={t('settings.orbit.runTimeAria')}
+              aria-disabled={controlsLocked || undefined}
+              disabled={controlsLocked}
+              title={controlsLockedHint}
+            />
+            <div className="orbit-next-run" aria-live="polite">
+              {orbit.enabled ? (
+                nextRunLabel ? (
+                  <>
+                    <span className="orbit-next-run-label">{t('settings.orbit.nextRun')}</span>
+                    <span className="orbit-next-run-value">{nextRunLabel}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="orbit-next-run-label">{t('settings.orbit.nextRun')}</span>
+                    <span className="orbit-next-run-value muted">{t('settings.orbit.nextRunScheduledAfterSave')}</span>
+                  </>
+                )
+              ) : (
+                <>
+                  <span className="orbit-next-run-label">{t('settings.orbit.schedule')}</span>
+                  <span className="orbit-next-run-value muted">{t('settings.orbit.pausedManualOnly')}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="orbit-automation-divider" aria-hidden="true" />
+
+        {/* Prompt template row — folded into the automation card so users
+            configure schedule and prompt steering in one place. The select
+            picks which scenario === 'orbit' skill template gets injected
+            into the Orbit prompt. There is no separate preview slab below
+            the select: the dropdown's option label is the source of
+            truth for the active template, and each option carries the
+            skill description as a `title` tooltip. The only state that
+            still needs explicit surfacing is "saved id no longer in the
+            registry" — that warning replaces the row's normal sub-copy
+            and inlines a Reset action when the missing id differs from
+            the default. */}
+        <div className="orbit-automation-row orbit-automation-template-row">
+          <div className="orbit-automation-label">
+            {/* Title aligns with the other automation rows ("Daily summary",
+                "Run time") — a single short label. */}
+            <span className="orbit-automation-title">{t('settings.orbit.templateTitle')}</span>
+            {orbitTemplates &&
+            effectiveTemplateSkillId &&
+            !orbitTemplates.some((s) => s.id === effectiveTemplateSkillId) ? (
+              // The saved skill id is no longer installed — surface a
+              // soft warning right under the title, with an inline Reset
+              // action that pushes back to DEFAULT_ORBIT (currently
+              // `orbit-general`). Reset is hidden when the missing id
+              // already equals the default, so the control never loops
+              // on itself.
+              <span
+                className="orbit-automation-sub orbit-automation-sub-warning"
+                role="status"
+              >
+                <Icon name="history" size={11} />
+                <span>
+                  {t('settings.orbit.templateMissing', { id: effectiveTemplateSkillId })}{' '}
+                  {orbitTemplates.length === 0
+                    ? t('settings.orbit.templateMissingInstall')
+                    : t('settings.orbit.templateMissingPickAnother')}
+                </span>
+                {DEFAULT_ORBIT.templateSkillId &&
+                effectiveTemplateSkillId !== DEFAULT_ORBIT.templateSkillId ? (
+                  <button
+                    type="button"
+                    className="orbit-automation-sub-action"
+                    disabled={controlsLocked}
+                    aria-disabled={controlsLocked || undefined}
+                    onClick={() =>
+                      updateOrbit({ templateSkillId: DEFAULT_ORBIT.templateSkillId })
+                    }
+                    title={
+                      controlsLocked
+                        ? t('settings.orbit.controlsLockedHint')
+                        : t('settings.orbit.templateResetTitle', {
+                            id: DEFAULT_ORBIT.templateSkillId,
+                          })
+                    }
+                  >
+                    {t('settings.orbit.templateReset')}
+                  </button>
+                ) : null}
+              </span>
+            ) : (
+              <span className="orbit-automation-sub">
+                {t('settings.orbit.templateHelp')}
+              </span>
+            )}
+          </div>
+          <div className="orbit-automation-template-controls">
+            <div className="orbit-template-select">
+              <div className="orbit-template-select-wrap">
+                <select
+                  id="orbit-template-select"
+                  className="orbit-template-select-input"
+                  aria-label={t('settings.orbit.templateAria')}
+                  aria-disabled={controlsLocked || undefined}
+                  value={effectiveTemplateSkillId}
+                  disabled={orbitTemplates === null || controlsLocked}
+                  title={controlsLockedHint}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    // Guard against the loading placeholder making it
+                    // through onChange — only persist real skill ids.
+                    if (!next) return;
+                    updateOrbit({ templateSkillId: next });
+                  }}
+                >
+                  {/* While the skill registry is still loading we render a
+                      single non-interactive placeholder so the select has
+                      a value to display. Once `orbitTemplates` resolves we
+                      drop the placeholder entirely — the dropdown lists
+                      only real Orbit skill templates, so there is no
+                      "no template" / "use built-in" option to pick. */}
+                  {orbitTemplates === null ? (
+                    <option value="">{t('settings.orbit.templatesLoading')}</option>
+                  ) : null}
+                  {/* If the saved id no longer exists in the registry,
+                      surface it as a hidden placeholder so the controlled
+                      <select> doesn't fall back to the first real option
+                      and silently mutate the user's stored choice. The
+                      inline warning above offers the explicit Reset
+                      action. */}
+                  {orbitTemplates &&
+                  effectiveTemplateSkillId &&
+                  !orbitTemplates.some((s) => s.id === effectiveTemplateSkillId) ? (
+                    <option value={effectiveTemplateSkillId} hidden>
+                      {t('settings.orbit.templateMissingOption', {
+                        id: effectiveTemplateSkillId,
+                      })}
+                    </option>
+                  ) : null}
+                  {orbitTemplates && orbitTemplates.length > 0 ? (
+                    <optgroup label={t('settings.orbit.templatesOptgroup')}>
+                      {orbitTemplates.map((s) => (
+                        <option
+                          key={s.id}
+                          value={s.id}
+                          // Browser-native tooltip — surfaces the skill
+                          // description on hover without needing a
+                          // dedicated preview panel.
+                          title={s.description ?? undefined}
+                        >
+                          {s.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+                <Icon
+                  name="chevron-down"
+                  size={12}
+                  className="orbit-template-select-chevron"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- 4. RUN RESULT / RECEIPT ---------- */}
+      {/* When there is no last run yet, the "receipt" metaphor doesn't fit —
+          there's nothing to report. We swap to a first-run prompt with its
+          own composed layout (orbit-glyph · copy · inline CTA) so the empty
+          state feels intentional and rhythmically balanced with the hero,
+          automation card, and (eventual) artifact strip. */}
+      {lastRun ? (
+        <div className="orbit-receipt">
+          <div className="orbit-receipt-head">
+            <div className="orbit-receipt-head-left">
+              <span className="orbit-receipt-eyebrow">
+                <Icon name="history" size={12} />
+                {t('settings.orbit.lastRun')}
+              </span>
+              <span
+                className="orbit-receipt-timestamp"
+                title={lastRunAbs ?? undefined}
+              >
+                {lastRunRel ?? lastRunAbs}
+              </span>
+            </div>
+            <span
+              className={`orbit-trigger-pill orbit-trigger-${lastRun.trigger ?? 'scheduled'}`}
+            >
+              {triggerLabel}
+            </span>
+          </div>
+
+          {notice ? (
+            <div
+              className={`orbit-inline-notice is-${notice.kind}`}
+              role={notice.kind === 'error' ? 'alert' : 'status'}
+            >
+              <Icon name={notice.kind === 'error' ? 'close' : 'check'} size={12} />
+              <span>{notice.message}</span>
+            </div>
+          ) : null}
+
+          <div
+            className="orbit-meter"
+            role="img"
+            aria-label={t('settings.orbit.meterAria', {
+              succeeded: lastRun.connectorsSucceeded,
+              skipped: lastRun.connectorsSkipped,
+              failed: lastRun.connectorsFailed,
+              checked: lastRun.connectorsChecked,
+            })}
+          >
+            {meterSucceeded > 0 ? (
+              <span
+                className="orbit-meter-seg is-succeeded"
+                style={{ width: `${meterSucceeded}%` }}
+              />
+            ) : null}
+            {meterSkipped > 0 ? (
+              <span
+                className="orbit-meter-seg is-skipped"
+                style={{ width: `${meterSkipped}%` }}
+              />
+            ) : null}
+            {meterFailed > 0 ? (
+              <span
+                className="orbit-meter-seg is-failed"
+                style={{ width: `${meterFailed}%` }}
+              />
+            ) : null}
+            {meterSucceeded + meterSkipped + meterFailed === 0 ? (
+              <span className="orbit-meter-seg is-empty" />
+            ) : null}
+          </div>
+          <dl className="orbit-counts">
+            <div className="orbit-count">
+              <dt>{t('settings.orbit.countChecked')}</dt>
+              <dd>{lastRun.connectorsChecked}</dd>
+            </div>
+            <div className="orbit-count is-succeeded">
+              <dt>{t('settings.orbit.countSucceeded')}</dt>
+              <dd>{lastRun.connectorsSucceeded}</dd>
+            </div>
+            <div className="orbit-count is-skipped">
+              <dt>{t('settings.orbit.countSkipped')}</dt>
+              <dd>{lastRun.connectorsSkipped}</dd>
+            </div>
+            <div className="orbit-count is-failed">
+              <dt>{t('settings.orbit.countFailed')}</dt>
+              <dd>{lastRun.connectorsFailed}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : notice ? (
+        <div
+          className={`orbit-inline-notice is-${notice.kind}`}
+          role={notice.kind === 'error' ? 'alert' : 'status'}
+        >
+          <Icon name={notice.kind === 'error' ? 'close' : 'check'} size={12} />
+          <span>{notice.message}</span>
+        </div>
+      ) : null}
+
+      {/* ---------- 5. LIVE ARTIFACT STRIP ---------- */}
+      {lastRun ? (
+        <div
+          className={`orbit-artifact-strip${liveArtifactHref ? '' : ' is-legacy'}`}
+        >
+          <div className="orbit-artifact-strip-icon" aria-hidden="true">
+            <Icon name="file-code" size={18} />
+          </div>
+          <div className="orbit-artifact-strip-copy">
+            <span className="orbit-artifact-strip-kicker">
+              {liveArtifactHref
+                ? t('settings.orbit.artifactKickerLive')
+                : t('settings.orbit.artifactKickerLegacy')}
+            </span>
+            <span className="orbit-artifact-strip-title">
+              {t('settings.orbit.artifactTitle')}
+            </span>
+            <span className="orbit-artifact-strip-meta">
+              {liveArtifactHref
+                ? t('settings.orbit.artifactMetaLive')
+                : t('settings.orbit.artifactMetaLegacy')}
+            </span>
+          </div>
+          <div className="orbit-artifact-strip-actions">
+            {lastRun.markdown ? (
+              <button
+                type="button"
+                className="orbit-artifact-ghost"
+                onClick={() => void copyMarkdown()}
+                title={t('settings.orbit.copyMarkdownTitle')}
+              >
+                {copied ? (
+                  <>
+                    <Icon name="check" size={13} />
+                    <span>{t('settings.orbit.copied')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="copy" size={13} />
+                    <span>{t('settings.orbit.copy')}</span>
+                  </>
+                )}
+              </button>
+            ) : null}
+            {liveArtifactHref ? (
+              <a
+                className="orbit-artifact-open"
+                href={liveArtifactHref}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>{t('settings.orbit.openArtifact')}</span>
+                <Icon name="external-link" size={13} />
+              </a>
+            ) : null}
+          </div>
+          {lastRun.markdown ? (
+            <details className="orbit-artifact-peek">
+              <summary>
+                <Icon name="chevron-right" size={12} />
+                <span>{t('settings.orbit.sourceMarkdown')}</span>
+              </summary>
+              <pre>{lastRun.markdown}</pre>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1803,11 +3264,26 @@ function ComposioSection({
 function MediaProvidersSection({
   cfg,
   setCfg,
+  onChange,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  onChange: () => void;
 }) {
   const { t } = useI18n();
+  const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    setVisibleApiKeys((current) => {
+      const next = new Set<string>();
+      for (const providerId of current) {
+        const apiKey = cfg.mediaProviders?.[providerId]?.apiKey ?? '';
+        if (apiKey.trim()) next.add(providerId);
+      }
+      return next.size === current.size ? current : next;
+    });
+  }, [cfg.mediaProviders]);
   const providers = MEDIA_PROVIDERS
     .filter((p) => p.settingsVisible !== false)
     .slice()
@@ -1824,6 +3300,7 @@ function MediaProvidersSection({
     provider: MediaProvider,
     patch: { apiKey?: string; baseUrl?: string; model?: string },
   ) => {
+    onChange();
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
@@ -1834,6 +3311,17 @@ function MediaProvidersSection({
         map[provider.id] = next;
       }
       return { ...curr, mediaProviders: map };
+    });
+  };
+  const toggleApiKeyVisibility = (providerId: string) => {
+    setVisibleApiKeys((current) => {
+      const next = new Set(current);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
     });
   };
 
@@ -1852,6 +3340,7 @@ function MediaProvidersSection({
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
           const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
+          const apiKeyVisible = visibleApiKeys.has(provider.id);
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
@@ -1871,14 +3360,30 @@ function MediaProvidersSection({
                 </div>
               </div>
               <div className="media-provider-body">
-                <input
-                  type="password"
-                  value={entry.apiKey}
-                  placeholder={t('settings.mediaProviderPlaceholder')}
-                  aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
-                  disabled={disabled}
-                  onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
-                />
+                <div className="media-provider-secret-field">
+                  <input
+                    type={apiKeyVisible ? 'text' : 'password'}
+                    value={entry.apiKey}
+                    placeholder={t('settings.mediaProviderPlaceholder')}
+                    aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
+                    disabled={disabled}
+                    onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="secret-visibility-button"
+                    disabled={disabled}
+                    aria-label={
+                      apiKeyVisible
+                        ? `${provider.label} ${t('settings.hideKey')}`
+                        : `${provider.label} ${t('settings.showKey')}`
+                    }
+                    aria-pressed={apiKeyVisible}
+                    onClick={() => toggleApiKeyVisibility(provider.id)}
+                  >
+                    <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                  </button>
+                </div>
                 <input
                   value={entry.baseUrl}
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -2399,7 +3904,15 @@ function IntegrationsSection() {
             style={{
               background: 'var(--surface-2, #11141a)',
               color: 'var(--fg-1, #e6e6e6)',
-              padding: '12px 14px',
+              // Reserve top clearance for the absolutely-positioned
+              // Copy button so the first line of the snippet does not
+              // sit underneath it, and reserve right clearance so a
+              // wrapped bash one-liner stops short of the button rather
+              // than scrolling behind it. The right padding is sized
+              // for the wider "Copied" post-click state (icon + text +
+              // button padding + the 8px right offset) with a few px
+              // of buffer for elevated font sizes / zoom. Issue #632.
+              padding: '40px 104px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
@@ -2423,7 +3936,7 @@ function IntegrationsSection() {
           </pre>
           <button
             type="button"
-            className="ghost"
+            className="ghost mcp-copy-btn"
             onClick={onCopy}
             disabled={!snippet}
             style={{
