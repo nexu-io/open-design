@@ -191,6 +191,18 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     models: ['mimo-v2.5-pro'],
   },
   {
+    label: 'Ollama Cloud',
+    protocol: 'openai',
+    baseUrl: 'https://ollama.com/v1',
+    model: 'gpt-oss:120b-cloud',
+    models: [
+      'gpt-oss:20b-cloud',
+      'gpt-oss:120b-cloud',
+      'deepseek-v3.1:671b-cloud',
+      'qwen3-coder:480b-cloud',
+    ],
+  },
+  {
     label: 'MiMo (Xiaomi) — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
