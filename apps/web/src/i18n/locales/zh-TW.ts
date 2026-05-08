@@ -293,7 +293,7 @@ export const zhTW: Dict = {
   'newproj.tabTemplate': '從範本',
   'newproj.tabOther': '其它',
   'newproj.titlePrototype': '新建原型',
-  'newproj.titleLiveArtifact': '即時成品',
+  'newproj.titleLiveArtifact': '新建即時成品',
   'newproj.titleDeck': '新建投影片',
   'newproj.titleTemplate': '從範本開始',
   'newproj.titleImage': '新建圖片',

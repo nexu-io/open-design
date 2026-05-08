@@ -293,7 +293,7 @@ export const zhCN: Dict = {
   'newproj.tabTemplate': '从模板',
   'newproj.tabOther': '其它',
   'newproj.titlePrototype': '新建原型',
-  'newproj.titleLiveArtifact': '实时制品',
+  'newproj.titleLiveArtifact': '新建实时制品',
   'newproj.titleDeck': '新建幻灯片',
   'newproj.titleTemplate': '从模板开始',
   'newproj.titleImage': '新建图片',
