@@ -113,7 +113,7 @@ function injectPrintStylesheet(doc: string, css: string): string {
   return `${tag}${doc}`;
 }
 
-async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
+export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
   await window.webContents.executeJavaScript(
     `Promise.all([
       document.fonts && document.fonts.ready ? document.fonts.ready.catch(function(){}) : Promise.resolve(),

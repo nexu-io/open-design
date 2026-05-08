@@ -313,9 +313,9 @@ export async function exportAsPdf(
   }
 
   // Navigate the verified window to the generated Blob URL then release
-  // the Blob URL — the window holds its own reference once navigation starts.
+  // the Blob URL after the tab has had time to start loading it.
   win.location.href = url;
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function injectPrintScript(doc: string, title: string): string {
