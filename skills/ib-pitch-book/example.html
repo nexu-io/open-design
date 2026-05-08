@@ -4,9 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Project Atlas — Strategic Alternatives Review · Hartfield & Co.</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper:        oklch(98.5% 0.008 80);
@@ -20,9 +17,9 @@
     --teal:         oklch(45% 0.07 200);
     --neg:          oklch(48% 0.16 28);
     --pos:          oklch(45% 0.10 165);
-    --serif: 'Fraunces', 'Iowan Old Style', 'Charter', Georgia, serif;
-    --sans:  'Inter', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
-    --mono:  'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+    --serif: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --sans:  system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -53,6 +50,28 @@
     border-bottom: 1px solid oklch(35% 0.03 70);
   }
   .demo-banner strong { color: oklch(96% 0.03 85); font-weight: 600; }
+  .demo-pill {
+    display: inline-flex;
+    width: max-content;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+    padding: 8px 11px;
+    border: 1px solid color-mix(in oklch, var(--accent) 45%, var(--rule));
+    background: color-mix(in oklch, var(--accent) 8%, var(--paper));
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .demo-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
   .stage {
     flex: 1 1 auto;
     min-height: 0;
@@ -562,17 +581,19 @@
         <span class="ribbon">Strictly Confidential — Discussion Materials</span>
         <h1 class="display">Project <em>Atlas</em></h1>
         <div class="subhead">Strategic alternatives review for the Board of Directors of NorthPeak Industries, Inc.</div>
+        <div class="demo-pill">Demo data / fictional sample</div>
       </div>
       <div class="cover-meta">
         <div class="row"><span class="k">Prepared for</span><span class="v">Board of Directors<br/>NorthPeak Industries, Inc. (NYSE: NPK)</span></div>
         <div class="row"><span class="k">Prepared by</span><span class="v">Hartfield &amp; Co.<br/>Industrials &amp; Industrial Tech, M&amp;A</span></div>
         <div class="row"><span class="k">Date</span><span class="v">April 24, 2026</span></div>
         <div class="row"><span class="k">Engagement</span><span class="v">Strategic alternatives — sell-side, IPO, recapitalization, status quo</span></div>
+        <div class="row"><span class="k">Sample status</span><span class="v">All companies, tickers, dates, market metrics, valuation outputs, and source labels are fictional placeholders for Open Design demonstration only.</span></div>
       </div>
     </div>
     <div class="marque">Volume IV · Edition 02</div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
+      <span class="conf">Demo data — fictional sample</span>
       <span>Page 1 / 10 · /v1/agents · pitch-agent · run 7f3a91</span>
     </footer>
   </div>
@@ -601,11 +622,11 @@
         <li><span class="t">DCF output &amp; sensitivity</span><span class="pg">p.07</span><span class="sub">5-year explicit, terminal value, WACC × g</span></li>
         <li><span class="t">Strategic alternatives matrix</span><span class="pg">p.08</span><span class="sub">Status quo · sale · IPO · recap — pros, cons, value</span></li>
         <li><span class="t">Recommendation &amp; process timeline</span><span class="pg">p.09</span><span class="sub">Suggested path, indicative milestones</span></li>
-        <li><span class="t">Disclaimers &amp; appendix</span><span class="pg">p.10</span><span class="sub">Sources, methodology notes, FINRA disclosures</span></li>
+        <li><span class="t">Disclaimers &amp; appendix</span><span class="pg">p.10</span><span class="sub">Demo-data notice, methodology notes, required disclosures</span></li>
       </ol>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
+      <span class="conf">Demo data — fictional sample</span>
       <span>02 / 10 · skill: pitch-deck · ds: investment-banking</span>
     </footer>
   </div>
@@ -636,7 +657,7 @@
         <div class="chartbox">
           <div class="title">
             <h3>Sector EV/EBITDA — rolling 36 months</h3>
-            <div class="src">Source: FactSet, Daloopa</div>
+            <div class="src">Source: demo dataset — fictional placeholders</div>
           </div>
           <div class="chart">
             <svg viewBox="0 0 600 180" preserveAspectRatio="none">
@@ -652,7 +673,7 @@
                 <line x1="0" y1="120" x2="600" y2="120"/>
                 <line x1="0" y1="160" x2="600" y2="160"/>
               </g>
-              <g font-family="JetBrains Mono" font-size="9" fill="oklch(56% 0.008 70)">
+              <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="9" fill="oklch(56% 0.008 70)">
                 <text x="2" y="38">18×</text>
                 <text x="2" y="78">16×</text>
                 <text x="2" y="118">14×</text>
@@ -661,7 +682,7 @@
               <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58 L 600 180 L 0 180 Z" fill="url(#g1)"/>
               <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58" fill="none" stroke="oklch(48% 0.18 28)" stroke-width="2"/>
               <line x1="0" y1="100" x2="600" y2="100" stroke="oklch(38% 0.010 70)" stroke-dasharray="4 4" stroke-width="1"/>
-              <text x="540" y="96" font-family="Inter" font-size="10" fill="oklch(38% 0.010 70)">5-yr avg 14.0×</text>
+              <text x="540" y="96" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="10" fill="oklch(38% 0.010 70)">5-yr avg 14.0×</text>
             </svg>
           </div>
           <div class="legend">
@@ -681,8 +702,8 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
-      <span>03 / 10 · sources: FactSet · Daloopa · S&amp;P Capital IQ</span>
+      <span class="conf">Demo data — fictional sample</span>
+      <span>03 / 10 · source: demo dataset · no live market data</span>
     </footer>
   </div>
 </section>
@@ -739,8 +760,8 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
-      <span>04 / 10 · skill: comps-analysis · /comps · last refresh: 18:42 UTC</span>
+      <span class="conf">Demo data — fictional sample</span>
+      <span>04 / 10 · skill: comps-analysis · source: demo dataset</span>
     </footer>
   </div>
 </section>
@@ -782,8 +803,8 @@
       </table>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
-      <span>05 / 10 · sources: S&amp;P Capital IQ · Mergermarket · 8-K filings</span>
+      <span class="conf">Demo data — fictional sample</span>
+      <span>05 / 10 · source: demo dataset · no live transaction data</span>
     </footer>
   </div>
 </section>
@@ -850,7 +871,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
+      <span class="conf">Demo data — fictional sample</span>
       <span>06 / 10 · skills: comps-analysis · dcf-model · lbo-model</span>
     </footer>
   </div>
@@ -910,14 +931,14 @@
             <span>✓ Cash flow reconciles</span>
             <span>✓ No hardcoded forecast</span>
             <span>✓ Terminal &gt; trough margin</span>
-            <span>✓ Sources cited</span>
+            <span>✓ Demo sources labeled</span>
             <span>✓ Sensitivity ±2σ</span>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
+      <span class="conf">Demo data — fictional sample</span>
       <span>07 / 10 · skill: dcf-model · /dcf · QC: ib-check-deck (pass)</span>
     </footer>
   </div>
@@ -1010,7 +1031,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
+      <span class="conf">Demo data — fictional sample</span>
       <span>08 / 10 · skill: strategic-alternatives</span>
     </footer>
   </div>
@@ -1046,7 +1067,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution</span>
+      <span class="conf">Demo data — fictional sample</span>
       <span>09 / 10 · skill: process-letter · /process-letter</span>
     </footer>
   </div>
@@ -1071,8 +1092,9 @@
           <h3>Important disclosures</h3>
           <div class="body-text">
             <p>These materials have been prepared by Hartfield &amp; Co. for the exclusive use of the Board of Directors of NorthPeak Industries, Inc. They are intended to provide a basis for discussion only and are not, and may not be relied upon as, financial, investment, legal, tax, or accounting advice. Recipients should consult their own professional advisors.</p>
-            <p>The financial analysis herein has been derived from a combination of (i) public filings and disclosures, (ii) third-party data providers, (iii) information provided by management of the company under non-disclosure agreement, and (iv) Hartfield's own estimates. We have not independently verified all of this information and assume no responsibility for its accuracy or completeness.</p>
-            <p>Trading multiples and projections reflect market data as of April 22, 2026. Forward estimates are derived from FactSet consensus where two or more analyst estimates were available, or from Hartfield estimates where coverage is thin. Precedent-transaction multiples have been adjusted to a comparable LTM basis where disclosure permits.</p>
+            <p><strong>Demo-data notice:</strong> NorthPeak Industries, Hartfield &amp; Co., Project Atlas, all people, dates, tickers, financial figures, valuation outputs, process dates, and source labels in this artifact are fictional illustrative placeholders created for Open Design demonstration only. They are not sourced from live market data, filings, third-party vendors, or management materials.</p>
+            <p>In a live engagement, the financial analysis must be derived only from documented source material such as public filings, licensed third-party data, user-provided management materials, or explicitly labeled assumptions. Each figure should carry a source date and should be traceable to a citation log before external distribution.</p>
+            <p>Trading multiples, projections, and precedent-transaction metrics in this sample are synthetic and should not be reused as factual market observations. Replace this sample source block with engagement-specific citations, freshness dates, licensing notes, and the firm's required review status.</p>
             <p>The nominal valuation outputs presented are indicative and are intended to frame the Board's discussion of strategic alternatives. They are not a recommendation to enter into, or refrain from entering into, any specific transaction. Any decision to pursue a transaction will require independent Board approval, fairness analysis at the appropriate juncture, and customary regulatory and shareholder approvals.</p>
           </div>
         </div>
@@ -1083,8 +1105,8 @@
             <div class="det">Lead: Margaret Eun, Managing Director<br/>Coverage: David Brennan, Director<br/>Execution: Aisha Patel, VP · Lukas Marek, Associate</div>
           </div>
           <div class="stamp">
-            <div class="lab">Data sources</div>
-            <div class="det" style="font-family:var(--mono);font-size:11px;">FactSet · S&amp;P Capital IQ · Daloopa · Mergermarket · Refinitiv · Public 10-K / 10-Q / 8-K filings · Company management materials</div>
+            <div class="lab">Demo source status</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">Synthetic Open Design demo dataset · no live vendor feeds · no filings · no MNPI · no management materials</div>
           </div>
           <div class="stamp">
             <div class="lab">Generated with</div>
@@ -1094,7 +1116,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Confidential — Not for distribution · End of document</span>
+      <span class="conf">Demo data — fictional sample · End of document</span>
       <span>10 / 10 · © 2026 Hartfield &amp; Co. · All rights reserved</span>
     </footer>
   </div>
