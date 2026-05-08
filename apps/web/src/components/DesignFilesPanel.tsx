@@ -304,7 +304,7 @@ export function DesignFilesPanel({
                       key={artifact.artifactId}
                       type="button"
                       data-testid={`design-file-row-${artifact.tabId}`}
-                      className="df-row"
+                      className="df-row df-row-live-artifact"
                       onDoubleClick={() => onOpenLiveArtifact(artifact.tabId)}
                       onClick={() => onOpenLiveArtifact(artifact.tabId)}
                     >

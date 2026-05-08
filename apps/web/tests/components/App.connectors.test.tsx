@@ -54,11 +54,11 @@ vi.mock('../../src/components/SettingsDialog', () => ({
   SettingsDialog: ({
     initial,
     initialSection,
-    onSave,
+    onPersistComposioKey,
   }: {
     initial: AppConfig;
     initialSection?: string;
-    onSave: (next: AppConfig) => void;
+    onPersistComposioKey: (composio: AppConfig['composio']) => void;
   }) => (
     <div role="dialog" aria-label="Settings dialog">
       <div>Section: {initialSection}</div>
@@ -66,13 +66,10 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       <button
         type="button"
         onClick={() =>
-          onSave({
-            ...initial,
-            composio: {
-              apiKey: 'cmp_secret_replacement',
-              apiKeyConfigured: true,
-              apiKeyTail: initial.composio?.apiKeyTail ?? '',
-            },
+          onPersistComposioKey({
+            apiKey: 'cmp_secret_replacement',
+            apiKeyConfigured: true,
+            apiKeyTail: initial.composio?.apiKeyTail ?? '',
           })
         }
       >
@@ -81,13 +78,10 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       <button
         type="button"
         onClick={() =>
-          onSave({
-            ...initial,
-            composio: {
-              apiKey: '',
-              apiKeyConfigured: false,
-              apiKeyTail: '',
-            },
+          onPersistComposioKey({
+            apiKey: '',
+            apiKeyConfigured: false,
+            apiKeyTail: '',
           })
         }
       >

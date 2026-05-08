@@ -118,7 +118,7 @@ interface Props {
 let liveArtifactEventSequence = 0;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 320;
+const MIN_CHAT_PANEL_WIDTH = 345;
 const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_WORKSPACE_PANEL_WIDTH = 400;
 const SPLIT_RESIZE_HANDLE_WIDTH = 8;
@@ -379,10 +379,13 @@ export function ProjectView({
       for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
       reattachTextBuffersRef.current.clear();
       for (const controller of reattachControllersRef.current.values()) {
+        if (abortRef.current === controller) abortRef.current = null;
         controller.abort();
       }
       for (const controller of reattachCancelControllersRef.current.values()) {
-        controller.abort();
+        // Route changes should only detach the browser-side SSE listener.
+        // Aborting this signal maps to POST /cancel, so leave the daemon run alive.
+        if (cancelRef.current === controller) cancelRef.current = null;
       }
       reattachControllersRef.current.clear();
       reattachCancelControllersRef.current.clear();

@@ -76,6 +76,7 @@ import {
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
+import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
   buildProjectArchive,
@@ -765,6 +766,7 @@ migrateLegacyDataDirSync({
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
@@ -1588,6 +1590,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   };
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
+  composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
+  composioConnectorProvider.startCatalogRefreshLoop();
   let daemonUrl = `http://127.0.0.1:${port}`;
 
   // Boot reconcile: any critique_runs row left in 'running' state by a prior
@@ -1608,7 +1612,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
   void readAppConfig(RUNTIME_DATA_DIR)
-    .then((config) => detectAgents(config.agentCliEnv ?? {}))
+    .then((config) => {
+      orbitService.configure(config.orbit);
+      return detectAgents(config.agentCliEnv ?? {});
+    })
     .catch(() => detectAgents().catch(() => {}));
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
@@ -3727,7 +3734,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
     try {
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
+      orbitService.configure(config.orbit);
       res.json({ config });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get('/api/orbit/status', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      res.json(await orbitService.status());
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.post('/api/orbit/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      res.json(await orbitService.start('manual'));
     } catch (err) {
       res
         .status(500)
@@ -4906,6 +4940,155 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   };
 
+  orbitService.setRunHandler(async ({
+    trigger,
+    startedAt,
+    prompt,
+    systemPrompt,
+    template,
+  }) => {
+    // Each Orbit run gets its own project so the conversation, messages, and
+    // live artifact are isolated. The handler does the synchronous prep here
+    // (insert project/conversation/run rows, kick off the chat run) and
+    // returns immediately with the new project id; the daemon endpoint
+    // resolves the HTTP request with that id so the client can navigate to
+    // the new project before the agent has finished. Anything that depends
+    // on the agent's final status (live artifact discovery, lastRun summary
+    // metadata) lives inside the `completion` promise.
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    let agentId = typeof appConfig.agentId === 'string' && appConfig.agentId
+      ? appConfig.agentId
+      : null;
+    if (!agentId) {
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      agentId = agents.find((agent) => agent.available)?.id ?? null;
+    }
+    if (!agentId) throw new Error('No available agent is configured for Orbit. Choose an agent in Settings first.');
+
+    const now = Date.now();
+    const projectId = `orbit-${randomUUID()}`;
+    const conversationId = `orbit-conv-${randomUUID()}`;
+    const assistantMessageId = `orbit-assistant-${randomUUID()}`;
+    const projectName = `Orbit · ${formatLocalProjectTimestamp(startedAt)}`;
+
+    const orbitDesignSystemId = template?.designSystemRequired === false
+      ? null
+      : appConfig.designSystemId ?? null;
+
+    insertProject(db, {
+      id: projectId,
+      name: projectName,
+      skillId: 'live-artifact',
+      designSystemId: orbitDesignSystemId,
+      pendingPrompt: null,
+      metadata: { kind: 'orbit', trigger },
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: conversationId,
+      projectId,
+      title: projectName,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: `orbit-${trigger}-${randomUUID()}`,
+      agentId,
+    });
+    upsertMessage(db, conversationId, {
+      id: `orbit-user-${run.id}`,
+      role: 'user',
+      content: prompt,
+    });
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId,
+      agentName: getAgentDef(agentId)?.name ?? agentId,
+      runId: run.id,
+      runStatus: 'queued',
+      startedAt: now,
+    });
+
+    if (template?.dir) {
+      const cwd = await ensureProject(PROJECTS_DIR, projectId);
+      const result = await stageActiveSkill(
+        cwd,
+        path.basename(template.dir),
+        template.dir,
+        (msg) => console.warn(msg),
+      );
+      if (!result.staged) {
+        console.warn(
+          `[od] orbit template skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to prompt-embedded instructions`,
+        );
+      }
+    }
+
+    const modelPrefs = appConfig.agentModels?.[agentId] ?? {};
+    design.runs.start(run, () => startChatRun({
+      agentId,
+      projectId,
+      conversationId: run.conversationId,
+      assistantMessageId: run.assistantMessageId,
+      clientRequestId: run.clientRequestId,
+      skillId: 'live-artifact',
+      designSystemId: orbitDesignSystemId,
+      model: modelPrefs.model ?? null,
+      reasoning: modelPrefs.reasoning ?? null,
+      message: prompt,
+      systemPrompt: [
+        renderOrbitTemplateSystemPrompt(template),
+        systemPrompt,
+        'You are Orbit, an autonomous activity-summary agent inside Open Design.',
+        'You must discover connectors and connector tools yourself through the OD CLI; the daemon has not chosen tools for you.',
+        'You must create and register a Live Artifact as the final deliverable. Do not merely describe what you would do.',
+        'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
+        'Keep connector credentials and OD_TOOL_TOKEN private; never print or persist secrets.',
+      ].join('\n'),
+    }, run));
+
+    const completion = (async () => {
+      const finalStatus = await design.runs.wait(run);
+      db.prepare(
+        `UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`,
+      ).run(finalStatus.status, Date.now(), assistantMessageId);
+      const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId });
+      const artifact = artifacts.find((candidate) => candidate.createdByRunId === run.id);
+      const status = finalStatus.status === 'succeeded' && !artifact ? 'failed' : finalStatus.status;
+      return {
+        agentRunId: run.id,
+        status,
+        ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
+        summary: artifact?.id
+          ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
+          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+      };
+    })();
+
+    return { projectId, agentRunId: run.id, completion };
+  });
+
+  orbitService.setTemplateResolver(async (skillId) => {
+    const skills = await listSkills(SKILLS_DIR);
+    const skill = findSkillById(skills, skillId);
+    if (!skill || skill.scenario !== 'orbit') return null;
+    return {
+      id: skill.id,
+      name: skill.name,
+      examplePrompt: skill.examplePrompt,
+      dir: skill.dir,
+      body: skill.body,
+      designSystemRequired: skill.designSystemRequired !== false,
+    };
+  });
+
   app.post('/api/runs', (req, res) => {
     const run = design.runs.create(req.body || {});
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
@@ -5630,39 +5813,54 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    const server = app.listen(port, host, () => {
-      const address = server.address();
-      // `address()` can in theory return `string | AddressInfo | null`. For
-      // a TCP listener it's always `AddressInfo` with a `.port` — the guard
-      // is belt-and-braces so an unexpected null never silently produces a
-      // `http://127.0.0.1:0` URL that callers would then try to fetch.
-      const boundPort =
-        address && typeof address === 'object' ? address.port : null;
-      if (!boundPort) {
-        reject(
-          new Error(
-            `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
-          ),
-        );
-        return;
-      }
-      resolvedPort = boundPort;
-      // When binding to all interfaces report localhost for local callers;
-      // when binding to a specific address (e.g. a Tailscale IP) report that
-      // address so remote callers and the sidecar use the correct URL.
-      const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
-      const url = `http://${reportHost}:${resolvedPort}`;
-      if (!returnServer) {
-        console.log(`[od] daemon listening on ${url}`);
-      }
-      daemonUrl = url;
-      resolve(returnServer ? { url, server } : url);
-    });
+    const cleanupDaemonBackgroundWork = () => {
+      composioConnectorProvider.stopCatalogRefreshLoop();
+      orbitService.stop();
+    };
+    let server;
+    try {
+      server = app.listen(port, host, () => {
+        const address = server.address();
+        // `address()` can in theory return `string | AddressInfo | null`. For
+        // a TCP listener it's always `AddressInfo` with a `.port` — the guard
+        // is belt-and-braces so an unexpected null never silently produces a
+        // `http://127.0.0.1:0` URL that callers would then try to fetch.
+        const boundPort =
+          address && typeof address === 'object' ? address.port : null;
+        if (!boundPort) {
+          reject(
+            new Error(
+              `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
+            ),
+          );
+          return;
+        }
+        resolvedPort = boundPort;
+        // When binding to all interfaces report localhost for local callers;
+        // when binding to a specific address (e.g. a Tailscale IP) report that
+        // address so remote callers and the sidecar use the correct URL.
+        const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+        const url = `http://${reportHost}:${resolvedPort}`;
+        if (!returnServer) {
+          console.log(`[od] daemon listening on ${url}`);
+        }
+        daemonUrl = url;
+        resolve(returnServer ? { url, server } : url);
+      });
+    } catch (error) {
+      cleanupDaemonBackgroundWork();
+      reject(error);
+      return;
+    }
+    server.once('close', cleanupDaemonBackgroundWork);
     // `app.listen` throws synchronously when the port is already in use on
     // some Node versions, but emits an `error` event on others (and for
     // EACCES / EADDRNOTAVAIL even on the same Node). Wire the event so the
     // returned Promise always settles instead of hanging forever.
-    server.on('error', reject);
+    server.on('error', (error) => {
+      cleanupDaemonBackgroundWork();
+      reject(error);
+    });
   });
 }
 

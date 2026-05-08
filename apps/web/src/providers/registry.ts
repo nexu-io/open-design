@@ -37,6 +37,15 @@ import type {
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      openExternal?: (url: string) => Promise<boolean>;
+      pickFolder?: () => Promise<string | null>;
+    };
+  }
+}
+
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const DEPLOY_PROVIDER_IDS = [
@@ -289,9 +298,13 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
+  const openExternal = window.electronAPI?.openExternal;
+  const useExternalBrowser = typeof openExternal === 'function';
   try {
-    authWindow = window.open('about:blank', '_blank');
-    renderConnectorAuthLoading(authWindow);
+    if (!useExternalBrowser) {
+      authWindow = window.open('about:blank', '_blank');
+      renderConnectorAuthLoading(authWindow);
+    }
     const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/connect`, {
       method: 'POST',
     });
@@ -301,7 +314,12 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
     }
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
-      if (authWindow) {
+      if (useExternalBrowser) {
+        const opened = await openExternal(json.auth.redirectUrl);
+        if (!opened) {
+          return { connector: json.connector ?? null, error: popupBlockedMessage() };
+        }
+      } else if (authWindow) {
         authWindow.location.href = json.auth.redirectUrl;
       } else {
         const redirected = window.open(json.auth.redirectUrl, '_blank');

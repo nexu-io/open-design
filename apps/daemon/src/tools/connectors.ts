@@ -1,6 +1,6 @@
 import type { ToolTokenGrant } from '../tool-tokens.js';
 
-import { classifyConnectorToolSafety, type ConnectorCatalogDefinition, type ConnectorToolDetail, type ConnectorToolSafety } from '../connectors/catalog.js';
+import { classifyConnectorToolSafety, connectorDefinitionToDetail, type ConnectorCatalogDefinition, type ConnectorToolDetail, type ConnectorToolSafety, type ConnectorToolUseCase } from '../connectors/catalog.js';
 import { connectorService, ConnectorService, type ConnectorExecuteRequest } from '../connectors/service.js';
 
 export interface ConnectorToolContext {
@@ -48,16 +48,49 @@ function isAgentPreviewListableTool(definition: ConnectorCatalogDefinition, tool
   return runtimeSafety.sideEffect === 'read' && effectiveApproval === 'auto';
 }
 
-export async function listConnectorTools(context: ConnectorToolContext): Promise<Awaited<ReturnType<ConnectorService['listConnectors']>>> {
+function matchesConnectorToolUseCase(tool: ConnectorToolDetail, useCase: ConnectorToolUseCase | undefined): boolean {
+  if (useCase === undefined) return true;
+  return tool.curation?.useCases?.includes(useCase) ?? false;
+}
+
+export async function listConnectorTools(context: ConnectorToolContext & { useCase?: ConnectorToolUseCase }): Promise<Awaited<ReturnType<ConnectorService['listConnectors']>>> {
   const service = context.service ?? connectorService;
-  const definitions = await service.listDefinitions();
-  const entries = await Promise.all(definitions.map(async (definition) => ({ definition, connector: await service.getConnector(definition.id) })));
+  // Agent-facing tool discovery sits on the hot path for unattended Orbit
+  // runs. Do not call provider discovery here: Composio toolkit discovery can
+  // cold-start slowly and leave the agent with no data before its shell
+  // timeout. Static definitions plus locally persisted connection status are
+  // enough to expose the approved read-only tool surface, and execution still
+  // validates connection state and safety again before calling providers.
+  const fastDefinitions = service.listFastDefinitions();
+  const fastDefinitionsById = new Map(fastDefinitions.map((definition) => [definition.id, definition]));
+  const connectedStatusIds = Object.entries(service.listConnectorStatuses())
+    .filter(([, status]) => status.status === 'connected')
+    .map(([connectorId]) => connectorId);
+  const hasConnectedConnectorNeedingDiscovery = connectedStatusIds.some((connectorId) => {
+    const fastDefinition = fastDefinitionsById.get(connectorId);
+    return !fastDefinition || fastDefinition.tools.length === 0;
+  });
+  const definitions = hasConnectedConnectorNeedingDiscovery ? await service.listDefinitions() : fastDefinitions;
+  const entries = definitions.map((definition) => {
+    const detail = connectorDefinitionToDetail(definition);
+    const status = service.getStatus(definition);
+    return {
+      definition,
+      connector: {
+        ...detail,
+        status: status.status,
+        ...(status.accountLabel === undefined ? {} : { accountLabel: status.accountLabel }),
+        ...(status.lastError === undefined ? {} : { lastError: status.lastError }),
+      },
+    };
+  });
   return entries
     .filter(({ connector }) => connector.status === 'connected')
     .map(({ definition, connector }) => ({
       ...connector,
       tools: connector.tools
         .filter((tool) => isAgentPreviewListableTool(definition, tool))
+        .filter((tool) => matchesConnectorToolUseCase(tool, context.useCase))
         .sort((left, right) => {
           const leftReadOnly = left.safety.sideEffect === 'read' && left.safety.approval === 'auto';
           const rightReadOnly = right.safety.sideEffect === 'read' && right.safety.approval === 'auto';

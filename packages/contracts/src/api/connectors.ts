@@ -6,10 +6,17 @@ export type ConnectorToolSideEffect = 'read' | 'write' | 'destructive' | 'unknow
 
 export type ConnectorToolApproval = 'auto' | 'confirm' | 'disabled';
 
+export type ConnectorToolUseCase = 'personal_daily_digest';
+
 export interface ConnectorToolSafety {
   sideEffect: ConnectorToolSideEffect;
   approval: ConnectorToolApproval;
   reason: string;
+}
+
+export interface ConnectorToolCuration {
+  useCases?: ConnectorToolUseCase[];
+  reason?: string;
 }
 
 export interface ConnectorToolDetail {
@@ -20,6 +27,7 @@ export interface ConnectorToolDetail {
   outputSchemaJson?: BoundedJsonObject;
   safety: ConnectorToolSafety;
   refreshEligible: boolean;
+  curation?: ConnectorToolCuration;
 }
 
 export interface ConnectorDetail {

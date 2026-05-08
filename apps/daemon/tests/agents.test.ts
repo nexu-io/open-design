@@ -44,6 +44,7 @@ const originalAgentHome = process.env.OD_AGENT_HOME;
 const originalDaemonUrl = process.env.OD_DAEMON_URL;
 const originalToolToken = process.env.OD_TOOL_TOKEN;
 const originalNpmConfigPrefix = process.env.NPM_CONFIG_PREFIX;
+const originalVpHome = process.env.VP_HOME;
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -77,6 +78,11 @@ afterEach(() => {
     delete process.env.NPM_CONFIG_PREFIX;
   } else {
     process.env.NPM_CONFIG_PREFIX = originalNpmConfigPrefix;
+  }
+  if (originalVpHome == null) {
+    delete process.env.VP_HOME;
+  } else {
+    process.env.VP_HOME = originalVpHome;
   }
   globalThis.fetch = originalFetch;
 });
@@ -323,10 +329,34 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
 
   const createTool = tools.find((tool) => tool.name === 'live_artifacts_create')!;
   const updateTool = tools.find((tool) => tool.name === 'live_artifacts_update')!;
+  const connectorsListTool = tools.find((tool) => tool.name === 'connectors_list')!;
   const createProperties = createTool.inputSchema.properties as Record<string, unknown>;
   const updateProperties = updateTool.inputSchema.properties as Record<string, unknown>;
+  const connectorsListProperties = connectorsListTool.inputSchema.properties as Record<string, unknown>;
   assert.deepEqual(Object.keys(createProperties).sort(), ['input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
+  assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
+});
+
+test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {
+  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456/base';
+  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ connectors: [] }), { status: 200 });
+  };
+
+  const response = await handleLiveArtifactsMcpRequest({
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'tools/call',
+    params: { name: 'connectors_list', arguments: { useCase: 'personal_daily_digest' } },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:17456/base/api/tools/connectors/list?useCase=personal_daily_digest');
 });
 
 test('live artifact MCP create forwards input and artifact payload fields to daemon tools', async () => {
@@ -1132,6 +1162,46 @@ fsTest(
   },
 );
 
+fsTest(
+  'resolveAgentExecutable searches ~/.vite-plus/bin under a minimal GUI-launched PATH (vp global install)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-vp-home-'));
+    try {
+      const dir = join(home, '.vite-plus', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentExecutable honors $VP_HOME/bin when the custom Vite+ home is outside PATH',
+  () => {
+    const vpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-custom-'));
+    try {
+      const dir = join(vpHome, 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = vpHome;
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(vpHome, { recursive: true, force: true });
+    }
+  },
+);
+
 // Test isolation: when OD_AGENT_HOME points at a sandbox, an exported
 // $NPM_CONFIG_PREFIX / $npm_config_prefix on the developer's or CI
 // runner's environment must not leak a real <prefix>/bin into the
@@ -1172,6 +1242,34 @@ fsTest(
       // same Vitest worker.
       rmSync(sandbox, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_AGENT_HOME isolates resolution from $VP_HOME leakage',
+  () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-vp-sandbox-'));
+    const realVpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-real-home-'));
+    const realVpBin = join(realVpHome, 'bin');
+    try {
+      mkdirSync(realVpBin, { recursive: true });
+      writeFileSync(join(realVpBin, 'vp-cli-probe'), '');
+      chmodSync(join(realVpBin, 'vp-cli-probe'), 0o755);
+
+      process.env.OD_AGENT_HOME = sandbox;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = realVpHome;
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(
+        resolved,
+        null,
+        `OD_AGENT_HOME sandbox must not see the real $VP_HOME bin; got ${resolved}`,
+      );
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(realVpHome, { recursive: true, force: true });
     }
   },
 );

@@ -525,7 +525,7 @@ export class ConnectorService {
   }
 
   listFastDefinitions(): ConnectorCatalogDefinition[] {
-    return getStaticComposioCatalogDefinitions();
+    return composioConnectorProvider.getFastDefinitions();
   }
 
   async getDefinition(connectorId: string, signal?: AbortSignal): Promise<ConnectorCatalogDefinition | undefined> {
@@ -554,7 +554,9 @@ export class ConnectorService {
   async listConnectorDiscovery(options: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<ConnectorDiscoveryResult> {
     if (options.refresh) composioConnectorProvider.clearDiscoveryCache();
     return {
-      connectors: (await this.listDefinitions(options.signal)).map((definition) => this.toDetail(definition)),
+      connectors: ((options.refresh
+        ? await composioConnectorProvider.refreshCatalog(options.signal)
+        : await this.listDefinitions(options.signal))).map((definition) => this.toDetail(definition)),
       meta: {
         provider: 'composio',
         ...(options.refresh ? { refreshRequested: true } : {}),
@@ -625,7 +627,12 @@ export class ConnectorService {
   }
 
   async execute(request: ConnectorExecuteRequest, context: ConnectorExecutionContext): Promise<ConnectorExecuteResponse> {
-    const definition = await this.getDefinition(request.connectorId, context.signal);
+    const fastDefinition = this.listFastDefinitions().find((candidate) => (
+      candidate.id === request.connectorId &&
+      candidate.allowedToolNames.includes(request.toolName) &&
+      candidate.tools.some((tool) => tool.name === request.toolName)
+    ));
+    const definition = fastDefinition ?? await this.getDefinition(request.connectorId, context.signal);
     if (!definition) {
       throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
     }
@@ -677,7 +684,7 @@ export class ConnectorService {
 
     this.enforceRunLimits(context);
 
-    const providerOutput = await this.executeConnectorProviderTool(request, context);
+    const providerOutput = await this.executeConnectorProviderTool(request, context, definition, tool);
     const protectedOutput = protectConnectorOutput(providerOutput);
     const output = protectedOutput.output;
     const outputSummary = summarizeConnectorOutput(output);
@@ -701,9 +708,14 @@ export class ConnectorService {
     };
   }
 
-  protected async executeConnectorProviderTool(request: ConnectorExecuteRequest, context: ConnectorExecutionContext): Promise<BoundedJsonObject> {
-    const definition = await this.getDefinition(request.connectorId, context.signal);
-    const tool = definition?.tools.find((candidate) => candidate.name === request.toolName);
+  protected async executeConnectorProviderTool(
+    request: ConnectorExecuteRequest,
+    context: ConnectorExecutionContext,
+    resolvedDefinition?: ConnectorCatalogDefinition,
+    resolvedTool?: ConnectorCatalogToolDefinition,
+  ): Promise<BoundedJsonObject> {
+    const definition = resolvedDefinition ?? await this.getDefinition(request.connectorId, context.signal);
+    const tool = resolvedTool ?? definition?.tools.find((candidate) => candidate.name === request.toolName);
     if (definition?.authentication === 'composio' && tool) {
       return composioConnectorProvider.execute(definition, tool, request.input, this.getCredential(request.connectorId)?.credentials, context.signal);
     }

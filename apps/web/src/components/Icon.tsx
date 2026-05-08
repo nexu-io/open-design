@@ -30,6 +30,7 @@ type IconName =
   | 'link'
   | 'mic'
   | 'minus'
+  | 'orbit'
   | 'pencil'
   | 'plus'
   | 'play'
@@ -286,6 +287,24 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common}>
           <path d="M5 12h14" />
+        </svg>
+      );
+    case 'orbit':
+      // Tilted elliptical orbit + central body + a small satellite riding the
+      // path. Reads unmistakably as "orbit/automation" rather than the
+      // generic refresh loop, and the rotated ellipse keeps the silhouette
+      // distinct from `refresh` and `reload` at small sizes.
+      return (
+        <svg {...common}>
+          <ellipse
+            cx="12"
+            cy="12"
+            rx="9"
+            ry="3.5"
+            transform="rotate(-25 12 12)"
+          />
+          <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
+          <circle cx="16" cy="6.8" r="1.5" fill="currentColor" stroke="none" />
         </svg>
       );
     case 'pencil':
