@@ -176,7 +176,7 @@ between compression and expansion:
       is ≤ 1.2×. (long-form only — guidance)
 - [ ] Bold used ≤ 2 times per 400 words in body copy. (long-form only)
 - [ ] `var(--accent)` used ≤ 2 times on the full editorial surface (see `color.md` §accent discipline).
-- [ ] Section separators (space, rules, dingbats) are used only when they
+- [ ] Section separators (rules, dingbats) are used only when they
   reinforce publication identity or clearly mark unrelated-content boundaries;
   they must not be used as a hierarchy fallback. (guidance)
 - [ ] Pull quote has no background, border, or container treatment.
