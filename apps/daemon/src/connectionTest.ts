@@ -46,11 +46,45 @@ import {
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
-const PROVIDER_TIMEOUT_MS = 12_000;
+// Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
+// or distant providers; invalid values fall back to the default.
+const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 // CLI boot time is dominated by adapter auth/session restore; the heavy
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
 // run, so 45 s leaves headroom without making a hung child invisible.
-const AGENT_TIMEOUT_MS = 45_000;
+// Override with OD_CONNECTION_TEST_AGENT_TIMEOUT_MS.
+const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
+
+export function resolveConnectionTestTimeoutMs(
+  key: 'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+  fallback: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env[key];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+    console.warn(
+      `connection-test: ignoring ${key}=${JSON.stringify(raw)} (must be a positive integer ms); using ${fallback}ms`,
+    );
+    return fallback;
+  }
+  return n;
+}
+
+function providerTimeoutMs(): number {
+  return resolveConnectionTestTimeoutMs(
+    'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS',
+    DEFAULT_PROVIDER_TIMEOUT_MS,
+  );
+}
+
+function agentTimeoutMs(): number {
+  return resolveConnectionTestTimeoutMs(
+    'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+    DEFAULT_AGENT_TIMEOUT_MS,
+  );
+}
 const AGENT_COMPLETION_DEBOUNCE_MS = 500;
 const AGENT_KILL_GRACE_MS = 2_000;
 // Truncates the assistant reply we surface in the success copy so a
@@ -492,7 +526,7 @@ export async function testProviderConnection(
   } else {
     input.signal?.addEventListener('abort', abortFromParent, { once: true });
   }
-  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), providerTimeoutMs());
 
   try {
     const modelError = await validateLocalOpenAiModel(
@@ -1114,7 +1148,7 @@ export async function testAgentConnection(
       child.stdin.end(SMOKE_PROMPT, 'utf8');
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
-      timer = setTimeout(() => resolve({ kind: 'timeout' }), AGENT_TIMEOUT_MS);
+      timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
       abortHandler = () => resolve({ kind: 'aborted' });
       if (input.signal?.aborted) {
         abortHandler();
