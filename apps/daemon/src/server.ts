@@ -1543,6 +1543,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
 
+  // POST endpoints that the Open Design UI needs with a portless Origin.
+  // Kept narrow to avoid opening state-changing endpoints beyond the UI's
+  // actual usage. All listed endpoints require Content-Type: application/json,
+  // which is NOT a CORS-safelisted type, so the browser always sends a
+  // preflight OPTIONS request — meaning this fallback does not bypass CORS
+  // for those routes.  The /upload endpoint is deliberately excluded because
+  // it accepts multipart/form-data (a safelisted type that skips preflight),
+  // which would allow CSRF from a page on the default port (80).
+  // See _PORTLESS_SAFE_POST_RE usage in the origin middleware.
+  const _PORTLESS_SAFE_POST_RE =
+    /^\/(test\/connection|projects|chat|runs|artifacts\/(save|lint)|templates|codex-pets\/sync|tools\/live-artifacts\/(create|update|refresh)|projects\/[^/]+\/(conversations|deploy|archive|media)|live-artifacts\/[^/]+\/refresh)$/;
+
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
   // Non-browser clients (no Origin header) are always allowed.
@@ -1574,7 +1586,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const ports = allowedBrowserPorts(resolvedPort);
     if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
-      if (!isPortlessLoopbackOrigin(String(origin))) {
+      // Chrome strips the port from the Origin header on same-origin
+      // requests to localhost (e.g. http://127.0.0.1 instead of
+      // http://127.0.0.1:4353). Allow portless loopback origins only
+      // for GET (idempotent) and for a small set of POST endpoints
+      // that the Open Design UI needs (test connection, create project,
+      // chat, conversations, templates, artifacts, runs).
+      // All whitelisted POST endpoints require Content-Type: application/json,
+      // which forces a CORS preflight — so this is not vulnerable to CSRF
+      // from simple form submissions. Endpoints accepting multipart/form-data
+      // (e.g. /upload) are excluded because that content type is safelisted
+      // and skips preflight. Other mutating methods (PUT/PATCH/DELETE) and
+      // POST endpoints not in this list always require an exact port-match.
+      const isPortlessSafe =
+        isPortlessLoopbackOrigin(String(origin)) &&
+        (req.method === 'GET' || _PORTLESS_SAFE_POST_RE.test(req.path));
+      if (!isPortlessSafe) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
       }
     }
