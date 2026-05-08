@@ -49,6 +49,37 @@ const connectedConnector: ConnectorDetail = {
   tools: [],
 };
 
+const orbitTemplates = [
+  {
+    id: 'orbit-general',
+    name: 'General digest',
+    description: 'General summary',
+    triggers: [],
+    mode: 'template' as const,
+    scenario: 'orbit',
+    previewType: 'html',
+    designSystemRequired: false,
+    defaultFor: [],
+    upstream: null,
+    hasBody: true,
+    examplePrompt: 'General prompt',
+  },
+  {
+    id: 'orbit-editorial',
+    name: 'Editorial digest',
+    description: 'Editorial summary',
+    triggers: [],
+    mode: 'template' as const,
+    scenario: 'orbit',
+    previewType: 'html',
+    designSystemRequired: false,
+    defaultFor: [],
+    upstream: null,
+    hasBody: true,
+    examplePrompt: 'Editorial prompt',
+  },
+];
+
 describe('SettingsDialog Orbit connector gate refresh', () => {
   afterEach(() => {
     cleanup();
@@ -96,5 +127,82 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
       expect(screen.queryByTestId('orbit-config-gate')).toBeNull();
       expect(screen.getByRole('button', { name: 'Run it now' }).hasAttribute('disabled')).toBe(false);
     });
+  });
+
+  it('updates the Last run panel when the selected Orbit template changes', async () => {
+    vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
+    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/orbit/status') {
+        return new Response(JSON.stringify({
+          running: false,
+          nextRunAt: null,
+          lastRun: {
+            completedAt: '2026-05-06T10:00:00.000Z',
+            trigger: 'manual',
+            templateSkillId: 'orbit-general',
+            connectorsChecked: 5,
+            connectorsSucceeded: 3,
+            connectorsSkipped: 2,
+            connectorsFailed: 0,
+            markdown: 'General latest summary',
+          },
+          lastRunsByTemplate: {
+            'orbit-general': {
+              completedAt: '2026-05-06T10:00:00.000Z',
+              trigger: 'manual',
+              templateSkillId: 'orbit-general',
+              connectorsChecked: 5,
+              connectorsSucceeded: 3,
+              connectorsSkipped: 2,
+              connectorsFailed: 0,
+              markdown: 'General latest summary',
+            },
+            'orbit-editorial': {
+              completedAt: '2026-05-06T09:00:00.000Z',
+              trigger: 'scheduled',
+              templateSkillId: 'orbit-editorial',
+              connectorsChecked: 7,
+              connectorsSucceeded: 2,
+              connectorsSkipped: 4,
+              connectorsFailed: 1,
+              markdown: 'Editorial summary',
+            },
+          },
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    render(
+      <SettingsDialog
+        initial={baseConfig}
+        agents={[]}
+        daemonLive
+        appVersionInfo={null}
+        initialSection="orbit"
+        onPersist={vi.fn()}
+        onPersistComposioKey={vi.fn()}
+        onClose={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('General latest summary')).toBeTruthy();
+    });
+    expect(screen.getByText('5')).toBeTruthy();
+    expect(screen.queryByText('Editorial summary')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Orbit prompt template'), {
+      target: { value: 'orbit-editorial' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Editorial summary')).toBeTruthy();
+    });
+    expect(screen.queryByText('General latest summary')).toBeNull();
+    expect(screen.getByText('7')).toBeTruthy();
   });
 });

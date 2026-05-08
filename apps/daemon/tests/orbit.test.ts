@@ -276,4 +276,79 @@ describe('OrbitService', () => {
       await rm(dataDir, { recursive: true, force: true });
     }
   });
+
+  it('tracks the most recent run per template alongside the global last run', async () => {
+    vi.useFakeTimers();
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));
+    try {
+      const service = new OrbitService(dataDir);
+      let runCount = 0;
+      service.setTemplateResolver(async (skillId) => ({
+        id: skillId,
+        name: skillId,
+        examplePrompt: `${skillId} prompt`,
+        dir: path.join('/repo', 'skills', skillId),
+        body: `${skillId} body`,
+        designSystemRequired: false,
+      }));
+      service.setRunHandler(async (request) => {
+        runCount += 1;
+        return {
+          projectId: `project-${runCount}`,
+          agentRunId: `agent-${runCount}`,
+          completion: Promise.resolve({
+            agentRunId: `agent-${runCount}`,
+            status: 'succeeded',
+          }),
+        };
+      });
+
+      service.configure({ enabled: false, time: '08:00', templateSkillId: 'orbit-general' });
+      vi.setSystemTime(new Date('2026-05-06T08:00:00.000Z'));
+      await service.start('manual');
+      let status = await service.status();
+      for (let attempt = 0; attempt < 10 && !status.lastRun; attempt += 1) {
+        await vi.advanceTimersByTimeAsync(1);
+        status = await service.status();
+      }
+
+      service.configure({ enabled: false, time: '08:00', templateSkillId: 'orbit-editorial' });
+      vi.setSystemTime(new Date('2026-05-06T09:00:00.000Z'));
+      await service.start('manual');
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await vi.advanceTimersByTimeAsync(1);
+        status = await service.status();
+        if (status.lastRunsByTemplate['orbit-editorial']) break;
+      }
+
+      service.configure({ enabled: false, time: '08:00', templateSkillId: 'orbit-general' });
+      vi.setSystemTime(new Date('2026-05-06T10:00:00.000Z'));
+      await service.start('manual');
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await vi.advanceTimersByTimeAsync(1);
+        status = await service.status();
+        if (status.lastRunsByTemplate['orbit-general']?.agentRunId === 'agent-3') break;
+      }
+
+      status = await service.status();
+
+      expect(status.lastRun).toMatchObject({
+        agentRunId: 'agent-3',
+        templateSkillId: 'orbit-general',
+      });
+      expect(status.lastRunsByTemplate).toMatchObject({
+        'orbit-general': {
+          agentRunId: 'agent-3',
+          templateSkillId: 'orbit-general',
+        },
+        'orbit-editorial': {
+          agentRunId: 'agent-2',
+          templateSkillId: 'orbit-editorial',
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });

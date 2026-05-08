@@ -33,6 +33,8 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ExecMode,
   SkillSummary,
 } from '../types';
@@ -2471,22 +2473,6 @@ function ConnectorSection({
   );
 }
 
-interface OrbitRunSummary {
-  id?: string;
-  startedAt?: string;
-  completedAt: string;
-  trigger?: 'manual' | 'scheduled';
-  connectorsChecked: number;
-  connectorsSucceeded: number;
-  connectorsFailed: number;
-  connectorsSkipped: number;
-  artifactId?: string | null;
-  artifactProjectId?: string | null;
-  /** Identifier of the daemon run that produced this summary. Useful for log correlation. */
-  agentRunId?: string | null;
-  markdown: string;
-}
-
 interface OrbitRunStartResponse {
   projectId: string;
   agentRunId: string;
@@ -2516,12 +2502,6 @@ export function configForManualOrbitRun(config: AppConfig): AppConfig {
 
 export function isOrbitRunDisabled(isBusy: boolean, connectedCount: number | null): boolean {
   return isBusy || connectedCount === null || connectedCount === 0;
-}
-
-interface OrbitStatusResponse {
-  running?: boolean;
-  nextRunAt?: string | null;
-  lastRun?: OrbitRunSummary | null;
 }
 
 function formatRelative(
@@ -2678,6 +2658,7 @@ function OrbitSection({
   // were on the default. Manual runs persist this effective value before
   // launching so the daemon uses the same template the UI displays.
   const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+  const supportsTemplateScopedHistory = status?.lastRunsByTemplate !== undefined;
 
   const selectedTemplate = useMemo(() => {
     if (!effectiveTemplateSkillId || !orbitTemplates) return null;
@@ -2715,7 +2696,12 @@ function OrbitSection({
     })();
   };
 
-  const lastRun = status?.lastRun ?? null;
+  const templateScopedLastRun = effectiveTemplateSkillId
+    ? status?.lastRunsByTemplate?.[effectiveTemplateSkillId] ?? null
+    : null;
+  const lastRun = supportsTemplateScopedHistory
+    ? templateScopedLastRun
+    : status?.lastRun ?? null;
   const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);

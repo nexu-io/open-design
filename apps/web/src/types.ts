@@ -27,6 +27,8 @@ import type {
   LiveArtifactStatus,
   LiveArtifactSummary,
   MediaAspect,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ProjectDeploymentsResponse,
   ProviderTestRequest,
   PersistedAgentEvent,
@@ -56,6 +58,8 @@ export type {
   CloudflarePagesDeploySelection,
   CloudflarePagesDeploymentInfo,
   CloudflarePagesZonesResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
 } from '@open-design/contracts';
