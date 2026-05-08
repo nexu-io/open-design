@@ -3,7 +3,8 @@
 ## 覆盖范围
 
 - 新建项目入口面板
-- 入口标签切换与草稿保持
+- 入口侧栏项目类型切换与草稿保持
+- 首页顶部标签结构
 - Examples 示例库搜索、筛选、预览与导出
 - 提示词模板创建路径
 - 连接器入口与连接器 gate
@@ -37,13 +38,14 @@
 | ENTRY-013 | 创建音频项目时，所选 `duration` 与修剪后的 `voice` 会正确写入创建 payload | `NewProjectPanel.test.tsx` |
 | ENTRY-014 | 顶部 settings menu 可以切换 pet rail 的显示/隐藏 | `entry-chrome-flows.test.ts` |
 | ENTRY-015 | 紧凑桌面宽度下，入口页 header 与整页不会出现明显横向溢出 | `entry-chrome-flows.test.ts` |
-| ENTRY-016 | Examples 示例库为空时展示 daemon/catalog 不可用提示 | `ExamplesTab.test.tsx` |
-| ENTRY-017 | Examples 搜索支持按名称、描述、prompt 命中，并在无匹配时展示空结果态 | `ExamplesTab.test.tsx` |
-| ENTRY-018 | Examples 支持按 Surface、Type、Scenario 筛选并正确收敛卡片列表 | `ExamplesTab.test.tsx` |
-| ENTRY-019 | 点击 Examples 卡片的 `Use this prompt` 会把选中的 skill 传给创建快路径 | `ExamplesTab.test.tsx` |
-| ENTRY-020 | Examples 预览按需加载后，Share 菜单可触发 PDF、ZIP、HTML 导出 | `ExamplesTab.test.tsx` |
-| ENTRY-021 | Examples 全屏预览弹窗支持 Fullscreen/ESC 退出/Exit、Share 导出 PDF/ZIP/HTML、Open in new tab 和关闭 | `ExamplesTab.test.tsx` |
-| ENTRY-022 | Examples 点击 `Docs & templates` 筛选后只展示模板类 example，并可点击 `Use this prompt` 使用模板 prompt | `ExamplesTab.test.tsx` |
+| ENTRY-016 | 首页顶部标签固定为 `Designs / Examples / Design systems / Image templates / Video templates`，不再展示旧 `Connectors` 标签 | `entry-chrome-flows.test.ts` |
+| ENTRY-017 | Examples 示例库为空时展示 daemon/catalog 不可用提示 | `ExamplesTab.test.tsx` |
+| ENTRY-018 | Examples 搜索支持按名称、描述、prompt 命中，并在无匹配时展示空结果态 | `ExamplesTab.test.tsx` |
+| ENTRY-019 | Examples 支持按 Surface、Type、Scenario 筛选并正确收敛卡片列表 | `ExamplesTab.test.tsx` |
+| ENTRY-020 | 点击 Examples 卡片的 `Use this prompt` 会把选中的 skill 传给创建快路径 | `ExamplesTab.test.tsx` |
+| ENTRY-021 | Examples 预览按需加载后，Share 菜单可触发 PDF、ZIP、HTML 导出 | `ExamplesTab.test.tsx` |
+| ENTRY-022 | Examples 全屏预览弹窗支持 Fullscreen/ESC 退出/Exit、Share 导出 PDF/ZIP/HTML、Open in new tab 和关闭 | `ExamplesTab.test.tsx` |
+| ENTRY-023 | Examples 点击 `Docs & templates` 筛选后只展示模板类 example，并可点击 `Use this prompt` 使用模板 prompt | `ExamplesTab.test.tsx` |
 
 ### 资源驱动创建场景
 

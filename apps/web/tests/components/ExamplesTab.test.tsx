@@ -14,7 +14,9 @@ import {
 import type { SkillSummary } from '../../src/types';
 
 vi.mock('../../src/providers/registry', () => ({
-  fetchSkillExample: vi.fn(async (id: string) => `<main><h1>${id} preview</h1></main>`),
+  fetchSkillExample: vi.fn(async (id: string) => ({
+    html: `<main><h1>${id} preview</h1></main>`,
+  })),
 }));
 
 vi.mock('../../src/runtime/exports', () => ({
