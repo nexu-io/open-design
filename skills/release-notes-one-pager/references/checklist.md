@@ -21,6 +21,8 @@ Run this before emitting `<artifact>`. P0 = must pass; P1 = should pass; P2 = ni
 - [ ] Every top-level `<section>` has a `data-od-id`.
 - [ ] Every required release-note section root also includes the matching `id` anchor: `added`, `fixed`, `breaking-changes`, `known-issues`, `upgrade-note`.
 - [ ] Every emitted CTA uses a real destination; `href="#"` is not acceptable. If no destination exists, omit the closing CTA strip.
+- [ ] No placeholder URLs like `https://example.com` remain in emitted HTML; all `href` attributes must be replaced with real, safe destinations.
+- [ ] No placeholder strings like `REPLACE_WITH_REAL_URL` remain in emitted HTML; all hrefs must be valid URLs.
 - [ ] CTA copy must accurately describe an available destination; do not promise content that is not present.
 - [ ] Mobile reflow works without horizontal scroll at narrow widths.
 

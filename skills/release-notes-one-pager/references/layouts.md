@@ -30,8 +30,8 @@ Use when the page leads with a thesis sentence (most landings, most marketing pa
     <h1>One sharp sentence about what this is.</h1>
     <p class="lead">One concrete-value subhead — what changes for the reader.</p>
     <div class="hero-cta">
-      <a class="btn btn-primary" href="https://example.com">Primary action</a>
-      <a class="btn btn-secondary" href="https://example.com">Secondary</a>
+      <a class="btn btn-primary" href="REPLACE_WITH_REAL_URL">Primary action</a>
+      <a class="btn btn-secondary" href="REPLACE_WITH_REAL_URL">Secondary</a>
     </div>
   </div>
 </section>
@@ -49,8 +49,8 @@ Use when there is a real product visual (product UI, screenshot, photograph). Le
       <h1>Headline that names the change.</h1>
       <p class="lead" style="margin-top: 20px;">A short subhead — concrete, not corporate. Two sentences max.</p>
       <div class="hero-cta" style="margin-top: 28px;">
-        <a class="btn btn-primary" href="https://example.com">Primary action</a>
-        <a class="btn btn-ghost btn-arrow" href="https://example.com">Read the story</a>
+        <a class="btn btn-primary" href="REPLACE_WITH_REAL_URL">Primary action</a>
+        <a class="btn btn-ghost btn-arrow" href="REPLACE_WITH_REAL_URL">Read the story</a>
       </div>
     </div>
     <div class="ph-img wide" aria-label="Hero visual placeholder">[ Hero visual · 16:9 ]</div>
@@ -145,7 +145,7 @@ End the page on one decisive ask. Centered, generous whitespace, one primary but
   <div class="container" style="max-width: 600px;">
     <h2>Stop measuring meetings. Start measuring focus.</h2>
     <p class="lead" style="margin: 16px auto 32px;">Free for solo. $4/mo per teammate after that.</p>
-    <a class="btn btn-primary" href="https://example.com">Start free</a>
+    <a class="btn btn-primary" href="REPLACE_WITH_REAL_URL">Start free</a>
   </div>
 </section>
 ```
@@ -159,7 +159,7 @@ Editorial layout for a list of dated entries. Date in mono on the left, title + 
   <div class="container">
     <div class="row-between" style="margin-bottom: 32px;">
       <h2>Recent changes</h2>
-      <a class="btn btn-ghost btn-arrow" href="https://example.com">View all</a>
+      <a class="btn btn-ghost btn-arrow" href="REPLACE_WITH_REAL_URL">View all</a>
     </div>
     <div>
       <article class="log-row">
