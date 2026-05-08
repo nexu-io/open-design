@@ -3151,9 +3151,20 @@ code {
   text-align: left;
   color: var(--text);
 }
-.settings-language-option:hover,
-.settings-language-option.active { background: var(--bg-subtle); }
-.settings-language-option.active { color: var(--accent); }
+/* Differentiate hover, selected, and keyboard-focus states so the
+   currently-selected language is visually distinct even when the
+   pointer is hovering a different row. Issue #628. */
+.settings-language-option:hover { background: var(--bg-subtle); }
+.settings-language-option.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+.settings-language-option.active:hover { background: var(--accent-soft); }
+.settings-language-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .empty-card {
   padding: 16px;
   border: 1px dashed var(--border);
