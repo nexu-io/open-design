@@ -4627,6 +4627,8 @@ function HtmlViewer({
               </div>
                <button
                 type="button"
+                title="Close Inspect Hint"
+                aria-label="Close Inspect Hint"
                 onClick={() => setOpenHintBox(false)}
                 className="orbit-artifact-ghost">
                  <Icon className='' name='close' size={12} />
