@@ -289,7 +289,7 @@ export const zhCN: Dict = {
   'connectors.emptyNoMatchAction': '清除搜索',
 
   'newproj.tabPrototype': '原型',
-  'newproj.tabLiveArtifact': '新建实时制品',
+  'newproj.tabLiveArtifact': '实时制品',
   'newproj.tabDeck': '幻灯片',
   'newproj.tabTemplate': '从模板',
   'newproj.tabOther': '其它',

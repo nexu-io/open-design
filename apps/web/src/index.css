@@ -1204,11 +1204,10 @@ code {
   position: absolute;
   top: 14px;
   right: 14px;
-  z-index: 3;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 8px;
-  pointer-events: none; /* children opt back in */
 }
 .settings-chrome > * {
   pointer-events: auto;
