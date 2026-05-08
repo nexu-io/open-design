@@ -234,9 +234,18 @@ describe('ExamplesTab', () => {
     });
 
     fireEvent.click(within(dialog).getByRole('button', { name: /Fullscreen/i }));
+    const modal = dialog.querySelector('.ds-modal') as HTMLElement;
+    expect(modal.classList.contains('ds-modal-fullscreen')).toBe(true);
     expect(within(dialog).getByRole('button', { name: /Exit/i })).toBeTruthy();
 
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(modal.classList.contains('ds-modal-fullscreen')).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'live-dashboard preview' })).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Fullscreen/i }));
+    expect(modal.classList.contains('ds-modal-fullscreen')).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: /Exit/i }));
+    expect(modal.classList.contains('ds-modal-fullscreen')).toBe(false);
     expect(within(dialog).getByRole('button', { name: /Fullscreen/i })).toBeTruthy();
 
     const shareButton = within(dialog).getByRole('button', { name: 'Share ▾' });
