@@ -29,7 +29,9 @@ od:
   design_system:
     requires: true
     sections: [color, typography, layout, components]
-  example_prompt: "Design ‘The Creator's Style & Format Guide’ — cover page and one inside spread, lifestyle creator brand."
+  craft:
+    requires: [typography-hierarchy, typography-hierarchy-editorial, rtl-and-bidi]
+  example_prompt: "Design 'The Creator's Style & Format Guide' — cover page and one inside spread, lifestyle creator brand."
 ---
 
 # Digital E-Guide Skill
