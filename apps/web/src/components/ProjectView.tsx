@@ -1422,7 +1422,7 @@ export function ProjectView({
         `Set the \`<a:latin>\` and \`<a:ea>\` typeface slots explicitly so Chinese runs ` +
         `don't fall back to Microsoft JhengHei.\n\n` +
         `**Verify (mandatory gate).** After writing, run ` +
-        `\`python skills/pptx-html-fidelity-audit/scripts/verify_layout.py "${baseTitle}.pptx"\` ` +
+        `\`python3 skills/pptx-html-fidelity-audit/scripts/verify_layout.py "${baseTitle}.pptx"\` ` +
         `(quote the path — filenames may contain spaces). Zero rail violations is the gate ` +
         `for "shippable". If violations remain, walk Steps 2-4 of the SKILL.md ` +
         `(extract dump → audit table → re-export) — do not declare done by eyeballing the ` +
