@@ -15,25 +15,49 @@ import { useEffect } from 'react';
 export interface ToastProps {
   message: string;
   details?: string | null;
+  // Optional code/preformatted body. When present the toast pins
+  // itself open (no auto-dismiss) so the user has time to manually
+  // copy the content. Used for the clipboard-failure recovery path
+  // in Continue in CLI: when copyToClipboard returns false the
+  // prepared prompt is rendered here so the user can select-and-copy
+  // it manually.
+  code?: string | null;
   ttlMs?: number;
   onDismiss?: () => void;
 }
 
 const DEFAULT_TTL = 4000;
 
-export function Toast({ message, details, ttlMs = DEFAULT_TTL, onDismiss }: ToastProps) {
+export function Toast({ message, details, code, ttlMs = DEFAULT_TTL, onDismiss }: ToastProps) {
+  // When code is present the toast is a manual-action surface; never
+  // auto-dismiss it out from under the user mid-copy.
+  const effectiveTtl = code ? 0 : ttlMs;
+
   useEffect(() => {
-    if (!onDismiss || !Number.isFinite(ttlMs) || ttlMs <= 0) return;
+    if (!onDismiss || !Number.isFinite(effectiveTtl) || effectiveTtl <= 0) return;
     const id = window.setTimeout(() => {
       onDismiss();
-    }, ttlMs);
+    }, effectiveTtl);
     return () => window.clearTimeout(id);
-  }, [message, details, ttlMs, onDismiss]);
+  }, [message, details, code, effectiveTtl, onDismiss]);
 
   return (
     <div className="od-toast" role="status" aria-live="polite">
       <div className="od-toast-message">{message}</div>
       {details ? <div className="od-toast-details">{details}</div> : null}
+      {code ? (
+        <pre className="od-toast-code">{code}</pre>
+      ) : null}
+      {code && onDismiss ? (
+        <button
+          type="button"
+          className="od-toast-dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+        >
+          Dismiss
+        </button>
+      ) : null}
     </div>
   );
 }

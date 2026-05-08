@@ -271,6 +271,7 @@ export function ProjectView({
   const [projectActionsToast, setProjectActionsToast] = useState<{
     message: string;
     details: string | null;
+    code?: string | null;
   } | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
@@ -1823,7 +1824,20 @@ export function ProjectView({
       },
       projectDir,
     });
-    await copyToClipboard(prompt);
+    const copied = await copyToClipboard(prompt);
+    if (!copied) {
+      // Clipboard write failed in both the canonical and execCommand
+      // fallback paths (locked clipboard / insecure context). Surface
+      // the prompt body in the toast so the user can manually
+      // select-and-copy. Do not open the folder — the user has nothing
+      // to paste yet.
+      setProjectActionsToast({
+        message: 'Clipboard unavailable. Copy this prompt manually, then run `claude` at the working directory.',
+        details: `Working directory: ${projectDir}`,
+        code: prompt,
+      });
+      return;
+    }
     const launched = await terminalLauncher.open(projectDir);
     if (launched.kind === 'electron' && launched.ok) {
       setProjectActionsToast({
@@ -2038,6 +2052,7 @@ export function ProjectView({
         <Toast
           message={projectActionsToast.message}
           details={projectActionsToast.details}
+          code={projectActionsToast.code}
           onDismiss={() => setProjectActionsToast(null)}
         />
       ) : null}
