@@ -8283,19 +8283,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   gap: 5px;
 }
 
-.inspect-empty-hint {
-  /* position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 5;
-  padding: 8px 12px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  font-size: 12px;
-  pointer-events: none; */
-}
 .inspect-empty-hint code {
   padding: 1px 5px;
   border-radius: 3px;
