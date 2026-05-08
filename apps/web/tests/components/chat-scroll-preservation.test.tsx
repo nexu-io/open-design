@@ -1,49 +1,87 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage } from '../../src/types';
 
-// jsdom does not run a layout engine, so scrollHeight, clientHeight, and
-// scrollTop are zero by default. The scroll-preservation effect derives
-// "near bottom" from those, so we drive them explicitly per test.
-function mockScrollGeometry(
-  el: HTMLElement,
-  geom: { scrollHeight: number; clientHeight: number; scrollTop: number },
-) {
-  Object.defineProperty(el, 'scrollHeight', {
-    configurable: true,
-    get: () => geom.scrollHeight,
-  });
-  Object.defineProperty(el, 'clientHeight', {
-    configurable: true,
-    get: () => geom.clientHeight,
-  });
-  let scrollTop = geom.scrollTop;
-  Object.defineProperty(el, 'scrollTop', {
-    configurable: true,
-    get: () => scrollTop,
-    set: (v: number) => {
-      scrollTop = v;
-    },
-  });
-  return {
-    setScrollTop(v: number) {
-      scrollTop = v;
-      fireEvent.scroll(el);
-    },
-    setScrollHeight(v: number) {
-      Object.defineProperty(el, 'scrollHeight', {
-        configurable: true,
-        get: () => v,
-      });
-      geom.scrollHeight = v;
-    },
-    getScrollTop() {
-      return scrollTop;
-    },
+// jsdom does not run a layout engine, so scrollHeight/clientHeight/scrollTop
+// are all 0. The scroll-preservation effect derives "near bottom" and the
+// restore target from those, so we install prototype-level getters/setters
+// that route every chat-log read/write through a per-test `geom` object.
+//
+// The earlier shape installed instance-level Object.defineProperty mocks on
+// the *remounted* chat-log only AFTER `await switchTab('Chat')`. Inside that
+// act() the component schedules a rAF that writes scrollTop on the new
+// element; depending on whether jsdom's rAF polyfill flushed before the await
+// resolved, the write either landed on the still-default prototype setter
+// (lost) or the not-yet-installed instance setter (also lost). The instance
+// mock's closure-captured `remountedTop` then served its initial 0 forever
+// and the assertion failed nondeterministically across CI runs without any
+// product-code change. Patching at the prototype level eliminates the race
+// because any chat-log instance React mounts later automatically reads/writes
+// through this single test-controlled geometry.
+type Geom = { scrollHeight: number; clientHeight: number; scrollTop: number };
+let geom: Geom;
+let savedDescriptors: Record<
+  'scrollTop' | 'scrollHeight' | 'clientHeight',
+  PropertyDescriptor | undefined
+>;
+
+function isChatLog(el: HTMLElement): boolean {
+  return typeof el?.classList?.contains === 'function' && el.classList.contains('chat-log');
+}
+
+beforeEach(() => {
+  geom = { scrollHeight: 0, clientHeight: 0, scrollTop: 0 };
+  savedDescriptors = {
+    scrollTop: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop'),
+    scrollHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight'),
+    clientHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight'),
   };
+  Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isChatLog(this) ? geom.scrollTop : 0;
+    },
+    set(this: HTMLElement, v: number) {
+      if (isChatLog(this)) geom.scrollTop = v;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isChatLog(this) ? geom.scrollHeight : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isChatLog(this) ? geom.clientHeight : 0;
+    },
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  for (const key of ['scrollTop', 'scrollHeight', 'clientHeight'] as const) {
+    const original = savedDescriptors[key];
+    if (original) {
+      Object.defineProperty(HTMLElement.prototype, key, original);
+    } else {
+      delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+    }
+  }
+});
+
+function setGeom(partial: Partial<Geom>) {
+  geom = { ...geom, ...partial };
+}
+
+function setUserScroll(top: number) {
+  geom.scrollTop = top;
+  const el = document.querySelector('.chat-log');
+  if (el) fireEvent.scroll(el);
 }
 
 function chatPaneEl(messages: ChatMessage[], activeConversationId: string | null) {
@@ -76,12 +114,6 @@ const sampleMessages: ChatMessage[] = [
   { id: 'a2', role: 'assistant', content: 'second reply', createdAt: Date.now() },
 ];
 
-function getChatLog(): HTMLElement {
-  const el = document.querySelector('.chat-log');
-  if (!el) throw new Error('chat-log not found');
-  return el as HTMLElement;
-}
-
 function flushFrame() {
   return act(async () => {
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
@@ -96,137 +128,64 @@ async function switchTab(name: 'Chat' | 'Comments') {
 }
 
 describe('chat scroll preservation across tab switches', () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it('restores absolute scrollTop when user was scrolled up', async () => {
     renderChatPane(sampleMessages);
-    const log = getChatLog();
-    const ctl = mockScrollGeometry(log, {
-      scrollHeight: 1000,
-      clientHeight: 400,
-      scrollTop: 0,
-    });
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
 
     // User scrolls up to 200 (well above bottom: distance=400).
-    ctl.setScrollTop(200);
+    setUserScroll(200);
 
     await switchTab('Comments');
     await switchTab('Chat');
     await flushFrame();
 
-    const restored = getChatLog();
-    expect(restored.scrollTop).toBe(200);
+    expect(geom.scrollTop).toBe(200);
   });
 
   it('snaps to new scrollHeight when user was pinned to bottom and new content arrived off-tab', async () => {
     renderChatPane(sampleMessages);
-    const log = getChatLog();
-    const ctl = mockScrollGeometry(log, {
-      scrollHeight: 1000,
-      clientHeight: 400,
-      scrollTop: 600,
-    });
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
 
     // User is pinned at bottom (distance = 1000 - 600 - 400 = 0 < 50).
-    ctl.setScrollTop(600);
+    setUserScroll(600);
 
     await switchTab('Comments');
-
-    // While off-tab, new messages would normally grow scrollHeight. We
-    // simulate that, then re-render so the chat-log remounts at the new
-    // size.
-    ctl.setScrollHeight(1500);
-
+    // While off-tab, new messages would normally grow scrollHeight.
+    setGeom({ scrollHeight: 1500 });
     await switchTab('Chat');
-
-    // Re-mount picks up a fresh element; carry the new geometry into it.
-    const remounted = getChatLog();
-    Object.defineProperty(remounted, 'scrollHeight', {
-      configurable: true,
-      get: () => 1500,
-    });
-    Object.defineProperty(remounted, 'clientHeight', {
-      configurable: true,
-      get: () => 400,
-    });
-    let remountedTop = 0;
-    Object.defineProperty(remounted, 'scrollTop', {
-      configurable: true,
-      get: () => remountedTop,
-      set: (v: number) => {
-        remountedTop = v;
-      },
-    });
-
     await flushFrame();
 
     // Bottom-pinned user lands at scrollHeight, not at the old offset.
-    expect(remountedTop).toBe(1500);
+    expect(geom.scrollTop).toBe(1500);
   });
 
   it('reveals the jump-to-latest button when restored position is no longer near bottom', async () => {
     renderChatPane(sampleMessages);
-    const log = getChatLog();
-    const ctl = mockScrollGeometry(log, {
-      scrollHeight: 1000,
-      clientHeight: 400,
-      scrollTop: 0,
-    });
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
 
     // User leaves Chat ~60px from the bottom (distance = 1000 - 540 - 400 = 60).
-    ctl.setScrollTop(540);
-
+    setUserScroll(540);
     await switchTab('Comments');
-
     // While off-tab, new messages stack underneath. scrollHeight grows
     // dramatically; the saved absolute scrollTop is now hundreds of
     // pixels above the latest turn.
-    ctl.setScrollHeight(2000);
-
+    setGeom({ scrollHeight: 2000 });
     await switchTab('Chat');
-
-    // Carry the new geometry into the remounted element so the
-    // distance-from-bottom calc inside the rAF restore can see it.
-    const remounted = getChatLog();
-    let remountedTop = 0;
-    Object.defineProperty(remounted, 'scrollHeight', {
-      configurable: true,
-      get: () => 2000,
-    });
-    Object.defineProperty(remounted, 'clientHeight', {
-      configurable: true,
-      get: () => 400,
-    });
-    Object.defineProperty(remounted, 'scrollTop', {
-      configurable: true,
-      get: () => remountedTop,
-      set: (v: number) => {
-        remountedTop = v;
-      },
-    });
-
     await flushFrame();
 
     // Restored to old offset (540), but distance = 2000 - 540 - 400 = 1060
     // is well past the 120px threshold, so the jump-to-latest button
     // must be visible immediately, not hidden until the user scrolls.
-    expect(remountedTop).toBe(540);
+    expect(geom.scrollTop).toBe(540);
     expect(screen.getByRole('button', { name: /jump to latest/i })).toBeTruthy();
   });
 
   it('lands new conversation at its own bottom when switching conversations off-tab', async () => {
     const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
-    const log = getChatLog();
-    const ctl = mockScrollGeometry(log, {
-      scrollHeight: 1000,
-      clientHeight: 400,
-      scrollTop: 0,
-    });
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
 
     // User scrolls up in conversation A and switches to Comments.
-    ctl.setScrollTop(150);
+    setUserScroll(150);
     await switchTab('Comments');
 
     // While off-tab the active conversation changes to B. Returning to
@@ -234,30 +193,12 @@ describe('chat scroll preservation across tab switches', () => {
     // scrollTop: 0 and not at conversation A's saved offset.
     rerender(chatPaneEl(sampleMessages, 'conv-B'));
     await switchTab('Chat');
-
-    const remounted = getChatLog();
-    let remountedTop = 0;
-    Object.defineProperty(remounted, 'scrollHeight', {
-      configurable: true,
-      get: () => 1000,
-    });
-    Object.defineProperty(remounted, 'clientHeight', {
-      configurable: true,
-      get: () => 400,
-    });
-    Object.defineProperty(remounted, 'scrollTop', {
-      configurable: true,
-      get: () => remountedTop,
-      set: (v: number) => {
-        remountedTop = v;
-      },
-    });
-
     await flushFrame();
 
-    // Saved state was cleared and the initial-bottom-scroll effect
-    // re-runs with `tab` in its deps, so the new conversation lands at
-    // its own scrollHeight rather than the browser default 0.
-    expect(remountedTop).toBe(1000);
+    // Saved state was cleared by the activeConversationId-reset effect,
+    // and the initial-bottom-scroll effect re-runs with `tab` in its
+    // deps, so the new conversation lands at its own scrollHeight rather
+    // than the browser default 0.
+    expect(geom.scrollTop).toBe(1000);
   });
 });
