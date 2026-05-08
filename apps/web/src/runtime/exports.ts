@@ -258,7 +258,6 @@ export async function exportAsPdf(
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
-  doc = injectPrintScript(doc, title);
 
   if (sandboxedPreview) {
     doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
@@ -283,6 +282,11 @@ export async function exportAsPdf(
     }
     return;
   }
+
+  // Browser fallback: inject the self-printing script into the document before
+  // navigating the popup. The desktop bridge path above intentionally omits
+  // the print script because Electron calls webContents.print() natively.
+  doc = injectPrintScript(doc, title);
 
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);

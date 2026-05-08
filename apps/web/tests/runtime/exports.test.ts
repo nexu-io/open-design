@@ -335,5 +335,9 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('sandbox="allow-scripts allow-modals"');
     expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
     expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
+    // Verify the print script is NOT injected — Electron calls
+    // webContents.print() natively, so a self-printing document would
+    // trigger a second print dialog.
+    expect(htmlArg).not.toContain('window.print()');
   });
 });
