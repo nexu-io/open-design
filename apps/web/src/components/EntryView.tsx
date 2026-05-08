@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type { ConnectorDetail, ConnectorStatusResponse, ImportFolderResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -58,6 +58,7 @@ interface Props {
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -228,6 +229,7 @@ export function EntryView({
   onCreateProject,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
@@ -476,6 +478,7 @@ export function EntryView({
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
           onImportFolder={onImportFolder}
+          onImportFolderResponse={onImportFolderResponse}
           mediaProviders={config.mediaProviders}
           connectors={connectors}
           connectorsLoading={connectorsLoading}

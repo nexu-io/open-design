@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
 
 // Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
-// so the new openPath method (#451) and existing pickFolder/openExternal
-// stay in one place.
+// so the new openPath + pickAndImport methods (#451 / PR #974) and
+// existing openExternal stay in one place. PR #974 deleted the raw
+// `pickFolder` bridge: the renderer no longer receives a filesystem
+// path from the main process, only the daemon's import response.
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -62,7 +64,17 @@ interface Props {
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  // Web fallback: the user types an absolute baseDir into the manual
+  // input and the renderer POSTs `/api/import/folder` itself. Browser
+  // builds have no `shell.openPath` surface, so the renderer naming a
+  // path here cannot escalate (PR #974 trust model).
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  // Electron flow: the desktop main process owns the picker dialog and
+  // the import call atomically (`pickAndImport` IPC). The renderer
+  // never sees the path or the HMAC token; it only receives the
+  // daemon's import response and forwards it here so App-level state
+  // can update without a second fetch.
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -112,6 +124,7 @@ export function NewProjectPanel({
   onCreate,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -368,24 +381,35 @@ export function NewProjectPanel({
     }
   }
 
-  const hasElectronPicker =
-    typeof window !== 'undefined' && typeof window.electronAPI?.pickFolder === 'function';
+  // PR #974: the bridge no longer exposes `pickFolder` (raw path
+  // crossing to the renderer). The Electron flow now uses
+  // `pickAndImport`, which performs the picker + the HMAC-gated import
+  // atomically in the main process and returns the daemon response.
+  // The web fallback continues to use the manual baseDir input —
+  // browser builds have no `shell.openPath` surface so a renderer-named
+  // path cannot escalate.
+  const hasElectronPickAndImport =
+    typeof window !== 'undefined' && typeof window.electronAPI?.pickAndImport === 'function';
 
   async function handleOpenFolder() {
-    if (!onImportFolder) return;
-    let pathToOpen: string;
-    if (hasElectronPicker) {
-      const picked = await window.electronAPI!.pickFolder!();
-      if (!picked) return;
-      pathToOpen = picked;
-    } else {
-      const trimmed = baseDir.trim();
-      if (!trimmed) return;
-      pathToOpen = trimmed;
+    if (hasElectronPickAndImport) {
+      if (!onImportFolderResponse) return;
+      setImportingFolder(true);
+      try {
+        const result = await window.electronAPI!.pickAndImport!();
+        if (!result || result.ok !== true) return;
+        await onImportFolderResponse(result.response);
+      } finally {
+        setImportingFolder(false);
+      }
+      return;
     }
+    if (!onImportFolder) return;
+    const trimmed = baseDir.trim();
+    if (!trimmed) return;
     setImportingFolder(true);
     try {
-      await onImportFolder(pathToOpen);
+      await onImportFolder(trimmed);
     } finally {
       setImportingFolder(false);
     }
@@ -602,9 +626,9 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {onImportFolder ? (
+        {(hasElectronPickAndImport ? onImportFolderResponse : onImportFolder) ? (
           <div className="newproj-open-folder">
-            {!hasElectronPicker ? (
+            {!hasElectronPickAndImport ? (
               <input
                 type="text"
                 className="newproj-folder-input"
@@ -618,7 +642,7 @@ export function NewProjectPanel({
             <button
               type="button"
               className="ghost newproj-import"
-              disabled={(!hasElectronPicker && !baseDir.trim()) || importingFolder}
+              disabled={(!hasElectronPickAndImport && !baseDir.trim()) || importingFolder}
               onClick={() => void handleOpenFolder()}
             >
               <Icon name="folder" size={13} />

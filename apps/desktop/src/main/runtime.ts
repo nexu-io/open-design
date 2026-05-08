@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,6 +58,45 @@ export async function validateExistingDirectory(p: string): Promise<PathValidati
 }
 
 /**
+ * Shape returned to the desktop's `shell:open-path` handler. The handler
+ * needs both the canonical resolved directory (to forward into
+ * `shell.openPath`) and a couple of metadata signals so it can enforce
+ * mrcfps's PR #974 follow-up requirement: only allow `openPath(projectId)`
+ * for projects whose `resolvedDir` came from the trusted picker flow.
+ *
+ * `hasBaseDir` distinguishes folder-imported projects (where the
+ * resolvedDir is a user-controlled location) from native projects (where
+ * the resolvedDir is daemon-owned `<projectsRoot>/<id>` and is therefore
+ * always safe to open). Folder-imported projects must additionally
+ * carry `fromTrustedPicker: true` from the HMAC-gated import flow.
+ */
+export type ResolvedProjectDirContext = {
+  fromTrustedPicker: boolean;
+  hasBaseDir: boolean;
+  resolvedDir: string;
+};
+
+/**
+ * Decide whether `shell.openPath` may forward this project's
+ * `resolvedDir` to the OS file manager. PR #974 mrcfps follow-up:
+ * folder-imported projects (`hasBaseDir: true`) must additionally
+ * carry `fromTrustedPicker: true`, the marker stamped by the daemon's
+ * HMAC-gated import flow. Native projects (no `baseDir`,
+ * `resolvedDir` lives under the daemon-owned projects root) are
+ * always safe to open. Returned as a structured result so the IPC
+ * handler can prefix the rejection reason with "open-path: " to
+ * match the rest of its error envelope shape.
+ */
+export function isOpenPathAllowedForProject(
+  context: ResolvedProjectDirContext,
+): { ok: true } | { ok: false; reason: string } {
+  if (context.hasBaseDir && !context.fromTrustedPicker) {
+    return { ok: false, reason: "project did not come from the trusted picker flow" };
+  }
+  return { ok: true };
+}
+
+/**
  * Resolves a project ID to its canonical working directory by asking
  * the daemon. The web sidecar proxies `/api/*` to the daemon, so the
  * desktop main process can reach the daemon's project-detail endpoint
@@ -67,13 +107,16 @@ export async function validateExistingDirectory(p: string): Promise<PathValidati
  * the daemon registered), and the main process derives the path itself
  * from the daemon's authoritative response. A compromised renderer
  * cannot synthesize an arbitrary path because it never gets to name
- * the path — it only names the project.
+ * the path — it only names the project. The handler additionally
+ * inspects `metadata.baseDir` and `metadata.fromTrustedPicker` so it
+ * can refuse folder-imported projects that did not come through the
+ * desktop HMAC-gated import flow (PR #974).
  */
 export async function fetchResolvedProjectDir(
   webUrl: string,
   projectId: string,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch,
-): Promise<{ ok: true; resolvedDir: string } | { ok: false; reason: string }> {
+): Promise<{ ok: true; context: ResolvedProjectDirContext } | { ok: false; reason: string }> {
   if (typeof projectId !== "string" || projectId.length === 0) {
     return { ok: false, reason: "project id must be a non-empty string" };
   }
@@ -105,7 +148,49 @@ export async function fetchResolvedProjectDir(
   if (typeof resolvedDir !== "string" || resolvedDir.length === 0) {
     return { ok: false, reason: "daemon response did not include resolvedDir" };
   }
-  return { ok: true, resolvedDir };
+  const project =
+    body && typeof body === "object" && "project" in body
+      ? (body as { project: unknown }).project
+      : undefined;
+  const metadata =
+    project && typeof project === "object" && "metadata" in project
+      ? (project as { metadata: unknown }).metadata
+      : undefined;
+  const hasBaseDir =
+    metadata != null &&
+    typeof metadata === "object" &&
+    typeof (metadata as { baseDir?: unknown }).baseDir === "string" &&
+    ((metadata as { baseDir: string }).baseDir.length > 0);
+  const fromTrustedPicker =
+    metadata != null &&
+    typeof metadata === "object" &&
+    (metadata as { fromTrustedPicker?: unknown }).fromTrustedPicker === true;
+  return { ok: true, context: { fromTrustedPicker, hasBaseDir, resolvedDir } };
+}
+
+// Mirror of the daemon's token field separator. We avoid `.` because
+// ISO 8601 expiry strings already contain dots (`...:00.000Z`). `~`
+// appears in neither base64url nor ISO 8601, so the three fields are
+// unambiguous when the daemon splits them. Drift between the two
+// constants would silently invalidate every minted token, so the
+// packaged workspace's vitest pins the produced shape.
+const DESKTOP_IMPORT_TOKEN_FIELD_SEP = "~";
+
+/**
+ * Pure-function HMAC mint for the `X-OD-Desktop-Import-Token` header.
+ * Mirrors `signDesktopImportToken` on the daemon side (PR #974). Kept in
+ * a small exported helper so the packaged workspace's vitest suite can
+ * pin token-shape contract drift without booting Electron.
+ */
+export function signDesktopImportToken(
+  secret: Buffer,
+  baseDir: string,
+  options: { nonce: string; exp: string },
+): string {
+  const signature = createHmac("sha256", secret)
+    .update(`${baseDir}\n${options.nonce}\n${options.exp}`)
+    .digest("base64url");
+  return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
 }
 
 const PENDING_POLL_MS = 120;
@@ -169,8 +254,24 @@ export type DesktopRuntime = {
 };
 
 export type DesktopRuntimeOptions = {
+  // Per-process secret shared with the daemon at startup (over its
+  // sidecar IPC) so the main process can mint HMAC tokens for the
+  // `dialog:pick-and-import` flow. When omitted (e.g. unit tests, or
+  // future runtimes that don't ship the trusted picker), the runtime
+  // falls back to refusing every `dialog:pick-and-import` call —
+  // renderer-driven imports cannot proceed without main-process trust.
+  desktopAuthSecret?: Buffer | null;
   discoverUrl(): Promise<string | null>;
 };
+
+const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
+const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
+
+function mintImportToken(secret: Buffer, baseDir: string): string {
+  const nonce = randomBytes(16).toString("base64url");
+  const exp = new Date(Date.now() + DESKTOP_IMPORT_TOKEN_TTL_MS).toISOString();
+  return signDesktopImportToken(secret, baseDir, { nonce, exp });
+}
 
 const MAC_WINDOW_CHROME =
   process.platform === "darwin"
@@ -380,12 +481,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // a second handler" on the second createDesktopRuntime() call (e.g. dev
   // hot-reload). removeHandler is a no-op when nothing is registered.
   ipcMain.removeHandler("dialog:pick-folder");
+  ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
-  ipcMain.handle("dialog:pick-folder", async () => {
-    const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
-  });
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
     try {
@@ -395,6 +493,70 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return false;
     }
   });
+  // PR #974: the renderer no longer receives a raw filesystem path from
+  // the main process. The previous `dialog:pick-folder` IPC returned the
+  // chosen path string, the renderer then POSTed `/api/import/folder`
+  // itself, and a compromised renderer could substitute an arbitrary
+  // baseDir at the second step (or skip the picker entirely and call
+  // `/api/import/folder` directly via fetch). The new
+  // `dialog:pick-and-import` IPC binds the picker and the import into
+  // a single main-process transaction: we show the dialog, mint an
+  // HMAC token for the chosen path, POST `/api/import/folder` with that
+  // token, and hand the renderer back only the daemon's response shape.
+  // The daemon's HTTP handler verifies the token and rejects any
+  // import request without one whenever a desktop secret has been
+  // registered, closing the renderer→arbitrary-baseDir bypass at the
+  // import boundary while leaving web-only deployments untouched.
+  ipcMain.handle(
+    "dialog:pick-and-import",
+    async (_event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+      if (options.desktopAuthSecret == null) {
+        return { ok: false, reason: "desktop auth secret not registered" };
+      }
+      const webUrl = await options.discoverUrl();
+      if (!webUrl) {
+        return { ok: false, reason: "web sidecar URL not available" };
+      }
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, canceled: true };
+      }
+      const baseDir = result.filePaths[0];
+      const token = mintImportToken(options.desktopAuthSecret, baseDir);
+      let resp: Response;
+      try {
+        resp = await fetch(`${webUrl.replace(/\/+$/, "")}/api/import/folder`, {
+          body: JSON.stringify({
+            baseDir,
+            ...(init?.name == null ? {} : { name: init.name }),
+            ...(init?.skillId === undefined ? {} : { skillId: init.skillId }),
+            ...(init?.designSystemId === undefined ? {} : { designSystemId: init.designSystemId }),
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            [DESKTOP_IMPORT_TOKEN_HEADER]: token,
+          },
+          method: "POST",
+        });
+      } catch (err) {
+        return { ok: false, reason: `daemon fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+      }
+      let body: unknown;
+      try {
+        body = await resp.json();
+      } catch {
+        body = null;
+      }
+      if (!resp.ok) {
+        return {
+          ok: false,
+          reason: `daemon returned HTTP ${resp.status}`,
+          ...(body == null ? {} : { details: body }),
+        };
+      }
+      return { ok: true, response: body };
+    },
+  );
   // shell.openPath opens an absolute filesystem path in the OS file
   // manager (Finder / Explorer / Files). It resolves to '' on success
   // and to a non-empty error string on failure (per Electron's
@@ -409,6 +571,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // a compromised renderer cannot synthesize an arbitrary path
   // because it never names the path, only the project ID. The daemon
   // is the single source of truth for what counts as a project root.
+  //
+  // PR #974 defense in depth: when the project is folder-imported
+  // (resolvedDir comes from a user-controlled `metadata.baseDir`), we
+  // additionally require `metadata.fromTrustedPicker === true`, the
+  // marker stamped by the daemon's HMAC-gated import handler. Native
+  // projects (no `metadata.baseDir`, resolvedDir under the daemon's
+  // own projects root) are always safe to open. This is the literal
+  // interpretation of mrcfps's round-3 review: "only allowing
+  // openPath(projectId) for projects whose resolvedDir came from that
+  // trusted flow."
   ipcMain.handle("shell:open-path", async (_event, projectId: string) => {
     const webUrl = await options.discoverUrl();
     if (!webUrl) {
@@ -416,7 +588,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }
     const resolved = await fetchResolvedProjectDir(webUrl, projectId);
     if (!resolved.ok) return `open-path: ${resolved.reason}`;
-    const validated = await validateExistingDirectory(resolved.resolvedDir);
+    const allowed = isOpenPathAllowedForProject(resolved.context);
+    if (!allowed.ok) return `open-path: ${allowed.reason}`;
+    const validated = await validateExistingDirectory(resolved.context.resolvedDir);
     if (!validated.ok) return `open-path: ${validated.reason}`;
     try {
       return await shell.openPath(validated.resolved);

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +13,7 @@ import {
   type DesktopClickInput,
   type DesktopEvalInput,
   type DesktopScreenshotInput,
+  type RegisterDesktopAuthResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -40,7 +42,10 @@ export { isAllowedChildWindowUrl, isHttpUrl } from "./runtime.js";
 export {
   validateExistingDirectory,
   fetchResolvedProjectDir,
+  isOpenPathAllowedForProject,
+  signDesktopImportToken,
   type PathValidationResult,
+  type ResolvedProjectDirContext,
 } from "./runtime.js";
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -94,13 +99,83 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   };
 }
 
+const REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS = [120, 240, 480, 960, 1500];
+const REGISTER_DESKTOP_AUTH_TIMEOUT_MS = 800;
+
+/**
+ * Sends a fresh, per-process secret to the daemon over its sidecar IPC
+ * before any BrowserWindow is created. The daemon stores the secret
+ * and from this point on requires every `POST /api/import/folder`
+ * request to carry an HMAC token signed with it (PR #974). On a clean
+ * orchestrator startup the daemon is already up — but desktop and
+ * daemon are sibling processes spawned by `tools-dev` / `tools-pack`,
+ * so we retry the IPC call a few times before giving up. A failed
+ * registration is *not* a hard error: the desktop runtime continues
+ * and the import-folder bridge will simply refuse pickAndImport calls
+ * (because no secret is in scope), instead of opening a renderer-
+ * bypassable path. We log the failure so the operator can investigate.
+ */
+async function registerDesktopAuthWithDaemon(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  secret: Buffer,
+): Promise<boolean> {
+  const daemonIpc = resolveAppIpcPath({
+    app: APP_KEYS.DAEMON,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: runtime.namespace,
+  });
+  const message = {
+    input: { secret: secret.toString("base64") },
+    type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+  };
+  const delays = REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS;
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    try {
+      const result = await requestJsonIpc<RegisterDesktopAuthResult>(
+        daemonIpc,
+        message,
+        { timeoutMs: REGISTER_DESKTOP_AUTH_TIMEOUT_MS },
+      );
+      if (result?.accepted === true) return true;
+    } catch {
+      // Daemon not yet listening on the IPC socket, or message rejected.
+      // Fall through to the retry sleep below.
+    }
+    if (attempt >= delays.length) break;
+    await new Promise<void>((resolveDelay) => {
+      setTimeout(resolveDelay, delays[attempt]);
+    });
+  }
+  return false;
+}
+
 export async function runDesktopMain(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   options: DesktopMainOptions = {},
 ): Promise<void> {
   await app.whenReady();
 
+  // PR #974: mint a per-process auth secret and hand it to the daemon
+  // BEFORE the BrowserWindow loads. The daemon uses it to verify the
+  // HMAC tokens that the `dialog:pick-and-import` IPC mints for
+  // `POST /api/import/folder`. Doing this before the window load is
+  // load-bearing: it closes the race where a compromised renderer
+  // races to call /api/import/folder with an arbitrary baseDir before
+  // the gate is armed. If the registration fails (daemon down, slow
+  // sibling startup), we still proceed but the runtime treats imports
+  // as untrusted (pickAndImport refuses), so a partial-failure mode
+  // never silently relaxes the gate.
+  const desktopAuthSecret = randomBytes(32);
+  const registered = await registerDesktopAuthWithDaemon(runtime, desktopAuthSecret);
+  if (!registered) {
+    console.warn(
+      "[open-design desktop] failed to register import-token secret with daemon; " +
+        "Continue in CLI / Finalize design package buttons will refuse new imports until restart",
+    );
+  }
+
   const desktop = await createDesktopRuntime({
+    desktopAuthSecret: registered ? desktopAuthSecret : null,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
   });
   let ipcServer: JsonIpcServerHandle | null = null;

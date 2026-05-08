@@ -1,13 +1,17 @@
 /**
  * Coverage for the path-validation primitives that the new
  * shell.openPath IPC handler in `apps/desktop/src/main/runtime.ts`
- * relies on. The packaged workspace hosts the test because
- * `apps/desktop` itself has no vitest setup yet — same reasoning as
- * the existing `desktop-url-allowlist.test.ts` next to this file.
+ * relies on, and for the HMAC token mint helper introduced in PR #974
+ * to bind `POST /api/import/folder` to the desktop main process. The
+ * packaged workspace hosts the test because `apps/desktop` itself has
+ * no vitest setup yet — same reasoning as the existing
+ * `desktop-url-allowlist.test.ts` next to this file.
  *
- * @see https://github.com/nexu-io/open-design/pull/974 (mrcfps + lefarcen P1
- * reviews on runtime.ts: the path-allowlist gate must be
- * daemon-controlled and `.app` bundles must be rejected).
+ * @see https://github.com/nexu-io/open-design/pull/974
+ *      lefarcen + mrcfps round-3 reviews on runtime.ts: path-allowlist
+ *      gate must be daemon-controlled, `.app` bundles must be rejected,
+ *      and `openPath(projectId)` must only forward projects whose
+ *      resolvedDir came from the trusted-picker flow.
  */
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -18,6 +22,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   validateExistingDirectory,
   fetchResolvedProjectDir,
+  isOpenPathAllowedForProject,
+  signDesktopImportToken,
 } from "@open-design/desktop/main";
 
 let tempRoot = "";
@@ -133,8 +139,67 @@ describe("fetchResolvedProjectDir", () => {
     );
     const result = await fetchResolvedProjectDir("http://localhost:1234", "p1", fetchImpl);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.resolvedDir).toBe("/tmp/projects/p1");
+    if (result.ok) {
+      expect(result.context.resolvedDir).toBe("/tmp/projects/p1");
+      // Native project (no metadata.baseDir) — always safe to forward to
+      // shell.openPath because the resolvedDir lives under the daemon's
+      // own projects root, not a user-controlled location.
+      expect(result.context.hasBaseDir).toBe(false);
+      expect(result.context.fromTrustedPicker).toBe(false);
+    }
     expect(fetchImpl).toHaveBeenCalledWith("http://localhost:1234/api/projects/p1");
+  });
+
+  it("flags folder-imported projects without the trusted-picker marker", async () => {
+    // PR #974 mrcfps follow-up: the desktop main process refuses to
+    // forward `shell.openPath` for folder-imported projects whose
+    // metadata lacks `fromTrustedPicker: true`, even though the
+    // resolvedDir is technically valid.
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          project: {
+            id: "legacy",
+            name: "legacy folder import",
+            metadata: { kind: "prototype", baseDir: "/Users/u/legacy" },
+          },
+          resolvedDir: "/Users/u/legacy",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "legacy", fetchImpl);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.context.hasBaseDir).toBe(true);
+      expect(result.context.fromTrustedPicker).toBe(false);
+    }
+  });
+
+  it("trusts folder-imported projects whose metadata has fromTrustedPicker", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          project: {
+            id: "trusted",
+            name: "trusted import",
+            metadata: {
+              kind: "prototype",
+              baseDir: "/Users/u/trusted",
+              fromTrustedPicker: true,
+            },
+          },
+          resolvedDir: "/Users/u/trusted",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "trusted", fetchImpl);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.context.hasBaseDir).toBe(true);
+      expect(result.context.fromTrustedPicker).toBe(true);
+    }
   });
 
   it("strips trailing slashes from the web URL when constructing the request", async () => {
@@ -184,5 +249,96 @@ describe("fetchResolvedProjectDir", () => {
     );
     await fetchResolvedProjectDir("http://localhost:1234", "abc-123_xyz", fetchImpl);
     expect(fetchImpl).toHaveBeenCalledWith("http://localhost:1234/api/projects/abc-123_xyz");
+  });
+});
+
+describe("isOpenPathAllowedForProject", () => {
+  // PR #974 mrcfps follow-up: the desktop main process refuses to
+  // forward `shell.openPath` for folder-imported projects whose
+  // metadata lacks the trusted-picker marker. These three cases pin
+  // the literal interpretation of his round-3 ask.
+  it("allows native projects (no baseDir → daemon-owned resolvedDir)", () => {
+    const result = isOpenPathAllowedForProject({
+      fromTrustedPicker: false,
+      hasBaseDir: false,
+      resolvedDir: "/tmp/od-projects/abc123",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("allows folder-imported projects whose metadata is fromTrustedPicker", () => {
+    const result = isOpenPathAllowedForProject({
+      fromTrustedPicker: true,
+      hasBaseDir: true,
+      resolvedDir: "/Users/u/trusted-import",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses folder-imported projects without the trusted-picker marker", () => {
+    const result = isOpenPathAllowedForProject({
+      fromTrustedPicker: false,
+      hasBaseDir: true,
+      resolvedDir: "/Users/u/legacy-import",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/trusted picker/i);
+  });
+});
+
+describe("signDesktopImportToken", () => {
+  // The desktop main process mints these tokens for `POST
+  // /api/import/folder`. The daemon recomputes the same HMAC and
+  // accepts only matching signatures, so token shape is part of the
+  // wire contract between desktop and daemon (PR #974). Field
+  // separator is `~` (not `.`) because ISO 8601 expiry strings embed
+  // dots — drift between the two sides would silently reject every
+  // real token.
+  const SECRET_A = Buffer.from("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJyg=", "base64");
+  const SECRET_B = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/4QAYRXhpZgAATU0AKgAAAAgAAQAAA==", "base64");
+
+  it("produces a token shaped `${nonce}~${exp}~${signature}` with three non-empty parts", () => {
+    const token = signDesktopImportToken(SECRET_A, "/Users/u/proj", {
+      nonce: "n1",
+      exp: "2026-05-08T20:00:00.000Z",
+    });
+    const parts = token.split("~");
+    expect(parts).toHaveLength(3);
+    for (const part of parts) expect(part.length).toBeGreaterThan(0);
+    expect(parts[0]).toBe("n1");
+    expect(parts[1]).toBe("2026-05-08T20:00:00.000Z");
+  });
+
+  it("is deterministic for identical (secret, baseDir, nonce, exp) tuples", () => {
+    const args = { nonce: "n2", exp: "2026-05-08T20:01:00.000Z" } as const;
+    expect(signDesktopImportToken(SECRET_A, "/Users/u/proj", args)).toEqual(
+      signDesktopImportToken(SECRET_A, "/Users/u/proj", args),
+    );
+  });
+
+  it("changes the signature when the baseDir changes", () => {
+    const args = { nonce: "n3", exp: "2026-05-08T20:02:00.000Z" } as const;
+    const a = signDesktopImportToken(SECRET_A, "/Users/u/proj-a", args).split("~")[2];
+    const b = signDesktopImportToken(SECRET_A, "/Users/u/proj-b", args).split("~")[2];
+    expect(a).not.toEqual(b);
+  });
+
+  it("changes the signature when the nonce changes", () => {
+    const a = signDesktopImportToken(SECRET_A, "/p", { nonce: "n4", exp: "2026-05-08T20:03:00.000Z" });
+    const b = signDesktopImportToken(SECRET_A, "/p", { nonce: "n5", exp: "2026-05-08T20:03:00.000Z" });
+    expect(a.split("~")[2]).not.toEqual(b.split("~")[2]);
+  });
+
+  it("changes the signature when the expiry changes", () => {
+    const a = signDesktopImportToken(SECRET_A, "/p", { nonce: "n6", exp: "2026-05-08T20:04:00.000Z" });
+    const b = signDesktopImportToken(SECRET_A, "/p", { nonce: "n6", exp: "2026-05-08T20:05:00.000Z" });
+    expect(a.split("~")[2]).not.toEqual(b.split("~")[2]);
+  });
+
+  it("changes the signature when the secret changes", () => {
+    const args = { nonce: "n7", exp: "2026-05-08T20:06:00.000Z" } as const;
+    const a = signDesktopImportToken(SECRET_A, "/p", args).split("~")[2];
+    const b = signDesktopImportToken(SECRET_B, "/p", args).split("~")[2];
+    expect(a).not.toEqual(b);
   });
 });
