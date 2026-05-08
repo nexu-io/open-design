@@ -13,7 +13,7 @@
 
 ## Class inventory (must exist in `template.html`)
 
-> `section` `container` `hero` `hero-center` `hero-split` `hero-cta` `eyebrow` `lead` `h1` `h2` `h3` `meta` `num` `btn` `btn-primary` `btn-secondary` `btn-ghost` `btn-arrow` `card` `card-flat` `card-rule` `feature` `feature-mark` `stat` `stat-num` `stat-label` `stat-unit` `quote` `quote-mark` `quote-author` `pill` `tag` `field` `input` `textarea` `ds-table` `num-col` `ph-img` `square` `portrait` `wide` `rule` `rule-strong` `grid-2` `grid-3` `grid-4` `grid-2-1` `grid-1-2` `row` `row-between` `stack` `log-row` `pull` `topnav` `pagefoot`
+> `section` `container` `hero` `hero-center` `hero-split` `hero-cta` `eyebrow` `lead` `h1` `h2` `h3` `meta` `num` `btn` `btn-primary` `btn-secondary` `btn-ghost` `btn-arrow` `card` `card-flat` `card-rule` `feature` `feature-mark` `stat` `stat-num` `stat-label` `stat-unit` `quote` `quote-mark` `quote-author` `pill` `tag` `field` `input` `textarea` `ds-table` `num-col` `ph-img` `square` `portrait` `wide` `rule` `rule-strong` `list` `grid-2` `grid-3` `grid-4` `grid-2-1` `grid-1-2` `row` `row-between` `stack` `log-row` `pull` `topnav` `pagefoot`
 
 If you reach for a class not on this list, define it in `<style>` first or use `style="…"` inline. Never invent a global class on a `<section>` that isn't backed by CSS.
 
@@ -187,6 +187,40 @@ Editorial layout for a list of dated entries. Date in mono on the left, title + 
         <span class="pull meta">Infra</span>
       </article>
     </div>
+  </div>
+</section>
+```
+
+## List block — Known issues / Upgrade note
+
+Use `.list` for itemized issue rows or step-by-step upgrade guidance. Keep the list clear, short, and factual; avoid long prose inside each bullet.
+
+```html
+<section class="section" data-od-id="known-issues">
+  <div class="container">
+    <div class="row-between" style="margin-bottom: 16px;">
+      <h2>Known issues</h2>
+      <span class="meta">—</span>
+    </div>
+    <ul class="list">
+      <li>Sync may lag by up to 30 seconds after a large file upload.</li>
+      <li>Drag-and-drop is disabled for archived projects in this release.</li>
+      <li>Mobile app notifications may arrive late on iOS 18.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" data-od-id="upgrade-note">
+  <div class="container">
+    <div class="row-between" style="margin-bottom: 16px;">
+      <h2>Upgrade note</h2>
+      <span class="meta">—</span>
+    </div>
+    <ol class="list">
+      <li>Update to v2.3.1 using your normal release process.</li>
+      <li>Restart the sync service after deployment.</li>
+      <li>Verify release notes in the internal changelog link.</li>
+    </ol>
   </div>
 </section>
 ```

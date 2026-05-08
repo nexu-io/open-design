@@ -20,6 +20,8 @@ Run this before emitting `<artifact>`. P0 = must pass; P1 = should pass; P2 = ni
 - [ ] No rounded card with a coloured left-border accent pattern.
 - [ ] Every top-level `<section>` has a `data-od-id`.
 - [ ] Every required release-note section root also includes the matching `id` anchor: `added`, `fixed`, `breaking-changes`, `known-issues`, `upgrade-note`.
+- [ ] Every emitted CTA uses a real destination; `href="#"` is not acceptable. If no destination exists, omit the closing CTA strip.
+- [ ] CTA copy must accurately describe an available destination; do not promise content that is not present.
 - [ ] Mobile reflow works without horizontal scroll at narrow widths.
 
 ## P1 — should pass

@@ -74,12 +74,13 @@ Inside `<main id="content">`, compose this section order:
 6. Upgrade note (short steps list or explicit no-action statement; section root must include `id="upgrade-note"`).
 7. Closing CTA strip (Layout 6).
 
-For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination.
+For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination. If no real destination is available, omit the closing CTA strip entirely rather than using a placeholder such as `href="#"` or a misleading page-anchor link.
 
 ### Step 3 — Honesty rules for missing details
 
 If the user does not provide details, do not invent them. Write explicit placeholders:
 
+- Summary: `No summary provided.`
 - Added: `No additions provided`
 - Fixed: `No fixes provided`
 - Breaking changes: `None`
