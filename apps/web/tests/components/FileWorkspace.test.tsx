@@ -245,6 +245,78 @@ describe('FileWorkspace design file rename', () => {
     });
     expect(onRefreshFiles).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects renaming a persisted file over an open pending sketch tab', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response('', { status: 200 }),
+    );
+    const alertMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', alertMock);
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const onTabsStateChange = vi.fn();
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="project-1"
+        files={[workspaceFile('paste-1.txt')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['paste-1.txt'], active: 'paste-1.txt' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
+    if (!designFilesTab) throw new Error('Could not find design files tab');
+    act(() => designFilesTab.click());
+
+    const newSketchButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'New sketch');
+    if (!newSketchButton) throw new Error('Could not find new sketch command');
+    act(() => newSketchButton.click());
+
+    const pendingSketchTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((tab) =>
+      tab.textContent?.includes('.sketch.json'),
+    );
+    expect(pendingSketchTab).toBeTruthy();
+    const pendingSketchName = pendingSketchTab!.textContent!.replace(' •', '');
+
+    act(() => designFilesTab.click());
+    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
+    if (!menuButton) throw new Error('Could not find file menu');
+    act(() => menuButton.click());
+    const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'Rename');
+    if (!renameButton) throw new Error('Could not find rename command');
+    act(() => renameButton.click());
+
+    const input = container.querySelector<HTMLInputElement>('.df-rename-input');
+    if (!input) throw new Error('Could not find rename input');
+    act(() => {
+      input.value = pendingSketchName;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(alertMock).toHaveBeenCalledWith(
+      `A pending sketch named "${pendingSketchName}" is already open. Save or close it before renaming.`,
+    );
+    const renameCalls = fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith('/api/projects/project-1/files/rename'),
+    );
+    expect(renameCalls).toHaveLength(0);
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+    expect(pendingSketchTab.textContent).toContain(pendingSketchName);
+  });
 });
 
 describe('FileWorkspace tab reordering', () => {

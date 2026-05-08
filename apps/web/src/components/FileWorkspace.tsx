@@ -406,6 +406,15 @@ export function FileWorkspace({
   }
 
   async function handleRename(oldName: string, nextName: string): Promise<ProjectFile | null> {
+    const hasPendingSketchConflict = Object.entries(sketches).some(
+      ([name, sketch]) => !sketch.persisted && sameFileName(name, nextName),
+    );
+    if (nextName !== oldName && hasPendingSketchConflict) {
+      throw new Error(
+        `A pending sketch named "${nextName}" is already open. Save or close it before renaming.`,
+      );
+    }
+
     const result = await renameProjectFile(projectId, oldName, nextName);
     const renamed = result.file;
     await onRefreshFiles();
@@ -914,6 +923,10 @@ function kindIconName(
 
 function isSketchName(name: string): boolean {
   return name.endsWith('.sketch.json');
+}
+
+function sameFileName(a: string, b: string): boolean {
+  return a === b || a.toLocaleLowerCase() === b.toLocaleLowerCase();
 }
 
 function isLiveArtifactImplementationPath(name: string): boolean {
