@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -56,6 +56,17 @@ describe('project file rename route', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to }),
     });
+  }
+
+  async function importFolder(folder: string) {
+    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder }),
+    });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+    return project.id;
   }
 
   it('renames a text file and preserves non-ASCII target names', async () => {
@@ -151,15 +162,9 @@ describe('project file rename route', () => {
     tempDirs.push(folder);
     await writeFile(path.join(folder, 'note.txt'), 'imported');
 
-    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseDir: folder }),
-    });
-    expect(importResp.status).toBe(200);
-    const { project } = (await importResp.json()) as { project: { id: string } };
+    const projectId = await importFolder(folder);
 
-    const renamed = await renameFile(project.id, 'note.txt', 'renamed-note.txt');
+    const renamed = await renameFile(projectId, 'note.txt', 'renamed-note.txt');
     expect(renamed.status).toBe(200);
     await expect(stat(path.join(folder, 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(path.join(folder, 'renamed-note.txt'), 'utf8')).toBe('imported');
@@ -170,17 +175,40 @@ describe('project file rename route', () => {
     tempDirs.push(folder);
     await writeFile(path.join(folder, 'my note.txt'), 'imported');
 
-    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseDir: folder }),
-    });
-    expect(importResp.status).toBe(200);
-    const { project } = (await importResp.json()) as { project: { id: string } };
+    const projectId = await importFolder(folder);
 
-    const renamed = await renameFile(project.id, 'my note.txt', 'renamed-note.txt');
+    const renamed = await renameFile(projectId, 'my note.txt', 'renamed-note.txt');
     expect(renamed.status).toBe(200);
     await expect(stat(path.join(folder, 'my note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(path.join(folder, 'renamed-note.txt'), 'utf8')).toBe('imported');
+  });
+
+  it('rejects source paths that escape through a symlinked directory', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'od-rename-symlink-source-'));
+    const outside = mkdtempSync(path.join(tmpdir(), 'od-rename-outside-source-'));
+    tempDirs.push(folder, outside);
+    await writeFile(path.join(outside, 'secret.txt'), 'outside');
+    await symlink(outside, path.join(folder, 'linked'), 'dir');
+    const projectId = await importFolder(folder);
+
+    const renamed = await renameFile(projectId, 'linked/secret.txt', 'renamed.txt');
+    expect(renamed.status).toBe(400);
+    expect(await readFile(path.join(outside, 'secret.txt'), 'utf8')).toBe('outside');
+    await expect(stat(path.join(folder, 'renamed.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects target paths that escape through a symlinked directory', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'od-rename-symlink-target-'));
+    const outside = mkdtempSync(path.join(tmpdir(), 'od-rename-outside-target-'));
+    tempDirs.push(folder, outside);
+    await writeFile(path.join(folder, 'note.txt'), 'inside');
+    await mkdir(path.join(outside, 'sink'));
+    await symlink(path.join(outside, 'sink'), path.join(folder, 'linked'), 'dir');
+    const projectId = await importFolder(folder);
+
+    const renamed = await renameFile(projectId, 'note.txt', 'linked/note.txt');
+    expect(renamed.status).toBe(400);
+    expect(await readFile(path.join(folder, 'note.txt'), 'utf8')).toBe('inside');
+    await expect(stat(path.join(outside, 'sink', 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });
