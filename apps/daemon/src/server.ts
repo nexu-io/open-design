@@ -16,6 +16,7 @@ import {
 } from './prompts/system.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
+import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
@@ -60,6 +61,8 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
+import { searchResearch, ResearchError } from './research/index.js';
+import { renderResearchCommandContract } from './prompts/research-contract.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -141,6 +144,7 @@ import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore, readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import {
+  aggregateCloudflarePagesStatus,
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
@@ -149,9 +153,11 @@ import {
   deployToCloudflarePages,
   deployToVercel,
   isDeployProviderId,
+  listCloudflarePagesZones,
   prepareDeployPreflight,
   publicDeployConfigForProvider,
   readDeployConfig,
+  readCloudflarePagesDomain,
   VERCEL_PROVIDER_ID,
   writeDeployConfig,
 } from './deploy.js';
@@ -214,6 +220,19 @@ export function composeLiveInstructionPrompt({
     parts.push(override);
   }
   return parts.join('\n\n---\n\n');
+}
+
+export function resolveResearchCommandContract(research, message) {
+  if (!research || !research.enabled) return '';
+  const researchQuery =
+    typeof research.query === 'string' && research.query.trim()
+      ? research.query
+      : message;
+  return renderResearchCommandContract({
+    query: researchQuery,
+    maxSources:
+      typeof research.maxSources === 'number' ? research.maxSources : undefined,
+  });
 }
 
 export function resolveCodexGeneratedImagesDir(
@@ -938,6 +957,89 @@ function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) 
   }
 
   return cloudflarePagesProjectNameForProject(projectId, projectName);
+}
+
+function publicDeployment(deployment) {
+  if (!deployment || typeof deployment !== 'object') return deployment;
+  const { providerMetadata: _providerMetadata, ...publicShape } = deployment;
+  return publicShape;
+}
+
+function publicDeployments(deployments) {
+  return (deployments || []).map(publicDeployment);
+}
+
+async function checkCloudflarePagesDeploymentLinks(existing) {
+  const current = existing.cloudflarePages || {};
+  const projectName = current.projectName || cloudflarePagesProjectNameFromDeployment(existing);
+  const config = await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID);
+  const pagesDevUrl = current.pagesDev?.url || existing.url;
+  const pagesDevResult = await checkDeploymentUrl(pagesDevUrl);
+  const pagesDev = {
+    ...(current.pagesDev || {}),
+    url: pagesDevUrl,
+    status: pagesDevResult.reachable ? 'ready' : pagesDevResult.status || 'link-delayed',
+    statusMessage: pagesDevResult.reachable
+      ? 'Public link is ready.'
+      : pagesDevResult.statusMessage || current.pagesDev?.statusMessage || 'Cloudflare Pages is still preparing the pages.dev link.',
+    reachableAt: pagesDevResult.reachable ? Date.now() : current.pagesDev?.reachableAt,
+  };
+  let customDomain = current.customDomain;
+  if (customDomain?.url && customDomain.status !== 'conflict') {
+    let pagesDomain = null;
+    if (config?.token && config?.accountId && projectName) {
+      try {
+        pagesDomain = await readCloudflarePagesDomain({ ...config, projectName }, customDomain.hostname);
+      } catch {
+        pagesDomain = null;
+      }
+    }
+    const customResult = await checkDeploymentUrl(customDomain.url);
+    const pagesDomainStatus = pagesDomain?.status || customDomain.pagesDomainStatus;
+    const failedByApi = ['error', 'blocked', 'deactivated'].includes(String(pagesDomainStatus || '').toLowerCase());
+    const activeByApi = String(pagesDomainStatus || '').toLowerCase() === 'active';
+    const readyByReachability = customResult.reachable && activeByApi;
+    customDomain = {
+      ...customDomain,
+      domainStatus: pagesDomain
+        ? pagesDomain.status === 'active'
+          ? 'active'
+          : failedByApi
+            ? 'failed'
+            : 'pending'
+        : customDomain.domainStatus,
+      pagesDomainStatus,
+      validationData: pagesDomain?.validation_data ?? customDomain.validationData,
+      verificationData: pagesDomain?.verification_data ?? customDomain.verificationData,
+      status: readyByReachability
+        ? 'ready'
+        : customDomain.status === 'failed' || failedByApi
+          ? 'failed'
+          : 'pending',
+      statusMessage: readyByReachability
+        ? 'Custom domain is ready.'
+        : failedByApi
+          ? 'Cloudflare Pages reported a custom-domain error.'
+        : customResult.statusMessage || customDomain.statusMessage || 'Custom domain is still being prepared.',
+    };
+  }
+  const cloudflarePages = {
+    ...current,
+    projectName,
+    pagesDev,
+    ...(customDomain ? { customDomain } : {}),
+  };
+  const aggregate = aggregateCloudflarePagesStatus(pagesDev, customDomain);
+  return {
+    url: pagesDev.url,
+    status: aggregate.status,
+    statusMessage: aggregate.statusMessage,
+    cloudflarePages,
+    providerMetadata: {
+      ...(existing.providerMetadata || {}),
+      cloudflarePages,
+    },
+  };
 }
 
 // Filename slug for the Content-Disposition header on archive downloads.
@@ -1721,13 +1823,43 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
       );
     }
-    const commandEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
+    // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
+    // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
+    // In sidecar mode the snippet omits --daemon-url and the spawned
+    // `od mcp` discovers the live URL via the IPC status socket on
+    // every spawn, so the client config survives ephemeral-port
+    // restarts. We also propagate OD_SIDECAR_NAMESPACE (and IPC_BASE
+    // when overridden) so a non-default namespace daemon stays
+    // reachable - the MCP client does not inherit the daemon's env,
+    // so without this the spawned `od mcp` would probe the default
+    // namespace socket and miss.
+    //
+    // For direct `od` / `od --port X` launches there is no IPC
+    // socket; bake --daemon-url so custom ports keep working.
+    const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
+    const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
+    const sidecarEnv = {};
+    if (isSidecarMode) {
+      const ns = process.env[SIDECAR_ENV.NAMESPACE];
+      if (ns != null && ns !== SIDECAR_DEFAULTS.namespace) {
+        sidecarEnv[SIDECAR_ENV.NAMESPACE] = ns;
+      }
+      const ipcBase = process.env[SIDECAR_ENV.IPC_BASE];
+      if (ipcBase != null && ipcBase.length > 0) {
+        sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
+      }
+    }
+    const electronEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
       ? { ELECTRON_RUN_AS_NODE: '1' }
       : null;
+    const env = { ...sidecarEnv, ...(electronEnv ?? {}) };
+    const args = isSidecarMode
+      ? [cliPath, 'mcp']
+      : [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`];
     const payload = {
       command: process.execPath,
-      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
-      ...(commandEnv == null ? {} : { env: commandEnv }),
+      args,
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
       // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
@@ -3100,10 +3232,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  app.get('/api/deploy/cloudflare-pages/zones', async (_req, res) => {
+    try {
+      /** @type {import('@open-design/contracts').CloudflarePagesZonesResponse} */
+      const body = await listCloudflarePagesZones(await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID));
+      res.json(body);
+    } catch (err) {
+      const status = err instanceof DeployError ? err.status : 400;
+      const init =
+        err instanceof DeployError && err.details
+          ? { details: err.details }
+          : {};
+      sendApiError(res, status, 'BAD_REQUEST', String(err?.message || err), init);
+    }
+  });
+
   app.get('/api/projects/:id/deployments', (req, res) => {
     try {
       /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
-      const body = { deployments: listDeployments(db, req.params.id) };
+      const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -3112,7 +3259,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
+      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages } = req.body || {};
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
@@ -3146,6 +3293,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             },
             files,
             projectId: req.params.id,
+            cloudflarePages,
+            priorMetadata: prior?.providerMetadata,
           })
         : await deployToVercel({
             config: await readDeployConfig(VERCEL_PROVIDER_ID),
@@ -3166,14 +3315,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
+        cloudflarePages: result.cloudflarePages,
         providerMetadata:
           providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-            ? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName)
+            ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
             : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
-      res.json(body);
+      res.json(publicDeployment(body));
     } catch (err) {
       const status = err instanceof DeployError ? err.status : 400;
       const init =
@@ -3252,6 +3402,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
             ? cloudflarePagesProjectNameFromDeployment(existing)
             : '';
+        if (existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID && existing.cloudflarePages?.pagesDev?.url) {
+          const checked = await checkCloudflarePagesDeploymentLinks(existing);
+          const now = Date.now();
+          /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
         const checkUrl = stableCloudflareProjectName
           ? `https://${stableCloudflareProjectName}.pages.dev`
           : existing.url;
@@ -3269,7 +3431,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });
-        res.json(body);
+        res.json(publicDeployment(body));
       } catch (err) {
         sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
       }
@@ -3763,6 +3925,42 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  app.post('/api/research/search', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({
+        error:
+          'cross-origin request rejected: research search is restricted to the local UI / CLI',
+      });
+    }
+
+    try {
+      const result = await searchResearch({
+        projectRoot: PROJECT_ROOT,
+        query: req.body?.query,
+        maxSources:
+          typeof req.body?.maxSources === 'number'
+            ? req.body.maxSources
+            : undefined,
+        providers: Array.isArray(req.body?.providers)
+          ? req.body.providers
+          : undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      if (err instanceof ResearchError) {
+        return res.status(err.status).json({
+          error: { code: err.code, message: err.message },
+        });
+      }
+      res.status(500).json({
+        error: {
+          code: 'RESEARCH_FAILED',
+          message: String(err && err.message ? err.message : err),
+        },
+      });
+    }
+  });
+
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
@@ -4034,6 +4232,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       commentAttachments = [],
       model,
       reasoning,
+      research,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
@@ -4248,10 +4447,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       codexGeneratedImagesDir,
       extraAllowedDirs,
     });
+    const researchCommandContract = resolveResearchCommandContract(
+      research,
+      message,
+    );
+    const clientInstructionPrompt = [researchCommandContract, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
     const instructionPrompt = composeLiveInstructionPrompt({
       daemonSystemPrompt,
       runtimeToolPrompt,
-      clientSystemPrompt: systemPrompt,
+      clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
     const composed = [

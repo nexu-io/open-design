@@ -4,6 +4,8 @@ import {
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
   isValidApiBaseUrl,
+  sanitizeSettingsSavePayload,
+  shouldEnableSettingsSave,
   shouldShowCustomModelInput,
   switchApiProtocolConfig,
   testStatusVariant,
@@ -373,5 +375,228 @@ describe('deriveComposioCredentialState', () => {
     expect(
       deriveComposioCredentialState({ apiKey: '   \t\n', apiKeyConfigured: true }),
     ).toBe('saved');
+  });
+});
+
+describe('shouldEnableSettingsSave', () => {
+  // Issue #739: when the user toggles BYOK on the execution section without
+  // filling required fields and then navigates to a different sidebar section
+  // (language, appearance, ...), the footer Save button must reflect the
+  // destination section's state, not the execution section's incomplete mode.
+
+  const validApiCfg: AppConfig = {
+    ...baseConfig,
+    mode: 'api',
+    apiKey: 'sk-x',
+    model: 'claude-sonnet-4-5',
+  };
+
+  const incompleteApiCfg: AppConfig = {
+    ...baseConfig,
+    mode: 'api',
+    apiKey: '', // user toggled BYOK but did not fill in fields
+    model: '',
+  };
+
+  const validDaemonCfg: AppConfig = {
+    ...baseConfig,
+    mode: 'daemon',
+    agentId: 'claude-code',
+  };
+
+  const availableAgent = { id: 'claude-code', available: true };
+  const unavailableAgent = { id: 'claude-code', available: false };
+
+  it('returns true on any non-execution section regardless of mode completeness (the fix for #739)', () => {
+    // The exact scenario from the issue: incomplete BYOK on execution must
+    // not block save on language, appearance, composio, etc.
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'language', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'appearance', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'composio', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'media', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'integrations', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'notifications', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'pet', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'library', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'about', [availableAgent], true)).toBe(true);
+  });
+
+  it('on execution + daemon: returns true only when an available agent is selected', () => {
+    expect(shouldEnableSettingsSave(validDaemonCfg, 'execution', [availableAgent], false)).toBe(true);
+    expect(
+      shouldEnableSettingsSave(
+        { ...validDaemonCfg, agentId: null },
+        'execution',
+        [availableAgent],
+        false,
+      ),
+    ).toBe(false);
+    expect(shouldEnableSettingsSave(validDaemonCfg, 'execution', [unavailableAgent], false)).toBe(false);
+    expect(shouldEnableSettingsSave(validDaemonCfg, 'execution', [], false)).toBe(false);
+  });
+
+  it('on execution + api: returns true only when apiKey, model, and baseUrl are all valid', () => {
+    expect(shouldEnableSettingsSave(validApiCfg, 'execution', [], true)).toBe(true);
+    expect(shouldEnableSettingsSave({ ...validApiCfg, apiKey: '' }, 'execution', [], true)).toBe(false);
+    expect(shouldEnableSettingsSave({ ...validApiCfg, apiKey: '   ' }, 'execution', [], true)).toBe(false);
+    expect(shouldEnableSettingsSave({ ...validApiCfg, model: '' }, 'execution', [], true)).toBe(false);
+    expect(shouldEnableSettingsSave(validApiCfg, 'execution', [], false)).toBe(false);
+  });
+
+  it('on execution: incomplete BYOK still disables save (existing behavior preserved)', () => {
+    // Regression guard so that #739's fix only changes the cross-section
+    // behavior, not the within-execution-section validity check.
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'execution', [availableAgent], true)).toBe(false);
+  });
+});
+
+describe('sanitizeSettingsSavePayload', () => {
+  // Round-2 review on PR #827 (lefarcen + chatgpt-codex + mrcfps): enabling
+  // Save on non-execution sections is the right UX, but the click still
+  // calls onSave(cfg, ...) which writes the entire draft to localStorage.
+  // If the user toggled BYOK without filling apiKey/model and then saved an
+  // unrelated Language change, the broken execution mode would persist and
+  // leave the app unable to run queries. The sanitize helper reverts the
+  // execution-mode fields to `initial` in that exact case.
+
+  const initialDaemon: AppConfig = {
+    ...baseConfig,
+    mode: 'daemon',
+    apiKey: 'pre-existing-key',
+    apiProtocol: 'anthropic',
+    apiVersion: '2024-01-01',
+    apiProviderBaseUrl: 'https://api.anthropic.com',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    agentId: 'claude-code',
+    agentCliEnv: { claude: { CLAUDE_CONFIG_DIR: '~/.claude' } },
+    maxTokens: 8000,
+  };
+
+  const draftWithIncompleteBYOK: AppConfig = {
+    ...initialDaemon,
+    mode: 'api',
+    apiKey: '',
+    model: '',
+    // Simulate the user's Appearance change carrying through cfg too.
+    theme: 'dark',
+  };
+
+  const availableAgent = { id: 'claude-code', available: true };
+
+  it('reverts execution-mode fields to initial when saving from a non-execution section with incomplete BYOK', () => {
+    // The exact P1 from lefarcen + chatgpt-codex + mrcfps: persisting
+    // mode='api' with empty credentials must NOT happen when the user
+    // saves from a non-execution section.
+    const sanitized = sanitizeSettingsSavePayload(
+      draftWithIncompleteBYOK,
+      initialDaemon,
+      'language',
+      [availableAgent],
+      true,
+    );
+
+    // Execution-mode fields are restored from initial:
+    expect(sanitized.mode).toBe('daemon');
+    expect(sanitized.apiKey).toBe('pre-existing-key');
+    expect(sanitized.apiProtocol).toBe('anthropic');
+    expect(sanitized.apiVersion).toBe('2024-01-01');
+    expect(sanitized.apiProviderBaseUrl).toBe('https://api.anthropic.com');
+    expect(sanitized.baseUrl).toBe('https://api.anthropic.com');
+    expect(sanitized.model).toBe('claude-sonnet-4-5');
+    expect(sanitized.agentId).toBe('claude-code');
+    expect(sanitized.agentCliEnv).toEqual({ claude: { CLAUDE_CONFIG_DIR: '~/.claude' } });
+    expect(sanitized.maxTokens).toBe(8000);
+
+    // The non-execution change (theme) is preserved:
+    expect(sanitized.theme).toBe('dark');
+  });
+
+  it('passes the cfg through unchanged when execution config is already valid', () => {
+    // A user with a valid BYOK setup who navigates to a non-execution
+    // section and saves expects their pre-existing valid execution config
+    // AND their non-execution change to land. No reversion.
+    const validApiInitial: AppConfig = {
+      ...baseConfig,
+      mode: 'api',
+      apiKey: 'sk-valid',
+      model: 'claude-sonnet-4-5',
+      baseUrl: 'https://api.anthropic.com',
+    };
+    const draftWithThemeChange: AppConfig = { ...validApiInitial, theme: 'light' };
+
+    const sanitized = sanitizeSettingsSavePayload(
+      draftWithThemeChange,
+      validApiInitial,
+      'appearance',
+      [availableAgent],
+      true,
+    );
+
+    expect(sanitized).toEqual(draftWithThemeChange);
+  });
+
+  it('passes the cfg through unchanged on the execution section itself', () => {
+    // Within the execution section, the canSave gate already blocks
+    // incomplete-BYOK saves, so we explicitly do NOT sanitize here:
+    // any draft the user CAN save from execution is one they intend to
+    // commit as a real execution-config change.
+    const sanitized = sanitizeSettingsSavePayload(
+      draftWithIncompleteBYOK,
+      initialDaemon,
+      'execution',
+      [availableAgent],
+      true,
+    );
+    expect(sanitized).toBe(draftWithIncompleteBYOK);
+  });
+
+  it('reverts on every non-execution section, not just language', () => {
+    // The fix must cover every sidebar section that does not own execution
+    // fields, otherwise a save from any one of them could leak the
+    // incomplete BYOK draft.
+    const sections: Array<Parameters<typeof sanitizeSettingsSavePayload>[2]> = [
+      'media',
+      'composio',
+      'integrations',
+      'language',
+      'appearance',
+      'notifications',
+      'pet',
+      'library',
+      'about',
+    ];
+    for (const section of sections) {
+      const sanitized = sanitizeSettingsSavePayload(
+        draftWithIncompleteBYOK,
+        initialDaemon,
+        section,
+        [availableAgent],
+        true,
+      );
+      expect(sanitized.mode).toBe('daemon');
+      expect(sanitized.apiKey).toBe('pre-existing-key');
+      expect(sanitized.agentId).toBe('claude-code');
+    }
+  });
+
+  it('preserves the non-execution change even when the daemon agent is unavailable in the registry passed in', () => {
+    // Edge case: user originally had a valid daemon mode with available
+    // agent. They didn't touch execution. The agent later went unavailable
+    // (e.g., daemon offline). Saving an Appearance change should still
+    // preserve the user's existing daemon selection because the revert
+    // path uses initial as the source of truth, not the live agent registry.
+    const sanitized = sanitizeSettingsSavePayload(
+      { ...initialDaemon, theme: 'system' },
+      initialDaemon,
+      'appearance',
+      [{ id: 'claude-code', available: false }],
+      true,
+    );
+    // Execution fields land equal to initial regardless of revert path,
+    // and the appearance change survives.
+    expect(sanitized.mode).toBe('daemon');
+    expect(sanitized.agentId).toBe('claude-code');
+    expect(sanitized.theme).toBe('system');
   });
 });

@@ -1,4 +1,4 @@
-import type { JsonValue } from '../common';
+import type { JsonValue } from '../common.js';
 
 export type ArtifactKind =
   | 'html'

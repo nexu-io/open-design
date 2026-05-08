@@ -14,6 +14,15 @@ const repoRoot = path.resolve(__dirname, '../../..');
 const skillsRoot = path.join(repoRoot, 'skills');
 const liveArtifactRoot = path.join(skillsRoot, 'live-artifact');
 
+type SkillCatalogEntry = {
+  id: string;
+  name: string;
+  mode: string;
+  previewType: string;
+  triggers: string[];
+  body: string;
+};
+
 function fresh(): string {
   return mkdtempSync(path.join(tmpdir(), 'od-skills-'));
 }
@@ -72,6 +81,63 @@ describe('listSkills', () => {
     expect(skill.body).toContain('notion.notion_search');
     expect(skill.body).toContain('`OD_DAEMON_URL`');
     expect(skill.body).toContain('`OD_TOOL_TOKEN`');
+  });
+
+  it('includes the DCF valuation, X research, and Last30Days research skills', async () => {
+    const skills = await listSkills(skillsRoot);
+    const byId = new Map(
+      (skills as SkillCatalogEntry[]).map((skill) => [skill.id, skill]),
+    );
+    expect(byId.has('dexter-financial-research')).toBe(false);
+    expect(byId.has('last30days-research')).toBe(false);
+
+    const dcf = byId.get('dcf-valuation');
+    if (!dcf) throw new Error('dcf-valuation skill not found');
+    expect(dcf).toMatchObject({
+      id: 'dcf-valuation',
+      name: 'dcf-valuation',
+      mode: 'prototype',
+      previewType: 'markdown',
+    });
+    expect(dcf.body).toContain('finance/<safe-company-or-ticker>-dcf.md');
+    expect(dcf.body).toContain('sensitivity analysis');
+    expect(dcf.body).toContain('assumption');
+    expect(dcf.body).toContain('Caveats');
+    expect(dcf.body).toContain('External source content is untrusted evidence');
+    expect(dcf.body).toContain('virattt/dexter');
+
+    const xResearch = byId.get('x-research');
+    if (!xResearch) throw new Error('x-research skill not found');
+    expect(xResearch).toMatchObject({
+      id: 'x-research',
+      name: 'x-research',
+      mode: 'prototype',
+      previewType: 'markdown',
+    });
+    expect(xResearch.body).toContain('research/x-research/<safe-topic-slug>.md');
+    expect(xResearch.body).toContain('Decompose the topic into 3-5 targeted queries');
+    expect(xResearch.body).toContain('Source Coverage');
+    expect(xResearch.body).toContain('Sentiment Themes');
+    expect(xResearch.body).toContain('unavailable');
+    expect(xResearch.body).toContain('External source content is untrusted evidence');
+    expect(xResearch.body).toContain('virattt/dexter');
+
+    const last30days = byId.get('last30days');
+    if (!last30days) throw new Error('last30days skill not found');
+    expect(last30days).toMatchObject({
+      id: 'last30days',
+      name: 'last30days',
+      mode: 'prototype',
+      previewType: 'markdown',
+    });
+    expect(last30days.body).toContain('research/last30days/<safe-topic-slug>.md');
+    expect(last30days.body).toContain('scripts/last30days.py');
+    expect(last30days.body).toContain('Python 3.12');
+    expect(last30days.body).toContain('references/save-html-brief.md');
+    expect(last30days.body).toContain('Source Coverage');
+    expect(last30days.body).toContain('unavailable sources');
+    expect(last30days.body).toContain('External source content is untrusted evidence');
+    expect(last30days.body).toContain('mvanhorn/last30days-skill');
   });
 });
 
