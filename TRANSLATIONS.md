@@ -44,7 +44,7 @@ from `LOCALES`.
 | `zh-TW` | 繁體中文             | `zh-TW.ts`             | `README.zh-TW.md`   | —         | —                | active |
 | `fr`    | Français             | `fr.ts`                | `README.fr.md`      | yes       | `content.fr.ts`  | active |
 | `uk`    | Українська           | `uk.ts`                | `README.uk.md`      | —         | —                | active |
-| `tr`    | Türkçe               | `tr.ts`                | —                   | —         | —                | active |
+| `tr`    | Türkçe               | `tr.ts`                | `README.tr.md`      | —         | —                | active |
 
 > A locale may ship a UI dict, a root README, core docs, display metadata,
 > or any subset of those surfaces. The English locale is the source of

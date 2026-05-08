@@ -360,7 +360,7 @@ code {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-  max-height: 31px;
+  max-height: 32px;
   overflow: hidden;
 }
 .app-project-title .title {
@@ -376,7 +376,7 @@ code {
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
-  line-height: 12px;
+  line-height: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -838,6 +838,30 @@ code {
   color: var(--text-muted);
 }
 .composer-import:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.composer-research:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research.on {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.composer-research-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .composer-send {
   display: inline-flex;
   align-items: center;
@@ -1485,6 +1509,40 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 6px;
+}
+.media-provider-secret-field {
+  position: relative;
+  min-width: 0;
+}
+.media-provider-secret-field input {
+  width: 100%;
+  padding-right: 34px;
+}
+.secret-visibility-button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+.secret-visibility-button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-subtle);
+  box-shadow: none;
+}
+.secret-visibility-button:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
 }
 .section-head {
   display: flex;
@@ -3149,6 +3207,17 @@ code {
   font-size: 13px;
 }
 
+.connector-inline-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, #ff6b6b 45%, var(--line) 55%);
+  border-radius: 12px;
+  background: color-mix(in oklab, #ff6b6b 10%, var(--panel) 90%);
+  color: color-mix(in oklab, #ff6b6b 70%, var(--fg) 30%);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .connectors-heading h2 {
   margin: 0;
   font-size: 18px;
@@ -4642,6 +4711,26 @@ button.connector-action.is-loading {
 .ws-tab.design-files-tab {
   font-weight: 500;
   color: var(--text);
+  /* Pin the Design Files entry to the left edge of the horizontally
+     scrollable tab strip so the user always has a way back to the file
+     list even when many tabs overflow. Without sticky positioning,
+     Design Files sits at flex index 0 and scrolls off the left edge
+     once the strip is wide enough to require horizontal scrolling.
+     Issue #775. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  /* Solid panel surface so other tabs that scroll past underneath the
+     sticky element do not visibly bleed through. */
+  background: var(--bg-panel);
+  /* Subtle right-edge shadow signals the visual separation when other
+     tabs are scrolled beneath it. */
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+.ws-tab.design-files-tab.active {
+  /* Active state should still read as selected; layer the active tint
+     over the sticky panel surface. */
+  background: var(--bg-subtle);
 }
 
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
@@ -5948,13 +6037,30 @@ button.connector-action.is-loading {
   justify-content: space-between;
   gap: 10px;
 }
+.inspect-panel-head > button {
+  /* Without an explicit shrink-floor, a long selected-component label
+     in the title can squeeze the Close button so narrowly that the
+     "x" glyph stacks into a vertical layout on some font/zoom
+     combinations. Pinning flex-shrink: 0 keeps the close affordance
+     on a stable single-line size regardless of label length. Issue
+     #785. */
+  flex-shrink: 0;
+}
 .inspect-panel-title {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 .inspect-panel-title strong {
+  /* Long target.label values (deeply-nested component selectors) used
+     to spill past the title container and out of the panel because
+     this rule had no overflow constraint. Truncate with ellipsis;
+     the <strong> carries title={label} so the full string is still
+     visible on hover. Issue #780. */
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .inspect-panel-title code {
   color: var(--text-muted);
@@ -5962,6 +6068,21 @@ button.connector-action.is-loading {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* MCP Copy button floats above a syntax-highlighted <pre>; .ghost's
+   transparent background let the dark code surface bleed through and
+   made the affordance effectively invisible. Pin a solid panel
+   background here (not inline) so button.ghost:hover:not(:disabled)
+   still wins the cascade. Issue #742. */
+button.ghost.mcp-copy-btn {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+button.ghost.mcp-copy-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
 }
 .inspect-section {
   display: flex;
@@ -7085,6 +7206,19 @@ button.connector-action.is-loading {
   justify-content: space-between;
   gap: 16px;
 }
+.field-label-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: min(420px, 70%);
+  text-align: right;
+}
+.field-label-note .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
 .field-label-row a {
   color: var(--accent);
   font-size: 13px;
@@ -7150,6 +7284,9 @@ button.connector-action.is-loading {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.cloudflare-domain-grid {
+  grid-template-columns: minmax(180px, 0.85fr) minmax(220px, 1.15fr);
+}
 .deploy-field-grid.single-field {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -7167,50 +7304,164 @@ button.connector-action.is-loading {
   margin: 0;
   color: var(--red);
 }
-.deploy-result {
+.deploy-result-block {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.deploy-result-block.ready {
+  border-color: color-mix(in srgb, var(--green) 26%, var(--border));
+}
+.deploy-result-block.delayed {
+  border-color: color-mix(in srgb, #b7791f 34%, var(--border));
+}
+.deploy-result-block.protected,
+.deploy-result-block.failed {
+  border-color: color-mix(in srgb, #c96442 38%, var(--border));
+}
+.deploy-result-summary {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border-radius: var(--radius-lg);
+  gap: 6px;
+  padding: 14px 16px 12px;
+  background: color-mix(in srgb, var(--bg-subtle) 64%, var(--bg-panel));
 }
-.deploy-result.ready {
-  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--border));
-  background: color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+.deploy-result-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.deploy-result.delayed {
-  border: 1px solid color-mix(in srgb, #b7791f 42%, var(--border));
-  background: color-mix(in srgb, #b7791f 10%, var(--bg-panel));
+.deploy-result-link-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
-.deploy-result.protected {
-  border: 1px solid color-mix(in srgb, #c96442 48%, var(--border));
-  background: color-mix(in srgb, #c96442 10%, var(--bg-panel));
+.deploy-result-badge,
+.deploy-result-link-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.deploy-result-badge.ready,
+.deploy-result-link-state.ready {
+  color: #137a3d;
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 28%, var(--border));
+}
+.deploy-result-badge.delayed,
+.deploy-result-link-state.delayed {
+  color: #9a5b12;
+  background: color-mix(in srgb, #b7791f 14%, transparent);
+  border: 1px solid color-mix(in srgb, #b7791f 28%, var(--border));
+}
+.deploy-result-badge.protected,
+.deploy-result-badge.failed,
+.deploy-result-link-state.protected,
+.deploy-result-link-state.failed {
+  color: #a34828;
+  background: color-mix(in srgb, #c96442 14%, transparent);
+  border: 1px solid color-mix(in srgb, #c96442 30%, var(--border));
 }
 .deploy-result-label {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--green);
-}
-.deploy-result.delayed .deploy-result-label {
-  color: #9a5b12;
-}
-.deploy-result.protected .deploy-result-label {
-  color: #a34828;
+  color: var(--text);
 }
 .deploy-result-message {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
 }
-.deploy-result a {
+.deploy-result-links {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+.deploy-result-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  background: var(--bg-panel);
+}
+.deploy-result-link + .deploy-result-link {
+  border-top: 1px solid var(--border);
+}
+.deploy-result-link-main {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.deploy-result-link-label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.deploy-result-link-message {
+  margin: 0;
+  color: var(--text-muted);
+}
+.deploy-result-url {
+  min-width: 0;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 .deploy-result-actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.deploy-result-actions .viewer-action,
+.deploy-result-actions .ghost-link {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+}
+.deploy-result-actions .viewer-action:hover:not(:disabled),
+.deploy-result-actions .ghost-link:hover {
+  background: var(--bg-panel);
+}
+@media (max-width: 640px) {
+  .deploy-form .field-label-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .deploy-form .field-label-note {
+    align-items: flex-start;
+    max-width: none;
+    text-align: left;
+  }
+  .deploy-field-grid,
+  .cloudflare-domain-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploy-result-link {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploy-result-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    width: fit-content;
+  }
 }
 .ghost-link.disabled,
 .ghost-link[aria-disabled='true'] {
@@ -7987,6 +8238,27 @@ button.connector-action.is-loading {
   justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+/* Error state extends .ds-modal-empty: stacks a title, body, and Retry
+   button instead of a single line, so a fetch failure no longer leaves
+   the modal stuck at "Loading…" with disabled toolbar buttons and no
+   recovery path. Issue #860. */
+.ds-modal-error {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+}
+.ds-modal-error-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-modal-error-body {
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 48ch;
+  line-height: 1.5;
 }
 .ds-modal-actions .ghost.is-active {
   background: var(--accent-tint);

@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retro Presentation Template</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+
+  :root {
+    --bg-gray: #c0c0c0;
+    --bg-light: #d4d0c8;
+    --bg-dark: #808080;
+    --blue-navy: #000080;
+    --blue-bright: #0000a0;
+    --blue-light: #1084d0;
+    --white: #ffffff;
+    --black: #000000;
+    --text-dark: #222222;
+    --btn-face: #d4d0c8;
+    --btn-highlight: #ffffff;
+    --btn-shadow: #404040;
+    --btn-dark-shadow: #000000;
+    --green-retro: #008000;
+    --red-retro: #800000;
+    --yellow-retro: #808000;
+    --cyan-retro: #008080;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: "MS Sans Serif", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 16px;
+    background: var(--bg-dark);
+    color: var(--text-dark);
+  }
+
+  /* === CRT OVERLAY === */
+  .crt-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(0,0,0,0.03) 0px,
+        rgba(0,0,0,0.03) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+  }
+
+  /* === SLIDE SYSTEM === */
+  .slide {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 32px 44px 32px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .slide.active {
+    display: flex;
+    opacity: 1;
+  }
+
+  /* === WINDOW CHROME === */
+  .win-window {
+    background: var(--bg-light);
+    border: 2px solid var(--white);
+    border-right-color: var(--btn-dark-shadow);
+    border-bottom-color: var(--btn-dark-shadow);
+    box-shadow: inset 1px 1px 0 var(--btn-highlight), inset -1px -1px 0 var(--btn-shadow);
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 1200px;
+    height: 100%;
+    max-height: calc(100vh - 68px);
+  }
+
+  .win-titlebar {
+    background: linear-gradient(90deg, var(--blue-navy) 0%, var(--blue-bright) 100%);
+    color: var(--white);
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: bold;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .win-titlebar.inactive {
+    background: linear-gradient(90deg, #808080 0%, #a0a0a0 100%);
+  }
+
+  .win-title-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .win-icon {
+    width: 18px;
+    height: 18px;
+    background: var(--white);
+    border: 1px solid var(--black);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--blue-navy);
+    font-weight: bold;
+  }
+
+  .win-buttons {
+    display: flex;
+    gap: 3px;
+  }
+
+  .win-btn {
+    width: 20px;
+    height: 18px;
+    background: var(--bg-light);
+    border: 2px solid var(--btn-highlight);
+    border-right-color: var(--btn-dark-shadow);
+    border-bottom-color: var(--btn-dark-shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-dark);
+    cursor: pointer;
+    line-height: 1;
+    padding-bottom: 2px;
+  }
+
+  .win-btn:active {
+    border: 2px solid var(--btn-dark-shadow);
+    border-right-color: var(--white);
+    border-bottom-color: var(--white);
+  }
+
+  .win-body {
+    padding: 20px 24px 24px 24px;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* === BUTTONS === */
+  .btn-retro {
+    background: var(--btn-face);
+    border: 2px solid var(--btn-highlight);
+    border-right-color: var(--btn-dark-shadow);
+    border-bottom-color: var(--btn-dark-shadow);
+    padding: 6px 24px;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-dark);
+    outline: none;
+  }
+
+  .btn-retro:active {
+    border: 2px solid var(--btn-dark-shadow);
+    border-right-color: var(--btn-highlight);
+    border-bottom-color: var(--btn-highlight);
+  }
+
+  .btn-retro:focus {
+    outline: 1px dotted var(--black);
+    outline-offset: -4px;
+  }
+
+  /* === PANELS & GROUP BOXES === */
+  .group-box {
+    border: 2px solid var(--btn-shadow);
+    border-right-color: var(--btn-highlight);
+    border-bottom-color: var(--btn-highlight);
+    padding: 20px 18px 16px 18px;
+    position: relative;
+    background: var(--bg-light);
+  }
+
+  .group-box-title {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    background: var(--bg-light);
+    padding: 0 8px;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--text-dark);
+  }
+
+  .panel-raised {
+    background: var(--bg-light);
+    border: 2px solid var(--btn-highlight);
+    border-right-color: var(--btn-dark-shadow);
+    border-bottom-color: var(--btn-dark-shadow);
+    padding: 16px;
+  }
+
+  .panel-sunken {
+    background: var(--white);
+    border: 2px solid var(--btn-shadow);
+    border-right-color: var(--btn-highlight);
+    border-bottom-color: var(--btn-highlight);
+    padding: 12px;
+  }
+
+  /* === PROGRESS BAR === */
+  .progress-bar {
+    width: 100%;
+    height: 24px;
+    background: var(--white);
+    border: 2px solid var(--btn-shadow);
+    border-right-color: var(--btn-highlight);
+    border-bottom-color: var(--btn-highlight);
+    padding: 2px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--blue-navy);
+    transition: width 0.5s ease;
+  }
+
+  /* === TEXT STYLES === */
+  .pixel-font {
+    font-family: 'Press Start 2P', cursive;
+  }
+
+  .terminal-font {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+  }
+
+  .text-center { text-align: center; }
+
+  .text-xl { font-size: 32px; font-weight: bold; }
+  .text-lg { font-size: 22px; }
+  .text-md { font-size: 18px; }
+  .text-sm { font-size: 14px; }
+  .text-xs { font-size: 12px; }
+
+  .text-blue { color: var(--blue-navy); }
+  .text-green { color: var(--green-retro); }
+  .text-red { color: var(--red-retro); }
+  .text-gray { color: #555; }
+
+  /* === LAYOUT UTILITIES === */
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .justify-center { justify-content: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-1 { gap: 6px; }
+  .gap-2 { gap: 10px; }
+  .gap-3 { gap: 16px; }
+  .gap-4 { gap: 24px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 18px; }
+
+  .w-full { width: 100%; }
+  .h-full { height: 100%; }
+
+  .mt-1 { margin-top: 6px; }
+  .mt-2 { margin-top: 12px; }
+  .mt-3 { margin-top: 20px; }
+  .mb-1 { margin-bottom: 6px; }
+  .mb-2 { margin-bottom: 12px; }
+  .mb-3 { margin-bottom: 20px; }
+
+  .p-1 { padding: 6px; }
+  .p-2 { padding: 10px; }
+
+  .flex-1 { flex: 1; }
+  .flex-2 { flex: 2; }
+  .shrink-0 { flex-shrink: 0; }
+
+  /* === HORIZONTAL RULE === */
+  hr.retro {
+    border: none;
+    border-top: 1px solid var(--btn-shadow);
+    border-bottom: 1px solid var(--btn-highlight);
+    margin: 14px 0;
+    flex-shrink: 0;
+  }
+
+  /* === LIST STYLES === */
+  ul.retro-list {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  ul.retro-list li {
+    padding: 5px 0 5px 22px;
+    position: relative;
+    font-size: 15px;
+  }
+
+  ul.retro-list li::before {
+    content: ">";
+    position: absolute;
+    left: 4px;
+    color: var(--blue-navy);
+    font-weight: bold;
+  }
+
+  /* === CHECKBOX === */
+  .retro-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    padding: 3px 0;
+  }
+
+  .check-box {
+    width: 16px;
+    height: 16px;
+    background: var(--white);
+    border: 2px solid var(--btn-dark-shadow);
+    border-right-color: var(--btn-highlight);
+    border-bottom-color: var(--btn-highlight);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  /* === CHART CONTAINERS === */
+  .chart-container {
+    position: relative;
+    height: 100%;
+    min-height: 200px;
+    width: 100%;
+  }
+
+  .chart-container-sm {
+    position: relative;
+    height: 100%;
+    min-height: 160px;
+    width: 100%;
+  }
+
+  /* === NAVIGATION DOTS === */
+  .nav-dots {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .nav-dot {
+    width: 12px;
+    height: 12px;
+    background: var(--bg-gray);
+    border: 2px solid var(--btn-highlight);
+    border-right-color: var(--btn-dark-shadow);
+    border-bottom-color: var(--btn-dark-shadow);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nav-dot.active {
+    background: var(--blue-navy);
+  }
+
+  .nav-dot.active::after {
+    content: "";
+    width: 4px;
+    height: 4px;
+    background: var(--white);
+  }
+
+  .slide-counter {
+    position: fixed;
+    bottom: 10px;
+    right: 16px;
+    font-size: 12px;
+    color: var(--bg-dark);
+    background: var(--bg-light);
+    padding: 3px 10px;
+    border: 1px solid var(--btn-shadow);
+    z-index: 100;
+  }
+
+  .nav-hint {
+    position: fixed;
+    bottom: 10px;
+    left: 16px;
+    font-size: 16px;
+    color: #505050;
+    z-index: 100;
+    font-family: 'VT323', monospace;
+  }
+
+  /* === TABLE === */
+  table.retro-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  table.retro-table th {
+    background: var(--bg-gray);
+    border: 1px solid var(--btn-shadow);
+    padding: 6px 10px;
+    text-align: left;
+    font-weight: bold;
+  }
+
+  table.retro-table td {
+    border: 1px solid var(--bg-gray);
+    padding: 6px 10px;
+    background: var(--white);
+  }
+
+  table.retro-table tr:nth-child(even) td {
+    background: #f0f0f0;
+  }
+
+  /* === MARQUEE === */
+  .marquee-container {
+    overflow: hidden;
+    white-space: nowrap;
+    background: var(--white);
+    border: 1px inset var(--bg-gray);
+    padding: 3px 0;
+  }
+
+  .marquee-text {
+    display: inline-block;
+    animation: marquee 14s linear infinite;
+    font-size: 14px;
+    color: var(--text-dark);
+  }
+
+  @keyframes marquee {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+  }
+
+  /* === TREE VIEW === */
+  .tree-item {
+    font-size: 14px;
+    padding: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tree-icon {
+    width: 18px;
+    height: 18px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 18px;
+    flex-shrink: 0;
+  }
+
+  /* === SEPARATOR === */
+  .separator {
+    width: 2px;
+    background: var(--btn-shadow);
+    border-left: 1px solid var(--btn-highlight);
+    margin: 0 12px;
+  }
+
+  /* === SCROLLBAR === */
+  ::-webkit-scrollbar {
+    width: 16px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-gray);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--bg-gray);
+    border: 2px solid var(--btn-highlight);
+    border-right-color: var(--btn-dark-shadow);
+    border-bottom-color: var(--btn-dark-shadow);
+  }
+
+  /* === HOURGLASS === */
+  .hourglass {
+    font-size: 40px;
+  }
+
+  /* === RESPONSIVE === */
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+    .slide { padding: 15px 20px 40px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="crt-overlay"></div>
+
+<!-- ======================== SLIDE 1: TITLE / SPLASH ======================== -->
+<div class="slide active" id="slide-0">
+  <div class="win-window" style="max-width: 720px;">
+    <div class="win-titlebar">
+      <div class="win-title-left">
+        <div class="win-icon">P</div>
+        <span>PRESENTATION.EXE</span>
+      </div>
+      <div class="win-buttons">
+        <div class="win-btn">_</div>
+        <div class="win-btn">[]</div>
+        <div class="win-btn">X</div>
+      </div>
+    </div>
+    <div class="win-body flex flex-col items-center justify-center" style="padding: 40px;">
+      <div class="hourglass mb-3">&#x231B;</div>
+      <h1 class="pixel-font text-blue text-center" style="font-size: 24px; line-height: 1.8; margin-bottom: 28px;">QUARTERLY OVERVIEW</h1>
+
+      <div class="panel-sunken mb-3" style="width: 100%; max-width: 540px;">
+        <div class="marquee-container">
+          <span class="marquee-text">Welcome to the presentation template &bull; Use arrow keys or navigation dots to browse slides</span>
+        </div>
+      </div>
+
+      <p class="text-sm text-gray text-center mb-3">Please wait while content loads...</p>
+
+      <div class="progress-bar mb-3" style="max-width: 480px;">
+        <div class="progress-fill" style="width: 100%;"></div>
+      </div>
+
+      <div class="flex gap-2 mt-2">
+        <button class="btn-retro">OK</button>
+        <button class="btn-retro">Cancel</button>
+        <button class="btn-retro">Help</button>
+      </div>
+
+      <hr class="retro" style="width: 100%; margin-top: 28px;">
+      <p class="text-xs text-gray">Version 1.0 &bull; Build 2026.05.01 &bull; All systems operational</p>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 2: AGENDA ======================== -->
+<div class="slide" id="slide-1">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">A</div><span>AGENDA.TXT</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0">
+        <p class="text-lg text-blue" style="font-weight: bold;">Today's Discussion Topics</p>
+        <p class="text-sm text-gray mb-1">Select an item to navigate. Use keyboard shortcuts for faster access.</p>
+        <hr class="retro">
+      </div>
+
+      <div class="grid-2 gap-4 flex-1" style="min-height: 0;">
+        <div class="group-box flex flex-col">
+          <span class="group-box-title">Primary Items</span>
+          <div class="flex-1 flex flex-col justify-center">
+            <ul class="retro-list">
+              <li>Executive Summary &amp; Key Highlights</li>
+              <li>Financial Performance Metrics</li>
+              <li>Product Development Roadmap</li>
+              <li>Market Analysis &amp; Competitive Landscape</li>
+              <li>Customer Satisfaction Overview</li>
+            </ul>
+          </div>
+        </div>
+        <div class="group-box flex flex-col">
+          <span class="group-box-title">Secondary Items</span>
+          <div class="flex-1 flex flex-col justify-center">
+            <ul class="retro-list">
+              <li>Team Structure &amp; Resource Allocation</li>
+              <li>Risk Assessment Matrix</li>
+              <li>Strategic Initiatives for Next Quarter</li>
+              <li>Budget Forecast &amp; Allocation Plan</li>
+              <li>Open Discussion &amp; Q&amp;A Session</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-raised mt-3 shrink-0 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray">Status:</span>
+          <span class="text-sm text-green" style="font-weight: bold;">READY</span>
+        </div>
+        <div class="flex items-center gap-5">
+          <div class="retro-check"><div class="check-box">x</div><span>Notify participants</span></div>
+          <div class="retro-check"><div class="check-box"></div><span>Record session</span></div>
+        </div>
+      </div>
+
+      <div class="mt-3 panel-sunken shrink-0">
+        <div class="flex justify-between text-sm text-gray">
+          <span>Estimated duration: 45 minutes</span>
+          <span>Last updated: 05/01/2026</span>
+          <span>Items: 10 total</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 3: EXECUTIVE SUMMARY ======================== -->
+<div class="slide" id="slide-2">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">R</div><span>README.DOC</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="panel-raised mb-3 shrink-0" style="background: var(--white); padding: 18px;">
+        <p class="text-xl text-blue" style="font-size: 24px;">Executive Summary</p>
+      </div>
+
+      <div class="flex-1 flex flex-col gap-4" style="min-height: 0;">
+        <p class="text-md" style="line-height: 1.7;">
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+        </p>
+
+        <div class="grid-2 gap-4 flex-1" style="min-height: 0;">
+          <div class="group-box flex flex-col">
+            <span class="group-box-title">Key Objectives</span>
+            <div class="flex-1 flex flex-col justify-center">
+              <p class="text-md" style="line-height: 1.7;">
+                Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+              </p>
+            </div>
+          </div>
+          <div class="group-box flex flex-col">
+            <span class="group-box-title">Primary Outcomes</span>
+            <div class="flex-1 flex flex-col justify-center">
+              <p class="text-md" style="line-height: 1.7;">
+                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-4 mt-4 shrink-0">
+        <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">Prepared by</p><p class="text-md" style="font-weight: bold;">Department Name</p></div>
+        <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">Date</p><p class="text-md" style="font-weight: bold;">May 01, 2026</p></div>
+        <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">Classification</p><p class="text-md" style="font-weight: bold;">Internal Use</p></div>
+        <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">Review Status</p><p class="text-md text-green" style="font-weight: bold;">Approved</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 4: BAR CHART ======================== -->
+<div class="slide" id="slide-3">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">D</div><span>DATAVIEW.CSV</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0 flex justify-between items-center mb-1">
+        <p class="text-lg text-blue" style="font-weight: bold;">Quarterly Revenue Comparison</p>
+        <div class="flex gap-2"><button class="btn-retro text-sm">Export</button><button class="btn-retro text-sm">Print</button></div>
+      </div>
+      <hr class="retro">
+
+      <div class="grid-2 gap-5 flex-1 mt-2" style="min-height: 0;">
+        <div class="panel-raised" style="min-height: 0;">
+          <div class="chart-container"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="flex flex-col gap-4" style="min-height: 0;">
+          <div class="group-box">
+            <span class="group-box-title">Highlights</span>
+            <ul class="retro-list">
+              <li>Q3 exceeded projections by 18%</li>
+              <li>Enterprise segment grew 24% YoY</li>
+              <li>Recurring revenue now at 62% of total</li>
+            </ul>
+          </div>
+          <div class="panel-sunken flex-1" style="overflow: auto;">
+            <table class="retro-table">
+              <tr><th>Quarter</th><th>Revenue</th><th>Growth</th></tr>
+              <tr><td>Q1 2026</td><td>$1.2M</td><td class="text-green" style="font-weight: bold;">+5%</td></tr>
+              <tr><td>Q2 2026</td><td>$1.5M</td><td class="text-green" style="font-weight: bold;">+12%</td></tr>
+              <tr><td>Q3 2026</td><td>$1.9M</td><td class="text-green" style="font-weight: bold;">+18%</td></tr>
+              <tr><td>Q4 2026</td><td>$2.1M</td><td class="text-green" style="font-weight: bold;">+22%</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-raised mt-3 shrink-0">
+        <div class="flex justify-between text-sm text-gray">
+          <span>Data source: Internal reporting system</span>
+          <span>Updated: May 2026</span>
+          <span>Currency: USD (millions)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 5: TWO COLUMN FEATURES ======================== -->
+<div class="slide" id="slide-4">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">F</div><span>FEATURES.INI</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0">
+        <p class="text-lg text-blue" style="font-weight: bold;">Product Capabilities Overview</p>
+        <p class="text-sm text-gray mb-1">A detailed breakdown of current platform features and their implementation status.</p>
+        <hr class="retro">
+      </div>
+
+      <div class="grid-2 gap-5 flex-1 mt-2" style="min-height: 0;">
+        <div class="flex flex-col gap-4" style="min-height: 0;">
+          <div class="group-box flex-1 flex flex-col">
+            <span class="group-box-title">Core Modules</span>
+            <div class="flex-1 flex flex-col justify-around">
+              <div>
+                <div class="retro-check mb-1"><div class="check-box">x</div><span class="text-sm">User Authentication Service</span></div>
+                <div class="progress-bar" style="height: 16px;"><div class="progress-fill" style="width: 100%;"></div></div>
+              </div>
+              <div>
+                <div class="retro-check mb-1"><div class="check-box">x</div><span class="text-sm">Data Processing Engine</span></div>
+                <div class="progress-bar" style="height: 16px;"><div class="progress-fill" style="width: 92%;"></div></div>
+              </div>
+              <div>
+                <div class="retro-check mb-1"><div class="check-box">x</div><span class="text-sm">Reporting Dashboard</span></div>
+                <div class="progress-bar" style="height: 16px;"><div class="progress-fill" style="width: 88%;"></div></div>
+              </div>
+              <div>
+                <div class="retro-check mb-1"><div class="check-box"></div><span class="text-sm">Advanced Analytics Suite</span></div>
+                <div class="progress-bar" style="height: 16px;"><div class="progress-fill" style="width: 65%;"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-raised shrink-0">
+            <p class="text-sm text-gray mb-1">Overall Completion</p>
+            <div class="progress-bar"><div class="progress-fill" style="width: 86%;"></div></div>
+            <p class="text-lg text-right mt-1" style="font-size: 20px; font-weight: bold;">86%</p>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-4" style="min-height: 0;">
+          <div class="group-box flex-1 flex flex-col">
+            <span class="group-box-title">Module Details</span>
+            <div class="flex-1 flex flex-col justify-around">
+              <div class="panel-sunken"><p class="text-sm" style="line-height: 1.6;"><strong>Auth Service:</strong> Supports SSO, MFA, and role-based access control. Fully deployed across all regions with 99.99% uptime.</p></div>
+              <div class="panel-sunken"><p class="text-sm" style="line-height: 1.6;"><strong>Data Engine:</strong> Handles 10M+ records daily with sub-second query response times and automatic scaling.</p></div>
+              <div class="panel-sunken"><p class="text-sm" style="line-height: 1.6;"><strong>Dashboard:</strong> Real-time visualization with 25+ widget types, custom layouts, and scheduled reports.</p></div>
+              <div class="panel-sunken"><p class="text-sm" style="line-height: 1.6;"><strong>Analytics:</strong> Predictive modeling and trend forecasting. Beta release scheduled for Q3 2026.</p></div>
+            </div>
+          </div>
+          <div class="flex gap-3 shrink-0">
+            <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">Active</p><p class="text-lg" style="font-size: 22px; font-weight: bold; color: var(--blue-navy);">12</p></div>
+            <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">In Dev</p><p class="text-lg" style="font-size: 22px; font-weight: bold; color: var(--blue-navy);">3</p></div>
+            <div class="panel-sunken flex-1 text-center"><p class="text-xs text-gray mb-1">Planned</p><p class="text-lg" style="font-size: 22px; font-weight: bold; color: var(--blue-navy);">2</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 6: PIE CHART ======================== -->
+<div class="slide" id="slide-5">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">G</div><span>GRAPHS.BMP</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0">
+        <p class="text-lg text-blue mb-1" style="font-weight: bold;">Market Segment Distribution</p>
+        <hr class="retro">
+      </div>
+
+      <div class="grid-2 gap-5 flex-1 mt-2" style="min-height: 0;">
+        <div class="panel-raised flex items-center justify-center" style="min-height: 0;">
+          <div class="chart-container"><canvas id="pieChart"></canvas></div>
+        </div>
+        <div class="flex flex-col gap-4" style="min-height: 0;">
+          <div class="group-box">
+            <span class="group-box-title">Segment Breakdown</span>
+            <div class="flex justify-between items-center p-2 mb-1" style="background: rgba(0,0,128,0.06);">
+              <span class="text-md"><span style="color: var(--blue-navy);">&#9632;</span> Enterprise</span>
+              <span class="text-md" style="font-weight: bold;">42%</span>
+            </div>
+            <div class="flex justify-between items-center p-2 mb-1">
+              <span class="text-md"><span style="color: var(--green-retro);">&#9632;</span> Mid-Market</span>
+              <span class="text-md" style="font-weight: bold;">28%</span>
+            </div>
+            <div class="flex justify-between items-center p-2 mb-1" style="background: rgba(0,0,128,0.06);">
+              <span class="text-md"><span style="color: var(--cyan-retro);">&#9632;</span> Small Business</span>
+              <span class="text-md" style="font-weight: bold;">18%</span>
+            </div>
+            <div class="flex justify-between items-center p-2">
+              <span class="text-md"><span style="color: var(--yellow-retro);">&#9632;</span> Government</span>
+              <span class="text-md" style="font-weight: bold;">12%</span>
+            </div>
+          </div>
+          <div class="panel-raised flex-1 flex flex-col justify-center">
+            <p class="text-md" style="font-weight: bold; margin-bottom: 8px;">Key Insight</p>
+            <p class="text-sm" style="line-height: 1.6;">Enterprise clients continue to drive the majority of revenue, with a 15% increase in average contract value year-over-year. Mid-market segment shows the fastest growth rate at 32%.</p>
+          </div>
+          <div class="panel-sunken shrink-0">
+            <p class="text-sm text-gray">Total Addressable Market: <strong>$4.2B</strong> &bull; Our Share: <strong>8.3%</strong></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 7: METRICS DASHBOARD ======================== -->
+<div class="slide" id="slide-6">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">M</div><span>METRICS.LOG</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0">
+        <p class="text-lg text-blue mb-1" style="font-weight: bold;">Performance Metrics Dashboard</p>
+        <hr class="retro">
+      </div>
+
+      <div class="grid-4 gap-4 shrink-0 mt-2">
+        <div class="group-box text-center">
+          <span class="group-box-title">Revenue</span>
+          <p class="text-xl" style="font-size: 30px; margin: 10px 0; color: var(--blue-navy);">$2.1M</p>
+          <p class="text-sm text-green" style="font-weight: bold;">&#9650; +18.3%</p>
+          <p class="text-xs text-gray mt-1">vs previous quarter</p>
+        </div>
+        <div class="group-box text-center">
+          <span class="group-box-title">Customers</span>
+          <p class="text-xl" style="font-size: 30px; margin: 10px 0; color: var(--blue-navy);">1,482</p>
+          <p class="text-sm text-green" style="font-weight: bold;">&#9650; +124</p>
+          <p class="text-xs text-gray mt-1">new this quarter</p>
+        </div>
+        <div class="group-box text-center">
+          <span class="group-box-title">Retention</span>
+          <p class="text-xl" style="font-size: 30px; margin: 10px 0; color: var(--blue-navy);">94.2%</p>
+          <p class="text-sm text-green" style="font-weight: bold;">&#9650; +2.1%</p>
+          <p class="text-xs text-gray mt-1">annual rate</p>
+        </div>
+        <div class="group-box text-center">
+          <span class="group-box-title">NPS Score</span>
+          <p class="text-xl" style="font-size: 30px; margin: 10px 0; color: var(--blue-navy);">72</p>
+          <p class="text-sm text-green" style="font-weight: bold;">&#9650; +5</p>
+          <p class="text-xs text-gray mt-1">industry avg: 45</p>
+        </div>
+      </div>
+
+      <div class="grid-2 gap-5 flex-1 mt-4" style="min-height: 0;">
+        <div class="panel-raised" style="min-height: 0;">
+          <p class="text-sm" style="font-weight: bold; margin-bottom: 10px;">Monthly Active Users Trend</p>
+          <div class="chart-container-sm"><canvas id="lineChart"></canvas></div>
+        </div>
+        <div class="flex flex-col gap-4" style="min-height: 0;">
+          <div class="group-box flex-1">
+            <span class="group-box-title">Operational KPIs</span>
+            <div class="flex-1 flex flex-col justify-around" style="min-height: 0;">
+              <div class="flex justify-between text-sm"><span>Avg. Response Time</span><span style="font-weight: bold;">124ms</span></div>
+              <div class="flex justify-between text-sm"><span>System Uptime</span><span class="text-green" style="font-weight: bold;">99.97%</span></div>
+              <div class="flex justify-between text-sm"><span>Support Tickets</span><span style="font-weight: bold;">342 (-12%)</span></div>
+              <div class="flex justify-between text-sm"><span>Feature Adoption</span><span style="font-weight: bold;">68%</span></div>
+              <div class="flex justify-between text-sm"><span>API Calls / Day</span><span style="font-weight: bold;">4.2M</span></div>
+            </div>
+          </div>
+          <div class="panel-sunken shrink-0 flex items-center justify-between">
+            <span class="text-sm text-gray">All systems operational</span>
+            <span class="text-sm text-green" style="font-weight: bold;">&#9679; LIVE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 8: ORG STRUCTURE ======================== -->
+<div class="slide" id="slide-7">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">E</div><span>EXPLORER.EXE</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0">
+        <p class="text-lg text-blue mb-1" style="font-weight: bold;">Organizational Structure</p>
+        <hr class="retro">
+      </div>
+
+      <div class="grid-2 gap-5 flex-1 mt-2" style="min-height: 0;">
+        <div class="panel-sunken flex flex-col" style="background: var(--white); min-height: 0;">
+          <p class="text-sm text-gray mb-2 shrink-0">C:\ORG\STRUCTURE</p>
+          <div class="flex-1 flex flex-col justify-around" style="overflow: auto;">
+            <div>
+              <div class="tree-item"><span class="tree-icon">-</span>&#128193; <strong>Executive Leadership</strong></div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Office of the CEO</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Chief of Staff</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">-</span>&#128193; Board Relations</div>
+              <div class="tree-item" style="padding-left: 44px;"><span class="tree-icon">&nbsp;</span>&#128196; Governance</div>
+              <div class="tree-item" style="padding-left: 44px;"><span class="tree-icon">&nbsp;</span>&#128196; Committees</div>
+            </div>
+            <div>
+              <div class="tree-item"><span class="tree-icon">-</span>&#128193; <strong>Engineering</strong></div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Platform Team</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Product Engineering</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Infrastructure</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; QA &amp; DevOps</div>
+            </div>
+            <div>
+              <div class="tree-item"><span class="tree-icon">-</span>&#128193; <strong>Commercial</strong></div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Sales</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Marketing</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Customer Success</div>
+            </div>
+            <div>
+              <div class="tree-item"><span class="tree-icon">-</span>&#128193; <strong>Operations</strong></div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Finance</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; Legal &amp; Compliance</div>
+              <div class="tree-item" style="padding-left: 24px;"><span class="tree-icon">+</span>&#128193; People &amp; Culture</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-4" style="min-height: 0;">
+          <div class="group-box flex-1 flex flex-col" style="min-height: 0;">
+            <span class="group-box-title">Department Headcount</span>
+            <div class="flex-1" style="overflow: auto;">
+              <table class="retro-table">
+                <tr><th>Department</th><th>Headcount</th><th>Open Roles</th></tr>
+                <tr><td>Engineering</td><td>84</td><td>12</td></tr>
+                <tr><td>Commercial</td><td>56</td><td>8</td></tr>
+                <tr><td>Operations</td><td>32</td><td>4</td></tr>
+                <tr><td>Leadership</td><td>8</td><td>0</td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="panel-raised flex-1 flex flex-col justify-center">
+            <p class="text-sm" style="font-weight: bold; margin-bottom: 10px;">Growth Plan</p>
+            <p class="text-sm" style="line-height: 1.6; margin-bottom: 10px;">Planning to expand engineering by 25% and commercial teams by 18% over the next two quarters to support projected growth.</p>
+            <div class="flex gap-2">
+              <span class="text-xs panel-sunken p-1">Engineering: +21</span>
+              <span class="text-xs panel-sunken p-1">Sales: +10</span>
+              <span class="text-xs panel-sunken p-1">Support: +6</span>
+            </div>
+          </div>
+          <div class="panel-sunken shrink-0 flex items-center justify-between">
+            <span class="text-sm text-gray">Total Organization</span>
+            <span class="text-lg text-blue" style="font-weight: bold;">180 employees</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 9: TIMELINE ======================== -->
+<div class="slide" id="slide-8">
+  <div class="win-window">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">T</div><span>TIMELINE.PRJ</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body">
+      <div class="shrink-0">
+        <p class="text-lg text-blue mb-1" style="font-weight: bold;">Project Roadmap 2026</p>
+        <hr class="retro">
+      </div>
+
+      <div class="flex gap-3 shrink-0 mt-2" style="align-items: stretch;">
+        <div class="win-window flex-1" style="max-width: none;">
+          <div class="win-titlebar inactive"><span style="font-size: 12px;">Q1 2026</span></div>
+          <div class="p-2">
+            <div class="retro-check mb-1"><div class="check-box">x</div><strong> Completed</strong></div>
+            <ul class="retro-list">
+              <li>Platform v2.0 release</li>
+              <li>Mobile app launch</li>
+              <li>Partner integrations</li>
+            </ul>
+          </div>
+        </div>
+        <div class="win-window flex-1" style="max-width: none;">
+          <div class="win-titlebar inactive"><span style="font-size: 12px;">Q2 2026</span></div>
+          <div class="p-2">
+            <div class="retro-check mb-1"><div class="check-box">x</div><strong> Completed</strong></div>
+            <ul class="retro-list">
+              <li>Analytics dashboard</li>
+              <li>API marketplace</li>
+              <li>Regional expansion EU</li>
+            </ul>
+          </div>
+        </div>
+        <div class="win-window flex-1" style="max-width: none;">
+          <div class="win-titlebar"><span style="font-size: 12px;">Q3 2026</span></div>
+          <div class="p-2">
+            <div class="retro-check mb-1"><div class="check-box"></div><strong> In Progress</strong></div>
+            <ul class="retro-list">
+              <li>AI assistant beta</li>
+              <li>Enterprise security</li>
+              <li>Team expansion</li>
+            </ul>
+          </div>
+        </div>
+        <div class="win-window flex-1" style="max-width: none;">
+          <div class="win-titlebar inactive"><span style="font-size: 12px;">Q4 2026</span></div>
+          <div class="p-2">
+            <div class="retro-check mb-1"><div class="check-box"></div><strong> Planned</strong></div>
+            <ul class="retro-list">
+              <li>Global data centers</li>
+              <li>Advanced reporting</li>
+              <li>Series C prep</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-raised mt-4 shrink-0">
+        <p class="text-sm" style="font-weight: bold; margin-bottom: 10px;">Current Milestone: Q3 2026</p>
+        <div class="flex gap-4 items-center">
+          <div class="flex-1"><div class="progress-bar"><div class="progress-fill" style="width: 55%;"></div></div></div>
+          <div style="text-align: right;"><p class="text-md" style="font-weight: bold;">55%</p><p class="text-xs text-gray">6 of 11 milestones</p></div>
+        </div>
+      </div>
+
+      <div class="grid-3 gap-4 flex-1 mt-4" style="align-content: start;">
+        <div class="group-box text-center">
+          <span class="group-box-title">Risk Level</span>
+          <p class="text-lg text-yellow-retro" style="font-weight: bold; margin-top: 6px;">MODERATE</p>
+          <p class="text-xs text-gray">2 risks identified</p>
+        </div>
+        <div class="group-box text-center">
+          <span class="group-box-title">Budget Status</span>
+          <p class="text-lg text-green" style="font-weight: bold; margin-top: 6px;">ON TRACK</p>
+          <p class="text-xs text-gray">$1.2M remaining</p>
+        </div>
+        <div class="group-box text-center">
+          <span class="group-box-title">Next Review</span>
+          <p class="text-lg text-blue" style="font-weight: bold; margin-top: 6px;">JUL 15</p>
+          <p class="text-xs text-gray">Q3 checkpoint</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SLIDE 10: CLOSING ======================== -->
+<div class="slide" id="slide-9">
+  <div class="win-window" style="max-width: 680px;">
+    <div class="win-titlebar">
+      <div class="win-title-left"><div class="win-icon">?</div><span>SHUTDOWN.EXE</span></div>
+      <div class="win-buttons"><div class="win-btn">_</div><div class="win-btn">[]</div><div class="win-btn">X</div></div>
+    </div>
+    <div class="win-body flex flex-col items-center justify-center" style="padding: 40px;">
+      <div style="font-size: 52px; margin-bottom: 20px;">&#x1F4A4;</div>
+      <h2 class="pixel-font text-blue text-center" style="font-size: 20px; margin-bottom: 20px; line-height: 1.8;">THANK YOU FOR WATCHING</h2>
+      <p class="text-md text-center mb-3" style="line-height: 1.7;">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit.<br>
+        Questions and feedback are always welcome.
+      </p>
+
+      <div class="panel-sunken mb-3" style="width: 100%; max-width: 520px;">
+        <div class="marquee-container">
+          <span class="marquee-text">Contact us at hello@company.example &bull; Visit www.company.example &bull; Follow @companyhandle</span>
+        </div>
+      </div>
+
+      <div class="flex gap-4 mb-3 items-center">
+        <div class="text-center"><p class="text-xs text-gray mb-1">Email</p><p class="text-sm" style="font-weight: bold;">hello@example.com</p></div>
+        <div class="separator"></div>
+        <div class="text-center"><p class="text-xs text-gray mb-1">Phone</p><p class="text-sm" style="font-weight: bold;">+1 (555) 000-0000</p></div>
+        <div class="separator"></div>
+        <div class="text-center"><p class="text-xs text-gray mb-1">Website</p><p class="text-sm" style="font-weight: bold;">www.example.com</p></div>
+      </div>
+
+      <div class="flex gap-2 mt-2">
+        <button class="btn-retro">Restart</button>
+        <button class="btn-retro">Contact</button>
+        <button class="btn-retro">End Session</button>
+      </div>
+
+      <hr class="retro" style="width: 100%; margin-top: 28px;">
+      <p class="text-xs text-gray">&copy; 2026 Company Name &bull; All rights reserved &bull; Confidential &amp; Proprietary</p>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-dots" id="navDots"></div>
+<div class="slide-counter" id="slideCounter">1 / 10</div>
+<div class="nav-hint">&lt;-- ARROW KEYS to navigate --&gt;</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const totalSlides = slides.length;
+let currentSlide = 0;
+
+function showSlide(index) {
+  slides.forEach((s, i) => {
+    s.classList.toggle('active', i === index);
+  });
+  updateNavDots();
+  updateCounter();
+  if (index === 3) renderBarChart();
+  if (index === 5) renderPieChart();
+  if (index === 6) renderLineChart();
+}
+
+function nextSlide() {
+  if (currentSlide < totalSlides - 1) {
+    currentSlide++;
+    showSlide(currentSlide);
+  }
+}
+
+function prevSlide() {
+  if (currentSlide > 0) {
+    currentSlide--;
+    showSlide(currentSlide);
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+    e.preventDefault();
+    nextSlide();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    prevSlide();
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    currentSlide = 0;
+    showSlide(currentSlide);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    currentSlide = totalSlides - 1;
+    showSlide(currentSlide);
+  }
+});
+
+const dotsContainer = document.getElementById('navDots');
+for (let i = 0; i < totalSlides; i++) {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+  dot.addEventListener('click', () => { currentSlide = i; showSlide(i); });
+  dotsContainer.appendChild(dot);
+}
+
+function updateNavDots() {
+  document.querySelectorAll('.nav-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === currentSlide);
+  });
+}
+
+function updateCounter() {
+  document.getElementById('slideCounter').textContent = (currentSlide + 1) + ' / ' + totalSlides;
+}
+
+let barChartInstance = null;
+let pieChartInstance = null;
+let lineChartInstance = null;
+
+function renderBarChart() {
+  const ctx = document.getElementById('barChart');
+  if (!ctx || barChartInstance) return;
+  barChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+      datasets: [{
+        label: 'Revenue ($M)',
+        data: [1.2, 1.5, 1.9, 2.1],
+        backgroundColor: ['#000080', '#0000a0', '#1084d0', '#000080'],
+        borderColor: '#000000',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { family: 'MS Sans Serif', size: 12 }, color: '#222' }, grid: { display: false } },
+        y: { ticks: { font: { family: 'MS Sans Serif', size: 12 }, color: '#222' }, grid: { color: '#c0c0c0', lineWidth: 1 }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function renderPieChart() {
+  const ctx = document.getElementById('pieChart');
+  if (!ctx || pieChartInstance) return;
+  pieChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Enterprise', 'Mid-Market', 'Small Business', 'Government'],
+      datasets: [{
+        data: [42, 28, 18, 12],
+        backgroundColor: ['#000080', '#008000', '#008080', '#808000'],
+        borderColor: '#d4d0c8',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: 'MS Sans Serif', size: 12 }, color: '#222', padding: 14 } }
+      }
+    }
+  });
+}
+
+function renderLineChart() {
+  const ctx = document.getElementById('lineChart');
+  if (!ctx || lineChartInstance) return;
+  lineChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+      datasets: [{
+        label: 'Active Users (K)',
+        data: [42, 48, 55, 62, 71, 78],
+        borderColor: '#000080',
+        backgroundColor: 'rgba(0,0,128,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#000080',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { family: 'MS Sans Serif', size: 11 }, color: '#222' }, grid: { display: false } },
+        y: { ticks: { font: { family: 'MS Sans Serif', size: 11 }, color: '#222' }, grid: { color: '#d4d0c8' }, beginAtZero: false }
+      }
+    }
+  });
+}
+
+showSlide(0);
+</script>
+</body>
+</html>

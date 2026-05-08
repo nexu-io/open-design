@@ -1,4 +1,4 @@
-import type { JsonValue } from './common';
+import type { JsonValue } from './common.js';
 
 export const API_ERROR_CODES = [
   // Generic HTTP/API failures.

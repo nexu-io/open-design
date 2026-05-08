@@ -107,6 +107,12 @@ const MAC_WINDOW_CHROME_CSS = `
   .entry-header [role="button"],
   .entry-tabs,
   .entry-tabs *,
+  .ds-modal-header,
+  .ds-modal-header *,
+  .ds-modal-actions,
+  .ds-modal-actions *,
+  .share-menu-popover,
+  .share-menu-popover *,
   .entry-side-resizer,
   .avatar-popover,
   .avatar-popover * {
@@ -176,6 +182,15 @@ function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedChildWindowUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "blob:";
   } catch {
     return false;
   }
@@ -269,6 +284,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.on("blur", () => showWindowButtons(window));
 
   window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedChildWindowUrl(url)) return { action: "allow" };
     if (isHttpUrl(url)) void shell.openExternal(url);
     return { action: "deny" };
   });

@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stencil &amp; Tablet — Slide Template</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Stardos+Stencil:wght@400;700&family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root {
+    --bone:    #E2DCC9;
+    --black:   #000000;
+    --ink:     #0A0A0A;
+    --paper:   #F4EFE0;
+    --sienna:  #A06A3C;
+    --magenta: #C73B7A;
+    --orange:  #EE7A2E;
+    --teal:    #2D7E73;
+    --blue:    #3F73B7;
+    --mustard: #D8A93B;
+    --olive:   #6F7A2E;
+  }
+  html, body { margin:0; padding:0; background:#1a1a1a; }
+  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+  deck-stage { background: #1a1a1a; }
+
+  section.slide { background: var(--bone); color: var(--ink); overflow: hidden; position: relative; }
+  section.slide.dark { background: var(--black); color: var(--bone); }
+
+  /* ---------- chrome ---------- */
+  .top {
+    position: absolute; top: 48px; left: 64px; right: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: "Barlow Condensed", "Helvetica Neue", sans-serif;
+    font-weight: 800;
+    font-size: 32px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .top .meta { display: flex; gap: 64px; font-size: 24px; font-weight: 600; letter-spacing: .06em; opacity: .85; }
+  section.slide.dark .top { color: var(--bone); }
+
+  .footer {
+    position: absolute; left: 64px; right: 64px; bottom: 36px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: "Barlow Condensed", sans-serif;
+    font-weight: 600; font-size: 22px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    opacity: .75;
+  }
+  section.slide.dark .footer { color: var(--bone); }
+
+  /* ---------- shared tablet card ---------- */
+  .tablet { border-radius: 26px; padding: 38px 32px 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  .tablet .num {
+    font-family: "Stardos Stencil", "Bowlby One", serif;
+    font-weight: 700;
+    line-height: .9;
+    color: var(--ink);
+    font-size: 220px;
+    letter-spacing: -.02em;
+  }
+  .tablet h3 {
+    font-family: "Stardos Stencil", serif;
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    margin-top: auto;
+    margin-bottom: 14px;
+  }
+  .tablet p {
+    font-family: "Inter", sans-serif;
+    font-size: 22px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+  .tablet.dark { color: var(--bone); }
+  .tablet.dark h3 { color: var(--bone); }
+  .tablet.dark p  { color: var(--bone); opacity: .9; }
+
+  /* =========== 01 COVER =========== */
+  .s-cover { padding: 0; }
+  .s-cover .stage {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    padding: 48px 64px;
+  }
+  .s-cover .super {
+    font-family: "Barlow Condensed", sans-serif;
+    font-weight: 800; font-size: 28px; letter-spacing: .12em;
+    text-transform: uppercase; opacity: .8;
+  }
+  .s-cover h1 {
+    font-family: "Stardos Stencil", serif;
+    font-weight: 700;
+    font-size: 220px;
+    line-height: .82;
+    letter-spacing: -.015em;
+    text-transform: uppercase;
+    color: var(--ink);
+    align-self: end;
+    margin: 0;
+  }
+  .s-cover h1 em { font-style: normal; color: var(--magenta); }
+  .s-cover .row {
+    display: flex; align-items: end; justify-content: space-between;
+    margin-top: 24px;
+  }
+  .s-cover .row .lockup { display: flex; align-items: center; gap: 18px; }
+  .s-cover .row .mark {
+    width: 56px; height: 56px; border-radius: 14px; background: var(--orange);
+  }
+  .s-cover .row .who {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 30px; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .s-cover .row .who small {
+    display: block; font-size: 22px; font-weight: 500; letter-spacing: .08em; opacity: .65;
+  }
+  .s-cover .row .date {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 36px; text-transform: uppercase;
+  }
+  .s-cover .shape {
+    position: absolute; right: 56px; top: 64px;
+    width: 320px; height: 380px;
+    color: var(--teal);
+  }
+
+  /* =========== 02 AGENDA (organic shapes on black) =========== */
+  .s-agenda { padding: 0; }
+  .s-agenda .grid {
+    position: absolute;
+    left: 64px; right: 64px; top: 200px; bottom: 100px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+  }
+  .s-agenda .item { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 36px 18px 36px; }
+  .s-agenda .item svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .s-agenda .item .n {
+    position: relative; z-index: 2;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 32px; letter-spacing: .06em; color: var(--ink);
+  }
+  .s-agenda .item .lab {
+    position: relative; z-index: 2;
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 32px; line-height: 1.05; text-align: center;
+    text-transform: uppercase; color: var(--ink);
+  }
+
+  /* =========== 03 PRINCIPLES (the source slide) =========== */
+  .s-princ { padding: 0; }
+  .s-princ .row {
+    position: absolute;
+    left: 64px; right: 64px; top: 160px; bottom: 70px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+  .s-princ .card { border-radius: 26px; padding: 36px 30px 32px; display: flex; flex-direction: column; min-height: 0; }
+  .s-princ .card.c1 { background: var(--sienna); }
+  .s-princ .card.c2 { background: var(--magenta); }
+  .s-princ .card.c3 { background: var(--orange); }
+  .s-princ .card.c4 { background: var(--teal); }
+  .s-princ .card .n {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 240px; line-height: .85; letter-spacing: -.02em;
+    color: var(--ink);
+  }
+  .s-princ .card h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 30px; line-height: 1.05;
+    text-transform: uppercase; letter-spacing: .02em;
+    margin: auto 0 14px; color: var(--ink);
+  }
+  .s-princ .card p {
+    font-size: 22px; line-height: 1.4; color: var(--ink);
+  }
+  .s-princ .card.c4 h3, .s-princ .card.c4 p { color: var(--bone); }
+
+  /* =========== 04 SECTION DIVIDER =========== */
+  .s-sec { padding: 0; }
+  .s-sec .num {
+    position: absolute; left: 64px; top: 110px;
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 540px; line-height: .8; color: var(--orange);
+  }
+  .s-sec .label {
+    position: absolute; right: 64px; top: 220px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--bone); opacity: .7;
+    text-align: right;
+  }
+  .s-sec h2 {
+    position: absolute;
+    right: 64px; bottom: 130px; left: 360px;
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 120px; line-height: .92; text-transform: uppercase;
+    letter-spacing: -.005em;
+    color: var(--bone);
+    text-align: right;
+  }
+  .s-sec h2 em { font-style: normal; color: var(--orange); }
+
+  /* =========== 05 CONSULT (text-dense action title) =========== */
+  .s-consult .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    background: var(--mustard);
+    border-radius: 22px;
+    padding: 24px 32px;
+    display: flex; align-items: center; gap: 28px;
+  }
+  .s-consult .head .tag {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: .12em; text-transform: uppercase;
+    flex-shrink: 0; padding-right: 28px;
+    border-right: 2px solid var(--ink);
+  }
+  .s-consult .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 34px; line-height: 1.15; text-transform: uppercase; letter-spacing: -.005em;
+  }
+  .s-consult .grid {
+    position: absolute; left: 64px; right: 64px; top: 290px; bottom: 80px;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr;
+    gap: 24px;
+  }
+  .s-consult .col {
+    border-radius: 22px; padding: 28px 28px;
+    display: flex; flex-direction: column; gap: 14px; min-height: 0;
+  }
+  .s-consult .col.a { background: var(--paper); }
+  .s-consult .col.b { background: var(--orange); }
+  .s-consult .col.c { background: var(--paper); }
+  .s-consult .col h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 28px; text-transform: uppercase; letter-spacing: .02em;
+    border-bottom: 2px solid var(--ink); padding-bottom: 12px;
+  }
+  .s-consult .col .meta {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 32px; line-height: 1.1;
+  }
+  .s-consult .col p { font-size: 20px; line-height: 1.45; }
+  .s-consult .col ul { margin: 0; padding-left: 22px; font-size: 20px; line-height: 1.45; }
+  .s-consult .col ul li { margin-bottom: 8px; }
+  .s-consult .col ul li strong { font-weight: 700; }
+  .s-consult .col .src {
+    margin-top: auto;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 18px; letter-spacing: .12em; text-transform: uppercase;
+    border-top: 1px dashed rgba(10,10,10,.35); padding-top: 12px; opacity: .75;
+  }
+
+  /* =========== 06 CHART =========== */
+  .s-chart { padding: 0; }
+  /* Bottom bumped from 110 to 150 so the legend can never collide with
+     the absolutely-positioned .footer (which sits at bottom: 36 with
+     ~24px text height). Also: h2 size now caps by viewport height too. */
+  .s-chart .left {
+    position: absolute; left: 64px; top: 200px; bottom: 150px; width: 540px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  .s-chart .left h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: min(110px, 12vh); line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+    color: var(--bone);
+  }
+  .s-chart .left h2 em { font-style: normal; color: var(--orange); }
+  .s-chart .left p { font-size: 22px; line-height: 1.5; color: var(--bone); opacity: .85; }
+  .s-chart .left .legend {
+    margin-top: auto; display: flex; flex-direction: column; gap: 10px;
+  }
+  .s-chart .left .legend .li {
+    display: flex; align-items: center; gap: 14px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase; color: var(--bone);
+  }
+  .s-chart .left .legend .li i { width: 32px; height: 6px; }
+  .s-chart .right {
+    position: absolute; right: 64px; top: 200px; bottom: 130px; left: 680px;
+    background: var(--paper); border-radius: 22px;
+    padding: 32px 32px 28px 80px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .s-chart .right .yhead {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 18px; letter-spacing: .12em; text-transform: uppercase;
+    margin-bottom: 8px; opacity: .7;
+  }
+  .s-chart .plot { flex: 1; min-height: 0; position: relative;
+    border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+  .s-chart .plot .gline { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(10,10,10,.18); }
+  .s-chart .plot .yticks {
+    position: absolute; left: -52px; top: 0; bottom: 0;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 18px;
+  }
+  .s-chart .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .s-chart .right .xticks { display: flex; justify-content: space-between; padding-top: 10px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 18px; letter-spacing: .06em; }
+
+  /* =========== 07 PROCESS DIAGRAM =========== */
+  .s-process .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 40px;
+  }
+  .s-process .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 92px; line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+  }
+  .s-process .head h2 em { font-style: normal; color: var(--magenta); }
+  .s-process .head .sub {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase;
+    max-width: 38ch; line-height: 1.5; opacity: .8; margin-top: 12px;
+  }
+  .s-process .flow {
+    position: absolute; left: 64px; right: 64px; top: 470px; bottom: 200px;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px;
+  }
+  .s-process .node {
+    border-radius: 22px; padding: 24px 22px 22px;
+    display: flex; flex-direction: column; gap: 8px; position: relative;
+  }
+  .s-process .node.n1 { background: var(--sienna); color: var(--ink); }
+  .s-process .node.n2 { background: var(--magenta); color: var(--ink); }
+  .s-process .node.n3 { background: var(--orange); color: var(--ink); }
+  .s-process .node.n4 { background: var(--teal); color: var(--bone); }
+  .s-process .node.n5 { background: var(--blue); color: var(--bone); }
+  .s-process .node .n {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 64px; line-height: .9;
+  }
+  .s-process .node h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 28px; line-height: 1.05; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .s-process .node p { font-size: 18px; line-height: 1.4; }
+  .s-process .node .arr {
+    position: absolute; right: -16px; top: 40%;
+    width: 32px; height: 32px; z-index: 2;
+  }
+  .s-process .node.n5 .arr { display: none; }
+  .s-process .timeline {
+    position: absolute; left: 64px; right: 64px; bottom: 110px; height: 50px;
+    background: var(--paper); border-radius: 14px;
+    padding: 0 28px; display: flex; align-items: center; justify-content: space-between;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 20px; letter-spacing: .08em; text-transform: uppercase;
+  }
+
+  /* =========== 08 COMPARISON MATRIX =========== */
+  .s-matrix .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 40px;
+  }
+  .s-matrix .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 92px; line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+  }
+  .s-matrix .head h2 em { font-style: normal; color: var(--teal); }
+  .s-matrix .head .sub {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase;
+    max-width: 38ch; line-height: 1.5; opacity: .8; margin-top: 12px;
+  }
+  .s-matrix .table {
+    position: absolute; left: 64px; right: 64px; top: 460px; bottom: 110px;
+    background: var(--paper); border-radius: 22px;
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    grid-auto-rows: 1fr; overflow: hidden;
+  }
+  .s-matrix .cell {
+    padding: 18px 22px; display: flex; align-items: center;
+    font-size: 22px; line-height: 1.35;
+    border-bottom: 1.5px solid rgba(10,10,10,.35);
+    border-right: 1.5px solid rgba(10,10,10,.35);
+  }
+  .s-matrix .cell:nth-child(4n) { border-right: 0; }
+  .s-matrix .cell.last { border-bottom: 0; }
+  .s-matrix .cell.head-row {
+    background: var(--ink); color: var(--bone);
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 24px; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .s-matrix .cell.row-label {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 26px; text-transform: uppercase; letter-spacing: .01em;
+  }
+  .s-matrix .pill {
+    display: inline-block; border-radius: 999px;
+    padding: 6px 16px; font-weight: 700;
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: 18px; letter-spacing: .08em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .s-matrix .pill.yes  { background: var(--teal); color: var(--bone); }
+  .s-matrix .pill.part { background: var(--mustard); color: var(--ink); }
+  .s-matrix .pill.no   { background: var(--magenta); color: var(--bone); }
+  .s-matrix .pill.note { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
+
+  /* =========== 09 STATS / NUMBERS =========== */
+  .s-stats .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 40px;
+  }
+  .s-stats .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 92px; line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+    color: var(--bone);
+  }
+  .s-stats .head h2 em { font-style: normal; color: var(--orange); }
+  .s-stats .head .sub {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase;
+    max-width: 36ch; line-height: 1.5; opacity: .85; color: var(--bone); margin-top: 12px;
+  }
+  .s-stats .grid {
+    position: absolute; left: 64px; right: 64px; top: 470px; bottom: 110px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+  }
+  .s-stats .stat {
+    border-radius: 22px; padding: 32px 30px;
+    display: flex; flex-direction: column; gap: 14px;
+    color: var(--ink);
+  }
+  .s-stats .stat.s1 { background: var(--orange); }
+  .s-stats .stat.s2 { background: var(--mustard); }
+  .s-stats .stat.s3 { background: var(--bone); }
+  .s-stats .stat .big {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 160px; line-height: .85; letter-spacing: -.02em;
+  }
+  .s-stats .stat .big small {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 40px; vertical-align: top; margin-left: 6px;
+  }
+  .s-stats .stat h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 26px; text-transform: uppercase; letter-spacing: .02em;
+    margin-top: auto;
+  }
+  .s-stats .stat p { font-size: 20px; line-height: 1.4; }
+
+  /* =========== 10 QUOTE =========== */
+  .s-quote { padding: 0; }
+  .s-quote .panel {
+    position: absolute; left: 64px; right: 64px; top: 130px; bottom: 110px;
+    background: var(--magenta);
+    border-radius: 26px;
+    padding: 60px 80px;
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 60px;
+    align-items: center;
+  }
+  .s-quote .panel .qmark {
+    font-family: "Bowlby One", "Stardos Stencil", serif; font-weight: 700;
+    font-size: 320px; line-height: .8; color: var(--ink);
+  }
+  .s-quote .panel blockquote {
+    margin: 0;
+    font-family: "Stardos Stencil", serif; font-weight: 400;
+    font-size: 60px; line-height: 1.05;
+    color: var(--ink);
+    letter-spacing: -.005em;
+  }
+  .s-quote .panel .who {
+    margin-top: 32px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 26px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink);
+  }
+  .s-quote .panel .who small {
+    display: block; font-weight: 600; font-size: 22px; opacity: .7; margin-top: 4px;
+  }
+
+  /* =========== 11 CTA =========== */
+  .s-cta { padding: 0; }
+  .s-cta .stage {
+    position: absolute; inset: 0;
+    padding: 130px 64px 100px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+  }
+  .s-cta .pane {
+    border-radius: 26px; padding: 40px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .s-cta .pane.l { background: var(--teal); color: var(--bone); justify-content: space-between; }
+  .s-cta .pane.r { background: var(--orange); color: var(--ink); }
+  .s-cta .pane.l h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 130px; line-height: .9; text-transform: uppercase; letter-spacing: -.015em;
+  }
+  .s-cta .pane.l h2 em { font-style: normal; color: var(--orange); }
+  .s-cta .pane.l p { font-size: 22px; line-height: 1.5; opacity: .9; max-width: 32ch; }
+  .s-cta .pane.r h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 36px; line-height: 1; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .s-cta .pane.r .step { display: grid; grid-template-columns: 60px 1fr; gap: 14px; align-items: start; }
+  .s-cta .pane.r .step .n {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 56px; line-height: .9;
+  }
+  .s-cta .pane.r .step h4 {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 26px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+  }
+  .s-cta .pane.r .step p { font-size: 20px; line-height: 1.4; }
+
+  /* =========== 12 DESIGN SYSTEM =========== */
+  .s-system .wrap {
+    position: absolute; left: 64px; right: 64px; top: 130px; bottom: 80px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;
+  }
+  .s-system .card {
+    border-radius: 22px; padding: 28px;
+    display: flex; flex-direction: column; gap: 14px;
+    background: var(--paper);
+  }
+  .s-system .card h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 28px; text-transform: uppercase; letter-spacing: .02em;
+    border-bottom: 2px solid var(--ink); padding-bottom: 10px;
+  }
+  .s-system .card .row { display: flex; align-items: center; gap: 14px; }
+  .s-system .swatch { width: 48px; height: 48px; border-radius: 10px; border: 1.5px solid var(--ink); }
+  .s-system .row .label {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 22px; letter-spacing: .04em; text-transform: uppercase;
+  }
+  .s-system .row .label small {
+    display: block; font-weight: 500; opacity: .65; letter-spacing: .04em;
+  }
+  .s-system .typespec {
+    display: flex; align-items: baseline; gap: 14px;
+    border-bottom: 1px dashed rgba(10,10,10,.3); padding-bottom: 12px;
+  }
+  .s-system .typespec .name {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 36px; text-transform: uppercase; flex-shrink: 0;
+  }
+  .s-system .typespec .name.barlow {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+  }
+  .s-system .typespec .name.inter {
+    font-family: "Inter", sans-serif; font-weight: 600; text-transform: none; font-size: 28px;
+  }
+  .s-system .typespec .desc {
+    font-size: 18px; opacity: .75;
+  }
+  .s-system ul { margin: 0; padding-left: 20px; font-size: 18px; line-height: 1.45; }
+  .s-system ul li { margin-bottom: 6px; }
+  .s-system .principle {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 30px; line-height: 1.05; text-transform: uppercase;
+    color: var(--magenta);
+  }
+</style>
+</head>
+<body>
+
+<deck-stage>
+
+  <!-- ============ 01 COVER ============ -->
+  <section class="slide s-cover" data-label="01 Cover" data-om-validate="false">
+    <div class="stage">
+      <div>
+        <div class="super">Agency name × Partner name</div>
+      </div>
+      <div>
+        <h1>Bold by<br/><em>design.</em></h1>
+        <div class="row">
+          <div class="lockup">
+            <div class="mark"></div>
+            <div class="who">North &amp; Partners
+              <small>Brand · Strategy · Q2 2026</small>
+            </div>
+          </div>
+          <div class="date">29 · IV · 2026</div>
+        </div>
+      </div>
+    </div>
+    <svg class="shape" viewBox="0 0 100 120" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M50 0 C 80 0, 100 20, 100 40 C 100 60, 80 60, 50 60 C 20 60, 0 60, 0 80 C 0 100, 20 120, 50 120 C 80 120, 100 100, 100 80" fill="currentColor"/>
+    </svg>
+  </section>
+
+  <!-- ============ 02 AGENDA (organic shapes) ============ -->
+  <section class="slide s-agenda dark" data-label="02 Agenda" data-om-validate="false">
+    <div class="top">
+      <span>Agenda</span>
+      <span class="meta"><span>Agency × Partner</span><span>Phase I</span></span>
+    </div>
+    <div class="grid">
+      <div class="item">
+        <!-- figure-8 / peanut -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M50 0 C 90 0, 100 30, 100 65 C 100 95, 70 110, 50 125 C 30 140, 0 155, 0 185 C 0 220, 10 250, 50 250 C 90 250, 100 220, 100 185 C 100 155, 70 140, 50 125 C 30 110, 0 95, 0 65 C 0 30, 10 0, 50 0 Z" fill="#EE7A2E"/>
+        </svg>
+        <span class="n">01</span>
+        <span class="lab">Agenda<br/>item</span>
+      </div>
+      <div class="item">
+        <!-- octagon -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <polygon points="30,0 70,0 100,40 100,210 70,250 30,250 0,210 0,40" fill="#2D7E73"/>
+        </svg>
+        <span class="n">02</span>
+        <span class="lab">Agenda<br/>item</span>
+      </div>
+      <div class="item">
+        <!-- hourglass / bowtie -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 0 L100 0 L100 30 Q 50 125 100 220 L100 250 L0 250 L0 220 Q 50 125 0 30 Z" fill="#3F73B7"/>
+        </svg>
+        <span class="n">03</span>
+        <span class="lab">Agenda<br/>item</span>
+      </div>
+      <div class="item">
+        <!-- pinched X -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 0 Q 20 0 35 20 Q 50 40 65 20 Q 80 0 100 0 L100 90 Q 70 125 100 160 L100 250 Q 80 250 65 230 Q 50 210 35 230 Q 20 250 0 250 L0 160 Q 30 125 0 90 Z" fill="#A06A3C"/>
+        </svg>
+        <span class="n">04</span>
+        <span class="lab">Agenda<br/>item</span>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>02 / 11</span></div>
+  </section>
+
+  <!-- ============ 03 PRINCIPLES ============ -->
+  <section class="slide s-princ" data-label="03 Our Principles" data-om-validate="false">
+    <div class="top">
+      <span>Our Principles</span>
+      <span class="meta"><span>Agency × Partner</span><span>Phase II</span></span>
+    </div>
+    <div class="row">
+      <div class="card c1">
+        <div class="n">1</div>
+        <h3>Make it<br/>blunt</h3>
+        <p>Decisions read at a glance. If a stakeholder needs the legend, the slide is doing too much.</p>
+      </div>
+      <div class="card c2">
+        <div class="n">2</div>
+        <h3>Stay in<br/>the system</h3>
+        <p>Three serif numerals, two sans weights, six saturated colours. Anything else is a special case.</p>
+      </div>
+      <div class="card c3">
+        <div class="n">3</div>
+        <h3>Show the<br/>shape</h3>
+        <p>Lead with form. Use weight, scale, and silhouette before reaching for icons or imagery.</p>
+      </div>
+      <div class="card c4">
+        <div class="n">4</div>
+        <h3>Earn the<br/>black slide</h3>
+        <p>Reserve full-bleed black for moments that deserve a beat. Never as wallpaper.</p>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>03 / 11</span></div>
+  </section>
+
+  <!-- ============ 04 SECTION DIVIDER ============ -->
+  <section class="slide s-sec dark" data-label="04 Section · Direction" data-om-validate="false">
+    <div class="top">
+      <span>Direction</span>
+      <span class="meta"><span>Section II</span></span>
+    </div>
+    <div class="num">02</div>
+    <div class="label">Direction<br/>&amp; doctrine</div>
+    <h2>Where we<br/>are going,<br/><em>and why.</em></h2>
+    <div class="footer"><span>North &amp; Partners</span><span>04 / 11</span></div>
+  </section>
+
+  <!-- ============ 05 CONSULT (text-dense) ============ -->
+  <section class="slide s-consult" data-label="05 Findings · Detail" data-om-validate="false">
+    <div class="top">
+      <span>Findings · Detail</span>
+      <span class="meta"><span>Agency × Partner</span><span>Phase III</span></span>
+    </div>
+    <div class="head">
+      <div class="tag">Action title · 05</div>
+      <h2>The trust gap is built in the first 72 hours, not the first 7 days — and the cost compounds for the rest of the lifecycle.</h2>
+    </div>
+    <div class="grid">
+      <div class="col a">
+        <h3>What we found</h3>
+        <p><strong>Three behavioural signals</strong> in the first 72 hours predict 18-month retention better than any feature-usage metric we tracked.</p>
+        <ul>
+          <li><strong>Email open #2</strong> — opening the second lifecycle email lifts D90 retention by 19 points.</li>
+          <li><strong>Personal salutation</strong> — accounts that received a written welcome retained 2.4× the cohort.</li>
+          <li><strong>Reply received</strong> — a single human reply within 24 hours is the single largest lever measured.</li>
+        </ul>
+        <div class="src">N = 14,200 · Q1 2026</div>
+      </div>
+      <div class="col b">
+        <h3>Why it matters</h3>
+        <div class="meta">$4.1M projected retained ARR — current cohort.</div>
+        <p>The first three days are the only window where customers are both paying attention and willing to write back. Every interaction here does the work of roughly four interactions in week three.</p>
+        <p>The cost of getting this wrong is not refunds — it is the long, quiet churn of an account that never returns to the inbox.</p>
+        <div class="src">Modelled on FY24 cohort behaviour</div>
+      </div>
+      <div class="col c">
+        <h3>What to do</h3>
+        <ul>
+          <li><strong>Rewrite emails 1–3</strong> in human voice; ship behind a 50/50 holdout. Owner: lifecycle. Due: May 17.</li>
+          <li><strong>Route every signup</strong> to a named human for one personal reply within 24h, capped at the top 200 accounts/day. Owner: success. Due: May 24.</li>
+          <li><strong>Instrument the 72-hour window</strong> as a first-class metric in the weekly review. Owner: analytics. Due: June 1.</li>
+        </ul>
+        <div class="src">Pilot scope: top-decile signups</div>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>05 / 11</span></div>
+  </section>
+
+  <!-- ============ 06 CHART ============ -->
+  <section class="slide s-chart dark" data-label="06 Retention Curve" data-om-validate="false">
+    <div class="top">
+      <span>Retention, by cohort</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="left">
+      <h2>Curve<br/>bends at<br/><em>day three.</em></h2>
+      <p>Cohorts that received a written welcome and a human reply within 24 hours retain at roughly 2× the rate of the templated cohort, and the gap holds steady for ninety days.</p>
+      <div class="legend">
+        <div class="li"><i style="background:var(--bone); opacity:.5"></i> Templated welcome (control)</div>
+        <div class="li"><i style="background:var(--mustard)"></i> Written welcome</div>
+        <div class="li"><i style="background:var(--orange)"></i> Written + human reply</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="yhead">% of cohort active, by day</div>
+      <div class="plot">
+        <div class="yticks">
+          <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+        </div>
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="#0a0a0a" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2,1.5"
+            points="0,4 16,30 32,50 48,64 64,76 80,84 100,90" />
+          <polyline fill="none" stroke="#D8A93B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,18 32,28 48,38 64,46 80,52 100,56" />
+          <polyline fill="none" stroke="#EE7A2E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,10 32,16 48,22 64,28 80,32 100,36" />
+        </svg>
+      </div>
+      <div class="xticks">
+        <span>D0</span><span>D7</span><span>D14</span><span>D30</span><span>D45</span><span>D60</span><span>D90</span>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>06 / 11</span></div>
+  </section>
+
+  <!-- ============ 07 PROCESS ============ -->
+  <section class="slide s-process" data-label="07 Process" data-om-validate="false">
+    <div class="top">
+      <span>How we'll work</span>
+      <span class="meta"><span>Agency × Partner</span><span>Phase IV</span></span>
+    </div>
+    <div class="head">
+      <h2>From <em>insight</em><br/>to default,<br/>in five moves.</h2>
+      <div class="sub">A repeatable path each pilot follows, end to end, before it is allowed to graduate to the default experience for every customer.</div>
+    </div>
+    <div class="flow">
+      <div class="node n1">
+        <div class="n">1</div>
+        <h3>Frame</h3>
+        <p>Translate the insight into a single behavioural hypothesis we can falsify in a sprint.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n2">
+        <div class="n">2</div>
+        <h3>Design</h3>
+        <p>Smallest end-to-end change that lets the hypothesis be tested cleanly in one cycle.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n3">
+        <div class="n">3</div>
+        <h3>Pilot</h3>
+        <p>Ship to a 50/50 holdout in one segment. Hold the line for two cycles before reading.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n4">
+        <div class="n">4</div>
+        <h3>Read</h3>
+        <p>Pre-registered metrics only. Kill, scale, or extend — not three of three.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n5">
+        <div class="n">5</div>
+        <h3>Default</h3>
+        <p>Promote to the default surface and retire the legacy path inside the same release.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>Week 1 · Frame</span>
+      <span>Week 2–3 · Design</span>
+      <span>Week 3–6 · Pilot</span>
+      <span>Week 7 · Read</span>
+      <span>Week 8 · Default</span>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>07 / 11</span></div>
+  </section>
+
+  <!-- ============ 08 COMPARISON MATRIX ============ -->
+  <section class="slide s-matrix" data-label="08 Comparison" data-om-validate="false">
+    <div class="top">
+      <span>Three pilots, side by side</span>
+      <span class="meta"><span>Agency × Partner</span><span>Phase IV</span></span>
+    </div>
+    <div class="head">
+      <h2>Where each<br/><em>pilot</em> earns<br/>its keep.</h2>
+      <div class="sub">Scored against the four levers that matter most this cycle. We will only carry forward bets that win on at least two.</div>
+    </div>
+    <div class="table">
+      <div class="cell head-row">Lever</div>
+      <div class="cell head-row">Rewrite welcome</div>
+      <div class="cell head-row">Quiet upgrades</div>
+      <div class="cell head-row">Inbox-as-search</div>
+
+      <div class="cell row-label">Time-to-impact</div>
+      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+      <div class="cell"><span class="pill part">6–8 weeks</span></div>
+      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+
+      <div class="cell row-label">Build cost</div>
+      <div class="cell"><span class="pill yes">Low</span></div>
+      <div class="cell"><span class="pill part">Medium</span></div>
+      <div class="cell"><span class="pill yes">Low</span></div>
+
+      <div class="cell row-label">Retention lift (model)</div>
+      <div class="cell"><span class="pill yes">+19 pts D90</span></div>
+      <div class="cell"><span class="pill part">+7 pts D90</span></div>
+      <div class="cell"><span class="pill part">+5 pts D90</span></div>
+
+      <div class="cell row-label last">Risk to power users</div>
+      <div class="cell last"><span class="pill yes">None</span></div>
+      <div class="cell last"><span class="pill no">Material</span></div>
+      <div class="cell last"><span class="pill note">Soft, reversible</span></div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>08 / 11</span></div>
+  </section>
+
+  <!-- ============ 09 STATS ============ -->
+  <section class="slide s-stats dark" data-label="09 In Numbers" data-om-validate="false">
+    <div class="top">
+      <span>In numbers</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="head">
+      <h2>The case,<br/><em>by the numbers.</em></h2>
+      <div class="sub">Three figures we will report against every cycle. If one of these stops moving, the bet is over.</div>
+    </div>
+    <div class="grid">
+      <div class="stat s1">
+        <div class="big">2.4<small>×</small></div>
+        <h3>Retention<br/>multiple</h3>
+        <p>Cohort with written welcome + human reply, vs. templated control. Sustained through D90.</p>
+      </div>
+      <div class="stat s2">
+        <div class="big">$4.1<small>M</small></div>
+        <h3>Projected<br/>retained ARR</h3>
+        <p>Modelled on the current quarter's signup cohort, holding all other inputs constant.</p>
+      </div>
+      <div class="stat s3">
+        <div class="big">72<small>HR</small></div>
+        <h3>The window<br/>that matters</h3>
+        <p>Behaviour after the first 72 hours predicts 18-month retention better than any feature metric.</p>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>09 / 11</span></div>
+  </section>
+
+  <!-- ============ 10 QUOTE ============ -->
+  <section class="slide s-quote" data-label="10 Voice" data-om-validate="false">
+    <div class="top">
+      <span>Client voice</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="panel">
+      <div class="qmark">"</div>
+      <div>
+        <blockquote>Three days in, someone wrote me a real sentence. I'd been a customer of theirs for nine months before I noticed I'd never been a customer anywhere else again.</blockquote>
+        <div class="who">Margaux Lévêque
+          <small>CFO · mid-market retailer · 14 months in</small>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>10 / 11</span></div>
+  </section>
+
+  <!-- ============ 11 CTA ============ -->
+  <section class="slide s-cta" data-label="11 Next" data-om-validate="false">
+    <div class="top">
+      <span>What's next</span>
+      <span class="meta"><span>Agency × Partner</span><span>Phase V</span></span>
+    </div>
+    <div class="stage">
+      <div class="pane l">
+        <div class="super" style="font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; opacity: .8;">From here</div>
+        <h2>Pick the<br/>three<br/><em>bets.</em></h2>
+        <p>Three pilots in eight weeks. We'll bring back evidence the quarter after, and the question won't be whether to ship — it'll be which two to default.</p>
+      </div>
+      <div class="pane r">
+        <h3>How we move this week</h3>
+        <div class="step">
+          <div class="n">1</div>
+          <div>
+            <h4>Pick the pilots</h4>
+            <p>Confirm two of three by Friday. Owners named in the same conversation; calendars cleared.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <div>
+            <h4>Pre-register the read</h4>
+            <p>Lock the metric, the holdout, and the kill criteria before any code ships. Analytics writes it; both sides sign.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <div>
+            <h4>Stand a Friday review</h4>
+            <p>One slide each pilot, every Friday, until the bet defaults or dies. No exceptions, no makeup decks.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>North &amp; Partners</span><span>11 / 11</span></div>
+  </section>
+
+  <!-- ============ 12 DESIGN SYSTEM ============ -->
+</deck-stage>
+
+</body>
+</html>
