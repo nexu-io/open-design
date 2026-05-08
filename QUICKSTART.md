@@ -6,7 +6,7 @@ Run the full product locally.
 
 ## Environment requirements
 
-- **Node.js:** `~24` (Node 24.x). The repo enforces this through `package.json#engines`.
+- **Node.js:** `>=22 <25` (Node 22 LTS or Node 24). The repo declares this through `package.json#engines`. Node 22 LTS is the safest baseline; Node 24 also works but on some machines `pnpm install` can OOM in a worker thread (see note below).
 - **pnpm:** `10.33.x`. The repo pins `pnpm@10.33.2` through `packageManager`; use Corepack so the pinned version is selected automatically.
 - **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native should work for most flows, but WSL2 is the safer baseline.
 - **Optional local agent CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
@@ -15,17 +15,22 @@ Run the full product locally.
 
 The daemon scans your **`PATH`** (plus common user toolchain directories). If you install a CLI with **`npm install -g`** or **Homebrew** and Open Design still shows it as *not installed*, the GUI may be starting with a minimal `PATH` that does not include your global npm or Homebrew `bin` directory (common on macOS when the app is not launched from a full login shell). Ensure the executable’s directory is on `PATH` for the process that runs the daemon, then use **Rescan** in **Settings → Execution & model**.
 
-`nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 24 before running pnpm:
+`mise` / `nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 22 (or 24) before running pnpm:
 
 ```bash
+# mise (recommended; Rust-based, multi-language)
+mise use node@22
+
 # nvm
-nvm install 24
-nvm use 24
+nvm install 22
+nvm use 22
 
 # fnm
-fnm install 24
-fnm use 24
+fnm install 22
+fnm use 22
 ```
+
+> **Note:** If `pnpm install` crashes with `FATAL ERROR: invalid array length Allocation failed - JavaScript heap out of memory` originating from a worker thread (`TypedArrayPrototypeJoin` in the stack), you are hitting a known interaction between `pnpm@10.33.x` and Node 24. Switch to Node 22 LTS for the install; subsequent commands work on either.
 
 Then enable Corepack and let the repo select pnpm:
 

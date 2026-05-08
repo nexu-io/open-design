@@ -6,22 +6,27 @@
 
 ## 环境要求
 
-- **Node.js：** `~24`（Node 24.x）。仓库在 `package.json#engines` 中强制要求该版本。
+- **Node.js：** `>=22 <25`（Node 22 LTS 或 Node 24）。仓库通过 `package.json#engines` 声明该范围。**推荐使用 Node 22 LTS 作为基线**；Node 24 也可用，但部分机器会在 `pnpm install` 阶段触发 worker OOM（见下方注意事项）。
 - **pnpm：** `10.33.x`。仓库通过 `packageManager` 固定为 `pnpm@10.33.2`；若使用 Corepack，该固定版本将被自动选中。
 - **操作系统：** 主要支持 macOS、Linux、WSL2。Windows 原生环境大部分流程也可运行，但 WSL2 是更稳定的基线。
 - **可选的本地 agent CLI：** Claude Code、Codex、Devin for Terminal、Gemini CLI、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等。即使未安装任何 CLI，也可在 Settings 中切换至 BYOK API 模式。
 
-`nvm` / `fnm` 为可选的便捷工具，并非项目必要依赖。如需使用，请在执行 pnpm 之前安装并切换到 Node 24：
+`mise` / `nvm` / `fnm` 为可选的便捷工具，并非项目必要依赖。如需使用，请在执行 pnpm 之前安装并切换到 Node 22（或 24）：
 
 ```bash
+# mise（推荐；Rust 实现、多语言版本管理）
+mise use node@22
+
 # nvm
-nvm install 24
-nvm use 24
+nvm install 22
+nvm use 22
 
 # fnm
-fnm install 24
-fnm use 24
+fnm install 22
+fnm use 22
 ```
+
+> **注意：** 若 `pnpm install` 抛出 `FATAL ERROR: invalid array length Allocation failed - JavaScript heap out of memory`（堆栈中可见 worker 线程的 `TypedArrayPrototypeJoin`），即触发了 `pnpm@10.33.x` 与 Node 24 的已知交互问题。改用 Node 22 LTS 完成安装即可，后续命令在 22/24 上均可运行。
 
 随后启用 Corepack，由仓库自动选择 pnpm：
 

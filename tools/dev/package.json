@@ -25,6 +25,6 @@
     "typescript": "6.0.3"
   },
   "engines": {
-    "node": "~24"
+    "node": ">=22 <25"
   }
 }
