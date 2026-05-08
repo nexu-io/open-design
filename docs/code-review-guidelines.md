@@ -95,6 +95,7 @@ A PR is in scope when it passes the [Product relevance test](#1-product-relevanc
 **Single primary ownership area:**
 
 - `apps/web` — Next.js App Router UI, browser runtime behavior, web-local provider integration.
+- `apps/landing-page` — first-party marketing site workspace package with its own documented boundaries and commands.
 - `apps/daemon` — local privileged daemon APIs, SSE, agent spawning, SQLite persistence, skills/design-system/resource serving, artifacts, credentials storage, static serving, daemon CLI.
 - `apps/desktop` — Electron shell that discovers runtime state through sidecar IPC.
 - `apps/packaged` — packaged Electron entry, packaged sidecar startup, runtime integration, `od://` entry glue.
@@ -288,15 +289,15 @@ Approve only when **all** of the following hold:
 - New risk is proportionate to the change and covered by tests, types, guards, or clearly documented manual validation.
 - Follow-up work is unnecessary for correctness or explicitly tracked outside the review.
 
-### Documentation-only exception
+### Documentation-only review additions
 
-For pure documentation changes (Markdown only, no executable code, no package metadata, no generated entries, no resource files consumed by runtime), validation may be limited to:
+Pure documentation changes still require the baseline validation from `AGENTS.md`: run `pnpm guard` and `pnpm typecheck` before approval.
+
+For documentation-heavy PRs, reviewers should also check:
 
 - Internal link checks and reference integrity.
 - Consistency with `AGENTS.md` and the relevant directory-level `AGENTS.md` files.
 - Reviewer inspection that the document does not conflict with directory-level rules.
-
-Run `pnpm guard` and `pnpm typecheck` when the documentation change touches executable rules, generated entries, package metadata, command surfaces, resource loading, or validation behavior — anything where doc text is also a contract enforced by tooling.
 
 ## Appendix: examples of failed product-relevance reviews
 
