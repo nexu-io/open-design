@@ -1856,7 +1856,19 @@ function ComposioSection({
             type="button"
             className="ghost"
             disabled={!apiKeyConfigured}
-            onClick={() => updateComposio({ apiKey: '', apiKeyConfigured: false, apiKeyTail: '' })}
+            onClick={() => {
+              // Match the existing window.confirm guard the rest of the
+              // app uses for destructive actions (conversation delete,
+              // design delete, file delete in FileWorkspace, and the
+              // Media providers Clear button). Without this a stray
+              // click wipes the daemon-stored Composio key and the
+              // user has to paste it back from their secrets manager.
+              // Issue #734.
+              if (!confirm('Clear the saved Composio API key? You\'ll need to paste it again to use Composio-backed connectors.')) {
+                return;
+              }
+              updateComposio({ apiKey: '', apiKeyConfigured: false, apiKeyTail: '' });
+            }}
           >
             Clear
           </button>
