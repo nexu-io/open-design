@@ -152,8 +152,9 @@ export function isLocalSameOrigin(
   const bindHost = env.OD_BIND_HOST || '127.0.0.1';
   const extraAllowedOrigins = configuredAllowedOrigins(env);
 
+  const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, []);
+  if (origin == null || origin === '') return localHostAllowed;
   if (!isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins)) return false;
-  if (origin == null || origin === '') return true;
   return isAllowedBrowserOrigin(origin, host, ports, bindHost, extraAllowedOrigins);
 }
 

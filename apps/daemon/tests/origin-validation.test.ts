@@ -222,6 +222,37 @@ describe('daemon origin validation middleware', () => {
     expect(res.status).toBe(403);
   });
 
+  it('blocks local guarded routes without Origin when Host only matches a configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  it('allows local guarded routes from a matching configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        origin: 'https://od.example.com',
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
   // --- Origin: null (sandboxed iframe previews) ---
 
   it('allows Origin: null for GET raw-file preview routes', async () => {

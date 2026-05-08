@@ -420,6 +420,18 @@ describe('app-config origin guard', () => {
     expect(res.status).toBe(403);
   });
 
+  it('rejects no-Origin requests that only match configured deployment hosts', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await httpRequest(`${baseUrl}/api/app-config`, {
+        headers: { Host: 'od.example.com' },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
   it('still rejects non-loopback Origin', async () => {
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       headers: {
