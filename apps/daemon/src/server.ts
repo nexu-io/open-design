@@ -1790,9 +1790,13 @@ export function createSseResponse(
     /** @param {ChatSseEvent['event'] | ProxySseEvent['event'] | string} event */
     send(event, data, id: string | number | null | undefined = null) {
       if (!canWrite()) return false;
-      if (id !== null && id !== undefined) res.write(`id: ${id}\n`);
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      // Assemble the full SSE event into a single write so id/event/data land
+      // in one TCP chunk. Three separate writes would let `event: <type>` flush
+      // ahead of the `data:` payload, which produces partial events for
+      // consumers that read chunk-by-chunk (e.g. tests using a Response body
+      // reader with a substring marker).
+      const idLine = id !== null && id !== undefined ? `id: ${id}\n` : '';
+      res.write(`${idLine}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       return true;
     },
     writeKeepAlive,
