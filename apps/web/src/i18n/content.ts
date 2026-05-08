@@ -358,6 +358,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Editorial · Studio': 'Editorial · Studio',
   'Retro & Nostalgic': 'Retro & Nostalgisch',
   'Themed & Unique': 'Thematisch & Einzigartig',
+  'Editorial / Personal / Publication': 'Editorial / Persönlich / Publikation',
   Uncategorized: 'Nicht kategorisiert',
 };
 
@@ -483,6 +484,7 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'storytelling',
   'totality-festival',
   'tetris',
+  'urdu',
   'vibrant',
   'vintage',
 ] as const;

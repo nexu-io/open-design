@@ -309,6 +309,7 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Editorial · Studio': 'Редакционная студия',
   'Retro & Nostalgic': 'Ретро и ностальгия',
   'Themed & Unique': 'Тематические и уникальные',
+  'Editorial / Personal / Publication': 'Редакционные / Персональные / Публикации',
   Uncategorized: 'Без категории',
 };
 
@@ -434,6 +435,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'storytelling',
   'totality-festival',
   'tetris',
+  'urdu',
   'vibrant',
   'vintage',
 ] as const;
