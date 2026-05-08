@@ -5156,13 +5156,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google',
+            'protocol must be one of anthropic|openai|azure|google|ollama',
           );
         }
         if (
@@ -5367,6 +5367,44 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const tail = buffer.trim();
     if (tail) await onFrame(collectSseFrame(tail));
+  };
+
+  // Ollama Cloud streams NDJSON (newline-delimited JSON) — each line is a
+  // complete JSON object. Parse per-line and dispatch parsed objects.
+  const streamUpstreamNdjson = async (response, onFrame) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (await onFrame({ data })) return;
+        } catch {
+          // skip unparseable lines
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        const data = JSON.parse(tail);
+        await onFrame({ data });
+      } catch {
+        // skip
+      }
+    }
   };
 
   const extractOpenAIText = (data) => {
@@ -5800,6 +5838,98 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       sse.end();
     } catch (err) {
       console.error(`[proxy:google] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
+  app.post('/api/proxy/ollama/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '');
+    const url = `${clean}/api/chat`;
+    console.log(
+      `[proxy:ollama] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const payload = {
+      model,
+      messages: payloadMessages,
+      stream: true,
+    };
+    if (typeof maxTokens === 'number' && maxTokens > 0) {
+      payload.options = { num_predict: maxTokens };
+    }
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamNdjson(response, ({ data }) => {
+        if (!data) return false;
+        if (data.done) {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        const content = data.message?.content;
+        if (typeof content === 'string' && content) {
+          sse.send('delta', { delta: content });
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:ollama] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
     }

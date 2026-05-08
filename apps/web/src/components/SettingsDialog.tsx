@@ -147,6 +147,8 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2.1',
     'MiniMax-M2',
     'mimo-v2.5-pro',
+  ],
+  ollama: [
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
     'deepseek-v3.2',
@@ -207,6 +209,7 @@ const API_PROTOCOL_TABS: Array<{
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure OpenAI' },
   { id: 'google', title: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud' },
 ];
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -214,6 +217,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   openai: 'OpenAI API',
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
+  ollama: 'Ollama Cloud API',
 };
 
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -221,6 +225,7 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   openai: 'sk-...',
   azure: 'azure key',
   google: 'AIza...',
+  ollama: 'Ollama API key',
 };
 
 type RescanNotice =

@@ -192,8 +192,8 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   },
   {
     label: 'Ollama Cloud',
-    protocol: 'openai',
-    baseUrl: 'https://ollama.com/v1',
+    protocol: 'ollama',
+    baseUrl: 'https://ollama.com',
     model: 'gpt-oss:120b',
     models: [
       'cogito-2.1:671b',

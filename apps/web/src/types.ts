@@ -61,7 +61,7 @@ export type {
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
+export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
 
 export type LiveArtifactTabId = `live:${string}`;
 export type ProjectWorkspaceTabId = string | LiveArtifactTabId;
