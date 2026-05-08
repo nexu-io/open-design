@@ -186,25 +186,6 @@ Options:
                    to that interface only.
   --no-open        Do not open the browser after start.
 
-Environment:
-  OD_WEB_PORT      Sibling static-server port (e.g. caddy fronting apps/web/out).
-                   When set, the daemon's same-origin gate accepts loopback origins on
-                   that port in addition to its own.
-  OD_ALLOWED_ORIGINS
-                   Comma-separated list of full HTTP(S) origins (\`scheme://host[:port]\`)
-                   the daemon should accept as same-site for /api/* requests, in
-                   addition to its built-in loopback set. Required when a non-loopback
-                   static server fronts the SPA — without it, browsers will see 403s on
-                   PUT/POST. Each entry must be a bare origin; only http:// and https://
-                   are accepted, and the daemon refuses to start if any entry fails to
-                   parse. The daemon both compares it verbatim against the browser's
-                   \`Origin\` header AND admits its host:port to the \`Host\`-header
-                   allowlist (Caddy v2 reverse_proxy preserves the original Host upstream
-                   by default).
-                   Example: OD_ALLOWED_ORIGINS=http://laptop.local:5174,https://laptop.local:5174
-                   Note: this widens only the general /api gate. Connector-credential and
-                   live-artifact preview/refresh routes remain strictly loopback-only.
-
 What the daemon does:
   * scans PATH for installed code-agent CLIs (claude, codex, devin, gemini, opencode, cursor-agent, ...)
   * serves the chat UI at http://<host>:<port>
