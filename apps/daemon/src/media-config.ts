@@ -7,6 +7,29 @@
 // stored values so power users can keep keys out of the workspace
 // folder altogether (`OD_OPENAI_API_KEY=… node daemon/cli.js`).
 //
+// Storage location (precedence high → low):
+//   1. OD_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
+//   2. OD_DATA_DIR=DIR           → <DIR>/media-config.json
+//   3. (default)                 → <projectRoot>/.od/media-config.json
+// The default is unchanged for workspace-local installs. (1) lets a
+// supervisor relocate just the credentials file. (2) means installs
+// that already set OD_DATA_DIR for the rest of the daemon's runtime
+// state (Nix-store / immutable-image installs, the packaged daemon at
+// apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
+// the Home Manager / NixOS modules) get media-config there too without
+// any extra plumbing. Both env values are resolved with the same
+// semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared
+// expandHomePrefix() helper handles `~`, `$HOME`, and `${HOME}` (with
+// either `/` or `\` separator), then relative paths anchor to
+// <projectRoot> (NOT process.cwd, which is unrelated to the workspace
+// when systemd or launchd starts the daemon).
+//
+// Migration note: a workspace install that sets a custom OD_DATA_DIR
+// AND has a pre-existing `<projectRoot>/.od/media-config.json` will
+// start reading from `<OD_DATA_DIR>/media-config.json` instead. Move
+// the file once or set OD_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
+// the old location.
+//
 // The file is intentionally simple JSON — no encryption, no schema
 // versioning yet. The daemon listens on 127.0.0.1 only and the workspace
 // is already trusted, so adding a vault here would mostly be theatre.
@@ -14,9 +37,10 @@
 // echo secrets back into the DOM.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
+import { expandHomePrefix } from './home-expansion.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 
@@ -38,6 +62,7 @@ const ENV_KEYS = {
   // upstream env per docs.x.ai quickstart — so users who already export
   // it for the official SDK don't have to re-paste into Settings.
   grok: ['OD_GROK_API_KEY', 'XAI_API_KEY'],
+  nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
   replicate: ['OD_REPLICATE_API_TOKEN', 'REPLICATE_API_TOKEN'],
@@ -49,10 +74,47 @@ const ENV_KEYS = {
   udio: ['OD_UDIO_API_KEY'],
   elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
+  tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
 };
 
+// Resolve an `OD_*_DIR` env override using the same semantics as
+// `resolveDataDir()` in server.ts: expandHomePrefix() handles the `~`,
+// `$HOME`, and `${HOME}` shorthands (with either `/` or `\` separator),
+// then relative paths anchor to <projectRoot>, not process.cwd, since
+// the daemon is often launched from a directory that has nothing to do
+// with the workspace, e.g. systemd's `/`. The writability check that
+// resolveDataDir does on startup is intentionally NOT replicated here:
+// configFile() is on the read path and a missing/unwritable directory
+// is a normal "no config yet" condition handled by readStored(); the
+// write path's mkdir(recursive) creates the directory on first use.
+function resolveOverrideDir(raw, projectRoot) {
+  // Share expandHomePrefix with resolveDataDir (server.ts) so OD_DATA_DIR
+  // and OD_MEDIA_CONFIG_DIR cannot split state under a $HOME-style value.
+  // A launcher passing OD_DATA_DIR=$HOME/.open-design without a shell to
+  // expand it would otherwise route SQLite/projects/artifacts to the
+  // expanded path while media-config.json stayed under
+  // <projectRoot>/$HOME/.open-design, leaving stored credentials
+  // unreachable on the next read.
+  const expanded = expandHomePrefix(raw);
+  return path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(projectRoot, expanded);
+}
+
+function envOverrideDir(envName, projectRoot) {
+  const raw = process.env[envName];
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed ? resolveOverrideDir(trimmed, projectRoot) : null;
+}
+
 function configFile(projectRoot) {
-  return path.join(projectRoot, '.od', 'media-config.json');
+  // Precedence: explicit media-config override > general data dir > default.
+  const dir =
+    envOverrideDir('OD_MEDIA_CONFIG_DIR', projectRoot)
+    ?? envOverrideDir('OD_DATA_DIR', projectRoot)
+    ?? path.join(projectRoot, '.od');
+  return path.join(dir, 'media-config.json');
 }
 
 async function readStored(projectRoot) {
@@ -140,7 +202,7 @@ function tokenFromCodexAuth(data) {
 }
 
 async function resolveOpenAIOAuthCredential() {
-  const home = homedir();
+  const home = os.homedir();
   const hermesAuth = await readJsonIfPresent(
     path.join(home, '.hermes', 'auth.json'),
   );
@@ -176,6 +238,9 @@ export async function resolveProviderConfig(projectRoot, providerId) {
   return {
     apiKey: envKey || entry.apiKey || oauth?.apiKey || '',
     baseUrl: entry.baseUrl || '',
+    ...(typeof entry.model === 'string' && entry.model.trim()
+      ? { model: entry.model.trim() }
+      : {}),
   };
 }
 
@@ -203,6 +268,9 @@ export async function readMaskedConfig(projectRoot) {
       // the DOM.
       apiKeyTail: hasStoredKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
+      ...(typeof entry.model === 'string' && entry.model.trim()
+        ? { model: entry.model.trim() }
+        : {}),
     };
   }
   return { providers };
@@ -235,8 +303,16 @@ export async function writeConfig(projectRoot, body) {
       typeof entry.baseUrl === 'string' && entry.baseUrl.trim()
         ? entry.baseUrl.trim()
         : '';
-    if (!apiKey && !baseUrl) continue;
-    next[id] = { apiKey, baseUrl };
+    const model =
+      typeof entry.model === 'string' && entry.model.trim()
+        ? entry.model.trim()
+        : '';
+    if (!apiKey && !baseUrl && !model) continue;
+    next[id] = {
+      apiKey,
+      baseUrl,
+      ...(model ? { model } : {}),
+    };
   }
   if (Object.keys(next).length === 0) {
     const prior = await readStored(projectRoot);

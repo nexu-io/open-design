@@ -18,6 +18,14 @@ export type PackagedDesktopRootIdentity = {
   version: 1;
 };
 
+export type PackagedWebRootIdentity = {
+  namespace: string;
+  pid: number;
+  url: string;
+  startedAt: string;
+  version: 1;
+};
+
 export type PackagedDesktopIdentityHandle = {
   close(): Promise<void>;
   identity: PackagedDesktopRootIdentity;
@@ -72,4 +80,19 @@ export async function writePackagedDesktopIdentity(options: {
     },
     identity,
   };
+}
+
+export async function writePackagedWebIdentity(options: {
+  paths: PackagedNamespacePaths;
+  pid: number;
+  url: string;
+}): Promise<void> {
+  const identity: PackagedWebRootIdentity = {
+    namespace: options.paths.namespaceRoot.split("/").pop() ?? "default",
+    pid: options.pid,
+    url: options.url,
+    startedAt: new Date().toISOString(),
+    version: 1,
+  };
+  await writeJsonFile(options.paths.webIdentityPath, identity);
 }

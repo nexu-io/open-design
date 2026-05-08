@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
-import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
+import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 
 export interface PreviewView {
   id: string;
   label: string;
-  // Null means "still loading" — modal renders the loading affordance.
-  // Undefined means "not yet requested" — parent should react to onView and
-  // begin a fetch. Both states keep the iframe blank.
+  // Null means "still loading", undefined means "not yet requested".
+  // Both states keep the iframe blank. The parent should react to
+  // onView and begin a fetch.
   html: string | null | undefined;
+  // When set, the modal renders an error affordance with a Retry
+  // button that re-fires onView for this view id, instead of sitting
+  // at the loading state forever. Issue #860.
+  error?: string | null;
+  // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
+  // print-all-slides behavior survive the sandboxed export path.
+  deck?: boolean;
 }
 
 export interface PreviewSidebar {
@@ -197,9 +204,11 @@ export function PreviewModal({
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];
   const activeHtml = activeView?.html ?? null;
+  const activeError = activeView?.error ?? null;
+  const activeDeck = activeView?.deck ?? false;
   const srcDoc = useMemo(
-    () => (activeHtml ? buildSrcdoc(activeHtml) : ''),
-    [activeHtml],
+    () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck }) : ''),
+    [activeHtml, activeDeck],
   );
   const exportTitle = exportTitleFor(activeView?.id ?? '');
 
@@ -223,10 +232,7 @@ export function PreviewModal({
 
   function openInNewTab() {
     if (!activeHtml) return;
-    const blob = new Blob([activeHtml], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openSandboxedPreviewInNewTab(activeHtml, exportTitle, { deck: activeDeck });
   }
 
   function enterFullscreen() {
@@ -314,7 +320,7 @@ export function PreviewModal({
                     role="menuitem"
                     onClick={() => {
                       setShareOpen(false);
-                      if (activeHtml) exportAsPdf(activeHtml, exportTitle);
+                      if (activeHtml) exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
                     }}
                   >
                     <span className="share-menu-icon">📄</span>
@@ -376,7 +382,30 @@ export function PreviewModal({
           ref={stageRef}
         >
           <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
-            {activeHtml === null || activeHtml === undefined ? (
+            {activeError ? (
+              // Distinct error state so a fetch failure stops looking
+              // like an indefinite "Loading…". The Retry button re-fires
+              // onView for this view id; the caller is responsible for
+              // clearing the error state and re-running the fetch.
+              // Issue #860.
+              <div className="ds-modal-empty ds-modal-error">
+                <div className="ds-modal-error-title">
+                  {t('preview.errorTitle')}
+                </div>
+                <div className="ds-modal-error-body">
+                  {t('preview.errorBody')}
+                </div>
+                {onView && activeView ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => onView(activeView.id)}
+                  >
+                    {t('preview.retry')}
+                  </button>
+                ) : null}
+              </div>
+            ) : activeHtml === null || activeHtml === undefined ? (
               <div className="ds-modal-empty">
                 {t('preview.loading', {
                   label:
@@ -388,7 +417,7 @@ export function PreviewModal({
                 <iframe
                   key={activeView?.id ?? 'view'}
                   title={`${title} ${activeView?.label ?? ''}`}
-                  sandbox="allow-scripts allow-same-origin"
+                  sandbox="allow-scripts"
                   srcDoc={srcDoc}
                 />
               </div>

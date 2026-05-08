@@ -24,6 +24,8 @@ od:
   design_system:
     requires: true
     sections: [color, typography, layout, components]
+  craft:
+    requires: [rtl-and-bidi]
   example_prompt: "Build me a Q3 financial report for an early-stage SaaS — MRR, burn, gross margin, top accounts."
 ---
 

@@ -42,6 +42,7 @@ import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { Agent as UndiciAgent } from 'undici';
 import {
   AUDIO_DURATIONS_SEC,
   VIDEO_LENGTHS_SEC,
@@ -58,6 +59,11 @@ import {
 } from './projects.js';
 
 const execFile = promisify(execFileCb);
+const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+// Verify the current Nano Banana / Gemini image model name against:
+// https://ai.google.dev/gemini-api/docs/models
+const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
+const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -205,6 +211,7 @@ function clampWithWarning(value, allowed, flagName) {
  * @param {number} [args.duration]
  * @param {string} [args.voice]
  * @param {string} [args.audioKind]
+ * @param {string} [args.language]
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
  */
 export async function generateMedia(args) {
@@ -221,6 +228,7 @@ export async function generateMedia(args) {
     duration,
     voice,
     audioKind,
+    language,
     compositionDir,
     image,
   } = args;
@@ -304,6 +312,7 @@ export async function generateMedia(args) {
     duration: clampedDuration,
     voice: voice || '',
     audioKind: resolvedAudioKind,
+    language: language || '',
     // Project-relative path to the directory the agent scaffolded with
     // hyperframes.json / meta.json / index.html. Only consumed by the
     // hyperframes renderer; null/empty for every other provider.
@@ -361,6 +370,11 @@ export async function generateMedia(args) {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'grok' && surface === 'video') {
       const result = await renderGrokVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'nanobanana' && surface === 'image') {
+      const result = await renderNanoBananaImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -506,6 +520,12 @@ function defaultAspectFor(surface) {
 // ---------------------------------------------------------------------------
 
 const AZURE_DEFAULT_API_VERSION = '2024-02-01';
+const OPENAI_IMAGE_HEADERS_TIMEOUT_MS = 10 * 60 * 1000;
+const OPENAI_IMAGE_BODY_TIMEOUT_MS = 10 * 60 * 1000;
+const openAIImageDispatcher = new UndiciAgent({
+  headersTimeout: OPENAI_IMAGE_HEADERS_TIMEOUT_MS,
+  bodyTimeout: OPENAI_IMAGE_BODY_TIMEOUT_MS,
+});
 
 async function renderOpenAIImage(ctx, credentials) {
   if (!credentials.apiKey) {
@@ -552,6 +572,7 @@ async function renderOpenAIImage(ctx, credentials) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    dispatcher: openAIImageDispatcher,
   });
   const text = await resp.text();
   if (!resp.ok) {
@@ -1036,6 +1057,101 @@ async function renderGrokImage(ctx, credentials) {
   };
 }
 
+async function renderNanoBananaImage(ctx, credentials) {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || NANOBANANA_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireModel = (credentials.model || ctx.model || NANOBANANA_DEFAULT_MODEL).trim();
+  const body = {
+    contents: [{
+      parts: [{
+        text: ctx.prompt || 'A high-quality reference image.',
+      }],
+    }],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+      imageConfig: {
+        aspectRatio: nanoBananaAspectFor(ctx.aspect),
+        imageSize: NANOBANANA_DEFAULT_IMAGE_SIZE,
+      },
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, {
+    method: 'POST',
+    headers: nanoBananaHeaders(baseUrl, credentials.apiKey),
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`nano-banana image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`nano-banana image non-JSON: ${truncate(text, 200)}`);
+  }
+  const bytes = inlineImageBytesFromGenerateContent(data);
+  return {
+    bytes,
+    providerNote: `nano-banana/${wireModel} · ${nanoBananaAspectFor(ctx.aspect)} · ${NANOBANANA_DEFAULT_IMAGE_SIZE} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function nanoBananaHeaders(baseUrl, apiKey) {
+  const headers = {
+    'content-type': 'application/json',
+  };
+  if (usesOfficialGoogleApiKeyHeader(baseUrl)) {
+    headers['x-goog-api-key'] = apiKey;
+    return headers;
+  }
+  headers.authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
+function usesOfficialGoogleApiKeyHeader(baseUrl) {
+  try {
+    const url = new URL(baseUrl);
+    return url.hostname === 'generativelanguage.googleapis.com';
+  } catch {
+    return false;
+  }
+}
+
+function nanoBananaAspectFor(aspect) {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+function inlineImageBytesFromGenerateContent(data) {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    for (const part of parts) {
+      const inline = part?.inlineData;
+      if (typeof inline?.data === 'string' && inline.data) {
+        return Buffer.from(inline.data, 'base64');
+      }
+    }
+  }
+  throw new Error('nano-banana image response missing candidates[].content.parts[].inlineData.data');
+}
+
 function sniffImageExt(bytes) {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return '.jpg';
@@ -1248,10 +1364,13 @@ async function renderMinimaxTTS(ctx, credentials) {
   // platform.minimaxi.com under voice management.
   const voiceId = (ctx.voice && ctx.voice.trim()) || 'male-qn-qingse';
 
+  const languageBoost = typeof ctx.language === 'string' ? ctx.language.trim() : '';
+
   const body = {
     model: wireModel,
     text,
     stream: false,
+    ...(languageBoost ? { language_boost: languageBoost } : {}),
     voice_setting: {
       voice_id: voiceId,
       speed: 1.0,

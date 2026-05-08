@@ -26,6 +26,11 @@ const OVERRIDES: Record<string, number> = {
   // not the canonical `mimo-v2.5-pro` id we hand to Xiaomi's direct API.
   // 32k matches what issue #29 reports as the working ceiling.
   'mimo-v2.5-pro': 32768,
+
+  // DeepSeek v4 models not tracked by LiteLLM as of 2026-05-07.
+  // Spec: https://platform.deepseek.com/docs/model-cards
+  'deepseek-v4-pro': 384000,
+  'deepseek-v4-flash': 384000,
 };
 
 export function modelMaxTokensDefault(model: string): number {

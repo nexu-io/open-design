@@ -6,7 +6,10 @@ out/
 .tmp/
 .DS_Store
 *.log
+/OpenDesign.exe
 .vite
+.astro/
+.vscode
 
 # Local runtime data — auto-created by the daemon on first start.
 # Holds app.sqlite (project metadata), projects/<id>/ (per-project artifacts,
@@ -23,6 +26,10 @@ e2e/reports/test-results
 e2e/reports/results.json
 e2e/reports/junit.xml
 e2e/reports/latest.md
+e2e/ui/.od-data
+e2e/ui/reports
+e2e/ui/test-results
+apps/web/playwright/
 
 # Legacy folder name from before the rename; keep ignored so existing
 # clones don't accidentally stage stale runtime data.
@@ -37,9 +44,13 @@ tsconfig.tsbuildinfo
 .opencode/
 .claude/
 .codex/
+.deepseek/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/
 task.md
 specs/change/active
 .ralph/
+
+# Local design assistant context
+.impeccable.md

@@ -12,7 +12,7 @@
 // PPTX export is fundamentally different — it asks the agent to convert the
 // artifact server-side, so it lives in ProjectView.tsx (not here).
 
-import { buildSrcdoc } from './srcdoc';
+import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 
@@ -158,6 +158,53 @@ export function archiveFilenameFrom(resp: Response, fallbackTitle: string, root:
   return `${slug}.zip`;
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Blob documents inherit the origin of the page that created them. For
+// generated preview HTML, opening the artifact itself as the top-level Blob
+// document would bypass the preview contract documented in
+// docs/architecture.md: the untrusted code must run in an iframe sandbox
+// without `allow-same-origin`. This wrapper is same-origin, but it contains no
+// generated script; the generated document lives in an opaque-origin child.
+export function buildSandboxedPreviewDocument(
+  doc: string,
+  title: string,
+  opts?: { allowModals?: boolean },
+): string {
+  const safeTitle = escapeHtmlAttribute(title || 'Preview');
+  const sandbox = opts?.allowModals ? 'allow-scripts allow-modals' : 'allow-scripts';
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>html,body,iframe{margin:0;width:100%;height:100%;border:0}body{overflow:hidden;background:#fff}</style>
+</head>
+<body>
+  <iframe title="${safeTitle}" sandbox="${sandbox}" srcdoc="${escapeHtmlAttribute(doc)}"></iframe>
+</body>
+</html>`;
+}
+
+export function openSandboxedPreviewInNewTab(
+  html: string,
+  title: string,
+  srcdocOptions?: SrcdocOptions,
+): void {
+  const doc = buildSandboxedPreviewDocument(buildSrcdoc(html, srcdocOptions), title);
+  const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // Open the artifact in a new tab via a Blob URL with a self-printing
 // script injected. Going through a Blob URL (rather than `window.open('')`
 // + `document.write`) avoids two failure modes we hit before:
@@ -176,21 +223,44 @@ export function archiveFilenameFrom(resp: Response, fallbackTitle: string, root:
 export function exportAsPdf(
   html: string,
   title: string,
-  opts?: { deck?: boolean },
+  opts?: SrcdocOptions & { sandboxedPreview?: boolean },
 ): void {
-  let doc = buildSrcdoc(html);
+  const sandboxedPreview = opts?.sandboxedPreview ?? true;
+  let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintScript(doc, title);
+  if (sandboxedPreview) {
+    // `allow-modals` is needed so the child can show the browser print dialog;
+    // it still does not grant same-origin access to the generated document.
+    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+  }
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
+
+  // Open an empty tab synchronously (without noopener) to reliably detect popup blocking.
+  // Since window.open with 'noopener' returns null on success by specification,
+  // this approach allows us to distinguish between a successful export and a blocked popup.
+  const win = window.open('', '_blank');
+
   if (!win) {
-    // Popup blocked — at least the tab navigation may have happened above.
-    // Nothing else we can do without a fresh user gesture.
+    if (typeof alert !== 'undefined') {
+      alert('Popup blocked! Please allow popups for this site to export as PDF.');
+    }
+    URL.revokeObjectURL(url); // Prevent memory leaks on early exit
+    return;
   }
-  // Revoke later — the loaded document keeps a reference until the tab
-  // closes; revoking the URL string only removes the lookup name.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  if (sandboxedPreview) {
+    try {
+      // Disassociate the opener reference to preserve sandboxing/noopener behavior
+      win.opener = null;
+    } catch (e) {
+      // Guard against potential context environment restrictions
+    }
+  }
+
+  // Navigate the verified window to the generated Blob URL
+  win.location.href = url;
 }
 
 function injectPrintScript(doc: string, title: string): string {

@@ -5,12 +5,13 @@ import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform }
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
+  inspectPackedMacApp,
   packMac,
   readPackedMacLogs,
   startPackedMacApp,
   stopPackedMacApp,
   uninstallPackedMacApp,
-} from "./mac.js";
+} from "./mac/index.js";
 import {
   cleanupPackedWinNamespace,
   installPackedWinApp,
@@ -22,14 +23,17 @@ import {
   startPackedWinApp,
   stopPackedWinApp,
   uninstallPackedWinApp,
-} from "./win.js";
+} from "./win/index.js";
 import {
   cleanupPackedLinuxNamespace,
   installPackedLinuxApp,
+  installPackedLinuxHeadless,
   packLinux,
   readPackedLinuxLogs,
   startPackedLinuxApp,
+  startPackedLinuxHeadless,
   stopPackedLinuxApp,
+  stopPackedLinuxHeadless,
   uninstallPackedLinuxApp,
 } from "./linux.js";
 
@@ -55,6 +59,7 @@ type CacCommand = ReturnType<CAC["command"]>;
 
 function addSharedOptions(command: CacCommand) {
   return command
+    .option("--cache-dir <path>", "tools-pack cache directory")
     .option("--dir <path>", "tools-pack root directory")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
@@ -78,6 +83,11 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
     .option("--to <target>", TO_HELP_BY_PLATFORM[platform]);
 }
 
+function addMacBuildOptions(command: CacCommand) {
+  return addBuildOptions(command, "mac")
+    .option("--mac-compression <mode>", "mac artifact compression: normal|maximum|store (default: normal)");
+}
+
 function addWinLifecycleOptions(command: CacCommand) {
   return command
     .option("--remove-data", "remove packaged data during uninstall/reset/cleanup")
@@ -89,7 +99,7 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
-addBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "mac").action(
+addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
   async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("mac", options);
     switch (action) {
@@ -107,6 +117,9 @@ addBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging comm
         return;
       case "logs":
         printLogs(await readPackedMacLogs(config), options);
+        return;
+      case "inspect":
+        printJson(await inspectPackedMacApp(config, options));
         return;
       case "uninstall":
         printJson(await uninstallPackedMacApp(config));
@@ -170,6 +183,7 @@ addWinLifecycleOptions(
 
 addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "linux")
   .option("--containerized", "build inside electronuserland/builder Docker for distro-agnostic glibc compat")
+  .option("--headless", "install/start/stop the headless (no-Electron) entry instead of the full desktop app")
   .action(async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("linux", options);
     switch (action) {
@@ -177,13 +191,13 @@ addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging 
         printJson(await packLinux(config));
         return;
       case "install":
-        printJson(await installPackedLinuxApp(config));
+        printJson(await (options.headless ? installPackedLinuxHeadless(config) : installPackedLinuxApp(config)));
         return;
       case "start":
-        printJson(await startPackedLinuxApp(config));
+        printJson(await (options.headless ? startPackedLinuxHeadless(config) : startPackedLinuxApp(config)));
         return;
       case "stop":
-        printJson(await stopPackedLinuxApp(config));
+        printJson(await (options.headless ? stopPackedLinuxHeadless(config) : stopPackedLinuxApp(config)));
         return;
       case "logs":
         printLogs(await readPackedLinuxLogs(config), options);

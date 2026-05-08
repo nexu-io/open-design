@@ -4,7 +4,7 @@
 
 这份指南会告诉你：每种贡献该往哪里看、合并之前 PR 需要过哪些线。
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>简体中文</b> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <b>简体中文</b> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -16,7 +16,7 @@
 | 让 OD 说一种新品牌的视觉语言 | 一套 **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | 一个 Markdown 文件 |
 | 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | 一个数组里 ~10 行 |
 | 加功能、修 bug、从 [`open-codesign`][ocod] 移植一个 UX 模式 | 代码 | `apps/web/src/`、`apps/daemon/` | 普通 PR |
-| 改文档、补德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
+| 改文档、补法语 / 德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.fr.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
 
 不确定自己想做的属于哪一桶？[先开 issue / discussion](https://github.com/nexu-io/open-design/issues/new)，我们告诉你该改哪个面。
 
@@ -33,7 +33,7 @@ corepack enable           # 使用 packageManager 固定的 pnpm
 pnpm install
 pnpm tools-dev run web    # daemon + web 前台闭环
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # 生产构建
+pnpm --filter @open-design/web build  # 需要时构建 web package
 ```
 
 要求 Node `~24` 和 pnpm `10.33.x`。`nvm` / `fnm` 是可选路径；如果你习惯用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`。macOS、Linux、WSL2 是主要路径。Windows 原生应该能跑但不是主要目标 —— 跑不起来请开 issue。

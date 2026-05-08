@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-creative-mode",
+  "name": "Creative Mode",
+  "tagline": "Cream paper canvas with confident multi-color (green, pink, orange, yellow) accents and Archivo Black display.",
+  "mood": [
+    "creative",
+    "confident",
+    "playful",
+    "design-led"
+  ],
+  "occasion": [
+    "creative agency pitch",
+    "design studio deck",
+    "ad shop credentials",
+    "brand creative review",
+    "concept presentation"
+  ],
+  "tone": [
+    "graphic",
+    "expressive",
+    "modern"
+  ],
+  "formality": "medium",
+  "density": "medium-high",
+  "palette": {
+    "cream": "#EFE9D9",
+    "cream_2": "#E4DCC4",
+    "green": "#1F8A4C",
+    "pink": "#F06CA8",
+    "orange": "#E85A1F",
+    "yellow": "#F5C518",
+    "ink": "#0F0F0F",
+    "description": "warm cream paper background with a saturated multi-accent palette (forest green, hot pink, orange, mustard yellow) on ink-black structure"
+  },
+  "typography": {
+    "display": "Archivo Black",
+    "body": "Space Grotesk",
+    "mono": "JetBrains Mono",
+    "style": "ultra-heavy poster sans + clean grotesk + technical mono"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel design-led and confident: creative agency pitches, design studio decks, ad shop credentials, brand creative reviews, art-direction reviews. Also a great unexpected pick for a tech talk, research findings, or finance review when the speaker wants to lead with taste rather than convention.",
+  "avoid_for": "Contexts that demand institutional restraint and a quiet authority — the saturated multi-accent palette will read as expressive, not formal.",
+  "slide_count": 8,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/creative-mode"
+}

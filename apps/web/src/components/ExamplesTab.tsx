@@ -9,6 +9,7 @@ import { fetchSkillExample } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { SkillSummary, Surface } from '../types';
+import { Icon } from './Icon';
 import { PreviewModal } from './PreviewModal';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -18,7 +19,14 @@ interface Props {
   onUsePrompt: (skill: SkillSummary) => void;
 }
 
-type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document';
+type ModeFilter =
+  | 'all'
+  | 'prototype-desktop'
+  | 'prototype-mobile'
+  | 'deck'
+  | 'document'
+  | 'orbit'
+  | 'live';
 type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
 
@@ -36,6 +44,8 @@ const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'prototype-mobile', labelKey: 'examples.modePrototypeMobile' },
   { value: 'deck', labelKey: 'examples.modeDeck' },
   { value: 'document', labelKey: 'examples.modeDocument' },
+  { value: 'orbit', labelKey: 'examples.modeOrbit' },
+  { value: 'live', labelKey: 'examples.modeLive' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {
@@ -84,6 +94,13 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
   if (filter === 'prototype-mobile')
     return skill.mode === 'prototype' && skill.platform === 'mobile';
   if (filter === 'document') return skill.mode === 'template';
+  if (filter === 'orbit') return skill.scenario === 'orbit';
+  // Live artifacts ride on the prototype mode but want their own bucket so
+  // refreshable / connector-backed samples are easy to find without
+  // scrolling through every desktop prototype. The parent live-artifact
+  // skill and every derived `live-artifact:<example>` card share the
+  // `live` scenario, so they all light up here together.
+  if (filter === 'live') return skill.scenario === 'live';
   return true;
 }
 
@@ -101,23 +118,101 @@ function quotePrompt(locale: string, text: string): string {
   return locale === 'de' ? `„${text}“` : `“${text}”`;
 }
 
-export function ExamplesTab({ skills, onUsePrompt }: Props) {
+export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
   const { locale, t } = useI18n();
+  // Skills tagged `aggregatesExamples: true` are containers whose preview
+  // would just duplicate one of their derived `<parent>:<child>` cards
+  // (e.g. live-artifact ships a sample gallery under `examples/`). Drop
+  // them up front so every count, filter, and rendered card downstream
+  // sees only the user-facing entries. The full listing is still passed
+  // through for `findSkillById` lookups elsewhere in the app.
+  const skills = useMemo(
+    () => rawSkills.filter((s) => !s.aggregatesExamples),
+    [rawSkills],
+  );
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  // Track per-skill fetch failures separately so the preview modal can show
+  // an actionable error / retry state instead of staying stuck at "loading".
+  // Issue #860.
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
+  // Synchronous in-flight set: state updates are batched, so two parallel
+  // loadPreview calls (e.g. card hover firing simultaneously with modal
+  // open) could both pass the "is anything cached?" check before either
+  // setState landed. The ref check happens before any await so the second
+  // caller sees the first one already running and exits early.
+  const inFlightRef = useRef<Set<string>>(new Set());
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
+  // Free-text search filters by skill name + description + prompt so users
+  // can find a known example by typing any associated word ("airbnb",
+  // "wireframe", "deck") without having to click through filter pills first.
+  const [search, setSearch] = useState('');
   const [previewSkillId, setPreviewSkillId] = useState<string | null>(null);
 
   const loadPreview = useCallback(
     async (id: string) => {
-      if (previews[id] !== undefined) return;
-      const html = await fetchSkillExample(id);
-      setPreviews((prev) => ({ ...prev, [id]: html }));
+      // Race guard: synchronous check before any state read so two parallel
+      // calls (hover + modal open) cannot both fall through.
+      if (inFlightRef.current.has(id)) return;
+      // Skip the fetch only when we already hold a successful html result.
+      // A prior error must not short-circuit a retry; a prior success can.
+      if (previews[id] !== undefined && previewErrors[id] === undefined) return;
+      inFlightRef.current.add(id);
+      try {
+        // Reset both branches before firing so a retry from the error UI
+        // immediately swaps to "loading" instead of flashing the old error.
+        setPreviewErrors((prev) => {
+          if (prev[id] === undefined) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setPreviews((prev) => ({ ...prev, [id]: null }));
+        const result = await fetchSkillExample(id);
+        if ('html' in result) {
+          setPreviews((prev) => ({ ...prev, [id]: result.html }));
+        } else {
+          setPreviewErrors((prev) => ({ ...prev, [id]: result.error }));
+          setPreviews((prev) => {
+            if (prev[id] === undefined) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }
+      } finally {
+        inFlightRef.current.delete(id);
+      }
     },
-    [previews],
+    [previews, previewErrors],
   );
+
+  // Keep a ref to the latest loadPreview so the onView handler passed to
+  // PreviewModal can have a stable identity. Without this, the inline
+  // `() => loadPreview(...)` arrow rebuilds on every state change and
+  // PreviewModal's `useEffect(() => onView?.(activeId), [activeId, onView])`
+  // re-fires on each render, turning a persistent fetch failure into an
+  // automatic retry loop that flashes past the error UI.
+  const loadPreviewRef = useRef(loadPreview);
+  useEffect(() => {
+    loadPreviewRef.current = loadPreview;
+  }, [loadPreview]);
+  // Mirror the active skill id into a ref so onPreviewView can fetch the
+  // selected skill instead of the modal's internal view id. PreviewModal
+  // calls onView(activeId), where activeId is the modal-local view id
+  // ('preview' in this component); forwarding that id straight into
+  // fetchSkillExample would request /api/skills/preview/example instead
+  // of the user's selected skill, leaving Retry unable to recover.
+  const activeSkillIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeSkillIdRef.current = previewSkillId;
+  }, [previewSkillId]);
+  const onPreviewView = useCallback(() => {
+    const skillId = activeSkillIdRef.current;
+    if (skillId !== null) void loadPreviewRef.current(skillId);
+  }, []);
 
   // Open the modal for a card. We always trigger a preview fetch even if
   // the card hasn't been hovered yet — the modal needs the HTML.
@@ -142,12 +237,16 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       'prototype-mobile': 0,
       deck: 0,
       document: 0,
+      orbit: 0,
+      live: 0,
     };
     for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
       if (matchesMode(s, 'prototype-mobile')) c['prototype-mobile']++;
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
+      if (matchesMode(s, 'orbit')) c.orbit++;
+      if (matchesMode(s, 'live')) c.live++;
     }
     return c;
   }, [skills, surfaceFilter]);
@@ -177,10 +276,15 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   }, [scenarioCounts]);
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     const matched = skills.filter((s) => {
       if (!matchesSurface(s, surfaceFilter) || !matchesMode(s, modeFilter)) return false;
-      if (scenarioFilter === 'all') return true;
-      return (s.scenario || 'general') === scenarioFilter;
+      if (scenarioFilter !== 'all' && (s.scenario || 'general') !== scenarioFilter) return false;
+      if (!q) return true;
+      const desc = localizeSkillDescription(locale, s);
+      const prompt = localizeSkillPrompt(locale, s) || '';
+      const haystack = `${s.name} ${desc} ${prompt} ${s.scenario ?? ''}`.toLowerCase();
+      return haystack.includes(q);
     });
     // Featured magazine-style examples float to the top (lower priority
     // number wins). Non-featured skills keep their server-side order so
@@ -194,7 +298,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
         return a.idx - b.idx;
       })
       .map(({ s }) => s);
-  }, [skills, surfaceFilter, modeFilter, scenarioFilter]);
+  }, [skills, surfaceFilter, modeFilter, scenarioFilter, search, locale]);
 
   if (skills.length === 0) {
     return <div className="tab-empty">{t('examples.emptyNoSkills')}</div>;
@@ -203,6 +307,18 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   return (
     <div className="tab-panel examples-panel">
       <div className="examples-toolbar">
+        <div className="examples-search">
+          <span className="search-icon" aria-hidden>
+            <Icon name="search" size={13} />
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('examples.searchPlaceholder')}
+            aria-label={t('examples.searchAria')}
+          />
+        </div>
         <div
           className="examples-filter-row"
           role="tablist"
@@ -308,8 +424,15 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               id: 'preview',
               label: t('examples.previewLabel'),
               html: previews[previewSkill.id],
+              error: previewErrors[previewSkill.id] ?? null,
+              deck: previewSkill.mode === 'deck',
             },
           ]}
+          // Stable identity (see onPreviewView definition) so PreviewModal's
+          // mount-time onView effect doesn't re-fire on every state update;
+          // the Retry button reaches loadPreview through the same handler.
+          // Issue #860.
+          onView={onPreviewView}
           exportTitleFor={() => previewSkill.name}
           onClose={() => setPreviewSkillId(null)}
         />
@@ -334,7 +457,41 @@ function ExampleCard({
   const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [intersected, setIntersected] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  // Eagerly request the preview HTML once the card scrolls near the viewport.
+  // The 800px bottom rootMargin prefetches cards that are about to be
+  // scrolled into view so the iframe is ready by the time the user reaches
+  // it. Hover (below) is kept as a fallback for environments that lack
+  // IntersectionObserver or for cards already visible on first paint that
+  // somehow miss the initial observation.
+  useEffect(() => {
+    if (intersected) return;
+    const node = cardRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIntersected(true);
+      onLoad();
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setIntersected(true);
+            onLoad();
+            obs.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '0px 0px 800px 0px' },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [intersected, onLoad]);
 
   useEffect(() => {
     if (!shareOpen) return;
@@ -361,6 +518,7 @@ function ExampleCard({
 
   return (
     <div
+      ref={cardRef}
       className="example-card"
       data-testid={`example-card-${skill.id}`}
       onMouseEnter={() => {
@@ -396,7 +554,7 @@ function ExampleCard({
           </>
         ) : (
           <div className="example-preview-placeholder">
-            {hovered
+            {hovered || intersected
               ? t('examples.loadingPreview')
               : t('examples.hoverPreview')}
           </div>

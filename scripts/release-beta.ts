@@ -1,30 +1,15 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { get as httpsGet } from "node:https";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
 
-const BETA_TAG = "open-design-beta";
 const stableVersionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
 const stableTagPattern = /^open-design-v(\d+\.\d+\.\d+)$/;
 const betaVersionPattern = /^(\d+\.\d+\.\d+)-beta\.(\d+)$/;
-const betaTagPattern = /^open-design-v(\d+\.\d+\.\d+)-beta\.(\d+)(?:\.unsigned)?$/;
-
-type GitHubReleaseAsset = {
-  id?: number;
-  name?: string;
-};
-
-type GitHubRelease = {
-  assets?: GitHubReleaseAsset[];
-  body?: string | null;
-  draft?: boolean;
-  name?: string | null;
-  prerelease?: boolean;
-  tag_name?: string;
-};
 
 type ParsedStableVersion = {
   parsed: [number, number, number];
@@ -35,6 +20,10 @@ type ParsedBetaVersion = {
   baseVersion: string;
   betaNumber: number;
   betaVersion: string;
+};
+
+type ParsedBetaMetadata = ParsedBetaVersion & {
+  source: "metadata-json";
 };
 
 function fail(message: string): never {
@@ -66,54 +55,83 @@ function compareVersions(left: [number, number, number], right: [number, number,
   return 0;
 }
 
-function extractStableVersion(release: GitHubRelease): ParsedStableVersion | null {
-  const candidates = [release.tag_name, release.name].filter((value): value is string => typeof value === "string");
+function extractStableVersionFromTag(tag: string): ParsedStableVersion | null {
+  const match = stableTagPattern.exec(tag);
+  if (match?.[1] == null) return null;
 
-  for (const candidate of candidates) {
-    const tagMatch = stableTagPattern.exec(candidate);
-    const value = tagMatch?.[1] ?? candidate.match(/\b(\d+\.\d+\.\d+)\b/)?.[1];
-    if (value == null) continue;
-
-    const parsed = parseStableVersion(value);
-    if (parsed != null) return { parsed, value };
-  }
-
-  return null;
+  const parsed = parseStableVersion(match[1]);
+  return parsed == null ? null : { parsed, value: match[1] };
 }
 
 function parseBetaParts(baseVersion: string, betaNumber: string): ParsedBetaVersion {
+  const parsedBetaNumber = Number(betaNumber);
+  if (!Number.isSafeInteger(parsedBetaNumber) || parsedBetaNumber < 1) {
+    fail(`invalid beta number in latest beta metadata: ${betaNumber}`);
+  }
+
   return {
     baseVersion,
-    betaNumber: Number(betaNumber),
+    betaNumber: parsedBetaNumber,
     betaVersion: `${baseVersion}-beta.${betaNumber}`,
   };
 }
 
-function extractBetaVersion(release: GitHubRelease): ParsedBetaVersion | null {
-  const tagMatch = typeof release.tag_name === "string" ? betaTagPattern.exec(release.tag_name) : null;
-  if (tagMatch?.[1] != null && tagMatch[2] != null) {
-    return parseBetaParts(tagMatch[1], tagMatch[2]);
-  }
-
-  const candidates = [release.name, release.body].filter((value): value is string => typeof value === "string");
-  for (const candidate of candidates) {
-    const match = candidate.match(/(\d+\.\d+\.\d+)-beta\.(\d+)/);
-    if (match?.[1] != null && match[2] != null) {
-      return parseBetaParts(match[1], match[2]);
-    }
-  }
-
-  return null;
+function readStringField(record: Record<string, unknown>, field: string): string | null {
+  const value = record[field];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function extractBetaVersionFromLatestMacYml(value: string): ParsedBetaVersion | null {
-  const match = value.match(/^version:\s*["']?([^"'\n]+)["']?\s*$/m);
-  if (match?.[1] == null) return null;
+function readNumberField(record: Record<string, unknown>, field: string): number | null {
+  const value = record[field];
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
 
-  const betaMatch = betaVersionPattern.exec(match[1]);
-  if (betaMatch?.[1] == null || betaMatch[2] == null) return null;
+function parseBetaVersion(value: string, sourceName: string): ParsedBetaVersion {
+  const match = betaVersionPattern.exec(value);
+  if (match?.[1] == null || match[2] == null) {
+    fail(`${sourceName} betaVersion must be x.y.z-beta.N; got ${value}`);
+  }
+  return parseBetaParts(match[1], match[2]);
+}
 
-  return parseBetaParts(betaMatch[1], betaMatch[2]);
+function parseBetaMetadataJson(value: string): ParsedBetaMetadata {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    fail(`R2 beta metadata.json is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+    fail("R2 beta metadata.json must be a JSON object");
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const betaVersion = readStringField(record, "betaVersion");
+  const betaNumber = readNumberField(record, "betaNumber");
+  const baseVersion = readStringField(record, "baseVersion");
+
+  if (betaVersion != null) {
+    const beta = parseBetaVersion(betaVersion, "R2 beta metadata.json");
+    if (baseVersion != null && baseVersion !== beta.baseVersion) {
+      fail(`R2 beta metadata.json baseVersion ${baseVersion} does not match betaVersion ${beta.betaVersion}`);
+    }
+    if (betaNumber != null && betaNumber !== beta.betaNumber) {
+      fail(`R2 beta metadata.json betaNumber ${betaNumber} does not match betaVersion ${beta.betaVersion}`);
+    }
+    return { ...beta, source: "metadata-json" };
+  }
+
+  if (baseVersion == null || betaNumber == null) {
+    fail("R2 beta metadata.json must include betaVersion or baseVersion+betaNumber");
+  }
+
+  const parsedBase = parseStableVersion(baseVersion);
+  if (parsedBase == null) {
+    fail(`R2 beta metadata.json baseVersion must be x.y.z; got ${baseVersion}`);
+  }
+
+  return { ...parseBetaParts(baseVersion, String(betaNumber)), source: "metadata-json" };
 }
 
 async function readPackagedVersion(): Promise<string> {
@@ -131,25 +149,83 @@ async function readPackagedVersion(): Promise<string> {
   return packageJson.version;
 }
 
-async function fetchReleases(repository: string): Promise<GitHubRelease[]> {
-  const releases: GitHubRelease[] = [];
-  for (let page = 1; ; page += 1) {
-    const { stdout } = await execFile("gh", ["api", `repos/${repository}/releases?per_page=100&page=${page}`]);
-    const batch = JSON.parse(stdout) as GitHubRelease[];
-    if (batch.length === 0) break;
-    releases.push(...batch);
-  }
-  return releases;
+async function fetchGitTags(pattern: string): Promise<string[]> {
+  const { stdout } = await execFile("git", ["tag", "--list", pattern]);
+  return stdout
+    .split("\n")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
 }
 
-async function fetchReleaseAssetText(repository: string, assetId: number): Promise<string> {
-  const { stdout } = await execFile("gh", [
-    "api",
-    `repos/${repository}/releases/assets/${assetId}`,
-    "--header",
-    "Accept: application/octet-stream",
-  ]);
-  return stdout;
+function fetchOptionalHttpsText(url: string, redirectCount = 0): Promise<string | null> {
+  return new Promise((resolvePromise, reject) => {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") {
+      reject(new Error(`expected HTTPS URL for beta feed lookup: ${parsed.protocol}`));
+      return;
+    }
+
+    const request = httpsGet(
+      parsed,
+      {
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      },
+      (response) => {
+        const statusCode = response.statusCode ?? 0;
+        if (statusCode === 404) {
+          response.resume();
+          resolvePromise(null);
+          return;
+        }
+
+        const location = response.headers.location;
+        if (statusCode >= 300 && statusCode < 400 && typeof location === "string") {
+          response.resume();
+          if (redirectCount >= 3) {
+            reject(new Error("too many redirects while reading beta feed"));
+            return;
+          }
+          const nextUrl = new URL(location, parsed).toString();
+          fetchOptionalHttpsText(nextUrl, redirectCount + 1).then(resolvePromise, reject);
+          return;
+        }
+
+        if (statusCode < 200 || statusCode >= 300) {
+          response.resume();
+          reject(new Error(`beta feed request failed with HTTP ${statusCode}`));
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+        response.on("end", () => {
+          resolvePromise(Buffer.concat(chunks).toString("utf8"));
+        });
+      },
+    );
+
+    request.setTimeout(10_000, () => {
+      request.destroy(new Error("timed out while reading beta feed"));
+    });
+    request.on("error", reject);
+  });
+}
+
+function validateHttpsUrl(value: string, name: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail(`${name} must be an HTTPS URL; got ${value}`);
+  }
+
+  if (parsed.protocol !== "https:") {
+    fail(`${name} must be an HTTPS URL; got ${value}`);
+  }
 }
 
 function setOutput(name: string, value: string): void {
@@ -158,17 +234,14 @@ function setOutput(name: string, value: string): void {
   appendFileSync(outputPath, `${name}=${value}\n`);
 }
 
-const repository = process.env.GITHUB_REPOSITORY ?? fail("GITHUB_REPOSITORY is required");
 const signed = process.env.OPEN_DESIGN_RELEASE_SIGNED !== "false";
 const packagedVersion = await readPackagedVersion();
 const packagedParsed = parseStableVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
-const releases = await fetchReleases(repository);
+const tags = await fetchGitTags("open-design-v*");
 
 let latestStable: ParsedStableVersion | null = null;
-for (const release of releases) {
-  if (release.draft === true || release.prerelease === true) continue;
-
-  const stableVersion = extractStableVersion(release);
+for (const tag of tags) {
+  const stableVersion = extractStableVersionFromTag(tag);
   if (stableVersion == null) continue;
 
   if (latestStable == null || compareVersions(stableVersion.parsed, latestStable.parsed) > 0) {
@@ -180,23 +253,38 @@ if (latestStable != null && compareVersions(packagedParsed, latestStable.parsed)
   fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
 }
 
-const betaCandidates: ParsedBetaVersion[] = [];
-for (const release of releases) {
-  const beta = extractBetaVersion(release);
-  if (beta != null) betaCandidates.push(beta);
+const metadataUrl = process.env.OPEN_DESIGN_BETA_METADATA_URL;
+if (metadataUrl == null || metadataUrl.length === 0) {
+  fail("OPEN_DESIGN_BETA_METADATA_URL is required");
 }
-
-const existingBetaRelease = releases.find((release) => release.tag_name === BETA_TAG);
-const latestMacAsset = existingBetaRelease?.assets?.find((asset) => asset.name === "latest-mac.yml");
-if (latestMacAsset?.id != null) {
-  const beta = extractBetaVersionFromLatestMacYml(await fetchReleaseAssetText(repository, latestMacAsset.id));
-  if (beta != null) betaCandidates.push(beta);
-}
+validateHttpsUrl(metadataUrl, "OPEN_DESIGN_BETA_METADATA_URL");
 
 let betaNumber = 1;
-for (const beta of betaCandidates) {
+let latestBeta: ParsedBetaVersion | null = null;
+let stateSource = "R2 metadata.json";
+const latestMetadataJson = await fetchOptionalHttpsText(metadataUrl);
+if (latestMetadataJson == null) {
+  // Only HTTP 404 reaches this branch; other fetch failures throw above. This
+  // is an intentional cold-start/reset behavior for a missing beta metadata
+  // object, not a fallback to any updater feed or GitHub release state.
+  latestBeta = {
+    baseVersion: packagedVersion,
+    betaNumber: 0,
+    betaVersion: `${packagedVersion}-beta.0`,
+  };
+  stateSource = "missing R2 metadata.json fallback beta.0";
+  console.log("[release-beta] R2 beta metadata.json: not found; using beta.0 fallback");
+} else {
+  latestBeta = parseBetaMetadataJson(latestMetadataJson);
+  console.log(`[release-beta] R2 beta metadata.json version: ${latestBeta.betaVersion}`);
+}
+
+if (latestBeta != null) {
+  const beta = latestBeta;
   const existingBase = parseStableVersion(beta.baseVersion);
-  if (existingBase == null) continue;
+  if (existingBase == null) {
+    fail(`invalid beta base version in ${stateSource}: ${beta.baseVersion}`);
+  }
 
   const ordering = compareVersions(packagedParsed, existingBase);
   if (ordering < 0) {
@@ -204,13 +292,12 @@ for (const beta of betaCandidates) {
   }
 
   if (ordering === 0) {
-    betaNumber = Math.max(betaNumber, beta.betaNumber + 1);
+    betaNumber = beta.betaNumber + 1;
   }
 }
 
 const betaVersion = `${packagedVersion}-beta.${betaNumber}`;
 const unsignedSuffix = signed ? "" : ".unsigned";
-const versionTag = `open-design-v${betaVersion}${unsignedSuffix}`;
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const commit = process.env.GITHUB_SHA ?? "";
 const releaseName = `Open Design Beta ${betaVersion}${signed ? "" : " (unsigned)"}`;
@@ -219,18 +306,17 @@ console.log(`[release-beta] channel: beta`);
 console.log(`[release-beta] base version: ${packagedVersion}`);
 console.log(`[release-beta] beta version: ${betaVersion}`);
 console.log(`[release-beta] signed: ${signed ? "true" : "false"}`);
-console.log(`[release-beta] fixed beta tag: ${BETA_TAG}`);
-console.log(`[release-beta] immutable beta tag: ${versionTag}`);
+console.log(`[release-beta] beta state source: ${stateSource}`);
 if (latestStable != null) console.log(`[release-beta] latest stable: ${latestStable.value}`);
+if (latestBeta != null) console.log(`[release-beta] latest beta: ${latestBeta.betaVersion}`);
 
 setOutput("asset_version_suffix", unsignedSuffix);
 setOutput("base_version", packagedVersion);
 setOutput("beta_number", String(betaNumber));
-setOutput("beta_tag", BETA_TAG);
 setOutput("beta_version", betaVersion);
 setOutput("branch", branch);
 setOutput("commit", commit);
 setOutput("latest_stable", latestStable?.value ?? "");
 setOutput("release_name", releaseName);
 setOutput("signed", signed ? "true" : "false");
-setOutput("version_tag", versionTag);
+setOutput("state_source", stateSource);

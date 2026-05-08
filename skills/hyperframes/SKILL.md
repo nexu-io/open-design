@@ -9,6 +9,12 @@ triggers:
   - "captions"
   - "tts video"
   - "kinetic typography"
+  - "html in canvas"
+  - "drawElementImage"
+  - "html shader"
+  - "vfx-iphone-device"
+  - "vfx-liquid-glass"
+  - "vfx-portal"
 od:
   mode: video
   surface: video
@@ -70,10 +76,10 @@ npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
 #    is unsandboxed, so renders complete reliably.)
 #
 #    The dispatcher returns within ~1s with a {taskId}; drive the
-#    render to completion by looping `od media wait <taskId>` calls.
+#    render to completion by looping `"$OD_NODE_BIN" "$OD_BIN" media wait <taskId>` calls.
 #    Each call long-polls up to 25s (well under your shell tool's
 #    default 30s cap) and exits 0/2/5 to signal done/running/failed.
-out=$(node "$OD_BIN" media generate \
+out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
   --surface video \
   --model hyperframes-html \
@@ -83,7 +89,7 @@ ec=$?
 task_id=$(printf '%s\n' "$out" | tail -1 | jq -r '.taskId // empty')
 since=$(printf '%s\n' "$out" | tail -1 | jq -r '.nextSince // 0')
 while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
-  out=$(node "$OD_BIN" media wait "$task_id" --since "$since")
+  out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
   since=$(printf '%s\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
 done
@@ -123,7 +129,7 @@ The lighter HF subcommands you CAN still run from your own shell
 Reserve the daemon dispatch for `render`/`inspect`/`preview` (anything
 Chrome-bound).
 
-**Do NOT** call `od media generate --model hyperframes-html` — that
+**Do NOT** call `"$OD_NODE_BIN" "$OD_BIN" media generate --model hyperframes-html` — that
 dispatcher path returns a 400 (`AGENT_RENDERED`) on purpose. HyperFrames
 is rendered by you directly via npx.
 
@@ -489,5 +495,6 @@ Skip on small edits (fixing a color, adjusting one duration). Run on new composi
 - **[references/transitions.md](references/transitions.md)** — Scene transitions: crossfades, wipes, reveals, shader transitions. Energy/mood selection, CSS vs WebGL guidance. **Always read for multi-scene compositions** — scenes without transitions feel like jump cuts.
   - [transitions/catalog.md](references/transitions/catalog.md) — Hard rules, scene template, and routing to per-type implementation code.
   - Shader transitions are in `@hyperframes/shader-transitions` (`packages/shader-transitions/`) — read package source, not skill files.
+- **[references/html-in-canvas.md](references/html-in-canvas.md)** — HTML-in-Canvas (`drawElementImage`) for rendering live DOM as WebGL textures: 3D device mockups, shader-warped UIs, liquid glass, portals. Read when the user asks for `vfx-iphone-device`, `vfx-liquid-glass`, `vfx-portal`, or any "HTML mapped onto 3D / shader" effect. The render path auto-enables the Chrome flag, but the texture must be re-captured every frame for animated content — that's the most common cause of "the screen renders dead" output.
 
 GSAP patterns and effects are in the `/gsap` skill.

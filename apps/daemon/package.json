@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -24,27 +24,31 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json",
+    "build": "tsc -p tsconfig.json",
     "daemon": "pnpm run build && node dist/cli.js --no-open",
     "dev": "pnpm run build && node dist/cli.js --no-open",
     "start": "pnpm run build && node dist/cli.js",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/contracts": "workspace:0.3.0",
-    "@open-design/platform": "workspace:0.3.0",
-    "@open-design/sidecar": "workspace:0.3.0",
-    "@open-design/sidecar-proto": "workspace:0.3.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@open-design/contracts": "workspace:*",
+    "@open-design/platform": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/sidecar-proto": "workspace:*",
     "better-sqlite3": "^12.9.0",
+    "blake3-wasm": "2.1.5",
+    "chokidar": "^5.0.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^2.1.1",
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^4.17.21",
-    "@types/multer": "^1.4.12",
+    "@types/multer": "^2.1.0",
     "@types/node": "^20.17.10",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

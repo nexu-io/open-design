@@ -16,6 +16,7 @@ export type PackagedNamespacePaths = {
   namespaceRoot: string;
   resourceRoot: string;
   runtimeRoot: string;
+  webIdentityPath: string;
 };
 
 export function resolvePackagedNamespacePaths(
@@ -36,5 +37,6 @@ export function resolvePackagedNamespacePaths(
     namespaceRoot,
     resourceRoot: config.resourceRoot,
     runtimeRoot: join(namespaceRoot, "runtime"),
+    webIdentityPath: join(namespaceRoot, "runtime", "web-root.json"),
   };
 }

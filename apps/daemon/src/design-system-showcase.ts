@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Build a fully-formed product webpage that demonstrates a design system in
  * action — not just a list of tokens, but a real-feeling marketing /
@@ -10,7 +9,11 @@
  * than imported so the two views can evolve independently.
  */
 
-export function renderDesignSystemShowcase(id, raw) {
+type ColorToken = { name: string; value: string; role: string };
+type FontHints = { display?: string; heading?: string; body?: string; mono?: string };
+type RowStatus = 'up' | '';
+
+export function renderDesignSystemShowcase(id: string, raw: string): string {
   const titleMatch = /^#\s+(.+?)\s*$/m.exec(raw);
   const rawTitle = titleMatch?.[1] ?? id;
   const title = cleanTitle(rawTitle);
@@ -18,24 +21,80 @@ export function renderDesignSystemShowcase(id, raw) {
   const colors = extractColors(raw);
   const fonts = extractFonts(raw);
 
+  // Hints are matched against each color's role description (the prose that
+  // follows the name in DESIGN.md, e.g. "Primary background.") first, then
+  // against the color name. We use word-boundary matching so descriptive
+  // names like "Cardinal Red" don't accidentally satisfy a "card" hint and
+  // "Gem Pink" doesn't satisfy "ink".
+  // Hint ordering matters: more specific phrases come first so a system
+  // with both "Primary background" and "Page background in light mode" (e.g.
+  // Linear's marketing black + light-mode escape hatch) lands on the
+  // dominant role rather than the light-mode subtitle. We drop 'page
+  // background' from the bg hints entirely because in practice it almost
+  // always belongs to a secondary, light-mode-only entry.
   const bg =
-    pickColor(colors, ['page background', 'background', 'canvas', 'paper', 'bg ', 'page bg'])
+    pickColor(colors, ['primary background', 'background', 'canvas', 'paper'])
+    ?? firstLightish(colors)
     ?? '#ffffff';
+  // Exclude `bg` so a token whose hex matches the page background (for
+  // example Warp's "Warm Parchment" doubling as primary text *and* the
+  // firstLightish bg fallback) doesn't make body copy invisible.
   const fg =
-    pickColor(colors, ['heading', 'foreground', 'ink', 'fg', 'text', 'navy', 'graphite'])
+    pickColor(
+      colors,
+      [
+        'primary text',
+        'body text',
+        'foreground',
+        'ink primary',
+        'heading',
+        'ink',
+        'graphite',
+        'navy',
+      ],
+      [bg],
+    )
+    ?? pickReadableForeground(bg)
     ?? '#0a0a0a';
   const accent =
-    pickColor(colors, ['primary brand', 'brand primary', 'primary', 'brand', 'accent'])
-    ?? firstNonNeutral(colors)
+    pickColor(colors, [
+      'brand primary',
+      'primary brand',
+      'primary cta',
+      'gradient origin',
+      'brand mark',
+      'brand color',
+    ])
+    ?? firstNonNeutral(colors, [bg, fg])
     ?? '#2f6feb';
   const accent2 =
-    pickColor(colors, ['secondary', 'tertiary', 'highlight', 'support'])
-    ?? secondNonNeutral(colors, accent)
+    pickColor(colors, [
+      'brand secondary',
+      'secondary brand',
+      'gradient terminus',
+      'tertiary brand',
+      'tertiary',
+      'highlight',
+    ])
+    ?? secondNonNeutral(colors, [accent, bg, fg])
     ?? accent;
-  const muted = pickColor(colors, ['muted', 'subtle', 'caption', 'meta', 'neutral']) ?? '#666666';
-  const border = pickColor(colors, ['border', 'divider', 'rule', 'stroke']) ?? '#e6e6e6';
+  const muted =
+    pickColor(colors, ['secondary text', 'caption', 'metadata', 'placeholder', 'muted', 'subtle'])
+    ?? '#666666';
+  const border =
+    pickColor(colors, ['border', 'divider', 'hairline', 'rule', 'stroke'])
+    ?? '#e6e6e6';
   const surface =
-    pickColor(colors, ['surface', 'card', 'background-secondary', 'panel', 'elevated'])
+    pickColor(colors, [
+      'secondary surface',
+      'section break',
+      'sidebar',
+      'surface subtle',
+      'surface',
+      'panel',
+      'elevated',
+      'card surface',
+    ])
     ?? mixSurface(bg);
 
   const display = fonts.display ?? fonts.heading ?? "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -490,7 +549,7 @@ export function renderDesignSystemShowcase(id, raw) {
 </html>`;
 }
 
-function featureCard(icon, title, body) {
+function featureCard(icon: string, title: string, body: string): string {
   return `<div class="feature">
     <div class="feature-icon">${escapeHtml(icon)}</div>
     <h3>${escapeHtml(title)}</h3>
@@ -498,7 +557,7 @@ function featureCard(icon, title, body) {
   </div>`;
 }
 
-function kpi(label, value, delta) {
+function kpi(label: string, value: string, delta: string): string {
   return `<div class="kpi">
     <div class="label">${escapeHtml(label)}</div>
     <div class="value">${escapeHtml(value)}</div>
@@ -506,7 +565,7 @@ function kpi(label, value, delta) {
   </div>`;
 }
 
-function listRow(name, meta, value, status) {
+function listRow(name: string, meta: string, value: string, status: RowStatus): string {
   const badge = status === 'up' ? '<span class="badge up">↑</span>' : '<span class="badge">·</span>';
   return `<div class="list-row">
     <div>
@@ -518,7 +577,7 @@ function listRow(name, meta, value, status) {
   </div>`;
 }
 
-function activityRow(name, meta) {
+function activityRow(name: string, meta: string): string {
   return `<div class="list-row">
     <div>
       <div class="name">${escapeHtml(name)}</div>
@@ -529,7 +588,7 @@ function activityRow(name, meta) {
   </div>`;
 }
 
-function priceCard(name, price, sub, features, featured) {
+function priceCard(name: string, price: string, sub: string, features: string[], featured = false): string {
   return `<div class="price-card${featured ? ' featured' : ''}">
     <div class="tier-name">${escapeHtml(name)}</div>
     <div class="price">${escapeHtml(price)} <small>${escapeHtml(sub)}</small></div>
@@ -538,7 +597,7 @@ function priceCard(name, price, sub, features, featured) {
   </div>`;
 }
 
-function quote(text, name, role) {
+function quote(text: string, name: string, role: string): string {
   return `<div class="quote">
     <p>${escapeHtml(text)}</p>
     <div class="quote-author">
@@ -551,14 +610,14 @@ function quote(text, name, role) {
   </div>`;
 }
 
-function faq(q, a) {
+function faq(q: string, a: string): string {
   return `<div class="faq-item">
     <h4>${escapeHtml(q)}</h4>
     <p>${escapeHtml(a)}</p>
   </div>`;
 }
 
-function inlineLineChart() {
+function inlineLineChart(): string {
   // Deterministic numbers so the chart looks specific (12 weekly data points).
   const data = [38, 44, 41, 52, 49, 61, 58, 67, 71, 76, 82, 88];
   const max = Math.max(...data);
@@ -568,7 +627,7 @@ function inlineLineChart() {
   const padX = 8;
   const padY = 14;
   const stepX = (w - padX * 2) / (data.length - 1);
-  const norm = (v) => padY + (h - padY * 2) * (1 - (v - min) / (max - min));
+  const norm = (v: number) => padY + (h - padY * 2) * (1 - (v - min) / (max - min));
   const points = data.map((v, i) => `${padX + i * stepX},${norm(v).toFixed(1)}`).join(' ');
   const area = `${padX},${h} ${points} ${w - padX},${h}`;
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
@@ -584,7 +643,7 @@ function inlineLineChart() {
   </svg>`;
 }
 
-function extractSubtitle(raw) {
+function extractSubtitle(raw: string): string {
   const lines = raw.split(/\r?\n/);
   const h1 = lines.findIndex((l) => /^#\s+/.test(l));
   if (h1 === -1) return '';
@@ -598,33 +657,85 @@ function extractSubtitle(raw) {
   return window.split(/\n\n/)[0]?.slice(0, 240) ?? '';
 }
 
-function extractColors(raw) {
-  const colors = [];
-  const seen = new Set();
-  function push(name, value) {
-    const cleanName = name.replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim();
+export function extractColors(raw: string): ColorToken[] {
+  const colors: ColorToken[] = [];
+  const seen = new Set<string>();
+  function push(name: string, value: string, role: string): void {
+    const cleanName = String(name).replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim();
     if (!cleanName || cleanName.length > 60) return;
     const v = normalizeHex(value);
     const key = `${cleanName.toLowerCase()}|${v}`;
-    if (seen.has(key)) return;
+    const cleanRole = String(role || '')
+      .replace(/[`*_]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[.;]+$/, '');
+    if (seen.has(key)) {
+      // Already recorded — but if this occurrence carries a richer role
+      // description, upgrade the stored entry so role-based lookups don't
+      // fall back to the bare name.
+      if (cleanRole) {
+        const existing = colors.find(
+          (c) => c.name.toLowerCase() === cleanName.toLowerCase() && c.value === v,
+        );
+        if (existing && (!existing.role || cleanRole.length > existing.role.length)) {
+          existing.role = cleanRole;
+        }
+      }
+      return;
+    }
     seen.add(key);
-    colors.push({ name: cleanName, value: v });
+    colors.push({ name: cleanName, value: v, role: cleanRole });
   }
-  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*\**\s*[:：]\s*`?(#[0-9a-fA-F]{3,8})/gm;
-  let m;
-  while ((m = reA.exec(raw)) !== null) push(m[1], m[2]);
-  const reB = /\*\*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\*\*\s*\(?\s*`?(#[0-9a-fA-F]{3,8})/g;
-  while ((m = reB.exec(raw)) !== null) push(m[1], m[2]);
+
+  // Process the file line-by-line so multi-hex entries like Linear's
+  // `**Marketing Black** (\`#010102\` / \`#08090a\`): role` don't confuse a
+  // single global regex. We extract three pieces from each candidate line:
+  //   - the bold (or list-prefixed) name
+  //   - the FIRST hex on the line
+  //   - everything after the first `:` that follows the hex (the role)
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Pattern A: **Name** … #hex … : role description
+    const bold = /\*\*([A-Za-z][A-Za-z0-9 /&()+_'’-]{1,40}?)\*\*([^\n]+)/.exec(line);
+    if (bold) {
+      const rest = bold[2] ?? '';
+      const hex = /#[0-9a-fA-F]{3,8}\b/.exec(rest);
+      if (hex) {
+        const after = rest.slice((hex.index ?? 0) + hex[0].length);
+        const colonIdx = after.search(/[:：]/);
+        const role = colonIdx >= 0 ? after.slice(colonIdx + 1).trim() : '';
+        push(bold[1] ?? '', hex[0], role);
+        continue;
+      }
+    }
+
+    // Pattern B: list-prefixed spec lines like
+    //   "- Background: `#7d2ae8`" inside a ### Buttons block.
+    // Also handles the `- **Name:** \`#hex\`` shape (colon inside the bold
+    // wrapper) used by agentic/warm-editorial: the optional `\*{0,2}` slots
+    // before the name and after the colon let us absorb the surrounding
+    // `**` markers without needing a third pattern.
+    // Use the name itself as the role so lookups can still see "Background"
+    // and "Text" labels.
+    const spec = /^[\s>*-]*\*{0,2}([A-Za-z][^:*\n]{1,40}?)\*{0,2}\s*[:：]\s*\*{0,2}\s*`?(#[0-9a-fA-F]{3,8})/.exec(line);
+    if (spec) {
+      push(spec[1] ?? '', spec[2] ?? '', spec[1] ?? '');
+    }
+  }
+
   return colors;
 }
 
-function extractFonts(raw) {
-  const out = {};
+function extractFonts(raw: string): FontHints {
+  const out: FontHints = {};
   const re = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z /]{1,30}?)\s*\**\s*[:：]\s*`?([^`\n]+?)`?$/gm;
   let m;
   while ((m = re.exec(raw)) !== null) {
-    const label = m[1].toLowerCase();
-    const value = m[2].trim().replace(/[*_`]+$/g, '').trim();
+    const label = (m[1] ?? '').toLowerCase();
+    const value = (m[2] ?? '').trim().replace(/[*_`]+$/g, '').trim();
     if (!/[a-zA-Z]/.test(value)) continue;
     if (value.startsWith('#')) continue;
     if (/display|heading|h1|title/.test(label) && !out.display) out.display = value;
@@ -634,50 +745,93 @@ function extractFonts(raw) {
   return out;
 }
 
-function pickColor(colors, hints) {
+function escapeRegex(s: string): string {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Match a hint as a whole word inside `text` (case-insensitive). We use word
+// boundaries so descriptive color names like "Cardinal Red" don't satisfy a
+// "card" hint, and "Gem Pink" doesn't satisfy "ink" — both real bugs the
+// substring-based version produced for the Duolingo and Canva showcases.
+function matchesHint(text: string, hint: string): boolean {
+  if (!text) return false;
+  const needle = hint.toLowerCase().trim();
+  if (!needle) return false;
+  const re = new RegExp(`\\b${escapeRegex(needle)}\\b`, 'i');
+  return re.test(text);
+}
+
+function pickColor(colors: ColorToken[], hints: string[], exclude: string[] = []): string | null {
+  // Two-pass lookup: each hint is first checked against every color's role
+  // description (the prose authors use to explain how the color is used)
+  // and only then against the bare name. This ensures a `**Snow** … Primary
+  // background.` line is recognised as the page background even though the
+  // name "Snow" doesn't contain the word "background".
+  // `exclude` skips colors whose hex equals an already-chosen role (e.g.
+  // pass `[bg]` when picking `fg`) so two roles can't collapse to the same
+  // hex and erase contrast.
+  const blocked = new Set(
+    exclude
+      .map((v) => (v == null ? '' : String(v).toLowerCase()))
+      .filter((v) => v.length > 0),
+  );
+  const isAllowed = (c: ColorToken) => !blocked.has(c.value.toLowerCase());
   for (const hint of hints) {
-    const needle = hint.toLowerCase();
-    const found = colors.find((c) => c.name.toLowerCase().includes(needle));
-    if (found) return found.value;
+    const byRole = colors.find((c) => isAllowed(c) && matchesHint(c.role, hint));
+    if (byRole) return byRole.value;
+    const byName = colors.find((c) => isAllowed(c) && matchesHint(c.name, hint));
+    if (byName) return byName.value;
   }
   return null;
 }
 
-function firstNonNeutral(colors) {
+function colorSaturation(hex: string): number {
+  const v = String(hex).replace('#', '').toLowerCase();
+  if (v.length !== 6) return 0;
+  const r = parseInt(v.slice(0, 2), 16);
+  const g = parseInt(v.slice(2, 4), 16);
+  const b = parseInt(v.slice(4, 6), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+function colorLuminance(hex: string): number {
+  const v = String(hex).replace('#', '').toLowerCase();
+  if (v.length !== 6) return 0.5;
+  const r = parseInt(v.slice(0, 2), 16);
+  const g = parseInt(v.slice(2, 4), 16);
+  const b = parseInt(v.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+function firstLightish(colors: ColorToken[]): string | null {
   for (const c of colors) {
-    const v = c.value.replace('#', '').toLowerCase();
-    if (v.length !== 6) continue;
-    const r = parseInt(v.slice(0, 2), 16);
-    const g = parseInt(v.slice(2, 4), 16);
-    const b = parseInt(v.slice(4, 6), 16);
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const sat = max === 0 ? 0 : (max - min) / max;
-    if (sat > 0.25) return c.value;
+    if (colorSaturation(c.value) > 0.15) continue;
+    if (colorLuminance(c.value) >= 0.92) return c.value;
   }
   return null;
 }
 
-function secondNonNeutral(colors, exclude) {
-  let seen = false;
+function firstNonNeutral(colors: ColorToken[], exclude: string[] = []): string | null {
+  const set = new Set(exclude.map((v) => String(v || '').toLowerCase()));
   for (const c of colors) {
-    const v = c.value.replace('#', '').toLowerCase();
-    if (v.length !== 6) continue;
-    const r = parseInt(v.slice(0, 2), 16);
-    const g = parseInt(v.slice(2, 4), 16);
-    const b = parseInt(v.slice(4, 6), 16);
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const sat = max === 0 ? 0 : (max - min) / max;
-    if (sat > 0.25) {
-      if (c.value === exclude || (!seen)) { seen = true; continue; }
-      return c.value;
-    }
+    if (set.has(c.value.toLowerCase())) continue;
+    if (colorSaturation(c.value) > 0.25) return c.value;
   }
   return null;
 }
 
-function pickReadableForeground(hex) {
+function secondNonNeutral(colors: ColorToken[], exclude: string[] = []): string | null {
+  const set = new Set(exclude.map((v) => String(v || '').toLowerCase()));
+  for (const c of colors) {
+    if (set.has(c.value.toLowerCase())) continue;
+    if (colorSaturation(c.value) > 0.25) return c.value;
+  }
+  return null;
+}
+
+function pickReadableForeground(hex: string): string {
   const n = normalizeHex(hex);
   if (n.length !== 7) return '#ffffff';
   const r = parseInt(n.slice(1, 3), 16);
@@ -687,7 +841,7 @@ function pickReadableForeground(hex) {
   return lum > 0.6 ? '#0a0a0a' : '#ffffff';
 }
 
-function mixSurface(bg) {
+function mixSurface(bg: string): string {
   const n = normalizeHex(bg);
   if (n.length !== 7) return '#fafafa';
   const r = parseInt(n.slice(1, 3), 16);
@@ -696,11 +850,11 @@ function mixSurface(bg) {
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   // Lift dark backgrounds; tint light backgrounds slightly cooler.
   const adjust = lum < 0.4 ? 16 : -8;
-  const fix = (v) => Math.max(0, Math.min(255, v + adjust)).toString(16).padStart(2, '0');
+  const fix = (v: number) => Math.max(0, Math.min(255, v + adjust)).toString(16).padStart(2, '0');
   return `#${fix(r)}${fix(g)}${fix(b)}`;
 }
 
-function normalizeHex(hex) {
+function normalizeHex(hex: string): string {
   let h = hex.toLowerCase();
   if (h.length === 4) {
     h = '#' + h.slice(1).split('').map((c) => c + c).join('');
@@ -708,15 +862,15 @@ function normalizeHex(hex) {
   return h;
 }
 
-function cleanTitle(raw) {
+function cleanTitle(raw: string): string {
   return String(raw).replace(/^Design System (Inspired by|for)\s+/i, '').trim();
 }
 
-function oneLine(s) {
+function oneLine(s: string): string {
   return String(s).replace(/\s+/g, ' ').trim();
 }
 
-function escapeHtml(s) {
+function escapeHtml(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
   );

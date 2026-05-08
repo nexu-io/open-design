@@ -1,9 +1,9 @@
 ---
 name: docs-page
 description: |
-  A documentation page — left nav, scrollable article body, right-rail
-  table of contents. Use when the brief mentions "docs", "documentation",
-  "guide", "API reference", or "tutorial".
+  A documentation page — inline-start nav, scrollable article body,
+  inline-end table of contents. Use when the brief mentions "docs",
+  "documentation", "guide", "API reference", or "tutorial".
 triggers:
   - "docs"
   - "documentation"
@@ -21,6 +21,8 @@ od:
   design_system:
     requires: true
     sections: [color, typography, layout, components]
+  craft:
+    requires: [rtl-and-bidi]
 ---
 
 # Docs Page Skill
@@ -34,14 +36,16 @@ Produce a single, three-column documentation page in one HTML file.
 2. **Pick a topic** from the brief — the page should look like real docs, not
    a generic wireframe. Concrete API names, command examples, plausible
    parameters.
-3. **Lay out** three regions:
-   - **Left nav** (240–280px, sticky): grouped link list, current page bolded
-     with a left-edge accent stripe. 3–5 groups of 4–8 links.
+3. **Lay out** three regions, expressed on the inline axis so the
+   layout flips correctly under `dir="rtl"`:
+   - **Inline-start nav** (240–280px, sticky): grouped link list, current
+     page bolded with an `inline-start`-edge accent stripe. 3–5 groups
+     of 4–8 links.
    - **Article body** (max-width ~720px, centered in the middle column):
      H1, lede paragraph, H2 sections, code blocks, callout boxes (note /
      warning), inline links, lists.
-   - **Right TOC** (200–240px, sticky): "On this page" with the H2/H3
-     anchors, current section highlighted as the user scrolls.
+   - **Inline-end TOC** (200–240px, sticky): "On this page" with the
+     H2/H3 anchors, current section highlighted as the user scrolls.
 4. **Write** a single HTML document:
    - `<!doctype html>` through `</html>`, all CSS inline.
    - CSS Grid for the three columns; sticky positioning for the rails.
@@ -58,6 +62,9 @@ Produce a single, three-column documentation page in one HTML file.
      border. Not on body text.
    - Page is readable at 1280w and collapses gracefully below 900w (TOC drops
      out, nav becomes a top drawer).
+   - Use logical CSS (`margin-inline-start`, `border-inline-start`,
+     `inset-inline-end`, `text-align: start`) on the rails and accent
+     stripe so the layout flips correctly under `dir="rtl"`.
 
 ## Output contract
 

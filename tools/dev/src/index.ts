@@ -414,6 +414,7 @@ async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): P
 
   try {
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
+    if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
       config,
@@ -611,8 +612,10 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
       status,
     };
   } catch (error) {
+    const logPath = config.apps.web.latestLogPath;
+    const lines = await readLogTail(logPath, 80).catch(() => []);
     await stopApp(config, APP_KEYS.WEB).catch(() => undefined);
-    throw error;
+    throw appendStartupLogDiagnostics(error, APP_KEYS.WEB, createStartupLogDiagnostics(logPath, lines));
   }
 }
 
@@ -917,7 +920,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
-    .option("--prod", "use production build (requires pnpm build first)");
+    .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
