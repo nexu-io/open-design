@@ -491,6 +491,7 @@ describe('MCP_TEMPLATES', () => {
       'image-generation',
       'image-editing',
       'web-capture',
+      'design-systems',
       'ui-components',
       'data-viz',
       'publishing',
@@ -501,13 +502,43 @@ describe('MCP_TEMPLATES', () => {
     }
   });
 
-  it('groups image-generation templates correctly', () => {
+  it('groups image-generation templates in declaration order', () => {
     const ids = MCP_TEMPLATES.filter((t) => t.category === 'image-generation').map((t) => t.id);
+    // Order matters — the picker renders templates in the declared order
+    // inside each category bucket, so the most useful default (Higgsfield
+    // OpenClaw, the marquee install) needs to stay first.
     expect(ids).toEqual([
       'higgsfield-openclaw',
       'pollinations',
       'allyson',
       'bedrock-image',
+      'prompt-to-asset',
+      'nanobanana',
+      'seedream',
+      'fal-ai',
+    ]);
+  });
+
+  it('groups design-systems templates in declaration order', () => {
+    const ids = MCP_TEMPLATES.filter((t) => t.category === 'design-systems').map((t) => t.id);
+    expect(ids).toEqual([
+      'figma-context',
+      'design-token-bridge',
+      'design-system-extractor',
+      'aesthetics-wiki',
+    ]);
+  });
+
+  it('groups publishing templates in declaration order', () => {
+    const ids = MCP_TEMPLATES.filter((t) => t.category === 'publishing').map((t) => t.id);
+    expect(ids).toEqual([
+      'edgeone-pages',
+      'pagedrop',
+      'pdfspark',
+      'ogforge',
+      'qrmint',
+      'slideshot',
+      'deckrun',
     ]);
   });
 
@@ -583,5 +614,222 @@ describe('MCP_TEMPLATES', () => {
     expect(tpl?.command).toBe('uvx');
     expect(tpl?.args).toEqual(['bedrock-image-mcp-server@latest']);
     expect(tpl?.envFields?.some((f) => f.key === 'AWS_REGION')).toBe(true);
+  });
+
+  it('includes the prompt-to-asset template (no required key, free-tier paths)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'prompt-to-asset');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.command).toBe('npx');
+    expect(tpl?.args).toEqual(['-y', 'prompt-to-asset']);
+    // The package routes free-tier providers first (Cloudflare / NVIDIA NIM /
+    // HF / Stable Horde / Pollinations / inline SVG) so the template MUST
+    // not surface required env fields.
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Nano Banana hosted streamable-HTTP template with required Authorization', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'nanobanana');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://nanobanana.mcp.acedata.cloud/mcp');
+    const auth = tpl?.headerFields?.find((f) => f.key === 'Authorization');
+    expect(auth?.required).toBe(true);
+    expect(auth?.secret).toBe(true);
+  });
+
+  it('includes the Seedream hosted streamable-HTTP template with required Authorization', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'seedream');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://seedream.mcp.acedata.cloud/mcp');
+    const auth = tpl?.headerFields?.find((f) => f.key === 'Authorization');
+    expect(auth?.required).toBe(true);
+    expect(auth?.secret).toBe(true);
+  });
+
+  it('includes the fal.ai template via uvx with required FAL_KEY', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'fal-ai');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.command).toBe('uvx');
+    // `--from` is required because the package name and bin name differ
+    // (fal-mcp-server vs fal-mcp).
+    expect(tpl?.args).toEqual(['--from', 'fal-mcp-server', 'fal-mcp']);
+    const key = tpl?.envFields?.find((f) => f.key === 'FAL_KEY');
+    expect(key?.required).toBe(true);
+    expect(key?.secret).toBe(true);
+  });
+
+  it('includes the Photopea layered-editor template (no auth, opens browser on first call)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'photopea');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-editing');
+    expect(tpl?.command).toBe('npx');
+    expect(tpl?.args).toEqual(['-y', 'photopea-mcp-server']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Topaz Labs template with required API key', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'topaz-labs');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-editing');
+    expect(tpl?.args).toEqual(['-y', '@topazlabs/mcp']);
+    const key = tpl?.envFields?.find((f) => f.key === 'TOPAZ_API_KEY');
+    expect(key?.required).toBe(true);
+    expect(key?.secret).toBe(true);
+  });
+
+  it('includes the Transloadit template with both KEY and SECRET required', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'transloadit');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-editing');
+    // The MCP server bin needs the `stdio` subcommand to select transport
+    // (default would expose HTTP locally and require an auth token).
+    expect(tpl?.args).toEqual(['-y', '@transloadit/mcp-server', 'stdio']);
+    const key = tpl?.envFields?.find((f) => f.key === 'TRANSLOADIT_KEY');
+    const secret = tpl?.envFields?.find((f) => f.key === 'TRANSLOADIT_SECRET');
+    expect(key?.required).toBe(true);
+    expect(secret?.required).toBe(true);
+    expect(key?.secret).toBe(true);
+    expect(secret?.secret).toBe(true);
+  });
+
+  it('includes the pagecast browser-recording template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'pagecast');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('web-capture');
+    expect(tpl?.args).toEqual(['-y', '@mcpware/pagecast']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Figma-Context design template with required FIGMA_API_KEY', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'figma-context');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('design-systems');
+    // `--stdio` is required — without it the package starts an HTTP listener
+    // on a random port and the spawn never produces stdio messages.
+    expect(tpl?.args).toEqual(['-y', 'figma-developer-mcp', '--stdio']);
+    const key = tpl?.envFields?.find((f) => f.key === 'FIGMA_API_KEY');
+    expect(key?.required).toBe(true);
+    expect(key?.secret).toBe(true);
+  });
+
+  it('includes the Design Token Bridge template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'design-token-bridge');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('design-systems');
+    expect(tpl?.args).toEqual(['-y', 'design-token-bridge-mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Design System Extractor template with optional STORYBOOK_URL', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'design-system-extractor');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('design-systems');
+    expect(tpl?.args).toEqual(['-y', 'mcp-design-system-extractor@latest']);
+    // STORYBOOK_URL has a sensible default in the upstream package
+    // (http://localhost:6006), so the template surfaces it but does NOT
+    // require it — users with a localhost Storybook can save the entry as-is.
+    const url = tpl?.envFields?.find((f) => f.key === 'STORYBOOK_URL');
+    expect(url).toBeDefined();
+    expect(url?.required ?? false).toBe(false);
+  });
+
+  it('includes the Aesthetics Wiki uvx template (no auth, moodboard MCP)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'aesthetics-wiki');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('design-systems');
+    expect(tpl?.command).toBe('uvx');
+    expect(tpl?.args).toEqual(['aesthetics-wiki-mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the MCP Dashboards template with --stdio arg (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'mcp-dashboards');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('data-viz');
+    // `--stdio` flag selects stdio transport — without it the bin starts an
+    // HTTP server on :3001 and the spawn never produces stdio messages.
+    expect(tpl?.args).toEqual(['-y', 'mcp-dashboards', '--stdio']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Excalidraw Architect uvx template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'excalidraw-architect');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('data-viz');
+    expect(tpl?.command).toBe('uvx');
+    expect(tpl?.args).toEqual(['excalidraw-architect-mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the PageDrop instant-hosting template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'pagedrop');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('publishing');
+    expect(tpl?.args).toEqual(['-y', 'pagedrop-mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the PDFSpark HTML→PDF template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'pdfspark');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('publishing');
+    expect(tpl?.args).toEqual(['-y', 'pdfspark-api']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the OGForge Open-Graph image template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'ogforge');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('publishing');
+    expect(tpl?.args).toEqual(['-y', 'ogforge-api']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the QRMint styled-QR template (no auth, package = qr-mcp)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'qrmint');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('publishing');
+    // The npm package is `qr-mcp`, not `qrmint` (the brand name is QRMint).
+    expect(tpl?.args).toEqual(['-y', 'qr-mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Slideshot HTML→PDF/PPTX template (no auth, package = slideshot-mcp)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'slideshot');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('publishing');
+    // The npm package for the MCP entry is `slideshot-mcp`; the bare
+    // `slideshot` package is the standalone CLI / REST server.
+    expect(tpl?.args).toEqual(['-y', 'slideshot-mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Deckrun hosted-HTTP template (free tier, no required header)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'deckrun');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('publishing');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://deckrun-mcp-free.agenticdecks.com/mcp/');
+    // Free-tier endpoint works token-less; Authorization header is exposed
+    // for the paid-tier upgrade path but NOT marked required.
+    const auth = tpl?.headerFields?.find((f) => f.key === 'Authorization');
+    expect(auth).toBeDefined();
+    expect(auth?.required ?? false).toBe(false);
+    expect(auth?.secret).toBe(true);
+  });
+
+  it('includes the A11y axe-core template (no auth)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'a11y');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('utilities');
+    // The npm package is `a11y-mcp-server`, NOT `a11ymcp` (which is the
+    // GitHub repo slug). Getting this wrong silently 404s on the registry.
+    expect(tpl?.args).toEqual(['-y', 'a11y-mcp-server']);
+    expect(tpl?.envFields ?? []).toEqual([]);
   });
 });

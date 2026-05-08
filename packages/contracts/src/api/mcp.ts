@@ -55,13 +55,14 @@ export interface McpTemplateField {
 }
 
 /** Coarse-grained category used to group templates in the picker UI so the
- * 17+ built-in entries stay scannable. Stable string union — adding a new
- * category requires a matching entry in `MCP_TEMPLATE_CATEGORIES` on the
- * web side so the group has a label / order. */
+ * 30+ built-in entries stay scannable. Stable string union — adding a new
+ * category requires a matching entry in `CATEGORY_ORDER` on the web side
+ * so the group has a label / display order. */
 export type McpTemplateCategory =
   | 'image-generation'
   | 'image-editing'
   | 'web-capture'
+  | 'design-systems'
   | 'ui-components'
   | 'data-viz'
   | 'publishing'

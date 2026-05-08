@@ -171,6 +171,11 @@ const CATEGORY_ORDER: ReadonlyArray<{
     hint: 'Render a URL into an image so the agent can see what it built.',
   },
   {
+    id: 'design-systems',
+    label: 'Design systems',
+    hint: 'Figma read/write, design-token translation, brand inspiration.',
+  },
+  {
     id: 'ui-components',
     label: 'UI components',
     hint: 'Designer-grade components, blocks and landing-page material.',
