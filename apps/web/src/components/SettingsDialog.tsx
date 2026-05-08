@@ -2549,6 +2549,7 @@ function OrbitSection({
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [legacyLastRunTemplateSkillId, setLegacyLastRunTemplateSkillId] = useState<string | null>(null);
   // Orbit-scenario skill templates fetched from /api/skills. We fetch on mount
   // and keep three states for graceful UX: `null` = still loading, `[]` =
   // loaded with no orbit templates available, `SkillSummary[]` = ready. If
@@ -2660,6 +2661,16 @@ function OrbitSection({
   const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
   const supportsTemplateScopedHistory = status?.lastRunsByTemplate !== undefined;
 
+  useEffect(() => {
+    const hasTemplateScopedHistory = Object.keys(status?.lastRunsByTemplate ?? {}).length > 0;
+    const hasLegacyUnscopedLastRun = Boolean(status?.lastRun && !status.lastRun.templateSkillId);
+    if (hasLegacyUnscopedLastRun && !hasTemplateScopedHistory) {
+      setLegacyLastRunTemplateSkillId(effectiveTemplateSkillId || null);
+      return;
+    }
+    setLegacyLastRunTemplateSkillId(null);
+  }, [status]);
+
   const selectedTemplate = useMemo(() => {
     if (!effectiveTemplateSkillId || !orbitTemplates) return null;
     return orbitTemplates.find((s) => s.id === effectiveTemplateSkillId) ?? null;
@@ -2699,8 +2710,14 @@ function OrbitSection({
   const templateScopedLastRun = effectiveTemplateSkillId
     ? status?.lastRunsByTemplate?.[effectiveTemplateSkillId] ?? null
     : null;
+  const hasLegacyUnscopedLastRun = Boolean(
+    status?.lastRun
+    && !status.lastRun.templateSkillId
+    && legacyLastRunTemplateSkillId
+    && legacyLastRunTemplateSkillId === effectiveTemplateSkillId,
+  );
   const lastRun = supportsTemplateScopedHistory
-    ? templateScopedLastRun
+    ? (templateScopedLastRun ?? (hasLegacyUnscopedLastRun ? status?.lastRun ?? null : null))
     : status?.lastRun ?? null;
   const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;

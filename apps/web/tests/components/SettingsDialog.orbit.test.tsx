@@ -205,4 +205,55 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
     expect(screen.queryByText('General latest summary')).toBeNull();
     expect(screen.getByText('7')).toBeTruthy();
   });
+
+  it('preserves legacy unscoped Last run only for the initially selected template', async () => {
+    vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
+    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/orbit/status') {
+        return new Response(JSON.stringify({
+          running: false,
+          nextRunAt: null,
+          lastRun: {
+            completedAt: '2026-05-06T10:00:00.000Z',
+            trigger: 'manual',
+            connectorsChecked: 5,
+            connectorsSucceeded: 3,
+            connectorsSkipped: 2,
+            connectorsFailed: 0,
+            markdown: 'Legacy unscoped summary',
+          },
+          lastRunsByTemplate: {},
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    render(
+      <SettingsDialog
+        initial={baseConfig}
+        agents={[]}
+        daemonLive
+        appVersionInfo={null}
+        initialSection="orbit"
+        onPersist={vi.fn()}
+        onPersistComposioKey={vi.fn()}
+        onClose={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Legacy unscoped summary')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText('Orbit prompt template'), {
+      target: { value: 'orbit-editorial' },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Legacy unscoped summary')).toBeNull();
+    });
+  });
 });
