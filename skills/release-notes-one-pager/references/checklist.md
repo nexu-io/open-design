@@ -5,6 +5,8 @@ Run this before emitting `<artifact>`. P0 = must pass; P1 = should pass; P2 = ni
 ## P0 — must pass
 
 - [ ] Required sections exist and are visible: Added, Fixed, Breaking changes, Known issues, Upgrade note.
+- [ ] Added section explicitly says `No additions provided` when no additions are supplied.
+- [ ] Fixed section explicitly says `No fixes provided` when no fixes are supplied.
 - [ ] Breaking changes section explicitly says `None` when there are no breaking changes.
 - [ ] Known issues section explicitly says `None reported` when there are no known issues.
 - [ ] Upgrade note section explicitly says either concrete steps or `No upgrade actions required based on provided information`.

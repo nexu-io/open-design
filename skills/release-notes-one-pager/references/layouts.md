@@ -30,8 +30,8 @@ Use when the page leads with a thesis sentence (most landings, most marketing pa
     <h1>One sharp sentence about what this is.</h1>
     <p class="lead">One concrete-value subhead — what changes for the reader.</p>
     <div class="hero-cta">
-      <button class="btn btn-primary">Primary action</button>
-      <button class="btn btn-secondary">Secondary</button>
+      <a class="btn btn-primary" href="#">Primary action</a>
+      <a class="btn btn-secondary" href="#">Secondary</a>
     </div>
   </div>
 </section>
@@ -49,8 +49,8 @@ Use when there is a real product visual (product UI, screenshot, photograph). Le
       <h1>Headline that names the change.</h1>
       <p class="lead" style="margin-top: 20px;">A short subhead — concrete, not corporate. Two sentences max.</p>
       <div class="hero-cta" style="margin-top: 28px;">
-        <button class="btn btn-primary">Primary action</button>
-        <button class="btn btn-ghost btn-arrow">Read the story</button>
+        <a class="btn btn-primary" href="#">Primary action</a>
+        <a class="btn btn-ghost btn-arrow" href="#">Read the story</a>
       </div>
     </div>
     <div class="ph-img wide" aria-label="Hero visual placeholder">[ Hero visual · 16:9 ]</div>
@@ -145,7 +145,7 @@ End the page on one decisive ask. Centered, generous whitespace, one primary but
   <div class="container" style="max-width: 600px;">
     <h2>Stop measuring meetings. Start measuring focus.</h2>
     <p class="lead" style="margin: 16px auto 32px;">Free for solo. $4/mo per teammate after that.</p>
-    <button class="btn btn-primary">Start free</button>
+    <a class="btn btn-primary" href="#">Start free</a>
   </div>
 </section>
 ```
