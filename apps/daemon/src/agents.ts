@@ -940,6 +940,12 @@ export function buildLiveArtifactsMcpServersForAgent(def, { enabled = true, comm
       name: 'open-design-live-artifacts',
       command,
       args: [...argsPrefix, 'mcp', 'live-artifacts'],
+      // Hermes ACP validates stdio MCP env as a list, not an object. Passing no
+      // env is fine here because the child process inherits OD_* values from
+      // the agent runtime environment (see buildAgentEnv in server.ts). Without
+      // this field Hermes rejects session/new with "Invalid params" whenever a
+      // project run enables live-artifacts MCP.
+      env: [],
     },
   ];
 }
