@@ -456,6 +456,14 @@ export function wellKnownUserToolchainBins(
   const includeSystemBins = options.includeSystemBins ?? process.platform !== "win32";
   const env = options.env ?? process.env;
   const dirs: string[] = [];
+  // Vite+ global installs expose CLI shims from VP_HOME/bin (default
+  // ~/.vite-plus/bin). An explicit VP_HOME is the most specific signal for
+  // vp-managed shims, so it wins over other global package-manager prefixes
+  // when a CLI name exists in multiple stores.
+  const vpHome = resolveUserScopedHome(env.VP_HOME, home);
+  if (vpHome) {
+    dirs.push(join(vpHome, "bin"));
+  }
   // The user's *explicit* npm prefix outranks every conventional
   // location below — including `~/.local/bin`. The env var is the
   // user's current npm configuration, so a binary installed via
@@ -477,14 +485,6 @@ export function wellKnownUserToolchainBins(
     if (npmPrefix.length > 0) {
       dirs.push(join(npmPrefix, "bin"));
     }
-  }
-  // Vite+ global installs expose CLI shims from VP_HOME/bin (default
-  // ~/.vite-plus/bin). Put an explicit VP_HOME override ahead of the
-  // conventional per-user locations below so the current managed home wins
-  // over stale binaries left behind in older prefixes.
-  const vpHome = resolveUserScopedHome(env.VP_HOME, home);
-  if (vpHome) {
-    dirs.push(join(vpHome, "bin"));
   }
   dirs.push(
     join(home, ".local", "bin"),
