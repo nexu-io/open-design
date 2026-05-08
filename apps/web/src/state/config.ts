@@ -280,6 +280,11 @@ function isValidOrbitTime(time: string): boolean {
 
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
+    const normalized = (baseUrl || '').toLowerCase();
+    // Any config pointing at ollama.com should resolve to the new ollama
+    // protocol so both chat and the connection test hit the native Ollama
+    // proxy instead of the Anthropic or OpenAI paths.
+    if (normalized.includes('ollama.com')) return 'ollama';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is
