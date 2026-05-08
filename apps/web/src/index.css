@@ -9368,6 +9368,19 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+/* Add a few extra pixels above the deploy dialog's primary action so
+   it does not crowd the divider. The shared .modal-foot uses 12px
+   vertical padding which is fine for shorter dialogs but reads as
+   cramped here because the deploy form ends in dense token / domain
+   config rows that push content right up to the border. Scoped to the
+   deploy dialog only (the template-save dialog also carries the
+   .deploy-modal class on its root, which is why we key off the
+   purpose-specific .deploy-flow-modal hook instead). 16px matches the
+   bump proposed for the global rule in #957 so the rhythm stays close
+   to the rest of the app. Issue #913. */
+.deploy-flow-modal .modal-foot {
+  padding-top: 16px;
+}
 .deploy-form {
   display: flex;
   flex-direction: column;

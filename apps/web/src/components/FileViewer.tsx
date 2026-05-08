@@ -4737,7 +4737,7 @@ function HtmlViewer({
       ) : null}
       {deployModalOpen ? (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal deploy-modal" role="dialog" aria-modal="true">
+          <div className="modal deploy-modal deploy-flow-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
               <div className="kicker">{deployProviderLabel}</div>
               <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
