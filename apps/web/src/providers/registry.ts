@@ -38,14 +38,7 @@ import type {
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      openExternal?: (url: string) => Promise<boolean>;
-      pickFolder?: () => Promise<string | null>;
-    };
-  }
-}
+// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';

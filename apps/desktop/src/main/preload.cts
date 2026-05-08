@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('shell:open-external', url),
   pickFolder: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:pick-folder'),
+  openPath: (path: string): Promise<string> =>
+    ipcRenderer.invoke('shell:open-path', path),
 });

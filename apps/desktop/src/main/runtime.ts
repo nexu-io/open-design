@@ -277,6 +277,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // hot-reload). removeHandler is a no-op when nothing is registered.
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("shell:open-external");
+  ipcMain.removeHandler("shell:open-path");
   ipcMain.handle("dialog:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
@@ -288,6 +289,21 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return true;
     } catch {
       return false;
+    }
+  });
+  // shell.openPath opens an absolute filesystem path in the OS file
+  // manager (Finder / Explorer / Files). It resolves to '' on success
+  // and to a non-empty error string on failure (per Electron's
+  // contract). The web caller uses that empty/non-empty distinction
+  // to decide between the success toast and the manual fallback toast.
+  ipcMain.handle("shell:open-path", async (_event, p: string) => {
+    if (typeof p !== "string" || p.length === 0) {
+      return "open-path: empty path";
+    }
+    try {
+      return await shell.openPath(p);
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
     }
   });
 

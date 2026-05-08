@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      openExternal?: (url: string) => Promise<boolean>;
-      pickFolder?: () => Promise<string | null>;
-    };
-  }
-}
+// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
+// so the new openPath method (#451) and existing pickFolder/openExternal
+// stay in one place.
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
