@@ -60,17 +60,18 @@ Update:
 - topnav logo text
 - topnav link labels (destinations are pre-wired to `#added`, `#fixed`, `#upgrade-note`)
 - topnav CTA label and `href` destination
+- ensure the topnav link targets exist by adding matching section `id` attributes
 
 ### Step 2 — Build release-note structure
 
 Inside `<main id="content">`, compose this section order:
 
 1. Hero (Layout 1 or 2): version, date, one-sentence summary.
-2. Added (use Layout 7 log-list).
-3. Fixed (use Layout 7 log-list).
-4. Breaking changes (use Layout 7 log-list, or one row explicitly saying "None").
-5. Known issues (Layout 7 or card list).
-6. Upgrade note (short steps list or explicit no-action statement).
+2. Added (use Layout 7 log-list; section root must include `id="added"`).
+3. Fixed (use Layout 7 log-list; section root must include `id="fixed"`).
+4. Breaking changes (use Layout 7 log-list, or one row explicitly saying "None"; section root must include `id="breaking-changes"`).
+5. Known issues (Layout 7 or card list; section root must include `id="known-issues"`).
+6. Upgrade note (short steps list or explicit no-action statement; section root must include `id="upgrade-note"`).
 7. Closing CTA strip (Layout 6).
 
 For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination.
