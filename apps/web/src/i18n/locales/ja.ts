@@ -146,6 +146,7 @@ export const ja: Dict = {
   'settings.mediaProviderConfigured': '設定済み',
   'settings.mediaProviderUnset': '未設定',
   'settings.mediaProviderClear': 'クリア',
+  'settings.mediaProviderClearConfirm': '保存された {name} の設定を削除しますか？{name} を使うには再度入力する必要があります。',
   'settings.mediaProviderPlaceholder': 'APIキーを貼り付け',
   'settings.mediaProviderBaseUrlPlaceholder': 'デフォルトのベース URL を上書き',
   'settings.about': 'About',

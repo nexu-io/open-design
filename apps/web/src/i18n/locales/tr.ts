@@ -140,6 +140,7 @@ export const tr: Dict = {
   'settings.mediaProviderConfigured': 'Ayarlandı',
   'settings.mediaProviderUnset': 'Ayarlanmadı',
   'settings.mediaProviderClear': 'Temizle',
+  'settings.mediaProviderClearConfirm': 'Kayıtlı {name} ayarları silinsin mi? {name}\'ı tekrar kullanmak için bunları yeniden girmeniz gerekecek.',
   'settings.mediaProviderPlaceholder': 'API anahtarı yapıştır',
   'settings.mediaProviderBaseUrlPlaceholder': 'Varsayılan temel URL’yi görmezden gel',
   'settings.about': 'Hakkında',

@@ -146,6 +146,7 @@ export const ko: Dict = {
   'settings.mediaProviderConfigured': '설정됨',
   'settings.mediaProviderUnset': '설정 안됨',
   'settings.mediaProviderClear': '지우기',
+  'settings.mediaProviderClearConfirm': '저장된 {name} 설정을 삭제하시겠습니까? {name}을(를) 사용하려면 다시 입력해야 합니다.',
   'settings.mediaProviderPlaceholder': 'API 키를 붙여넣으세요',
   'settings.mediaProviderBaseUrlPlaceholder': '기본 Base URL 재정의',
   'settings.about': '정보',

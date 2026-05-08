@@ -146,6 +146,7 @@ export const esES: Dict = {
   'settings.mediaProviderConfigured': 'Configurado',
   'settings.mediaProviderUnset': 'Sin configurar',
   'settings.mediaProviderClear': 'Limpiar',
+  'settings.mediaProviderClearConfirm': '¿Eliminar la configuración guardada de {name}? Tendrás que introducirla de nuevo para usar {name}.',
   'settings.mediaProviderPlaceholder': 'Pega la clave de API',
   'settings.mediaProviderBaseUrlPlaceholder': 'Sobrescribir URL base por defecto',
   'settings.about': 'Acerca de',

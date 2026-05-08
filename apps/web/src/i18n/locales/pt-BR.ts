@@ -143,6 +143,7 @@ export const ptBR: Dict = {
   'settings.mediaProviderConfigured': 'Configurado',
   'settings.mediaProviderUnset': 'Não configurado',
   'settings.mediaProviderClear': 'Limpar',
+  'settings.mediaProviderClearConfirm': 'Remover as configurações salvas de {name}? Você precisará inseri-las novamente para usar {name}.',
   'settings.mediaProviderPlaceholder': 'Cole a API key',
   'settings.mediaProviderBaseUrlPlaceholder': 'Sobrescrever Base URL padrão',
   'settings.about': 'Sobre',

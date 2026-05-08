@@ -146,6 +146,7 @@ export const ar: Dict = {
   'settings.mediaProviderConfigured': 'تم التكوين',
   'settings.mediaProviderUnset': 'غير محدد',
   'settings.mediaProviderClear': 'مسح',
+  'settings.mediaProviderClearConfirm': 'مسح إعدادات {name} المحفوظة؟ ستحتاج إلى إدخالها مرة أخرى لاستخدام {name}.',
   'settings.mediaProviderPlaceholder': 'الصق مفتاح API',
   'settings.mediaProviderBaseUrlPlaceholder': 'تجاوز رابط القاعدة الافتراضي',
   'settings.about': 'حول',

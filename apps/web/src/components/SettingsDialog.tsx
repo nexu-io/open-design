@@ -3355,7 +3355,23 @@ function MediaProvidersSection({
                   type="button"
                   className="ghost"
                   disabled={!clearable}
-                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '', model: '' })}
+                  onClick={() => {
+                    // Match the existing window.confirm guard the rest of
+                    // the app uses for destructive actions (conversation
+                    // delete, design delete, file delete in FileWorkspace).
+                    // Without this a stray click on the row's Clear button
+                    // wipes the saved key with no recovery. Issue #737.
+                    if (
+                      !confirm(
+                        t('settings.mediaProviderClearConfirm', {
+                          name: provider.label,
+                        }),
+                      )
+                    ) {
+                      return;
+                    }
+                    updateProvider(provider, { apiKey: '', baseUrl: '', model: '' });
+                  }}
                 >
                   {t('settings.mediaProviderClear')}
                 </button>

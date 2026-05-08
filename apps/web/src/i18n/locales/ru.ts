@@ -143,6 +143,7 @@ export const ru: Dict = {
   'settings.mediaProviderConfigured': 'Настроено',
   'settings.mediaProviderUnset': 'Не настроено',
   'settings.mediaProviderClear': 'Очистить',
+  'settings.mediaProviderClearConfirm': 'Удалить сохранённые настройки {name}? Вам придётся ввести их заново, чтобы использовать {name}.',
   'settings.mediaProviderPlaceholder': 'Вставьте API-ключ',
   'settings.mediaProviderBaseUrlPlaceholder': 'Переопределить базовый URL',
   'settings.about': 'О приложении',

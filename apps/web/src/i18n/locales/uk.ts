@@ -145,6 +145,7 @@ export const uk: Dict = {
   'settings.mediaProviderConfigured': 'Налаштовано',
   'settings.mediaProviderUnset': 'Не встановлено',
   'settings.mediaProviderClear': 'Очистити',
+  'settings.mediaProviderClearConfirm': 'Видалити збережені налаштування {name}? Вам доведеться ввести їх знову, щоб використовувати {name}.',
   'settings.mediaProviderPlaceholder': 'Вставте API-ключ',
   'settings.mediaProviderBaseUrlPlaceholder': 'Переопрацювати базовий URL за замовчуванням',
   'settings.about': 'Про програму',

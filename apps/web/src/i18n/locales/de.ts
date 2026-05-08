@@ -146,6 +146,7 @@ export const de: Dict = {
   'settings.mediaProviderConfigured': 'Konfiguriert',
   'settings.mediaProviderUnset': 'Nicht gesetzt',
   'settings.mediaProviderClear': 'Leeren',
+  'settings.mediaProviderClearConfirm': 'Gespeicherte {name}-Einstellungen löschen? Du musst sie erneut eingeben, um {name} zu nutzen.',
   'settings.mediaProviderPlaceholder': 'API-Key einfügen',
   'settings.mediaProviderBaseUrlPlaceholder': 'Standard-Base-URL überschreiben',
   'settings.about': 'Info',

@@ -146,6 +146,7 @@ export const hu: Dict = {
   'settings.mediaProviderConfigured': 'Beállítva',
   'settings.mediaProviderUnset': 'Nincs beállítva',
   'settings.mediaProviderClear': 'Törlés',
+  'settings.mediaProviderClearConfirm': 'Törölni szeretnéd a mentett {name} beállításokat? A {name} használatához újra meg kell adnod azokat.',
   'settings.mediaProviderPlaceholder': 'API-kulcs beillesztése',
   'settings.mediaProviderBaseUrlPlaceholder': 'Alapértelmezett bázis URL felülírása',
   'settings.about': 'Névjegy',

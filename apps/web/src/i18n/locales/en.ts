@@ -144,6 +144,7 @@ export const en: Dict = {
   'settings.mediaProviderConfigured': 'Configured',
   'settings.mediaProviderUnset': 'Unset',
   'settings.mediaProviderClear': 'Clear',
+  'settings.mediaProviderClearConfirm': 'Clear saved {name} settings? You\'ll need to enter them again to use {name}.',
   'settings.mediaProviderPlaceholder': 'Paste API key',
   'settings.mediaProviderBaseUrlPlaceholder': 'Override default base URL',
   'settings.about': 'About',

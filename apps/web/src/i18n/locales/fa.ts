@@ -144,6 +144,7 @@ export const fa: Dict = {
   'settings.mediaProviderConfigured': 'پیکربندی شده',
   'settings.mediaProviderUnset': 'تنظیم نشده',
   'settings.mediaProviderClear': 'پاک کردن',
+  'settings.mediaProviderClearConfirm': 'پاک کردن تنظیمات ذخیره‌شده‌ی {name}؟ برای استفاده از {name} باید آن‌ها را دوباره وارد کنید.',
   'settings.mediaProviderPlaceholder': 'کلید API را وارد کنید',
   'settings.mediaProviderBaseUrlPlaceholder': 'بازنویسی آدرس پایه پیش‌فرض',
   'settings.about': 'درباره',

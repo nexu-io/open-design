@@ -142,6 +142,7 @@ export const zhTW: Dict = {
   'settings.mediaProviderConfigured': '已設定',
   'settings.mediaProviderUnset': '未設定',
   'settings.mediaProviderClear': '清除',
+  'settings.mediaProviderClearConfirm': '清除已儲存的 {name} 設定？您需要再次輸入才能使用 {name}。',
   'settings.mediaProviderPlaceholder': '貼上 API key',
   'settings.mediaProviderBaseUrlPlaceholder': '覆蓋預設 Base URL',
   'settings.about': '關於',

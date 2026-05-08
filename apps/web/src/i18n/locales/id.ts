@@ -142,6 +142,7 @@ export const id: Dict = {
   'settings.mediaProviderConfigured': 'Sudah diatur',
   'settings.mediaProviderUnset': 'Belum diatur',
   'settings.mediaProviderClear': 'Bersihkan',
+  'settings.mediaProviderClearConfirm': 'Hapus pengaturan {name} yang tersimpan? Anda perlu memasukkannya lagi untuk menggunakan {name}.',
   'settings.mediaProviderPlaceholder': 'Tempel API key',
   'settings.mediaProviderBaseUrlPlaceholder': 'Timpa base URL default',
   'settings.about': 'Tentang',

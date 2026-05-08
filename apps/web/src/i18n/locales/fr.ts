@@ -146,6 +146,7 @@ export const fr: Dict = {
   'settings.mediaProviderConfigured': 'Configuré',
   'settings.mediaProviderUnset': 'Non défini',
   'settings.mediaProviderClear': 'Effacer',
+  'settings.mediaProviderClearConfirm': 'Effacer les paramètres enregistrés pour {name} ? Vous devrez les saisir à nouveau pour utiliser {name}.',
   'settings.mediaProviderPlaceholder': 'Coller la clé API',
   'settings.mediaProviderBaseUrlPlaceholder': 'Remplacer l\'URL de base par défaut',
   'settings.about': 'À propos',

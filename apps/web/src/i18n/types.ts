@@ -165,6 +165,7 @@ export interface Dict {
   'settings.mediaProviderConfigured': string;
   'settings.mediaProviderUnset': string;
   'settings.mediaProviderClear': string;
+  'settings.mediaProviderClearConfirm': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
   'settings.about': string;
