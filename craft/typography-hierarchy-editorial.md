@@ -90,7 +90,7 @@ A pull quote is not a blockquote. It is a visual interrupt.
 | Scale | 28–40 px — above body, below display |
 | Weight | Regular or light — never bold |
 | Tracking | Slightly negative (`-0.01em`) or zero |
-| Alignment | Break from body column — full width, or offset left/right |
+| Alignment | Break from body column — full width, or offset inline-start/inline-end |
 | Spacing | Large above and below — equal to or greater than a section break |
 | Color | May use `var(--accent)` as the only accent use on the page |
 
