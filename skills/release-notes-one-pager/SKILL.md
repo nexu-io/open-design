@@ -74,7 +74,7 @@ Inside `<main id="content">`, compose this section order:
 6. Upgrade note (short steps list or explicit no-action statement; section root must include `id="upgrade-note"`).
 7. Closing CTA strip (Layout 6).
 
-For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination. If no real destination is available, omit the topnav or closing CTA entirely rather than using a placeholder such as `href="#"` or a misleading page-anchor link. Replace all placeholder URLs (e.g., `REPLACE_WITH_REAL_URL`) with actual, safe destinations.
+For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination with real, safe values. If no real destination is available, omit the CTA entirely—do not use a placeholder such as `href="#"`, a misleading page-anchor, or `REPLACE_WITH_REAL_URL`. Hero CTAs are optional; only add them when real destinations exist.
 
 ### Step 3 — Honesty rules for missing details
 
