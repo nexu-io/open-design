@@ -108,6 +108,73 @@ const AGENT_BIN_ENV_KEYS = new Map([
   ['vibe', 'VIBE_BIN'],
 ]);
 
+/** HTTPS links for the web UI when `available` is false. Keys must match `AGENT_DEFS[].id`. */
+const AGENT_INSTALL_LINKS = {
+  claude: {
+    installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
+    docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
+  },
+  codex: {
+    installUrl: 'https://github.com/openai/codex',
+    docsUrl: 'https://developers.openai.com/codex',
+  },
+  devin: {
+    installUrl: 'https://cli.devin.ai/docs',
+    docsUrl: 'https://docs.devin.ai',
+  },
+  gemini: {
+    installUrl: 'https://github.com/google-gemini/gemini-cli',
+    docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
+  },
+  opencode: {
+    installUrl: 'https://opencode.ai/docs',
+    docsUrl: 'https://github.com/sst/opencode',
+  },
+  hermes: {
+    installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
+  },
+  kimi: {
+    installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+  },
+  'cursor-agent': {
+    installUrl: 'https://cursor.com/docs/cli/overview',
+  },
+  qwen: {
+    installUrl: 'https://github.com/QwenLM/qwen-code',
+  },
+  qoder: {
+    installUrl: 'https://qoder.com/download',
+    docsUrl: 'https://docs.qoder.com',
+  },
+  copilot: {
+    installUrl: 'https://github.com/github/copilot-cli',
+    docsUrl: 'https://docs.github.com/en/copilot/how-tos/use-copilot-extensions/use-in-cli',
+  },
+  pi: {
+    installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
+  },
+  kiro: {
+    installUrl: 'https://kiro.dev',
+  },
+  kilo: {
+    installUrl: 'https://kilo.ai',
+  },
+  vibe: {
+    installUrl: 'https://docs.mistral.ai',
+    docsUrl: 'https://github.com/mistralai/vibe-acp',
+  },
+  deepseek: {
+    installUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI',
+    docsUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI/blob/main/README.md',
+  },
+};
+
+function installMetaForAgent(agentId) {
+  const meta = AGENT_INSTALL_LINKS[agentId];
+  if (!meta) return {};
+  return { ...meta };
+}
+
 // Map a user-picked reasoning effort to one the chosen model will accept.
 // Codex's CLI accepts `none | minimal | low | medium | high | xhigh`, but
 // real models support narrower subsets — gpt-5.2/5.3/5.4/5.5 reject
@@ -1014,6 +1081,7 @@ async function probe(def, configuredEnv = {}) {
       ...stripFns(def),
       models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
       available: false,
+      ...installMetaForAgent(def.id),
     };
   }
   const probeEnv = spawnEnvForAgent(
@@ -1060,6 +1128,7 @@ async function probe(def, configuredEnv = {}) {
     available: true,
     path: resolved,
     version,
+    ...installMetaForAgent(def.id),
   };
 }
 

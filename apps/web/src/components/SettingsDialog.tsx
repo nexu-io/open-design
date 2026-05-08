@@ -1402,53 +1402,102 @@ export function SettingsDialog({
                   {t('settings.noAgentsDetected')}
                 </div>
               ) : (
-                <div className="agent-grid">
-                  {agents.map((a) => {
-                    const active = cfg.agentId === a.id;
-                    return (
-                      <button
-                        type="button"
-                        key={a.id}
-                        className={
-                          'agent-card' +
-                          (active ? ' active' : '') +
-                          (a.available ? '' : ' disabled')
-                        }
-                        onClick={() =>
-                          a.available && setCfg((c) => ({ ...c, agentId: a.id }))
-                        }
-                        disabled={!a.available}
-                        aria-pressed={active}
-                      >
-                        <AgentIcon id={a.id} size={40} />
-                        <div className="agent-card-body">
-                          <div className="agent-card-name">{a.name}</div>
-                          <div className="agent-card-meta">
-                            {a.available ? (
-                              a.version ? (
-                                <span title={a.path ?? ''}>{a.version}</span>
-                              ) : (
-                                <span title={a.path ?? ''}>
-                                  {t('common.installed')}
-                                </span>
-                              )
-                            ) : (
+                <>
+                  <div className="agent-grid">
+                    {agents.map((a) => {
+                      const active = cfg.agentId === a.id;
+                      if (a.available) {
+                        return (
+                          <button
+                            type="button"
+                            key={a.id}
+                            className={
+                              'agent-card' + (active ? ' active' : '')
+                            }
+                            onClick={() =>
+                              setCfg((c) => ({ ...c, agentId: a.id }))
+                            }
+                            aria-pressed={active}
+                          >
+                            <AgentIcon id={a.id} size={40} />
+                            <div className="agent-card-body">
+                              <div className="agent-card-name">{a.name}</div>
+                              <div className="agent-card-meta">
+                                {a.version ? (
+                                  <span title={a.path ?? ''}>{a.version}</span>
+                                ) : (
+                                  <span title={a.path ?? ''}>
+                                    {t('common.installed')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span
+                              className={
+                                'status-dot' + (active ? ' active' : '')
+                              }
+                              aria-hidden="true"
+                            />
+                          </button>
+                        );
+                      }
+                      const hasLinks = Boolean(a.installUrl || a.docsUrl);
+                      const cardLabel = `${a.name} · ${t('common.notInstalled')}`;
+                      return (
+                        <div
+                          key={a.id}
+                          className="agent-card disabled agent-card-unavailable"
+                          role="group"
+                          aria-label={cardLabel}
+                        >
+                          <AgentIcon id={a.id} size={40} />
+                          <div className="agent-card-body">
+                            <div className="agent-card-name">{a.name}</div>
+                            <div className="agent-card-meta">
                               <span className="muted">
                                 {t('common.notInstalled')}
                               </span>
-                            )}
+                            </div>
+                            {hasLinks ? (
+                              <div className="agent-card-actions">
+                                {a.installUrl ? (
+                                  <a
+                                    href={a.installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link"
+                                  >
+                                    Install
+                                  </a>
+                                ) : null}
+                                {a.docsUrl ? (
+                                  <a
+                                    href={a.docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link"
+                                  >
+                                    Docs
+                                  </a>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
-                        {a.available ? (
-                          <span
-                            className={'status-dot' + (active ? ' active' : '')}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                  {agents.some((x) => !x.available) ? (
+                    <p className="hint agent-install-path-hint">
+                      If you installed a CLI with npm or Homebrew and it
+                      still shows as not installed, ensure the tool's bin
+                      directory is on the PATH the Open Design daemon
+                      inherits (Terminal vs GUI apps can differ on macOS).
+                      See QUICKSTART.md (section "Local agent CLI and PATH").
+                      After installing, click Rescan.
+                    </p>
+                  ) : null}
+                </>
               )}
               {(() => {
                 const selected = agents.find(

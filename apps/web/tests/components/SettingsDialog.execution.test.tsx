@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -499,6 +499,8 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       available: false,
       version: null,
       models: [],
+      installUrl: 'https://github.com/google-gemini/gemini-cli',
+      docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
     };
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -509,8 +511,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(localCliTab);
 
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
-    const geminiCard = screen.getByRole('button', { name: /Gemini CLI/i }) as HTMLButtonElement;
-    expect(geminiCard.disabled).toBe(true);
+    const geminiGroup = screen.getByRole('group', { name: /Gemini CLI/i });
+    expect(
+      (within(geminiGroup).getByRole('link', { name: 'Install' }) as HTMLAnchorElement).getAttribute('href'),
+    ).toBe(
+      'https://github.com/google-gemini/gemini-cli',
+    );
+    expect(screen.getByText(/QUICKSTART\.md/)).toBeTruthy();
 
     fireEvent.click(codexCard);
     await waitForPersist(
