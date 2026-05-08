@@ -64,3 +64,30 @@ The script defaults to:
 If `127.0.0.1:7890` is available and no proxy is already set, the script uses it
 for registry access and passes `host.docker.internal:7890` into Docker builds. The
 host-gateway alias is only added for builds that need this local proxy mapping.
+
+### Colima swap helper for Apple Silicon
+
+`deploy/scripts/prepare-colima-build-swap.sh` is for manual Docker image
+publishing from an Apple Silicon macOS host that uses Colima as the Docker VM.
+Low-memory Colima VMs can run out of RAM during multi-arch image builds; this
+helper checks the VM memory and swap status, then creates and enables a temporary
+swap file only when the VM has no swap and less than 4 GiB of RAM. The script
+exits before touching Colima on non-macOS or non-Apple-Silicon hosts.
+
+Run it before a manual publish if Docker builds fail with out-of-memory errors,
+or if `status` shows a small Colima VM with no swap:
+
+```bash
+deploy/scripts/prepare-colima-build-swap.sh status
+deploy/scripts/prepare-colima-build-swap.sh
+deploy/scripts/publish-images.sh --image_tag latest
+deploy/scripts/prepare-colima-build-swap.sh cleanup
+```
+
+Useful overrides:
+
+```bash
+COLIMA_BUILD_SWAP_SIZE=6G deploy/scripts/prepare-colima-build-swap.sh
+COLIMA_BUILD_SWAP_MEMORY_THRESHOLD_KIB=6291456 deploy/scripts/prepare-colima-build-swap.sh
+COLIMA_BIN=/opt/homebrew/bin/colima deploy/scripts/prepare-colima-build-swap.sh status
+```
