@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow, ipcMain, shell } from "electron";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -229,6 +230,10 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   });
 }
 
+const __filename = fileURLToPath(import.meta.url);
+const __desktopDir = dirname(dirname(__filename));
+const preloadPath = join(__desktopDir, 'preload', 'index.js');
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
@@ -239,6 +244,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: preloadPath,
       sandbox: true,
     },
     width: 1280,
@@ -246,6 +252,28 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+
+  ipcMain.handle('od:print-pdf', async (_event, html: string) => {
+    const printWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+
+    try {
+      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      printWindow.show();
+      await printWindow.webContents.print({ printBackground: true });
+    } finally {
+      if (!printWindow.isDestroyed()) printWindow.close();
+    }
+  });
+
   let currentUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
