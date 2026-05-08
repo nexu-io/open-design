@@ -309,6 +309,57 @@ The fastest way to try Open Design is the prebuilt desktop app — no Node, no p
 - **[open-design.ai](https://open-design.ai/)** — official download page
 - **[GitHub releases](https://github.com/nexu-io/open-design/releases)**
 
+
+### Run with Docker
+
+Run Open Design without installing Node.js or pnpm locally.
+
+#### Requirements
+
+* Docker Desktop
+* Docker Compose v2
+
+Verify Docker:
+
+```bash id="70jv9o"
+docker compose version
+```
+
+#### Start Open Design
+
+```bash id="m9w43w"
+git clone https://github.com/nexu-io/open-design.git
+cd open-design/deploy
+docker compose up -d
+```
+
+Open in your browser:
+
+```text id="4s4xeh"
+http://localhost:7456
+```
+
+#### Common Commands
+
+```bash id="gl95kp"
+# View logs
+docker compose logs -f
+
+# Restart containers
+docker compose restart
+
+# Stop containers
+docker compose down
+
+# Pull latest image
+docker compose pull
+docker compose up -d
+```
+
+For advanced Docker configuration and environment variables, see [`QUICKSTART.md`](QUICKSTART.md).
+
+
+
 ### Run from source
 
 ```bash
