@@ -135,7 +135,12 @@ Default **10-slide** spine unless the brief says otherwise:
    with inline CSS. Default to system fonts for confidential / offline export.
    Remote fonts are opt-in only: the user must accept the privacy, availability,
    and PDF-rendering tradeoff before any third-party font URL is added.
-3. Self-check against **`references/conventions.md`** before declaring done.
+3. For dense market-context slides (KPI strip + chart + narrative), use the
+   seed's compact fitting primitives (`.body.fit`, `.metric-strip`,
+   `.chart-card`, `.compact-copy`) and keep chart height around 150px. Do not
+   add extra paragraphs until the slide has been checked at 1366×768 and
+   1440×900 without footer or chrome overlap.
+4. Self-check against **`references/conventions.md`** before declaring done.
 
 ### Step 3 — Export
 

@@ -287,13 +287,18 @@
   /* ──────────────────────────────────────────────────────────────────────────
      Slide 3 — MARKET CONTEXT
   ────────────────────────────────────────────────────────────────────────── */
-  .market .body { display: grid; grid-template-rows: auto auto 1fr; gap: 22px; padding-top: 28px; }
+  .market .body {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 16px;
+    padding-top: 20px;
+  }
   .kpi-grid {
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
     border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
   }
   .kpi {
-    padding: 18px 18px; display: grid; gap: 4px;
+    padding: 12px 14px; display: grid; gap: 3px;
     border-right: 1px solid var(--rule);
   }
   .kpi:last-child { border-right: 0; }
@@ -302,24 +307,24 @@
     text-transform: uppercase; color: var(--ink-soft);
   }
   .kpi .v {
-    font-family: var(--serif); font-size: 36px; line-height: 1; color: var(--ink);
+    font-family: var(--serif); font-size: 31px; line-height: 1; color: var(--ink);
     margin-top: 2px;
   }
-  .kpi .v small { font-size: 18px; color: var(--ink-mid); margin-left: 2px; }
+  .kpi .v small { font-size: 16px; color: var(--ink-mid); margin-left: 2px; }
   .kpi .delta {
-    font-family: var(--mono); font-size: 11px; margin-top: 6px; letter-spacing: 0.02em;
+    font-family: var(--mono); font-size: 10.5px; margin-top: 4px; letter-spacing: 0.02em;
   }
   .kpi .delta.up { color: var(--pos); }
   .kpi .delta.down { color: var(--neg); }
-  .market-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px; }
+  .market-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 26px; min-height: 0; }
   .chartbox {
-    border: 1px solid var(--rule); padding: 18px 20px 14px; display: grid; gap: 8px;
+    border: 1px solid var(--rule); padding: 14px 16px 12px; display: grid; gap: 6px;
     background: var(--paper-warm);
   }
   .chartbox .title { display: flex; justify-content: space-between; align-items: baseline; }
   .chartbox .title h3 { font-size: 16px; }
   .chartbox .title .src { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); }
-  .chart svg { width: 100%; height: 180px; display: block; }
+  .chart svg { width: 100%; height: 150px; display: block; }
   .legend {
     display: flex; gap: 16px; font-family: var(--sans); font-size: 11px;
     color: var(--ink-mid);
@@ -328,8 +333,11 @@
   .legend .sw i { width: 10px; height: 10px; display: inline-block; border-radius: 2px; font-style: normal; }
   .pull {
     border-left: 3px solid var(--accent); padding: 4px 0 4px 16px;
-    font-family: var(--serif); font-size: 16px; color: var(--ink); line-height: 1.4;
+    font-family: var(--serif); font-size: 15px; color: var(--ink); line-height: 1.32;
   }
+  .market .body-text { font-size: 12.8px; line-height: 1.48; }
+  .market .kicker { font-size: 9.5px; letter-spacing: 0.12em; }
+  .market .num { line-height: 1.05; }
 
   /* ──────────────────────────────────────────────────────────────────────────
      Tables

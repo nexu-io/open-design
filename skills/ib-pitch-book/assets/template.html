@@ -79,6 +79,7 @@
     padding: 56px 64px 48px;
     display: grid;
     grid-template-rows: auto 1fr auto;
+    min-height: 0;
     background: var(--paper);
     border-top: 6px solid var(--ink);
     box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35);
@@ -102,7 +103,13 @@
     text-transform: none;
   }
   .mast .meta { display: flex; gap: 22px; }
-  .body { padding: 28px 0 22px; }
+  .body { min-height: 0; padding: 28px 0 22px; }
+  .body.fit {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 18px;
+    padding-top: 22px;
+  }
   .ribbon,
   .eyebrow {
     display: inline-flex;
@@ -143,6 +150,72 @@
     grid-template-columns: 1fr 1fr;
     gap: 48px;
     align-items: start;
+    min-height: 0;
+  }
+  .grid-2.compact {
+    gap: 28px;
+  }
+  .metric-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+  .metric {
+    min-width: 0;
+    padding: 12px 14px;
+    border-right: 1px solid var(--rule);
+  }
+  .metric:last-child { border-right: 0; }
+  .metric .label {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .metric .value {
+    display: block;
+    margin-top: 5px;
+    font-family: var(--serif);
+    font-size: 31px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric .delta {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-mid);
+  }
+  .chart-card {
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+    padding: 14px 16px 12px;
+    border: 1px solid var(--rule);
+    background: var(--paper-warm);
+  }
+  .chart-card .chart {
+    min-height: 0;
+    height: min(150px, 22vh);
+  }
+  .chart-card svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .compact-copy {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    min-height: 0;
+  }
+  .compact-copy .body-text {
+    font-size: 12.8px;
+    line-height: 1.48;
   }
   table.fin {
     width: 100%;

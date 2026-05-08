@@ -22,6 +22,8 @@ Use after building **`index.html`**, before emitting `<artifact>`.
 - [ ] Disclaimer slide present; **references/compliance.md** tone satisfied.
 - [ ] Conflicts, compensation, supervisory / FINRA review, licensing, legal,
   tax, and accounting review status are included or marked not applicable.
+- [ ] Dense slides fit inside the slide frame at 1366×768 and 1440×900:
+  no text, charts, tables, footer, or nav chrome overlap the page boundary.
 
 ## P1 — should pass
 
