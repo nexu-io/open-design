@@ -1,7 +1,7 @@
 name: Contributor Card Bot
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
   issues:
     types: [opened]
@@ -18,7 +18,7 @@ jobs:
   recognize:
     name: Render and post contributor card
     if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
       (github.event_name == 'issues' && github.event.action == 'opened') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
