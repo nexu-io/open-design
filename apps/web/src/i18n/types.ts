@@ -1,11 +1,12 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk';
+export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr';
 
-export const LOCALES: Locale[] = ['en', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk'];
+export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
+  'id': 'Bahasa Indonesia',
   'de': 'Deutsch',
   'zh-CN': '简体中文',
   'zh-TW': '繁體中文',
@@ -19,7 +20,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'pl': 'Polski',
   'hu': 'Magyar',
   'fr': 'Français',
-  'uk': 'Українська'
+  'uk': 'Українська',
+  'tr': 'Türkçe'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -92,6 +94,23 @@ export interface Dict {
   'settings.rescanRunning': string;
   'settings.rescanSuccess': string;
   'settings.rescanFailed': string;
+  'settings.test': string;
+  'settings.testTitle': string;
+  'settings.testRunning': string;
+  'settings.testCancel': string;
+  'settings.testSuccessApi': string;
+  'settings.testSuccessCli': string;
+  'settings.testAuthFailed': string;
+  'settings.testForbidden': string;
+  'settings.testNotFoundModel': string;
+  'settings.testInvalidModelId': string;
+  'settings.testInvalidBaseUrl': string;
+  'settings.testRateLimited': string;
+  'settings.testUpstream': string;
+  'settings.testTimeout': string;
+  'settings.testAgentMissing': string;
+  'settings.testAgentSpawn': string;
+  'settings.testUnknown': string;
   'settings.noAgentsDetected': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
@@ -127,11 +146,20 @@ export interface Dict {
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
+  'settings.cliEnvTitle': string;
+  'settings.cliEnvHint': string;
+  'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvCodexHome': string;
+  'settings.cliEnvCodexBin': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
   'settings.mediaProviders': string;
   'settings.mediaProvidersHint': string;
+  'settings.mcpServerTitle': string;
+  'settings.mcpServerHint': string;
+  'settings.externalMcpTitle': string;
+  'settings.externalMcpHint': string;
   'settings.mediaProviderApiKey': string;
   'settings.mediaProviderBaseUrl': string;
   'settings.mediaProviderConfigured': string;
@@ -149,6 +177,110 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+  'settings.library': string;
+  'settings.libraryHint': string;
+  'settings.librarySkills': string;
+  'settings.libraryDesignSystems': string;
+  'settings.librarySearch': string;
+  'settings.libraryAll': string;
+  'settings.libraryPreview': string;
+  'settings.libraryPreviewClose': string;
+  'settings.libraryLoading': string;
+  'settings.libraryNoResults': string;
+  'settings.libraryEnabled': string;
+  'settings.libraryDisabled': string;
+  'settings.libraryToggleLabel': string;
+  'settings.connectorsNavHint': string;
+  'settings.connectorsHint': string;
+  'settings.connectorsComposioApiKey': string;
+  'settings.connectorsSavedTitle': string;
+  'settings.connectorsSavedWithTail': string;
+  'settings.connectorsSaved': string;
+  'settings.connectorsGetApiKey': string;
+  'settings.connectorsReplaceKeyPlaceholder': string;
+  'settings.connectorsApiKeyPlaceholder': string;
+  'settings.connectorsClear': string;
+  'settings.connectorsClearConfirmTitle': string;
+  'settings.connectorsClearConfirmBody': string;
+  'settings.connectorsClearConfirmContinue': string;
+  'settings.connectorsClearFinalTitle': string;
+  'settings.connectorsClearFinalBody': string;
+  'settings.connectorsClearFinalConfirm': string;
+  'settings.connectorsClearArming': string;
+  'settings.connectorsClearCancel': string;
+  'settings.connectorsSaveKey': string;
+  'settings.connectorsSaveKeyTitle': string;
+  'settings.connectorsKeySaving': string;
+  'settings.connectorsKeyError': string;
+  'settings.connectorsHelpSaved': string;
+  'settings.connectorsHelpUnsaved': string;
+  'settings.connectorsHelpEmpty': string;
+  'settings.connectorsLoadingSavedKey': string;
+  'settings.autosaveSaving': string;
+  'settings.autosaveSaved': string;
+  'settings.autosaveError': string;
+  'settings.orbit.eyebrow': string;
+  'settings.orbit.title': string;
+  'settings.orbit.navHint': string;
+  'settings.orbit.lede': string;
+  'settings.orbit.statusOnTitle': string;
+  'settings.orbit.statusOffTitle': string;
+  'settings.orbit.statusActive': string;
+  'settings.orbit.statusOff': string;
+  'settings.orbit.runTitle': string;
+  'settings.orbit.running': string;
+  'settings.orbit.runOpen': string;
+  'settings.orbit.dailySummaryTitle': string;
+  'settings.orbit.dailySummarySub': string;
+  'settings.orbit.on': string;
+  'settings.orbit.off': string;
+  'settings.orbit.runTimeTitle': string;
+  'settings.orbit.runTimeSub': string;
+  'settings.orbit.runTimeAria': string;
+  'settings.orbit.nextRun': string;
+  'settings.orbit.nextRunScheduledAfterSave': string;
+  'settings.orbit.schedule': string;
+  'settings.orbit.pausedManualOnly': string;
+  'settings.orbit.templateTitle': string;
+  'settings.orbit.templateMissing': string;
+  'settings.orbit.templateMissingOption': string;
+  'settings.orbit.templateMissingInstall': string;
+  'settings.orbit.templateMissingPickAnother': string;
+  'settings.orbit.templateResetTitle': string;
+  'settings.orbit.templateReset': string;
+  'settings.orbit.templateHelp': string;
+  'settings.orbit.templateAria': string;
+  'settings.orbit.templatesLoading': string;
+  'settings.orbit.templatesOptgroup': string;
+  'settings.orbit.lastRun': string;
+  'settings.orbit.triggerManual': string;
+  'settings.orbit.triggerScheduled': string;
+  'settings.orbit.meterAria': string;
+  'settings.orbit.countChecked': string;
+  'settings.orbit.countSucceeded': string;
+  'settings.orbit.countSkipped': string;
+  'settings.orbit.countFailed': string;
+  'settings.orbit.runError': string;
+  'settings.orbit.artifactKickerLive': string;
+  'settings.orbit.artifactKickerLegacy': string;
+  'settings.orbit.artifactTitle': string;
+  'settings.orbit.artifactMetaLive': string;
+  'settings.orbit.artifactMetaLegacy': string;
+  'settings.orbit.copyMarkdownTitle': string;
+  'settings.orbit.copied': string;
+  'settings.orbit.copy': string;
+  'settings.orbit.openArtifact': string;
+  'settings.orbit.sourceMarkdown': string;
+  'settings.orbit.gateAriaLabel': string;
+  'settings.orbit.gateEyebrow': string;
+  'settings.orbit.gateTitle': string;
+  'settings.orbit.gateBody': string;
+  'settings.orbit.gateBodyNoKey': string;
+  'settings.orbit.gateAction': string;
+  'settings.orbit.gateActionNoKey': string;
+  'settings.orbit.gateLoading': string;
+  'settings.orbit.controlsLockedBadge': string;
+  'settings.orbit.controlsLockedHint': string;
 
   // Notifications (settings + system notifications)
   'settings.notifications': string;
@@ -196,6 +328,9 @@ export interface Dict {
   'connectors.tools': string;
   'connectors.connect': string;
   'connectors.disconnect': string;
+  'connectors.authorizationPending': string;
+  'connectors.authorizationPendingHint': string;
+  'connectors.cancelAuthorization': string;
   'connectors.configure': string;
   'connectors.unavailable': string;
   'connectors.phaseStubTitle': string;
@@ -205,15 +340,78 @@ export interface Dict {
   'connectors.statusDisabled': string;
   'connectors.gateTitle': string;
   'connectors.gateBody': string;
-  'connectors.gateAction': string;
   'connectors.aboutLabel': string;
   'connectors.detailsLabel': string;
   'connectors.statusLabel': string;
   'connectors.categoryLabel': string;
+  'connectors.category.aiAgents': string;
+  'connectors.category.aiInfrastructure': string;
+  'connectors.category.accounting': string;
+  'connectors.category.admin': string;
+  'connectors.category.advertising': string;
+  'connectors.category.analytics': string;
+  'connectors.category.automation': string;
+  'connectors.category.cms': string;
+  'connectors.category.crm': string;
+  'connectors.category.calendar': string;
+  'connectors.category.commerce': string;
+  'connectors.category.communication': string;
+  'connectors.category.contacts': string;
+  'connectors.category.dataPlatform': string;
+  'connectors.category.database': string;
+  'connectors.category.design': string;
+  'connectors.category.developer': string;
+  'connectors.category.documentation': string;
+  'connectors.category.erp': string;
+  'connectors.category.education': string;
+  'connectors.category.email': string;
+  'connectors.category.events': string;
+  'connectors.category.fieldService': string;
+  'connectors.category.finance': string;
+  'connectors.category.fitness': string;
+  'connectors.category.forms': string;
+  'connectors.category.gaming': string;
+  'connectors.category.hr': string;
+  'connectors.category.hospitality': string;
+  'connectors.category.itsm': string;
+  'connectors.category.integration': string;
+  'connectors.category.localization': string;
+  'connectors.category.logistics': string;
+  'connectors.category.maps': string;
+  'connectors.category.marketing': string;
+  'connectors.category.media': string;
+  'connectors.category.meetings': string;
+  'connectors.category.nonprofit': string;
+  'connectors.category.observability': string;
+  'connectors.category.payments': string;
+  'connectors.category.personal': string;
+  'connectors.category.presentations': string;
+  'connectors.category.procurement': string;
+  'connectors.category.product': string;
+  'connectors.category.productivity': string;
+  'connectors.category.projectManagement': string;
+  'connectors.category.recruiting': string;
+  'connectors.category.research': string;
+  'connectors.category.salesIntelligence': string;
+  'connectors.category.scheduling': string;
+  'connectors.category.search': string;
+  'connectors.category.security': string;
+  'connectors.category.signing': string;
+  'connectors.category.social': string;
+  'connectors.category.spreadsheets': string;
+  'connectors.category.storage': string;
+  'connectors.category.support': string;
+  'connectors.category.surveys': string;
+  'connectors.category.tasks': string;
+  'connectors.category.timeTracking': string;
+  'connectors.category.video': string;
+  'connectors.category.whiteboard': string;
   'connectors.providerLabel': string;
   'connectors.toolsSection': string;
   'connectors.toolsLoading': string;
   'connectors.noToolsAvailable': string;
+  'connectors.toolDetailsUnavailable': string;
+  'connectors.loadMoreTools': string;
   'connectors.openDetailsAria': string;
   'connectors.toolsBadgeNone': string;
   'connectors.toolsBadgeOne': string;
@@ -331,6 +529,8 @@ export interface Dict {
   'promptTemplates.openSource': string;
   'promptTemplates.openFullscreen': string;
   'promptTemplates.closeFullscreen': string;
+  'promptTemplates.allSources': string;
+  'promptTemplates.sourceFilterAria': string;
   'promptTemplates.retry': string;
 
   // Designs tab
@@ -378,6 +578,8 @@ export interface Dict {
   'examples.modePrototypeMobile': string;
   'examples.modeDeck': string;
   'examples.modeDocument': string;
+  'examples.modeOrbit': string;
+  'examples.modeLive': string;
   'examples.scenarioGeneral': string;
   'examples.scenarioEngineering': string;
   'examples.scenarioProduct': string;
@@ -455,6 +657,7 @@ export interface Dict {
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
+  'project.resizeChatPanel': string;
   'chat.tabChat': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
@@ -527,6 +730,9 @@ export interface Dict {
   'preview.fullscreen': string;
   'preview.closeTitle': string;
   'preview.loading': string;
+  'preview.errorTitle': string;
+  'preview.errorBody': string;
+  'preview.retry': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 
@@ -537,8 +743,12 @@ export interface Dict {
 
   // Workspace / file viewer / design files panel
   'workspace.designFiles': string;
+  'workspace.focusMode': string;
+  'workspace.showChat': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;
+  'workspace.deleteSelectedFilesConfirm': string;
+  'workspace.deleteSelectedFilesPartial': string;
   'workspace.openFromDesignFiles': string;
   'workspace.designFilesLink': string;
   'workspace.loadingSketch': string;
@@ -557,6 +767,7 @@ export interface Dict {
   'designFiles.openInTab': string;
   'designFiles.download': string;
   'designFiles.downloadSelected': string;
+  'designFiles.deleteSelected': string;
   'designFiles.clearSelection': string;
   'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
@@ -587,6 +798,12 @@ export interface Dict {
   'designFiles.kindSpreadsheet': string;
   'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
+  'quickSwitcher.placeholder': string;
+  'quickSwitcher.empty': string;
+  'quickSwitcher.noMatches': string;
+  'quickSwitcher.navigate': string;
+  'quickSwitcher.open': string;
+  'quickSwitcher.close': string;
   'pasteDialog.title': string;
   'pasteDialog.hint': string;
   'pasteDialog.fileNameLabel': string;
@@ -637,6 +854,47 @@ export interface Dict {
   'fileViewer.comment': string;
   'fileViewer.edit': string;
   'fileViewer.draw': string;
+  'manualEdit.layers': string;
+  'manualEdit.editableCount': string;
+  'manualEdit.title': string;
+  'manualEdit.selectLayer': string;
+  'manualEdit.empty': string;
+  'manualEdit.noClass': string;
+  'manualEdit.tabsAria': string;
+  'manualEdit.tabContent': string;
+  'manualEdit.tabStyle': string;
+  'manualEdit.tabAttributes': string;
+  'manualEdit.tabHtml': string;
+  'manualEdit.tabSource': string;
+  'manualEdit.attributesJson': string;
+  'manualEdit.selectedHtml': string;
+  'manualEdit.fullSource': string;
+  'manualEdit.applyContent': string;
+  'manualEdit.applyStyle': string;
+  'manualEdit.applyAttributes': string;
+  'manualEdit.applyHtml': string;
+  'manualEdit.applySource': string;
+  'manualEdit.invalidAttributes': string;
+  'manualEdit.changes': string;
+  'manualEdit.undo': string;
+  'manualEdit.redo': string;
+  'manualEdit.noChanges': string;
+  'manualEdit.imageUrl': string;
+  'manualEdit.altText': string;
+  'manualEdit.label': string;
+  'manualEdit.text': string;
+  'manualEdit.href': string;
+  'manualEdit.textColor': string;
+  'manualEdit.background': string;
+  'manualEdit.fontSize': string;
+  'manualEdit.weight': string;
+  'manualEdit.align': string;
+  'manualEdit.padding': string;
+  'manualEdit.margin': string;
+  'manualEdit.radius': string;
+  'manualEdit.border': string;
+  'manualEdit.width': string;
+  'manualEdit.minHeight': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
@@ -685,6 +943,27 @@ export interface Dict {
   'liveArtifact.refresh.statusReady': string;
   'liveArtifact.refresh.statusSucceeded': string;
   'liveArtifact.refresh.statusFailed': string;
+  'fileViewer.deployProviderLabel': string;
+  'fileViewer.vercelProvider': string;
+  'fileViewer.cloudflarePagesProvider': string;
+  'fileViewer.deployToProvider': string;
+  'fileViewer.redeployToProvider': string;
+  'fileViewer.deployingToProvider': string;
+  'liveArtifact.viewer.tabPreview': string;
+  'liveArtifact.viewer.tabCode': string;
+  'liveArtifact.viewer.tabData': string;
+  'liveArtifact.viewer.tabRefreshHistory': string;
+  'liveArtifact.viewer.dataEmpty': string;
+  'liveArtifact.viewer.code.templateHeading': string;
+  'liveArtifact.viewer.code.renderedHeading': string;
+  'liveArtifact.viewer.code.templateHelp': string;
+  'liveArtifact.viewer.code.renderedHelp': string;
+  'liveArtifact.viewer.code.variantAria': string;
+  'liveArtifact.viewer.code.variantTemplate': string;
+  'liveArtifact.viewer.code.variantRendered': string;
+  'liveArtifact.viewer.code.loading': string;
+  'liveArtifact.viewer.code.unavailable': string;
+  'liveArtifact.viewer.code.empty': string;
   'fileViewer.deployToVercel': string;
   'fileViewer.redeployToVercel': string;
   'fileViewer.deployingToVercel': string;
@@ -697,16 +976,44 @@ export interface Dict {
   'fileViewer.vercelTokenPlaceholder': string;
   'fileViewer.vercelTokenReuseHint': string;
   'fileViewer.vercelTokenRequired': string;
+  'fileViewer.cloudflareApiToken': string;
+  'fileViewer.cloudflareApiTokenGetLink': string;
+  'fileViewer.cloudflareApiTokenPlaceholder': string;
+  'fileViewer.cloudflareApiTokenReuseHint': string;
+  'fileViewer.cloudflareApiTokenRequired': string;
+  'fileViewer.cloudflareApiTokenScopeHint': string;
   'fileViewer.vercelTeamId': string;
   'fileViewer.vercelTeamSlug': string;
+  'fileViewer.cloudflareAccountId': string;
+  'fileViewer.cloudflareAccountIdHint': string;
+  'fileViewer.cloudflareAccountIdRequired': string;
+  'fileViewer.cloudflareZoneLabel': string;
+  'fileViewer.cloudflareZonePlaceholder': string;
+  'fileViewer.cloudflareZoneRequired': string;
+  'fileViewer.cloudflareZonesLoading': string;
+  'fileViewer.cloudflareZonesRefresh': string;
+  'fileViewer.cloudflareZonesLoadFailed': string;
+  'fileViewer.cloudflareZonesEmpty': string;
+  'fileViewer.cloudflareDomainPrefixLabel': string;
+  'fileViewer.cloudflareDomainPrefixPlaceholder': string;
+  'fileViewer.cloudflareDomainPrefixInvalid': string;
+  'fileViewer.cloudflareHostnamePreview': string;
+  'fileViewer.cloudflareCustomDomainHint': string;
+  'fileViewer.cloudflarePagesDevLinkLabel': string;
+  'fileViewer.cloudflareCustomDomainLinkLabel': string;
   'fileViewer.optional': string;
   'fileViewer.vercelPreviewOnly': string;
+  'fileViewer.cloudflarePagesPreviewHint': string;
   'fileViewer.savingConfig': string;
   'fileViewer.deployConfigSaveFailed': string;
   'fileViewer.deployFailed': string;
+  'fileViewer.deployProviderConfigSaveFailed': string;
+  'fileViewer.deployProviderFailed': string;
   'fileViewer.deployResultLabel': string;
+  'fileViewer.deployLinkReady': string;
   'fileViewer.deployLinkPreparingLabel': string;
   'fileViewer.deployLinkDelayed': string;
+  'fileViewer.deployLinkFailed': string;
   'fileViewer.deployLinkProtectedLabel': string;
   'fileViewer.deployLinkProtected': string;
   'fileViewer.retryLink': string;
@@ -906,6 +1213,8 @@ export interface Dict {
   'pet.slashPetTuck': string;
   'pet.slashHatch': string;
   'pet.slashHatchArg': string;
+  'pet.slashSearch': string;
+  'pet.slashSearchArg': string;
   // Recently-hatched section in pet settings
   'pet.codexTitle': string;
   'pet.codexSubtitle': string;
@@ -936,4 +1245,5 @@ export interface Dict {
   'sketch.clear': string;
   'sketch.close': string;
   'sketch.textPrompt': string;
+  'sketch.textModalTitle': string;
 }

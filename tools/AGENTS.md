@@ -43,5 +43,8 @@ pnpm tools-pack win inspect --expr "document.title"
 pnpm tools-pack win cleanup
 pnpm tools-pack linux build --to appimage
 pnpm tools-pack linux install
+pnpm tools-pack linux install --headless
+pnpm tools-pack linux start --headless
+pnpm tools-pack linux stop --headless
 pnpm tools-pack linux build --containerized
 ```

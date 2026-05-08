@@ -1,19 +1,50 @@
-// @ts-nocheck
 import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import express from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  allowedBrowserPorts,
+  configuredAllowedOrigins,
+  isAllowedBrowserOrigin,
+  isLocalSameOrigin,
+} from '../src/origin-validation.js';
 
-/**
- * Replicate the origin validation middleware from server.ts exactly
- * as it appears in the real daemon, so we test the actual logic
- * including OD_WEB_PORT, Origin: null scoping, and non-loopback host.
- */
-function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
-  // Routes that serve content to sandboxed iframes (Origin: null) for
-  // read-only purposes.
+type TestRequestOptions = {
+  origin?: string;
+  headers?: http.OutgoingHttpHeaders;
+};
+
+type TestResponse = {
+  status: number | undefined;
+  body: string;
+  headers: http.IncomingHttpHeaders;
+};
+
+function getListeningPort(server: http.Server): number {
+  const address = server.address();
+  if (address == null || typeof address === 'string') {
+    throw new Error('Expected HTTP server to listen on a TCP port');
+  }
+  return (address as AddressInfo).port;
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error != null) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function createOriginMiddleware(resolvedPort: number, host = '127.0.0.1') {
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
-  return (req, res, next) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers.origin;
     if (origin == null || origin === '') return next();
     if (origin === 'null') {
@@ -27,30 +58,27 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
     if (!resolvedPort) {
       return res.status(403).json({ error: 'Server initializing' });
     }
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    const allowedOrigins = new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
-    if (!allowedOrigins.has(String(origin))) {
+    const ports = allowedBrowserPorts(resolvedPort);
+    const extraAllowedOrigins = configuredAllowedOrigins();
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
   };
 }
 
-function makeTestApp(port, host = '127.0.0.1') {
+function makeTestApp(port: number, host = '127.0.0.1') {
   const app = express();
   app.use(express.json());
   app.use('/api', createOriginMiddleware(port, host));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/projects', (_req, res) => res.json({ projects: [] }));
+  app.post('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, port)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    res.json({ active: true });
+  });
   app.get('/api/projects/:id/raw/:name', (req, res) => {
     // Mimics the real raw-file route that sets CORS for Origin: null
     if (req.headers.origin === 'null') {
@@ -70,9 +98,14 @@ function makeTestApp(port, host = '127.0.0.1') {
   return app;
 }
 
-function request(port, method, path, { origin, headers = {} } = {}) {
-  return new Promise((resolve) => {
-    const opts = {
+function request(
+  port: number,
+  method: string,
+  path: string,
+  { origin, headers = {} }: TestRequestOptions = {},
+): Promise<TestResponse> {
+  return new Promise((resolve, reject) => {
+    const opts: http.RequestOptions = {
       hostname: '127.0.0.1',
       port,
       path,
@@ -84,37 +117,36 @@ function request(port, method, path, { origin, headers = {} } = {}) {
     };
     const req = http.request(opts, (res) => {
       let body = '';
-      res.on('data', (chunk) => (body += chunk));
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => (body += chunk));
       res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
     });
+    req.on('error', reject);
     req.end();
   });
 }
 
 describe('daemon origin validation middleware', () => {
-  let server;
-  let port;
+  let server: http.Server;
+  let port: number;
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         // Start on port 0 to get a dynamic port, then rebuild with real port
         const tempApp = makeTestApp(0);
         const tempServer = tempApp.listen(0, '127.0.0.1', () => {
-          port = tempServer.address().port;
+          port = getListeningPort(tempServer);
           tempServer.close(() => {
             const realApp = makeTestApp(port);
-            server = realApp.listen(port, '127.0.0.1', () => resolve());
+            server = realApp.listen(port, '127.0.0.1', resolve);
           });
         });
       }),
   );
 
   afterAll(
-    () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-      }),
+    () => closeServer(server),
   );
 
   // --- Non-browser clients (no Origin) ---
@@ -145,6 +177,116 @@ describe('daemon origin validation middleware', () => {
       origin: `https://127.0.0.1:${port}`,
     });
     expect(res.status).toBe(200);
+  });
+
+  it('allows same-origin requests from a private LAN address', async () => {
+    const lanHost = `192.168.18.16:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    '10.0.5.12',
+    '172.16.0.1',
+    '172.31.255.254',
+    '169.254.10.20',
+  ])('allows same-origin requests from private LAN range %s', async (host) => {
+    const lanHost = `${host}:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    '172.15.255.255',
+    '172.32.0.1',
+    '192.168.1.256',
+  ])('blocks non-private or malformed LAN-like address %s', async (host) => {
+    const lanHost = `${host}:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows local guarded routes from a matching private LAN origin', async () => {
+    const lanHost = `192.168.18.16:${port}`;
+    const res = await request(port, 'POST', '/api/active', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks private LAN origins when the request host differs', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://192.168.18.16:${port}`,
+      headers: {
+        Host: `192.168.18.17:${port}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks local guarded routes when the private LAN host differs', async () => {
+    const res = await request(port, 'POST', '/api/active', {
+      origin: `http://192.168.18.16:${port}`,
+      headers: {
+        Host: `192.168.18.17:${port}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks local guarded routes without Origin when Host only matches a configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  it('allows local guarded routes from a matching configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        origin: 'https://od.example.com',
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
   });
 
   // --- Origin: null (sandboxed iframe previews) ---
@@ -186,6 +328,18 @@ describe('daemon origin validation middleware', () => {
       origin: 'null',
     });
     expect(res.status).toBe(403);
+  });
+
+  it('allows explicitly configured deployment origins', async () => {
+    process.env.OD_ALLOWED_ORIGINS = `https://od.example.com,http://203.0.113.10:${port}`;
+    try {
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: 'https://od.example.com',
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
   });
 
   // --- Cross-origin rejection ---
@@ -240,25 +394,22 @@ describe('daemon origin validation middleware', () => {
 });
 
 describe('origin validation: fail-closed before port resolution', () => {
-  let server;
-  let port;
+  let server: http.Server;
+  let port: number;
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         const app = makeTestApp(0); // port=0 → not resolved
         server = app.listen(0, '127.0.0.1', () => {
-          port = server.address().port;
+          port = getListeningPort(server);
           resolve();
         });
       }),
   );
 
   afterAll(
-    () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-      }),
+    () => closeServer(server),
   );
 
   it('blocks browser origins when port is not resolved (fail-closed)', async () => {
@@ -275,30 +426,27 @@ describe('origin validation: fail-closed before port resolution', () => {
 });
 
 describe('origin validation: non-loopback bind host', () => {
-  let server;
-  let port;
+  let server: http.Server;
+  let port: number;
   const nonLoopbackHost = '100.64.1.2'; // Tailscale-like address
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         // Start on port 0 to get a dynamic port, then rebuild with real port
         const tempApp = makeTestApp(0, nonLoopbackHost);
         const tempServer = tempApp.listen(0, '127.0.0.1', () => {
-          port = tempServer.address().port;
+          port = getListeningPort(tempServer);
           tempServer.close(() => {
             const realApp = makeTestApp(port, nonLoopbackHost);
-            server = realApp.listen(port, '127.0.0.1', () => resolve());
+            server = realApp.listen(port, '127.0.0.1', resolve);
           });
         });
       }),
   );
 
   afterAll(
-    () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-      }),
+    () => closeServer(server),
   );
 
   it('allows browser requests from the non-loopback bind host', async () => {

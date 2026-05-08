@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-retro-zine",
+  "name": "Retro Zine",
+  "tagline": "Beige paper with green accent and Bebas Neue + Caveat: a riso-printed zine in HTML form.",
+  "mood": [
+    "crafted",
+    "lo-fi",
+    "underground",
+    "warm-retro"
+  ],
+  "occasion": [
+    "indie zine / publication",
+    "music or arts brand",
+    "creator portfolio",
+    "small-batch / craft launch",
+    "cultural / community deck"
+  ],
+  "tone": [
+    "scrappy",
+    "warm",
+    "intentional",
+    "DIY"
+  ],
+  "formality": "medium-low",
+  "density": "medium",
+  "palette": {
+    "bg": "#C8B99A",
+    "bg_dark": "#B8A98A",
+    "green": "#008F4D",
+    "green_light": "#00A85D",
+    "black": "#1A1A1A",
+    "white": "#F4EFE6",
+    "description": "warm beige / khaki paper with one saturated forest green; dark ink and off-white cream; reads like a two-color riso print"
+  },
+  "typography": {
+    "display": "Bebas Neue",
+    "script": "Caveat",
+    "body": "Space Grotesk",
+    "style": "tall condensed display + handwritten script + clean grotesk body; layered like a printed zine page"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel printed, lo-fi, and crafted: indie zines and publications, music / arts brands, creator portfolios, small-batch craft launches, community decks. Also a great underdog choice for tech, research, or business decks that want a riso-print warmth instead of digital polish.",
+  "avoid_for": "Contexts that demand digital-native polish or fast modern-tech energy — the layered zine aesthetic intentionally feels handmade.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/retro-zine"
+}

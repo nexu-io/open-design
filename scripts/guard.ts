@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -34,6 +34,9 @@ const residualSkippedDirectories = new Set([
 ]);
 
 const residualAllowedExactPaths = new Set([
+  // esbuild config entrypoints are executed directly by Node before package
+  // dist output exists.
+  "packages/contracts/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/sidecar/esbuild.config.mjs",
   "packages/sidecar-proto/esbuild.config.mjs",
@@ -53,8 +56,8 @@ const residualAllowedExactPaths = new Set([
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
-  // electron-builder hook path; CJS compatibility entry used by tools-pack mac builds.
-  "tools/pack/resources/mac/web-standalone-after-pack.cjs",
+  // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
+  "tools/pack/resources/web-standalone-after-pack.cjs",
 ]);
 
 const residualAllowedPathPrefixes = [
@@ -66,17 +69,33 @@ const residualAllowedPathPrefixes = [
   "e2e/reports/html/",
   "e2e/reports/playwright-html-report/",
   "e2e/reports/test-results/",
+  "e2e/ui/.od-data/",
+  "e2e/ui/reports/playwright-html-report/",
+  "e2e/ui/reports/test-results/",
+  "e2e/ui/test-results/",
   // Vendored upstream HyperFrames skill helper scripts.
   "skills/hyperframes/scripts/",
+  // Vendored upstream Last30Days runtime helper used by the skill engine.
+  "skills/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt skill runtime assets (lewislulu/html-ppt-skill).
   "skills/html-ppt/assets/",
   "test-results/",
   "vendor/",
 ];
 
+const residualAllowedPathPatterns: RegExp[] = [
+  // Vendored upstream Zara template runtimes — one skill per template, name prefix
+  // `html-ppt-zhangzara-` (zarazhangrui/beautiful-html-templates). Only the
+  // vendored deck-stage runtime asset is allowlisted; any other JavaScript under
+  // these skill directories must still be converted to TypeScript or explicitly
+  // listed in `residualAllowedExactPaths`.
+  /^skills\/html-ppt-zhangzara-[^/]+\/assets\/deck-stage\.js$/,
+];
+
 function isResidualAllowedPath(repositoryPath: string): boolean {
   if (residualAllowedExactPaths.has(repositoryPath)) return true;
-  return residualAllowedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+  if (residualAllowedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix))) return true;
+  return residualAllowedPathPatterns.some((pattern) => pattern.test(repositoryPath));
 }
 
 function isResidualSkippedDirectoryName(directoryName: string): boolean {
@@ -133,7 +152,7 @@ async function checkResidualJavaScript(): Promise<boolean> {
 }
 
 const testLayoutScopedDirectories = ["apps", "packages", "tools"];
-const testLayoutSkippedDirectories = new Set([".next", "dist", "node_modules", "out"]);
+const testLayoutSkippedDirectories = new Set([".next", ".od-data", "dist", "node_modules", "out", "reports", "test-results"]);
 
 function isTestFile(fileName: string): boolean {
   return /\.test\.tsx?$/.test(fileName);
@@ -202,9 +221,189 @@ async function checkTestLayout(): Promise<boolean> {
   return true;
 }
 
+const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
+const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
+const e2eAllowedScripts = ["test", "typecheck"];
+
+async function collectRepositoryFiles(directory: string, skippedDirectoryNames = new Set<string>()): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (skippedDirectoryNames.has(entry.name)) continue;
+      files.push(...(await collectRepositoryFiles(fullPath, skippedDirectoryNames)));
+      continue;
+    }
+    if (entry.isFile()) files.push(toRepositoryPath(fullPath));
+  }
+
+  return files;
+}
+
+async function checkE2eLayout(): Promise<boolean> {
+  const violations: string[] = [];
+  const packageJson = JSON.parse(await readFile(e2ePackageJsonPath, "utf8")) as {
+    scripts?: Record<string, unknown>;
+  };
+  const scriptNames = Object.keys(packageJson.scripts ?? {}).sort();
+  if (scriptNames.join("\0") !== e2eAllowedScripts.join("\0")) {
+    violations.push(
+      `e2e/package.json scripts must be exactly ${e2eAllowedScripts.join(", ")} (found: ${scriptNames.join(", ")})`,
+    );
+  }
+
+  const e2eRoot = path.join(repoRoot, "e2e");
+  for (const repositoryPath of await collectRepositoryFiles(e2eRoot, e2eSkippedDirectories)) {
+    if (
+      repositoryPath === "e2e/package.json" ||
+      repositoryPath === "e2e/tsconfig.json" ||
+      repositoryPath === "e2e/vitest.config.ts" ||
+      repositoryPath === "e2e/playwright.config.ts" ||
+      repositoryPath === "e2e/AGENTS.md"
+    ) {
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/specs/")) {
+      if (!/\.spec\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e specs must be *.spec.ts`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/tests/")) {
+      if (!/\.test\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e tests must be *.test.ts`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/ui/")) {
+      const relativePath = repositoryPath.slice("e2e/ui/".length);
+      if (relativePath.includes("/") || !/\.test\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e UI files must be flat Playwright *.test.ts files under ui/`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/resources/")) {
+      const relativePath = repositoryPath.slice("e2e/resources/".length);
+      if (relativePath.includes("/") || !/\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e resources must be flat TypeScript files under resources/`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/lib/")) {
+      if (!/\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e lib files must be TypeScript`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/scripts/")) {
+      if (repositoryPath !== "e2e/scripts/playwright.ts") {
+        violations.push(`${repositoryPath} -> e2e scripts currently allow only scripts/playwright.ts`);
+      }
+      continue;
+    }
+
+    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or scripts/playwright.ts`);
+  }
+
+  if (violations.length > 0) {
+    console.error("E2E package layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("E2E layout check passed: Vitest, Playwright UI, resources, lib, and scripts stay in their lanes.");
+  return true;
+}
+
+const webTestSkippedDirectories = new Set([".od-data", "reports", "test-results"]);
+
+async function checkWebTestLayout(): Promise<boolean> {
+  const violations: string[] = [];
+  const webTestsRoot = path.join(repoRoot, "apps", "web", "tests");
+
+  for (const repositoryPath of await collectRepositoryFiles(webTestsRoot, webTestSkippedDirectories)) {
+    if (repositoryPath.startsWith("apps/web/tests/vitest/") || repositoryPath.startsWith("apps/web/tests/playwright/")) {
+      violations.push(`${repositoryPath} -> web tests should stay lightweight under apps/web/tests/ without vitest/playwright nesting`);
+      continue;
+    }
+
+    if (/\.(spec|test)\.tsx?$/.test(repositoryPath) && !/\.test\.tsx?$/.test(repositoryPath)) {
+      violations.push(`${repositoryPath} -> web Vitest test files must be *.test.ts or *.test.tsx`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Web test layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Web test layout check passed: web tests stay lightweight and Vitest-only.");
+  return true;
+}
+
+const toolsRootAllowlist = new Map<string, "directory" | "file">([
+  // Keep top-level tools intentionally small. `tools/launcher` was an incoming
+  // Windows shim experiment from PR #683 and is not an active repo boundary.
+  ["AGENTS.md", "file"],
+  ["dev", "directory"],
+  ["pack", "directory"],
+]);
+
+async function checkToolsLayout(): Promise<boolean> {
+  const toolsRoot = path.join(repoRoot, "tools");
+  const entries = await readdir(toolsRoot, { withFileTypes: true });
+  const seen = new Set<string>();
+  const violations: string[] = [];
+
+  for (const entry of entries) {
+    const expected = toolsRootAllowlist.get(entry.name);
+    const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
+
+    if (expected == null) {
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, and pack/`);
+      continue;
+    }
+
+    seen.add(entry.name);
+    if (expected === "directory" && !entry.isDirectory()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name}/ to be a directory`);
+    }
+    if (expected === "file" && !entry.isFile()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name} to be a file`);
+    }
+  }
+
+  for (const [entryName, expected] of toolsRootAllowlist) {
+    if (!seen.has(entryName)) {
+      violations.push(`tools/${entryName}${expected === "directory" ? "/" : ""} -> required tools boundary is missing`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Tools layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Tools layout check passed: tools/ top-level entries match the active boundary allowlist.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "test layout", run: checkTestLayout },
+  { name: "e2e layout", run: checkE2eLayout },
+  { name: "web test layout", run: checkWebTestLayout },
+  { name: "tools layout", run: checkToolsLayout },
 ];
 
 const results: boolean[] = [];

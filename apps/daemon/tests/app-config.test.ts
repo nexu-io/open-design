@@ -14,7 +14,7 @@ import {
 } from 'vitest';
 
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
-import { isLocalSameOrigin } from '../src/server.js';
+import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 describe('app-config', () => {
   let dataDir: string;
@@ -82,6 +82,83 @@ describe('app-config', () => {
       );
       const cfg = await readAppConfig(dataDir);
       expect(cfg).toEqual({});
+    });
+
+    it('preserves omitted orbit.templateSkillId from legacy stored config', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '09:30',
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.orbit).toEqual({
+        enabled: true,
+        time: '09:30',
+      });
+      expect(cfg.orbit).not.toHaveProperty('templateSkillId');
+    });
+
+    it('falls back to default orbit time for out-of-range stored values', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '99:99',
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.orbit).toEqual({
+        enabled: true,
+        time: '08:00',
+      });
+    });
+
+    it('preserves explicit orbit.templateSkillId null and trimmed string', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: false,
+            time: '08:00',
+            templateSkillId: null,
+          },
+        }),
+      );
+
+      let cfg = await readAppConfig(dataDir);
+      expect(cfg.orbit).toEqual({
+        enabled: false,
+        time: '08:00',
+        templateSkillId: null,
+      });
+
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '10:15',
+            templateSkillId: '  orbit-general  ',
+          },
+        }),
+      );
+
+      cfg = await readAppConfig(dataDir);
+      expect(cfg.orbit).toEqual({
+        enabled: true,
+        time: '10:15',
+        templateSkillId: 'orbit-general',
+      });
     });
   });
 
@@ -177,6 +254,81 @@ describe('app-config', () => {
       expect(cfg.agentModels).toBeUndefined();
     });
 
+    it('persists supported per-agent CLI env keys and drops everything else', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          claude: {
+            CLAUDE_CONFIG_DIR: '  ~/.claude-2  ',
+            ANTHROPIC_API_KEY: 'sk-should-not-persist',
+          },
+          codex: {
+            CODEX_HOME: '~/.codex-alt',
+            CODEX_BIN: '~/bin/codex-next',
+            OPENAI_API_KEY: 'sk-should-not-persist',
+          },
+          gemini: {
+            GEMINI_API_KEY: 'should-not-persist',
+          },
+          __proto__: {
+            CLAUDE_CONFIG_DIR: 'bad',
+          },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
+      });
+    });
+
+    it('drops agentCliEnv entries that collide with Object.prototype keys', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          toString: {
+            CODEX_HOME: '~/.codex-prototype',
+          },
+          hasOwnProperty: {
+            CLAUDE_CONFIG_DIR: '~/.claude-prototype',
+          },
+          claude: {
+            CLAUDE_CONFIG_DIR: '~/.claude-2',
+          },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+      });
+    });
+
+    it('clears agentCliEnv when null or an empty object is sent', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        },
+        onboardingCompleted: true,
+      });
+      expect((await readAppConfig(dataDir)).agentCliEnv).toBeDefined();
+
+      await writeAppConfig(dataDir, { agentCliEnv: null });
+      let cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toBeUndefined();
+      expect(cfg.onboardingCompleted).toBe(true);
+
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codex: { CODEX_HOME: '~/.codex-alt' },
+        },
+      });
+      await writeAppConfig(dataDir, { agentCliEnv: {} });
+      cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toBeUndefined();
+    });
+
     it('handles corrupted existing file gracefully on write', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), 'CORRUPT');
       await writeAppConfig(dataDir, { agentId: 'test' });
@@ -215,6 +367,49 @@ function httpRequest(
     req.end();
   });
 }
+
+describe('app-config disabled lists', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-disabled-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('persists disabledSkills as string array', async () => {
+    await writeAppConfig(dataDir, { disabledSkills: ['skill-a', 'skill-b'] });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.disabledSkills).toEqual(['skill-a', 'skill-b']);
+  });
+
+  it('persists disabledDesignSystems as string array', async () => {
+    await writeAppConfig(dataDir, { disabledDesignSystems: ['ds-x'] });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.disabledDesignSystems).toEqual(['ds-x']);
+  });
+
+  it('drops disabledSkills when not a string array', async () => {
+    await writeAppConfig(dataDir, { disabledSkills: 'not-array' } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.disabledSkills).toBeUndefined();
+  });
+
+  it('drops disabledSkills with non-string elements', async () => {
+    await writeAppConfig(dataDir, { disabledSkills: [1, 2, 3] } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.disabledSkills).toBeUndefined();
+  });
+
+  it('clears disabledSkills when empty array is sent', async () => {
+    await writeAppConfig(dataDir, { disabledSkills: ['a'] });
+    await writeAppConfig(dataDir, { disabledSkills: [] });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.disabledSkills).toEqual([]);
+  });
+});
 
 describe('app-config origin guard', () => {
   let server: http.Server;
@@ -300,6 +495,18 @@ describe('app-config origin guard', () => {
       headers: { Host: 'evil.com:9999' },
     });
     expect(res.status).toBe(403);
+  });
+
+  it('rejects no-Origin requests that only match configured deployment hosts', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await httpRequest(`${baseUrl}/api/app-config`, {
+        headers: { Host: 'od.example.com' },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
   });
 
   it('still rejects non-loopback Origin', async () => {

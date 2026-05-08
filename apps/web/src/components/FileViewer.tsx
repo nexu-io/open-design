@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -8,7 +8,10 @@ import {
   fetchLiveArtifactCode,
   fetchLiveArtifactRefreshes,
   checkDeploymentLink,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
+  fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchProjectDeployments,
   fetchProjectFilePreview,
@@ -19,6 +22,13 @@ import {
   LiveArtifactRefreshError,
   refreshLiveArtifact,
   updateDeployConfig,
+  type WebDeployConfigResponse,
+  type WebCloudflarePagesDeploySelection,
+  type WebDeploymentInfo,
+  type WebDeployProjectFileResponse,
+  type WebDeployProviderId,
+  type WebUpdateDeployConfigRequest,
+  writeProjectTextFile,
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
@@ -38,8 +48,6 @@ import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
-  DeployConfigResponse,
-  DeployProjectFileResponse,
   LiveArtifact,
   LiveArtifactRefreshLogEntry,
   LiveArtifactViewerTab,
@@ -48,15 +56,91 @@ import type {
 } from '../types';
 import { Icon } from './Icon';
 import {
+  buildBoardCommentAttachments,
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
+  selectionKindLabel,
   targetFromSnapshot,
   type PreviewCommentSnapshot,
 } from '../comments';
-import type { PreviewComment, PreviewCommentTarget } from '../types';
+import type {
+  ChatCommentAttachment,
+  PreviewComment,
+  PreviewCommentMember,
+  PreviewCommentTarget,
+} from '../types';
+import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import {
+  applyManualEditPatch,
+  readManualEditAttributes,
+  readManualEditFields,
+  readManualEditOuterHtml,
+  readManualEditStyles,
+} from '../edit-mode/source-patches';
+import type { ManualEditBridgeMessage, ManualEditHistoryEntry, ManualEditPatch, ManualEditTarget } from '../edit-mode/types';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
+type BoardTool = 'inspect' | 'pod';
+type StrokePoint = { x: number; y: number };
+type DeployProviderOption = {
+  id: WebDeployProviderId;
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  tokenLink: string;
+  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenPlaceholderKey:
+    | 'fileViewer.vercelTokenPlaceholder'
+    | 'fileViewer.cloudflareApiTokenPlaceholder';
+  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
+  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
+  tokenLabelKey:
+    | 'fileViewer.vercelToken'
+    | 'fileViewer.cloudflareApiToken';
+  accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
+  accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
+};
+type CloudflarePagesZoneOption = {
+  id: string;
+  name: string;
+  status?: string;
+  type?: string;
+};
+type DeployResultCard = {
+  id: string;
+  label: string;
+  url: string;
+  status: string;
+  message?: string;
+};
+const MAX_BRIDGE_COORDINATE = 1_000_000;
+
+// The five basic style facets the inspect panel exposes. Kept narrow on
+// purpose — open-slide's design tokens panel only edits global tokens, so
+// the per-element delta is small + obvious + cheap to read back from
+// getComputedStyle on the iframe side.
+type InspectStyleSnapshot = {
+  color?: string;
+  backgroundColor?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  paddingTop?: string;
+  paddingRight?: string;
+  paddingBottom?: string;
+  paddingLeft?: string;
+  borderRadius?: string;
+  textAlign?: string;
+  fontFamily?: string;
+  lineHeight?: string;
+};
+
+type InspectTarget = {
+  elementId: string;
+  selector: string;
+  label: string;
+  text: string;
+  style: InspectStyleSnapshot;
+};
 
 const MAX_CACHED_SLIDE_STATES = 64;
 const htmlPreviewSlideState = new Map<string, SlideState>();
@@ -64,6 +148,53 @@ const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
 const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
 const MARKDOWN_COPY_TOAST_CLASS = 'markdown-code-toast';
+
+const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
+  {
+    id: DEFAULT_DEPLOY_PROVIDER_ID,
+    labelKey: 'fileViewer.vercelProvider',
+    tokenLink: 'https://vercel.com/account/settings/tokens',
+    tokenLinkKey: 'fileViewer.vercelTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.vercelTokenRequired',
+    previewHintKey: 'fileViewer.vercelPreviewOnly',
+    tokenLabelKey: 'fileViewer.vercelToken',
+  },
+  {
+    id: CLOUDFLARE_PAGES_PROVIDER_ID,
+    labelKey: 'fileViewer.cloudflarePagesProvider',
+    tokenLink: 'https://dash.cloudflare.com/profile/api-tokens',
+    tokenLinkKey: 'fileViewer.cloudflareApiTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
+    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
+    tokenLabelKey: 'fileViewer.cloudflareApiToken',
+    accountIdLabelKey: 'fileViewer.cloudflareAccountId',
+    accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+];
+
+function getDeployProviderOption(providerId: WebDeployProviderId): DeployProviderOption {
+  return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0]!;
+}
+
+function normalizeCloudflareDomainPrefixInput(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+function isValidCloudflareDomainPrefixInput(raw: string): boolean {
+  const prefix = normalizeCloudflareDomainPrefixInput(raw);
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(prefix);
+}
+
+function deployResultState(status?: string): 'ready' | 'delayed' | 'protected' | 'failed' {
+  if (status === 'protected') return 'protected';
+  if (status === 'failed' || status === 'conflict') return 'failed';
+  if (status === 'link-delayed' || status === 'pending') return 'delayed';
+  return 'ready';
+}
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
@@ -161,6 +292,8 @@ interface Props {
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onFileSaved?: () => Promise<void> | void;
 }
 
 export function FileViewer({
@@ -173,6 +306,8 @@ export function FileViewer({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
+  onSendBoardCommentAttachments,
+  onFileSaved,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -191,6 +326,8 @@ export function FileViewer({
         previewComments={previewComments}
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onFileSaved={onFileSaved}
       />
     );
   }
@@ -241,6 +378,7 @@ export function LiveArtifactViewer({
   onRefreshArtifacts?: () => Promise<void> | void;
 }) {
   const t = useT();
+  const tabs = useMemo(() => liveArtifactViewerTabs(t), [t]);
   const [mode, setMode] = useState<LiveArtifactViewerTab>('preview');
   const [detail, setDetail] = useState<LiveArtifact | null>(null);
   const [loading, setLoading] = useState(true);
@@ -423,7 +561,7 @@ export function LiveArtifactViewer({
         </div>
         <div className="viewer-toolbar-actions">
           <div className="viewer-tabs">
-            {LIVE_ARTIFACT_VIEWER_TABS.map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -540,7 +678,7 @@ export function LiveArtifactViewer({
             <iframe
               data-testid="live-artifact-preview-frame"
               title={liveArtifact.title}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-popups"
               src={previewUrl}
             />
           </div>
@@ -553,7 +691,7 @@ export function LiveArtifactViewer({
             reloadKey={reloadKey}
           />
         ) : mode === 'data' ? (
-          <JsonPanel value={dataPayload} emptyLabel="No data.json cache available." />
+          <JsonPanel value={dataPayload} emptyLabel={t('liveArtifact.viewer.dataEmpty')} />
         ) : (
           <LiveArtifactRefreshHistoryPanel
             liveArtifact={detail}
@@ -612,16 +750,27 @@ function refreshErrorMessage(error: unknown, t: TranslateFn): string {
   return t('liveArtifact.refresh.genericFailure');
 }
 
-const LIVE_ARTIFACT_VIEWER_TABS: Array<{ id: LiveArtifactViewerTab; label: string }> = [
-  { id: 'preview', label: 'Preview' },
-  { id: 'code', label: 'Code' },
-  { id: 'data', label: 'Data' },
-  { id: 'refresh-history', label: 'Refresh history' },
-];
+function liveArtifactViewerTabs(t: TranslateFn): Array<{ id: LiveArtifactViewerTab; label: string }> {
+  return [
+    { id: 'preview', label: t('liveArtifact.viewer.tabPreview') },
+    { id: 'code', label: t('liveArtifact.viewer.tabCode') },
+    { id: 'data', label: t('liveArtifact.viewer.tabData') },
+    { id: 'refresh-history', label: t('liveArtifact.viewer.tabRefreshHistory') },
+  ];
+}
 
 type LiveArtifactCodeVariant = 'template' | 'rendered-source';
 
-function LiveArtifactCodePanel({ projectId, artifactId, reloadKey }: { projectId: string; artifactId: string; reloadKey: number }) {
+function LiveArtifactCodePanel({
+  projectId,
+  artifactId,
+  reloadKey,
+}: {
+  projectId: string;
+  artifactId: string;
+  reloadKey: number;
+}) {
+  const t = useT();
   const [variant, setVariant] = useState<LiveArtifactCodeVariant>('template');
   const [code, setCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -647,38 +796,45 @@ function LiveArtifactCodePanel({ projectId, artifactId, reloadKey }: { projectId
     <div className="live-artifact-code-panel">
       <div className="live-artifact-code-header">
         <div className="live-artifact-code-copy">
-          <strong>{variant === 'template' ? 'Template HTML' : 'Rendered HTML'}</strong>
+          <strong>
+            {variant === 'template'
+              ? t('liveArtifact.viewer.code.templateHeading')
+              : t('liveArtifact.viewer.code.renderedHeading')}
+          </strong>
           <span>
             {variant === 'template'
-              ? 'The editable template used with data.json to generate the preview.'
-              : 'The generated index.html currently loaded by Preview.'}
+              ? t('liveArtifact.viewer.code.templateHelp')
+              : t('liveArtifact.viewer.code.renderedHelp')}
           </span>
         </div>
-        <div className="viewer-tabs live-artifact-code-tabs" aria-label="Code variant">
+        <div
+          className="viewer-tabs live-artifact-code-tabs"
+          aria-label={t('liveArtifact.viewer.code.variantAria')}
+        >
           <button
             type="button"
             className={`viewer-tab ${variant === 'template' ? 'active' : ''}`}
             onClick={() => setVariant('template')}
           >
-            Template
+            {t('liveArtifact.viewer.code.variantTemplate')}
           </button>
           <button
             type="button"
             className={`viewer-tab ${variant === 'rendered-source' ? 'active' : ''}`}
             onClick={() => setVariant('rendered-source')}
           >
-            Rendered
+            {t('liveArtifact.viewer.code.variantRendered')}
           </button>
         </div>
       </div>
       {loading ? (
-        <div className="viewer-empty">Loading code…</div>
+        <div className="viewer-empty">{t('liveArtifact.viewer.code.loading')}</div>
       ) : failed ? (
-        <div className="viewer-empty">Code is not available yet.</div>
+        <div className="viewer-empty">{t('liveArtifact.viewer.code.unavailable')}</div>
       ) : code && code.trim().length > 0 ? (
         <pre className="viewer-source">{code}</pre>
       ) : (
-        <div className="viewer-empty">This code file is empty.</div>
+        <div className="viewer-empty">{t('liveArtifact.viewer.code.empty')}</div>
       )}
     </div>
   );
@@ -1161,39 +1317,91 @@ function FileActions({
   );
 }
 
-function CommentPopover({
+function BoardComposerPopover({
   target,
   existing,
   draft,
+  notes,
   onDraft,
+  onAddDraft,
+  onRemoveQueuedNote,
   onClose,
-  onSave,
+  onSaveComment,
+  onSendBatch,
   onRemove,
+  sending,
   t,
 }: {
   target: PreviewCommentSnapshot;
   existing: PreviewComment | null;
   draft: string;
+  notes: string[];
   onDraft: (value: string) => void;
+  onAddDraft: () => void;
+  onRemoveQueuedNote: (index: number) => void;
   onClose: () => void;
-  onSave: (attach: boolean) => void | Promise<void>;
+  onSaveComment: () => void | Promise<void>;
+  onSendBatch: () => void | Promise<void>;
   onRemove: (commentId: string) => void | Promise<void>;
+  sending: boolean;
   t: TranslateFn;
 }) {
+  const pendingCount = notes.length + (draft.trim() ? 1 : 0);
+  const podMembers = target.podMembers ?? [];
+  const titleId = useId();
   return (
-    <div className="comment-popover" data-testid="comment-popover">
+    <div
+      className="comment-popover"
+      data-testid="comment-popover"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={titleId}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+    >
       <div className="comment-popover-head">
-        <div>
-          <strong>{target.elementId}</strong>
+        <div title={target.elementId}>
+          <strong id={titleId}>{target.elementId}</strong>
           <span>{target.label}</span>
+          <span>{selectionKindLabel(target.selectionKind, target.memberCount)}</span>
         </div>
-        <button type="button" className="ghost" onClick={onClose}>
+        <button type="button" className="ghost" onClick={onClose} title={t('common.close')}>
           {t('common.close')}
         </button>
       </div>
+      {podMembers.length > 0 ? (
+        <div className="board-pod-summary">
+          <strong>{target.memberCount || podMembers.length} captured items</strong>
+          <div className="board-pod-members">
+            {podMembers.slice(0, 6).map((member) => (
+              <span key={member.elementId} className="board-pod-chip">
+                {summarizeMember(member)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {notes.length > 0 ? (
+        <div className="board-note-list">
+          {notes.map((note, index) => (
+            <div key={`${target.elementId}-${index}`} className="board-note-item">
+              <span>{note}</span>
+              <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <textarea
         data-testid="comment-popover-input"
         value={draft}
+        autoFocus
+        aria-label={t('chat.comments.placeholder')}
         placeholder={t('chat.comments.placeholder')}
         onChange={(event) => onDraft(event.target.value)}
       />
@@ -1205,16 +1413,729 @@ function CommentPopover({
         ) : <span />}
         <button
           type="button"
+          className="ghost"
+          disabled={!draft.trim()}
+          onClick={onAddDraft}
+        >
+          Add note
+        </button>
+        <button
+          type="button"
+          className="ghost"
+          disabled={target.selectionKind === 'pod' || !draft.trim()}
+          onClick={() => void onSaveComment()}
+        >
+          Save comment
+        </button>
+        <button
+          type="button"
           className="primary"
           data-testid="comment-add-send"
-          disabled={!draft.trim()}
-          onClick={() => void onSave(true)}
+          disabled={pendingCount === 0 || sending}
+          onClick={() => void onSendBatch()}
         >
-          {existing ? t('chat.comments.updateSend') : t('chat.comments.addSend')}
+          {sending ? 'Sending...' : 'Send to chat'}
         </button>
       </div>
     </div>
   );
+}
+
+// Maps a CSS computed value (e.g. "rgb(40, 50, 60)" or "16px") to a form
+// input value. Browsers return colors as rgb()/rgba(); HTML <input type=color>
+// only accepts "#rrggbb". Lengths come back as "12px" or "0px"; we strip
+// units for slider binding and re-append on emit.
+//
+// Note: <input type=color> has no alpha channel, so an rgba() with alpha < 1
+// is collapsed to its opaque RGB equivalent here. Most agent-generated HTML
+// uses opaque colors, so this is a known cosmetic limitation — a
+// semi-transparent source value will display in the panel as fully opaque.
+function rgbToHex(value: string | undefined): string {
+  if (!value) return '#000000';
+  const v = value.trim();
+  if (v.startsWith('#') && (v.length === 7 || v.length === 4)) {
+    if (v.length === 4) {
+      return '#' + [1, 2, 3].map((i) => {
+        const c = v.charAt(i);
+        return c + c;
+      }).join('');
+    }
+    return v;
+  }
+  const m = v.match(/rgba?\(\s*([0-9.]+)[ ,]+([0-9.]+)[ ,]+([0-9.]+)/i);
+  if (!m) return '#000000';
+  const toHex = (n: string) => {
+    const x = Math.max(0, Math.min(255, Math.round(Number(n))));
+    return x.toString(16).padStart(2, '0');
+  };
+  return '#' + toHex(m[1] ?? '0') + toHex(m[2] ?? '0') + toHex(m[3] ?? '0');
+}
+
+// Parse a CSS length to a number. Inspect's current sliders all clamp to a
+// non-negative range (padding, font-size, border-radius), so we reject
+// negatives at parse time too — otherwise a `-12px` source value would be
+// silently floored to 0 by the slider clamp without the regex agreeing.
+// If a future control needs negative values (e.g. margin), thread an
+// explicit `allowNegative` flag rather than reintroducing `-?` here.
+function pxToNumber(value: string | undefined): number {
+  if (!value) return 0;
+  const m = value.trim().match(/^(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function InspectPanel({
+  target,
+  onApply,
+  onResetElement,
+  onSaveToSource,
+  onClose,
+  saving,
+  savedAt,
+  error,
+}: {
+  target: InspectTarget;
+  onApply: (prop: string, value: string) => void;
+  onResetElement: (elementId: string) => void;
+  onSaveToSource: () => void;
+  onClose: () => void;
+  saving: boolean;
+  savedAt: number | null;
+  error: string | null;
+}) {
+  // Local "draft" mirror of the most recent value the user picked, so
+  // sliders/colors keep responding even before the iframe echoes back the
+  // computed result. Reset whenever the selected element changes.
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setDraft({});
+  }, [target.elementId]);
+
+  const value = (prop: string, fallback: string): string =>
+    draft[prop] ?? fallback;
+
+  function setVal(prop: string, raw: string) {
+    setDraft((d) => ({ ...d, [prop]: raw }));
+    onApply(prop, raw);
+  }
+
+  // Padding is exposed as a single shared slider that emits the `padding`
+  // shorthand; the browser fans the value out to all four sides internally.
+  // When per-side control becomes useful, switch to emitting explicit
+  // padding-top / padding-right / padding-bottom / padding-left props
+  // (the bridge already allow-lists those long-hand names).
+  const initialPadding = pxToNumber(target.style.paddingTop);
+  const initialFontSize = pxToNumber(target.style.fontSize);
+  const initialRadius = pxToNumber(target.style.borderRadius);
+
+  // Color / length controls all read through `draft` first so the input
+  // tracks the most recent user pick even before getComputedStyle catches
+  // up. Without this the picker would snap back to the initial computed
+  // snapshot on every change and feel non-editable.
+  const colorHex = value('color', rgbToHex(target.style.color));
+  const bgHex = value('background-color', rgbToHex(target.style.backgroundColor));
+  const padding = value('padding', String(initialPadding));
+  const fontSize = value('font-size', String(initialFontSize));
+  const radius = value('border-radius', String(initialRadius));
+  const textAlign = value('text-align', target.style.textAlign || 'left');
+  const fontWeight = value('font-weight', target.style.fontWeight || '400');
+  // Parse once: `pxToNumber(...) || initial...` would treat a legitimate
+  // `0px` draft as missing and snap the slider back to the original
+  // computed value, making it impossible to remove padding/radius from an
+  // element whose initial value is nonzero. `pxToNumber` already returns
+  // 0 for unparseable input, so its result is safe to consume directly
+  // and zero is preserved.
+  const paddingNum = pxToNumber(padding);
+  const fontSizeNum = pxToNumber(fontSize);
+  const radiusNum = pxToNumber(radius);
+
+  const justSaved = savedAt && Date.now() - savedAt < 4000;
+
+  return (
+    <aside className="inspect-panel" data-testid="inspect-panel">
+      <header className="inspect-panel-head">
+        <div className="inspect-panel-title">
+          <strong title={target.label || target.elementId}>{target.label || target.elementId}</strong>
+          <code title={target.selector}>{target.elementId}</code>
+        </div>
+        <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">
+          ×
+        </button>
+      </header>
+
+      <section className="inspect-section">
+        <div className="inspect-section-label">Colors</div>
+        <div className="inspect-row">
+          <label htmlFor="ip-color">Text</label>
+          <input
+            id="ip-color"
+            data-testid="inspect-color"
+            type="color"
+            value={colorHex}
+            onChange={(e) => setVal('color', e.target.value)}
+          />
+          <input
+            type="text"
+            value={colorHex}
+            onChange={(e) => setVal('color', e.target.value)}
+            spellCheck={false}
+          />
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-bg">Background</label>
+          <input
+            id="ip-bg"
+            data-testid="inspect-bg"
+            type="color"
+            value={bgHex}
+            onChange={(e) => setVal('background-color', e.target.value)}
+          />
+          <input
+            type="text"
+            value={bgHex}
+            onChange={(e) => setVal('background-color', e.target.value)}
+            spellCheck={false}
+          />
+        </div>
+      </section>
+
+      <section className="inspect-section">
+        <div className="inspect-section-label">Typography</div>
+        <div className="inspect-row">
+          <label htmlFor="ip-fs">Size</label>
+          <input
+            id="ip-fs"
+            data-testid="inspect-font-size"
+            type="range"
+            min={8}
+            max={160}
+            step={1}
+            value={clamp(fontSizeNum, 8, 160)}
+            onChange={(e) => setVal('font-size', `${e.target.value}px`)}
+          />
+          <span className="inspect-row-value">{Math.round(fontSizeNum)}px</span>
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-fw">Weight</label>
+          <select
+            id="ip-fw"
+            value={fontWeight}
+            onChange={(e) => setVal('font-weight', e.target.value)}
+          >
+            {['100', '300', '400', '500', '600', '700', '800', '900'].map((w) => (
+              <option key={w} value={w}>{w}</option>
+            ))}
+          </select>
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-ta">Align</label>
+          <select
+            id="ip-ta"
+            value={textAlign}
+            onChange={(e) => setVal('text-align', e.target.value)}
+          >
+            {['left', 'center', 'right', 'justify'].map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      <section className="inspect-section">
+        <div className="inspect-section-label">Spacing &amp; Shape</div>
+        <div className="inspect-row">
+          <label htmlFor="ip-pad">Padding</label>
+          <input
+            id="ip-pad"
+            data-testid="inspect-padding"
+            type="range"
+            min={0}
+            max={120}
+            step={1}
+            value={clamp(paddingNum, 0, 120)}
+            onChange={(e) => setVal('padding', `${e.target.value}px`)}
+          />
+          <span className="inspect-row-value">{Math.round(paddingNum)}px</span>
+        </div>
+        <div className="inspect-row">
+          <label htmlFor="ip-rad">Radius</label>
+          <input
+            id="ip-rad"
+            data-testid="inspect-radius"
+            type="range"
+            min={0}
+            max={120}
+            step={1}
+            value={clamp(radiusNum, 0, 120)}
+            onChange={(e) => setVal('border-radius', `${e.target.value}px`)}
+          />
+          <span className="inspect-row-value">{Math.round(radiusNum)}px</span>
+        </div>
+      </section>
+
+      <footer className="inspect-panel-footer">
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            setDraft({});
+            onResetElement(target.elementId);
+          }}
+        >
+          Reset element
+        </button>
+        <button
+          type="button"
+          className="primary"
+          data-testid="inspect-save"
+          disabled={saving}
+          onClick={onSaveToSource}
+        >
+          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save to source'}
+        </button>
+      </footer>
+      {error ? <div className="inspect-panel-error">{error}</div> : null}
+    </aside>
+  );
+}
+
+// Inspect-mode override entry as held in the host's authoritative map and as
+// it travels in od:inspect-overrides messages. The host's persisted map is
+// owned and mutated only by host-driven onApply / reset actions plus the
+// initial parse of the source's <style data-od-inspect-overrides> block;
+// inbound iframe messages are treated as preview acknowledgements, never as
+// save input. Artifact code rendered with scripts enabled can call
+// window.parent.postMessage with a forged payload — ev.source still points
+// at iframe.contentWindow — so any field arriving from the iframe is
+// untrusted. Even the structured `overrides` field could be tampered with
+// to flip allow-listed properties on elements the user never edited, which
+// is why we no longer ingest it on save.
+type InspectOverridePayload = {
+  selector?: unknown;
+  props?: unknown;
+};
+
+// Authoritative host-side override map: elementId → { selector, props }.
+// Mirrors the in-iframe shape so serializeInspectOverrides can consume it.
+export type InspectOverrideEntry = {
+  selector: string;
+  props: Record<string, string>;
+};
+export type InspectOverrideMap = Record<string, InspectOverrideEntry>;
+
+// Allow-list of CSS properties the host will persist on Save. Mirrors the
+// in-iframe ALLOWED_PROPS list so the host doesn't accept properties that
+// the bridge itself would reject.
+const HOST_ALLOWED_INSPECT_PROPS = new Set([
+  'color',
+  'background-color',
+  'font-size',
+  'font-weight',
+  'font-family',
+  'line-height',
+  'text-align',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'border-radius',
+]);
+
+// Reject values that could break out of `prop: value` and into the
+// surrounding <style> block — semicolons, braces, angle brackets, and
+// newlines. Mirrors the bridge's UNSAFE_VALUE regex.
+const HOST_UNSAFE_INSPECT_VALUE = /[;{}<>\n\r]/;
+
+// Reject elementIds whose characters could break out of `[attr="..."]`
+// inside a <style> block. Forbidden:
+//   - `"` and `\` would close the attribute string or smuggle CSS
+//     escapes the host didn't pre-process;
+//   - `<` and `>` would close the surrounding <style> tag;
+//   - C0/C1 controls (newline, etc.) end the CSS rule under string
+//     tokenization — kept in as defense-in-depth against parser quirks.
+// Everything else — including ASCII whitespace and leading digits — is
+// allowed, so deck labels like `01 Cover` survive instead of being
+// dropped on the way to the persisted overrides block.
+const HOST_UNSAFE_INSPECT_ID = /["\\<>\u0000-\u001f\u007f]/;
+
+// Build the inspect overrides CSS body the host will persist, from the
+// structured `overrides` field of an od:inspect-overrides message. The host
+// MUST NOT trust the sibling `css` string — it is attacker-controlled when
+// artifact JS forges the message. The selector is re-derived from each
+// elementId; only allow-listed properties with safe values survive.
+//
+// Exported so unit tests can exercise the validator with hostile payloads.
+export function serializeInspectOverrides(overrides: unknown): string {
+  if (!overrides || typeof overrides !== 'object') return '';
+  const map = overrides as Record<string, unknown>;
+  const lines: string[] = [];
+  for (const elementId of Object.keys(map)) {
+    if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
+    const entry = map[elementId] as InspectOverridePayload | null | undefined;
+    if (!entry || typeof entry !== 'object') continue;
+    const props = entry.props;
+    if (!props || typeof props !== 'object') continue;
+    // Trust only the *kind* of selector the bridge built, not the value
+    // it carried. The bridge runs CSS.escape over the elementId, so a raw
+    // equality check against `[data-screen-label="${elementId}"]` would
+    // miss legitimate deck labels like `01 Cover` (whitespace, leading
+    // digit) and silently downgrade them to `[data-od-id="..."]`. The
+    // elementId itself was sanitized above, so embedding it verbatim into
+    // the re-derived selector is safe inside an attribute value string.
+    const inboundSelector = typeof entry.selector === 'string' ? entry.selector : '';
+    const attr = inboundSelector.startsWith('[data-screen-label="')
+      ? 'data-screen-label'
+      : 'data-od-id';
+    const safeSelector = `[${attr}="${elementId}"]`;
+    const decls: string[] = [];
+    for (const [rawName, rawValue] of Object.entries(props as Record<string, unknown>)) {
+      if (typeof rawName !== 'string' || typeof rawValue !== 'string') continue;
+      const name = rawName.toLowerCase();
+      if (!HOST_ALLOWED_INSPECT_PROPS.has(name)) continue;
+      const value = rawValue.trim();
+      if (!value || HOST_UNSAFE_INSPECT_VALUE.test(value)) continue;
+      decls.push(`${name}: ${value} !important`);
+    }
+    if (!decls.length) continue;
+    lines.push(`${safeSelector} { ${decls.join('; ')} }`);
+  }
+  return lines.join('\n');
+}
+
+// Apply a single host-driven prop change to the authoritative override map.
+// Returns a new map (or the same reference if no-op so React skips renders).
+// Empty value clears the prop; clearing the last prop drops the elementId.
+// Mirrors the iframe bridge's applyOverride sanitization so the host map and
+// the live preview stay in lock-step under the same rules.
+export function updateInspectOverride(
+  map: InspectOverrideMap,
+  elementId: string,
+  selector: string,
+  prop: string,
+  value: string,
+): InspectOverrideMap {
+  if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) return map;
+  const propName = String(prop || '').toLowerCase();
+  if (!HOST_ALLOWED_INSPECT_PROPS.has(propName)) return map;
+  const trimmed = String(value ?? '').trim();
+  if (trimmed && HOST_UNSAFE_INSPECT_VALUE.test(trimmed)) return map;
+  const existing = map[elementId];
+  const nextProps: Record<string, string> = { ...(existing?.props ?? {}) };
+  if (!trimmed) {
+    if (!(propName in nextProps)) return map;
+    delete nextProps[propName];
+  } else if (nextProps[propName] === trimmed && existing?.selector === selector) {
+    return map;
+  } else {
+    nextProps[propName] = trimmed;
+  }
+  const nextMap: InspectOverrideMap = { ...map };
+  if (Object.keys(nextProps).length === 0) {
+    delete nextMap[elementId];
+  } else {
+    nextMap[elementId] = { selector: selector || existing?.selector || '', props: nextProps };
+  }
+  return nextMap;
+}
+
+// Parse any persisted <style data-od-inspect-overrides> blocks in the
+// artifact source into the host's authoritative override map. The host owns
+// this map and only mutates it from onApply / reset actions plus this
+// initial hydration step — inbound iframe od:inspect-overrides messages are
+// not ingested. Without this step, opening a file that already carries an
+// override block would leave the host map empty, so a Save-to-source after
+// any subsequent edit could splice a CSS body that drops every previously
+// saved rule for elements the user did not touch in this session.
+//
+// Mirrors the iframe bridge's hydrateOverridesFromDom: same allow-list,
+// same value sanitizer, same selector kinds, so what the iframe applies and
+// what the host persists stay in lock-step. Pure string transform; no DOM.
+//
+// HTML-aware: enumerates `<style data-od-inspect-overrides>` elements via
+// the same walker used by the splicer, so a `<style data-od-inspect-overrides>`
+// literal living inside a `<script>`, `<style>` (e.g. CSS comment), `<textarea>`,
+// `<title>`, or HTML comment is not mistaken for a real override block. Without
+// that exclusion, useEffect would seed the host map from forged/quoted text and
+// a later Save-to-source would persist phantom CSS the user never created.
+export function parseInspectOverridesFromSource(source: string): InspectOverrideMap {
+  const map: InspectOverrideMap = {};
+  if (!source) return map;
+  for (const body of stripInspectOverridesAndIndex(source).bodies) {
+    const ruleRe = /(\[data-(?:od-id|screen-label)="([^"]*)"\])\s*\{\s*([^}]*)\}/g;
+    let ruleMatch: RegExpExecArray | null;
+    while ((ruleMatch = ruleRe.exec(body)) !== null) {
+      const selector = ruleMatch[1] ?? '';
+      const elementId = ruleMatch[2] ?? '';
+      const declBody = ruleMatch[3] ?? '';
+      if (!selector || !elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
+      const props: Record<string, string> = {};
+      for (const raw of declBody.split(';')) {
+        if (!raw) continue;
+        const colon = raw.indexOf(':');
+        if (colon <= 0) continue;
+        const name = raw.slice(0, colon).trim().toLowerCase();
+        if (!HOST_ALLOWED_INSPECT_PROPS.has(name)) continue;
+        const value = raw.slice(colon + 1).replace(/!important/gi, '').trim();
+        if (!value || HOST_UNSAFE_INSPECT_VALUE.test(value)) continue;
+        props[name] = value;
+      }
+      if (Object.keys(props).length) {
+        map[elementId] = { selector, props };
+      }
+    }
+  }
+  return map;
+}
+
+// HTML5 raw-text and escapable-raw-text elements: the parser does not
+// interpret markup inside their contents, so a literal `</head>` or
+// `<style data-od-inspect-overrides>` written as text inside one of them
+// must NOT be treated as a real tag. Without this exclusion, a regex-only
+// splicer can match `</head>` inside an inline <script> string literal or
+// a CSS comment and inject the override block into the middle of
+// JavaScript/CSS instead of the actual document head, corrupting the
+// artifact on Save to source.
+const RAW_TEXT_INSPECT_ELEMENTS = new Set(['script', 'style', 'textarea', 'title']);
+
+// Decide whether a `<style ...>` opening tag actually carries a real
+// `data-od-inspect-overrides` attribute, as opposed to merely mentioning
+// the marker text inside another attribute name or value. The naive
+// `\bdata-od-inspect-overrides\b` test against the whole tag text is
+// over-broad in two cases:
+//
+//   1. A longer attribute name that has the marker as a prefix, e.g.
+//      `<style data-od-inspect-overrides-note="docs">`. The `-` after
+//      `overrides` is a non-word character, so `\b` matches and the tag
+//      gets mis-stripped on save / mis-parsed on hydration.
+//   2. The marker spelled inside an attribute value, e.g.
+//      `<style title="data-od-inspect-overrides">`. The whole tag text
+//      contains the literal, so the regex matches even though the actual
+//      attribute names are `title` only.
+//
+// Both shapes occur in real artifacts (notes, documentation, fixtures)
+// and would either silently drop the user's CSS on save or seed phantom
+// overrides into the host map even though the artifact has no real
+// override block. So we walk attributes proper, lower-casing each name
+// and skipping any quoted value, and report a hit only when one of those
+// names is exactly `data-od-inspect-overrides` (boolean attribute or
+// assigned value, both legal HTML for our marker).
+function styleTagIsInspectOverrideBlock(tagText: string): boolean {
+  const start = /^<style/i.exec(tagText);
+  if (!start) return false;
+  let i = start[0].length;
+  const end = tagText.length;
+  while (i < end) {
+    const ch = tagText.charAt(i);
+    if (ch === '>') return false;
+    if (ch === '/' || /\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    const nameStart = i;
+    while (i < end) {
+      const c = tagText.charAt(i);
+      if (c === '=' || c === '/' || c === '>' || /\s/.test(c)) break;
+      i++;
+    }
+    const name = tagText.slice(nameStart, i).toLowerCase();
+    while (i < end && /\s/.test(tagText.charAt(i))) i++;
+    if (i < end && tagText.charAt(i) === '=') {
+      i++;
+      while (i < end && /\s/.test(tagText.charAt(i))) i++;
+      const quote = tagText.charAt(i);
+      if (quote === '"' || quote === "'") {
+        i++;
+        const close = tagText.indexOf(quote, i);
+        i = close < 0 ? end : close + 1;
+      } else {
+        while (i < end) {
+          const c = tagText.charAt(i);
+          if (c === '>' || /\s/.test(c)) break;
+          i++;
+        }
+      }
+    }
+    if (name === 'data-od-inspect-overrides') return true;
+  }
+  return false;
+}
+
+// Find the start (`<` position) of the matching close tag for a raw-text
+// element, scanning case-insensitively. The close tag must be followed by
+// a tag-name boundary (whitespace, `/`, or `>`) so a longer name like
+// `</scripted>` doesn't accidentally close a `<script>`.
+function findInspectRawTextEnd(source: string, start: number, name: string): number {
+  const lower = source.toLowerCase();
+  const needle = '</' + name.toLowerCase();
+  let p = start;
+  while (p < source.length) {
+    const idx = lower.indexOf(needle, p);
+    if (idx < 0) return -1;
+    const after = source.charAt(idx + needle.length);
+    if (after === '' || after === '>' || after === '/' || /\s/.test(after)) return idx;
+    p = idx + needle.length;
+  }
+  return -1;
+}
+
+type InspectSpliceScan = {
+  out: string;
+  // Position in `out` immediately after the first top-level `<head ...>`
+  // open tag, or -1 if no head was found outside raw-text content.
+  headOpenEnd: number;
+  // Position in `out` at the first top-level `</head>` close tag, or -1.
+  headCloseStart: number;
+  // Raw inner-text of every real `<style data-od-inspect-overrides>` element
+  // discovered during the walk, in source order. Excludes occurrences inside
+  // raw-text element contents and HTML comments. Hydration parses these
+  // bodies for the host map; the splicer ignores them.
+  bodies: string[];
+};
+
+// Walk `source` and produce a copy with every existing
+// `<style data-od-inspect-overrides>...</style>` block removed, while
+// remembering where the real (non-raw-text) `<head>` boundaries land in
+// the output. The walker honours HTML comment, doctype/processing
+// instruction, and raw-text element boundaries so the splicer can ignore
+// tag-shaped literals inside scripts/styles/textareas/titles. Pure string
+// transform — no DOM dependency, safe to run during SSR/tests.
+function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
+  const parts: string[] = [];
+  const bodies: string[] = [];
+  let outLen = 0;
+  let headOpenEnd = -1;
+  let headCloseStart = -1;
+  let i = 0;
+  function emit(text: string): void {
+    if (!text) return;
+    parts.push(text);
+    outLen += text.length;
+  }
+  while (i < source.length) {
+    const lt = source.indexOf('<', i);
+    if (lt < 0) {
+      emit(source.slice(i));
+      break;
+    }
+    if (lt > i) emit(source.slice(i, lt));
+    i = lt;
+    if (source.startsWith('<!--', i)) {
+      const end = source.indexOf('-->', i + 4);
+      const stop = end < 0 ? source.length : end + 3;
+      emit(source.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    if (source.startsWith('<!', i) || source.startsWith('<?', i)) {
+      const end = source.indexOf('>', i + 2);
+      const stop = end < 0 ? source.length : end + 1;
+      emit(source.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    const tagEnd = source.indexOf('>', i + 1);
+    if (tagEnd < 0) {
+      emit(source.slice(i));
+      break;
+    }
+    const tagText = source.slice(i, tagEnd + 1);
+    const closeMatch = /^<\/([a-zA-Z][a-zA-Z0-9-]*)/.exec(tagText);
+    if (closeMatch) {
+      const name = closeMatch[1]!.toLowerCase();
+      if (name === 'head' && headCloseStart < 0) headCloseStart = outLen;
+      emit(tagText);
+      i = tagEnd + 1;
+      continue;
+    }
+    const openMatch = /^<([a-zA-Z][a-zA-Z0-9-]*)/.exec(tagText);
+    if (!openMatch) {
+      emit(tagText);
+      i = tagEnd + 1;
+      continue;
+    }
+    const name = openMatch[1]!.toLowerCase();
+    const isSelfClose = /\/\s*>$/.test(tagText);
+    if (name === 'head' && headOpenEnd < 0) headOpenEnd = outLen + tagText.length;
+    if (name === 'style' && styleTagIsInspectOverrideBlock(tagText)) {
+      // Strip the entire override block. A self-closing <style /> is a
+      // degenerate authoring case; treat it as nothing to skip past.
+      if (isSelfClose) {
+        i = tagEnd + 1;
+        continue;
+      }
+      const closeStart = findInspectRawTextEnd(source, tagEnd + 1, 'style');
+      if (closeStart < 0) {
+        // Unterminated override block — drop the rest of the document
+        // rather than silently reflowing later content into a dangling
+        // <style>. Matches the "stop" behaviour of the previous regex.
+        i = source.length;
+        continue;
+      }
+      bodies.push(source.slice(tagEnd + 1, closeStart));
+      const closeEnd = source.indexOf('>', closeStart);
+      let stop = closeEnd < 0 ? source.length : closeEnd + 1;
+      while (stop < source.length && /\s/.test(source.charAt(stop))) stop++;
+      i = stop;
+      continue;
+    }
+    if (!isSelfClose && RAW_TEXT_INSPECT_ELEMENTS.has(name)) {
+      const closeStart = findInspectRawTextEnd(source, tagEnd + 1, name);
+      if (closeStart < 0) {
+        emit(source.slice(i));
+        i = source.length;
+        continue;
+      }
+      const closeEnd = source.indexOf('>', closeStart);
+      const stop = closeEnd < 0 ? source.length : closeEnd + 1;
+      // Copy the entire raw-text element (open tag, body, close tag) to
+      // the output verbatim so its contents pass through unmodified.
+      emit(source.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    emit(tagText);
+    i = tagEnd + 1;
+  }
+  return { out: parts.join(''), headOpenEnd, headCloseStart, bodies };
+}
+
+// Splice (or remove) the inspect overrides <style> block in an HTML
+// document. Idempotent: calling with the same css produces the same
+// document. Empty css strips the block entirely.
+//
+// HTML-aware: the underlying scan ignores comments and raw-text element
+// contents (script / style / textarea / title), so a literal `</head>` or
+// `<style data-od-inspect-overrides>` written inside an inline script or
+// style block does not trick the splicer into stripping user code or
+// inserting the override block in the middle of JavaScript/CSS.
+//
+// Exported (via the module) so a unit test can drive it without a live
+// browser. Pure string transform — no DOM, no parser dependency.
+export function applyInspectOverridesToSource(source: string, css: string): string {
+  const trimmed = css.trim();
+  const { out, headOpenEnd, headCloseStart } = stripInspectOverridesAndIndex(source);
+  if (!trimmed) return out;
+  const block = `<style data-od-inspect-overrides>\n${trimmed}\n</style>\n`;
+  if (headCloseStart >= 0) {
+    return out.slice(0, headCloseStart) + block + out.slice(headCloseStart);
+  }
+  if (headOpenEnd >= 0) {
+    return out.slice(0, headOpenEnd) + block + out.slice(headOpenEnd);
+  }
+  return block + out;
+}
+
+function summarizeMember(member: PreviewCommentMember): string {
+  const text = String(member.text || '').trim();
+  if (text) {
+    const trimmed = text.length > 24 ? `${text.slice(0, 21)}...` : text;
+    return `${member.label || member.elementId} · ${trimmed}`;
+  }
+  return member.label || member.elementId;
 }
 
 function CommentPreviewOverlays({
@@ -1222,14 +2143,18 @@ function CommentPreviewOverlays({
   liveTargets,
   hoveredTarget,
   activeTarget,
+  boardTool,
   scale,
+  strokePoints,
   onOpenComment,
 }: {
   comments: PreviewComment[];
   liveTargets: Map<string, PreviewCommentSnapshot>;
   hoveredTarget: PreviewCommentSnapshot | null;
   activeTarget: PreviewCommentSnapshot | null;
+  boardTool: BoardTool;
   scale: number;
+  strokePoints: StrokePoint[];
   onOpenComment: (comment: PreviewComment, snapshot: PreviewCommentSnapshot) => void;
 }) {
   const visibleComments = comments
@@ -1278,6 +2203,13 @@ function CommentPreviewOverlays({
           selected={Boolean(activeTarget)}
         />
       ) : null}
+      {boardTool === 'pod' && strokePoints.length > 1 ? (
+        <svg className="board-pod-stroke">
+          <polyline
+            points={strokePoints.map((point) => `${point.x * scale},${point.y * scale}`).join(' ')}
+          />
+        </svg>
+      ) : null}
     </div>
   );
 }
@@ -1291,9 +2223,44 @@ function CommentTargetOverlay({
   scale: number;
   selected: boolean;
 }) {
+  const displayMembers = podDisplayMembers(snapshot);
+  if (displayMembers.length > 0) {
+    const overlayWeights = podOverlayWeights(displayMembers);
+    return (
+      <>
+        {displayMembers.map((member, index) => {
+          const bounds = overlayBoundsFromSnapshot(member, scale);
+          const width = Math.round(member.position.width);
+          const height = Math.round(member.position.height);
+          const overlayWeight = overlayWeights[index] ?? {
+            backgroundOpacity: 0.24,
+            outlineOpacity: 0.72,
+            ringOpacity: 0.18,
+          };
+          const overlayStyle: CSSProperties & Record<string, string | number> = {
+            left: bounds.left,
+            top: bounds.top,
+            width: bounds.width,
+            height: bounds.height,
+            '--comment-overlay-bg': `rgba(22, 119, 255, ${overlayWeight.backgroundOpacity})`,
+            '--comment-overlay-ring': `rgba(22, 119, 255, ${overlayWeight.ringOpacity})`,
+            '--comment-overlay-border': `rgba(22, 119, 255, ${overlayWeight.outlineOpacity})`,
+          };
+          return (
+            <div
+              key={`${member.elementId}-${index}`}
+              className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}`}
+              style={overlayStyle}
+              data-testid="comment-target-overlay"
+            >
+              <span className="comment-target-overlay-label">{snapshot.elementId}</span>
+            </div>
+          );
+        })}
+      </>
+    );
+  }
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
-  const width = Math.round(snapshot.position.width);
-  const height = Math.round(snapshot.position.height);
   return (
     <div
       className={`comment-target-overlay${selected ? ' selected' : ''}`}
@@ -1305,13 +2272,278 @@ function CommentTargetOverlay({
       }}
       data-testid="comment-target-overlay"
     >
-      <div className="comment-target-tooltip">
-        <strong>{snapshot.elementId}</strong>
-        <span>{snapshot.label}</span>
-        <span>{width} × {height}</span>
-      </div>
+      <span className="comment-target-overlay-label">{snapshot.elementId}</span>
     </div>
   );
+}
+
+function podDisplayMembers(snapshot: PreviewCommentSnapshot): PreviewCommentSnapshot[] {
+  if (snapshot.selectionKind !== 'pod' || !Array.isArray(snapshot.podMembers)) return [];
+  const memberSnapshots = snapshot.podMembers.map((member) => ({
+    filePath: snapshot.filePath,
+    elementId: member.elementId,
+    selector: member.selector,
+    label: member.label,
+    text: member.text,
+    position: member.position,
+    htmlHint: member.htmlHint,
+    selectionKind: 'element' as const,
+  }));
+  const refined = pruneContainerSelections(memberSnapshots);
+  return refined.length > 0 ? refined : memberSnapshots;
+}
+
+function podOverlayWeights(
+  members: PreviewCommentSnapshot[],
+): Array<{ backgroundOpacity: number; outlineOpacity: number; ringOpacity: number }> {
+  const areas = members.map((member) =>
+    Math.max(1, member.position.width * member.position.height),
+  );
+  const maxArea = Math.max(...areas);
+  const minArea = Math.min(...areas);
+  return areas.map((area) => {
+    const normalized =
+      maxArea === minArea ? 1 : 1 - (area - minArea) / (maxArea - minArea);
+    const emphasis = Math.pow(normalized, 0.9);
+    return {
+      backgroundOpacity: roundOverlayOpacity(0.1 + emphasis * 0.6),
+      outlineOpacity: roundOverlayOpacity(0.34 + emphasis * 0.36),
+      ringOpacity: roundOverlayOpacity(0.08 + emphasis * 0.18),
+    };
+  });
+}
+
+function roundOverlayOpacity(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function buildPodSnapshot(input: {
+  filePath: string;
+  strokePoints: StrokePoint[];
+  liveTargets: Map<string, PreviewCommentSnapshot>;
+}): PreviewCommentSnapshot | null {
+  if (input.strokePoints.length < 2) return null;
+  const closedLoop = isClosedLoop(input.strokePoints);
+  const intersected = Array.from(input.liveTargets.values()).filter((snapshot) =>
+    selectionHitsSnapshot({
+      points: input.strokePoints,
+      snapshot,
+      closedLoop,
+    }),
+  );
+  const refined = pruneContainerSelections(intersected);
+  const selected = refined.length > 0 ? refined : intersected;
+  if (selected.length === 0) return null;
+  const bounds = selected.reduce(
+    (acc, snapshot) => {
+      const rect = snapshot.position;
+      return {
+        left: Math.min(acc.left, rect.x),
+        top: Math.min(acc.top, rect.y),
+        right: Math.max(acc.right, rect.x + rect.width),
+        bottom: Math.max(acc.bottom, rect.y + rect.height),
+      };
+    },
+    {
+      left: Number.POSITIVE_INFINITY,
+      top: Number.POSITIVE_INFINITY,
+      right: Number.NEGATIVE_INFINITY,
+      bottom: Number.NEGATIVE_INFINITY,
+    },
+  );
+  const podMembers: PreviewCommentMember[] = selected.map((snapshot) => ({
+    elementId: snapshot.elementId,
+    selector: snapshot.selector,
+    label: snapshot.label,
+    text: snapshot.text,
+    position: snapshot.position,
+    htmlHint: snapshot.htmlHint,
+  }));
+  const summary = selected
+    .slice(0, 3)
+    .map((snapshot) => summarizeSnapshot(snapshot))
+    .join(' · ');
+  const htmlHint = selected
+    .slice(0, 4)
+    .map((snapshot) => snapshot.htmlHint)
+    .filter(Boolean)
+    .join(' ');
+  const combinedSelector = selected
+    .slice(0, 8)
+    .map((snapshot) => snapshot.selector)
+    .filter(Boolean)
+    .join(', ');
+  return {
+    filePath: input.filePath,
+    elementId: `pod-${Date.now()}`,
+    selector: combinedSelector || 'body *',
+    label: summary || `Pod of ${intersected.length} items`,
+    text: intersected
+      .slice(0, 4)
+      .map((snapshot) => snapshot.text)
+      .filter(Boolean)
+      .join(' · '),
+    position: {
+      x: Math.round(bounds.left),
+      y: Math.round(bounds.top),
+      width: Math.max(1, Math.round(bounds.right - bounds.left)),
+      height: Math.max(1, Math.round(bounds.bottom - bounds.top)),
+    },
+    htmlHint: htmlHint.slice(0, 180),
+    selectionKind: 'pod',
+    memberCount: selected.length,
+    podMembers,
+  };
+}
+
+function pruneContainerSelections(
+  snapshots: PreviewCommentSnapshot[],
+): PreviewCommentSnapshot[] {
+  if (snapshots.length < 2) return snapshots;
+  return snapshots.filter((candidate) => {
+    const candidateArea = Math.max(1, candidate.position.width * candidate.position.height);
+    const contained = snapshots.filter(
+      (other) =>
+        other.elementId !== candidate.elementId &&
+        rectContains(candidate.position, other.position),
+    );
+    if (contained.length === 0) return true;
+    const union = contained.reduce(
+      (acc, other) => ({
+        left: Math.min(acc.left, other.position.x),
+        top: Math.min(acc.top, other.position.y),
+        right: Math.max(acc.right, other.position.x + other.position.width),
+        bottom: Math.max(acc.bottom, other.position.y + other.position.height),
+      }),
+      {
+        left: Number.POSITIVE_INFINITY,
+        top: Number.POSITIVE_INFINITY,
+        right: Number.NEGATIVE_INFINITY,
+        bottom: Number.NEGATIVE_INFINITY,
+      },
+    );
+    const unionArea = Math.max(1, (union.right - union.left) * (union.bottom - union.top));
+    return !(contained.length >= 2 && candidateArea > unionArea * 2.4);
+  });
+}
+
+function summarizeSnapshot(snapshot: PreviewCommentSnapshot): string {
+  const text = snapshot.text.trim();
+  if (text) {
+    const trimmed = text.length > 28 ? `${text.slice(0, 25)}...` : text;
+    return `${snapshot.label || snapshot.elementId} · ${trimmed}`;
+  }
+  return snapshot.label || snapshot.elementId;
+}
+
+function selectionHitsSnapshot(input: {
+  points: StrokePoint[];
+  snapshot: PreviewCommentSnapshot;
+  closedLoop: boolean;
+}): boolean {
+  const bounds = {
+    left: input.snapshot.position.x,
+    top: input.snapshot.position.y,
+    width: input.snapshot.position.width,
+    height: input.snapshot.position.height,
+  };
+  if (pathIntersectsRect(input.points, bounds)) return true;
+  if (!input.closedLoop) return false;
+  const center = {
+    x: bounds.left + bounds.width / 2,
+    y: bounds.top + bounds.height / 2,
+  };
+  if (pointInPolygon(center, input.points)) return true;
+  const corners = [
+    { x: bounds.left, y: bounds.top },
+    { x: bounds.left + bounds.width, y: bounds.top },
+    { x: bounds.left + bounds.width, y: bounds.top + bounds.height },
+    { x: bounds.left, y: bounds.top + bounds.height },
+  ];
+  return corners.some((corner) => pointInPolygon(corner, input.points));
+}
+
+function isClosedLoop(points: StrokePoint[]): boolean {
+  if (points.length < 4) return false;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  return Math.hypot(first.x - last.x, first.y - last.y) <= 28;
+}
+
+function rectContains(
+  outer: { x: number; y: number; width: number; height: number },
+  inner: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    outer.x <= inner.x &&
+    outer.y <= inner.y &&
+    outer.x + outer.width >= inner.x + inner.width &&
+    outer.y + outer.height >= inner.y + inner.height
+  );
+}
+
+function pathIntersectsRect(
+  points: StrokePoint[],
+  rect: { left: number; top: number; width: number; height: number },
+): boolean {
+  if (points.length === 0) return false;
+  const x1 = rect.left;
+  const y1 = rect.top;
+  const x2 = rect.left + rect.width;
+  const y2 = rect.top + rect.height;
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index]!;
+    if (point.x >= x1 && point.x <= x2 && point.y >= y1 && point.y <= y2) {
+      return true;
+    }
+    const next = points[index + 1];
+    if (!next) continue;
+    if (
+      lineIntersectsLine(point, next, { x: x1, y: y1 }, { x: x2, y: y1 }) ||
+      lineIntersectsLine(point, next, { x: x2, y: y1 }, { x: x2, y: y2 }) ||
+      lineIntersectsLine(point, next, { x: x2, y: y2 }, { x: x1, y: y2 }) ||
+      lineIntersectsLine(point, next, { x: x1, y: y2 }, { x: x1, y: y1 })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pointInPolygon(point: StrokePoint, polygon: StrokePoint[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const pi = polygon[i]!;
+    const pj = polygon[j]!;
+    const intersects =
+      pi.y > point.y !== pj.y > point.y &&
+      point.x <
+        ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || Number.EPSILON) + pi.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function lineIntersectsLine(a1: StrokePoint, a2: StrokePoint, b1: StrokePoint, b2: StrokePoint): boolean {
+  const denominator =
+    (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
+  if (denominator === 0) return false;
+  const ua =
+    ((b2.x - b1.x) * (a1.y - b1.y) - (b2.y - b1.y) * (a1.x - b1.x)) / denominator;
+  const ub =
+    ((a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x)) / denominator;
+  return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+}
+
+function finiteBridgeInteger(value: unknown): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  return clampBridgeCoordinate(value);
+}
+
+function clampBridgeCoordinate(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
 function ReactComponentViewer({
@@ -1595,6 +2827,8 @@ function HtmlViewer({
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
+  onSendBoardCommentAttachments,
+  onFileSaved,
 }: {
   projectId: string;
   file: ProjectFile;
@@ -1605,6 +2839,8 @@ function HtmlViewer({
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -1617,21 +2853,47 @@ function HtmlViewer({
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateNote, setTemplateNote] = useState<string | null>(null);
-  const [deployment, setDeployment] = useState<DeployProjectFileResponse | null>(null);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
+  const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
+  const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const [deployModalOpen, setDeployModalOpen] = useState(false);
-  const [deployConfig, setDeployConfig] = useState<DeployConfigResponse | null>(null);
+  const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
-  const [deployResult, setDeployResult] = useState<DeployProjectFileResponse | null>(null);
-  const [copiedDeployLink, setCopiedDeployLink] = useState(false);
-  const [vercelToken, setVercelToken] = useState('');
+  const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
+  const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
+  const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
+  const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
+  const [cloudflareAccountId, setCloudflareAccountId] = useState('');
+  const [cloudflareZones, setCloudflareZones] = useState<CloudflarePagesZoneOption[]>([]);
+  const [cloudflareZonesLoading, setCloudflareZonesLoading] = useState(false);
+  const [cloudflareZonesError, setCloudflareZonesError] = useState<string | null>(null);
+  const [cloudflareZoneId, setCloudflareZoneId] = useState('');
+  const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
+  const deployProviderLoadSeqRef = useRef(0);
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [commentMode, setCommentMode] = useState(false);
+  const [boardMode, setBoardMode] = useState(false);
+  const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
+  const [inspectMode, setInspectMode] = useState(false);
+  const [manualEditMode, setManualEditMode] = useState(false);
+  const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
+  const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
+  const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
+  const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
+  const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
+  const [manualEditError, setManualEditError] = useState<string | null>(null);
+  const [manualEditSaving, setManualEditSaving] = useState(false);
+  const manualEditSavingRef = useRef(false);
+  const templateNameId = useId();
+  const templateDescriptionId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -1642,8 +2904,151 @@ function HtmlViewer({
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
+  const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
+  // Inspect mode shares the iframe selection bridge with comment mode but
+  // routes the picked element to a side panel that mutates per-element CSS
+  // overrides via postMessage. The host owns the authoritative override map:
+  // it is hydrated from the artifact's persisted <style> block on load and
+  // mutated only by host-driven onApply / reset actions. Save-to-source
+  // serializes that host map directly — iframe od:inspect-overrides messages
+  // are preview acknowledgements and never feed save input, so artifact JS
+  // forging a postMessage cannot tamper with what gets persisted.
+  const [activeInspectTarget, setActiveInspectTarget] = useState<InspectTarget | null>(null);
+  const [inspectOverrides, setInspectOverrides] = useState<InspectOverrideMap>(() =>
+    typeof source === 'string' ? parseInspectOverridesFromSource(source) : {},
+  );
+  // Track which `source` value the host map was last hydrated from so the
+  // setState-during-render hydration below only fires when the artifact
+  // text actually changes (file switch, save round-trip, live edits). The
+  // ref is initialised to `source` so the matching useState initialiser
+  // above counts as the first hydration.
+  const inspectHydratedSourceRef = useRef<string | null | undefined>(source);
+  const [savingInspect, setSavingInspect] = useState(false);
+  const [inspectSavedAt, setInspectSavedAt] = useState<number | null>(null);
+  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
+  const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
+  const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
+  const previewScale = zoom / 100;
+
+  function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
+    const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
+    for (const option of DEPLOY_PROVIDER_OPTIONS) {
+      const deploymentForProvider = items.find(
+        (item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim(),
+      );
+      if (deploymentForProvider) next[option.id] = deploymentForProvider;
+    }
+    return next;
+  }
+
+  function syncDeployFormFromConfig(
+    providerId: WebDeployProviderId,
+    config: WebDeployConfigResponse | null,
+  ) {
+    const matchingConfig = config?.providerId === providerId ? config : null;
+    setDeployProviderId(providerId);
+    setDeployConfig(matchingConfig);
+    setDeployToken(matchingConfig?.tokenMask || '');
+    setTeamId(matchingConfig?.teamId || '');
+    setTeamSlug(matchingConfig?.teamSlug || '');
+    setCloudflareAccountId(matchingConfig?.accountId || '');
+    setCloudflareZoneId(matchingConfig?.cloudflarePages?.lastZoneId || '');
+    setCloudflareDomainPrefix(matchingConfig?.cloudflarePages?.lastDomainPrefix || '');
+  }
+
+  function cloudflareConfigHintsFromForm() {
+    const zone = cloudflareZones.find((item) => item.id === cloudflareZoneId);
+    const hints = {
+      ...(cloudflareZoneId.trim() ? { lastZoneId: cloudflareZoneId.trim() } : {}),
+      ...((zone?.name || deployConfig?.cloudflarePages?.lastZoneName)
+        ? { lastZoneName: zone?.name || deployConfig?.cloudflarePages?.lastZoneName }
+        : {}),
+      ...(cloudflareDomainPrefix.trim()
+        ? { lastDomainPrefix: normalizeCloudflareDomainPrefixInput(cloudflareDomainPrefix) }
+        : {}),
+    };
+    return Object.keys(hints).length > 0 ? hints : undefined;
+  }
+
+  function buildDeployConfigRequest(providerId: WebDeployProviderId): WebUpdateDeployConfigRequest {
+    const token = deployToken.trim();
+    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+      return {
+        providerId,
+        token,
+        accountId: cloudflareAccountId.trim(),
+        cloudflarePages: cloudflareConfigHintsFromForm(),
+      };
+    }
+    return {
+      providerId,
+      token,
+      teamId: teamId.trim(),
+      teamSlug: teamSlug.trim(),
+    };
+  }
+
+  async function loadDeployProvider(
+    providerId: WebDeployProviderId,
+    options?: { fallbackToExisting?: boolean },
+  ) {
+    const requestSeq = ++deployProviderLoadSeqRef.current;
+    setDeployProviderId(providerId);
+    const deployments = await fetchProjectDeployments(projectId);
+    const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
+    const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
+    const fallbackDeployment = options?.fallbackToExisting
+      ? Object.values(nextDeploymentsByProvider)[0] ?? null
+      : null;
+    const currentDeployment = exactDeployment ?? fallbackDeployment;
+    // Use the explicit providerId for config/form so a fallback deployment from
+    // another provider only fills the existing-URL display, never the form/credentials.
+    const config = await fetchDeployConfig(providerId);
+    if (requestSeq !== deployProviderLoadSeqRef.current) {
+      return { config: null, currentDeployment: null };
+    }
+    syncDeployFormFromConfig(providerId, config);
+    setDeploymentsByProvider(nextDeploymentsByProvider);
+    setDeployment(currentDeployment ?? null);
+    setDeployResult(currentDeployment ?? null);
+    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
+      void loadCloudflareZones(config, { requestSeq });
+    }
+    return { config, currentDeployment };
+  }
+
+  async function loadCloudflareZones(
+    config: WebDeployConfigResponse | null = deployConfig,
+    options?: { requestSeq?: number },
+  ) {
+    if (!config?.configured || config.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) return;
+    const requestSeq = options?.requestSeq ?? deployProviderLoadSeqRef.current;
+    setCloudflareZonesLoading(true);
+    setCloudflareZonesError(null);
+    try {
+      const response = await fetchCloudflarePagesZones();
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      const zones = response?.zones ?? [];
+      setCloudflareZones(zones);
+      const hintedZoneId = response?.cloudflarePages?.lastZoneId || config.cloudflarePages?.lastZoneId || '';
+      const nextZoneId = hintedZoneId && zones.some((zone) => zone.id === hintedZoneId)
+        ? hintedZoneId
+        : zones[0]?.id || '';
+      setCloudflareZoneId(nextZoneId);
+      const hintedPrefix = response?.cloudflarePages?.lastDomainPrefix || config.cloudflarePages?.lastDomainPrefix || '';
+      if (hintedPrefix) setCloudflareDomainPrefix(hintedPrefix);
+    } catch (err) {
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      setCloudflareZones([]);
+      setCloudflareZonesError(err instanceof Error ? err.message : t('fileViewer.cloudflareZonesLoadFailed'));
+    } finally {
+      if (requestSeq === deployProviderLoadSeqRef.current) setCloudflareZonesLoading(false);
+    }
+  }
+
   // Slide deck nav state: the iframe posts the active index + total count
   // back to the host every time a slide settles. Host renders prev/next
   // controls in the toolbar and reflects the count beside them.
@@ -1653,6 +3058,10 @@ function HtmlViewer({
   const previewBodyRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    liveCommentTargetsRef.current = liveCommentTargets;
+  }, [liveCommentTargets]);
 
   useEffect(() => {
     if (liveHtml !== undefined) {
@@ -1673,20 +3082,20 @@ function HtmlViewer({
     let cancelled = false;
     setDeployResult(null);
     setDeployError(null);
-    setCopiedDeployLink(false);
+    setCopiedDeployLink(null);
     setDeployPhase('idle');
     void fetchProjectDeployments(projectId).then((items) => {
       if (cancelled) return;
-      const current = items.find(
-        (item) => item.fileName === file.name && item.providerId === 'vercel-self',
-      );
+      const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
+      const current = nextDeploymentsByProvider[deployProviderId] ?? null;
+      setDeploymentsByProvider(nextDeploymentsByProvider);
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name]);
+  }, [projectId, file.name, deployProviderId]);
 
   // Detect deck-shaped HTML even when the project's skill didn't declare
   // `mode: deck`. Freeform projects often produce a deck because the user
@@ -1704,7 +3113,8 @@ function HtmlViewer({
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
-    commentMode,
+    commentMode: boardMode || manualEditMode,
+    inspectMode,
     forceInline,
   });
   const previewSrcUrl = useMemo(
@@ -1730,9 +3140,11 @@ function HtmlViewer({
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-      commentBridge: commentMode,
+      commentBridge: boardMode && !manualEditMode,
+      inspectBridge: inspectMode,
+      editBridge: manualEditMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, commentMode],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode, inspectMode],
   );
 
   useEffect(() => {
@@ -1759,21 +3171,91 @@ function HtmlViewer({
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    win.postMessage({ type: 'od:comment-mode', enabled: commentMode }, '*');
-  }, [commentMode, srcDoc]);
+    win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
+  }, [boardMode, boardTool, srcDoc]);
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
+  }, [manualEditMode, srcDoc]);
+
+  function syncBridgeModes() {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:comment-mode', enabled: boardMode, mode: boardTool }, '*');
+    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
+  }
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
+  }, [inspectMode, srcDoc]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
     setCommentDraft('');
+    setActiveInspectTarget(null);
+    setInspectOverrides({});
+    setInspectSavedAt(null);
+    setInspectError(null);
+    setQueuedBoardNotes([]);
+    setStrokePoints([]);
+    setManualEditTargets([]);
+    setSelectedManualEditTarget(null);
+    setManualEditDraft(emptyManualEditDraft());
+    setManualEditHistory([]);
+    setManualEditUndone([]);
+    setManualEditError(null);
   }, [file.name]);
 
+  // Selecting a new file or turning inspect off resets the panel target.
   useEffect(() => {
-    if (!commentMode) {
-      setActiveCommentTarget(null);
-      setHoveredCommentTarget(null);
-      setLiveCommentTargets(new Map());
+    if (!inspectMode) {
+      setActiveInspectTarget(null);
+      setInspectError(null);
+    }
+  }, [inspectMode]);
+
+  // Hydrate the host-authoritative override map from the artifact source
+  // synchronously, *before* React commits a render that carries a new
+  // `srcDoc` to the iframe. A `useEffect([source])` would commit the new
+  // source first and only re-render with the parsed map afterwards — if
+  // the iframe finishes loading the new srcDoc in that window, its
+  // `onLoad` handler captures the previous file's empty/stale map in its
+  // closure and posts that map back over the bridge's freshly DOM-hydrated
+  // overrides, leaving the preview without saved inspect styles until the
+  // next reload or mode toggle. Setting state during render is React's
+  // documented escape hatch for "store a value derived from props"
+  // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes):
+  // the in-flight render is discarded and React re-renders with the
+  // updated state before commit, so the new `srcDoc` and the new
+  // `inspectOverrides` always commit together. After hydration the map
+  // only mutates from host-driven onApply / reset callbacks below, so
+  // artifact JS forging an od:inspect-overrides message cannot tamper
+  // with what saveInspectToSource will persist.
+  if (inspectHydratedSourceRef.current !== source) {
+    inspectHydratedSourceRef.current = source;
+    setInspectOverrides(typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
+  }
+
+  useEffect(() => {
+    if (source == null) return;
+    setManualEditDraft((current) => (
+      current.fullSource === source ? current : { ...current, fullSource: source }
+    ));
+  }, [source]);
+
+  useEffect(() => {
+    if (!boardMode) {
+      setActiveCommentTarget((current) => (current ? null : current));
+      setHoveredCommentTarget((current) => (current ? null : current));
+      setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      setQueuedBoardNotes((current) => (current.length > 0 ? [] : current));
+      setStrokePoints((current) => (current.length > 0 ? [] : current));
       return;
     }
     const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot => ({
@@ -1783,18 +3265,22 @@ function HtmlViewer({
       label: String(data.label || ''),
       text: String(data.text || ''),
       position: {
-        x: Number(data.position?.x) || 0,
-        y: Number(data.position?.y) || 0,
-        width: Number(data.position?.width) || 0,
-        height: Number(data.position?.height) || 0,
+        x: clampBridgeCoordinate(data.position?.x),
+        y: clampBridgeCoordinate(data.position?.y),
+        width: clampBridgeCoordinate(data.position?.width),
+        height: clampBridgeCoordinate(data.position?.height),
       },
       htmlHint: String(data.htmlHint || ''),
+      selectionKind: data.selectionKind === 'pod' ? 'pod' : 'element',
+      memberCount: finiteBridgeInteger(data.memberCount),
+      podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
     });
     function onMessage(ev: MessageEvent) {
       if (ev.source !== iframeRef.current?.contentWindow) return;
       const data = ev.data as (Partial<PreviewCommentSnapshot> & {
         type?: string;
         targets?: Array<Partial<PreviewCommentSnapshot>>;
+        points?: StrokePoint[];
       }) | null;
       if (!data?.type) return;
       if (data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
@@ -1805,10 +3291,18 @@ function HtmlViewer({
         });
         setLiveCommentTargets(next);
         setActiveCommentTarget((current) => (
-          current ? next.get(current.elementId) ?? null : null
+          current
+            ? current.selectionKind === 'pod'
+              ? current
+              : next.get(current.elementId) ?? null
+            : null
         ));
         setHoveredCommentTarget((current) => (
-          current ? next.get(current.elementId) ?? null : null
+          current
+            ? current.selectionKind === 'pod'
+              ? current
+              : next.get(current.elementId) ?? null
+            : null
         ));
         return;
       }
@@ -1831,16 +3325,325 @@ function HtmlViewer({
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
         setCommentDraft(existing?.note ?? '');
+        setQueuedBoardNotes([]);
+        return;
+      }
+      if (data.type === 'od:pod-clear') {
+        setStrokePoints([]);
+        return;
+      }
+      if (data.type === 'od:pod-stroke' && Array.isArray(data.points)) {
+        setStrokePoints(
+          data.points.map((point) => ({
+            x: clampBridgeCoordinate(point.x),
+            y: clampBridgeCoordinate(point.y),
+          })),
+        );
+        return;
+      }
+      if (data.type === 'od:pod-select' && Array.isArray(data.points)) {
+        const points = data.points.map((point) => ({
+          x: clampBridgeCoordinate(point.x),
+          y: clampBridgeCoordinate(point.y),
+        }));
+        setStrokePoints(points);
+        const nextTarget = buildPodSnapshot({
+          filePath: file.name,
+          strokePoints: points,
+          liveTargets: liveCommentTargetsRef.current,
+        });
+        if (!nextTarget) {
+          setStrokePoints([]);
+          return;
+        }
+        setActiveCommentTarget(nextTarget);
+        setHoveredCommentTarget(nextTarget);
+        setQueuedBoardNotes([]);
+        setCommentDraft('');
+        setStrokePoints([]);
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [commentMode, file.name, previewComments]);
+  }, [boardMode, file.name, previewComments]);
+
+  useEffect(() => {
+    if (!manualEditMode) {
+      setManualEditTargets([]);
+      setSelectedManualEditTarget(null);
+      setManualEditError(null);
+      return;
+    }
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as ManualEditBridgeMessage | null;
+      if (!data?.type) return;
+      if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
+        setManualEditTargets(data.targets);
+        setSelectedManualEditTarget((current) =>
+          current ? data.targets.find((target) => target.id === current.id) ?? null : current,
+        );
+        return;
+      }
+      if (data.type === 'od-edit-select') {
+        selectManualEditTarget(data.target);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [manualEditMode, source]);
+
+  function selectManualEditTarget(target: ManualEditTarget) {
+    const base = source ?? '';
+    const fields = readManualEditFields(base, target.id);
+    setSelectedManualEditTarget(target);
+    setManualEditDraft({
+      text: fields.text ?? target.fields.text ?? target.text,
+      href: fields.href ?? target.fields.href ?? '',
+      src: fields.src ?? target.fields.src ?? '',
+      alt: fields.alt ?? target.fields.alt ?? '',
+      styles: readManualEditStyles(base, target.id),
+      attributesText: JSON.stringify(readManualEditAttributes(base, target.id), null, 2),
+      outerHtml: readManualEditOuterHtml(base, target.id) || target.outerHtml,
+      fullSource: base,
+    });
+    setManualEditError(null);
+  }
+
+  async function applyManualEdit(patch: ManualEditPatch, label: string) {
+    if (manualEditSavingRef.current) return;
+    if (source == null) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    setManualEditError(null);
+    try {
+      const baseSource = source;
+      const result = applyManualEditPatch(baseSource, patch);
+      if (!result.ok) {
+        setManualEditError(result.error ?? 'Could not apply edit.');
+        return;
+      }
+      if (!(await confirmManualEditHistorySource(
+        baseSource,
+        'The file changed outside manual edit mode. Refreshing before applying manual edits.',
+      ))) return;
+      const saved = await writeProjectTextFile(projectId, file.name, result.source, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) {
+        setManualEditError('Could not save the edited file.');
+        return;
+      }
+      const entry: ManualEditHistoryEntry = {
+        id: `${Date.now()}-${manualEditHistory.length}`,
+        label,
+        patch,
+        beforeSource: baseSource,
+        afterSource: result.source,
+        createdAt: Date.now(),
+      };
+      setSource(result.source);
+      setInlinedSource(null);
+      setManualEditHistory((current) => [entry, ...current]);
+      setManualEditUndone([]);
+      setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      await onFileSaved?.();
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+  }
+
+  async function confirmManualEditHistorySource(expectedSource: string, message: string): Promise<boolean> {
+    const persisted = await fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      cacheBustKey: Date.now(),
+    });
+    if (persisted == null || persisted === expectedSource) return true;
+    setSource(persisted);
+    setInlinedSource(null);
+    setManualEditHistory([]);
+    setManualEditUndone([]);
+    setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
+    setManualEditError(message);
+    return false;
+  }
+
+  async function undoManualEdit() {
+    if (manualEditSavingRef.current) return;
+    const [latest, ...rest] = manualEditHistory;
+    if (!latest) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    try {
+      if (!(await confirmManualEditHistorySource(
+        latest.afterSource,
+        'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
+      ))) return;
+      const saved = await writeProjectTextFile(projectId, file.name, latest.beforeSource, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) {
+        setManualEditError('Could not save the undo result.');
+        return;
+      }
+      setSource(latest.beforeSource);
+      setInlinedSource(null);
+      setManualEditHistory(rest);
+      setManualEditUndone((current) => [latest, ...current]);
+      setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
+      await onFileSaved?.();
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+  }
+
+  async function redoManualEdit() {
+    if (manualEditSavingRef.current) return;
+    const [latest, ...rest] = manualEditUndone;
+    if (!latest) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    try {
+      if (!(await confirmManualEditHistorySource(
+        latest.beforeSource,
+        'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
+      ))) return;
+      const saved = await writeProjectTextFile(projectId, file.name, latest.afterSource, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) {
+        setManualEditError('Could not save the redo result.');
+        return;
+      }
+      setSource(latest.afterSource);
+      setInlinedSource(null);
+      setManualEditUndone(rest);
+      setManualEditHistory((current) => [latest, ...current]);
+      setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
+      await onFileSaved?.();
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+  }
+
+  // Inspect-mode picker: same `od:comment-target` payload, different sink.
+  // The bridge tags the message with a computed-style snapshot so the panel
+  // can show real starting values for color / typography / spacing / radius.
+  useEffect(() => {
+    if (!inspectMode) return;
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as
+        | { type?: string; elementId?: string; selector?: string; label?: string; text?: string; style?: InspectStyleSnapshot }
+        | null;
+      if (!data || data.type !== 'od:comment-target') return;
+      if (!data.elementId || !data.selector) return;
+      setActiveInspectTarget({
+        elementId: String(data.elementId),
+        selector: String(data.selector),
+        label: String(data.label || ''),
+        text: String(data.text || ''),
+        style: data.style && typeof data.style === 'object' ? data.style : {},
+      });
+      setInspectError(null);
+      setInspectSavedAt(null);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [inspectMode]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od:slide', action }, '*');
+  }
+
+  function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(
+      { type: 'od:inspect-set', elementId, selector, prop, value },
+      '*',
+    );
+  }
+
+  function postInspectReset(elementId?: string) {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:inspect-reset', elementId }, '*');
+  }
+
+  // Replay the host's authoritative override map into the freshly loaded
+  // iframe. The bridge inside the iframe only sees rules persisted in the
+  // artifact source via its own hydrateOverridesFromDom() — any unsaved
+  // edit lives on the host side until Save-to-source. Without this replay,
+  // toggling Inspect off/on, switching to Comment mode, or any other
+  // srcdoc rebuild reloads the iframe from previewSource without the
+  // unsaved style block, so the preview drops the live edits while
+  // saveInspectToSource() can still persist them later from the stale
+  // host map. The bridge re-validates each entry under its own allow-list,
+  // so a parent that posted a hostile replay can only land overrides the
+  // bridge would also have accepted via od:inspect-set.
+  //
+  // The render-time hydration above keeps `inspectOverrides` aligned with
+  // the current `source` whenever React commits, but the iframe `onLoad`
+  // callback fires from a separate event-loop turn after the new srcDoc
+  // is parsed; if it ever races a stale closure (e.g. an interleaved
+  // remount), reading React state would post the previous file's map over
+  // the bridge's DOM-hydrated one and silently strip the persisted styles
+  // from preview. Re-derive synchronously from `source` whenever the
+  // hydration ref disagrees so onLoad never sends a stale snapshot.
+  function replayInspectOverridesToIframe() {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    const overrides = inspectHydratedSourceRef.current === source
+      ? inspectOverrides
+      : (typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
+    win.postMessage({ type: 'od:inspect-replay', overrides }, '*');
+  }
+
+  // Persist accumulated inspect overrides into the artifact source: replace
+  // (or insert) a single <style data-od-inspect-overrides> block in <head>.
+  // The CSS body is serialized from the host's own override map, hydrated
+  // from source on load and updated only by host-driven onApply / reset
+  // callbacks. We deliberately do NOT round-trip through the iframe at save
+  // time: artifact JS rendered inside the preview shares the same
+  // contentWindow as the bridge and could forge an od:inspect-overrides
+  // reply that flips allow-listed properties on elements the user never
+  // touched. POSTing to /api/projects/:id/files upserts the file via
+  // writeProjectFile (multipart-or-JSON; we use JSON).
+  async function saveInspectToSource() {
+    if (!source) return;
+    setSavingInspect(true);
+    setInspectError(null);
+    try {
+      const css = serializeInspectOverrides(inspectOverrides).trim();
+      const next = applyInspectOverridesToSource(source, css);
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, content: next }),
+      });
+      if (!resp.ok) {
+        const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
+        throw new Error(payload?.error || payload?.message || `Save failed (${resp.status})`);
+      }
+      setSource(next);
+      setInspectSavedAt(Date.now());
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      setInspectError(msg);
+      // The error banner inside the inspect panel is easy to miss when the
+      // user is focused on the iframe preview — surface failures in the
+      // console as well so quota/network errors aren't silently lost.
+      console.error('[inspect] saveToSource failed:', err);
+    } finally {
+      setSavingInspect(false);
+    }
   }
 
   // Keyboard nav on the host, so the user can press ←/→ even when focus
@@ -1930,107 +3733,153 @@ function HtmlViewer({
   // the viewer), so the template captures the whole design, not a single
   // page. Surfaced here in the Share menu because that's where the user's
   // share / export mental model already lives.
-  async function handleSaveAsTemplate() {
+  function openSaveAsTemplateModal() {
     setShareMenuOpen(false);
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
-    const name = window.prompt(t('fileViewer.templateNamePrompt'), defaultName);
-    if (!name || !name.trim()) return;
-    const description = window.prompt(
-      t('fileViewer.templateDescPrompt'),
-      '',
-    );
+    setTemplateName(defaultName);
+    setTemplateDescription('');
+    setTemplateSaveError(null);
+    setTemplateModalOpen(true);
+  }
+
+  async function handleSaveAsTemplate() {
+    const name = templateName.trim();
+    if (!name) return;
     setSavingTemplate(true);
     setTemplateNote(null);
+    setTemplateSaveError(null);
+    let savedName: string | null = null;
     try {
       const tpl = await saveTemplate({
-        name: name.trim(),
-        description: description?.trim() || undefined,
+        name,
+        description: templateDescription.trim() || undefined,
         sourceProjectId: projectId,
       });
-      setTemplateNote(
-        tpl
-          ? t('fileViewer.savedTemplate', { name: tpl.name })
-          : t('fileViewer.savedTemplateFail'),
-      );
+      if (!tpl) {
+        setTemplateSaveError(t('fileViewer.savedTemplateFail'));
+        return;
+      }
+      savedName = tpl.name;
+      setTemplateModalOpen(false);
+      setTemplateName('');
+      setTemplateDescription('');
+      setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
     } finally {
       setSavingTemplate(false);
-      // Auto-clear the note so the menu doesn't keep stale state next open.
-      setTimeout(() => setTemplateNote(null), 4000);
+      if (savedName) {
+        // Auto-clear the note so the menu doesn't keep stale state next open.
+        setTimeout(() => setTemplateNote(null), 4000);
+      }
     }
   }
 
-  async function openDeployModal() {
+  async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
     setShareMenuOpen(false);
     setDeployModalOpen(true);
     setDeployError(null);
-    setCopiedDeployLink(false);
+    setCopiedDeployLink(null);
     setDeployPhase('idle');
-    const [config, deployments] = await Promise.all([
-      fetchDeployConfig(),
-      fetchProjectDeployments(projectId),
-    ]);
-    if (config) {
-      setDeployConfig(config);
-      setVercelToken(config.tokenMask || '');
-      setTeamId(config.teamId || '');
-      setTeamSlug(config.teamSlug || '');
-    }
-    const current = deployments.find(
-      (item) => item.fileName === file.name && item.providerId === 'vercel-self',
-    );
-    setDeployment(current ?? null);
-    setDeployResult(current ?? null);
+    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+  }
+
+  async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
+    if (nextProviderId === deployProviderId) return;
+    setDeployError(null);
+    setDeployPhase('idle');
+    await loadDeployProvider(nextProviderId);
   }
 
   async function saveDeployConfig() {
     setSavingDeployConfig(true);
     setDeployError(null);
     try {
-      const config = await updateDeployConfig({
-        token: vercelToken,
-        teamId,
-        teamSlug,
-      });
-      if (!config) throw new Error(t('fileViewer.deployConfigSaveFailed'));
-      setDeployConfig(config);
-      setVercelToken(config.tokenMask || '');
-      setTeamId(config.teamId || '');
-      setTeamSlug(config.teamSlug || '');
+      if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+        if (!deployToken.trim()) {
+          throw new Error(t('fileViewer.cloudflareApiTokenRequired'));
+        }
+        if (!cloudflareAccountId.trim()) {
+          throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
+        }
+      }
+      const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
+      if (!config || config.providerId !== deployProviderId) {
+        throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
+      }
+      syncDeployFormFromConfig(deployProviderId, config);
+      if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+        await loadCloudflareZones(config);
+      }
       return config;
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployConfigSaveFailed'));
+      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       return null;
     } finally {
       setSavingDeployConfig(false);
     }
   }
 
-  async function deployToVercel() {
+  function buildCloudflarePagesDeploySelection(): WebCloudflarePagesDeploySelection | undefined {
+    if (deployProviderId !== CLOUDFLARE_PAGES_PROVIDER_ID) return undefined;
+    const prefix = normalizeCloudflareDomainPrefixInput(cloudflareDomainPrefix);
+    if (!prefix) return undefined;
+    if (!isValidCloudflareDomainPrefixInput(prefix)) {
+      throw new Error(t('fileViewer.cloudflareDomainPrefixInvalid'));
+    }
+    const zone = cloudflareZones.find((item) => item.id === cloudflareZoneId);
+    if (!zone) {
+      throw new Error(t('fileViewer.cloudflareZoneRequired'));
+    }
+    return {
+      zoneId: zone.id,
+      zoneName: zone.name,
+      domainPrefix: prefix,
+    };
+  }
+
+  async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
-    setCopiedDeployLink(false);
+    setCopiedDeployLink(null);
     try {
-      const typedToken = vercelToken.trim();
+      const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
+      const typedToken = deployToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
+      const cloudflareHints = cloudflareConfigHintsFromForm();
+      const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
+        cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
+        cloudflareHints?.lastZoneName !== deployConfig?.cloudflarePages?.lastZoneName ||
+        cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
+      );
       const needsConfigSave =
         hasNewToken ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
+        cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
+        cloudflareHintsChanged ||
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
+        if (!nextConfig) return;
         if (!nextConfig?.configured) {
-          throw new Error(t('fileViewer.vercelTokenRequired'));
+          const option = getDeployProviderOption(deployProviderId);
+          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name);
+      const next = await deployProjectFile(projectId, file.name, deployProviderId, cloudflarePagesSelection);
+      setDeploymentsByProvider((current) => ({
+        ...current,
+        [next.providerId]: next,
+      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployFailed'));
+      const option = getDeployProviderOption(deployProviderId);
+      setDeployError(
+        err instanceof Error ? err.message : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) }),
+      );
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -2044,6 +3893,10 @@ function HtmlViewer({
     setDeployPhase('preparing-link');
     try {
       const next = await checkDeploymentLink(projectId, current.id);
+      setDeploymentsByProvider((items) => ({
+        ...items,
+        [next.providerId]: next,
+      }));
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
@@ -2069,8 +3922,10 @@ function HtmlViewer({
       document.execCommand('copy');
       document.body.removeChild(textarea);
     }
-    setCopiedDeployLink(true);
-    window.setTimeout(() => setCopiedDeployLink(false), 1800);
+    setCopiedDeployLink(safeUrl);
+    window.setTimeout(() => {
+      setCopiedDeployLink((current) => (current === safeUrl ? null : current));
+    }, 1800);
   }
 
   function presentInThisTab() {
@@ -2097,20 +3952,157 @@ function HtmlViewer({
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
   }
 
+  function clearBoardComposer() {
+    setActiveCommentTarget(null);
+    setHoveredCommentTarget(null);
+    setCommentDraft('');
+    setQueuedBoardNotes([]);
+    setStrokePoints([]);
+  }
+
+  function activateBoard(nextTool?: BoardTool) {
+    setMode('preview');
+    setBoardMode(true);
+    if (nextTool) {
+      setBoardTool(nextTool);
+    }
+  }
+
+  function queueCurrentDraft() {
+    const note = commentDraft.trim();
+    if (!note) return;
+    setQueuedBoardNotes((current) => [...current, note]);
+    setCommentDraft('');
+  }
+
+  async function sendBoardBatch() {
+    if (!activeCommentTarget || !onSendBoardCommentAttachments) return;
+    const nextNotes = [...queuedBoardNotes];
+    if (commentDraft.trim()) nextNotes.push(commentDraft.trim());
+    if (nextNotes.length === 0) return;
+    setSendingBoardBatch(true);
+    try {
+      await onSendBoardCommentAttachments(
+        buildBoardCommentAttachments({
+          target: targetFromSnapshot(activeCommentTarget),
+          notes: nextNotes,
+        }),
+      );
+      clearBoardComposer();
+    } finally {
+      setSendingBoardBatch(false);
+    }
+  }
+
+  async function savePersistentComment() {
+    if (!activeCommentTarget || !commentDraft.trim() || !onSavePreviewComment) return;
+    const saved = await onSavePreviewComment(
+      targetFromSnapshot(activeCommentTarget),
+      commentDraft.trim(),
+      false,
+    );
+    if (saved) {
+      setCommentDraft('');
+    }
+  }
+
   const showPresent = effectiveDeck && source !== null;
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
-  const previewScale = zoom / 100;
+  const boardAvailable = source !== null;
   const activeDeployment = deployResult || deployment;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
-  const activeDeploymentReady = activeDeployment?.status === 'ready';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
-  const activeDeploymentNeedsRetry = activeDeploymentDelayed || activeDeploymentProtected;
-  const copyDeployLabel = copiedDeployLink
-    ? t('fileViewer.copied')
-    : t('fileViewer.copyDeployLink');
+  const activeCloudflarePages = activeDeployment?.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+    ? activeDeployment.cloudflarePages
+    : undefined;
+  const activeCloudflareCustomDomain = activeCloudflarePages?.customDomain;
+  const deployProvider = getDeployProviderOption(deployProviderId);
+  const deployProviderLabel = t(deployProvider.labelKey);
+  const selectedCloudflareZone = cloudflareZones.find((zone) => zone.id === cloudflareZoneId) ?? null;
+  const normalizedCloudflarePrefix = normalizeCloudflareDomainPrefixInput(cloudflareDomainPrefix);
+  const cloudflareHostnamePreview =
+    selectedCloudflareZone && normalizedCloudflarePrefix
+      ? `${normalizedCloudflarePrefix}.${selectedCloudflareZone.name}`
+      : '';
+  const deployResultCards: DeployResultCard[] = activeCloudflarePages
+    ? (() => {
+        const cards: DeployResultCard[] = [];
+        const pagesDevUrl = activeCloudflarePages.pagesDev?.url || activeDeployedUrl;
+        if (pagesDevUrl) {
+          cards.push({
+            id: 'pages-dev',
+            label: t('fileViewer.cloudflarePagesDevLinkLabel'),
+            url: pagesDevUrl,
+            status: activeCloudflarePages.pagesDev?.status || activeDeployment?.status || 'link-delayed',
+            message: activeCloudflarePages.pagesDev?.statusMessage,
+          });
+        }
+        if (activeCloudflareCustomDomain?.url) {
+          cards.push({
+            id: 'custom-domain',
+            label: t('fileViewer.cloudflareCustomDomainLinkLabel'),
+            url: activeCloudflareCustomDomain.url,
+            status: activeCloudflareCustomDomain.status,
+            message:
+              activeCloudflareCustomDomain.errorMessage ||
+              activeCloudflareCustomDomain.statusMessage,
+          });
+        }
+        return cards;
+      })()
+    : activeDeployedUrl
+      ? [{
+          id: 'default',
+          label: activeDeploymentProtected
+            ? t('fileViewer.deployLinkProtectedLabel')
+            : activeDeploymentDelayed
+              ? t('fileViewer.deployLinkPreparingLabel')
+              : t('fileViewer.deployResultLabel'),
+          url: activeDeployedUrl,
+          status: activeDeployment?.status || 'ready',
+          message: activeDeploymentProtected
+            ? t('fileViewer.deployLinkProtected')
+            : activeDeploymentDelayed
+              ? t('fileViewer.deployLinkDelayed')
+              : activeDeployment?.statusMessage,
+        }]
+      : [];
+  const deployActionLabelFor = (providerId: WebDeployProviderId) => {
+    const option = getDeployProviderOption(providerId);
+    const label = t(option.labelKey);
+    const hasActiveDeploymentForProvider = Boolean(deploymentsByProvider[providerId]?.url?.trim());
+    return hasActiveDeploymentForProvider
+      ? t('fileViewer.redeployToProvider', { provider: label })
+      : t('fileViewer.deployToProvider', { provider: label });
+  };
+  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
+    providerId: option.id,
+    providerLabel: t(option.labelKey),
+    url: deploymentsByProvider[option.id]?.url?.trim() || '',
+  })).filter((item) => item.url);
+  const deployButtonLabel =
+    deployPhase === 'deploying'
+      ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
+      : deployPhase === 'preparing-link'
+        ? t('fileViewer.preparingPublicLink')
+        : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+  const copyDeployLabel = (url: string) =>
+    copiedDeployLink === url.trim()
+      ? t('fileViewer.copied')
+      : t('fileViewer.copyDeployLink');
+  const copyDeployMenuLabel = (providerLabel: string, url: string) =>
+    copiedDeployLink === url.trim()
+      ? t('fileViewer.copied')
+      : `${t('fileViewer.copyDeployLink')} · ${providerLabel}`;
+  const statusLabelFor = (state: ReturnType<typeof deployResultState>) => {
+    if (state === 'ready') return t('fileViewer.deployLinkReady');
+    if (state === 'protected') return t('fileViewer.deployLinkProtectedLabel');
+    if (state === 'failed') return t('fileViewer.deployLinkFailed');
+    return t('fileViewer.deployLinkPreparingLabel');
+  };
 
   return (
     <div className="viewer html-viewer">
@@ -2163,12 +4155,20 @@ function HtmlViewer({
           ) : null}
           <button
             type="button"
-            className="viewer-toggle"
-            disabled
-            data-coming-soon="true"
+            className={`viewer-toggle${boardMode ? ' active' : ''}`}
+            data-testid="board-mode-toggle"
             title={t('fileViewer.tweaks')}
-            aria-pressed={false}
-            onClick={(e) => e.preventDefault()}
+            aria-pressed={boardMode}
+            disabled={!boardAvailable}
+            onClick={() => {
+              if (boardMode) {
+                setBoardMode(false);
+                clearBoardComposer();
+                return;
+              }
+              setManualEditMode(false);
+              activateBoard(boardTool);
+            }}
           >
             <Icon name="tweaks" size={13} />
             <span>{t('fileViewer.tweaks')}</span>
@@ -2191,35 +4191,74 @@ function HtmlViewer({
             </button>
           </div>
           <span className="viewer-divider" aria-hidden />
+          {boardMode ? (
+            <>
+              <button
+                className={`viewer-action${boardTool === 'inspect' ? ' active' : ''}`}
+                type="button"
+                data-testid="comment-mode-toggle"
+                disabled={!boardAvailable}
+                title="Pick one element"
+                aria-label="Picker"
+                aria-pressed={boardTool === 'inspect'}
+                onClick={() => activateBoard('inspect')}
+              >
+                <Icon name="edit" size={13} />
+                <span>Picker</span>
+              </button>
+              <button
+                className={`viewer-action${boardTool === 'pod' ? ' active' : ''}`}
+                type="button"
+                disabled={!boardAvailable}
+                title="Draw a pod selection"
+                aria-label="Pods"
+                aria-pressed={boardTool === 'pod'}
+                onClick={() => activateBoard('pod')}
+              >
+                <Icon name="draw" size={13} />
+                <span>Pods</span>
+              </button>
+            </>
+          ) : null}
           <button
-            className={`viewer-action${commentMode ? ' active' : ''}`}
+            className={`viewer-action${inspectMode ? ' active' : ''}`}
             type="button"
-            data-testid="comment-mode-toggle"
-            title={t('fileViewer.comment')}
-            onClick={() => setCommentMode((v) => !v)}
+            data-testid="inspect-mode-toggle"
+            title="Inspect"
+            aria-pressed={inspectMode}
+            onClick={() => {
+              setInspectMode((v) => {
+                const next = !v;
+                if (next) {
+                  setBoardMode(false);
+                  clearBoardComposer();
+                  setManualEditMode(false);
+                }
+                return next;
+              });
+            }}
           >
-            <Icon name="comment" size={13} />
-            <span>{t('fileViewer.comment')}</span>
+            <Icon name="tweaks" size={13} />
+            <span>Inspect</span>
           </button>
           <button
-            className="viewer-action"
+            className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
-            disabled
-            data-coming-soon="true"
+            data-testid="manual-edit-mode-toggle"
             title={t('fileViewer.edit')}
+            aria-pressed={manualEditMode}
+            onClick={() => {
+              if (!manualEditMode) {
+                setBoardMode(false);
+                clearBoardComposer();
+                setInspectMode(false);
+                setMode('preview');
+              }
+              setManualEditMode((value) => !value);
+            }}
           >
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
-          </button>
-          <button
-            className="viewer-action"
-            type="button"
-            disabled
-            data-coming-soon="true"
-            title={t('fileViewer.draw')}
-          >
-            <Icon name="draw" size={13} />
-            <span>{t('fileViewer.draw')}</span>
           </button>
           <span className="viewer-divider" aria-hidden />
           <button
@@ -2390,7 +4429,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      void handleSaveAsTemplate();
+                      openSaveAsTemplateModal();
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
@@ -2403,36 +4442,38 @@ function HtmlViewer({
                     </span>
                   </button>
                   <div className="share-menu-divider" />
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      void openDeployModal();
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
-                    <span>
-                      {activeDeployedUrl
-                        ? t('fileViewer.redeployToVercel')
-                        : t('fileViewer.deployToVercel')}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    disabled={!activeDeployedUrl}
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      void copyDeployLink(activeDeployedUrl);
-                    }}
-                  >
-                    <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
-                    <span>
-                      {copyDeployLabel}
-                    </span>
-                  </button>
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        void openDeployModal(option.id);
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
+                      <span>{deployActionLabelFor(option.id)}</span>
+                    </button>
+                  ))}
+                  {deployCopyLinks.length > 0 ? (
+                    <div className="share-menu-divider" />
+                  ) : null}
+                  {deployCopyLinks.map((item) => (
+                    <button
+                      key={`copy-${item.providerId}`}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setShareMenuOpen(false);
+                        void copyDeployLink(item.url);
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
+                      <span>{copyDeployMenuLabel(item.providerLabel, item.url)}</span>
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -2443,8 +4484,35 @@ function HtmlViewer({
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
-          <div className="comment-preview-layer">
-            <div className="comment-frame-clip">
+          <div className={manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'}>
+            {manualEditMode ? (
+              <ManualEditPanel
+                targets={manualEditTargets}
+                selectedTarget={selectedManualEditTarget}
+                draft={manualEditDraft}
+                history={manualEditHistory}
+                error={manualEditError}
+                canUndo={manualEditHistory.length > 0}
+                canRedo={manualEditUndone.length > 0}
+                busy={manualEditSaving}
+                onSelectTarget={selectManualEditTarget}
+                onDraftChange={setManualEditDraft}
+                onApplyPatch={(patch, label) => {
+                  void applyManualEdit(patch, label);
+                }}
+                onError={setManualEditError}
+                onCancelDraft={() => {
+                  if (selectedManualEditTarget) selectManualEditTarget(selectedManualEditTarget);
+                }}
+                onUndo={() => {
+                  void undoManualEdit();
+                }}
+                onRedo={() => {
+                  void redoManualEdit();
+                }}
+              />
+            ) : null}
+            <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
               <div
                 style={{
                   width: `${100 / previewScale}%`,
@@ -2461,6 +4529,7 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     src={previewSrcUrl}
+                    onLoad={syncBridgeModes}
                   />
                 ) : (
                   <iframe
@@ -2470,43 +4539,95 @@ function HtmlViewer({
                     title={file.name}
                     sandbox="allow-scripts"
                     srcDoc={srcDoc}
+                    // Re-seeds the iframe-side bridge with the host's
+                    // authoritative inspect override map after each srcdoc
+                    // rebuild, then syncs comment/edit bridge modes.
+                    // URL-loaded iframes have no inspect bridge, so the
+                    // replay handler is intentionally only on the srcDoc
+                    // branch.
+                    onLoad={() => {
+                      replayInspectOverridesToIframe();
+                      syncBridgeModes();
+                    }}
                   />
                 )}
               </div>
             </div>
-            {commentMode ? (
+            {boardMode ? (
               <CommentPreviewOverlays
                 comments={previewComments}
                 liveTargets={liveCommentTargets}
                 hoveredTarget={hoveredCommentTarget}
                 activeTarget={activeCommentTarget}
+                boardTool={boardTool}
                 scale={previewScale}
+                strokePoints={strokePoints}
                 onOpenComment={(comment, snapshot) => {
                   setActiveCommentTarget(snapshot);
                   setHoveredCommentTarget(snapshot);
                   setCommentDraft(comment.note);
+                  setQueuedBoardNotes([]);
                 }}
               />
             ) : null}
-            {commentMode && activeCommentTarget ? (
-              <CommentPopover
+            {boardMode && activeCommentTarget ? (
+              <BoardComposerPopover
                 target={activeCommentTarget}
                 existing={previewComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
                 draft={commentDraft}
+                notes={queuedBoardNotes}
                 onDraft={setCommentDraft}
-                onClose={() => setActiveCommentTarget(null)}
-                onSave={async (attach) => {
-                  if (!commentDraft.trim() || !onSavePreviewComment) return;
-                  const saved = await onSavePreviewComment(targetFromSnapshot(activeCommentTarget), commentDraft.trim(), attach);
-                  if (saved) setActiveCommentTarget(null);
-                }}
+                onAddDraft={queueCurrentDraft}
+                onRemoveQueuedNote={(index) =>
+                  setQueuedBoardNotes((current) => current.filter((_, currentIndex) => currentIndex !== index))
+                }
+                onClose={clearBoardComposer}
+                onSaveComment={savePersistentComment}
+                onSendBatch={sendBoardBatch}
                 onRemove={async (commentId) => {
                   if (!onRemovePreviewComment) return;
                   await onRemovePreviewComment(commentId);
-                  setActiveCommentTarget(null);
+                  clearBoardComposer();
                 }}
+                sending={sendingBoardBatch || streaming}
                 t={t}
               />
+            ) : null}
+            {inspectMode && activeInspectTarget ? (
+              <InspectPanel
+                target={activeInspectTarget}
+                onApply={(prop, value) => {
+                  const target = activeInspectTarget;
+                  setInspectOverrides((current) =>
+                    updateInspectOverride(current, target.elementId, target.selector, prop, value),
+                  );
+                  postInspectSet(target.elementId, target.selector, prop, value);
+                }}
+                onResetElement={(elementId) => {
+                  setInspectOverrides((current) => {
+                    if (!(elementId in current)) return current;
+                    const next = { ...current };
+                    delete next[elementId];
+                    return next;
+                  });
+                  postInspectReset(elementId);
+                  setActiveInspectTarget((current) => current && current.elementId === elementId
+                    ? current
+                    : current);
+                }}
+                onSaveToSource={() => {
+                  void saveInspectToSource();
+                }}
+                onClose={() => setActiveInspectTarget(null)}
+                saving={savingInspect}
+                savedAt={inspectSavedAt}
+                error={inspectError}
+              />
+            ) : null}
+            {inspectMode && !activeInspectTarget ? (
+              <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
+                Click any element with <code>data-od-id</code> to tune its style.
+              </div>
             ) : null}
           </div>
         ) : (
@@ -2543,31 +4664,112 @@ function HtmlViewer({
           )}
         </div>
       ) : null}
+      {templateModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal deploy-modal" role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <div className="kicker">TEMPLATE</div>
+              <h2>{t('fileViewer.saveAsTemplate')}</h2>
+              <p className="subtitle">{t('fileViewer.templateDescPrompt')}</p>
+            </div>
+            <div className="deploy-form">
+              <label className="field" htmlFor={templateNameId}>
+                <span className="field-label">{t('fileViewer.templateNamePrompt')}</span>
+                <input
+                  id={templateNameId}
+                  type="text"
+                  value={templateName}
+                  placeholder={t('fileViewer.templateNameDefault')}
+                  autoFocus
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+              </label>
+              <label className="field" htmlFor={templateDescriptionId}>
+                <span className="field-label">{t('fileViewer.templateDescPrompt')}</span>
+                <textarea
+                  id={templateDescriptionId}
+                  rows={3}
+                  value={templateDescription}
+                  placeholder={t('fileViewer.optional')}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                />
+              </label>
+              {templateSaveError ? <p className="deploy-error">{templateSaveError}</p> : null}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={savingTemplate}
+                onClick={() => {
+                  setTemplateModalOpen(false);
+                  setTemplateSaveError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={savingTemplate || !templateName.trim()}
+                onClick={() => {
+                  void handleSaveAsTemplate();
+                }}
+              >
+                {savingTemplate ? t('fileViewer.savingTemplate') : t('common.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {deployModalOpen ? (
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div className="kicker">VERCEL</div>
-              <h2>{t('fileViewer.deployModalTitle')}</h2>
+              <div className="kicker">{deployProviderLabel}</div>
+              <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
               <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
             </div>
             <div className="deploy-form">
-              <div className="field-label-row">
-                <label htmlFor="vercel-token">{t('fileViewer.vercelToken')}</label>
-                <a
-                  href="https://vercel.com/account/settings/tokens"
-                  target="_blank"
-                  rel="noreferrer noopener"
+              <label className="deploy-provider-field">
+                <span>{t('fileViewer.deployProviderLabel')}</span>
+                <select
+                  value={deployProviderId}
+                  onChange={(e) => {
+                    void changeDeployProvider(e.target.value as WebDeployProviderId);
+                  }}
                 >
-                  {t('fileViewer.vercelTokenGetLink')}
-                </a>
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {t(option.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="field-label-row">
+                <label htmlFor="deploy-token">{t(deployProvider.tokenLabelKey)}</label>
+                <div className="field-label-note">
+                  {deployConfig?.configured ? (
+                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                  ) : null}
+                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                  ) : null}
+                  <a
+                    href={deployProvider.tokenLink}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    {t(deployProvider.tokenLinkKey)}
+                  </a>
+                </div>
               </div>
               <input
-                id="vercel-token"
+                id="deploy-token"
                 type="password"
-                value={vercelToken}
-                placeholder={t('fileViewer.vercelTokenPlaceholder')}
-                onChange={(e) => setVercelToken(e.target.value)}
+                value={deployToken}
+                placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                onChange={(e) => setDeployToken(e.target.value)}
               />
               <div className="deploy-config-actions">
                 <button
@@ -2581,87 +4783,172 @@ function HtmlViewer({
                   {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
                 </button>
               </div>
-              {deployConfig?.configured ? (
-                <p className="hint">{t('fileViewer.vercelTokenReuseHint')}</p>
-              ) : null}
-              <div className="deploy-field-grid">
-                <label>
-                  <span>{t('fileViewer.vercelTeamId')}</span>
-                  <input
-                    value={teamId}
-                    placeholder={t('fileViewer.optional')}
-                    onChange={(e) => setTeamId(e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>{t('fileViewer.vercelTeamSlug')}</span>
-                  <input
-                    value={teamSlug}
-                    placeholder={t('fileViewer.optional')}
-                    onChange={(e) => setTeamSlug(e.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="hint">{t('fileViewer.vercelPreviewOnly')}</p>
-              {deployError ? <p className="deploy-error">{deployError}</p> : null}
-              {activeDeployedUrl ? (
-                <div
-                  className={`deploy-result ${
-                    activeDeploymentProtected ? 'protected' : activeDeploymentDelayed ? 'delayed' : 'ready'
-                  }`}
-                >
-                  <div className="deploy-result-label">
-                    {activeDeploymentProtected
-                      ? t('fileViewer.deployLinkProtectedLabel')
-                      : activeDeploymentDelayed
-                      ? t('fileViewer.deployLinkPreparingLabel')
-                      : t('fileViewer.deployResultLabel')}
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <>
+                  <div className="deploy-field-grid single-field">
+                    <label>
+                      <span>{t('fileViewer.cloudflareAccountId')}</span>
+                      <input
+                        value={cloudflareAccountId}
+                        onChange={(e) => setCloudflareAccountId(e.target.value)}
+                      />
+                      <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
+                    </label>
                   </div>
-                  {activeDeploymentNeedsRetry ? (
-                    <p className="deploy-result-message">
-                      {activeDeploymentProtected
-                        ? t('fileViewer.deployLinkProtected')
-                        : t('fileViewer.deployLinkDelayed')}
-                    </p>
-                  ) : null}
-                  <a href={activeDeployedUrl} target="_blank" rel="noreferrer noopener">
-                    {activeDeployedUrl}
-                  </a>
-                  <div className="deploy-result-actions">
-                    {activeDeploymentNeedsRetry ? (
-                      <button
-                        type="button"
-                        className="viewer-action"
-                        disabled={deployPhase === 'preparing-link'}
-                        onClick={() => {
-                          void retryDeploymentLink();
-                        }}
+                  <div className="deploy-field-grid cloudflare-domain-grid">
+                    <label>
+                      <span>{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                      <input
+                        value={cloudflareDomainPrefix}
+                        placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
+                        onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>{t('fileViewer.cloudflareZoneLabel')}</span>
+                      <select
+                        value={cloudflareZoneId}
+                        disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
+                        onChange={(e) => setCloudflareZoneId(e.target.value)}
                       >
-                        {deployPhase === 'preparing-link'
-                          ? t('fileViewer.preparingPublicLink')
-                          : t('fileViewer.retryLink')}
-                      </button>
-                    ) : null}
+                        {cloudflareZones.length === 0 ? (
+                          <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
+                        ) : null}
+                        {cloudflareZones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="deploy-config-actions secondary">
                     <button
                       type="button"
-                      className="viewer-action"
+                      className="ghost-link button-like"
+                      disabled={cloudflareZonesLoading || !deployConfig?.configured}
                       onClick={() => {
-                        void copyDeployLink(activeDeployedUrl);
+                        void loadCloudflareZones();
                       }}
                     >
-                      <Icon name="copy" size={14} />
-                      <span>{copyDeployLabel}</span>
+                      {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
                     </button>
-                    <a
-                      className={`ghost-link ${activeDeploymentReady ? '' : 'disabled'}`}
-                      href={activeDeploymentReady ? activeDeployedUrl : undefined}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      aria-disabled={!activeDeploymentReady}
-                    >
-                      <Icon name="upload" size={14} />
-                      {t('fileViewer.open')}
-                    </a>
+                  </div>
+                  {cloudflareZonesError ? (
+                    <p className="deploy-error">{cloudflareZonesError}</p>
+                  ) : cloudflareZonesLoading ? (
+                    <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
+                  ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
+                    <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
+                  ) : (
+                    <p className="hint">{t('fileViewer.cloudflareCustomDomainHint')}</p>
+                  )}
+                  {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
+                    <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
+                  ) : cloudflareHostnamePreview ? (
+                    <p className="hint">
+                      {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <div className="deploy-field-grid">
+                  <label>
+                    <span>{t('fileViewer.vercelTeamId')}</span>
+                    <input
+                      value={teamId}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setTeamId(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>{t('fileViewer.vercelTeamSlug')}</span>
+                    <input
+                      value={teamSlug}
+                      placeholder={t('fileViewer.optional')}
+                      onChange={(e) => setTeamSlug(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+              <p className="hint">{t(deployProvider.previewHintKey)}</p>
+              {deployError ? <p className="deploy-error">{deployError}</p> : null}
+              {deployResultCards.length > 0 ? (
+                <div className={`deploy-result-block ${deployResultState(activeDeployment?.status)}`}>
+                  <div className="deploy-result-summary">
+                    <div className="deploy-result-summary-head">
+                      <div className="deploy-result-label">{t('fileViewer.deployResultLabel')}</div>
+                      <div className={`deploy-result-badge ${deployResultState(activeDeployment?.status)}`}>
+                        {statusLabelFor(deployResultState(activeDeployment?.status))}
+                      </div>
+                    </div>
+                    {activeDeployment?.statusMessage ? (
+                      <p className="deploy-result-message">{activeDeployment.statusMessage}</p>
+                    ) : null}
+                    <div className="deploy-result-links">
+                      {deployResultCards.map((card) => {
+                        const state = deployResultState(card.status);
+                        const canRetry = state === 'delayed' || state === 'protected';
+                        const isDisabled = state === 'protected' || state === 'failed';
+                        return (
+                          <div key={card.id} className={`deploy-result-link ${state}`}>
+                            <div className="deploy-result-link-main">
+                              <div className="deploy-result-link-head">
+                                <span className="deploy-result-link-label">{card.label}</span>
+                                <span className={`deploy-result-link-state ${state}`}>{statusLabelFor(state)}</span>
+                              </div>
+                              {card.message ? (
+                                <p className="deploy-result-link-message">{card.message}</p>
+                              ) : null}
+                              <a
+                                className="deploy-result-url"
+                                href={card.url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                              >
+                                {card.url}
+                              </a>
+                            </div>
+                            <div className="deploy-result-actions">
+                              {canRetry ? (
+                                <button
+                                  type="button"
+                                  className="viewer-action"
+                                  disabled={deployPhase === 'preparing-link'}
+                                  onClick={() => {
+                                    void retryDeploymentLink();
+                                  }}
+                                >
+                                  {deployPhase === 'preparing-link'
+                                    ? t('fileViewer.preparingPublicLink')
+                                    : t('fileViewer.retryLink')}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="viewer-action"
+                                onClick={() => {
+                                  void copyDeployLink(card.url);
+                                }}
+                              >
+                                <Icon name="copy" size={14} />
+                                <span>{copyDeployLabel(card.url)}</span>
+                              </button>
+                              <a
+                                className={`ghost-link ${isDisabled ? 'disabled' : ''}`}
+                                href={isDisabled ? undefined : card.url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                aria-disabled={isDisabled}
+                              >
+                                <Icon name="upload" size={14} />
+                                {t('fileViewer.open')}
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -2679,14 +4966,10 @@ function HtmlViewer({
                 className="viewer-action primary"
                 disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
-                  void deployToVercel();
+                  void deployToSelectedProvider();
                 }}
               >
-                {deployPhase === 'deploying'
-                  ? t('fileViewer.deployingToVercel')
-                  : deployPhase === 'preparing-link'
-                    ? t('fileViewer.preparingPublicLink')
-                    : t('fileViewer.deployToVercel')}
+                {deployButtonLabel}
               </button>
             </div>
           </div>

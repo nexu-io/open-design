@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Long Table — Slide Template</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500;1,9..144,600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper:    #FAF1E2;   /* warm buttery cream paper */
+    --paper-d:  #F2E5CF;   /* slightly darker cream */
+    --paper-vd: #E8D7B6;   /* deeper cream for accents */
+    --ink:      #B53D2A;   /* warm rust / terracotta red — the only ink colour */
+    --ink-dp:   #8E2D1F;   /* deeper red for emphasis */
+    --rule:     #B53D2A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  body {
+    font-family: 'Fraunces', Georgia, serif;
+    color: var(--ink);
+    overflow: hidden;
+  }
+
+  /* Deck wrapper */
+  .deck { position: fixed; inset: 0; display: grid; place-items: center; }
+  .stage {
+    position: relative;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  /* Subtle paper texture */
+  .stage::before {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.10;
+    background-image: radial-gradient(circle at 1px 1px, rgba(181,61,42,0.5) 0.5px, transparent 1px);
+    background-size: 4px 4px;
+    z-index: 1;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    opacity: 0; pointer-events: none;
+    transition: opacity 280ms ease;
+    z-index: 2;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+
+  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
+  .disp {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    line-height: 0.92;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .body-it {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .body-ro {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  /* Page-number marker — italic Fraunces */
+  .pagenum {
+    position: absolute;
+    right: clamp(36px, 3.6vw, 80px);
+    bottom: clamp(40px, 4vh, 64px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    z-index: 9;
+  }
+  .nav-hint {
+    position: fixed;
+    left: clamp(36px, 3.6vw, 80px);
+    bottom: clamp(40px, 4vh, 64px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(11px, 0.78vw, 13px);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    opacity: 0.45;
+    z-index: 12;
+    pointer-events: none;
+  }
+
+  /* ─── REUSABLE: pill button (outlined rounded rectangle) ────── */
+  .pill {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    padding: clamp(8px, 1vh, 14px) clamp(20px, 2vw, 32px);
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.1vw, 20px);
+    color: var(--ink);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .pill-divider {
+    color: var(--ink);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.4vw, 24px);
+    line-height: 1;
+    align-self: center;
+    opacity: 0.7;
+  }
+
+  /* ─── REUSABLE: numbered edition badge (circle outline) ─────── */
+  .ed-badge {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: clamp(34px, 2.6vw, 44px);
+    height: clamp(34px, 2.6vw, 44px);
+    border: 1.5px solid var(--ink);
+    border-radius: 50%;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    line-height: 1;
+  }
+
+  /* ─── REUSABLE: outlined rectangle tag ──────────────────────── */
+  .rect-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: clamp(7px, 0.9vh, 12px) clamp(14px, 1.4vw, 22px);
+    border: 1.5px solid var(--ink);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.1vw, 20px);
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 1 — COVER (echo of supper-club poster, left text + right illustration)
+     ────────────────────────────────────────────────────────────── */
+  .s-cover { background: var(--paper); }
+
+  .s-cover .grid {
+    position: absolute;
+    inset: clamp(60px, 6vh, 100px) clamp(60px, 5vw, 110px) clamp(110px, 11vh, 170px);
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: clamp(40px, 4vw, 80px);
+    z-index: 5;
+  }
+  .s-cover .left {
+    display: flex; flex-direction: column;
+    gap: clamp(18px, 2vh, 30px);
+  }
+  .s-cover .ed-row {
+    display: flex; align-items: center; gap: clamp(12px, 1.2vw, 18px);
+  }
+  .s-cover .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(20px, 1.6vw, 30px);
+    color: var(--ink);
+    line-height: 1;
+  }
+  .s-cover .title {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(82px, min(8.8vw, 15vh), 180px);
+    line-height: 0.92;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-cover .actions {
+    display: flex; gap: clamp(8px, 0.8vw, 14px); align-items: center;
+    flex-wrap: wrap;
+  }
+  .s-cover .stats {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.4;
+    color: var(--ink);
+  }
+  .s-cover .stats .num {
+    font-style: normal;
+    font-weight: 600;
+  }
+  .s-cover .left .bottom-block {
+    margin-top: auto;
+    display: flex; flex-direction: column;
+    gap: clamp(12px, 1.4vh, 22px);
+    align-items: flex-start;
+  }
+  .s-cover .tagline {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.4vw, 26px);
+    line-height: 1.35;
+    color: var(--ink);
+    max-width: 40ch;
+  }
+
+  /* Right side of cover — big italic edition numeral as a typographic anchor,
+     replacing the hand-drawn illustration. */
+  .s-cover .right {
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: flex-end;
+    color: var(--ink);
+    text-align: right;
+  }
+  .s-cover .big-edition {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(180px, min(22vw, 38vh), 480px);
+    line-height: 0.86;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .s-cover .big-edition-lab {
+    margin-top: clamp(8px, 1vh, 16px);
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(15px, 1.1vw, 18px);
+    letter-spacing: 0.18em;
+    color: var(--ink);
+  }
+  .s-cover .big-edition-meta {
+    margin-top: clamp(20px, 2.4vh, 36px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 30ch;
+    text-align: right;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 2 — MANIFESTO / LETTER FROM THE TABLE
+     ────────────────────────────────────────────────────────────── */
+  .s-manifesto { background: var(--paper); }
+  .s-manifesto .frame {
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(80px, 8vw, 200px) clamp(110px, 11vh, 170px);
+    display: grid;
+    grid-template-columns: 0.85fr 1fr;
+    gap: clamp(50px, 5vw, 100px);
+    align-items: center;
+    z-index: 5;
+  }
+  .s-manifesto .left .ed-row {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: clamp(20px, 2.4vh, 36px);
+  }
+  .s-manifesto .left .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.4vw, 24px);
+    color: var(--ink);
+  }
+  .s-manifesto .left .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(72px, min(7.6vw, 13vh), 160px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-manifesto .right p {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(20px, 1.5vw, 28px);
+    line-height: 1.45;
+    color: var(--ink);
+    margin: 0 0 clamp(16px, 1.6vh, 24px);
+  }
+  .s-manifesto .right p .empha {
+    font-style: normal;
+    font-weight: 600;
+  }
+  .s-manifesto .right .sig {
+    margin-top: clamp(18px, 2vh, 30px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.2vw, 20px);
+    color: var(--ink);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .s-manifesto .right .sig .who-tag {
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 3 — INDEX OF EDITIONS
+     ────────────────────────────────────────────────────────────── */
+  .s-index { background: var(--paper); }
+  .s-index .frame {
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(60px, 5vw, 110px) clamp(110px, 11vh, 170px);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: clamp(28px, 3vh, 50px);
+    z-index: 5;
+  }
+  .s-index .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(14px, 1.6vh, 24px);
+    gap: 30px;
+  }
+  .s-index .topbar .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(56px, min(6vw, 10vh), 120px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-index .topbar .lab-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    text-align: right;
+    line-height: 1.4;
+  }
+  .s-index .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto;
+    gap: clamp(20px, 2.4vw, 36px);
+    align-self: center;
+    align-items: start;
+  }
+  .s-index .card {
+    border: 1.5px solid var(--ink);
+    padding: clamp(20px, 2vh, 32px) clamp(20px, 1.8vw, 30px);
+    display: flex; flex-direction: column; gap: clamp(10px, 1.2vh, 18px);
+  }
+  .s-index .card .card-top {
+    display: flex; align-items: center; gap: clamp(10px, 1vw, 16px);
+    border-bottom: 1px solid rgba(181, 61, 42, 0.32);
+    padding-bottom: clamp(10px, 1.2vh, 16px);
+  }
+  .s-index .card .card-top .num-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+  }
+  .s-index .card .card-top .city-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    margin-left: auto;
+  }
+  .s-index .card .nm {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(28px, 2.4vw, 44px);
+    line-height: 0.95;
+    color: var(--ink);
+    letter-spacing: -0.008em;
+  }
+  .s-index .card .desc {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1vw, 17px);
+    line-height: 1.45;
+    color: var(--ink);
+    flex: 1;
+  }
+  .s-index .card .meta-row {
+    display: flex; align-items: center; gap: clamp(10px, 1vw, 16px);
+    margin-top: auto;
+    border-top: 1px dashed rgba(181, 61, 42, 0.32);
+    padding-top: clamp(10px, 1.2vh, 16px);
+  }
+  .s-index .card .meta-row .seats-tag,
+  .s-index .card .meta-row .date-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+  }
+  .s-index .card .meta-row .seats-tag { margin-right: auto; }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 4 — FEATURED EDITION
+     ────────────────────────────────────────────────────────────── */
+  .s-featured { background: var(--paper); }
+  .s-featured .frame {
+    /* Bottom inset enlarged so content can never run into the page-num /
+       nav-hint chrome at the bottom of the slide. */
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(80px, 7vw, 160px) clamp(150px, 14vh, 220px);
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: clamp(40px, 4vw, 80px);
+    align-items: center;
+    z-index: 5;
+  }
+  .s-featured .left { display: flex; flex-direction: column; gap: clamp(18px, 2vh, 32px); }
+  .s-featured .left .ed-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .s-featured .left .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.3vw, 22px);
+    color: var(--ink);
+  }
+  .s-featured .left .ttl {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(60px, min(6.4vw, 10.5vh), 140px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-featured .left .lede {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 44ch;
+  }
+  .s-featured .left .stats-line {
+    display: flex; gap: clamp(20px, 2vw, 36px); align-items: center;
+    flex-wrap: wrap;
+  }
+  /* Right side of featured edition — text info card replacing the illustration. */
+  .s-featured .right {
+    display: flex; flex-direction: column;
+    justify-content: center;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: clamp(28px, 3vw, 56px) clamp(28px, 2.4vw, 48px);
+    gap: clamp(16px, 2vh, 28px);
+  }
+  .s-featured .right .info-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: clamp(20px, 2vw, 36px);
+    align-items: baseline;
+    border-bottom: 1px dashed rgba(181, 61, 42, 0.32);
+    padding-bottom: clamp(12px, 1.4vh, 20px);
+  }
+  .s-featured .right .info-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .s-featured .right .info-row .k {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+  }
+  .s-featured .right .info-row .v {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(20px, 1.6vw, 28px);
+    line-height: 1.1;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    text-align: right;
+  }
+  .s-featured .right .info-row .v.it {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: clamp(20px, 1.5vw, 26px);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 5 — MENU / PROGRAMME
+     ────────────────────────────────────────────────────────────── */
+  .s-menu { background: var(--paper); }
+  .s-menu .frame {
+    /* Stack content from the top with natural spacing — no flex-stretch on
+       course rows, so the menu sits up against the title instead of the
+       rows being pushed apart by space-between distribution. */
+    position: absolute;
+    inset: clamp(40px, 4vh, 70px) clamp(120px, 12vw, 280px) clamp(110px, 11vh, 170px);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(14px, 1.6vh, 24px);
+    z-index: 5;
+  }
+  .s-menu .top-row {
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    gap: clamp(8px, 1vh, 14px);
+  }
+  .s-menu .top-row .kicker {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.2vw, 20px);
+    color: var(--ink);
+  }
+  .s-menu .top-row .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(48px, min(5vw, 8.4vh), 100px);
+    line-height: 0.92;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-menu .courses {
+    display: flex; flex-direction: column;
+    gap: 0;
+  }
+  .s-menu .course {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: clamp(14px, 1.4vw, 28px);
+    align-items: center;
+    padding: clamp(14px, 1.6vh, 24px) 0;
+    border-bottom: 1px solid rgba(181, 61, 42, 0.32);
+  }
+  .s-menu .course .num-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.1vw, 20px);
+    color: var(--ink);
+    line-height: 1;
+  }
+  .s-menu .course .item {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .s-menu .course .item .nm {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(20px, 1.5vw, 28px);
+    line-height: 1.05;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .s-menu .course .item .desc {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1vw, 17px);
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 60ch;
+  }
+  .s-menu .course .pair-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    text-align: right;
+    white-space: nowrap;
+    opacity: 0.78;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 6 — QUOTE / TESTIMONIAL
+     ────────────────────────────────────────────────────────────── */
+  .s-quote { background: var(--paper); }
+  .s-quote .frame {
+    /* Single centred quote — no illustration. */
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(120px, 12vw, 280px) clamp(150px, 14vh, 220px);
+    display: flex; flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    z-index: 5;
+  }
+  .s-quote .right {
+    display: flex; flex-direction: column;
+    gap: clamp(18px, 2vh, 32px);
+    align-items: center;
+    width: 100%;
+  }
+  .s-quote .right .kicker {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.2vw, 20px);
+    color: var(--ink);
+  }
+  .s-quote .right .qbody {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(40px, min(4.4vw, 7.4vh), 96px);
+    line-height: 0.95;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-quote .right .qbody .it-emph {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: -0.005em;
+    line-height: 1;
+  }
+  .s-quote .right .who-row {
+    display: flex; flex-direction: column; gap: 4px;
+    border-top: 1.5px solid var(--ink);
+    padding-top: clamp(12px, 1.4vh, 20px);
+    align-items: center;
+  }
+  .s-quote .right .who-row .who-tag {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .s-quote .right .who-row .meta-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    opacity: 0.78;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 7 — UPCOMING SCHEDULE
+     ────────────────────────────────────────────────────────────── */
+  .s-cal { background: var(--paper); }
+  .s-cal .frame {
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(80px, 7vw, 160px) clamp(110px, 11vh, 170px);
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+  .s-cal .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(14px, 1.6vh, 24px);
+    margin-bottom: clamp(20px, 2.4vh, 32px);
+    gap: 30px;
+  }
+  .s-cal .topbar .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(56px, min(6vw, 10vh), 120px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-cal .topbar .lab-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    text-align: right;
+    line-height: 1.4;
+  }
+  .s-cal .ledger {
+    flex: 1;
+    display: flex; flex-direction: column;
+  }
+  .s-cal .row {
+    display: grid;
+    grid-template-columns: 80px 130px 1.6fr 0.9fr auto;
+    gap: clamp(14px, 1.4vw, 28px);
+    align-items: center;
+    padding: clamp(11px, 1.3vh, 18px) 0;
+    border-bottom: 1px solid rgba(181, 61, 42, 0.30);
+    flex: 1 1 0;
+    min-height: clamp(56px, 7vh, 90px);
+  }
+  .s-cal .row.headrow {
+    flex: 0 0 auto;
+    min-height: 0;
+    border-bottom: 1.5px solid var(--ink);
+    padding: 6px 0;
+  }
+  .s-cal .row.headrow > div {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(13px, 0.92vw, 15px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .s-cal .row .num-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+  }
+  .s-cal .row .city-tag {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(18px, 1.3vw, 24px);
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .s-cal .row .theme {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    color: var(--ink);
+    line-height: 1.3;
+  }
+  .s-cal .row .date-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 17px);
+    color: var(--ink);
+  }
+  .s-cal .row .seats-pill {
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(13px, 0.95vw, 16px);
+    color: var(--ink);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .s-cal .row .seats-pill.sold-out {
+    background: var(--ink);
+    color: var(--paper);
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 8 — CLOSING / RSVP
+     ────────────────────────────────────────────────────────────── */
+  .s-closing { background: var(--paper); }
+  /* Frame ends well above the footer-line; footer-line ends well above the
+     page-num chrome. Three discrete bands, no overlap zones. */
+  .s-closing .frame {
+    position: absolute;
+    left: clamp(80px, 7vw, 160px);
+    right: clamp(80px, 7vw, 160px);
+    top: clamp(96px, 10vh, 160px);
+    bottom: clamp(280px, 28vh, 400px);
+    display: flex; flex-direction: column;
+    justify-content: center;
+    z-index: 5;
+  }
+  .s-closing .left { display: flex; flex-direction: column; gap: clamp(20px, 2.4vh, 38px); max-width: 60ch; }
+  .s-closing .left .ed-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .s-closing .left .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.3vw, 22px);
+    color: var(--ink);
+  }
+  .s-closing .left .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(60px, min(6.4vw, 10vh), 130px);
+    line-height: 0.92;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  /* No right-side illustration — closing is a single text band. */
+  .s-closing .left .desc-it {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 42ch;
+  }
+  .s-closing .left .actions {
+    display: flex; gap: clamp(12px, 1.2vw, 20px); align-items: center;
+    flex-wrap: wrap;
+  }
+  .s-closing .right {
+    display: grid; place-items: center;
+    color: var(--ink);
+  }
+  .s-closing .right svg { width: 100%; height: auto; max-height: 100%; }
+  .s-closing .footer-line {
+    /* Footer band sits above the page-num chrome; clear gap below. */
+    position: absolute;
+    left: clamp(80px, 7vw, 160px);
+    right: clamp(80px, 7vw, 160px);
+    bottom: clamp(110px, 11vh, 160px);
+    display: flex; gap: clamp(40px, 4vw, 70px);
+    z-index: 5;
+  }
+  .s-closing .footer-line .colf {
+    border-top: 1px solid var(--ink);
+    padding-top: clamp(8px, 1vh, 14px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    line-height: 1.4;
+    flex: 1;
+  }
+  .s-closing .footer-line .colf .ftag {
+    font-style: normal;
+    font-weight: 600;
+    margin-bottom: 2px;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<div class="deck">
+  <div class="stage">
+
+    <!-- 1. COVER ─────────────────────────────────────────────── -->
+    <section class="slide s-cover active">
+      <div class="grid">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">5</div>
+            <div class="ed-label caption">december edition</div>
+          </div>
+          <h1 class="title">Long Table</h1>
+          <div class="actions">
+            <span class="pill caption">Lisbon</span>
+            <span class="pill-divider caption">|</span>
+            <span class="pill caption">Apply now</span>
+          </div>
+          <div class="stats body-it">
+            <span class="num">22 seats only</span><br/>
+            More than dinner, it's a long evening.
+          </div>
+          <div class="bottom-block">
+            <span class="rect-tag caption">Not a meal, an evening</span>
+            <p class="tagline">Where ten strangers, one cook, and a long evening meet under low light. Twice a month, by application.</p>
+          </div>
+        </div>
+
+        <div class="right">
+          <div class="big-edition">No. 05</div>
+          <div class="big-edition-lab caption">December · Lisbon · Edition</div>
+          <div class="big-edition-meta">Twice a month, ten strangers, one cook, one long table. By application.</div>
+        </div>
+      </div>
+
+      <div class="pagenum">01 / 08</div>
+    </section>
+
+    <!-- 2. MANIFESTO ─────────────────────────────────────────── -->
+    <section class="slide s-manifesto">
+      <div class="frame">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">·</div>
+            <div class="ed-label caption">a letter from the table</div>
+          </div>
+          <h2 class="h">A note<br/>before<br/>we sit.</h2>
+        </div>
+        <div class="right">
+          <p>We started Long Table in a borrowed kitchen, with <span class="empha">six chairs we'd carried up the stairs</span>, and the conviction that an evening is more than the food on the plates.</p>
+          <p>Three years on we've seated almost <span class="empha">two thousand strangers</span> across nine cities, and we've learned that the chairs are sometimes the most important part.</p>
+          <p>This deck is the small handbook we send our hosts before each edition. It is also, quietly, an invitation.</p>
+          <div class="sig">
+            <div class="who-tag">Iris &amp; Theo</div>
+            <div>founders · written from a kitchen in Lisbon, November 2025</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">02 / 08</div>
+    </section>
+
+    <!-- 3. INDEX OF EDITIONS ────────────────────────────────── -->
+    <section class="slide s-index">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">Three recent editions</div>
+          <div class="lab-tag caption">Long Table · 2025 · selected</div>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 03</div>
+              <div class="city-tag caption">Mexico City</div>
+            </div>
+            <div class="nm">A Plate<br/>of Quiet</div>
+            <div class="desc body-it">Eight courses cooked entirely on a single induction ring. The room agreed not to use phones for the entire evening, and almost kept the agreement.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">22 seats</div>
+              <div class="date-tag caption">14 March 2025</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 04</div>
+              <div class="city-tag caption">Tokyo</div>
+            </div>
+            <div class="nm">A Soup<br/>of Letters</div>
+            <div class="desc body-it">A reading evening, with a single course served slowly. Four guest writers, one bowl per person, and the longest pause we have ever held between courses.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">18 seats</div>
+              <div class="date-tag caption">06 July 2025</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 05</div>
+              <div class="city-tag caption">Lisbon</div>
+            </div>
+            <div class="nm">December<br/>Edition</div>
+            <div class="desc body-it">A long winter dinner. Twenty-two seats, one shared roast, and a quiet bookshop next door we'll wander to between courses, when the rain agrees.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">22 seats</div>
+              <div class="date-tag caption">11 December 2025</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">03 / 08</div>
+    </section>
+
+    <!-- 4. FEATURED EDITION ────────────────────────────────── -->
+    <section class="slide s-featured">
+      <div class="frame">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">5</div>
+            <div class="ed-label caption">december · the featured edition</div>
+          </div>
+          <h2 class="ttl">An evening<br/>for the rain.</h2>
+          <p class="lede">A long winter dinner in a converted printing room above a bookshop. One shared roast, an unhurried wine list, and a single intermission that may, if the weather agrees, become a walk to the harbour and back.</p>
+          <div class="stats-line">
+            <span class="pill caption">Apply by 28 November</span>
+            <span class="pill caption">Twelve seats left</span>
+          </div>
+        </div>
+        <div class="right">
+          <div class="info-row">
+            <div class="k caption">When</div>
+            <div class="v it">11 December 2025</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">Where</div>
+            <div class="v it">A printing room, Bairro Alto · Lisbon</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">Who</div>
+            <div class="v it">Twenty-two seats, by application</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">How long</div>
+            <div class="v it">From eight, well into the evening</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">Seat</div>
+            <div class="v">€84</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">04 / 08</div>
+    </section>
+
+    <!-- 5. MENU ─────────────────────────────────────────────── -->
+    <section class="slide s-menu">
+      <div class="frame">
+        <div class="top-row">
+          <div class="kicker caption">A Menu, in Five Slow Movements</div>
+          <h2 class="h">December · Lisbon</h2>
+        </div>
+        <div class="courses">
+          <div class="course">
+            <div class="num-tag caption">i.</div>
+            <div class="item">
+              <div class="nm">Roasted chestnut soup</div>
+              <div class="desc body-it">with brown butter, sage, and a single thin disc of pear</div>
+            </div>
+            <div class="pair-tag caption">unoaked white</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">ii.</div>
+            <div class="item">
+              <div class="nm">A small bread, hot</div>
+              <div class="desc body-it">made the morning of, with cultured butter and a coarse salt</div>
+            </div>
+            <div class="pair-tag caption">water, lemon</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">iii.</div>
+            <div class="item">
+              <div class="nm">Mackerel, lightly cured</div>
+              <div class="desc body-it">on toasted rye, with parsley oil and pickled celery</div>
+            </div>
+            <div class="pair-tag caption">vinho verde</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">iv.</div>
+            <div class="item">
+              <div class="nm">A long roast, the centre course</div>
+              <div class="desc body-it">slow lamb shoulder, root vegetables under it, served family-style</div>
+            </div>
+            <div class="pair-tag caption">douro red</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">v.</div>
+            <div class="item">
+              <div class="nm">Cheese, two only</div>
+              <div class="desc body-it">a soft, a hard, both local; quince paste and walnuts in the half-shell</div>
+            </div>
+            <div class="pair-tag caption">port, late bottled</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">05 / 08</div>
+    </section>
+
+    <!-- 6. QUOTE ──────────────────────────────────────────── -->
+    <section class="slide s-quote">
+      <div class="frame">
+        <div class="right">
+          <div class="kicker caption">A guest writes</div>
+          <p class="qbody">An evening I keep <span class="it-emph">describing,</span> badly, to people who weren't there.</p>
+          <div class="who-row">
+            <div class="who-tag">Hana Brennan</div>
+            <div class="meta-tag caption">long-table guest · Edition No. 04 · Tokyo</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">06 / 08</div>
+    </section>
+
+    <!-- 7. UPCOMING SCHEDULE ───────────────────────────────── -->
+    <section class="slide s-cal">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">What's coming up</div>
+          <div class="lab-tag caption">2026 calendar · subject to weather</div>
+        </div>
+        <div class="ledger">
+          <div class="row headrow">
+            <div class="caption">No.</div>
+            <div class="caption">City</div>
+            <div class="caption">Theme</div>
+            <div class="caption">Date</div>
+            <div class="caption">Status</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">06</div>
+            <div class="city-tag">Lisbon</div>
+            <div class="theme">A long winter dinner, with a roast and a walk</div>
+            <div class="date-tag caption">11 December 2025</div>
+            <div><span class="seats-pill sold-out caption">Sold out</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">07</div>
+            <div class="city-tag">Brooklyn</div>
+            <div class="theme">A reading evening, with one quiet course</div>
+            <div class="date-tag caption">17 January 2026</div>
+            <div><span class="seats-pill caption">12 seats left</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">08</div>
+            <div class="city-tag">Mexico City</div>
+            <div class="theme">A small breakfast, taken slowly</div>
+            <div class="date-tag caption">22 February 2026</div>
+            <div><span class="seats-pill caption">Apply now</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">09</div>
+            <div class="city-tag">Athens</div>
+            <div class="theme">A spring supper, on a roof, with wind</div>
+            <div class="date-tag caption">14 March 2026</div>
+            <div><span class="seats-pill caption">Apply now</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">10</div>
+            <div class="city-tag">Seoul</div>
+            <div class="theme">A small soup of late letters</div>
+            <div class="date-tag caption">06 May 2026</div>
+            <div><span class="seats-pill caption">Apply soon</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">11</div>
+            <div class="city-tag">Paris</div>
+            <div class="theme">An afternoon, mostly cheese and wind</div>
+            <div class="date-tag caption">18 June 2026</div>
+            <div><span class="seats-pill caption">Wait list</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">07 / 08</div>
+    </section>
+
+    <!-- 8. CLOSING / RSVP ─────────────────────────────────── -->
+    <section class="slide s-closing">
+      <div class="frame">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">·</div>
+            <div class="ed-label caption">come and sit with us</div>
+          </div>
+          <h2 class="h">See you<br/>at the table.</h2>
+          <p class="desc-it">Every Long Table evening is by application. We read each one, and we usually answer within a week. The next room opens for Brooklyn on the seventeenth of January.</p>
+          <div class="actions">
+            <span class="pill caption">long-table.co</span>
+            <span class="pill caption">Apply for Brooklyn</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-line">
+        <div class="colf">
+          <span class="ftag caption">Founded</span>
+          By Iris &amp; Theo, 2022, in a borrowed kitchen in Lisbon.
+        </div>
+        <div class="colf">
+          <span class="ftag caption">Set</span>
+          In Bricolage Grotesque &amp; Fraunces, with one rust-red ink.
+        </div>
+        <div class="colf">
+          <span class="ftag caption">Until then</span>
+          Dress for the rain. Bring a hand-written question.
+        </div>
+      </div>
+
+      <div class="pagenum">08 / 08</div>
+    </section>
+
+  </div>
+</div>
+
+<div class="caption nav-hint">← / → · space</div>
+
+<script>
+  // Plain vanilla navigation: arrows, space, home/end, swipe.
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let current = 0;
+  function show(i) {
+    if (i < 0) i = 0;
+    if (i > slides.length - 1) i = slides.length - 1;
+    slides[current].classList.remove('active');
+    slides[i].classList.add('active');
+    current = i;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(current + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp')               { e.preventDefault(); show(current - 1); }
+    else if (e.key === 'Home')                                            { e.preventDefault(); show(0); }
+    else if (e.key === 'End')                                             { e.preventDefault(); show(slides.length - 1); }
+  });
+  let tx = null;
+  document.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (tx == null) return;
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 40) show(current + (dx < 0 ? 1 : -1));
+    tx = null;
+  });
+</script>
+
+</body>
+</html>

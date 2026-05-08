@@ -34,6 +34,18 @@ describe('resolveDaemonCliPath', () => {
 
     expect(resolveDaemonCliPath()).toBe(path.join(packageRoot, 'dist', 'cli.js'));
   });
+
+  it('uses the packaged daemon CLI path override before package resolution', () => {
+    expect(resolveDaemonCliPath({ OD_DAEMON_CLI_PATH: '/app/prebundled/daemon-cli.mjs' })).toBe(
+      '/app/prebundled/daemon-cli.mjs',
+    );
+  });
+
+  it('uses OD_BIN as a fallback override for bundled wrapper invocations', () => {
+    expect(resolveDaemonCliPath({ OD_BIN: '/app/prebundled/daemon-cli.mjs' })).toBe(
+      '/app/prebundled/daemon-cli.mjs',
+    );
+  });
 });
 
 describe('resolveDaemonResourceRoot', () => {

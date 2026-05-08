@@ -1,5 +1,10 @@
 import type { ProjectFile } from './files';
-import type { PreviewCommentPosition } from './comments';
+import type {
+  PreviewCommentMember,
+  PreviewCommentPosition,
+  PreviewCommentSelectionKind,
+} from './comments';
+import type { ResearchOptions } from './research';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -17,6 +22,7 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  research?: ResearchOptions;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {
@@ -71,6 +77,10 @@ export interface ChatCommentAttachment {
   currentText: string;
   pagePosition: PreviewCommentPosition;
   htmlHint: string;
+  selectionKind?: PreviewCommentSelectionKind;
+  memberCount?: number;
+  podMembers?: PreviewCommentMember[];
+  source?: 'saved-comment' | 'board-batch';
 }
 
 export type PersistedAgentEvent =

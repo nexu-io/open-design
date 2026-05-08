@@ -1,12 +1,18 @@
 import type {
   AgentInfo,
+  AgentCliEnvPrefs,
   AgentModelPrefs,
+  AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
   AudioKind,
   ChatAttachment,
   ChatCommentAttachment,
   ChatMessage,
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestRequest,
+  ConnectionTestResponse,
   Conversation,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -22,8 +28,11 @@ import type {
   LiveArtifactSummary,
   MediaAspect,
   ProjectDeploymentsResponse,
+  ProviderTestRequest,
   PersistedAgentEvent,
   Project,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -41,6 +50,14 @@ import type {
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,
+} from '@open-design/contracts';
+
+export type {
+  CloudflarePagesDeploySelection,
+  CloudflarePagesDeploymentInfo,
+  CloudflarePagesZonesResponse,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
@@ -122,6 +139,7 @@ export interface LiveArtifactPreviewRequest {
 export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
+  model?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -137,6 +155,7 @@ export interface ApiProtocolConfig {
 // other one's choice. Missing entries fall back to the agent's first
 // declared model (`'default'` — let the CLI pick).
 export type AgentModelChoice = AgentModelPrefs;
+export type AgentCliEnvConfig = AgentCliEnvPrefs;
 
 export type AppTheme = 'system' | 'light' | 'dark';
 
@@ -213,6 +232,14 @@ export interface NotificationsConfig {
   desktopEnabled: boolean;
 }
 
+export interface OrbitConfig {
+  enabled: boolean;
+  /** Local 24-hour clock time in HH:mm format. */
+  time: string;
+  /** Optional skill id from the examples gallery where scenario === "orbit". */
+  templateSkillId?: string | null;
+}
+
 export interface PetConfig {
   // True once the user has explicitly picked a pet (built-in or custom).
   // Until then, the entry view shows an "adopt" callout to drive discovery.
@@ -244,6 +271,7 @@ export interface AppConfig {
   skillId: string | null;
   designSystemId: string | null;
   theme?: AppTheme;
+  accentColor?: string;
   // True once the user has been through the welcome onboarding modal at
   // least once (saved or skipped). Bootstrap skips the auto-popup when
   // this is set so refreshing the page doesn't re-prompt.
@@ -254,6 +282,8 @@ export interface AppConfig {
   // Pre-existing configs without this field fall through to the agent's
   // declared default.
   agentModels?: Record<string, AgentModelChoice>;
+  // Per-agent non-secret CLI config locations injected into detection and runs.
+  agentCliEnv?: AgentCliEnvConfig;
   // Caps the upstream completion length in API mode. Defaults to 8192 when
   // unset; raise it for providers (e.g. MiMo) that allow longer responses.
   maxTokens?: number;
@@ -265,6 +295,12 @@ export interface AppConfig {
   // configs that pre-date the feature land at `undefined`, which the loader
   // normalizes to a safe default (everything off).
   notifications?: NotificationsConfig;
+  // Daily connector activity digest. When enabled, the daemon runs this once
+  // per day at the configured local time; defaults to 08:00.
+  orbit?: OrbitConfig;
+  // IDs of skills/design-systems the user has explicitly disabled.
+  disabledSkills?: string[];
+  disabledDesignSystems?: string[];
 }
 
 export interface ComposioSettings {
@@ -331,9 +367,14 @@ export interface PromptTemplateDetail extends PromptTemplateSummary {
 
 export type {
   AgentInfo,
+  AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
   AudioKind,
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestRequest,
+  ConnectionTestResponse,
   Conversation,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -359,6 +400,7 @@ export type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  ProviderTestRequest,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
