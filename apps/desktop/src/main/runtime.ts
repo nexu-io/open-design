@@ -1,8 +1,105 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+
+/**
+ * Result of validating a candidate path before exposing it to a
+ * privileged shell operation.
+ */
+export type PathValidationResult =
+  | { ok: true; resolved: string }
+  | { ok: false; reason: string };
+
+/**
+ * Validates that a renderer-supplied string points at an existing
+ * absolute directory. Used as the floor check before consulting the
+ * project-root allowlist below — anything that fails this check
+ * (relative paths, files, apps, non-existent paths) is rejected
+ * outright. Returns the realpath-resolved canonical path on success
+ * so symlink games can't be used to register one path and reach
+ * another.
+ */
+export async function validateExistingDirectory(p: string): Promise<PathValidationResult> {
+  if (typeof p !== "string" || p.length === 0) {
+    return { ok: false, reason: "path must be a non-empty string" };
+  }
+  if (!isAbsolute(p)) {
+    return { ok: false, reason: "path must be absolute" };
+  }
+  let resolvedReal: string;
+  try {
+    resolvedReal = await realpath(p);
+  } catch {
+    return { ok: false, reason: "path does not exist" };
+  }
+  let st;
+  try {
+    st = await stat(resolvedReal);
+  } catch {
+    return { ok: false, reason: "path could not be stat'd" };
+  }
+  if (!st.isDirectory()) {
+    return { ok: false, reason: "path is not a directory" };
+  }
+  return { ok: true, resolved: resolvedReal };
+}
+
+/**
+ * Allowlist gate around `shell.openPath`. The renderer calls
+ * `register(absDir)` once per project mount, passing the daemon-
+ * validated `resolvedDir` for the active project. Subsequent
+ * `tryOpen(p)` calls only succeed when `p` resolves to a path that
+ * was previously registered. Validating against the allowlist
+ * (instead of only checking the path's existence) shrinks the
+ * renderer→main trust boundary that the openPath bridge introduces:
+ * without this, any XSS or compromised renderer dependency could
+ * forward arbitrary local paths into `shell.openPath`.
+ *
+ * Threat-model caveat: an attacker that fully controls the renderer
+ * can also call `register` directly with arbitrary paths. Closing
+ * that gap fully requires a daemon-side round-trip to derive the
+ * canonical `resolvedDir` from the daemon's project registry, which
+ * is deferred here to keep the PR focused. Today's allowlist still
+ * defends against accidental misuse, bugs, and common XSS payloads
+ * that don't know to call `register` first.
+ */
+export interface ProjectRootGate {
+  register(p: string): Promise<boolean>;
+  isApproved(p: string): boolean;
+  size(): number;
+  /** Test-only: empty the in-memory allowlist between tests. */
+  reset(): void;
+}
+
+export function createProjectRootGate(): ProjectRootGate {
+  const approved = new Set<string>();
+  return {
+    async register(p: string): Promise<boolean> {
+      const validated = await validateExistingDirectory(p);
+      if (!validated.ok) return false;
+      approved.add(validated.resolved);
+      return true;
+    },
+    isApproved(p: string): boolean {
+      return approved.has(p);
+    },
+    size(): number {
+      return approved.size;
+    },
+    reset(): void {
+      approved.clear();
+    },
+  };
+}
+
+/**
+ * Singleton used by the live IPC handlers in `createDesktopRuntime`.
+ * Tests use `createProjectRootGate()` directly to avoid sharing state
+ * between cases.
+ */
+const projectRootGate = createProjectRootGate();
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -278,6 +375,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  ipcMain.removeHandler("shell:register-project-root");
   ipcMain.handle("dialog:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
@@ -291,17 +389,34 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return false;
     }
   });
+  // Renderer registers a project working directory that it has
+  // received from the daemon's GET /api/projects/:id (resolvedDir).
+  // Only paths that pass through this registration are eligible for
+  // shell.openPath below.
+  ipcMain.handle("shell:register-project-root", async (_event, p: string) => {
+    return projectRootGate.register(p);
+  });
   // shell.openPath opens an absolute filesystem path in the OS file
   // manager (Finder / Explorer / Files). It resolves to '' on success
   // and to a non-empty error string on failure (per Electron's
   // contract). The web caller uses that empty/non-empty distinction
   // to decide between the success toast and the manual fallback toast.
+  //
+  // Path is gated by:
+  //   1. Shape: non-empty string, absolute path, realpath-resolves,
+  //      points at an existing directory.
+  //   2. Allowlist: must be in the projectRootGate (registered by
+  //      the renderer with a daemon-validated resolvedDir).
+  // Any other input returns a non-empty error string so the renderer
+  // shows the fallback toast naming the path manually.
   ipcMain.handle("shell:open-path", async (_event, p: string) => {
-    if (typeof p !== "string" || p.length === 0) {
-      return "open-path: empty path";
+    const validated = await validateExistingDirectory(p);
+    if (!validated.ok) return `open-path: ${validated.reason}`;
+    if (!projectRootGate.isApproved(validated.resolved)) {
+      return "open-path: path is not a registered project root";
     }
     try {
-      return await shell.openPath(p);
+      return await shell.openPath(validated.resolved);
     } catch (err) {
       return err instanceof Error ? err.message : String(err);
     }

@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('dialog:pick-folder'),
   openPath: (path: string): Promise<string> =>
     ipcRenderer.invoke('shell:open-path', path),
+  registerProjectRoot: (path: string): Promise<boolean> =>
+    ipcRenderer.invoke('shell:register-project-root', path),
 });
