@@ -90,6 +90,27 @@ import {
   reconcileMediaTasksOnBoot,
   updateMediaTask,
 } from './media-tasks.js';
+import {
+  MCP_TEMPLATES,
+  buildAcpMcpServers,
+  buildClaudeMcpJson,
+  isManagedProjectCwd,
+  readMcpConfig,
+  writeMcpConfig,
+} from './mcp-config.js';
+import {
+  beginAuth,
+  exchangeCodeForToken,
+  PendingAuthCache,
+  refreshAccessToken,
+} from './mcp-oauth.js';
+import {
+  clearToken,
+  getToken,
+  isTokenExpired,
+  readAllTokens,
+  setToken,
+} from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
