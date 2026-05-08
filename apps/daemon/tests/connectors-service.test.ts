@@ -663,7 +663,7 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
     const service = new TestConnectorService(definition, statusService);
 
     const detail = await service.getConnector('external_docs');
-    detail.allowedToolNames.push('docs.evil_inject');
+    detail.allowedToolNames!.push('docs.evil_inject');
     expect(definition.allowedToolNames).toEqual(['docs.search']);
 
     const detailAgain = await service.getConnector('external_docs');
@@ -702,7 +702,7 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
     // The badge in apps/web/src/components/EntryView.tsx uses
     // `connector.allowedToolNames?.length ?? connector.tools.length`,
     // so this single number is the one users see in the connector card.
-    expect(detail.allowedToolNames.length).toBe(1);
+    expect(detail.allowedToolNames!.length).toBe(1);
     // Sanity: the wider inventory is still on the wire for the detail
     // drawer to enumerate — we're just no longer using its length for
     // the badge.
@@ -731,7 +731,7 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
 
     const detail = await service.getConnector('external_docs');
     expect(Array.isArray(detail.allowedToolNames)).toBe(true);
-    expect(detail.allowedToolNames.length).toBe(0);
+    expect(detail.allowedToolNames!.length).toBe(0);
   });
 
   it('exposes curatedToolNames on the wire and falls it back to allowedToolNames for non-Composio connectors (#767 review)', async () => {
@@ -772,9 +772,9 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
     const detail = await service.getConnector('external_docs');
 
     // The "N tools" badge surface: catalog size only, no growth.
-    expect(detail.curatedToolNames.length).toBe(1);
+    expect(detail.curatedToolNames!.length).toBe(1);
     // The agent execution allowlist: full grown set.
-    expect(detail.allowedToolNames.length).toBe(51);
+    expect(detail.allowedToolNames!.length).toBe(51);
     // Sanity: the two arrays are intentionally diverging on this
     // shape; that divergence is exactly what the badge stability
     // depends on.
@@ -787,7 +787,7 @@ describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
     const service = new TestConnectorService(definition, statusService);
 
     const detail = await service.getConnector('external_docs');
-    detail.curatedToolNames.push('docs.evil_inject');
+    detail.curatedToolNames!.push('docs.evil_inject');
     expect(definition.allowedToolNames).toEqual(['docs.search']);
 
     const detailAgain = await service.getConnector('external_docs');

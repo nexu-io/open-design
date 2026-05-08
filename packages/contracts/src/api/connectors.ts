@@ -47,8 +47,12 @@ export interface ConnectorDetail {
    * hydration (a GitHub-style provider can add tens of read tools to
    * the catalog baseline of 2), so it is not the right anchor for a
    * stable UI summary count — see `curatedToolNames` for that.
+   *
+   * Optional in the type only to keep test fixtures terse — the daemon
+   * always populates this from `connectorDefinitionToDetail` so wire
+   * payloads are guaranteed to carry it.
    */
-  allowedToolNames: string[];
+  allowedToolNames?: string[];
   /**
    * Hand-curated catalog subset. Stable across hydration: never
    * extended by provider discovery, only the static catalog names.
@@ -57,8 +61,10 @@ export interface ConnectorDetail {
    * doesn't lurch when an API key flips on (issue #748). The full
    * provider inventory is still discoverable in the drawer's tools
    * section, which renders `tools` directly.
+   *
+   * Optional in the type only for fixture brevity, see `allowedToolNames`.
    */
-  curatedToolNames: string[];
+  curatedToolNames?: string[];
   toolCount?: number;
   toolsNextCursor?: string;
   toolsHasMore?: boolean;

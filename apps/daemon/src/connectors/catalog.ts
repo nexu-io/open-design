@@ -51,8 +51,11 @@ export interface ConnectorDetail {
    * `read + auto-approval` — so the count can grow from the catalog
    * baseline by tens of read tools after a Composio API key is
    * configured (issue #748).
+   *
+   * Optional in the type only for fixture brevity; daemon-built
+   * `ConnectorDetail` payloads always carry it.
    */
-  allowedToolNames: string[];
+  allowedToolNames?: string[];
   /**
    * The hand-curated catalog subset. Stable across hydration: never
    * extended by provider discovery, only ever the static catalog
@@ -61,8 +64,11 @@ export interface ConnectorDetail {
    * count doesn't lurch when an API key flips on (issue #748). The
    * full provider inventory is still discoverable in the drawer's
    * tools section, which renders `tools` directly.
+   *
+   * Optional in the type only for fixture brevity; daemon-built
+   * `ConnectorDetail` payloads always carry it.
    */
-  curatedToolNames: string[];
+  curatedToolNames?: string[];
   toolCount?: number;
   toolsNextCursor?: string;
   toolsHasMore?: boolean;

@@ -153,6 +153,8 @@ describe('connector display sorting', () => {
         status: 'connected',
         description: 'Sync issues from GitHub repositories.',
         tools: [],
+        allowedToolNames: [],
+        curatedToolNames: [],
       },
       {
         id: 'github-enterprise',
@@ -161,6 +163,8 @@ describe('connector display sorting', () => {
         category: 'Code',
         status: 'available',
         tools: [],
+        allowedToolNames: [],
+        curatedToolNames: [],
       },
       {
         id: 'github',
@@ -169,6 +173,8 @@ describe('connector display sorting', () => {
         category: 'Code',
         status: 'available',
         tools: [],
+        allowedToolNames: [],
+        curatedToolNames: [],
       },
       {
         id: 'slack',
@@ -184,6 +190,8 @@ describe('connector display sorting', () => {
             refreshEligible: false,
           },
         ],
+        allowedToolNames: [],
+        curatedToolNames: [],
       },
     ], 'github');
 
@@ -209,6 +217,8 @@ describe('connector authorization pending state', () => {
         category: 'Personal',
         status: 'available',
         tools: [],
+        allowedToolNames: [],
+        curatedToolNames: [],
       },
       auth: {
         kind: 'redirect_required',
@@ -258,6 +268,8 @@ describe('connector authorization pending state', () => {
         category: 'Personal',
         status: 'connected',
         tools: [],
+        allowedToolNames: [],
+        curatedToolNames: [],
       },
       auth: { kind: 'connected' },
     }, nowMs);
