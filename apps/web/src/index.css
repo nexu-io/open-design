@@ -7462,6 +7462,18 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.df-rename-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  padding: 3px 6px;
+}
 .df-row-sub {
   font-size: 11px;
   color: var(--text-muted);

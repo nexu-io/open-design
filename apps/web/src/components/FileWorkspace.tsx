@@ -9,6 +9,7 @@ import { useT } from '../i18n';
 import {
   deleteProjectFile,
   fetchProjectFileText,
+  renameProjectFile,
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
@@ -404,6 +405,28 @@ export function FileWorkspace({
     }
   }
 
+  async function handleRename(oldName: string, nextName: string): Promise<ProjectFile | null> {
+    const result = await renameProjectFile(projectId, oldName, nextName);
+    const renamed = result.file;
+    await onRefreshFiles();
+
+    const nextTabs = persistedTabs.map((name) => (name === oldName ? renamed.name : name));
+    const nextActive = tabsState.active === oldName ? renamed.name : tabsState.active;
+    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+    if (activeTab === oldName) setActiveTab(renamed.name);
+
+    setSketches((curr) => {
+      const entry = curr[oldName];
+      if (!entry) return curr;
+      const next = { ...curr };
+      delete next[oldName];
+      next[renamed.name] = entry;
+      return next;
+    });
+
+    return renamed;
+  }
+
   function startNewSketch() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const name = `sketch-${stamp}.sketch.json`;
@@ -650,6 +673,7 @@ export function FileWorkspace({
             onRefreshFiles={onRefreshFiles}
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
+            onRenameFile={handleRename}
             onDeleteFile={(name) => void handleDelete(name)}
             onDeleteFiles={handleDeleteMany}
             onUpload={() => fileInputRef.current?.click()}

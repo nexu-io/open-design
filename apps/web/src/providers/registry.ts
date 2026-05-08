@@ -32,6 +32,7 @@ import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
   ProjectFile,
+  RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,
@@ -1194,6 +1195,23 @@ export async function deleteProjectFile(
   } catch {
     return false;
   }
+}
+
+export async function renameProjectFile(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<RenameProjectFileResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!resp.ok) {
+    const errorBody = await readApiErrorBody(resp);
+    throw new Error(errorBody.message);
+  }
+  return (await resp.json()) as RenameProjectFileResponse;
 }
 
 export async function openFolderDialog(): Promise<string | null> {

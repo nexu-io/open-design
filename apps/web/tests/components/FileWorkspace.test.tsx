@@ -21,6 +21,9 @@ afterEach(() => {
   }
   host?.remove();
   host = null;
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 function workspaceFile(name: string): ProjectFile {
@@ -173,6 +176,74 @@ describe('FileWorkspace upload input', () => {
     );
 
     expect(markup).toContain('Show chat');
+  });
+});
+
+describe('FileWorkspace design file rename', () => {
+  it('renames from the Design Files row menu and replaces persisted tabs', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/projects/project-1/files/rename') && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            file: workspaceFile('resume-notes.txt'),
+            oldName: 'paste-1.txt',
+            newName: 'resume-notes.txt',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onTabsStateChange = vi.fn();
+    const onRefreshFiles = vi.fn();
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="project-1"
+        files={[workspaceFile('paste-1.txt'), workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: ['paste-1.txt', 'index.html'], active: 'paste-1.txt' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
+    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
+    if (!designFilesTab || !menuButton) throw new Error('Could not find design file controls');
+
+    act(() => designFilesTab.click());
+    act(() => menuButton.click());
+    const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'Rename');
+    if (!renameButton) throw new Error('Could not find rename command');
+    act(() => renameButton.click());
+
+    const input = container.querySelector<HTMLInputElement>('.df-rename-input');
+    if (!input) throw new Error('Could not find rename input');
+    act(() => {
+      input.value = 'resume-notes.txt';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/rename',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ from: 'paste-1.txt', to: 'resume-notes.txt' }),
+      }),
+    );
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['resume-notes.txt', 'index.html'],
+      active: 'resume-notes.txt',
+    });
+    expect(onRefreshFiles).toHaveBeenCalledTimes(1);
   });
 });
 
