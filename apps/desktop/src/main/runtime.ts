@@ -265,7 +265,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
-    return shell.openExternal(url);
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
