@@ -75,6 +75,15 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
+import {
+  deleteMediaTask,
+  getMediaTask,
+  insertMediaTask,
+  listMediaTasksByProject,
+  listRecentMediaTasks,
+  reconcileMediaTasksOnBoot,
+  updateMediaTask,
+} from './media-tasks.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
@@ -1426,8 +1435,34 @@ function sendMulterError(res, err) {
 
 const mediaTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
+const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
 
-function createMediaTask(taskId, projectId, info = {}) {
+function hydrateMediaTask(row) {
+  const task = {
+    id: row.id,
+    projectId: row.projectId,
+    status: row.status,
+    surface: row.surface,
+    model: row.model,
+    progress: Array.isArray(row.progress) ? row.progress.slice() : [],
+    file: row.file ?? null,
+    error: row.error ?? null,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    waiters: new Set(),
+  };
+  mediaTasks.set(task.id, task);
+  return task;
+}
+
+function getLiveMediaTask(db, taskId) {
+  const cached = mediaTasks.get(taskId);
+  if (cached) return cached;
+  const row = getMediaTask(db, taskId);
+  return row ? hydrateMediaTask(row) : null;
+}
+
+function createMediaTask(db, taskId, projectId, info = {}) {
   const task = {
     id: taskId,
     projectId,
@@ -1442,15 +1477,41 @@ function createMediaTask(taskId, projectId, info = {}) {
     waiters: new Set(),
   };
   mediaTasks.set(taskId, task);
+  insertMediaTask(db, {
+    id: taskId,
+    projectId,
+    status: task.status,
+    surface: task.surface,
+    model: task.model,
+    progress: task.progress,
+    file: task.file,
+    error: task.error,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+  });
   return task;
 }
 
-function appendTaskProgress(task, line) {
-  task.progress.push(line);
-  notifyTaskWaiters(task);
+function persistMediaTask(db, task) {
+  updateMediaTask(db, task.id, {
+    status: task.status,
+    surface: task.surface,
+    model: task.model,
+    progress: task.progress,
+    file: task.file,
+    error: task.error,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+  });
 }
 
-function notifyTaskWaiters(task) {
+function appendTaskProgress(db, task, line) {
+  task.progress.push(line);
+  persistMediaTask(db, task);
+  notifyTaskWaiters(db, task);
+}
+
+function notifyTaskWaiters(db, task) {
   const wakers = Array.from(task.waiters);
   for (const w of wakers) {
     try {
@@ -1460,14 +1521,33 @@ function notifyTaskWaiters(task) {
     }
   }
   if (
-    (task.status === 'done' || task.status === 'failed') &&
+    MEDIA_TERMINAL_STATUSES.has(task.status) &&
     !task._gcScheduled
   ) {
     task._gcScheduled = true;
     setTimeout(() => {
-      if (task.waiters.size === 0) mediaTasks.delete(task.id);
+      if (task.waiters.size === 0) {
+        mediaTasks.delete(task.id);
+        deleteMediaTask(db, task.id);
+      }
     }, TASK_TTL_AFTER_DONE_MS).unref?.();
   }
+}
+
+function mediaTaskSnapshot(task, since = 0) {
+  const snapshot = {
+    taskId: task.id,
+    status: task.status,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+    progress: task.progress.slice(since),
+    nextSince: task.progress.length,
+  };
+  if (task.status === 'done') snapshot.file = task.file;
+  if (task.status === 'failed' || task.status === 'interrupted') {
+    snapshot.error = task.error;
+  }
+  return snapshot;
 }
 
 export function createSseResponse(
@@ -1598,6 +1678,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const reconciledStaleRuns = reconcileStaleRuns(db, { staleAfterMs: critiqueCfg.totalTimeoutMs });
   if (reconciledStaleRuns > 0) {
     console.warn(`[critique] reconcileStaleRuns flipped ${reconciledStaleRuns} stale running row(s) to interrupted`);
+  }
+  const mediaReconcile = reconcileMediaTasksOnBoot(db, {
+    terminalTtlMs: TASK_TTL_AFTER_DONE_MS,
+  });
+  if (mediaReconcile.interrupted > 0 || mediaReconcile.deleted > 0) {
+    console.warn(
+      `[media] reconcileMediaTasksOnBoot interrupted ${mediaReconcile.interrupted} task(s), ` +
+        `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
+    );
+  }
+  mediaTasks.clear();
+  for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
+    hydrateMediaTask(row);
   }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
@@ -3764,7 +3857,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!project) return res.status(404).json({ error: 'project not found' });
 
       const taskId = randomUUID();
-      const task = createMediaTask(taskId, projectId, {
+      const task = createMediaTask(db, taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
       });
@@ -3776,6 +3869,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
 
       task.status = 'running';
+      persistMediaTask(db, task);
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -3796,13 +3890,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         language: typeof req.body?.language === 'string' ? req.body.language : undefined,
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
-        onProgress: (line) => appendTaskProgress(task, line),
+        onProgress: (line) => appendTaskProgress(db, task, line),
       })
         .then((meta) => {
           task.status = 'done';
           task.file = meta;
           task.endedAt = Date.now();
-          notifyTaskWaiters(task);
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
           console.error(
             `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
               `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
@@ -3816,7 +3911,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             code: err?.code,
           };
           task.endedAt = Date.now();
-          notifyTaskWaiters(task);
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
           console.error(
             `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
               `message=${(task.error.message || '').slice(0, 240)}`,
@@ -3878,7 +3974,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
-    const task = mediaTasks.get(taskId);
+    const task = getLiveMediaTask(db, taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
@@ -3889,22 +3985,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const respond = () => {
       if (res.writableEnded) return;
-      const snapshot = {
-        taskId,
-        status: task.status,
-        startedAt: task.startedAt,
-        endedAt: task.endedAt,
-        progress: task.progress.slice(since),
-        nextSince: task.progress.length,
-      };
-      if (task.status === 'done') snapshot.file = task.file;
-      if (task.status === 'failed') snapshot.error = task.error;
-      res.json(snapshot);
+      res.json(mediaTaskSnapshot(task, since));
     };
 
     if (
-      task.status === 'done' ||
-      task.status === 'failed' ||
+      MEDIA_TERMINAL_STATUSES.has(task.status) ||
       task.progress.length > since
     ) {
       return respond();
@@ -3930,25 +4015,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const projectId = req.params.id;
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = [];
-    for (const t of mediaTasks.values()) {
-      if (t.projectId !== projectId) continue;
-      const isTerminal = t.status === 'done' || t.status === 'failed';
-      if (isTerminal && !includeDone) continue;
-      tasks.push({
-        taskId: t.id,
-        status: t.status,
-        startedAt: t.startedAt,
-        endedAt: t.endedAt,
-        elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
-        surface: t.surface,
-        model: t.model,
-        progress: t.progress.slice(-3),
-        progressCount: t.progress.length,
-        ...(t.status === 'done' ? { file: t.file } : {}),
-        ...(t.status === 'failed' ? { error: t.error } : {}),
-      });
-    }
+    const tasks = listMediaTasksByProject(db, projectId, {
+      includeTerminal: includeDone,
+    }).map((t) => ({
+      taskId: t.id,
+      status: t.status,
+      startedAt: t.startedAt,
+      endedAt: t.endedAt,
+      elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
+      surface: t.surface,
+      model: t.model,
+      progress: t.progress.slice(-3),
+      progressCount: t.progress.length,
+      ...(t.status === 'done' ? { file: t.file } : {}),
+      ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
+    }));
     tasks.sort((a, b) => b.startedAt - a.startedAt);
     res.json({ tasks });
   });
