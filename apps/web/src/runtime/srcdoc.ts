@@ -166,20 +166,28 @@ function injectSandboxShim(doc: string): string {
     var isAnchor = href.startsWith('#') || href === '';
     if (isAnchor) {
       e.preventDefault();
-      var targetId = href.slice(1);
-      var target = targetId ? document.getElementById(targetId) : null;
-      if (target) {
-        target.scrollIntoView();
-        location.hash === href && history.replaceState(null, '', ' ');
-        location.hash = href;
+      if (href === '' || href === '#') {
+        window.scrollTo({ top: 0 });
+        history.replaceState(null, '', ' ');
+      } else {
+        var targetId = href.slice(1);
+        var target = targetId ? document.getElementById(targetId) : null;
+        if (target) {
+          target.scrollIntoView();
+          location.hash === href && history.replaceState(null, '', ' ');
+          location.hash = href;
+        }
       }
     } else if (link.getAttribute('target') === '_blank') {
       e.preventDefault();
       let safe = false;
       try {
         var url = new URL(href, location.href);
-        safe = url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:';
-      } catch(_) {}
+        safe =
+          url.protocol === 'http:' ||
+          url.protocol === 'https:' ||
+          url.protocol === 'mailto:';
+      } catch (_) {}
       safe && window.open(href, '_blank', 'noopener,noreferrer');
     }
   });
