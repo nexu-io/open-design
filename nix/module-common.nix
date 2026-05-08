@@ -41,8 +41,13 @@ in {
     default = 7457;
     description = ''
       TCP port the daemon API binds to. Passed to `od --port`.
-      The frontend (whether served via `webFrontend` or your own server)
-      must point its `OD_DAEMON_URL` at this port.
+
+      The static SPA issues relative `/api/*`, `/artifacts/*`, and
+      `/frames/*` requests, so whatever fronts the bundle (the
+      built-in `webFrontend` caddy or your own nginx/Caddy) must
+      reverse-proxy those three path prefixes to `127.0.0.1:<this
+      port>` and serve same-origin with the SPA. There is no runtime
+      `OD_DAEMON_URL` injection — see section (4) of `nix/README.md`.
     '';
   };
 
@@ -127,17 +132,22 @@ in {
   webFrontend = {
     # The Open Design web frontend is a static SPA built by
     # `apps/web` → `apps/web/out/`. The daemon is a separate Express
-    # process that serves the JSON API at `/api/*`. The SPA reads
-    # `OD_DAEMON_URL` to know where to send requests.
+    # process that serves the JSON API at `/api/*`. The SPA is built
+    # with `OD_DAEMON_URL=""`, so the bundled JS issues relative
+    # `/api/*`, `/artifacts/*`, and `/frames/*` requests and expects
+    # the static-server in front of it to reverse-proxy those to the
+    # daemon — there is no runtime daemon-URL injection.
     #
     # Enabling `webFrontend` runs a tiny static file server (caddy) that
-    # hosts the SPA on a sibling port. This is for users who just want
+    # hosts the SPA on a sibling port and proxies the three path
+    # prefixes back to the daemon. This is for users who just want
     # `nix run`-style convenience without configuring nginx/caddy by
     # hand.
     #
     # If you already serve the static export through your own reverse
-    # proxy, leave `webFrontend.enable = false` and point your server
-    # at `${cfg.webFrontend.package}` instead.
+    # proxy, leave `webFrontend.enable = false`, point your server's
+    # document root at `${cfg.webFrontend.package}`, and replicate the
+    # reverse-proxy rules (with SSE-safe streaming on `/api/*`).
     enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -154,9 +164,11 @@ in {
       # tools-dev workflow on the same machine.
       default = 5174;
       description = ''
-        TCP port the static file server binds to. The bundled SPA will
-        call the daemon at `OD_DAEMON_URL` (which the service unit sets
-        to `http://localhost:''${toString cfg.port}`).
+        TCP port the static file server binds to. The bundled caddy
+        serves the SPA on this port and reverse-proxies the SPA's
+        relative API requests (`/api/*`, `/artifacts/*`, `/frames/*`)
+        to the daemon at `127.0.0.1:''${toString cfg.port}`, so the
+        browser sees a single same-origin endpoint.
       '';
     };
 
