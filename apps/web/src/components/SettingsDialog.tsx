@@ -147,6 +147,10 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2.1',
     'MiniMax-M2',
     'mimo-v2.5-pro',
+    'gpt-oss:20b-cloud',
+    'gpt-oss:120b-cloud',
+    'deepseek-v3.1:671b-cloud',
+    'qwen3-coder:480b-cloud',
   ],
   azure: [
     'gpt-4o',
