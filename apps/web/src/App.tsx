@@ -127,10 +127,21 @@ export function App() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
-  // Goes false once the bootstrap effect has finished its initial round of
-  // fetches. The entry view uses this to show shimmer / skeleton states
-  // instead of an "empty" page that flickers before data lands.
-  const [bootstrapping, setBootstrapping] = useState(true);
+  // Per-resource loading flags. Each goes false the moment its own fetch
+  // resolves so each entry-view tab can render as its data lands instead of
+  // every tab waiting on the slowest endpoint (typically `/api/agents`,
+  // which probes CLI versions and can take seconds on cold start). The entry
+  // view picks the right flag for whichever tab the user is currently on.
+  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [dsLoading, setDsLoading] = useState(true);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
+  // Goes true once the daemon-persisted config (agentId/designSystemId/etc.)
+  // has merged into local state. Auto-selection effects below wait on this
+  // so they don't race ahead of the daemon-stored choice and overwrite it
+  // with a freshly picked first-available agent.
+  const [daemonConfigLoaded, setDaemonConfigLoaded] = useState(false);
   // Narrower flag dedicated to the Composio API key hydration. The key is
   // persisted by the daemon (and only reflected back via apiKeyConfigured
   // + apiKeyTail), so after a dev-server restart there is a window where
@@ -173,99 +184,157 @@ export function App() {
     });
   }, [activeProjectId, activeFileName]);
 
-  // Bootstrap — detect daemon, load pickers, seed sensible defaults.
+  // Bootstrap — detect daemon, then fan out independent fetches so each
+  // entry-view tab can render the moment its own data lands. Earlier this
+  // was one Promise.all behind a global "Loading workspace…" placeholder,
+  // which made the slowest endpoint (typically `/api/agents` on cold start)
+  // gate every tab including the ones that don't need agents at all.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const alive = await daemonIsLive();
       if (cancelled) return;
       setDaemonLive(alive);
-      const [
-        agentList,
-        skillList,
-        dsList,
-        projectList,
-        templateList,
-        promptTemplateList,
-        versionInfo,
-        daemonConfig,
-        daemonComposioConfig,
-      ] = await Promise.all([
-        alive ? fetchAgents() : Promise.resolve([] as AgentInfo[]),
-        alive ? fetchSkills() : Promise.resolve([] as SkillSummary[]),
-        alive
-          ? fetchDesignSystems()
-          : Promise.resolve([] as DesignSystemSummary[]),
-        alive ? listProjects() : Promise.resolve([] as Project[]),
-        alive ? listTemplates() : Promise.resolve([] as ProjectTemplate[]),
-        alive
-          ? fetchPromptTemplates()
-          : Promise.resolve([] as PromptTemplateSummary[]),
-        alive ? fetchAppVersionInfo() : Promise.resolve(null),
-        alive ? fetchDaemonConfig() : Promise.resolve(null),
-        alive ? fetchComposioConfigFromDaemon() : Promise.resolve(null),
-      ]);
-      if (cancelled) return;
-      setAgents(agentList);
-      setSkills(skillList);
-      setDesignSystems(dsList);
-      setProjects(projectList);
-      setTemplates(templateList);
-      setPromptTemplates(promptTemplateList);
-      setAppVersionInfo(versionInfo);
 
-      setConfig((prev) => {
-        // Merge daemon-persisted config — daemon values win for the fields
-        // it tracks so that the choice survives origin/storage resets.
-        const next = mergeDaemonConfig(prev, daemonConfig);
+      if (!alive) {
+        // No daemon — clear every loading flag so empty states render
+        // instead of the entry view sitting on indefinite spinners.
+        setAgentsLoading(false);
+        setSkillsLoading(false);
+        setDsLoading(false);
+        setProjectsLoading(false);
+        setPromptTemplatesLoading(false);
+        setDaemonConfigLoaded(true);
+        // Composio hydration also depends on the daemon. With no daemon
+        // we just keep whatever localStorage already held; drop the
+        // skeleton so the Settings → Connectors input reflects state.
+        setComposioConfigLoading(false);
+        return;
+      }
 
-        if (alive) {
+      void fetchAgents().then((list) => {
+        if (cancelled) return;
+        setAgents(list);
+        setAgentsLoading(false);
+      });
+
+      void fetchSkills().then((list) => {
+        if (cancelled) return;
+        setSkills(list);
+        setSkillsLoading(false);
+      });
+
+      void fetchDesignSystems().then((list) => {
+        if (cancelled) return;
+        setDesignSystems(list);
+        setDsLoading(false);
+      });
+
+      void listProjects().then((list) => {
+        if (cancelled) return;
+        setProjects(list);
+        setProjectsLoading(false);
+      });
+
+      void listTemplates().then((list) => {
+        if (cancelled) return;
+        setTemplates(list);
+      });
+
+      void fetchPromptTemplates().then((list) => {
+        if (cancelled) return;
+        setPromptTemplates(list);
+        setPromptTemplatesLoading(false);
+      });
+
+      void fetchAppVersionInfo().then((info) => {
+        if (cancelled) return;
+        setAppVersionInfo(info);
+      });
+
+      // Daemon-persisted config + composio config land together so the
+      // welcome-modal decision and the daemon-side composio key both apply
+      // in one merge, avoiding a flash where local-only state is shown
+      // before daemon overrides it.
+      void Promise.all([
+        fetchDaemonConfig(),
+        fetchComposioConfigFromDaemon(),
+      ]).then(([daemonConfig, daemonComposioConfig]) => {
+        if (cancelled) return;
+        setConfig((prev) => {
+          const next = mergeDaemonConfig(prev, daemonConfig);
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
           if (!hasLocalComposioKey && daemonComposioConfig) {
             next.composio = daemonComposioConfig;
           }
-          if (!next.agentId) {
-            const firstAvailable = agentList.find((a) => a.available);
-            if (firstAvailable) next.agentId = firstAvailable.id;
+          saveConfig(next);
+          if (hasAnyConfiguredProvider(next.mediaProviders)) {
+            void syncMediaProvidersToDaemon(next.mediaProviders);
           }
-          if (!next.designSystemId && dsList.length > 0) {
-            next.designSystemId =
-              dsList.find((d) => d.id === 'default')?.id ?? dsList[0]!.id;
-          }
-        }
-        saveConfig(next);
-        if (alive && hasAnyConfiguredProvider(next.mediaProviders)) {
-          void syncMediaProvidersToDaemon(next.mediaProviders);
-        }
-        // Migrate localStorage prefs to daemon on first boot with the new
-        // endpoint. If daemon already had values the merge above used them;
-        // writing back is idempotent and ensures both sides stay in sync.
-        if (alive) {
+          // Migrate localStorage prefs to daemon on first boot with the new
+          // endpoint. If daemon already had values the merge above used
+          // them; writing back is idempotent and keeps both sides in sync.
           void syncConfigToDaemon(next);
           void syncComposioConfigToDaemon(next.composio);
-        }
 
-        // Pop the onboarding modal only on the first run. Once the user has
-        // saved or skipped past it once, we trust their stored config and
-        // let them re-open Settings explicitly via the env pill.
-        if (!next.onboardingCompleted) {
-          setSettingsWelcome(true);
-          setSettingsOpen(true);
-        }
-        return next;
+          // Pop the onboarding modal only on the first run. Once the user
+          // has saved or skipped past it once, we trust their stored config
+          // and let them re-open Settings explicitly via the env pill.
+          if (!next.onboardingCompleted) {
+            setSettingsWelcome(true);
+            setSettingsOpen(true);
+          }
+          return next;
+        });
+        setDaemonConfigLoaded(true);
+        // Composio key hydration is part of this same daemon-config
+        // fetch — by the time we land here the daemon has either
+        // returned the saved-key shape (apiKeyConfigured + tail) or
+        // it errored and we kept whatever localStorage held. Either
+        // way it is safe to drop the skeleton.
+        setComposioConfigLoading(false);
       });
-      setBootstrapping(false);
-      // Composio hydration is part of the same Promise.all above — by the
-      // time we land here either the daemon returned the saved-key shape
-      // (apiKeyConfigured + tail) or the daemon was offline and we kept
-      // whatever localStorage held. Either way it is safe to drop the
-      // skeleton: the input now reflects the source of truth.
-      setComposioConfigLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Auto-pick the first available agent once both the daemon-stored config
+  // and the agents listing have landed. Splitting this out of bootstrap
+  // avoids racing the local-config initial value against a slow agents
+  // probe — by the time this runs, daemonConfig has already overlaid the
+  // user's previous choice, so we only fill an empty slot.
+  useEffect(() => {
+    if (!daemonConfigLoaded || agentsLoading) return;
+    if (config.agentId) return;
+    const firstAvailable = agents.find((a) => a.available);
+    if (!firstAvailable) return;
+    setConfig((prev) => {
+      if (prev.agentId) return prev;
+      const next: AppConfig = { ...prev, agentId: firstAvailable.id };
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      return next;
+    });
+  }, [daemonConfigLoaded, agentsLoading, agents, config.agentId]);
+
+  // Auto-pick the default design system the same way — only after daemon
+  // config has merged so we never overwrite a daemon-stored selection.
+  useEffect(() => {
+    if (!daemonConfigLoaded || dsLoading) return;
+    if (config.designSystemId) return;
+    if (designSystems.length === 0) return;
+    const id =
+      designSystems.find((d) => d.id === 'default')?.id ?? designSystems[0]!.id;
+    setConfig((prev) => {
+      if (prev.designSystemId) return prev;
+      const next: AppConfig = { ...prev, designSystemId: id };
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      return next;
+    });
+  }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId]);
 
   // One-shot self-healing migration for pets adopted before the
   // overlay learned atlas-row switching. If the stored pet is a
@@ -658,7 +727,10 @@ export function App() {
           defaultDesignSystemId={config.designSystemId}
           config={config}
           agents={agents}
-          loading={bootstrapping}
+          skillsLoading={skillsLoading}
+          designSystemsLoading={dsLoading}
+          projectsLoading={projectsLoading}
+          promptTemplatesLoading={promptTemplatesLoading}
           onCreateProject={handleCreateProject}
           onImportClaudeDesign={handleImportClaudeDesign}
           onImportFolder={handleImportFolder}

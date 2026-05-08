@@ -401,6 +401,8 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'html-ppt-zhangzara-stencil-tablet',
   'html-ppt-zhangzara-studio',
   'html-ppt-zhangzara-vellum',
+  // IB pitch-book skill (#888): English-only skill copy for now.
+  'ib-pitch-book',
   'last30days',
   'live-dashboard',
   'orbit-general',
@@ -418,6 +420,7 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'github-dashboard',
 ] as const;
 
 const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [

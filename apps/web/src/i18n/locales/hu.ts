@@ -407,6 +407,7 @@ export const hu: Dict = {
   'examples.modeDeck': 'Diák',
   'examples.modeDocument': 'Dokumentumok és sablonok',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'Élő',
   'examples.scenarioGeneral': 'Általános',
   'examples.scenarioEngineering': 'Mérnöki',
   'examples.scenarioProduct': 'Termék',

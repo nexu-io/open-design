@@ -58,26 +58,45 @@ export async function listSkills(skillsRoot) {
       const hasAttachments = await dirHasAttachments(dir);
       const mode = data.od?.mode || inferMode(body, data.description);
       const surface = normalizeSurface(data.od?.surface, mode);
+      const platform = normalizePlatform(
+        data.od?.platform,
+        mode,
+        body,
+        data.description
+      );
+      const scenario = normalizeScenario(
+        data.od?.scenario,
+        body,
+        data.description
+      );
+      const designSystemRequired = data.od?.design_system?.requires ?? true;
+      const upstream =
+        typeof data.od?.upstream === "string" ? data.od.upstream : null;
+      const previewType = data.od?.preview?.type || "html";
+      const parentId = data.name || entry.name;
+      const parentBody = hasAttachments ? withSkillRootPreamble(body, dir) : body;
+      // Pre-compute derived examples so the parent entry can advertise
+      // `aggregatesExamples` in the same push. The frontend uses that
+      // flag to hide the parent card from the gallery (its preview would
+      // duplicate one of the derived cards), while the daemon keeps the
+      // parent in the listing so `findSkillById` still resolves it for
+      // system-prompt composition and id alias lookups.
+      const derivedExamples = await collectDerivedExamples(dir);
+      const aggregatesExamples = derivedExamples.length > 0;
       out.push({
-        id: data.name || entry.name,
-        name: data.name || entry.name,
+        id: parentId,
+        name: parentId,
         description: data.description || "",
         triggers: Array.isArray(data.triggers) ? data.triggers : [],
         mode,
         surface,
         craftRequires: normalizeCraftRequires(data.od?.craft?.requires),
-        platform: normalizePlatform(
-          data.od?.platform,
-          mode,
-          body,
-          data.description
-        ),
-        scenario: normalizeScenario(data.od?.scenario, body, data.description),
-        previewType: data.od?.preview?.type || "html",
-        designSystemRequired: data.od?.design_system?.requires ?? true,
+        platform,
+        scenario,
+        previewType,
+        designSystemRequired,
         defaultFor: normalizeDefaultFor(data.od?.default_for),
-        upstream:
-          typeof data.od?.upstream === "string" ? data.od.upstream : null,
+        upstream,
         featured: normalizeFeatured(data.od?.featured),
         // Optional metadata hints used by 'Use this prompt' fast-create so
         // the resulting project mirrors the shipped example.html. Each hint
@@ -87,14 +106,135 @@ export async function listSkills(skillsRoot) {
         speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
         animations: normalizeBoolHint(data.od?.animations),
         examplePrompt: derivePrompt(data),
-        body: hasAttachments ? withSkillRootPreamble(body, dir) : body,
+        aggregatesExamples,
+        body: parentBody,
         dir,
       });
+
+      // Surface every example sitting next to a SKILL.md as its own card so
+      // a single skill (e.g. live-artifact) can ship a small gallery of
+      // hand-crafted samples without needing one SKILL.md per sample. Each
+      // derived card inherits the parent's mode/platform/surface/scenario
+      // so existing TYPE/SURFACE filters keep working; the synthetic id
+      // `<parent>:<child>` lets `/api/skills/:id/example` resolve straight
+      // to the matching HTML on disk. We deliberately do not inherit
+      // `featured` so derived cards never crowd the magazine row.
+      for (const example of derivedExamples) {
+        out.push({
+          id: `${parentId}:${example.key}`,
+          name: humanizeExampleName(example.key),
+          description: data.description || "",
+          triggers: Array.isArray(data.triggers) ? data.triggers : [],
+          mode,
+          surface,
+          craftRequires: [],
+          platform,
+          scenario,
+          previewType,
+          designSystemRequired,
+          defaultFor: [],
+          upstream,
+          featured: null,
+          fidelity: normalizeFidelity(data.od?.fidelity),
+          speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
+          animations: normalizeBoolHint(data.od?.animations),
+          examplePrompt: derivePrompt(data),
+          aggregatesExamples: false,
+          // Inherit the parent's full SKILL.md body so 'Use this prompt'
+          // on a derived card seeds the agent with the same workflow the
+          // parent describes. Without this, picking a derived card would
+          // compose an empty system prompt and the agent would have no
+          // skill instructions.
+          body: parentBody,
+          dir,
+        });
+      }
     } catch {
       // Skip unreadable entries — this is discovery, not validation.
     }
   }
   return out;
+}
+
+// Discover example artifacts that live alongside SKILL.md under
+// `<dir>/examples/`. Only the single-file layout is surfaced:
+//
+//   `examples/<name>.html` — pre-baked, self-contained sample.
+//
+// We deliberately do not surface the subfolder layout (e.g. live-artifact's
+// `examples/<name>/template.html` + `data.json`) because those templates
+// still hold `{{data.x}}` placeholders that only the daemon-side renderer
+// fills in. Showing the raw template would render visible placeholder
+// braces in the gallery — worse than not surfacing the example at all.
+// To ship a subfolder-style example, place the baked output beside the
+// folder as `examples/<name>.html` (the canonical render) and keep the
+// subfolder around as agent-readable source.
+async function collectDerivedExamples(dir) {
+  const examplesDir = path.join(dir, "examples");
+  let entries = [];
+  try {
+    entries = await readdir(examplesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.toLowerCase().endsWith(".html")) continue;
+    const key = entry.name.replace(/\.html$/i, "");
+    if (!isSafeExampleKey(key)) continue;
+    out.push({ key });
+  }
+  // Stable order so the gallery renders the same sequence on every reload.
+  out.sort((a, b) => a.key.localeCompare(b.key));
+  return out;
+}
+
+// Reject keys that could escape the examples folder or break the
+// `<parent>:<child>` id format. Letters/digits/dash/dot/underscore only,
+// and never the dotfile path-traversal patterns.
+function isSafeExampleKey(key) {
+  if (!key || key.startsWith(".")) return false;
+  if (key.includes(":")) return false;
+  return /^[A-Za-z0-9._-]+$/.test(key);
+}
+
+// Turn a basename like `stock-portfolio-live` into a title-cased label
+// (`Stock Portfolio Live`) so the gallery card has a readable heading
+// without forcing every example to ship its own frontmatter.
+function humanizeExampleName(key) {
+  return key
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) =>
+      word.length === 0
+        ? word
+        : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    )
+    .join(" ");
+}
+
+// Used by `/api/skills/:id/example` to resolve a derived id back to its
+// on-disk file. Returns null when the key is unsafe; the route checks
+// `fs.existsSync` against the returned path before reading.
+export function resolveDerivedExamplePath(parentDir, childKey) {
+  if (!isSafeExampleKey(childKey)) return null;
+  return path.join(parentDir, "examples", `${childKey}.html`);
+}
+
+// Split a `<parent>:<child>` synthetic id into its two halves. Returns
+// null for non-derived ids so the caller can fall through to the regular
+// listing-based lookup.
+export function splitDerivedSkillId(id) {
+  if (typeof id !== "string") return null;
+  const idx = id.indexOf(":");
+  if (idx <= 0 || idx === id.length - 1) return null;
+  const parentId = id.slice(0, idx);
+  const childKey = id.slice(idx + 1);
+  if (!isSafeExampleKey(childKey)) return null;
+  return { parentId, childKey };
 }
 
 // Skills that ship side files (e.g. `assets/template.html`, `references/*.md`)

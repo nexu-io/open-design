@@ -407,6 +407,7 @@ export const ko: Dict = {
   'examples.modeDeck': '슬라이드',
   'examples.modeDocument': '문서 및 템플릿',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': '라이브',
   'examples.scenarioGeneral': '일반',
   'examples.scenarioEngineering': '엔지니어링',
   'examples.scenarioProduct': '제품',

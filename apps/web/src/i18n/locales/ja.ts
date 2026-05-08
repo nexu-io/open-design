@@ -299,6 +299,7 @@ export const ja: Dict = {
   'examples.modeDeck': 'スライド',
   'examples.modeDocument': 'ドキュメント & テンプレート',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'ライブ',
   'examples.scenarioGeneral': '一般',
   'examples.scenarioEngineering': 'エンジニアリング',
   'examples.scenarioProduct': 'プロダクト',

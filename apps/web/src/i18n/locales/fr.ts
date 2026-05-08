@@ -407,6 +407,7 @@ export const fr: Dict = {
   'examples.modeDeck': 'Diaporamas',
   'examples.modeDocument': 'Docs et modèles',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'Live',
   'examples.scenarioGeneral': 'Général',
   'examples.scenarioEngineering': 'Ingénierie',
   'examples.scenarioProduct': 'Produit',

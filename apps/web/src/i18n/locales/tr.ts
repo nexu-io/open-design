@@ -400,6 +400,7 @@ export const tr: Dict = {
   'examples.modeDeck': 'Slaytlar',
   'examples.modeDocument': 'Doküman & şablonlar',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'Canlı',
   'examples.scenarioGeneral': 'Genel',
   'examples.scenarioEngineering': 'Mühendislik',
   'examples.scenarioProduct': 'Ürün',

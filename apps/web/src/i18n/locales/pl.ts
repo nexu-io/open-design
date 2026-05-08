@@ -407,6 +407,7 @@ export const pl: Dict = {
   'examples.modeDeck': 'Slajdy',
   'examples.modeDocument': 'Dokumenty i szablony',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'Live',
   'examples.scenarioGeneral': 'Ogólne',
   'examples.scenarioEngineering': 'Inżynieria',
   'examples.scenarioProduct': 'Produkt',

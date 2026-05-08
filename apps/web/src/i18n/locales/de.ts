@@ -300,6 +300,7 @@ export const de: Dict = {
   'examples.modeDeck': 'Folien',
   'examples.modeDocument': 'Dokumente & Templates',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'Live',
   'examples.scenarioGeneral': 'Allgemein',
   'examples.scenarioEngineering': 'Engineering',
   'examples.scenarioProduct': 'Produkt',

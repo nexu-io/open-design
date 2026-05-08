@@ -38,6 +38,7 @@ import {
   apiProtocolModelLabel,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
+import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
@@ -387,6 +388,13 @@ export function ProjectView({
     return () => {
       sendTextBufferRef.current?.cancel();
       sendTextBufferRef.current = null;
+      // Unmounts / conversation switches should only detach local stream
+      // consumers. Aborting the daemon cancel controllers here turns routine
+      // cleanup into an explicit POST /api/runs/:id/cancel, which can mark a
+      // live run canceled even when the user never clicked Stop.
+      abortRef.current?.abort();
+      abortRef.current = null;
+      cancelRef.current = null;
       for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
       reattachTextBuffersRef.current.clear();
       for (const controller of reattachControllersRef.current.values()) {
@@ -994,7 +1002,7 @@ export function ProjectView({
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         role: 'user',
         content: prompt,
         createdAt: startedAt,
@@ -1021,8 +1029,7 @@ export function ProjectView({
               selectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const assistantId = crypto.randomUUID();
-      
+      const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -1334,7 +1341,7 @@ export function ProjectView({
           projectId: project.id,
           conversationId: activeConversationId,
           assistantMessageId: assistantId,
-          clientRequestId: crypto.randomUUID(),
+          clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),

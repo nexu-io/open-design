@@ -407,6 +407,7 @@ export const ar: Dict = {
   'examples.modeDeck': 'شرائح',
   'examples.modeDocument': 'مستندات وقوالب',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'مباشر',
   'examples.scenarioGeneral': 'عام',
   'examples.scenarioEngineering': 'هندسة',
   'examples.scenarioProduct': 'منتج',

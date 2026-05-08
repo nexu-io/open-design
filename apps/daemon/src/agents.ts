@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -89,7 +89,24 @@ const agentCapabilities = new Map();
 // documented, non-secret runtime knobs that belong to the adapter contract.
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
-const AGENT_BIN_ENV_KEYS = new Map([['codex', 'CODEX_BIN']]);
+const AGENT_BIN_ENV_KEYS = new Map([
+  ['claude', 'CLAUDE_BIN'],
+  ['codex', 'CODEX_BIN'],
+  ['copilot', 'COPILOT_BIN'],
+  ['cursor-agent', 'CURSOR_AGENT_BIN'],
+  ['deepseek', 'DEEPSEEK_BIN'],
+  ['devin', 'DEVIN_BIN'],
+  ['gemini', 'GEMINI_BIN'],
+  ['hermes', 'HERMES_BIN'],
+  ['kimi', 'KIMI_BIN'],
+  ['kiro', 'KIRO_BIN'],
+  ['kilo', 'KILO_BIN'],
+  ['opencode', 'OPENCODE_BIN'],
+  ['pi', 'PI_BIN'],
+  ['qoder', 'QODER_BIN'],
+  ['qwen', 'QWEN_BIN'],
+  ['vibe', 'VIBE_BIN'],
+]);
 
 // Map a user-picked reasoning effort to one the chosen model will accept.
 // Codex's CLI accepts `none | minimal | low | medium | high | xhigh`, but
@@ -907,6 +924,16 @@ export function resolveOnPath(bin) {
   return null;
 }
 
+function looksExecutableOnWindows(filePath) {
+  const ext = path.extname(filePath).trim().toUpperCase();
+  if (!ext) return false;
+  const executableExts = (process.env.PATHEXT || '.EXE;.CMD;.BAT')
+    .split(';')
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+  return executableExts.includes(ext);
+}
+
 // Resolve the first available binary for an agent definition. Tries
 // `def.bin` first, then walks `def.fallbackBins` in order. Used for
 // agents whose forks ship under a different binary name but speak the
@@ -919,7 +946,17 @@ function configuredExecutableOverride(def, configuredEnv = {}) {
   if (typeof raw !== 'string' || raw.trim().length === 0) return null;
   const expanded = expandHomePath(raw.trim());
   if (!path.isAbsolute(expanded)) return null;
-  return existsSync(expanded) ? expanded : null;
+  try {
+    if (!statSync(expanded).isFile()) return null;
+    if (process.platform === 'win32') {
+      if (!looksExecutableOnWindows(expanded)) return null;
+    } else {
+      accessSync(expanded, constants.X_OK);
+    }
+    return expanded;
+  } catch {
+    return null;
+  }
 }
 
 export function resolveAgentExecutable(def, configuredEnv = {}) {

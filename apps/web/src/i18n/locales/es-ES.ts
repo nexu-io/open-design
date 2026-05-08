@@ -301,6 +301,7 @@ export const esES: Dict = {
   'examples.modeDeck': 'Diapositivas',
   'examples.modeDocument': 'Documentos y plantillas',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'En vivo',
   'examples.scenarioGeneral': 'General',
   'examples.scenarioEngineering': 'Ingeniería',
   'examples.scenarioProduct': 'Producto',

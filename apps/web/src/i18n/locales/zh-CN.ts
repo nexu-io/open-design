@@ -412,6 +412,7 @@ export const zhCN: Dict = {
   'examples.modeDeck': '幻灯片',
   'examples.modeDocument': '文档与模板',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': '实时',
   'examples.scenarioGeneral': '通用',
   'examples.scenarioEngineering': '工程',
   'examples.scenarioProduct': '产品',

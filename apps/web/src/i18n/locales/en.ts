@@ -418,6 +418,7 @@ export const en: Dict = {
   'examples.modeDeck': 'Slides',
   'examples.modeDocument': 'Docs & templates',
   'examples.modeOrbit': 'Orbit',
+  'examples.modeLive': 'Live',
   'examples.scenarioGeneral': 'General',
   'examples.scenarioEngineering': 'Engineering',
   'examples.scenarioProduct': 'Product',
