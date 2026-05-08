@@ -20,7 +20,15 @@ A **deep space command center** — dark, information-dense, unambiguous. Every 
 | Text Secondary | `#8BA3C7` | Labels, secondary information |
 | Text Tertiary | `#4A6080` | Timestamps, metadata |
 
-*"Every readout must be readable at 3 meters in low light by someone who hasn't slept in 18 hours."*
+*Every readout must be readable at 3 meters in low light by someone who hasn't slept in 18 hours.*
+
+### Use Cases
+
+Mission Control is purpose-built for:
+- **Operations dashboards** — real-time system health, infrastructure monitoring, on-call status boards
+- **Build and deploy status screens** — CI/CD pipelines, release coordination, incident response
+- **Real-time monitoring UIs** — telemetry aggregation, sensor networks, financial data feeds
+- **Any information-dense, low-light, high-stakes display**
 
 ### Prior Art
 
@@ -61,7 +69,7 @@ All data colors on `#111827` pass WCAG AA (minimum 4.5:1).
 
 ### Dark Mode
 
-Dark mode is the native mode. No light mode variant — mission control environments are always low-light. All tokens above apply directly.
+Dark mode is the native mode. No light mode variant by design — mission control environments are always low-light (ISRO ISTRAC, NASA FDO, SpaceX launch consoles all run dark). daytime operations centers with high ambient light are outside scope for v1; a light mode adaptation would require rethinking the full semantic color layer.
 
 ```css
 :root {
@@ -98,14 +106,20 @@ Dark mode is the native mode. No light mode variant — mission control environm
 
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
-| Display (countdown) | 48px | 700 | 1.0 | Mono |
-| H1 (panel title) | 18px | 600 | 1.2 | Sans |
-| H2 (section label) | 13px | 600 | 1.2 | Sans, uppercase, tracked |
-| Data Value | 24px | 700 | 1.0 | Mono |
-| Data Unit | 12px | 400 | 1.0 | Mono |
-| Body | 14px | 400 | 1.5 | Sans |
-| Caption | 12px | 400 | 1.4 | Sans |
-| Micro (badge) | 10px | 600 | 1.0 | Sans, uppercase |
+| Display | 48px | 700 | 1.0 | JetBrains Mono |
+| H1 | 18px | 600 | 1.2 | Inter |
+| H2 | 13px | 600 | 1.2 | Inter, uppercase, tracked |
+| Body | 14px | 400 | 1.5 | Inter |
+| Caption | 12px | 400 | 1.4 | Inter |
+| Micro | 10px | 600 | 1.0 | Inter, uppercase |
+
+**Font labels for catalog extraction:**
+
+```
+Display: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
+Body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
+```
 
 ## 4. Spacing
 
@@ -143,13 +157,7 @@ Dark mode is the native mode. No light mode variant — mission control environm
 ### Panel Structure
 
 ```css
-/* Standard data panel */
-.panel {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 4px;
-  padding: var(--space-4);
-}
+/* .panel base styles are defined in the Grid System section above. */
 
 .panel-header {
   display: flex;
@@ -272,7 +280,7 @@ Dark mode is the native mode. No light mode variant — mission control environm
   color: var(--fg-tertiary);
 }
 
-/* Negative delta (T+) */
+/* Positive delta (T+) — time after event */
 .countdown.positive { color: var(--data-success); }
 
 /* At T-0 */
