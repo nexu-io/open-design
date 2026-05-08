@@ -115,16 +115,25 @@ function injectPrintStylesheet(doc: string, css: string): string {
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
   await window.webContents.executeJavaScript(
-    `Promise.all([
-      document.fonts && document.fonts.ready ? document.fonts.ready.catch(function(){}) : Promise.resolve(),
-      Promise.all(Array.from(document.images || []).map(function(img) {
-        if (img.complete) return Promise.resolve();
-        return new Promise(function(resolve) {
-          img.addEventListener('load', resolve, { once: true });
-          img.addEventListener('error', resolve, { once: true });
-        });
-      }))
-    ]).then(function(){ return true; })`,
+    `(function() {
+      function waitDocument(doc) {
+        return Promise.all([
+          doc.fonts && doc.fonts.ready ? doc.fonts.ready.catch(function(){}) : Promise.resolve(),
+          Promise.all(Array.from(doc.images || []).map(function(img) {
+            if (img.complete) return Promise.resolve();
+            return new Promise(function(resolve) {
+              img.addEventListener('load', resolve, { once: true });
+              img.addEventListener('error', resolve, { once: true });
+            });
+          }))
+        ]);
+      }
+      var ifr = document.querySelector('iframe');
+      return Promise.all([
+        waitDocument(document),
+        ifr && ifr.contentDocument ? waitDocument(ifr.contentDocument) : Promise.resolve()
+      ]);
+    })()`,
     true,
   );
 }
