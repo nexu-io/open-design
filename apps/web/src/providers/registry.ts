@@ -265,7 +265,25 @@ export async function fetchConnectorDiscovery(options: { refresh?: boolean } = {
   return promise;
 }
 
-export async function connectConnector(connectorId: string): Promise<ConnectorDetail | null> {
+export interface ConnectorActionResult {
+  connector: ConnectorDetail | null;
+  error?: string;
+}
+
+function popupBlockedMessage(): string {
+  return 'Popup blocked. Allow popups for Open Design and try again.';
+}
+
+async function decodeConnectorError(resp: Response): Promise<string> {
+  try {
+    const payload = (await resp.json()) as { error?: { message?: string } } | null;
+    return payload?.error?.message?.trim() || `Connector request failed (${resp.status})`;
+  } catch {
+    return `Connector request failed (${resp.status})`;
+  }
+}
+
+export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
   try {
     authWindow = window.open('about:blank', '_blank');
@@ -275,22 +293,28 @@ export async function connectConnector(connectorId: string): Promise<ConnectorDe
     });
     if (!resp.ok) {
       authWindow?.close();
-      return null;
+      return { connector: null, error: await decodeConnectorError(resp) };
     }
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (authWindow) {
         authWindow.location.href = json.auth.redirectUrl;
       } else {
-        window.open(json.auth.redirectUrl, '_blank');
+        const redirected = window.open(json.auth.redirectUrl, '_blank');
+        if (!redirected) {
+          return { connector: json.connector ?? null, error: popupBlockedMessage() };
+        }
       }
     } else {
       authWindow?.close();
     }
-    return json.connector ?? null;
-  } catch {
+    return { connector: json.connector ?? null };
+  } catch (err) {
     authWindow?.close();
-    return null;
+    return {
+      connector: null,
+      error: err instanceof Error && err.message ? err.message : 'Could not start connector authentication.',
+    };
   }
 }
 

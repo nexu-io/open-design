@@ -963,6 +963,8 @@ export const ptBR: Dict = {
   'pet.slashPetTuck': 'Guardar o pet por agora.',
   'pet.slashHatch': 'Gere um pet Codex com a skill hatch-pet.',
   'pet.slashHatchArg': '<conceito>',
+  'pet.slashSearch': 'Pesquise na web pelo comando OD research.',
+  'pet.slashSearchArg': '<consulta>',
   'pet.codexTitle': 'Recém-chocados',
   'pet.codexSubtitle': 'Pets empacotados pela skill hatch-pet aparecem aqui para adoção em um clique.',
   'pet.codexSubtitleWithDir': 'Verificando {dir} em busca de pacotes do hatch-pet.',

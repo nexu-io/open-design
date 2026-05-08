@@ -886,6 +886,8 @@ export const ja: Dict = {
   'pet.slashPetTuck': 'ペットを一旦しまう。',
   'pet.slashHatch': 'hatch-pet スキルで Codex ペットを生成。',
   'pet.slashHatchArg': '<コンセプト>',
+  'pet.slashSearch': 'OD research コマンドで Web 検索します。',
+  'pet.slashSearchArg': '<検索クエリ>',
   'pet.codexTitle': '最近の孵化',
   'pet.codexSubtitle': 'hatch-pet スキルがパッケージしたペットがここに表示され、ワンクリックで採用できます。',
   'pet.codexSubtitleWithDir': '{dir} を hatch-pet スキルのパッケージのために走査中。',

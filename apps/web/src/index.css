@@ -360,7 +360,7 @@ code {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-  max-height: 31px;
+  max-height: 32px;
   overflow: hidden;
 }
 .app-project-title .title {
@@ -376,7 +376,7 @@ code {
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
-  line-height: 12px;
+  line-height: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -838,6 +838,30 @@ code {
   color: var(--text-muted);
 }
 .composer-import:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.composer-research:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research.on {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.composer-research-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .composer-send {
   display: inline-flex;
   align-items: center;
@@ -2266,6 +2290,31 @@ code {
   display: block;
   flex: 0 0 auto;
 }
+.newproj-open-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.newproj-folder-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg));
+  color: var(--text);
+  box-sizing: border-box;
+}
+.newproj-folder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.newproj-folder-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
 .newproj-footer {
   padding: 0 18px 16px;
   font-size: 11px;
@@ -3122,6 +3171,17 @@ code {
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.connector-inline-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, #ff6b6b 45%, var(--line) 55%);
+  border-radius: 12px;
+  background: color-mix(in oklab, #ff6b6b 10%, var(--panel) 90%);
+  color: color-mix(in oklab, #ff6b6b 70%, var(--fg) 30%);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .connectors-heading h2 {
@@ -4617,6 +4677,26 @@ button.connector-action.is-loading {
 .ws-tab.design-files-tab {
   font-weight: 500;
   color: var(--text);
+  /* Pin the Design Files entry to the left edge of the horizontally
+     scrollable tab strip so the user always has a way back to the file
+     list even when many tabs overflow. Without sticky positioning,
+     Design Files sits at flex index 0 and scrolls off the left edge
+     once the strip is wide enough to require horizontal scrolling.
+     Issue #775. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  /* Solid panel surface so other tabs that scroll past underneath the
+     sticky element do not visibly bleed through. */
+  background: var(--bg-panel);
+  /* Subtle right-edge shadow signals the visual separation when other
+     tabs are scrolled beneath it. */
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+.ws-tab.design-files-tab.active {
+  /* Active state should still read as selected; layer the active tint
+     over the sticky panel surface. */
+  background: var(--bg-subtle);
 }
 
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
@@ -5792,11 +5872,25 @@ button.connector-action.is-loading {
 .comment-popover-head div {
   display: grid;
   gap: 1px;
+  min-width: 0;
+  overflow: hidden;
 }
-.comment-popover-head strong { font-size: 13px; }
+.comment-popover-head strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .comment-popover-head span {
   color: var(--text-muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-popover-head button.ghost {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .board-pod-summary {
   display: grid;
@@ -5840,7 +5934,15 @@ button.connector-action.is-loading {
   font-size: 12px;
 }
 .board-note-item span {
+  /* The note span sits next to a Remove button inside a fixed-width
+     ~300px popover. Without flex: 1 + min-width: 0 + overflow-wrap an
+     unbroken long string (URL, hash, base64) refuses to break and
+     pushes the popover layout sideways past its 320px boundary.
+     Issue #782. */
+  flex: 1;
+  min-width: 0;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .comment-popover textarea {
   min-height: 78px;
@@ -5851,8 +5953,17 @@ button.connector-action.is-loading {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+.comment-popover-actions > * {
+  /* Buttons may carry labels longer than their natural fair-share of the
+     320px popover width (Save comment, Send to chat, Sending..., Add note,
+     Remove). Without an explicit shrink ceiling and wrap, the row pushes
+     past the popover's right edge instead of breaking onto a new line.
+     Issue #779. */
+  max-width: 100%;
 }
 .comment-popover-remove {
   color: var(--red);
@@ -5892,13 +6003,30 @@ button.connector-action.is-loading {
   justify-content: space-between;
   gap: 10px;
 }
+.inspect-panel-head > button {
+  /* Without an explicit shrink-floor, a long selected-component label
+     in the title can squeeze the Close button so narrowly that the
+     "x" glyph stacks into a vertical layout on some font/zoom
+     combinations. Pinning flex-shrink: 0 keeps the close affordance
+     on a stable single-line size regardless of label length. Issue
+     #785. */
+  flex-shrink: 0;
+}
 .inspect-panel-title {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 .inspect-panel-title strong {
+  /* Long target.label values (deeply-nested component selectors) used
+     to spill past the title container and out of the panel because
+     this rule had no overflow constraint. Truncate with ellipsis;
+     the <strong> carries title={label} so the full string is still
+     visible on hover. Issue #780. */
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .inspect-panel-title code {
   color: var(--text-muted);
@@ -5906,6 +6034,21 @@ button.connector-action.is-loading {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* MCP Copy button floats above a syntax-highlighted <pre>; .ghost's
+   transparent background let the dark code surface bleed through and
+   made the affordance effectively invisible. Pin a solid panel
+   background here (not inline) so button.ghost:hover:not(:disabled)
+   still wins the cascade. Issue #742. */
+button.ghost.mcp-copy-btn {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+button.ghost.mcp-copy-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
 }
 .inspect-section {
   display: flex;

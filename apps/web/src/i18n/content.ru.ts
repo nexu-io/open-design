@@ -313,9 +313,11 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 };
 
 export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
+  'dcf-valuation',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
+  'last30days',
   'live-dashboard',
   'orbit-general',
   'orbit-github',
@@ -323,10 +325,12 @@ export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
   'orbit-linear',
   'orbit-notion',
   'social-media-dashboard',
+  'social-media-matrix-tracker-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
   'waitlist-page',
+  'x-research',
 ] as const;
 
 export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [

@@ -948,6 +948,8 @@ export const zhTW: Dict = {
   'pet.slashPetTuck': '把寵物收起來。',
   'pet.slashHatch': '呼叫 hatch-pet 技能生成一隻 Codex 寵物。',
   'pet.slashHatchArg': '<概念>',
+  'pet.slashSearch': '透過 OD research 指令搜尋網頁。',
+  'pet.slashSearchArg': '<查詢>',
   'pet.codexTitle': '最近孵化',
   'pet.codexSubtitle': 'hatch-pet 技能打包的寵物會出現在這裡,可一鍵領養。',
   'pet.codexSubtitleWithDir': '正在掃描 {dir},尋找 hatch-pet 技能打包的寵物。',

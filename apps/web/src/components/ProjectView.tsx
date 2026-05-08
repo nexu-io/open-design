@@ -30,7 +30,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
-import { composeSystemPrompt } from '@open-design/contracts';
+import { composeSystemPrompt, type ResearchOptions } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import {
@@ -972,6 +972,7 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
+      meta?: { research?: ResearchOptions },
     ) => {
       if (!activeConversationId) return;
       if (streaming) return;
@@ -1261,6 +1262,7 @@ export function ProjectView({
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
+          research: meta?.research,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {
@@ -1842,6 +1844,7 @@ export function ProjectView({
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}
               onOpenPetSettings={onOpenPetSettings}
+              researchAvailable={config.mode === 'daemon'}
               projectMetadata={project.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });

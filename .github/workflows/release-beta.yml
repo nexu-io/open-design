@@ -36,7 +36,7 @@ jobs:
     name: Prepare beta metadata
     runs-on: ubuntu-latest
     env:
-      OPEN_DESIGN_BETA_METADATA_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
+      OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
       OPEN_DESIGN_RELEASE_SIGNED: ${{ inputs.signed }}
     outputs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
@@ -73,7 +73,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           AWS_EC2_METADATA_DISABLED: "true"
           CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
-          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
         run: |
           set -euo pipefail
@@ -210,8 +210,32 @@ jobs:
         env:
           OD_PACKAGED_E2E_MAC: "1"
           OD_PACKAGED_E2E_NAMESPACE: release-beta
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/mac/screenshots/open-design-mac-smoke.png
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: pnpm test specs/mac.spec.ts
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/release-report/mac"
+          mkdir -p "$report_dir/screenshots"
+          cat > "$report_dir/manifest.json" <<EOF
+          {
+            "platform": "mac",
+            "spec": "specs/mac.spec.ts",
+            "namespace": "release-beta",
+            "screenshot": "screenshots/open-design-mac-smoke.png",
+            "githubRunId": "$GITHUB_RUN_ID",
+            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
+            "commit": "$GITHUB_SHA"
+          }
+          EOF
+          pnpm test specs/mac.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+
+      - name: Upload mac e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac
+          if-no-files-found: warn
 
       - name: Prune mac tools-pack cache
         continue-on-error: true
@@ -316,7 +340,7 @@ jobs:
       - name: Prepare beta assets
         id: assets
         env:
-          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
           set -euo pipefail
           if [ -z "$CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN" ]; then
@@ -472,8 +496,34 @@ jobs:
           OD_PACKAGED_E2E_WIN: "1"
           OD_PACKAGED_E2E_NAMESPACE: release-beta-win
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/open-design-win-smoke.png
-        run: pnpm test specs/win.spec.ts
+        run: |
+          $ErrorActionPreference = "Stop"
+          $reportDir = Join-Path $env:RUNNER_TEMP "release-report/win"
+          $screenshotDir = Join-Path $reportDir "screenshots"
+          New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
+          $env:OD_PACKAGED_E2E_SCREENSHOT_PATH = Join-Path $screenshotDir "open-design-win-smoke.png"
+          @{
+            platform = "win"
+            spec = "specs/win.spec.ts"
+            namespace = "release-beta-win"
+            screenshot = "screenshots/open-design-win-smoke.png"
+            githubRunId = $env:GITHUB_RUN_ID
+            githubRunAttempt = $env:GITHUB_RUN_ATTEMPT
+            commit = $env:GITHUB_SHA
+          } | ConvertTo-Json | Set-Content -Path (Join-Path $reportDir "manifest.json")
+          pnpm test specs/win.spec.ts 2>&1 | Tee-Object -FilePath (Join-Path $reportDir "vitest.log")
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            exit $testExitCode
+          }
+
+      - name: Upload windows e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-win-e2e-report
+          path: ${{ runner.temp }}/release-report/win
+          if-no-files-found: warn
 
       - name: Prune Windows tools-pack cache
         shell: pwsh
@@ -623,7 +673,7 @@ jobs:
       - name: Prepare windows beta assets
         shell: pwsh
         env:
-          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN)) {
             throw "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN is required"
@@ -769,7 +819,7 @@ jobs:
       AWS_DEFAULT_REGION: auto
       AWS_EC2_METADATA_DISABLED: "true"
       CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
-      CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
       ASSET_VERSION_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
       BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
@@ -802,6 +852,20 @@ jobs:
           name: open-design-beta-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux
 
+      - name: Download mac e2e spec report
+        if: ${{ inputs.enable_mac }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac
+
+      - name: Download windows e2e spec report
+        if: ${{ inputs.enable_win }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-win-e2e-report
+          path: ${{ runner.temp }}/release-report/win
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -819,6 +883,7 @@ jobs:
           done
 
           release_root="$RUNNER_TEMP/release-assets"
+          report_root="$RUNNER_TEMP/release-report"
           public_origin="${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN%/}"
           version_prefix="beta/versions/${BETA_VERSION}${ASSET_VERSION_SUFFIX}"
           latest_prefix="beta/latest"
@@ -839,6 +904,33 @@ jobs:
               --content-type "$content_type" \
               --cache-control "$cache_control" \
               --no-cli-pager >/dev/null
+          }
+
+          report_content_type() {
+            case "$1" in
+              *.html) printf '%s' "text/html; charset=utf-8" ;;
+              *.json) printf '%s' "application/json; charset=utf-8" ;;
+              *.log) printf '%s' "text/plain; charset=utf-8" ;;
+              *.png) printf '%s' "image/png" ;;
+              *.txt) printf '%s' "text/plain; charset=utf-8" ;;
+              *.xml) printf '%s' "application/xml; charset=utf-8" ;;
+              *) printf '%s' "application/octet-stream" ;;
+            esac
+          }
+
+          upload_report_tree() {
+            local root="$1"
+            if [ ! -d "$root" ]; then
+              echo "e2e spec report root does not exist at $root; skipping"
+              return
+            fi
+            local uploaded_count=0
+            while IFS= read -r -d '' file_path; do
+              local relative_path="${file_path#"${root}/"}"
+              upload "$file_path" "$version_prefix/report/$relative_path" "$(report_content_type "$relative_path")" "public, max-age=31536000, immutable"
+              uploaded_count=$((uploaded_count + 1))
+            done < <(find "$root" -type f -print0 | sort -z)
+            echo "uploaded e2e spec report files: $uploaded_count"
           }
 
           mac_dmg="open-design-${BETA_VERSION}${ASSET_VERSION_SUFFIX}-mac-arm64.dmg"
@@ -879,6 +971,8 @@ jobs:
               echo "linux_appimage_url=$public_origin/$version_prefix/$linux_appimage"
             } >> "$GITHUB_OUTPUT"
           fi
+
+          upload_report_tree "$report_root"
 
           RELEASE_ROOT="$release_root" \
           PUBLIC_ORIGIN="$public_origin" \
@@ -979,6 +1073,7 @@ jobs:
               latestMetadataUrl: url(latestPrefix, "metadata.json"),
               latestPrefix,
               publicOrigin,
+              reportUrl: url(versionPrefix, "report/"),
               versionMetadataUrl: url(versionPrefix, "metadata.json"),
               versionPrefix,
             },
@@ -995,6 +1090,7 @@ jobs:
 
           {
             echo "metadata_url=$public_origin/$latest_prefix/metadata.json"
+            echo "report_url=$public_origin/$version_prefix/report/"
             echo "version_metadata_url=$public_origin/$version_prefix/metadata.json"
             echo "version_prefix=$version_prefix"
           } >> "$GITHUB_OUTPUT"
@@ -1025,6 +1121,9 @@ jobs:
             grep -F "${{ steps.r2.outputs.mac_zip_url }}" "$downloaded_feed"
             curl -fsSI "${{ steps.r2.outputs.mac_zip_url }}" >/dev/null
             curl -fsSI "${{ steps.r2.outputs.mac_dmg_url }}" >/dev/null
+            curl -fsSI "${{ steps.r2.outputs.report_url }}mac/manifest.json" >/dev/null
+            curl -fsSI "${{ steps.r2.outputs.report_url }}mac/screenshots/open-design-mac-smoke.png" >/dev/null
+            curl -fsSI "${{ steps.r2.outputs.report_url }}mac/vitest.log" >/dev/null
           fi
 
           if [ "$ENABLE_WIN" = "true" ]; then
@@ -1033,6 +1132,9 @@ jobs:
             grep -F 'version: "${{ needs.metadata.outputs.beta_version }}"' "$downloaded_feed"
             grep -F "${{ steps.r2.outputs.win_installer_url }}" "$downloaded_feed"
             curl -fsSI "${{ steps.r2.outputs.win_installer_url }}" >/dev/null
+            curl -fsSI "${{ steps.r2.outputs.report_url }}win/manifest.json" >/dev/null
+            curl -fsSI "${{ steps.r2.outputs.report_url }}win/screenshots/open-design-win-smoke.png" >/dev/null
+            curl -fsSI "${{ steps.r2.outputs.report_url }}win/vitest.log" >/dev/null
           fi
 
           if [ "$ENABLE_LINUX" = "true" ]; then
@@ -1048,6 +1150,9 @@ jobs:
             echo "- Artifact path: ${{ steps.r2.outputs.version_prefix }}"
             echo "- State source: ${{ needs.metadata.outputs.state_source }}"
             echo "- Metadata: ${{ steps.r2.outputs.metadata_url }}"
+            echo "- Version metadata: ${{ steps.r2.outputs.version_metadata_url }}"
+            echo "- E2E report path: ${{ steps.r2.outputs.version_prefix }}/report/"
+            echo "- E2E report URL: ${{ steps.r2.outputs.report_url }}"
             echo "- mac enabled: $ENABLE_MAC"
             echo "- windows enabled: $ENABLE_WIN"
             echo "- linux enabled: $ENABLE_LINUX"
@@ -1056,10 +1161,16 @@ jobs:
               echo "- mac dmg: ${{ steps.r2.outputs.mac_dmg_url }}"
               echo "- mac zip: ${{ steps.r2.outputs.mac_zip_url }}"
               echo "- mac feed: ${{ steps.r2.outputs.mac_feed_url }}"
+              echo "- mac e2e manifest: ${{ steps.r2.outputs.report_url }}mac/manifest.json"
+              echo "- mac e2e screenshot: ${{ steps.r2.outputs.report_url }}mac/screenshots/open-design-mac-smoke.png"
+              echo "- mac e2e vitest log: ${{ steps.r2.outputs.report_url }}mac/vitest.log"
             fi
             if [ "$ENABLE_WIN" = "true" ]; then
               echo "- win installer: ${{ steps.r2.outputs.win_installer_url }}"
               echo "- win feed: ${{ steps.r2.outputs.win_feed_url }}"
+              echo "- win e2e manifest: ${{ steps.r2.outputs.report_url }}win/manifest.json"
+              echo "- win e2e screenshot: ${{ steps.r2.outputs.report_url }}win/screenshots/open-design-win-smoke.png"
+              echo "- win e2e vitest log: ${{ steps.r2.outputs.report_url }}win/vitest.log"
             fi
             if [ "$ENABLE_LINUX" = "true" ]; then
               echo "- linux AppImage: ${{ steps.r2.outputs.linux_appimage_url }}"

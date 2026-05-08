@@ -933,6 +933,8 @@ export const ko: Dict = {
   'pet.slashPetTuck': '펫을 잠시 치우기.',
   'pet.slashHatch': 'hatch-pet 스킬로 Codex 펫 생성.',
   'pet.slashHatchArg': '<콘셉트>',
+  'pet.slashSearch': 'OD research 명령으로 웹을 검색합니다.',
+  'pet.slashSearchArg': '<검색어>',
   'pet.codexTitle': '최근 부화',
   'pet.codexSubtitle': 'hatch-pet 스킬이 패키지한 펫이 여기에서 원클릭으로 입양 가능.',
   'pet.codexSubtitleWithDir': 'hatch-pet 스킬 패키지를 위해 {dir} 스캔 중.',

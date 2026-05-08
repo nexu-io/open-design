@@ -963,6 +963,8 @@ export const ru: Dict = {
   'pet.slashPetTuck': 'Спрятать пета на время.',
   'pet.slashHatch': 'Создать Codex-пета через навык hatch-pet.',
   'pet.slashHatchArg': '<концепт>',
+  'pet.slashSearch': 'Искать в вебе через команду OD research.',
+  'pet.slashSearchArg': '<запрос>',
   'pet.codexTitle': 'Недавно вылупленные',
   'pet.codexSubtitle': 'Петы, упакованные навыком hatch-pet, появятся здесь для усыновления в один клик.',
   'pet.codexSubtitleWithDir': 'Сканируем {dir} в поисках пакетов hatch-pet.',

@@ -452,6 +452,78 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   };
 }
 
+/**
+ * Returns whether the modal's footer Save button should be enabled for the
+ * currently active sidebar section.
+ *
+ * The mode-completeness check (BYOK requires apiKey + model + valid baseUrl;
+ * Local CLI requires a selected available agent) is only meaningful on the
+ * execution-mode section, where the user is actively editing those fields.
+ * On every other sidebar section (language, appearance, composio, media,
+ * integrations, notifications, pet, library, about), partial state from a
+ * draft mode toggle (e.g. user clicked BYOK on the execution section without
+ * filling in fields, then navigated to language) must NOT block saving
+ * changes the user is making in those unrelated sections. Issue #739.
+ */
+export function shouldEnableSettingsSave(
+  cfg: AppConfig,
+  activeSection: SettingsSection,
+  agents: ReadonlyArray<{ id: string; available: boolean }>,
+  isBaseUrlValid: boolean,
+): boolean {
+  if (activeSection !== 'execution') return true;
+  if (cfg.mode === 'daemon') {
+    return Boolean(
+      cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available,
+    );
+  }
+  return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
+}
+
+/**
+ * Returns the config that should actually be persisted by `onSave`.
+ *
+ * Counterpart to {@link shouldEnableSettingsSave}: when Save is enabled on a
+ * non-execution sidebar section but the user's draft execution config is
+ * incomplete (e.g. they toggled BYOK on the execution section, never filled
+ * in apiKey, then navigated to Language and clicked Save), the raw `cfg`
+ * still carries that broken draft. Persisting it would leave the app in an
+ * unusable execution state after the modal closes. This helper reverts the
+ * execution-related fields to their `initial` values in that case, so saving
+ * an unrelated section change never silently commits an incomplete execution
+ * mode.
+ *
+ * Within the execution section, or when execution is already valid, the
+ * config passes through unchanged. Issue #739.
+ */
+export function sanitizeSettingsSavePayload(
+  cfg: AppConfig,
+  initial: AppConfig,
+  activeSection: SettingsSection,
+  agents: ReadonlyArray<{ id: string; available: boolean }>,
+  isBaseUrlValid: boolean,
+): AppConfig {
+  if (activeSection === 'execution') return cfg;
+  // Reuse the existing execution-section validity gate so the two helpers
+  // share one source of truth for "execution config is complete enough."
+  const executionValid = shouldEnableSettingsSave(cfg, 'execution', agents, isBaseUrlValid);
+  if (executionValid) return cfg;
+  return {
+    ...cfg,
+    mode: initial.mode,
+    apiKey: initial.apiKey,
+    apiProtocol: initial.apiProtocol,
+    apiVersion: initial.apiVersion,
+    apiProtocolConfigs: initial.apiProtocolConfigs,
+    apiProviderBaseUrl: initial.apiProviderBaseUrl,
+    baseUrl: initial.baseUrl,
+    model: initial.model,
+    agentId: initial.agentId,
+    agentCliEnv: initial.agentCliEnv,
+    maxTokens: initial.maxTokens,
+  };
+}
+
 export function switchApiProtocolConfig(
   config: AppConfig,
   protocol: ApiProtocol,
@@ -791,14 +863,7 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
-  const canSave =
-    cfg.mode === 'daemon'
-      ? Boolean(cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available)
-      : Boolean(
-          cfg.apiKey.trim() &&
-          cfg.model.trim() &&
-          baseUrlValid,
-        );
+  const canSave = shouldEnableSettingsSave(cfg, activeSection, agents, baseUrlValid);
 
   const protocolProviders = useMemo(
     () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
@@ -1686,7 +1751,17 @@ export function SettingsDialog({
             type="button"
             className="primary"
             disabled={!canSave}
-            onClick={() => onSave(cfg, activeSection !== 'composio')}
+            onClick={() =>
+              onSave(
+                // Sanitize before persist: when saving from a non-execution
+                // section with an incomplete BYOK draft, revert the
+                // execution-mode fields to `initial` so the unrelated section
+                // change is committed without leaving the app in a broken
+                // execution mode. Issue #739.
+                sanitizeSettingsSavePayload(cfg, initial, activeSection, agents, baseUrlValid),
+                activeSection !== 'composio',
+              )
+            }
           >
             {welcome ? t('settings.getStarted') : t('common.save')}
           </button>
@@ -1694,6 +1769,34 @@ export function SettingsDialog({
       </div>
     </div>
   );
+}
+
+/**
+ * The four UI states the Composio API key field can be in.
+ *
+ * `saved-pending` exists so the saved-key indicator stays visible while
+ * the user types a draft replacement. Previously the badge was tied to
+ * `!hasPendingEdit`, which made it vanish on the first keystroke and
+ * trained users to think the original key had already been overwritten
+ * (issue #741). Treating "saved key plus draft" as its own state lets
+ * the badge stay anchored while the hint text differentiates the
+ * unsaved replacement from a fully-saved value.
+ */
+export type ComposioCredentialState =
+  | 'empty'
+  | 'pending-new'
+  | 'saved'
+  | 'saved-pending';
+
+export function deriveComposioCredentialState(
+  composio: { apiKey?: string; apiKeyConfigured?: boolean } | null | undefined,
+): ComposioCredentialState {
+  const hasPendingEdit = Boolean(composio?.apiKey?.trim());
+  const hasSavedKey = Boolean(composio?.apiKeyConfigured);
+  if (hasSavedKey && hasPendingEdit) return 'saved-pending';
+  if (hasSavedKey) return 'saved';
+  if (hasPendingEdit) return 'pending-new';
+  return 'empty';
 }
 
 function ComposioSection({
@@ -1708,9 +1811,9 @@ function ComposioSection({
   const updateComposio = (patch: NonNullable<AppConfig['composio']>) => {
     setCfg((curr) => ({ ...curr, composio: { ...(curr.composio ?? {}), ...patch } }));
   };
-  const hasPendingEdit = Boolean(composio.apiKey?.trim());
-  const apiKeyConfigured = Boolean(hasPendingEdit || composio.apiKeyConfigured);
-  const isSavedState = apiKeyConfigured && !hasPendingEdit;
+  const credentialState = deriveComposioCredentialState(composio);
+  const hasSavedKey = credentialState === 'saved' || credentialState === 'saved-pending';
+  const apiKeyConfigured = credentialState !== 'empty';
   const tail = composio.apiKeyTail?.trim();
 
   return (
@@ -1725,7 +1828,7 @@ function ComposioSection({
         <span className="field-label-row">
           <span className="field-label-group">
             <span className="field-label">Composio API Key</span>
-            {isSavedState ? (
+            {hasSavedKey ? (
               <span className="field-status-badge" title="Saved to local daemon">
                 {tail ? `Saved · ••••${tail}` : 'Saved'}
               </span>
@@ -1745,7 +1848,7 @@ function ComposioSection({
           <input
             type="password"
             value={composio.apiKey ?? ''}
-            placeholder={isSavedState ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
+            placeholder={hasSavedKey ? 'Paste a new key to replace the saved one' : 'Paste Composio API key'}
             onChange={(e) => updateComposio({ apiKey: e.target.value })}
             aria-describedby="composio-api-key-help"
           />
@@ -1759,11 +1862,13 @@ function ComposioSection({
           </button>
         </div>
         <span id="composio-api-key-help" className="hint">
-          {isSavedState
-            ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
-            : apiKeyConfigured
-              ? 'Unsaved changes — click Save to store this key in the local daemon.'
-              : 'Keys are stored locally in the daemon and never sent through environment variables.'}
+          {credentialState === 'saved-pending'
+            ? 'Unsaved replacement. Click Save to overwrite the saved key, or Clear to discard the draft and the saved key.'
+            : credentialState === 'saved'
+              ? 'Your key stays in the local daemon. Paste a new key above to replace it, or Clear to remove.'
+              : credentialState === 'pending-new'
+                ? 'Unsaved changes. Click Save to store this key in the local daemon.'
+                : 'Keys are stored locally in the daemon and never sent through environment variables.'}
         </span>
       </label>
     </section>
@@ -2369,7 +2474,15 @@ function IntegrationsSection() {
             style={{
               background: 'var(--surface-2, #11141a)',
               color: 'var(--fg-1, #e6e6e6)',
-              padding: '12px 14px',
+              // Reserve top clearance for the absolutely-positioned
+              // Copy button so the first line of the snippet does not
+              // sit underneath it, and reserve right clearance so a
+              // wrapped bash one-liner stops short of the button rather
+              // than scrolling behind it. The right padding is sized
+              // for the wider "Copied" post-click state (icon + text +
+              // button padding + the 8px right offset) with a few px
+              // of buffer for elevated font sizes / zoom. Issue #632.
+              padding: '40px 104px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
@@ -2393,7 +2506,7 @@ function IntegrationsSection() {
           </pre>
           <button
             type="button"
-            className="ghost"
+            className="ghost mcp-copy-btn"
             onClick={onCopy}
             disabled={!snippet}
             style={{

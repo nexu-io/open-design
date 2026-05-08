@@ -933,6 +933,8 @@ export const fr: Dict = {
   'pet.slashPetTuck': 'Cacher le compagnon pour l\'instant.',
   'pet.slashHatch': 'Générer un pet Codex via la compétence hatch-pet.',
   'pet.slashHatchArg': '<concept>',
+  'pet.slashSearch': 'Rechercher sur le web via la commande OD research.',
+  'pet.slashSearchArg': '<requête>',
   'pet.codexTitle': 'Éclos récemment',
   'pet.codexSubtitle': 'Les pets empaquetés par la compétence hatch-pet apparaissent ici pour une adoption en un clic.',
   'pet.codexSubtitleWithDir': 'Analyse de {dir} pour les pets empaquetés par la compétence hatch-pet.',

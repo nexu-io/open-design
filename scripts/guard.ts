@@ -75,6 +75,8 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/test-results/",
   // Vendored upstream HyperFrames skill helper scripts.
   "skills/hyperframes/scripts/",
+  // Vendored upstream Last30Days runtime helper used by the skill engine.
+  "skills/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt skill runtime assets (lewislulu/html-ppt-skill).
   "skills/html-ppt/assets/",
   "test-results/",

@@ -888,6 +888,8 @@ export const esES: Dict = {
   'pet.slashPetTuck': 'Guardar la mascota por ahora.',
   'pet.slashHatch': 'Genera una mascota Codex con la skill hatch-pet.',
   'pet.slashHatchArg': '<concepto>',
+  'pet.slashSearch': 'Busca en la web con el comando OD research.',
+  'pet.slashSearchArg': '<consulta>',
   'pet.codexTitle': 'Recién eclosionadas',
   'pet.codexSubtitle': 'Las mascotas empaquetadas por la skill hatch-pet aparecen aquí para adopción en un clic.',
   'pet.codexSubtitleWithDir': 'Escaneando {dir} en busca de paquetes de hatch-pet.',

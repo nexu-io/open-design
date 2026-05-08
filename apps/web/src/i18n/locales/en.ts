@@ -964,6 +964,8 @@ export const en: Dict = {
   'pet.slashPetTuck': 'Tuck the pet away for now.',
   'pet.slashHatch': 'Generate a Codex pet via the hatch-pet skill.',
   'pet.slashHatchArg': '<concept>',
+  'pet.slashSearch': 'Search the web through the OD research command.',
+  'pet.slashSearchArg': '<query>',
   'pet.codexTitle': 'Recently hatched',
   'pet.codexSubtitle': 'Pets packaged by the hatch-pet skill show up here for one-click adoption.',
   'pet.codexSubtitleWithDir': 'Scanning {dir} for pets packaged by the hatch-pet skill.',

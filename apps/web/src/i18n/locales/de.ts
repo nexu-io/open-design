@@ -887,6 +887,8 @@ export const de: Dict = {
   'pet.slashPetTuck': 'Pet vorerst wegstecken.',
   'pet.slashHatch': 'Codex-Pet mit dem hatch-pet-Skill erzeugen.',
   'pet.slashHatchArg': '<Konzept>',
+  'pet.slashSearch': 'Suche im Web über den OD-Research-Befehl.',
+  'pet.slashSearchArg': '<Suchanfrage>',
   'pet.codexTitle': 'Kürzlich ausgebrütet',
   'pet.codexSubtitle': 'Vom hatch-pet-Skill gepackte Pets erscheinen hier zur Ein-Klick-Adoption.',
   'pet.codexSubtitleWithDir': 'Suche in {dir} nach hatch-pet-Paketen.',

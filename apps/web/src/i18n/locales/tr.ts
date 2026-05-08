@@ -924,6 +924,8 @@ export const tr: Dict = {
   'pet.slashPetTuck': 'Peti şimdilik sakla.',
   'pet.slashHatch': 'hatch-pet skill\'i ile bir Codex peti üret.',
   'pet.slashHatchArg': '<konsept>',
+  'pet.slashSearch': 'OD research komutuyla web araması yap.',
+  'pet.slashSearchArg': '<sorgu>',
   'pet.codexTitle': 'Yeni kuluçkalananlar',
   'pet.codexSubtitle': 'hatch-pet skill\'inin paketlediği petler tek tıkla evlat edinmek için burada görünür.',
   'pet.codexSubtitleWithDir': 'hatch-pet paketleri için {dir} taranıyor.',

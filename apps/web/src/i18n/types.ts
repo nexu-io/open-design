@@ -1017,6 +1017,8 @@ export interface Dict {
   'pet.slashPetTuck': string;
   'pet.slashHatch': string;
   'pet.slashHatchArg': string;
+  'pet.slashSearch': string;
+  'pet.slashSearchArg': string;
   // Recently-hatched section in pet settings
   'pet.codexTitle': string;
   'pet.codexSubtitle': string;

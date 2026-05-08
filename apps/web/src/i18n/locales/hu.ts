@@ -941,6 +941,8 @@ export const hu: Dict = {
   'pet.slashPetTuck': 'Háziállat elrejtése egy időre.',
   'pet.slashHatch': 'Codex háziállat generálása a hatch-pet skill-lel.',
   'pet.slashHatchArg': '<koncepció>',
+  'pet.slashSearch': 'Webes keresés az OD research paranccsal.',
+  'pet.slashSearchArg': '<keresés>',
   'pet.codexTitle': 'Frissen kikelt',
   'pet.codexSubtitle':
     'A hatch-pet skill által csomagolt háziállatok itt jelennek meg, egy kattintással befogadhatók.',

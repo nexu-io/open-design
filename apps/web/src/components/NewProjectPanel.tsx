@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      pickFolder: () => Promise<string | null>;
+    };
+  }
+}
+
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
@@ -57,6 +66,7 @@ interface Props {
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -105,6 +115,7 @@ export function NewProjectPanel({
   promptTemplates,
   onCreate,
   onImportClaudeDesign,
+  onImportFolder,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -114,6 +125,8 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [baseDir, setBaseDir] = useState('');
+  const [importingFolder, setImportingFolder] = useState(false);
   const [tab, setTab] = useState<CreateTab>('prototype');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
@@ -356,6 +369,29 @@ export function NewProjectPanel({
     }
   }
 
+  const hasElectronPicker =
+    typeof window !== 'undefined' && typeof window.electronAPI?.pickFolder === 'function';
+
+  async function handleOpenFolder() {
+    if (!onImportFolder) return;
+    let pathToOpen: string;
+    if (hasElectronPicker) {
+      const picked = await window.electronAPI!.pickFolder();
+      if (!picked) return;
+      pathToOpen = picked;
+    } else {
+      const trimmed = baseDir.trim();
+      if (!trimmed) return;
+      pathToOpen = trimmed;
+    }
+    setImportingFolder(true);
+    try {
+      await onImportFolder(pathToOpen);
+    } finally {
+      setImportingFolder(false);
+    }
+  }
+
   return (
     <div className="newproj" data-testid="new-project-panel">
       <div className={`newproj-tabs-shell${tabScroll.left ? ' can-left' : ''}${tabScroll.right ? ' can-right' : ''}`}>
@@ -566,6 +602,30 @@ export function NewProjectPanel({
               </span>
             </button>
           </>
+        ) : null}
+        {onImportFolder ? (
+          <div className="newproj-open-folder">
+            {!hasElectronPicker ? (
+              <input
+                type="text"
+                className="newproj-folder-input"
+                placeholder="/path/to/project"
+                value={baseDir}
+                onChange={(e) => setBaseDir(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
+                disabled={importingFolder}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="ghost newproj-import"
+              disabled={(!hasElectronPicker && !baseDir.trim()) || importingFolder}
+              onClick={() => void handleOpenFolder()}
+            >
+              <Icon name="folder" size={13} />
+              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+            </button>
+          </div>
         ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>

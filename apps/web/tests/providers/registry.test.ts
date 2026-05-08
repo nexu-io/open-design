@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
   fetchDeployConfig,
@@ -129,6 +130,31 @@ describe('fetchConnectorDiscovery', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/connectors/discovery?refresh=true');
+  });
+});
+
+describe('connectConnector', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns a user-facing error when the OAuth popup is blocked', async () => {
+    const open = vi.fn(() => null);
+    vi.stubGlobal('window', { open } as unknown as Window & typeof globalThis);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+      }), { status: 200 })),
+    );
+
+    await expect(connectConnector('github')).resolves.toEqual({
+      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+      error: 'Popup blocked. Allow popups for Open Design and try again.',
+    });
+    expect(open).toHaveBeenCalledTimes(2);
   });
 });
 

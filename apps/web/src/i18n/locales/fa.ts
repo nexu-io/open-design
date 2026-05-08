@@ -965,6 +965,8 @@ export const fa: Dict = {
   'pet.slashPetTuck': 'پت را فعلاً جمع کنید.',
   'pet.slashHatch': 'با مهارت hatch-pet یک پت Codex بسازید.',
   'pet.slashHatchArg': '<مفهوم>',
+  'pet.slashSearch': 'وب را با فرمان OD research جستجو کنید.',
+  'pet.slashSearchArg': '<پرس‌وجو>',
   'pet.codexTitle': 'تازه‌متولدها',
   'pet.codexSubtitle': 'پت‌هایی که مهارت hatch-pet بسته‌بندی کرده اینجا ظاهر می‌شوند تا با یک کلیک پذیرفته شوند.',
   'pet.codexSubtitleWithDir': 'در حال اسکن {dir} برای بسته‌های hatch-pet.',
