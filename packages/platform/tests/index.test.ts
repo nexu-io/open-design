@@ -338,6 +338,16 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes ~/.vite-plus/bin so vp-managed global shims resolve under GUI launchers", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".vite-plus", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("appends $NPM_CONFIG_PREFIX/bin when set so corporate prefixes resolve", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-"));
@@ -367,6 +377,22 @@ describe("wellKnownUserToolchainBins", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it("prepends $VP_HOME/bin and expands ~/ so custom Vite+ homes outrank the default", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-home-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { VP_HOME: "~/custom-vp-home" },
+        includeSystemBins: false,
+      });
+      expect(dirs[0]).toBe(join(home, "custom-vp-home", "bin"));
+      expect(dirs).toContain(join(home, ".vite-plus", "bin"));
+      expect(dirs.indexOf(join(home, ".vite-plus", "bin"))).toBeGreaterThan(0);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 
