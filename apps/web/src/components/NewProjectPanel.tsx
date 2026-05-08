@@ -4,7 +4,8 @@ import type { ConnectorDetail } from '@open-design/contracts';
 declare global {
   interface Window {
     electronAPI?: {
-      pickFolder: () => Promise<string | null>;
+      openExternal?: (url: string) => Promise<boolean>;
+      pickFolder?: () => Promise<string | null>;
     };
   }
 }
@@ -376,7 +377,7 @@ export function NewProjectPanel({
     if (!onImportFolder) return;
     let pathToOpen: string;
     if (hasElectronPicker) {
-      const picked = await window.electronAPI!.pickFolder();
+      const picked = await window.electronAPI!.pickFolder!();
       if (!picked) return;
       pathToOpen = picked;
     } else {

@@ -157,6 +157,28 @@ describe('connectConnector', () => {
     });
     expect(open).toHaveBeenCalledTimes(2);
   });
+
+  it('opens connector auth in the system browser when running in Electron', async () => {
+    const open = vi.fn();
+    const openExternal = vi.fn(async () => true);
+    vi.stubGlobal('window', {
+      open,
+      electronAPI: { openExternal },
+    } as unknown as Window & typeof globalThis);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+      }), { status: 200 })),
+    );
+
+    await expect(connectConnector('github')).resolves.toEqual({
+      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+    });
+    expect(open).not.toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
+  });
 });
 
 describe('uploadProjectFiles', () => {
