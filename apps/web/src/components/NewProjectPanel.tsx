@@ -50,7 +50,7 @@ type PromptTemplatePick = {
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other';
+export type CreateTab = 'prototype' | 'deck' | 'image';
 
 export interface CreateInput {
   name: string;
@@ -77,13 +77,8 @@ interface Props {
 
 const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   prototype: 'newproj.tabPrototype',
-  'live-artifact': 'newproj.tabLiveArtifact',
   deck: 'newproj.tabDeck',
-  template: 'newproj.tabTemplate',
   image: 'newproj.surfaceImage',
-  video: 'newproj.surfaceVideo',
-  audio: 'newproj.surfaceAudio',
-  other: 'newproj.tabOther',
 };
 
 export function defaultDesignSystemSelection(
@@ -151,47 +146,16 @@ export function NewProjectPanel({
     'high-fidelity',
   );
   const [speakerNotes, setSpeakerNotes] = useState(false);
-  const [animations, setAnimations] = useState(false);
-  const [templateId, setTemplateId] = useState<string | null>(null);
   const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
   const [imageStyle, setImageStyle] = useState('');
-  const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
-  const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
-  const [videoLength, setVideoLength] = useState(5);
-  const [audioKind, setAudioKind] = useState<AudioKind>('speech');
-  const [audioModel, setAudioModel] = useState(DEFAULT_AUDIO_MODEL.speech);
-  const [audioDuration, setAudioDuration] = useState(10);
-  const [voice, setVoice] = useState('');
-  // Per-surface curated prompt template the user picked. Tracked
-  // independently for image vs video so flipping tabs doesn't clobber the
-  // other one's pick. The body is editable in-line and the edited copy is
-  // what gets carried to the agent — that's the "optimize the template"
-  // affordance the design brief asks for.
   const [imagePromptTemplate, setImagePromptTemplate] =
     useState<PromptTemplatePick | null>(null);
-  const [videoPromptTemplate, setVideoPromptTemplate] =
-    useState<PromptTemplatePick | null>(null);
 
-  // Design system is meaningful only for the structured/visual surfaces
-  // (prototype, deck, template, and the freeform "other" canvas). The
-  // media surfaces use prompt templates instead — design tokens don't map
-  // onto image/video/audio generations, and the picker just adds noise
-  // there. Keep this list explicit so future tabs declare their intent.
-  const tabSupportsDesignSystem =
-    tab === 'prototype' ||
-    tab === 'deck' ||
-    tab === 'template' ||
-    tab === 'other';
-  // Orbit briefings ship their own complete visual language baked into
-  // example.html and explicitly opt out of DESIGN.md injection via
-  // `od.design_system.requires: false`. Hide the picker only for those
-  // Orbit scenario skills; the general prototype creation surface should
-  // still honor the user's configured default design system even when a
-  // non-Orbit default skill does not require one.
+  const tabSupportsDesignSystem = tab === 'prototype' || tab === 'deck';
   const tabDefaultSkillForcesNoDs = useMemo(() => {
     const tabSkillId = ((): string | null => {
-      if (tab === 'prototype' || tab === 'live-artifact') {
+      if (tab === 'prototype') {
         const list = skills.filter((s) => s.mode === 'prototype');
         return list.find((s) => s.defaultFor.includes('prototype'))?.id
           ?? list[0]?.id ?? null;
@@ -217,43 +181,14 @@ export function NewProjectPanel({
     setSelectedDsIds(initialDefaultDsSelection);
   }, [dsSelectionTouched, initialDefaultDsSelection]);
 
-  // When entering the template tab, snap to the first user-saved template
-  // if there is one (and we don't already have a valid pick). The template
-  // tab no longer offers a built-in fallback — the entire point is to
-  // start from a template *the user* created via Share.
-  useEffect(() => {
-    if (tab !== 'template') return;
-    if (templates.length === 0) {
-      setTemplateId(null);
-      return;
-    }
-    if (templateId == null || !templates.some((t) => t.id === templateId)) {
-      setTemplateId(templates[0]!.id);
-    }
-  }, [tab, templates, templateId]);
-
   // The skill the request still routes through — kept so prototype/deck
   // pick a default-rendered skill (so the agent gets the right SKILL.md
   // body) without requiring the user to choose one explicitly.
   const skillIdForTab = useMemo(() => {
-    if (tab === 'other') return null;
     if (tab === 'prototype') {
       const list = skills.filter((s) => s.mode === 'prototype');
       return list.find((s) => s.defaultFor.includes('prototype'))?.id
         ?? list[0]?.id
-        ?? null;
-    }
-    if (tab === 'live-artifact') {
-      const exact = skills.find((s) => s.id === 'live-artifact' || s.name === 'live-artifact');
-      if (exact) return exact.id;
-      const hinted = skills.find((s) => {
-        const haystack = `${s.id} ${s.name} ${s.description} ${s.triggers.join(' ')}`.toLowerCase();
-        return haystack.includes('live artifact') || haystack.includes('live-artifact');
-      });
-      if (hinted) return hinted.id;
-      const prototypes = skills.filter((s) => s.mode === 'prototype');
-      return prototypes.find((s) => s.defaultFor.includes('prototype'))?.id
-        ?? prototypes[0]?.id
         ?? null;
     }
     if (tab === 'deck') {
@@ -262,17 +197,16 @@ export function NewProjectPanel({
         ?? list[0]?.id
         ?? null;
     }
-    if (tab === 'image' || tab === 'video' || tab === 'audio') {
-      const list = skills.filter((s) => s.mode === tab || s.surface === tab);
-      return list.find((s) => s.defaultFor.includes(tab))?.id
+    if (tab === 'image') {
+      const list = skills.filter((s) => s.mode === 'image' || s.surface === 'image');
+      return list.find((s) => s.defaultFor.includes('image'))?.id
         ?? list[0]?.id
         ?? null;
     }
     return null;
   }, [tab, skills]);
 
-  const canCreate =
-    !loading && (tab !== 'template' || templateId != null);
+  const canCreate = !loading;
 
   function updateTabScrollState() {
     const el = tabsRef.current;
@@ -327,29 +261,14 @@ export function NewProjectPanel({
     // form (the picker is hidden for image/video/audio).
     const { primary: primaryDs, inspirations } =
       buildDesignSystemCreateSelection(showDesignSystemPicker, selectedDsIds);
-    const promptTemplatePick =
-      tab === 'image'
-        ? imagePromptTemplate
-        : tab === 'video'
-          ? videoPromptTemplate
-          : null;
+    const promptTemplatePick = tab === 'image' ? imagePromptTemplate : null;
     const metadata = buildMetadata({
       tab,
       fidelity,
       speakerNotes,
-      animations,
-      templateId,
-      templates,
       imageModel,
       imageAspect,
       imageStyle,
-      videoModel,
-      videoAspect,
-      videoLength,
-      audioKind,
-      audioModel,
-      audioDuration,
-      voice,
       inspirationIds: inspirations,
       promptTemplate: promptTemplatePick,
     });
@@ -435,12 +354,6 @@ export function NewProjectPanel({
       <div className="newproj-body">
         <h3 className="newproj-title">
           <span className="newproj-title-text">{titleForTab(tab, t)}</span>
-          {tab === 'live-artifact' ? (
-            // "Beta" is an internationally adopted brand-style status marker;
-            // intentionally not run through t() (consistent with short product
-            // status pills that read the same across our supported locales).
-            <span className="newproj-title-badge" aria-label="Beta feature">Beta</span>
-          ) : null}
         </h3>
 
         <input
@@ -472,25 +385,8 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        {tab === 'video' ? (
-          <PromptTemplatePicker
-            surface="video"
-            templates={promptTemplates}
-            value={videoPromptTemplate}
-            onChange={setVideoPromptTemplate}
-          />
-        ) : null}
-
-        {tab === 'prototype' || tab === 'live-artifact' ? (
+        {tab === 'prototype' ? (
           <FidelityPicker value={fidelity} onChange={setFidelity} />
-        ) : null}
-
-        {tab === 'live-artifact' ? (
-          <ConnectorsSection
-            connectors={connectors}
-            loading={connectorsLoading}
-            onOpenConnectorsTab={onOpenConnectorsTab}
-          />
         ) : null}
 
         {tab === 'deck' ? (
@@ -500,22 +396,6 @@ export function NewProjectPanel({
             checked={speakerNotes}
             onChange={setSpeakerNotes}
           />
-        ) : null}
-
-        {tab === 'template' ? (
-          <>
-            <TemplatePicker
-              templates={templates}
-              value={templateId}
-              onChange={setTemplateId}
-            />
-            <ToggleRow
-              label={t('newproj.toggleAnimations')}
-              hint={t('newproj.toggleAnimationsHint')}
-              checked={animations}
-              onChange={setAnimations}
-            />
-          </>
         ) : null}
 
         {tab === 'image' ? (
@@ -531,56 +411,14 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        {tab === 'video' ? (
-          <MediaProjectOptions
-            surface="video"
-            videoModel={videoModel}
-            videoAspect={videoAspect}
-            videoLength={videoLength}
-            mediaProviders={mediaProviders}
-            onVideoModel={setVideoModel}
-            onVideoAspect={setVideoAspect}
-            onVideoLength={setVideoLength}
-          />
-        ) : null}
-
-        {tab === 'audio' ? (
-          <MediaProjectOptions
-            surface="audio"
-            audioKind={audioKind}
-            audioModel={audioModel}
-            audioDuration={audioDuration}
-            voice={voice}
-            mediaProviders={mediaProviders}
-            onAudioKind={(kind) => {
-              setAudioKind(kind);
-              setAudioModel(DEFAULT_AUDIO_MODEL[kind]);
-            }}
-            onAudioModel={setAudioModel}
-            onAudioDuration={setAudioDuration}
-            onVoice={setVoice}
-          />
-        ) : null}
-
         <button
           className="primary newproj-create"
           data-testid="create-project"
           onClick={handleCreate}
           disabled={!canCreate}
-          title={
-            tab === 'template' && templateId == null
-              ? t('newproj.createDisabledTitle')
-              : undefined
-          }
         >
           <Icon name="plus" size={13} />
-          <span>
-            {tab === 'template'
-              ? t('newproj.createFromTemplate')
-              : tab === 'live-artifact'
-                ? t('newproj.createLiveArtifact')
-              : t('newproj.create')}
-          </span>
+          <span>{t('newproj.create')}</span>
         </button>
         {onImportClaudeDesign ? (
           <>
@@ -1886,51 +1724,21 @@ function buildMetadata(input: {
   tab: CreateTab;
   fidelity: 'wireframe' | 'high-fidelity';
   speakerNotes: boolean;
-  animations: boolean;
-  templateId: string | null;
-  templates: ProjectTemplate[];
   imageModel: string;
   imageAspect: MediaAspect;
   imageStyle: string;
-  videoModel: string;
-  videoAspect: MediaAspect;
-  videoLength: number;
-  audioKind: AudioKind;
-  audioModel: string;
-  audioDuration: number;
-  voice: string;
   inspirationIds: string[];
   promptTemplate: PromptTemplatePick | null;
 }): ProjectMetadata {
-  const kind: ProjectKind = input.tab === 'live-artifact' ? 'prototype' : input.tab;
+  const kind: ProjectKind = input.tab;
   const inspirations = input.inspirationIds.length > 0
     ? { inspirationDesignSystemIds: input.inspirationIds }
     : {};
-  if (input.tab === 'prototype' || input.tab === 'live-artifact') {
-    return {
-      kind,
-      fidelity: input.fidelity,
-      ...(input.tab === 'live-artifact' ? { intent: 'live-artifact' as const } : {}),
-      ...inspirations,
-    };
+  if (input.tab === 'prototype') {
+    return { kind, fidelity: input.fidelity, ...inspirations };
   }
   if (input.tab === 'deck') {
     return { kind, speakerNotes: input.speakerNotes, ...inspirations };
-  }
-  if (input.tab === 'template') {
-    if (input.templateId == null) {
-      return { kind, animations: input.animations, ...inspirations };
-    }
-    const tpl = input.templates.find((x) => x.id === input.templateId);
-    // The fallback label is consumed by the agent prompt rather than the
-    // UI, so we keep it in English to match the rest of the prompt corpus.
-    return {
-      kind,
-      animations: input.animations,
-      templateId: input.templateId,
-      templateLabel: tpl?.name ?? 'Saved template',
-      ...inspirations,
-    };
   }
   if (input.tab === 'image') {
     return {
@@ -1939,26 +1747,6 @@ function buildMetadata(input: {
       imageAspect: input.imageAspect,
       imageStyle: input.imageStyle.trim() || undefined,
       ...buildPromptTemplateMetadata(input.promptTemplate),
-      ...inspirations,
-    };
-  }
-  if (input.tab === 'video') {
-    return {
-      kind,
-      videoModel: input.videoModel,
-      videoAspect: input.videoAspect,
-      videoLength: input.videoLength,
-      ...buildPromptTemplateMetadata(input.promptTemplate),
-      ...inspirations,
-    };
-  }
-  if (input.tab === 'audio') {
-    return {
-      kind,
-      audioKind: input.audioKind,
-      audioModel: input.audioModel,
-      audioDuration: input.audioDuration,
-      voice: input.voice.trim() || undefined,
       ...inspirations,
     };
   }
@@ -1999,20 +1787,10 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
   switch (tab) {
     case 'prototype':
       return t('newproj.titlePrototype');
-    case 'live-artifact':
-      return t('newproj.titleLiveArtifact');
     case 'deck':
       return t('newproj.titleDeck');
-    case 'template':
-      return t('newproj.titleTemplate');
     case 'image':
       return t('newproj.titleImage');
-    case 'video':
-      return t('newproj.titleVideo');
-    case 'audio':
-      return t('newproj.titleAudio');
-    case 'other':
-      return t('newproj.titleOther');
   }
 }
 

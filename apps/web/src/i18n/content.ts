@@ -5,17 +5,6 @@ import type {
 } from '../types';
 import type { Locale } from './types';
 import {
-  FR_DESIGN_SYSTEM_CATEGORIES,
-  FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
-  FR_DESIGN_SYSTEM_SUMMARIES,
-  FR_PROMPT_TEMPLATE_CATEGORIES,
-  FR_PROMPT_TEMPLATE_COPY,
-  FR_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
-  FR_PROMPT_TEMPLATE_TAGS,
-  FR_SKILL_COPY,
-  FR_SKILL_IDS_WITH_EN_FALLBACK,
-} from './content.fr';
-import {
   RU_DESIGN_SYSTEM_CATEGORIES,
   RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
   RU_DESIGN_SYSTEM_SUMMARIES,
@@ -1063,17 +1052,6 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, LocalizedPromptTemplateCopy> = {
 };
 
 const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
-  de: {
-    skillCopy: DE_SKILL_COPY,
-    skillIdsWithEnFallback: DE_SKILL_IDS_WITH_EN_FALLBACK,
-    designSystemSummaries: DE_DESIGN_SYSTEM_SUMMARIES,
-    designSystemCategories: DE_DESIGN_SYSTEM_CATEGORIES,
-    designSystemIdsWithEnFallback: DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
-    promptTemplateCategories: DE_PROMPT_TEMPLATE_CATEGORIES,
-    promptTemplateIdsWithEnFallback: DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
-    promptTemplateTags: DE_PROMPT_TEMPLATE_TAGS,
-    promptTemplateCopy: DE_PROMPT_TEMPLATE_COPY,
-  },
   ru: {
     skillCopy: RU_SKILL_COPY,
     skillIdsWithEnFallback: RU_SKILL_IDS_WITH_EN_FALLBACK,
@@ -1084,17 +1062,6 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
     promptTemplateIdsWithEnFallback: RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
     promptTemplateTags: RU_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: RU_PROMPT_TEMPLATE_COPY,
-  },
-  fr: {
-    skillCopy: FR_SKILL_COPY,
-    skillIdsWithEnFallback: FR_SKILL_IDS_WITH_EN_FALLBACK,
-    designSystemSummaries: FR_DESIGN_SYSTEM_SUMMARIES,
-    designSystemCategories: FR_DESIGN_SYSTEM_CATEGORIES,
-    designSystemIdsWithEnFallback: FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
-    promptTemplateCategories: FR_PROMPT_TEMPLATE_CATEGORIES,
-    promptTemplateIdsWithEnFallback: FR_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
-    promptTemplateTags: FR_PROMPT_TEMPLATE_TAGS,
-    promptTemplateCopy: FR_PROMPT_TEMPLATE_COPY,
   },
 };
 
@@ -1119,14 +1086,10 @@ function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedCon
 }
 
 export const LOCALIZED_CONTENT_IDS = {
-  de: buildLocalizedContentIds(LOCALIZED_CONTENT.de!),
   ru: buildLocalizedContentIds(LOCALIZED_CONTENT.ru!),
-  fr: buildLocalizedContentIds(LOCALIZED_CONTENT.fr!),
-} satisfies Record<'de' | 'ru' | 'fr', LocalizedContentIds>;
+} satisfies Record<'ru', LocalizedContentIds>;
 
-export const GERMAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.de;
 export const RUSSIAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.ru;
-export const FRENCH_CONTENT_IDS = LOCALIZED_CONTENT_IDS.fr;
 
 function getLocalizedContent(locale: Locale): LocalizedContentBundle | undefined {
   return LOCALIZED_CONTENT[locale];

@@ -1,26 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
-import {
-  DEFAULT_AUDIO_MODEL,
-  DEFAULT_IMAGE_MODEL,
-  DEFAULT_VIDEO_MODEL,
-} from '../media/models';
 import type {
   AgentInfo,
   AppConfig,
   DesignSystemSummary,
   Project,
-  ProjectKind,
-  ProjectMetadata,
   ProjectTemplate,
   PromptTemplateSummary,
   SkillSummary,
 } from '../types';
 import { DesignsTab } from './DesignsTab';
-import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
-import { DesignSystemsTab } from './DesignSystemsTab';
-import { ExamplesTab } from './ExamplesTab';
+import { DesignSystemsManager } from './DesignSystemsManager';
 import { AppChromeHeader } from './AppChromeHeader';
 import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
@@ -30,12 +21,9 @@ import {
   fetchConnectors,
   fetchConnectorStatuses,
 } from '../providers/registry';
-import { PetRail } from './pet/PetRail';
-import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
-import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 
-type TopTab = 'designs' | 'examples' | 'design-systems' | 'image-templates' | 'video-templates';
+type TopTab = 'designs' | 'design-systems';
 
 interface Props {
   skills: SkillSummary[];
@@ -62,10 +50,8 @@ interface Props {
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
+  onRefreshDesignSystems: () => void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'language' | 'appearance' | 'notifications' | 'pet' | 'about') => void;
-  onAdoptPet: () => void;
-  onAdoptPetInline: (petId: string) => void;
-  onTogglePet: () => void;
 }
 
 const SIDEBAR_MIN = 320;
@@ -85,12 +71,6 @@ export function isTrustedConnectorCallbackOrigin(origin: string, currentOrigin?:
     return false;
   }
 }
-
-// Lets the user fully remove the right-side pet rail from the entry
-// layout. They re-summon it from the entry-view avatar dropdown — the
-// PetRail's own collapse toggle only narrows the column, so this state
-// is the "the rail isn't there at all" escape hatch.
-const PET_RAIL_HIDDEN_KEY = 'open-design:pet-rail-hidden';
 
 function loadSidebarWidth(): number {
   try {
@@ -203,15 +183,6 @@ export function sortConnectorsForSearch(
     .map((entry) => entry.connector);
 }
 
-function loadPetRailHidden(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(PET_RAIL_HIDDEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 export function EntryView({
   skills,
   designSystems,
@@ -232,33 +203,15 @@ export function EntryView({
   onOpenLiveArtifact,
   onDeleteProject,
   onChangeDefaultDesignSystem,
+  onRefreshDesignSystems,
   onOpenSettings,
-  onAdoptPet,
-  onAdoptPetInline,
-  onTogglePet,
 }: Props) {
   const t = useT();
   const [topTab, setTopTab] = useState<TopTab>('designs');
-  const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
-  const [previewPromptTemplate, setPreviewPromptTemplate] =
-    useState<PromptTemplateSummary | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [resizing, setResizing] = useState(false);
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
-  const [petRailHidden, setPetRailHiddenState] = useState<boolean>(() => loadPetRailHidden());
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
-
-  function setPetRailHidden(next: boolean) {
-    setPetRailHiddenState(next);
-    try {
-      window.localStorage.setItem(PET_RAIL_HIDDEN_KEY, next ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
-  }
-
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === config.agentId) ?? null,
     [agents, config.agentId],
@@ -276,28 +229,6 @@ export function EntryView({
       ? `${currentAgent.name}${currentAgent.version ? ` · ${currentAgent.version}` : ''}`
       : t('settings.noAgentSelected');
   }, [config.mode, config.model, config.baseUrl, currentAgent, t]);
-
-  // 'Use this prompt' on an example card is a fast path — skip the form and
-  // create the project immediately with sane defaults derived from the skill,
-  // seeding the chat composer with the example prompt via pendingPrompt.
-  function usePromptFromSkill(skill: SkillSummary) {
-    onCreateProject({
-      name: skill.name,
-      skillId: skill.id,
-      designSystemId: null,
-      metadata: metadataForSkill(skill),
-      pendingPrompt: skill.examplePrompt || skill.description,
-    });
-  }
-
-  function previewDesignSystem(id: string) {
-    setPreviewSystemId(id);
-  }
-
-  const previewSystem = useMemo(
-    () => (previewSystemId ? designSystems.find((d) => d.id === previewSystemId) ?? null : null),
-    [designSystems, previewSystemId],
-  );
 
   function handleCreate(input: CreateInput) {
     onCreateProject(input);
@@ -383,87 +314,25 @@ export function EntryView({
     return () => window.removeEventListener('focus', onFocus);
   }, [reloadConnectorStatuses]);
 
-  // Dismiss the avatar dropdown on outside-click / Escape so it behaves
-  // like the project-view AvatarMenu (which uses the same shell CSS).
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (!avatarMenuRef.current) return;
-      if (!avatarMenuRef.current.contains(e.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
-
   const avatarMenu = (
-    <div className="avatar-menu" ref={avatarMenuRef}>
-      <button
-        type="button"
-        className="settings-icon-btn"
-        onClick={() => setAvatarMenuOpen((v) => !v)}
-        title={t('entry.openSettingsTitle')}
-        aria-label={t('entry.openSettingsAria')}
-        aria-haspopup="menu"
-        aria-expanded={avatarMenuOpen}
-      >
-        <Icon name="settings" size={17} />
-      </button>
-      {avatarMenuOpen ? (
-        <div className="avatar-popover" role="menu">
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setPetRailHidden(!petRailHidden);
-              setAvatarMenuOpen(false);
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
-            </span>
-            <span>
-              {petRailHidden
-                ? t('pet.railShow')
-                : t('pet.railHide')}
-            </span>
-          </button>
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="settings" size={14} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      className="settings-icon-btn"
+      onClick={() => onOpenSettings()}
+      title={t('entry.openSettingsTitle')}
+      aria-label={t('entry.openSettingsAria')}
+    >
+      <Icon name="settings" size={17} />
+    </button>
   );
 
   return (
     <div className="entry-shell">
       <AppChromeHeader actions={avatarMenu} />
       <div
-        className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
+        className="entry"
         style={{
-          gridTemplateColumns: petRailHidden
-            ? `${sidebarWidth}px 1fr`
-            : `${sidebarWidth}px 1fr auto`,
+          gridTemplateColumns: `${sidebarWidth}px 1fr`,
         }}
       >
       <aside className="entry-side" style={{ width: sidebarWidth }}>
@@ -485,30 +354,6 @@ export function EntryView({
         <div className="entry-side-foot">
           <button
             type="button"
-            className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
-            onClick={onAdoptPet}
-            title={
-              config.pet?.adopted
-                ? t('pet.changePet')
-                : t('pet.adoptCallout')
-            }
-          >
-            <span className="pet-pill-glyph" aria-hidden>
-              {config.pet?.adopted
-                ? config.pet.petId === 'custom'
-                  ? config.pet.custom.glyph || '🦄'
-                  : '🐾'
-                : '🐾'}
-            </span>
-            <span>
-              {config.pet?.adopted
-                ? t('pet.changePet')
-                : t('pet.adoptCallout')}
-            </span>
-            {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
-          </button>
-          <button
-            type="button"
             className="foot-pill"
             onClick={() => onOpenSettings()}
             aria-label={t('settings.envConfigure')}
@@ -525,17 +370,6 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
-          <a
-            className="foot-pill"
-            href="https://x.com/nexudotio"
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Follow @nexudotio on X for releases and milestones"
-            aria-label="Follow @nexudotio on X"
-          >
-            <Icon name="external-link" size={12} />
-            <span>Follow @nexudotio</span>
-          </a>
           <LanguageMenu />
         </div>
         <button
@@ -554,33 +388,11 @@ export function EntryView({
         <div className="entry-header">
           <div className="entry-tabs" role="tablist">
             <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
-            <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
-            <TopTabButton
-              current={topTab}
-              value="design-systems"
-              label={t('entry.tabDesignSystems')}
-              onClick={setTopTab}
-            />
-            <TopTabButton
-              current={topTab}
-              value="image-templates"
-              label={t('entry.tabImageTemplates')}
-              onClick={setTopTab}
-            />
-            <TopTabButton
-              current={topTab}
-              value="video-templates"
-              label={t('entry.tabVideoTemplates')}
-              onClick={setTopTab}
-            />
+            <TopTabButton current={topTab} value="design-systems" label="Design Systems" onClick={setTopTab} />
           </div>
         </div>
         <div className="entry-tab-content">
           {topTab === 'designs' ? (
-            // DesignsTab uses skills + designSystems for tag rendering on
-            // each card, so wait until projects + that metadata are present
-            // to avoid a flash of "No projects yet" before the real list
-            // arrives.
             projectsLoading || skillsLoading || designSystemsLoading ? (
               <CenteredLoader label={t('common.loading')} />
             ) : (
@@ -594,71 +406,12 @@ export function EntryView({
               />
             )
           ) : null}
-          {topTab === 'examples' ? (
-            skillsLoading ? (
-              <CenteredLoader label={t('common.loading')} />
-            ) : (
-              <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
-            )
-          ) : null}
           {topTab === 'design-systems' ? (
-            designSystemsLoading ? (
-              <CenteredLoader label={t('common.loading')} />
-            ) : (
-              <DesignSystemsTab
-                systems={designSystems}
-                selectedId={defaultDesignSystemId}
-                onSelect={onChangeDefaultDesignSystem}
-                onPreview={previewDesignSystem}
-              />
-            )
-          ) : null}
-          {topTab === 'image-templates' ? (
-            promptTemplatesLoading ? (
-              <CenteredLoader label={t('common.loading')} />
-            ) : (
-              <PromptTemplatesTab
-                surface="image"
-                templates={promptTemplates}
-                onPreview={setPreviewPromptTemplate}
-              />
-            )
-          ) : null}
-          {topTab === 'video-templates' ? (
-            promptTemplatesLoading ? (
-              <CenteredLoader label={t('common.loading')} />
-            ) : (
-              <PromptTemplatesTab
-                surface="video"
-                templates={promptTemplates}
-                onPreview={setPreviewPromptTemplate}
-              />
-            )
+            <DesignSystemsManager systems={designSystems} onRefresh={onRefreshDesignSystems} />
           ) : null}
         </div>
       </main>
-      {petRailHidden ? null : (
-        <PetRail
-          config={config}
-          onAdoptInline={onAdoptPetInline}
-          onOpenPetSettings={onAdoptPet}
-          onTuck={onTogglePet}
-          onHide={() => setPetRailHidden(true)}
-        />
-      )}
       </div>
-      {previewSystem ? (
-        <DesignSystemPreviewModal
-          system={previewSystem}
-          onClose={() => setPreviewSystemId(null)}
-        />
-      ) : null}
-      {previewPromptTemplate ? (
-        <PromptTemplatePreviewModal
-          summary={previewPromptTemplate}
-          onClose={() => setPreviewPromptTemplate(null)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -687,55 +440,3 @@ function TopTabButton({
   );
 }
 
-// Map a skill's declared mode to project metadata. Falls back to the same
-// defaults the new-project form would apply (high-fidelity prototype, no
-// speaker notes on decks, no template animations) so 'Use this prompt'
-// produces a project indistinguishable from one created via the form. Per-
-// skill hints in SKILL.md frontmatter (od.fidelity, od.speaker_notes,
-// od.animations) override the defaults so each example reproduces the
-// shipped example.html — e.g. wireframe-sketch declares fidelity:wireframe.
-function metadataForSkill(skill: SkillSummary): ProjectMetadata {
-  const kind = kindForSkill(skill);
-  if (kind === 'prototype') {
-    return { kind, fidelity: skill.fidelity ?? 'high-fidelity' };
-  }
-  if (kind === 'deck') {
-    return {
-      kind,
-      speakerNotes:
-        typeof skill.speakerNotes === 'boolean' ? skill.speakerNotes : false,
-    };
-  }
-  if (kind === 'template') {
-    return {
-      kind,
-      animations:
-        typeof skill.animations === 'boolean' ? skill.animations : false,
-    };
-  }
-  if (kind === 'image') {
-    return { kind, imageModel: DEFAULT_IMAGE_MODEL, imageAspect: '1:1' };
-  }
-  if (kind === 'video') {
-    return { kind, videoModel: DEFAULT_VIDEO_MODEL, videoAspect: '16:9', videoLength: 5 };
-  }
-  if (kind === 'audio') {
-    return {
-      kind,
-      audioKind: 'speech',
-      audioModel: DEFAULT_AUDIO_MODEL.speech,
-      audioDuration: 10,
-    };
-  }
-  return { kind: 'other' };
-}
-
-function kindForSkill(skill: SkillSummary): ProjectKind {
-  if (skill.mode === 'deck') return 'deck';
-  if (skill.mode === 'prototype') return 'prototype';
-  if (skill.mode === 'template') return 'template';
-  if (skill.mode === 'image' || skill.surface === 'image') return 'image';
-  if (skill.mode === 'video' || skill.surface === 'video') return 'video';
-  if (skill.mode === 'audio' || skill.surface === 'audio') return 'audio';
-  return 'other';
-}

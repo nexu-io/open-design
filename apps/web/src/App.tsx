@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
-import { PetOverlay } from './components/pet/PetOverlay';
-import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
 import {
   SettingsDialog,
@@ -19,7 +17,6 @@ import {
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
-  DEFAULT_PET,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
@@ -336,37 +333,14 @@ export function App() {
     });
   }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId]);
 
-  // One-shot self-healing migration for pets adopted before the
-  // overlay learned atlas-row switching. If the stored pet is a
-  // custom / codex pet whose imageUrl is a single-row strip
-  // (no atlas), we silently re-download the full spritesheet so
-  // hover, drag, and idle-ambient variety all light up on next render.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const upgraded = await migrateCustomPetAtlas(config);
-      if (!upgraded || cancelled) return;
-      setConfig((prev) => {
-        if (!prev.pet) return prev;
-        const next: AppConfig = {
-          ...prev,
-          pet: { ...prev.pet, custom: upgraded },
-        };
-        saveConfig(next);
-        return next;
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Snapshot the config at mount; migration is one-shot per session
-    // and should not re-run every time config changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const refreshProjects = useCallback(async () => {
     const list = await listProjects();
     setProjects(list);
+  }, []);
+
+  const refreshDesignSystems = useCallback(async () => {
+    const list = await fetchDesignSystems();
+    setDesignSystems(list);
   }, []);
 
   const refreshTemplates = useCallback(async () => {
@@ -618,63 +592,12 @@ export function App() {
     setSettingsOpen(true);
   }, []);
 
-  const openPetSettings = useCallback(() => {
-    setSettingsWelcome(false);
-    setSettingsInitialSection('pet');
-    setSettingsOpen(true);
-  }, []);
-
   const openMcpSettings = useCallback(() => {
     setSettingsWelcome(false);
     setSettingsInitialSection('mcpClient');
     setSettingsOpen(true);
   }, []);
 
-  // Explicit enabled toggle — true = wake, false = tuck. Persists to
-  // localStorage so the overlay state survives across reloads. We keep
-  // `adopted` untouched so the entry-view CTA does not regress to
-  // "adopt me" once the user has already chosen.
-  const handleSetPetEnabled = useCallback((enabled: boolean) => {
-    setConfig((curr) => {
-      const prev = curr.pet ?? DEFAULT_PET;
-      const next: AppConfig = { ...curr, pet: { ...prev, enabled } };
-      saveConfig(next);
-      return next;
-    });
-  }, []);
-
-  const handleTuckPet = useCallback(
-    () => handleSetPetEnabled(false),
-    [handleSetPetEnabled],
-  );
-
-  // Toggle wake/tuck — used by the pet rail and the composer button.
-  const handleTogglePet = useCallback(() => {
-    setConfig((curr) => {
-      const prev = curr.pet ?? DEFAULT_PET;
-      const next: AppConfig = {
-        ...curr,
-        pet: { ...prev, enabled: !prev.enabled },
-      };
-      saveConfig(next);
-      return next;
-    });
-  }, []);
-
-  // Inline adopt — the right-hand pet rail and the composer's pet menu
-  // both call this to switch pets without bouncing the user into
-  // Settings. It always wakes the overlay so the change is visible.
-  const handleAdoptPet = useCallback((petId: string) => {
-    setConfig((curr) => {
-      const prev = curr.pet ?? DEFAULT_PET;
-      const next: AppConfig = {
-        ...curr,
-        pet: { ...prev, adopted: true, enabled: true, petId },
-      };
-      saveConfig(next);
-      return next;
-    });
-  }, []);
 
   // When the user lands on the entry view (route.kind === 'home'), pull
   // a fresh template list. The template store is global — if they just
@@ -715,9 +638,6 @@ export function App() {
           onRefreshAgents={refreshAgents}
           onOpenSettings={openSettings}
           onOpenMcpSettings={openMcpSettings}
-          onAdoptPetInline={handleAdoptPet}
-          onTogglePet={handleTogglePet}
-          onOpenPetSettings={openPetSettings}
           onBack={handleBack}
           onClearPendingPrompt={handleClearPendingPrompt}
           onTouchProject={handleTouchProject}
@@ -745,17 +665,10 @@ export function App() {
           onOpenLiveArtifact={handleOpenLiveArtifact}
           onDeleteProject={handleDeleteProject}
           onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
+          onRefreshDesignSystems={refreshDesignSystems}
           onOpenSettings={openSettings}
-          onAdoptPet={openPetSettings}
-          onAdoptPetInline={handleAdoptPet}
-          onTogglePet={handleTogglePet}
         />
       )}
-      <PetOverlay
-        pet={config.pet?.enabled ? config.pet : undefined}
-        onTuck={handleTuckPet}
-        onOpenSettings={openPetSettings}
-      />
       {settingsOpen ? (
         <SettingsDialog
           initial={config}

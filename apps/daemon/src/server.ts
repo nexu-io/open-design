@@ -35,7 +35,7 @@ import { validateLinkedDirs } from './linked-dirs.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
-import { listDesignSystems, readDesignSystem } from './design-systems.js';
+import { listDesignSystems, readDesignSystem, writeDesignSystem, deleteDesignSystem } from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
@@ -2985,6 +2985,54 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (body === null)
         return res.status(404).json({ error: 'design system not found' });
       res.json({ id: req.params.id, body });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems', async (req, res) => {
+    try {
+      const { id, content } = req.body || {};
+      if (!id || typeof id !== 'string' || !/^[a-z0-9_-]+$/.test(id))
+        return res.status(400).json({ error: 'invalid id: use lowercase letters, digits, hyphens, underscores' });
+      if (typeof content !== 'string' || !content.trim())
+        return res.status(400).json({ error: 'content is required' });
+      const existing = await readDesignSystem(DESIGN_SYSTEMS_DIR, id);
+      if (existing !== null)
+        return res.status(409).json({ error: 'design system already exists' });
+      await writeDesignSystem(DESIGN_SYSTEMS_DIR, id, content);
+      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const created = systems.find((s) => s.id === id);
+      res.status(201).json({ designSystem: created ?? { id } });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.put('/api/design-systems/:id', async (req, res) => {
+    try {
+      const { content } = req.body || {};
+      if (typeof content !== 'string' || !content.trim())
+        return res.status(400).json({ error: 'content is required' });
+      const existing = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      if (existing === null)
+        return res.status(404).json({ error: 'design system not found' });
+      await writeDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id, content);
+      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const updated = systems.find((s) => s.id === req.params.id);
+      res.json({ designSystem: updated ?? { id: req.params.id } });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.delete('/api/design-systems/:id', async (req, res) => {
+    try {
+      const existing = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      if (existing === null)
+        return res.status(404).json({ error: 'design system not found' });
+      await deleteDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

@@ -190,6 +190,44 @@ export async function fetchDesignSystem(id: string): Promise<DesignSystemDetail 
   }
 }
 
+export async function createDesignSystem(id: string, content: string): Promise<{ error?: string }> {
+  try {
+    const resp = await fetch('/api/design-systems', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, content }),
+    });
+    const json = await resp.json() as { error?: string };
+    return resp.ok ? {} : { error: json.error ?? 'unknown error' };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+export async function updateDesignSystem(id: string, content: string): Promise<{ error?: string }> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    const json = await resp.json() as { error?: string };
+    return resp.ok ? {} : { error: json.error ?? 'unknown error' };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+export async function deleteDesignSystemApi(id: string): Promise<{ error?: string }> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const json = await resp.json() as { error?: string };
+    return resp.ok ? {} : { error: json.error ?? 'unknown error' };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
 export async function fetchPromptTemplates(): Promise<PromptTemplateSummary[]> {
   try {
     const resp = await fetch('/api/prompt-templates');

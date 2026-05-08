@@ -4,7 +4,7 @@
 // `> Category: <name>` blockquote line beneath the H1. Summary is the first
 // paragraph between the H1 and the next heading (Category line stripped).
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export async function listDesignSystems(root) {
@@ -47,6 +47,17 @@ export async function readDesignSystem(root, id) {
   } catch {
     return null;
   }
+}
+
+export async function writeDesignSystem(root, id, content) {
+  const dir = path.join(root, id);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, 'DESIGN.md'), content, 'utf8');
+}
+
+export async function deleteDesignSystem(root, id) {
+  const dir = path.join(root, id);
+  await rm(dir, { recursive: true, force: true });
 }
 
 function summarize(raw) {
