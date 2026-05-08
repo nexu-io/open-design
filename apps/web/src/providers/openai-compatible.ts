@@ -45,6 +45,7 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   if (u.includes('api.groq')) return true;
   if (u.includes('api.together')) return true;
   if (u.includes('openrouter')) return true;
+  if (u.includes('ollama.com')) return true;
   if (u.includes('openai.com')) return true;
   if (m.startsWith('deepseek')) return true;
   if (m.startsWith('groq') || m.startsWith('llama') || m.startsWith('mixtral')) return true;
