@@ -250,31 +250,40 @@ export function openSandboxedPreviewInNewTab(
 // equivalent print rules; this is a safety net for older / partially
 // regenerated decks where the framework was stripped — without it,
 // horizontal-snap decks print only the visible slide.
-export function exportAsPdf(
+export async function exportAsPdf(
   html: string,
   title: string,
   opts?: SrcdocOptions & { sandboxedPreview?: boolean },
-): void {
+): Promise<void> {
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
+  doc = injectPrintScript(doc, title);
+
+  if (sandboxedPreview) {
+    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+  }
 
   // Desktop native print bridge — uses Electron's webContents.print() API
-  // instead of window.open + window.print(). The bridge receives the content
-  // HTML directly and shows the native print dialog in the main process.
+  // instead of window.open + window.print(). The bridge receives the complete
+  // sandboxed document and shows the native print dialog in the main process.
   const desktopApi =
-    typeof window !== 'undefined' ? (window as Record<string, unknown>).__odDesktop as { printPdf?: (html: string) => void; isDesktop?: boolean } | undefined : undefined;
+    typeof window !== 'undefined'
+      ? (window as unknown as Record<string, unknown>).__odDesktop as
+          | { printPdf?: (html: string) => Promise<void>; isDesktop?: boolean }
+          | undefined
+      : undefined;
   if (desktopApi?.printPdf) {
-    desktopApi.printPdf(doc);
+    try {
+      await desktopApi.printPdf(doc);
+    } catch {
+      if (typeof alert !== 'undefined') {
+        alert('Print failed. Please try Export PDF again or use the browser version.');
+      }
+    }
     return;
   }
 
-  doc = injectPrintScript(doc, title);
-  if (sandboxedPreview) {
-    // `allow-modals` is needed so the child can show the browser print dialog;
-    // it still does not grant same-origin access to the generated document.
-    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-  }
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
 
@@ -287,21 +296,22 @@ export function exportAsPdf(
     if (typeof alert !== 'undefined') {
       alert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     }
-    URL.revokeObjectURL(url); // Prevent memory leaks on early exit
+    URL.revokeObjectURL(url);
     return;
   }
 
   if (sandboxedPreview) {
     try {
-      // Disassociate the opener reference to preserve sandboxing/noopener behavior
       win.opener = null;
     } catch (e) {
       // Guard against potential context environment restrictions
     }
   }
 
-  // Navigate the verified window to the generated Blob URL
+  // Navigate the verified window to the generated Blob URL then release
+  // the Blob URL — the window holds its own reference once navigation starts.
   win.location.href = url;
+  URL.revokeObjectURL(url);
 }
 
 function injectPrintScript(doc: string, title: string): string {

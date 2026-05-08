@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
@@ -272,8 +272,7 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
 }
 
 const __filename = fileURLToPath(import.meta.url);
-const __desktopDir = dirname(dirname(__filename));
-const preloadPath = join(__desktopDir, 'preload', 'index.js');
+const preloadPath = dirname(__filename) + '/preload.js';
 
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
@@ -318,7 +317,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
 
-  ipcMain.handle('od:print-pdf', async (_event, html: string) => {
+  ipcMain.handle('od:print-pdf', async (_event, html: unknown): Promise<void> => {
+    if (typeof html !== 'string') {
+      throw new Error('Invalid print payload: expected HTML string');
+    }
+    if (_event.sender !== window.webContents) {
+      throw new Error('Print request from unexpected frame');
+    }
+
     const printWindow = new BrowserWindow({
       width: 800,
       height: 600,
@@ -330,10 +336,19 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       },
     });
 
+    printWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    printWindow.webContents.on('will-navigate', (e) => e.preventDefault());
+
     try {
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
       printWindow.show();
-      await printWindow.webContents.print({ printBackground: true });
+
+      await new Promise<void>((resolve, reject) => {
+        printWindow.webContents.print({ printBackground: true }, (success: boolean, failureReason?: string) => {
+          if (success) resolve();
+          else reject(new Error(failureReason ?? 'Print dialog was cancelled or failed'));
+        });
+      });
     } finally {
       if (!printWindow.isDestroyed()) printWindow.close();
     }

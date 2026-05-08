@@ -259,7 +259,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {
-    exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
+    await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
 
     expect(openCalls).toEqual([['', '_blank']]);
     expect(mockWin.opener).toBeNull();
@@ -273,7 +273,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('preserves deck print handling inside sandboxed PDF exports', async () => {
-    exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
+    await exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
 
     expect(openCalls).toEqual([['', '_blank']]);
     expect(mockWin.opener).toBeNull();
@@ -286,7 +286,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('allows explicit trusted PDF opt-out without changing the secure default', async () => {
-    exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
+    await exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
       sandboxedPreview: false,
     });
 
@@ -301,16 +301,39 @@ describe('sandboxed preview Blob exports', () => {
 
   it('shows an alert and revokes the blob URL when the popup is blocked', async () => {
     vi.stubGlobal('window', {
-      ...window,
       open: () => null,
+      addEventListener: () => {},
     });
 
     const revokeSpy = URL.revokeObjectURL as ReturnType<typeof vi.fn>;
     revokeSpy.mockClear();
 
-    exportAsPdf('<p>test</p>', 'Blocked');
+    await exportAsPdf('<p>test</p>', 'Blocked');
 
     expect(alert).toHaveBeenCalledWith('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     expect(revokeSpy).toHaveBeenCalledWith('blob:test');
+  });
+
+  it('uses the desktop native print bridge when __odDesktop.printPdf is available', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: (_url: string, _target: string, features?: string) => {
+        openCalls.push([_url, _target]);
+        openedFeatures = features;
+        return mockWin;
+      },
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'Desktop PDF');
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    expect(openCalls).toEqual([]);
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    expect(htmlArg).toContain('sandbox="allow-scripts allow-modals"');
+    expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
   });
 });
