@@ -175,8 +175,19 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   useEffect(() => {
     loadPreviewRef.current = loadPreview;
   }, [loadPreview]);
-  const onPreviewView = useCallback((id: string) => {
-    void loadPreviewRef.current(id);
+  // Mirror the active skill id into a ref so onPreviewView can fetch the
+  // selected skill instead of the modal's internal view id. PreviewModal
+  // calls onView(activeId), where activeId is the modal-local view id
+  // ('preview' in this component); forwarding that id straight into
+  // fetchSkillExample would request /api/skills/preview/example instead
+  // of the user's selected skill, leaving Retry unable to recover.
+  const activeSkillIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeSkillIdRef.current = previewSkillId;
+  }, [previewSkillId]);
+  const onPreviewView = useCallback(() => {
+    const skillId = activeSkillIdRef.current;
+    if (skillId !== null) void loadPreviewRef.current(skillId);
   }, []);
 
   // Open the modal for a card. We always trigger a preview fetch even if
