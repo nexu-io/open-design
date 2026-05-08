@@ -69,19 +69,32 @@ host-gateway alias is only added for builds that need this local proxy mapping.
 
 `deploy/scripts/prepare-colima-build-swap.sh` is for manual Docker image
 publishing from an Apple Silicon macOS host that uses Colima as the Docker VM.
-Low-memory Colima VMs can run out of RAM during multi-arch image builds; this
+The helper is intentionally Apple Silicon-only because the failure mode it covers
+is local arm64 Colima builds exhausting a small Linux VM while preparing
+multi-arch images. It exits before touching Colima on non-macOS or
+non-Apple-Silicon hosts.
+
+Low-memory Colima VMs can run out of RAM during multi-arch image builds. The
 helper checks the VM memory and swap status, then creates and enables a temporary
-swap file only when the VM has no swap and less than 4 GiB of RAM. The script
-exits before touching Colima on non-macOS or non-Apple-Silicon hosts.
+swap file only when the VM has no swap and less than 4 GiB of RAM. The 4 GiB
+threshold is a conservative default for short-lived manual publishes on small
+Colima profiles; raise `COLIMA_BUILD_SWAP_MEMORY_THRESHOLD_KIB` if larger builds
+still OOM, or lower it if you only want swap for very small VMs.
+
+Prefer increasing the Colima VM memory (`colima start --memory <GiB>` or the
+profile config) when you want a persistent build machine. Use this helper when
+you need a temporary, reversible boost for one manual publish without resizing
+or recreating the VM.
 
 Run it before a manual publish if Docker builds fail with out-of-memory errors,
-or if `status` shows a small Colima VM with no swap:
+or if `status` shows a small Colima VM with no swap. The swap remains active
+until cleanup or VM restart, so use a shell trap for one-off sessions:
 
 ```bash
 deploy/scripts/prepare-colima-build-swap.sh status
 deploy/scripts/prepare-colima-build-swap.sh
+trap 'deploy/scripts/prepare-colima-build-swap.sh cleanup' EXIT
 deploy/scripts/publish-images.sh --image_tag latest
-deploy/scripts/prepare-colima-build-swap.sh cleanup
 ```
 
 Useful overrides:
@@ -90,4 +103,9 @@ Useful overrides:
 COLIMA_BUILD_SWAP_SIZE=6G deploy/scripts/prepare-colima-build-swap.sh
 COLIMA_BUILD_SWAP_MEMORY_THRESHOLD_KIB=6291456 deploy/scripts/prepare-colima-build-swap.sh
 COLIMA_BIN=/opt/homebrew/bin/colima deploy/scripts/prepare-colima-build-swap.sh status
+COLIMA_BUILD_SWAP_CLEANUP_FORCE=1 COLIMA_BUILD_SWAPFILE=/custom-swapfile deploy/scripts/prepare-colima-build-swap.sh cleanup
 ```
+
+`cleanup` removes the default helper path and the old helper path. If you set a
+custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
+`COLIMA_BUILD_SWAP_CLEANUP_FORCE=1` is also set.
