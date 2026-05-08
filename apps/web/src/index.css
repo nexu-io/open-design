@@ -262,9 +262,18 @@ code {
 /* -------- App shell ------------------------------------------------- */
 .app {
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* Three rows: chrome header (auto, fixed at 40px), optional
+   * project-actions toolbar (auto — collapses to 0 when hidden),
+   * and the chat/workspace split (1fr — fills the remaining
+   * viewport). The split gets explicit `grid-row: 3` below so the
+   * layout works whether the toolbar is rendered or returns null
+   * (workspace-focused mode). */
+  grid-template-rows: auto auto 1fr;
   height: 100vh;
   background: var(--bg-app);
+}
+.app > .split {
+  grid-row: 3;
 }
 
 .app-chrome-header {
