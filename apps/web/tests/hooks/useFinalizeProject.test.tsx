@@ -166,6 +166,46 @@ describe('useFinalizeProject', () => {
     expect(result.current.status).toBe('idle');
     expect(result.current.error).toBeNull();
   });
+
+  it('surfaces a TIMEOUT error when the 130 s timeout aborts the in-flight request', async () => {
+    vi.useFakeTimers();
+    try {
+      let abortFromHandler: AbortSignal | undefined;
+      vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+        abortFromHandler = (init as RequestInit | undefined)?.signal as AbortSignal | undefined;
+        return new Promise((_resolve, reject) => {
+          abortFromHandler?.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        });
+      });
+
+      const { result } = renderHook(() => useFinalizeProject('p1'));
+
+      let triggerPromise!: Promise<unknown>;
+      act(() => {
+        triggerPromise = result.current.trigger(REQUEST);
+      });
+      // Advance past the 130 s internal timeout — its callback flips
+      // timedOutRef and aborts the controller, so the catch should
+      // surface a TIMEOUT error rather than the user-cancel idle reset.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(130_001);
+        await triggerPromise;
+      });
+
+      expect(abortFromHandler?.aborted).toBe(true);
+      expect(result.current.status).toBe('error');
+      expect(result.current.error?.code).toBe('TIMEOUT');
+      expect(result.current.error?.message).toBe(
+        'Finalize timed out after 130 s. The daemon may still be running.',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('messageForCode', () => {

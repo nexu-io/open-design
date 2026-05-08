@@ -26,7 +26,7 @@ const FETCH_TIMEOUT_MS = 130_000;
 export type FinalizeStatus = 'idle' | 'pending' | 'success' | 'error';
 
 export interface FinalizeError {
-  code: ApiErrorCode | 'NETWORK_ERROR';
+  code: ApiErrorCode | 'NETWORK_ERROR' | 'TIMEOUT';
   message: string;
   details: string | null;
 }
@@ -52,6 +52,11 @@ export function useFinalizeProject(projectId: string): FinalizeProjectState {
   const [error, setError] = useState<FinalizeError | null>(null);
   const [result, setResult] = useState<FinalizeAnthropicResponse | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Tracks whether the in-flight controller's abort came from the
+  // 130 s timeout (true) or the user clicking Cancel (false). The
+  // catch block reads this to surface a TIMEOUT error instead of a
+  // silent idle reset, so users learn the daemon may still be running.
+  const timedOutRef = useRef(false);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -62,9 +67,13 @@ export function useFinalizeProject(projectId: string): FinalizeProjectState {
       // Cancel any in-flight call before starting a new one so a
       // double-clicked button doesn't pile up two daemon requests.
       abortRef.current?.abort();
+      timedOutRef.current = false;
       const controller = new AbortController();
       abortRef.current = controller;
-      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => {
+        timedOutRef.current = true;
+        controller.abort();
+      }, FETCH_TIMEOUT_MS);
 
       setStatus('pending');
       setError(null);
@@ -105,7 +114,20 @@ export function useFinalizeProject(projectId: string): FinalizeProjectState {
           (err instanceof DOMException && err.name === 'AbortError') ||
           (err instanceof Error && err.name === 'AbortError');
         if (aborted) {
-          // Cancellation is a clean reset, not an error surface.
+          if (timedOutRef.current) {
+            // Timeout abort — surface as an error so users see the
+            // failure signal. The daemon may still be running its
+            // synthesis, so the message names that explicitly.
+            const finalizeError: FinalizeError = {
+              code: 'TIMEOUT',
+              message: messageForCode('TIMEOUT'),
+              details: null,
+            };
+            setError(finalizeError);
+            setStatus('error');
+            return null;
+          }
+          // User-initiated cancel — clean reset, not an error surface.
           setError(null);
           setStatus('idle');
           return null;
@@ -150,6 +172,8 @@ export function messageForCode(code: ApiErrorCode | 'NETWORK_ERROR' | string): s
       return 'Project not found.';
     case 'INTERNAL_ERROR':
       return 'Something went wrong while finalizing. Check the daemon logs.';
+    case 'TIMEOUT':
+      return 'Finalize timed out after 130 s. The daemon may still be running.';
     case 'NETWORK_ERROR':
     default:
       return "Couldn't reach the daemon. Make sure it's running.";
