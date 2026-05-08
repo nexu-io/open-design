@@ -45,6 +45,7 @@ const originalDaemonUrl = process.env.OD_DAEMON_URL;
 const originalToolToken = process.env.OD_TOOL_TOKEN;
 const originalNpmConfigPrefix = process.env.NPM_CONFIG_PREFIX;
 const originalPathExt = process.env.PATHEXT;
+const originalVpHome = process.env.VP_HOME;
 const originalFetch = globalThis.fetch;
 const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
 
@@ -84,6 +85,11 @@ afterEach(() => {
     delete process.env.PATHEXT;
   } else {
     process.env.PATHEXT = originalPathExt;
+  }
+  if (originalVpHome == null) {
+    delete process.env.VP_HOME;
+  } else {
+    process.env.VP_HOME = originalVpHome;
   }
   globalThis.fetch = originalFetch;
   if (originalPlatformDescriptor) {
@@ -1174,6 +1180,46 @@ fsTest(
   },
 );
 
+fsTest(
+  'resolveAgentExecutable searches ~/.vite-plus/bin under a minimal GUI-launched PATH (vp global install)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-vp-home-'));
+    try {
+      const dir = join(home, '.vite-plus', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentExecutable honors $VP_HOME/bin when the custom Vite+ home is outside PATH',
+  () => {
+    const vpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-custom-'));
+    try {
+      const dir = join(vpHome, 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = vpHome;
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(vpHome, { recursive: true, force: true });
+    }
+  },
+);
+
 // Test isolation: when OD_AGENT_HOME points at a sandbox, an exported
 // $NPM_CONFIG_PREFIX / $npm_config_prefix on the developer's or CI
 // runner's environment must not leak a real <prefix>/bin into the
@@ -1214,6 +1260,34 @@ fsTest(
       // same Vitest worker.
       rmSync(sandbox, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_AGENT_HOME isolates resolution from $VP_HOME leakage',
+  () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-vp-sandbox-'));
+    const realVpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-real-home-'));
+    const realVpBin = join(realVpHome, 'bin');
+    try {
+      mkdirSync(realVpBin, { recursive: true });
+      writeFileSync(join(realVpBin, 'vp-cli-probe'), '');
+      chmodSync(join(realVpBin, 'vp-cli-probe'), 0o755);
+
+      process.env.OD_AGENT_HOME = sandbox;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = realVpHome;
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(
+        resolved,
+        null,
+        `OD_AGENT_HOME sandbox must not see the real $VP_HOME bin; got ${resolved}`,
+      );
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(realVpHome, { recursive: true, force: true });
     }
   },
 );

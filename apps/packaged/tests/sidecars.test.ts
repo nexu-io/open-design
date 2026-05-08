@@ -16,9 +16,17 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { resolveDaemonStatusTimeoutMs, waitForStatus } from '../src/sidecars.js';
+import {
+  resolveDaemonStatusTimeoutMs,
+  resolvePackagedChildBaseEnv,
+  resolvePackagedPathEnv,
+  waitForStatus,
+} from '../src/sidecars.js';
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the default 35-second budget for normal cold boots', () => {
@@ -50,6 +58,40 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     } finally {
       if (original == null) delete process.env.OD_LEGACY_DATA_DIR;
       else process.env.OD_LEGACY_DATA_DIR = original;
+    }
+  });
+});
+
+describe('packaged child Vite+ environment forwarding', () => {
+  it('keeps VP_HOME in the packaged child base env without forwarding unrelated variables', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      LANG: 'en_US.UTF-8',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+      VP_HOME: '/Users/tester/.custom-vite-plus',
+    });
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+      LANG: 'en_US.UTF-8',
+      VP_HOME: '/Users/tester/.custom-vite-plus',
+    });
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
+  it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
+    const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
+    const originalVpHome = process.env.VP_HOME;
+    try {
+      process.env.VP_HOME = vpHome;
+      const pathEntries = resolvePackagedPathEnv('/usr/bin').split(delimiter);
+
+      expect(pathEntries).toContain('/usr/bin');
+      expect(pathEntries).toContain(join(vpHome, 'bin'));
+    } finally {
+      if (originalVpHome == null) delete process.env.VP_HOME;
+      else process.env.VP_HOME = originalVpHome;
+      rmSync(vpHome, { recursive: true, force: true });
     }
   });
 });

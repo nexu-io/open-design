@@ -26,6 +26,7 @@ test.beforeEach(async ({ page }) => {
   await resetDaemonAppConfig(page);
 
   await page.addInitScript(({ key, codexEnv }) => {
+    if (window.localStorage.getItem(key) != null) return;
     window.localStorage.setItem(
       key,
       JSON.stringify({
