@@ -247,6 +247,36 @@ export function FileWorkspace({
     return () => tabBar.removeEventListener('wheel', onWheel);
   }, []);
 
+  // Browser-style tab bar: when the active tab changes (open from a chat
+  // file chip, switch via Cmd+P, etc.), scroll it into view so the user
+  // can always see what they have selected even when the strip overflows.
+  // The Design Files entry is already sticky-pinned, so we only scroll
+  // for real workspace tabs. Issue #775.
+  useEffect(() => {
+    if (activeTab === DESIGN_FILES_TAB) return;
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+    const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
+    if (!el) return;
+    // The Design Files tab is sticky-pinned to the scrollport's left
+    // edge (index.css:.ws-tab.design-files-tab), so a naive scrollIntoView
+    // with inline: 'nearest' would slide a leftward-jumped active tab
+    // flush with that edge and leave it hidden underneath the sticky
+    // panel. Compute scrollLeft manually instead, treating the sticky
+    // tab's right edge as the effective visible-left boundary.
+    const tabRect = el.getBoundingClientRect();
+    const barRect = tabBar.getBoundingClientRect();
+    const stickyEl = tabBar.querySelector<HTMLElement>('.ws-tab.design-files-tab');
+    const stickyWidth = stickyEl ? stickyEl.getBoundingClientRect().width : 0;
+    const visibleLeft = barRect.left + stickyWidth;
+    const visibleRight = barRect.right;
+    if (tabRect.left < visibleLeft) {
+      tabBar.scrollLeft += tabRect.left - visibleLeft;
+    } else if (tabRect.right > visibleRight) {
+      tabBar.scrollLeft += tabRect.right - visibleRight;
+    }
+  }, [activeTab]);
+
   // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
   // so we beat the browser's default print dialog. Platform-gated so on
   // macOS we don't steal Ctrl+P from native readline ("previous line") in
