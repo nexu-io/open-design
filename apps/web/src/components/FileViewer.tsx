@@ -2883,7 +2883,7 @@ function HtmlViewer({
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
   const [inspectMode, setInspectMode] = useState(false);
   // for hint managing hint box state
-  const [openHintBox, setOpenHintBox] = useState(false);
+  const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditMode] = useState(false);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
