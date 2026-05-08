@@ -19,6 +19,7 @@ Run this before emitting `<artifact>`. P0 = must pass; P1 = should pass; P2 = ni
 - [ ] Display headings use `var(--font-display)`; no hardcoded sans display type.
 - [ ] No rounded card with a coloured left-border accent pattern.
 - [ ] Every top-level `<section>` has a `data-od-id`.
+- [ ] Every required release-note section root also includes the matching `id` anchor: `added`, `fixed`, `breaking-changes`, `known-issues`, `upgrade-note`.
 - [ ] Mobile reflow works without horizontal scroll at narrow widths.
 
 ## P1 — should pass
