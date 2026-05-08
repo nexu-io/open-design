@@ -195,7 +195,7 @@ in {
         actually issue PUT/POST through the bundled caddy proxy
         without being 403'd by the daemon's CSRF-style gate.
 
-        Each entry is forwarded to the daemon via the `OD_WEB_ORIGINS`
+        Each entry is forwarded to the daemon via the `OD_ALLOWED_ORIGINS`
         env var. The daemon both compares it verbatim against the
         browser's `Origin` header AND admits its host:port to the
         `Host`-header allowlist (Caddy v2 reverse_proxy preserves the

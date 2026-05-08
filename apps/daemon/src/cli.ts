@@ -44,6 +44,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'composition-dir',
   'image',
   'daemon-url',
+  'language',
 ]);
 const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'help',
@@ -189,15 +190,18 @@ Environment:
   OD_WEB_PORT      Sibling static-server port (e.g. caddy fronting apps/web/out).
                    When set, the daemon's same-origin gate accepts loopback origins on
                    that port in addition to its own.
-  OD_WEB_ORIGINS   Comma-separated list of full HTTP(S) origins (\`scheme://host[:port]\`)
+  OD_ALLOWED_ORIGINS
+                   Comma-separated list of full HTTP(S) origins (\`scheme://host[:port]\`)
                    the daemon should accept as same-site for /api/* requests, in
                    addition to its built-in loopback set. Required when a non-loopback
                    static server fronts the SPA — without it, browsers will see 403s on
-                   PUT/POST. Each entry must be a bare origin (no path/query/credentials);
-                   the daemon both compares it verbatim against the browser's \`Origin\`
-                   header AND admits its host:port to the \`Host\`-header allowlist (Caddy v2
-                   reverse_proxy preserves the original Host upstream by default).
-                   Example: OD_WEB_ORIGINS=http://laptop.local:5174,https://laptop.local:5174
+                   PUT/POST. Each entry must be a bare origin; only http:// and https://
+                   are accepted, and the daemon refuses to start if any entry fails to
+                   parse. The daemon both compares it verbatim against the browser's
+                   \`Origin\` header AND admits its host:port to the \`Host\`-header
+                   allowlist (Caddy v2 reverse_proxy preserves the original Host upstream
+                   by default).
+                   Example: OD_ALLOWED_ORIGINS=http://laptop.local:5174,https://laptop.local:5174
                    Note: this widens only the general /api gate. Connector-credential and
                    live-artifact preview/refresh routes remain strictly loopback-only.
 
@@ -349,6 +353,7 @@ async function runMediaGenerate(rawArgs) {
     audioKind: flags['audio-kind'],
     compositionDir: flags['composition-dir'],
     image: flags.image,
+    language: flags.language,
   };
   if (flags.length != null) body.length = Number(flags.length);
   if (flags.duration != null) body.duration = Number(flags.duration);
@@ -583,6 +588,7 @@ Common options:
   --length <seconds>        Video length.
   --duration <seconds>      Audio duration.
   --voice <voice-id>        Speech / TTS voice.
+  --language <lang>         Language boost for TTS (e.g. Chinese,Yue for Cantonese).
   --audio-kind music|speech|sfx
   --composition-dir <path>  hyperframes-html only — project-relative path
                             to the dir containing hyperframes.json /

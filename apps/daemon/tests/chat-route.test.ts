@@ -244,6 +244,147 @@ process.exit(0);
       },
     );
   });
+
+  it('fails stalled json-stream runs after the inactivity timeout elapses', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'step_start' }));
+process.on('SIGTERM', () => process.exit(143));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('event: agent');
+          expect(eventsBody).toContain('"type":"status"');
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('keeps Claude stream runs alive while structured output is still flowing', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '900';
+    try {
+      await withFakeAgent(
+        'claude',
+        `
+const lines = [
+  JSON.stringify({ type: 'stream_event', event: { type: 'message_start', message: { id: 'msg-1' }, ttft_ms: 10 } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello ' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'world' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_stop', index: 0 } }),
+  JSON.stringify({ type: 'result', usage: { input_tokens: 1, output_tokens: 2 }, duration_ms: 700, stop_reason: 'end_turn' }),
+];
+let index = 0;
+const timer = setInterval(() => {
+  if (index >= lines.length) {
+    clearInterval(timer);
+    process.exit(0);
+    return;
+  }
+  console.log(lines[index++]);
+}, 200);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'claude',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('marks stalled runs failed even when the child ignores SIGTERM', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'step_start' }));
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
 });
 
 async function readSseUntil(response: Response, marker: string): Promise<string> {
@@ -260,7 +401,7 @@ async function readSseUntil(response: Response, marker: string): Promise<string>
 }
 
 async function waitForRunStatus(baseUrl: string, runId: string): Promise<{ status: string }> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
     const statusBody = await statusResponse.json() as { status: string };
     if (statusBody.status !== 'queued' && statusBody.status !== 'running') return statusBody;

@@ -76,6 +76,9 @@ describe('listSkills', () => {
     expect(skill.body).toContain('references/artifact-schema.md');
     expect(skill.body).toContain('references/connector-policy.md');
     expect(skill.body).toContain('references/refresh-contract.md');
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/live-artifact/references/artifact-schema.md`);
+    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/live-artifact/assets/template.html`);
+    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/live-artifact/references/layouts.md`);
     expect(skill.body).toContain('"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts create --input artifact.json');
     expect(skill.body).toContain('do not ask “where should the data come from?” before checking daemon connector tools');
     expect(skill.body).toContain('notion.notion_search');
@@ -170,6 +173,23 @@ describe('listSkills preamble', () => {
     expect(skill.body).toContain(skill.dir);
     expect(skill.body).toMatch(/Skill root \(absolute fallback\)/);
     expect(skill.body).toMatch(/Skill root \(relative to project\)/);
+  });
+
+  it('mentions root-level example.html side files in the preamble', async () => {
+    const root = fresh();
+    writeSkill(root, 'orbit-style', {
+      withAttachments: false,
+      body: 'Open and mirror the shipped `example.html` before writing output.',
+    });
+    writeFileSync(path.join(root, 'orbit-style', 'example.html'), '<main>example</main>');
+
+    const skills = await listSkills(root);
+    expect(skills).toHaveLength(1);
+    const [skill] = skills;
+
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/`);
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/example.html`);
+    expect(skill.body).toContain('Known side files in this skill: `example.html`.');
   });
 
   it('uses the on-disk folder name in the alias path even when `name` differs', async () => {

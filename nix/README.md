@@ -123,20 +123,21 @@ services.open-design.openFirewall = true;
 ```
 
 Under the hood `allowedOrigins` is forwarded to the daemon as the
-`OD_WEB_ORIGINS` environment variable (comma-separated). If you run
-the daemon outside the modules — for example, behind your own
-nginx/caddy — set `OD_WEB_ORIGINS` directly in the daemon's
+`OD_ALLOWED_ORIGINS` environment variable (comma-separated). If you
+run the daemon outside the modules — for example, behind your own
+nginx/caddy — set `OD_ALLOWED_ORIGINS` directly in the daemon's
 environment with the same shape:
 
 ```
-OD_WEB_ORIGINS=http://host1:port,https://host1:port,http://host2:port
+OD_ALLOWED_ORIGINS=http://host1:port,https://host1:port,http://host2:port
 ```
 
-Each entry must be a bare origin (`scheme://host[:port]`, no path,
-query, fragment, or credentials); malformed entries are dropped with
-a warning at daemon startup. The variable widens only the general
-`/api/*` same-origin gate — connector-credential and live-artifact
-preview/refresh routes stay strictly loopback-only by design.
+Each entry must be a bare origin (`scheme://host[:port]`); only
+`http://` and `https://` schemes are accepted, and the daemon refuses
+to start if any entry fails to parse. The variable widens only the
+general `/api/*` same-origin gate — connector-credential and
+live-artifact preview/refresh routes stay strictly loopback-only by
+design.
 
 ## (4) `OD_DAEMON_URL` and the static-export build
 

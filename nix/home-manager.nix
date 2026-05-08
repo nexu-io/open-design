@@ -146,9 +146,9 @@
       # `webFrontend.enable` so users who serve the SPA through their
       # own reverse proxy (or expose the daemon's `/api` directly) can
       # still widen the daemon's same-origin allowlist via this
-      # option. Comma-joined; parsed by parseAllowedWebOrigins() in
-      # apps/daemon/src/server.ts.
-      OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+      # option. Comma-joined; parsed by configuredAllowedOrigins() in
+      # apps/daemon/src/origin-validation.ts.
+      OD_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
     }
     // cfg.extraEnv;
 

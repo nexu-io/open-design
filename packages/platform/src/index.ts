@@ -2,7 +2,7 @@ import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:chil
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 export type CommandInvocation = {
@@ -429,6 +429,17 @@ export type WellKnownUserToolchainOptions = {
   env?: NodeJS.ProcessEnv;
 };
 
+function resolveUserScopedHome(raw: string | undefined, home: string): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (value.length === 0) return null;
+  if (value === "~") return home;
+  if (value.startsWith("~/") || value.startsWith("~\\")) {
+    return join(home, value.slice(2));
+  }
+  return isAbsolute(value) ? value : null;
+}
+
 // Single source of truth for "user-level CLI install locations the daemon
 // must search even when launched with a minimal PATH". GUI launchers
 // (macOS .app bundles, Linux .desktop files) typically inherit a stripped
@@ -445,6 +456,14 @@ export function wellKnownUserToolchainBins(
   const includeSystemBins = options.includeSystemBins ?? process.platform !== "win32";
   const env = options.env ?? process.env;
   const dirs: string[] = [];
+  // Vite+ global installs expose CLI shims from VP_HOME/bin (default
+  // ~/.vite-plus/bin). An explicit VP_HOME is the most specific signal for
+  // vp-managed shims, so it wins over other global package-manager prefixes
+  // when a CLI name exists in multiple stores.
+  const vpHome = resolveUserScopedHome(env.VP_HOME, home);
+  if (vpHome) {
+    dirs.push(join(vpHome, "bin"));
+  }
   // The user's *explicit* npm prefix outranks every conventional
   // location below — including `~/.local/bin`. The env var is the
   // user's current npm configuration, so a binary installed via
@@ -469,6 +488,7 @@ export function wellKnownUserToolchainBins(
   }
   dirs.push(
     join(home, ".local", "bin"),
+    join(home, ".vite-plus", "bin"),
     join(home, ".opencode", "bin"),
     join(home, ".bun", "bin"),
     join(home, ".volta", "bin"),

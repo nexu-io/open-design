@@ -44,7 +44,10 @@ const originalAgentHome = process.env.OD_AGENT_HOME;
 const originalDaemonUrl = process.env.OD_DAEMON_URL;
 const originalToolToken = process.env.OD_TOOL_TOKEN;
 const originalNpmConfigPrefix = process.env.NPM_CONFIG_PREFIX;
+const originalPathExt = process.env.PATHEXT;
+const originalVpHome = process.env.VP_HOME;
 const originalFetch = globalThis.fetch;
+const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
 
 afterEach(() => {
   if (originalDisablePlugins == null) {
@@ -78,8 +81,29 @@ afterEach(() => {
   } else {
     process.env.NPM_CONFIG_PREFIX = originalNpmConfigPrefix;
   }
+  if (originalPathExt == null) {
+    delete process.env.PATHEXT;
+  } else {
+    process.env.PATHEXT = originalPathExt;
+  }
+  if (originalVpHome == null) {
+    delete process.env.VP_HOME;
+  } else {
+    process.env.VP_HOME = originalVpHome;
+  }
   globalThis.fetch = originalFetch;
+  if (originalPlatformDescriptor) {
+    Object.defineProperty(process, 'platform', originalPlatformDescriptor);
+  }
 });
+
+function withPlatform(platform, run) {
+  Object.defineProperty(process, 'platform', {
+    configurable: true,
+    value: platform,
+  });
+  return run();
+}
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
@@ -323,10 +347,34 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
 
   const createTool = tools.find((tool) => tool.name === 'live_artifacts_create')!;
   const updateTool = tools.find((tool) => tool.name === 'live_artifacts_update')!;
+  const connectorsListTool = tools.find((tool) => tool.name === 'connectors_list')!;
   const createProperties = createTool.inputSchema.properties as Record<string, unknown>;
   const updateProperties = updateTool.inputSchema.properties as Record<string, unknown>;
+  const connectorsListProperties = connectorsListTool.inputSchema.properties as Record<string, unknown>;
   assert.deepEqual(Object.keys(createProperties).sort(), ['input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
+  assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
+});
+
+test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {
+  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456/base';
+  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ connectors: [] }), { status: 200 });
+  };
+
+  const response = await handleLiveArtifactsMcpRequest({
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'tools/call',
+    params: { name: 'connectors_list', arguments: { useCase: 'personal_daily_digest' } },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:17456/base/api/tools/connectors/list?useCase=personal_daily_digest');
 });
 
 test('live artifact MCP create forwards input and artifact payload fields to daemon tools', async () => {
@@ -1132,6 +1180,46 @@ fsTest(
   },
 );
 
+fsTest(
+  'resolveAgentExecutable searches ~/.vite-plus/bin under a minimal GUI-launched PATH (vp global install)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-vp-home-'));
+    try {
+      const dir = join(home, '.vite-plus', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentExecutable honors $VP_HOME/bin when the custom Vite+ home is outside PATH',
+  () => {
+    const vpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-custom-'));
+    try {
+      const dir = join(vpHome, 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = vpHome;
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(vpHome, { recursive: true, force: true });
+    }
+  },
+);
+
 // Test isolation: when OD_AGENT_HOME points at a sandbox, an exported
 // $NPM_CONFIG_PREFIX / $npm_config_prefix on the developer's or CI
 // runner's environment must not leak a real <prefix>/bin into the
@@ -1172,6 +1260,34 @@ fsTest(
       // same Vitest worker.
       rmSync(sandbox, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_AGENT_HOME isolates resolution from $VP_HOME leakage',
+  () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-vp-sandbox-'));
+    const realVpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-real-home-'));
+    const realVpBin = join(realVpHome, 'bin');
+    try {
+      mkdirSync(realVpBin, { recursive: true });
+      writeFileSync(join(realVpBin, 'vp-cli-probe'), '');
+      chmodSync(join(realVpBin, 'vp-cli-probe'), 0o755);
+
+      process.env.OD_AGENT_HOME = sandbox;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = realVpHome;
+
+      const resolved = resolveAgentExecutable({ bin: 'vp-cli-probe' });
+      assert.equal(
+        resolved,
+        null,
+        `OD_AGENT_HOME sandbox must not see the real $VP_HOME bin; got ${resolved}`,
+      );
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(realVpHome, { recursive: true, force: true });
     }
   },
 );
@@ -1683,6 +1799,39 @@ test('resolveAgentExecutable prefers a configured CODEX_BIN override over PATH r
   }
 });
 
+test('resolveAgentExecutable supports configured binary overrides for non-Codex adapters', () => {
+  const cases = [
+    ['claude', 'claude', 'CLAUDE_BIN'],
+    ['gemini', 'gemini', 'GEMINI_BIN'],
+    ['opencode', 'opencode', 'OPENCODE_BIN'],
+    ['cursor-agent', 'cursor-agent', 'CURSOR_AGENT_BIN'],
+    ['qwen', 'qwen', 'QWEN_BIN'],
+    ['qoder', 'qodercli', 'QODER_BIN'],
+    ['copilot', 'copilot', 'COPILOT_BIN'],
+    ['deepseek', 'deepseek', 'DEEPSEEK_BIN'],
+  ];
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-overrides-'));
+  try {
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = dir;
+
+    for (const [id, binName, envKey] of cases) {
+      const configured = join(dir, `${binName}-custom`);
+      writeFileSync(configured, '#!/bin/sh\nexit 0\n');
+      chmodSync(configured, 0o755);
+
+      const resolved = resolveAgentExecutable(
+        { id, bin: binName },
+        { [envKey]: configured },
+      );
+
+      assert.equal(resolved, configured, `expected ${id} to use ${envKey}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('resolveAgentExecutable ignores relative CODEX_BIN overrides', () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-rel-'));
   const oldCwd = process.cwd();
@@ -1702,6 +1851,78 @@ test('resolveAgentExecutable ignores relative CODEX_BIN overrides', () => {
     assert.equal(resolved, null);
   } finally {
     process.chdir(oldCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable ignores configured binary overrides that are not executable files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-invalid-'));
+  try {
+    const directoryOverride = join(dir, 'as-directory');
+    mkdirSync(directoryOverride);
+    const fileOverride = join(dir, 'not-executable');
+    writeFileSync(fileOverride, '#!/bin/sh\nexit 0\n');
+    if (process.platform !== 'win32') chmodSync(fileOverride, 0o644);
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = dir;
+
+    assert.equal(
+      resolveAgentExecutable({ id: 'codex', bin: 'codex' }, { CODEX_BIN: directoryOverride }),
+      null,
+    );
+    if (process.platform !== 'win32') {
+      assert.equal(
+        resolveAgentExecutable({ id: 'codex', bin: 'codex' }, { CODEX_BIN: fileOverride }),
+        null,
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable ignores Windows CODEX_BIN overrides without executable PATHEXT extension', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-win-invalid-'));
+  try {
+    const invalidOverride = join(dir, 'codex-custom.txt');
+    const fallback = join(dir, 'codex.CMD');
+    writeFileSync(invalidOverride, '@echo off\r\nexit /b 0\r\n');
+    writeFileSync(fallback, '@echo off\r\nexit /b 0\r\n');
+    process.env.PATH = dir;
+    process.env.PATHEXT = '.EXE;.CMD;.BAT';
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolved = withPlatform('win32', () =>
+      resolveAgentExecutable(
+        { id: 'codex', bin: 'codex' },
+        { CODEX_BIN: invalidOverride },
+      ),
+    );
+
+    assert.equal(resolved, fallback);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable accepts Windows CODEX_BIN overrides with executable PATHEXT extension', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-win-valid-'));
+  try {
+    const configured = join(dir, 'codex-custom.CMD');
+    writeFileSync(configured, '@echo off\r\nexit /b 0\r\n');
+    process.env.PATH = '';
+    process.env.PATHEXT = '.EXE;.CMD;.BAT';
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolved = withPlatform('win32', () =>
+      resolveAgentExecutable(
+        { id: 'codex', bin: 'codex' },
+        { CODEX_BIN: configured },
+      ),
+    );
+
+    assert.equal(resolved, configured);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

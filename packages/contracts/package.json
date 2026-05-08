@@ -18,6 +18,10 @@
       "types": "./dist/api/connectionTest.d.ts",
       "default": "./dist/api/connectionTest.mjs"
     },
+    "./api/finalize": {
+      "types": "./dist/api/finalize.d.ts",
+      "default": "./dist/api/finalize.mjs"
+    },
     "./api/research": {
       "types": "./dist/api/research.d.ts",
       "default": "./dist/api/research.mjs"

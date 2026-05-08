@@ -14,7 +14,7 @@ import {
 } from 'vitest';
 
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
-import { isLocalSameOrigin } from '../src/server.js';
+import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 describe('app-config', () => {
   let dataDir: string;
@@ -82,6 +82,83 @@ describe('app-config', () => {
       );
       const cfg = await readAppConfig(dataDir);
       expect(cfg).toEqual({});
+    });
+
+    it('preserves omitted orbit.templateSkillId from legacy stored config', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '09:30',
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.orbit).toEqual({
+        enabled: true,
+        time: '09:30',
+      });
+      expect(cfg.orbit).not.toHaveProperty('templateSkillId');
+    });
+
+    it('falls back to default orbit time for out-of-range stored values', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '99:99',
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.orbit).toEqual({
+        enabled: true,
+        time: '08:00',
+      });
+    });
+
+    it('preserves explicit orbit.templateSkillId null and trimmed string', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: false,
+            time: '08:00',
+            templateSkillId: null,
+          },
+        }),
+      );
+
+      let cfg = await readAppConfig(dataDir);
+      expect(cfg.orbit).toEqual({
+        enabled: false,
+        time: '08:00',
+        templateSkillId: null,
+      });
+
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '10:15',
+            templateSkillId: '  orbit-general  ',
+          },
+        }),
+      );
+
+      cfg = await readAppConfig(dataDir);
+      expect(cfg.orbit).toEqual({
+        enabled: true,
+        time: '10:15',
+        templateSkillId: 'orbit-general',
+      });
     });
   });
 
@@ -420,6 +497,18 @@ describe('app-config origin guard', () => {
     expect(res.status).toBe(403);
   });
 
+  it('rejects no-Origin requests that only match configured deployment hosts', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await httpRequest(`${baseUrl}/api/app-config`, {
+        headers: { Host: 'od.example.com' },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
   it('still rejects non-loopback Origin', async () => {
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       headers: {
@@ -433,11 +522,11 @@ describe('app-config origin guard', () => {
 
 // Regression coverage for the LAN escape hatch: when the bundled caddy
 // fronts the SPA on a non-loopback host, it preserves the browser's
-// original Host header by default. Without OD_WEB_ORIGINS the daemon
+// original Host header by default. Without OD_ALLOWED_ORIGINS the daemon
 // 403's at the Host check before the Origin check ever runs; declaring
-// the external origin in OD_WEB_ORIGINS must widen *both* allowedHosts
+// the external origin in OD_ALLOWED_ORIGINS must widen *both* allowedHosts
 // and allowedOrigins.
-describe('app-config origin guard with OD_WEB_ORIGINS', () => {
+describe('app-config origin guard with OD_ALLOWED_ORIGINS', () => {
   let server: http.Server;
   let port: number;
   let baseUrl: string;
@@ -468,16 +557,16 @@ describe('app-config origin guard with OD_WEB_ORIGINS', () => {
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
   beforeEach(() => {
-    prevWebOrigins = process.env.OD_WEB_ORIGINS;
+    prevWebOrigins = process.env.OD_ALLOWED_ORIGINS;
   });
 
   afterEach(() => {
-    if (prevWebOrigins === undefined) delete process.env.OD_WEB_ORIGINS;
-    else process.env.OD_WEB_ORIGINS = prevWebOrigins;
+    if (prevWebOrigins === undefined) delete process.env.OD_ALLOWED_ORIGINS;
+    else process.env.OD_ALLOWED_ORIGINS = prevWebOrigins;
   });
 
-  it('rejects proxied LAN Host when OD_WEB_ORIGINS is unset (regression baseline)', async () => {
-    delete process.env.OD_WEB_ORIGINS;
+  it('rejects proxied LAN Host when OD_ALLOWED_ORIGINS is unset (regression baseline)', async () => {
+    delete process.env.OD_ALLOWED_ORIGINS;
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       method: 'PUT',
       headers: {
@@ -490,8 +579,8 @@ describe('app-config origin guard with OD_WEB_ORIGINS', () => {
     expect(res.status).toBe(403);
   });
 
-  it('accepts proxied LAN Host + Origin when both are listed in OD_WEB_ORIGINS', async () => {
-    process.env.OD_WEB_ORIGINS = externalOrigin;
+  it('accepts proxied LAN Host + Origin when both are listed in OD_ALLOWED_ORIGINS', async () => {
+    process.env.OD_ALLOWED_ORIGINS = externalOrigin;
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       method: 'PUT',
       headers: {
@@ -505,7 +594,7 @@ describe('app-config origin guard with OD_WEB_ORIGINS', () => {
   });
 
   it('still rejects when Host is listed but Origin is not', async () => {
-    process.env.OD_WEB_ORIGINS = externalOrigin;
+    process.env.OD_ALLOWED_ORIGINS = externalOrigin;
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       method: 'PUT',
       headers: {
@@ -518,8 +607,8 @@ describe('app-config origin guard with OD_WEB_ORIGINS', () => {
     expect(res.status).toBe(403);
   });
 
-  it('still accepts loopback Host + Origin when OD_WEB_ORIGINS is set', async () => {
-    process.env.OD_WEB_ORIGINS = externalOrigin;
+  it('still accepts loopback Host + Origin when OD_ALLOWED_ORIGINS is set', async () => {
+    process.env.OD_ALLOWED_ORIGINS = externalOrigin;
     const res = await httpRequest(`${baseUrl}/api/app-config`, {
       method: 'PUT',
       headers: {
@@ -532,17 +621,4 @@ describe('app-config origin guard with OD_WEB_ORIGINS', () => {
     expect(res.status).toBe(200);
   });
 
-  it('drops malformed entries with a warning, keeping valid ones', async () => {
-    process.env.OD_WEB_ORIGINS = `not-a-url,${externalOrigin},http://x:1/with/path`;
-    const res = await httpRequest(`${baseUrl}/api/app-config`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Host: externalHost,
-        Origin: externalOrigin,
-      },
-      body: JSON.stringify({ onboardingCompleted: true }),
-    });
-    expect(res.status).toBe(200);
-  });
 });

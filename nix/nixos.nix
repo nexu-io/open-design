@@ -122,9 +122,9 @@
       # exposing the daemon's `/api` directly (no bundled caddy in
       # front) — the path documented under `openFirewall` — can still
       # widen the daemon's same-origin allowlist via this option.
-      # Comma-joined; parsed by parseAllowedWebOrigins() in
-      # apps/daemon/src/server.ts.
-      OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+      # Comma-joined; parsed by configuredAllowedOrigins() in
+      # apps/daemon/src/origin-validation.ts.
+      OD_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
     }
     // cfg.extraEnv;
 
@@ -171,7 +171,7 @@ in {
           not `http://0.0.0.0:<port>`. Alternatively keep
           `OD_BIND_HOST = "0.0.0.0"` and add the externally reachable
           origin (e.g. `http://laptop.local:7456`) to
-          `webFrontend.allowedOrigins`, which feeds `OD_WEB_ORIGINS`.
+          `webFrontend.allowedOrigins`, which feeds `OD_ALLOWED_ORIGINS`.
         '';
       };
     };

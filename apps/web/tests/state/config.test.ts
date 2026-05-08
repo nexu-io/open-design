@@ -5,6 +5,7 @@ import {
   mergeDaemonConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
+  syncMediaProvidersToDaemon,
 } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
@@ -94,6 +95,21 @@ describe('syncConfigToDaemon', () => {
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       },
     });
+  });
+});
+
+describe('syncMediaProvidersToDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('throws when a forced media sync fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })));
+
+    await expect(
+      syncMediaProvidersToDaemon({}, { force: true, throwOnError: true }),
+    ).rejects.toThrow('Media config save failed');
   });
 });
 
@@ -257,6 +273,19 @@ describe('loadConfig', () => {
     store.set('open-design:config', JSON.stringify(savedConfig));
 
     expect(loadConfig().accentColor).toBe(DEFAULT_CONFIG.accentColor);
+  });
+
+  it('falls back to the default Orbit time for out-of-range saved times', () => {
+    const savedConfig: Partial<AppConfig> = {
+      orbit: {
+        enabled: true,
+        time: '99:99',
+        templateSkillId: 'orbit-general',
+      },
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    expect(loadConfig().orbit?.time).toBe(DEFAULT_CONFIG.orbit?.time);
   });
 
   it('returns defaults for malformed localStorage JSON', () => {

@@ -107,6 +107,10 @@ const MAC_WINDOW_CHROME_CSS = `
   .entry-header [role="button"],
   .entry-tabs,
   .entry-tabs *,
+  .viewer-toolbar,
+  .viewer-toolbar *,
+  .deck-nav,
+  .deck-nav *,
   .ds-modal-header,
   .ds-modal-header *,
   .ds-modal-actions,
@@ -254,9 +258,19 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // a second handler" on the second createDesktopRuntime() call (e.g. dev
   // hot-reload). removeHandler is a no-op when nothing is registered.
   ipcMain.removeHandler("dialog:pick-folder");
+  ipcMain.removeHandler("shell:open-external");
   ipcMain.handle("dialog:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+  ipcMain.handle("shell:open-external", async (_event, url: string) => {
+    if (!isHttpUrl(url)) return false;
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
