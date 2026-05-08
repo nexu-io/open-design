@@ -1766,6 +1766,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
       );
     }
+    // Pin OD_DATA_DIR to the daemon's resolved data root so the spawned
+    // MCP process writes to the same directory as the running daemon
+    // even when the IDE that launched it (Antigravity, VS Code, etc.)
+    // does not inherit the packaged app's environment. Without this,
+    // `od mcp` falls back to `<cwd>/.od/...` which is the read-only
+    // macOS app bundle for packaged installs and trips EPERM. Issue #848.
+    //
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
     // In sidecar mode the snippet omits --daemon-url and the spawned
@@ -1781,7 +1788,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // socket; bake --daemon-url so custom ports keep working.
     const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
-    const sidecarEnv = {};
+    const sidecarEnv: Record<string, string> = {};
     if (isSidecarMode) {
       const ns = process.env[SIDECAR_ENV.NAMESPACE];
       if (ns != null && ns !== SIDECAR_DEFAULTS.namespace) {
@@ -1795,14 +1802,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const electronEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
       ? { ELECTRON_RUN_AS_NODE: '1' }
       : null;
-    const env = { ...sidecarEnv, ...(electronEnv ?? {}) };
+    const env: Record<string, string> = {
+      OD_DATA_DIR: RUNTIME_DATA_DIR,
+      ...sidecarEnv,
+      ...(electronEnv ?? {}),
+    };
     const args = isSidecarMode
       ? [cliPath, 'mcp']
       : [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`];
     const payload = {
       command: process.execPath,
       args,
-      ...(Object.keys(env).length > 0 ? { env } : {}),
+      env,
       daemonUrl: `http://127.0.0.1:${resolvedPort}`,
       // Surface platform so the install panel can localize path hints
       // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts

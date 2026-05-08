@@ -21,9 +21,13 @@ interface InstallInfoOpts {
    *  non-sidecar daemon launches and custom namespaces without
    *  mutating the real process env. */
   env?: NodeJS.ProcessEnv;
+  /** Stand-in for the daemon's resolved RUNTIME_DATA_DIR (issue #848).
+   *  Pinned in the snippet env so IDE-spawned MCP processes write to
+   *  the same directory the daemon already uses. */
+  dataDir: string;
 }
 
-function makeInstallInfoApp({ cliPath, port, env = {} }: InstallInfoOpts) {
+function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpts) {
   const app = express();
 
   const TTL_MS = 5000;
@@ -49,6 +53,9 @@ function makeInstallInfoApp({ cliPath, port, env = {} }: InstallInfoOpts) {
     // sidecar-bootstrapped daemons rely on IPC discovery in `od mcp`
     // and propagate namespace / IPC base through the snippet env;
     // non-sidecar (direct `od --port X`) launches bake the URL.
+    // OD_DATA_DIR is pinned unconditionally so the spawned process
+    // does not fall back to <cwd>/.od and EPERM inside a packaged
+    // app bundle. Issue #848.
     const sidecarIpcPath = env[SIDECAR_ENV.IPC_PATH];
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
@@ -65,14 +72,18 @@ function makeInstallInfoApp({ cliPath, port, env = {} }: InstallInfoOpts) {
     const electronEnv = env.ELECTRON_RUN_AS_NODE === '1'
       ? { ELECTRON_RUN_AS_NODE: '1' }
       : null;
-    const snippetEnv = { ...sidecarEnv, ...(electronEnv ?? {}) };
+    const snippetEnv: Record<string, string> = {
+      OD_DATA_DIR: dataDir,
+      ...sidecarEnv,
+      ...(electronEnv ?? {}),
+    };
     const args = isSidecarMode
       ? [cliPath, 'mcp']
       : [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`];
     const payload = {
       command: process.execPath,
       args,
-      ...(Object.keys(snippetEnv).length > 0 ? { env: snippetEnv } : {}),
+      env: snippetEnv,
       daemonUrl: `http://127.0.0.1:${port}`,
       platform: process.platform,
       cliExists,
@@ -95,7 +106,11 @@ interface Harness {
   baseUrl: string;
 }
 
-async function startHarness(cliPath: string, env: NodeJS.ProcessEnv): Promise<Harness> {
+async function startHarness(
+  cliPath: string,
+  env: NodeJS.ProcessEnv,
+  dataDir: string,
+): Promise<Harness> {
   // Pick a free port first so the handler can compare against it for
   // isLocalSameOrigin.
   const port: number = await new Promise((resolveListen) => {
@@ -105,7 +120,7 @@ async function startHarness(cliPath: string, env: NodeJS.ProcessEnv): Promise<Ha
       tmp.close(() => resolveListen(p));
     });
   });
-  const app = makeInstallInfoApp({ cliPath, port, env });
+  const app = makeInstallInfoApp({ cliPath, port, env, dataDir });
   const server: http.Server = await new Promise((resolveStart) => {
     const handle = app.listen(port, '127.0.0.1', () => resolveStart(handle));
   });
@@ -115,6 +130,7 @@ async function startHarness(cliPath: string, env: NodeJS.ProcessEnv): Promise<Ha
 describe('GET /api/mcp/install-info', () => {
   let tmpDir: string;
   let cliPath: string;
+  let dataDir: string;
   // Tests share the tmpDir but each top-level case spins its own
   // app instance so different env configurations stay isolated.
   let nonSidecar: { server: http.Server; port: number; app: express.Express };
@@ -125,11 +141,13 @@ describe('GET /api/mcp/install-info', () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-mcp-info-'));
         cliPath = path.join(tmpDir, 'cli.js');
         fs.writeFileSync(cliPath, '// stub\n', 'utf8');
+        dataDir = path.join(tmpDir, 'data');
+        fs.mkdirSync(dataDir, { recursive: true });
         const tmp = http.createServer();
         tmp.listen(0, '127.0.0.1', () => {
           const port = (tmp.address() as { port: number }).port;
           tmp.close(() => {
-            const app = makeInstallInfoApp({ cliPath, port, env: {} });
+            const app = makeInstallInfoApp({ cliPath, port, env: {}, dataDir });
             const server = app.listen(port, '127.0.0.1', () => {
               nonSidecar = { server, port, app };
               resolveBoot();
@@ -159,12 +177,22 @@ describe('GET /api/mcp/install-info', () => {
     // URL so the spawned `od mcp` reaches the right port without any
     // discovery.
     expect(body.args).toEqual([cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`]);
-    expect(body.env).toBeUndefined();
+    // env always carries OD_DATA_DIR (issue #848); no sidecar keys in
+    // a non-sidecar launch.
+    expect(body.env).toEqual({ OD_DATA_DIR: dataDir });
     expect(body.daemonUrl).toBe(`http://127.0.0.1:${port}`);
     expect(body.platform).toBe(process.platform);
     expect(body.cliExists).toBe(true);
     expect(body.nodeExists).toBe(true);
     expect(body.buildHint).toBeNull();
+  });
+
+  it('pins OD_DATA_DIR in the env so IDE-spawned MCP processes write to the daemon data dir (issue #848)', async () => {
+    const { port } = nonSidecar;
+    const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
+    const body = await res.json();
+    expect(body.env).toBeDefined();
+    expect(body.env.OD_DATA_DIR).toBe(dataDir);
   });
 
   it('rejects cross-origin requests with 403', async () => {
@@ -200,28 +228,37 @@ describe('GET /api/mcp/install-info', () => {
     expect(after - before).toBeLessThanOrEqual(1);
   });
 
-  it('sidecar default namespace omits --daemon-url and emits no env block', async () => {
-    const { port, server } = await startHarness(cliPath, {
-      [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
-      [SIDECAR_ENV.NAMESPACE]: SIDECAR_DEFAULTS.namespace,
-    });
+  it('sidecar default namespace omits --daemon-url and emits only OD_DATA_DIR', async () => {
+    const { port, server } = await startHarness(
+      cliPath,
+      {
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+        [SIDECAR_ENV.NAMESPACE]: SIDECAR_DEFAULTS.namespace,
+      },
+      dataDir,
+    );
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
       const body = await res.json();
       expect(body.args).toEqual([cliPath, 'mcp']);
       // Default namespace + default IPC base means the spawned `od mcp`
-      // can derive the right socket without any env hints.
-      expect(body.env).toBeUndefined();
+      // can derive the right socket without any sidecar env hints. The
+      // OD_DATA_DIR pin still rides along so the data dir is correct.
+      expect(body.env).toEqual({ OD_DATA_DIR: dataDir });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
     }
   });
 
-  it('sidecar non-default namespace propagates OD_SIDECAR_NAMESPACE', async () => {
-    const { port, server } = await startHarness(cliPath, {
-      [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
-      [SIDECAR_ENV.NAMESPACE]: 'foo',
-    });
+  it('sidecar non-default namespace propagates OD_SIDECAR_NAMESPACE alongside OD_DATA_DIR', async () => {
+    const { port, server } = await startHarness(
+      cliPath,
+      {
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+        [SIDECAR_ENV.NAMESPACE]: 'foo',
+      },
+      dataDir,
+    );
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
       const body = await res.json();
@@ -229,22 +266,30 @@ describe('GET /api/mcp/install-info', () => {
       // Without this propagation the MCP client would launch `od mcp`
       // with no namespace env, fall back to "default", and miss the
       // foo daemon entirely.
-      expect(body.env).toEqual({ [SIDECAR_ENV.NAMESPACE]: 'foo' });
+      expect(body.env).toEqual({
+        OD_DATA_DIR: dataDir,
+        [SIDECAR_ENV.NAMESPACE]: 'foo',
+      });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
     }
   });
 
-  it('sidecar with custom IPC base propagates OD_SIDECAR_IPC_BASE', async () => {
-    const { port, server } = await startHarness(cliPath, {
-      [SIDECAR_ENV.IPC_PATH]: '/var/run/open-design/foo/daemon.sock',
-      [SIDECAR_ENV.NAMESPACE]: 'foo',
-      [SIDECAR_ENV.IPC_BASE]: '/var/run/open-design',
-    });
+  it('sidecar with custom IPC base propagates OD_SIDECAR_IPC_BASE alongside OD_DATA_DIR', async () => {
+    const { port, server } = await startHarness(
+      cliPath,
+      {
+        [SIDECAR_ENV.IPC_PATH]: '/var/run/open-design/foo/daemon.sock',
+        [SIDECAR_ENV.NAMESPACE]: 'foo',
+        [SIDECAR_ENV.IPC_BASE]: '/var/run/open-design',
+      },
+      dataDir,
+    );
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
       const body = await res.json();
       expect(body.env).toEqual({
+        OD_DATA_DIR: dataDir,
         [SIDECAR_ENV.NAMESPACE]: 'foo',
         [SIDECAR_ENV.IPC_BASE]: '/var/run/open-design',
       });
