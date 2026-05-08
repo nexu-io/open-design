@@ -71,8 +71,8 @@ describe('SettingsDialog media providers', () => {
     );
   });
 
-  it('preserves saved media keys when clearing only a non-secret field', () => {
-    const onSave = vi.fn();
+  it('preserves saved media keys when clearing only a non-secret field', async () => {
+    const onPersist = vi.fn();
     renderDialog(
       {
         ...saveableConfig(),
@@ -85,26 +85,30 @@ describe('SettingsDialog media providers', () => {
           },
         },
       },
-      { onSave },
+      { onPersist },
     );
 
     fireEvent.change(screen.getByLabelText('OpenAI Base URL'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const savedConfig = onSave.mock.calls[0]?.[0];
-    expect(savedConfig?.mediaProviders).toEqual({
-      openai: {
-        apiKey: '',
-        apiKeyConfigured: true,
-        apiKeyTail: '1234',
-        baseUrl: '',
-      },
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mediaProviders: {
+            openai: {
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '1234',
+              baseUrl: '',
+            },
+          },
+        }),
+        expect.objectContaining({ forceMediaProviderSync: true }),
+      );
     });
   });
 
-  it('clears saved media keys only through the explicit Clear action', () => {
-    const onSave = vi.fn();
+  it('clears saved media keys only through the explicit Clear action', async () => {
+    const onPersist = vi.fn();
     renderDialog(
       {
         ...saveableConfig(),
@@ -117,17 +121,19 @@ describe('SettingsDialog media providers', () => {
           },
         },
       },
-      { onSave },
+      { onPersist },
     );
 
     const openaiRow = screen.getByText('OpenAI').closest('.media-provider-row') as HTMLElement | null;
     if (!openaiRow) throw new Error('Expected OpenAI media provider row');
     fireEvent.click(within(openaiRow).getByRole('button', { name: 'Clear' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const savedConfig = onSave.mock.calls[0]?.[0];
-    expect(savedConfig?.mediaProviders).toEqual({});
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaProviders: {} }),
+        expect.objectContaining({ forceMediaProviderSync: true }),
+      );
+    });
   });
 });
 
@@ -136,7 +142,7 @@ function renderDialog(
   options?: {
     mediaProvidersNotice?: string | null;
     onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
-    onSave?: (cfg: AppConfig) => void;
+    onPersist?: (cfg: AppConfig, options?: { forceMediaProviderSync?: boolean }) => void;
   },
 ) {
   return render(
@@ -146,7 +152,8 @@ function renderDialog(
       daemonLive
       appVersionInfo={null}
       initialSection="media"
-      onSave={options?.onSave ?? vi.fn()}
+      onPersist={options?.onPersist ?? vi.fn()}
+      onPersistComposioKey={vi.fn()}
       onClose={vi.fn()}
       onRefreshAgents={vi.fn()}
       mediaProvidersNotice={options?.mediaProvidersNotice}

@@ -36,15 +36,23 @@ function externalConnector(overrides: Partial<ConnectorCatalogDefinition> = {}):
 }
 
 class TestConnectorService extends ConnectorService {
+  public listDefinitionsCallCount = 0;
+
   constructor(
     private readonly definition: ConnectorCatalogDefinition,
     statusService: ConnectorStatusService,
+    private readonly includeInFastDefinitions = false,
   ) {
     super(statusService);
   }
 
   override async listDefinitions(): Promise<ConnectorCatalogDefinition[]> {
+    this.listDefinitionsCallCount += 1;
     return [this.definition];
+  }
+
+  override listFastDefinitions(): ConnectorCatalogDefinition[] {
+    return this.includeInFastDefinitions ? [this.definition] : [];
   }
 
   override async getDefinition(connectorId: string): Promise<ConnectorCatalogDefinition | undefined> {
@@ -211,6 +219,90 @@ describe('connector read-only safety classification', () => {
   });
 });
 
+describe('connector detail responses', () => {
+  it('keeps non-read tools in connector list/detail discovery responses', async () => {
+    const definition = externalConnector({
+      tools: [
+        {
+          name: 'docs.search',
+          title: 'Search docs',
+          requiredScopes: ['docs:read'],
+          safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only docs search' },
+          refreshEligible: true,
+        },
+        {
+          name: 'docs.update_page',
+          title: 'Update page',
+          requiredScopes: ['docs:write'],
+          safety: { sideEffect: 'write', approval: 'confirm', reason: 'write-capable docs update' },
+          refreshEligible: false,
+        },
+        {
+          name: 'docs.delete_page',
+          title: 'Delete page',
+          requiredScopes: ['docs:write'],
+          safety: { sideEffect: 'destructive', approval: 'disabled', reason: 'destructive docs delete' },
+          refreshEligible: false,
+        },
+        {
+          name: 'docs.sync',
+          title: 'Sync docs',
+          requiredScopes: [],
+          safety: { sideEffect: 'unknown', approval: 'confirm', reason: 'unknown safety' },
+          refreshEligible: false,
+        },
+      ],
+      allowedToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      minimumApproval: 'auto',
+    });
+    const service = new TestConnectorService(definition, new ConnectorStatusService(), true);
+
+    await expect(service.listConnectors()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'external_docs',
+        tools: [
+          expect.objectContaining({ name: 'docs.search' }),
+          expect.objectContaining({ name: 'docs.update_page' }),
+          expect.objectContaining({ name: 'docs.delete_page' }),
+          expect.objectContaining({ name: 'docs.sync' }),
+        ],
+        featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      }),
+    ]);
+
+    await expect(service.listConnectorDiscovery()).resolves.toEqual(
+      expect.objectContaining({
+        connectors: [
+          expect.objectContaining({
+            id: 'external_docs',
+            tools: [
+              expect.objectContaining({ name: 'docs.search' }),
+              expect.objectContaining({ name: 'docs.update_page' }),
+              expect.objectContaining({ name: 'docs.delete_page' }),
+              expect.objectContaining({ name: 'docs.sync' }),
+            ],
+            featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+          }),
+        ],
+      }),
+    );
+
+    await expect(service.getConnector('external_docs')).resolves.toEqual(
+      expect.objectContaining({
+        id: 'external_docs',
+        tools: [
+          expect.objectContaining({ name: 'docs.search' }),
+          expect.objectContaining({ name: 'docs.update_page' }),
+          expect.objectContaining({ name: 'docs.delete_page' }),
+          expect.objectContaining({ name: 'docs.sync' }),
+        ],
+        featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      }),
+    );
+  });
+});
+
 describe('connector execution policy', () => {
   it('omits connected allowed tools that are not auto-approved read-only from agent preview listings', async () => {
     const definition = externalConnector({
@@ -255,6 +347,88 @@ describe('connector execution policy', () => {
         tools: [expect.objectContaining({ name: 'docs.search' })],
       }),
     ]);
+  });
+
+  it('filters connector tools by curated use case when requested', async () => {
+    const definition = externalConnector({
+      tools: [
+        {
+          name: 'docs.recent_changes',
+          title: 'Recent changes',
+          requiredScopes: ['docs:read'],
+          safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only recent changes' },
+          refreshEligible: true,
+          curation: { useCases: ['personal_daily_digest'], reason: 'Recent changes fit a daily digest.' },
+        },
+        {
+          name: 'docs.search',
+          title: 'Search docs',
+          requiredScopes: ['docs:read'],
+          safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only docs search' },
+          refreshEligible: true,
+        },
+      ],
+      allowedToolNames: ['docs.recent_changes', 'docs.search'],
+      minimumApproval: 'auto',
+    });
+    const statusService = new ConnectorStatusService();
+    statusService.connect(definition, 'docs@example.com');
+    const service = new TestConnectorService(definition, statusService, true);
+
+    await expect(listConnectorTools({
+      grant: {
+        token: 'test-token',
+        projectId: 'project-a',
+        runId: 'run-a',
+        allowedEndpoints: [],
+        allowedOperations: [],
+        issuedAt: '2026-04-30T00:00:00.000Z',
+        expiresAt: '2026-04-30T00:15:00.000Z',
+      },
+      projectsRoot: '/tmp/open-design-test',
+      service,
+      useCase: 'personal_daily_digest',
+    })).resolves.toEqual([
+      expect.objectContaining({
+        id: 'external_docs',
+        tools: [expect.objectContaining({ name: 'docs.recent_changes', curation: expect.objectContaining({ useCases: ['personal_daily_digest'] }) })],
+      }),
+    ]);
+  });
+
+  it('does not force dynamic definitions when curated fast definitions are available', async () => {
+    const definition = externalConnector({
+      tools: [{
+        name: 'docs.recent_changes',
+        title: 'Recent changes',
+        requiredScopes: ['docs:read'],
+        safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only recent changes' },
+        refreshEligible: true,
+        curation: { useCases: ['personal_daily_digest'] },
+      }],
+      allowedToolNames: ['docs.recent_changes'],
+      minimumApproval: 'auto',
+    });
+    const statusService = new ConnectorStatusService();
+    statusService.connect(definition, 'docs@example.com');
+    const service = new TestConnectorService(definition, statusService, true);
+
+    await listConnectorTools({
+      grant: {
+        token: 'test-token',
+        projectId: 'project-a',
+        runId: 'run-a',
+        allowedEndpoints: [],
+        allowedOperations: [],
+        issuedAt: '2026-04-30T00:00:00.000Z',
+        expiresAt: '2026-04-30T00:15:00.000Z',
+      },
+      projectsRoot: '/tmp/open-design-test',
+      service,
+      useCase: 'personal_daily_digest',
+    });
+
+    expect(service.listDefinitionsCallCount).toBe(0);
   });
 
   it('rejects connector inputs that no longer match the current tool schema', async () => {

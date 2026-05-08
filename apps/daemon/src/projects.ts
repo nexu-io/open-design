@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -24,16 +24,35 @@ export function projectDir(projectsRoot, projectId) {
   return path.join(projectsRoot, projectId);
 }
 
-export async function ensureProject(projectsRoot, projectId) {
-  const dir = projectDir(projectsRoot, projectId);
-  await mkdir(dir, { recursive: true });
+// Returns the folder a project's files live in. For git-linked projects
+// (metadata.baseDir set), this is the user's own folder. Otherwise falls
+// back to the standard computed path under projectsRoot.
+export function resolveProjectDir(projectsRoot, projectId, metadata?) {
+  if (typeof metadata?.baseDir === 'string') {
+    const p = path.normalize(metadata.baseDir);
+    if (path.isAbsolute(p)) return p;
+  }
+  if (!isSafeId(projectId)) throw new Error('invalid project id');
+  return path.join(projectsRoot, projectId);
+}
+
+export async function ensureProject(projectsRoot, projectId, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  // Git-linked folders already exist; skip mkdir to avoid side-effects.
+  if (typeof metadata?.baseDir !== 'string') {
+    await mkdir(dir, { recursive: true });
+  }
   return dir;
 }
 
 export async function listFiles(projectsRoot, projectId, opts = {}) {
-  const dir = projectDir(projectsRoot, projectId);
+  const metadata = opts?.metadata;
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const out = [];
-  await collectFiles(dir, '', out);
+  // Skip build/install dirs for linked folders so node_modules doesn't stall
+  // the walk on large repos.
+  const skipDirs = metadata?.baseDir ? SKIP_DIRS : undefined;
+  await collectFiles(dir, '', out, skipDirs);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
   const since = Number(opts.since);
@@ -43,7 +62,34 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   return out;
 }
 
-async function collectFiles(dir, relDir, out) {
+// Build/install dirs that should be hidden from the file panel when a
+// project is rooted at metadata.baseDir (the user's own folder). Without
+// this, the listing would be dominated by node_modules, lockfiles, and
+// build output that have no design value.
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.turbo',
+  '.cache', '.output', 'out', 'coverage', '__pycache__', '.venv',
+  'vendor', 'target', '.od', '.tmp',
+]);
+
+// Best-effort entry-file detector — looks for index.html at the root,
+// then any *.html file. Returns null if nothing obvious is found, in
+// which case the project simply opens to the file panel with no
+// auto-selected tab.
+export async function detectEntryFile(dir: string): Promise<string | null> {
+  try {
+    await stat(path.join(dir, 'index.html'));
+    return 'index.html';
+  } catch { /* not found */ }
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const htmlFile = entries.find((e) => e.isFile() && /\.html?$/i.test(e.name));
+    if (htmlFile) return htmlFile.name;
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function collectFiles(dir, relDir, out, skipDirs?: Set<string>) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -56,7 +102,8 @@ async function collectFiles(dir, relDir, out) {
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      await collectFiles(full, rel, out);
+      if (skipDirs && skipDirs.has(e.name)) continue;
+      await collectFiles(full, rel, out, skipDirs);
       continue;
     }
     if (!e.isFile()) continue;
@@ -83,12 +130,18 @@ async function collectFiles(dir, relDir, out) {
 // the user sees in the file panel. Used by the "Download as .zip" share
 // menu item, which exports the user's actual project tree (e.g. the
 // uploaded `ui-design/` folder), not just the rendered HTML.
-export async function buildProjectArchive(projectsRoot, projectId, root) {
-  const projectRoot = projectDir(projectsRoot, projectId);
+export async function buildProjectArchive(projectsRoot, projectId, root, metadata?) {
+  const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   let archiveRoot = projectRoot;
   let archiveBaseName = '';
   if (typeof root === 'string' && root.trim().length > 0) {
-    archiveRoot = resolveSafe(projectRoot, root);
+    // Use the symlink-aware resolver so that an imported folder containing
+    // e.g. `docs -> /Users/me/.ssh` cannot exfiltrate via
+    // GET /api/projects/:id/archive?root=docs. resolveSafe()'s string
+    // prefix check would let the literal path stay under projectRoot, then
+    // collectArchiveEntries() / readFile() would follow the symlink at
+    // open() time and zip files outside the project tree.
+    archiveRoot = await resolveSafeReal(projectRoot, root);
     archiveBaseName = path.basename(archiveRoot);
   }
 
@@ -141,8 +194,8 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
   return { buffer, baseName: archiveBaseName };
 }
 
-export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
-  const projectRoot = projectDir(projectsRoot, projectId);
+export async function buildBatchArchive(projectsRoot, projectId, fileNames, metadata?) {
+  const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   const zip = new JSZip();
   let packed = 0;
   const rejected = [];
@@ -281,9 +334,9 @@ async function collectArchiveEntries(dir, relDir, out) {
   }
 }
 
-export async function readProjectFile(projectsRoot, projectId, name) {
-  const dir = projectDir(projectsRoot, projectId);
-  const file = resolveSafe(dir, name);
+export async function readProjectFile(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
   const st = await stat(file);
   const rel = toProjectPath(path.relative(dir, file));
@@ -307,10 +360,11 @@ export async function writeProjectFile(
   name,
   body,
   { overwrite = true, artifactManifest = null } = {},
+  metadata?,
 ) {
-  const dir = await ensureProject(projectsRoot, projectId);
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
-  const target = resolveSafe(dir, safeName);
+  const target = await resolveSafeReal(dir, safeName);
   if (!overwrite) {
     try {
       await stat(target);
@@ -323,7 +377,7 @@ export async function writeProjectFile(
   await writeFile(target, body);
   if (artifactManifest && typeof artifactManifest === 'object') {
     const manifestFileName = artifactManifestNameFor(safeName);
-    const manifestTarget = resolveSafe(dir, manifestFileName);
+    const manifestTarget = await resolveSafeReal(dir, manifestFileName);
     const validated = validateArtifactManifestInput(artifactManifest, safeName);
     if (validated.ok && validated.value) {
       const nextManifest = validated.value;
@@ -366,9 +420,9 @@ function parseManifest(raw) {
   return parsePersistedManifest(raw, '');
 }
 
-export async function deleteProjectFile(projectsRoot, projectId, name) {
-  const dir = projectDir(projectsRoot, projectId);
-  const file = resolveSafe(dir, name);
+export async function deleteProjectFile(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const file = await resolveSafeReal(dir, name);
   await unlink(file);
 }
 
@@ -384,6 +438,49 @@ function resolveSafe(dir, name) {
     throw new Error('path escapes project dir');
   }
   return target;
+}
+
+// Symlink-aware variant of resolveSafe. resolveSafe only does string-prefix
+// validation, which is fooled by symlinks *inside* the project tree
+// (a `assets/` symlink pointing at `/Users/me/.ssh` passes the prefix
+// check because the literal path stays under dir, but the OS follows
+// the link at open() time). This helper realpath()s the resolved
+// candidate (or its existing prefix, for writes that haven't created
+// the file yet) and re-validates against the realpath of dir, so
+// descendant symlinks can't reach outside the project.
+async function resolveSafeReal(dir, name) {
+  const candidate = resolveSafe(dir, name);
+  const rootReal = await realpath(dir).catch(() => dir);
+  let real;
+  try {
+    real = await realpath(candidate);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
+    // Write case: path doesn't exist yet. Realpath the longest existing
+    // prefix and re-append the missing tail.
+    real = await resolveExistingPrefix(candidate);
+  }
+  if (!real.startsWith(rootReal + path.sep) && real !== rootReal) {
+    const e = new Error('path escapes project dir via symlink');
+    e.code = 'EPATHESCAPE';
+    throw e;
+  }
+  return real;
+}
+
+async function resolveExistingPrefix(p) {
+  const parts = p.split(path.sep);
+  for (let i = parts.length; i > 0; i--) {
+    const prefix = parts.slice(0, i).join(path.sep) || path.sep;
+    try {
+      const real = await realpath(prefix);
+      const rest = parts.slice(i).join(path.sep);
+      return rest ? path.join(real, rest) : real;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+  return p;
 }
 
 export function sanitizePath(raw) {
@@ -505,8 +602,9 @@ export function mimeFor(name) {
 export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
   const max = Math.min(Number(opts.max) || 200, 1000);
   const pattern = opts.pattern || null;
-  const items = await listFiles(projectsRoot, projectId);
-  const dir = projectDir(projectsRoot, projectId);
+  const metadata = opts.metadata;
+  const items = await listFiles(projectsRoot, projectId, { metadata });
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(escaped, 'i');
   const matches = [];

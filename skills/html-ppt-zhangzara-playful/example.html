@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Presentation Template</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #F0C8A0;
+            --bg-alt: #E8B88E;
+            --text: #1A1A1A;
+            --accent: #1A1A1A;
+            --light: #F7DEC6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--text);
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+            overflow: hidden;
+            padding: 3rem 4rem;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Navigation */
+        .nav-controls {
+            position: fixed;
+            bottom: 2rem;
+            right: 3rem;
+            z-index: 1000;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .nav-btn {
+            width: 48px;
+            height: 48px;
+            border: 2px solid var(--text);
+            background: transparent;
+            color: var(--text);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-btn:hover {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .slide-counter {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        .progress-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            background: var(--text);
+            z-index: 1000;
+            transition: width 0.4s ease;
+        }
+
+        /* Doodle SVGs */
+        .doodle {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .blob-frame {
+            border: 3px solid var(--text);
+            border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+            background: transparent;
+        }
+
+        .blob-fill {
+            background: var(--text);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+        }
+
+        .rough-box {
+            border: 3px solid var(--text);
+            position: relative;
+        }
+
+        .rough-box::before {
+            content: '';
+            position: absolute;
+            top: -3px; left: -3px; right: -3px; bottom: -3px;
+            border: 3px solid var(--text);
+            transform: rotate(0.5deg);
+            pointer-events: none;
+        }
+
+        .torn-edge {
+            clip-path: polygon(
+                0% 2%, 3% 0%, 7% 1%, 12% 0%, 18% 2%, 25% 0%, 32% 1%, 40% 0%,
+                48% 2%, 55% 0%, 62% 1%, 70% 0%, 78% 2%, 85% 0%, 92% 1%, 100% 0%,
+                100% 15%, 98% 25%, 100% 35%, 99% 45%, 100% 55%, 98% 65%, 100% 75%,
+                99% 85%, 100% 95%, 98% 100%, 90% 99%, 82% 100%, 75% 98%, 68% 100%,
+                60% 99%, 52% 100%, 45% 98%, 38% 100%, 30% 99%, 22% 100%, 15% 98%,
+                8% 100%, 2% 99%, 0% 100%, 1% 90%, 0% 80%, 2% 70%, 0% 60%, 1% 50%,
+                0% 40%, 2% 30%, 0% 20%, 1% 10%
+            );
+        }
+
+        .scribble-line {
+            stroke: var(--text);
+            stroke-width: 2;
+            fill: none;
+            stroke-linecap: round;
+        }
+
+        /* Typography */
+        .font-display {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            line-height: 0.85;
+            letter-spacing: -0.02em;
+        }
+
+        .font-body {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 400;
+            line-height: 1.5;
+        }
+
+        /* ========================================
+           SLIDE 1 - TITLE / OPENING
+           ======================================== */
+        .slide-1 {
+            justify-content: center;
+            padding: 4rem 5rem;
+        }
+
+        .slide-1 .date-large {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(4rem, 10vw, 9rem);
+            font-weight: 800;
+            line-height: 0.9;
+            letter-spacing: -0.03em;
+            margin-bottom: 1rem;
+        }
+
+        .slide-1 .title-main {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2.5rem, 6vw, 5rem);
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 2rem;
+            max-width: 70%;
+        }
+
+        .slide-1 .subtitle {
+            font-size: 1.1rem;
+            font-weight: 500;
+            max-width: 400px;
+            line-height: 1.6;
+        }
+
+        .slide-1 .doodle-blob-1 {
+            width: 280px;
+            height: 320px;
+            right: 8%;
+            top: 15%;
+            border: 3px solid var(--text);
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide-1 .doodle-blob-1::after {
+            content: '';
+            width: 180px;
+            height: 200px;
+            background: var(--text);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+        }
+
+        .slide-1 .doodle-blob-2 {
+            width: 160px;
+            height: 180px;
+            right: 25%;
+            bottom: 18%;
+            border: 3px solid var(--text);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+            background: var(--bg);
+        }
+
+        .slide-1 .vertical-text {
+            position: absolute;
+            right: 2rem;
+            top: 50%;
+            transform: translateY(-50%) rotate(90deg);
+            font-family: 'Syne', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+        }
+
+        /* ========================================
+           SLIDE 2 - TABLE OF CONTENTS
+           ======================================== */
+        .slide-2 {
+            padding: 3rem 4rem;
+        }
+
+        .slide-2 .section-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+            opacity: 0.7;
+        }
+
+        .slide-2 .toc-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            font-weight: 700;
+            margin-bottom: 3rem;
+            max-width: 60%;
+        }
+
+        .slide-2 .toc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            max-width: 900px;
+        }
+
+        .toc-item {
+            border: 3px solid var(--text);
+            padding: 1.5rem;
+            position: relative;
+            background: var(--bg);
+        }
+
+        .toc-item::before {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            right: -6px;
+            bottom: -6px;
+            border: 2px solid var(--text);
+            z-index: -1;
+        }
+
+        .toc-item .num {
+            font-family: 'Syne', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .toc-item .label {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .slide-2 .doodle-scribble {
+            position: absolute;
+            right: 5%;
+            top: 20%;
+            width: 200px;
+            height: 200px;
+        }
+
+        /* ========================================
+           SLIDE 3 - ABOUT / VISION
+           ======================================== */
+        .slide-3 {
+            justify-content: center;
+            align-items: flex-start;
+            padding: 4rem 5rem;
+        }
+
+        .slide-3 .big-statement {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            font-weight: 700;
+            line-height: 1.1;
+            max-width: 75%;
+            margin-bottom: 3rem;
+        }
+
+        .slide-3 .body-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            max-width: 800px;
+        }
+
+        .slide-3 .body-text {
+            font-size: 1rem;
+            line-height: 1.7;
+            opacity: 0.9;
+        }
+
+        .slide-3 .doodle-frame {
+            position: absolute;
+            right: 8%;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 220px;
+            height: 280px;
+            border: 3px solid var(--text);
+            border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+        }
+
+        .slide-3 .doodle-frame::after {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 190px;
+            height: 250px;
+            background: var(--text);
+            border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+        }
+
+        /* ========================================
+           SLIDE 4 - DATA / CHART
+           ======================================== */
+        .slide-4 {
+            padding: 3rem 4rem;
+        }
+
+        .slide-4 .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 3rem;
+        }
+
+        .slide-4 .chart-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            max-width: 50%;
+        }
+
+        .slide-4 .chart-legend {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            display: inline-block;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .chart-area {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            gap: 2rem;
+            padding-bottom: 2rem;
+            position: relative;
+        }
+
+        .chart-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 1.5rem;
+            height: 100%;
+            flex: 1;
+            padding-left: 3rem;
+            border-left: 3px solid var(--text);
+            border-bottom: 3px solid var(--text);
+            padding-bottom: 1rem;
+            padding-top: 2rem;
+        }
+
+        .bar-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            gap: 0.5rem;
+        }
+
+        .bar {
+            width: 100%;
+            max-width: 80px;
+            background: var(--text);
+            transition: height 0.8s ease;
+            position: relative;
+        }
+
+        .bar.alt {
+            background: transparent;
+            border: 3px solid var(--text);
+        }
+
+        .bar-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .y-axis {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding-right: 0.5rem;
+        }
+
+        .slide-4 .doodle-star {
+            position: absolute;
+            right: 8%;
+            top: 30%;
+            width: 150px;
+            height: 150px;
+        }
+
+        /* ========================================
+           SLIDE 5 - TEAM / PEOPLE
+           ======================================== */
+        .slide-5 {
+            padding: 3rem 4rem;
+        }
+
+        .slide-5 .team-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .slide-5 .team-sub {
+            font-size: 1rem;
+            opacity: 0.7;
+            margin-bottom: 3rem;
+        }
+
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            flex: 1;
+            align-content: center;
+        }
+
+        .team-card {
+            border: 3px solid var(--text);
+            padding: 1.5rem;
+            position: relative;
+            background: var(--bg);
+        }
+
+        .team-card:nth-child(2) {
+            transform: rotate(1deg);
+        }
+
+        .team-card:nth-child(3) {
+            transform: rotate(-1deg);
+        }
+
+        .team-card:nth-child(4) {
+            transform: rotate(0.5deg);
+        }
+
+        .team-card .avatar-placeholder {
+            width: 60px;
+            height: 60px;
+            background: var(--text);
+            border-radius: 50%;
+            margin-bottom: 1rem;
+        }
+
+        .team-card .name {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .team-card .role {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .slide-5 .doodle-squiggle {
+            position: absolute;
+            bottom: 10%;
+            right: 5%;
+            width: 180px;
+            height: 100px;
+        }
+
+        /* ========================================
+           SLIDE 6 - SERVICES / OFFERINGS
+           ======================================== */
+        .slide-6 {
+            padding: 3rem 4rem;
+            justify-content: center;
+        }
+
+        .slide-6 .services-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            font-weight: 700;
+            margin-bottom: 3rem;
+            max-width: 50%;
+        }
+
+        .services-collage {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 1.5rem;
+            flex: 1;
+            max-height: 55vh;
+        }
+
+        .service-block {
+            border: 3px solid var(--text);
+            padding: 1.5rem;
+            position: relative;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .service-block.filled {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .service-block:nth-child(1) { transform: rotate(-0.5deg); }
+        .service-block:nth-child(2) { transform: rotate(0.8deg); }
+        .service-block:nth-child(3) { transform: rotate(-0.3deg); }
+        .service-block:nth-child(4) { transform: rotate(0.5deg); }
+        .service-block:nth-child(5) { transform: rotate(-0.7deg); }
+
+        .service-block .block-num {
+            font-family: 'Syne', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .service-block .block-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .service-block .block-desc {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            opacity: 0.8;
+        }
+
+        /* ========================================
+           SLIDE 7 - TIMELINE / PROCESS
+           ======================================== */
+        .slide-7 {
+            padding: 3rem 4rem;
+            justify-content: center;
+        }
+
+        .slide-7 .timeline-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 3rem;
+        }
+
+        .timeline-track {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            position: relative;
+            flex: 1;
+            max-height: 50vh;
+            padding-top: 2rem;
+        }
+
+        .timeline-track::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 5%;
+            right: 5%;
+            height: 3px;
+            background: var(--text);
+            border-radius: 2px;
+        }
+
+        .timeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            flex: 1;
+            position: relative;
+        }
+
+        .step-node {
+            width: 64px;
+            height: 64px;
+            border: 3px solid var(--text);
+            border-radius: 50%;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step-node.filled {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .step-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            max-width: 140px;
+        }
+
+        .step-desc {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            max-width: 160px;
+            line-height: 1.4;
+        }
+
+        .slide-7 .doodle-arrow {
+            position: absolute;
+            bottom: 15%;
+            right: 10%;
+            width: 120px;
+            height: 80px;
+        }
+
+        /* ========================================
+           SLIDE 8 - STATISTICS / BIG NUMBERS
+           ======================================== */
+        .slide-8 {
+            padding: 3rem 4rem;
+            justify-content: center;
+        }
+
+        .slide-8 .stats-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(1.8rem, 3vw, 2.5rem);
+            font-weight: 700;
+            margin-bottom: 3rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3rem;
+            flex: 1;
+            align-content: center;
+        }
+
+        .stat-item {
+            position: relative;
+        }
+
+        .stat-num {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(4rem, 8vw, 7rem);
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 1rem;
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            font-weight: 500;
+            opacity: 0.8;
+            max-width: 200px;
+        }
+
+        .stat-item:nth-child(1) .stat-num { transform: rotate(-1deg); }
+        .stat-item:nth-child(2) .stat-num { transform: rotate(0.5deg); }
+        .stat-item:nth-child(3) .stat-num { transform: rotate(-0.5deg); }
+
+        .slide-8 .doodle-blob-big {
+            position: absolute;
+            right: 5%;
+            bottom: 10%;
+            width: 250px;
+            height: 250px;
+            background: var(--text);
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+            opacity: 0.08;
+        }
+
+        /* ========================================
+           SLIDE 9 - GALLERY / WORK SAMPLES
+           ======================================== */
+        .slide-9 {
+            padding: 3rem 4rem;
+        }
+
+        .slide-9 .gallery-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .slide-9 .gallery-sub {
+            font-size: 1rem;
+            opacity: 0.7;
+            margin-bottom: 2.5rem;
+        }
+
+        .gallery-collage {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 1rem;
+            flex: 1;
+            max-height: 60vh;
+        }
+
+        .gallery-item {
+            border: 3px solid var(--text);
+            position: relative;
+            overflow: hidden;
+            background: var(--bg-alt);
+        }
+
+        .gallery-item:nth-child(1) {
+            grid-row: 1 / 3;
+            transform: rotate(-0.5deg);
+        }
+
+        .gallery-item:nth-child(2) {
+            transform: rotate(0.5deg);
+        }
+
+        .gallery-item:nth-child(3) {
+            transform: rotate(-0.3deg);
+        }
+
+        .gallery-item:nth-child(4) {
+            grid-column: 2 / 4;
+            transform: rotate(0.3deg);
+        }
+
+        .gallery-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            opacity: 0.5;
+        }
+
+        .gallery-tag {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background: var(--text);
+            color: var(--bg);
+            padding: 0.4rem 0.8rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* ========================================
+           SLIDE 10 - CLOSING / CONTACT
+           ======================================== */
+        .slide-10 {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 4rem;
+        }
+
+        .slide-10 .closing-big {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(3rem, 8vw, 7rem);
+            font-weight: 800;
+            line-height: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .slide-10 .closing-sub {
+            font-size: 1.2rem;
+            font-weight: 500;
+            opacity: 0.8;
+            margin-bottom: 3rem;
+        }
+
+        .slide-10 .contact-block {
+            border: 3px solid var(--text);
+            padding: 2rem 3rem;
+            display: inline-block;
+            position: relative;
+        }
+
+        .slide-10 .contact-block::before {
+            content: '';
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            right: -8px;
+            bottom: -8px;
+            border: 3px solid var(--text);
+            z-index: -1;
+        }
+
+        .slide-10 .contact-line {
+            font-size: 1rem;
+            font-weight: 500;
+            margin: 0.5rem 0;
+        }
+
+        .slide-10 .doodle-circle {
+            position: absolute;
+            left: 10%;
+            top: 20%;
+            width: 100px;
+            height: 100px;
+            border: 3px solid var(--text);
+            border-radius: 50%;
+        }
+
+        .slide-10 .doodle-rect {
+            position: absolute;
+            right: 12%;
+            bottom: 25%;
+            width: 140px;
+            height: 100px;
+            border: 3px solid var(--text);
+            transform: rotate(10deg);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .slide {
+                padding: 2rem;
+            }
+
+            .team-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .services-collage {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
+
+            .gallery-collage {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: repeat(3, 1fr);
+            }
+
+            .gallery-item:nth-child(1) {
+                grid-row: 1 / 2;
+            }
+
+            .gallery-item:nth-child(4) {
+                grid-column: 1 / 3;
+            }
+
+            .timeline-track {
+                flex-direction: column;
+                gap: 2rem;
+            }
+
+            .timeline-track::before {
+                display: none;
+            }
+
+            .slide-3 .body-columns {
+                grid-template-columns: 1fr;
+            }
+
+            .slide-2 .toc-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="progress-bar" id="progressBar"></div>
+
+    <div class="presentation">
+
+        <!-- ==================== SLIDE 1: TITLE ==================== -->
+        <div class="slide slide-1 active" data-index="0">
+            <div class="date-large">02.05.26</div>
+            <div class="title-main">Creative Direction & Visual Systems</div>
+            <div class="subtitle">A template presentation for bold ideas, raw expression, and unfiltered storytelling. Built with expressive typography and organic forms.</div>
+
+            <div class="doodle-blob-1 doodle"></div>
+            <div class="doodle-blob-2 doodle"></div>
+            <div class="vertical-text">SCROLL DOWN &rarr;</div>
+
+            <svg class="doodle" style="position:absolute; bottom:15%; left:5%; width:120px; height:60px;" viewBox="0 0 120 60">
+                <path class="scribble-line" d="M5,30 Q20,5 35,30 T65,30 T95,30" />
+                <path class="scribble-line" d="M10,40 Q25,20 40,40 T70,40" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 2: TABLE OF CONTENTS ==================== -->
+        <div class="slide slide-2" data-index="1">
+            <div class="section-label">Overview</div>
+            <div class="toc-title">What We Will Cover Today</div>
+
+            <div class="toc-grid">
+                <div class="toc-item">
+                    <div class="num">01</div>
+                    <div class="label">Vision & Mission Statement</div>
+                </div>
+                <div class="toc-item">
+                    <div class="num">02</div>
+                    <div class="label">Market Analysis & Data Insights</div>
+                </div>
+                <div class="toc-item">
+                    <div class="num">03</div>
+                    <div class="label">Team Structure & Leadership</div>
+                </div>
+                <div class="toc-item">
+                    <div class="num">04</div>
+                    <div class="label">Core Services & Offerings</div>
+                </div>
+                <div class="toc-item">
+                    <div class="num">05</div>
+                    <div class="label">Process & Workflow Timeline</div>
+                </div>
+                <div class="toc-item">
+                    <div class="num">06</div>
+                    <div class="label">Results, Metrics & Impact</div>
+                </div>
+            </div>
+
+            <svg class="doodle-scribble" viewBox="0 0 200 200" style="position:absolute; right:5%; top:15%;">
+                <path class="scribble-line" d="M20,100 C40,40 80,20 100,60 C120,100 160,80 180,120 C200,160 160,180 120,160 C80,140 40,160 20,100" />
+                <path class="scribble-line" d="M50,100 C60,70 90,60 110,90 C130,120 150,100 160,130" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 3: VISION ==================== -->
+        <div class="slide slide-3" data-index="2">
+            <div class="big-statement">We believe in raw expression over polished perfection. Every project begins with a question and ends with a statement.</div>
+
+            <div class="body-columns">
+                <div class="body-text">Our approach combines strategic thinking with intuitive design. We build visual systems that adapt, evolve, and resonate with audiences across cultures and contexts.</div>
+                <div class="body-text">Founded in 2019, we have partnered with independent artists, cultural institutions, and forward-thinking brands to create work that challenges conventions.</div>
+            </div>
+
+            <div class="doodle-frame doodle"></div>
+
+            <svg class="doodle" style="position:absolute; left:5%; bottom:15%; width:100px; height:100px;" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" class="scribble-line" fill="none" />
+                <circle cx="50" cy="50" r="25" class="scribble-line" fill="none" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 4: CHART / DATA ==================== -->
+        <div class="slide slide-4" data-index="3">
+            <div class="chart-header">
+                <div class="chart-title">Growth Metrics Over Four Quarters</div>
+                <div class="chart-legend">
+                    <span><span class="legend-dot" style="background:var(--text);"></span>Revenue</span>
+                    <span><span class="legend-dot" style="background:transparent; border:2px solid var(--text);"></span>Engagement</span>
+                </div>
+            </div>
+
+            <div class="chart-area">
+                <div class="y-axis">
+                    <span>100</span>
+                    <span>75</span>
+                    <span>50</span>
+                    <span>25</span>
+                    <span>0</span>
+                </div>
+                <div class="chart-bars">
+                    <div class="bar-group">
+                        <div class="bar" style="height: 45%;"></div>
+                        <div class="bar alt" style="height: 30%;"></div>
+                        <div class="bar-label">Q1</div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar" style="height: 60%;"></div>
+                        <div class="bar alt" style="height: 50%;"></div>
+                        <div class="bar-label">Q2</div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar" style="height: 75%;"></div>
+                        <div class="bar alt" style="height: 65%;"></div>
+                        <div class="bar-label">Q3</div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar" style="height: 90%;"></div>
+                        <div class="bar alt" style="height: 85%;"></div>
+                        <div class="bar-label">Q4</div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar" style="height: 100%;"></div>
+                        <div class="bar alt" style="height: 95%;"></div>
+                        <div class="bar-label">Q5</div>
+                    </div>
+                </div>
+            </div>
+
+            <svg class="doodle-star" viewBox="0 0 150 150" style="position:absolute; right:8%; top:25%;">
+                <path class="scribble-line" d="M75,10 L85,55 L130,55 L95,85 L105,130 L75,100 L45,130 L55,85 L20,55 L65,55 Z" fill="none" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 5: TEAM ==================== -->
+        <div class="slide slide-5" data-index="4">
+            <div class="team-title">The Collective</div>
+            <div class="team-sub">Four perspectives, one shared obsession with craft.</div>
+
+            <div class="team-grid">
+                <div class="team-card">
+                    <div class="avatar-placeholder"></div>
+                    <div class="name">Alex Chen</div>
+                    <div class="role">Creative Director</div>
+                </div>
+                <div class="team-card">
+                    <div class="avatar-placeholder"></div>
+                    <div class="name">Mira Okafor</div>
+                    <div class="role">Strategy Lead</div>
+                </div>
+                <div class="team-card">
+                    <div class="avatar-placeholder"></div>
+                    <div class="name">Jonas Weber</div>
+                    <div class="role">Visual Designer</div>
+                </div>
+                <div class="team-card">
+                    <div class="avatar-placeholder"></div>
+                    <div class="name">Suki Tanaka</div>
+                    <div class="role">Motion Artist</div>
+                </div>
+            </div>
+
+            <svg class="doodle-squiggle" viewBox="0 0 180 100" style="position:absolute; bottom:10%; right:5%;">
+                <path class="scribble-line" d="M10,50 Q30,10 50,50 T90,50 T130,50 T170,50" />
+                <path class="scribble-line" d="M20,70 Q40,40 60,70 T100,70" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 6: SERVICES ==================== -->
+        <div class="slide slide-6" data-index="5">
+            <div class="services-title">What We Do Best</div>
+
+            <div class="services-collage">
+                <div class="service-block">
+                    <div class="block-num">01</div>
+                    <div>
+                        <div class="block-title">Brand Identity</div>
+                        <div class="block-desc">Visual systems that capture essence and scale across every touchpoint.</div>
+                    </div>
+                </div>
+                <div class="service-block filled">
+                    <div class="block-num">02</div>
+                    <div>
+                        <div class="block-title">Art Direction</div>
+                        <div class="block-desc">Creative vision for campaigns, editorial, and cultural projects.</div>
+                    </div>
+                </div>
+                <div class="service-block">
+                    <div class="block-num">03</div>
+                    <div>
+                        <div class="block-title">Motion Design</div>
+                        <div class="block-desc">Animation and kinetic identity that brings static brands to life.</div>
+                    </div>
+                </div>
+                <div class="service-block">
+                    <div class="block-num">04</div>
+                    <div>
+                        <div class="block-title">Digital Experiences</div>
+                        <div class="block-desc">Websites and interactive platforms with personality and purpose.</div>
+                    </div>
+                </div>
+                <div class="service-block filled">
+                    <div class="block-num">05</div>
+                    <div>
+                        <div class="block-title">Typography</div>
+                        <div class="block-desc">Custom letterforms and type systems for distinctive voices.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SLIDE 7: TIMELINE ==================== -->
+        <div class="slide slide-7" data-index="6">
+            <div class="timeline-title">Our Process in Five Steps</div>
+
+            <div class="timeline-track">
+                <div class="timeline-step">
+                    <div class="step-node filled">1</div>
+                    <div class="step-title">Discover</div>
+                    <div class="step-desc">Research, interviews, and competitive landscape analysis</div>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-node">2</div>
+                    <div class="step-title">Define</div>
+                    <div class="step-desc">Strategic positioning and core narrative development</div>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-node filled">3</div>
+                    <div class="step-title">Design</div>
+                    <div class="step-desc">Visual exploration, prototyping, and iteration cycles</div>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-node">4</div>
+                    <div class="step-title">Develop</div>
+                    <div class="step-desc">Production, asset creation, and implementation support</div>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-node filled">5</div>
+                    <div class="step-title">Deploy</div>
+                    <div class="step-desc">Launch support and ongoing performance measurement</div>
+                </div>
+            </div>
+
+            <svg class="doodle-arrow" viewBox="0 0 120 80" style="position:absolute; bottom:15%; right:10%;">
+                <path class="scribble-line" d="M10,40 L100,40 L80,20 M100,40 L80,60" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 8: BIG NUMBERS ==================== -->
+        <div class="slide slide-8" data-index="7">
+            <div class="stats-title">Impact by the Numbers</div>
+
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-num">47</div>
+                    <div class="stat-label">Projects delivered across three continents in the last year</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-num">12</div>
+                    <div class="stat-label">Industry awards and recognitions for creative excellence</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-num">98%</div>
+                    <div class="stat-label">Client retention rate with ongoing partnerships</div>
+                </div>
+            </div>
+
+            <div class="doodle-blob-big doodle"></div>
+
+            <svg class="doodle" style="position:absolute; left:8%; bottom:20%; width:80px; height:80px;" viewBox="0 0 80 80">
+                <rect x="10" y="10" width="60" height="60" class="scribble-line" fill="none" rx="5" />
+                <rect x="20" y="20" width="40" height="40" class="scribble-line" fill="none" rx="3" />
+            </svg>
+        </div>
+
+        <!-- ==================== SLIDE 9: GALLERY ==================== -->
+        <div class="slide slide-9" data-index="8">
+            <div class="gallery-title">Selected Works</div>
+            <div class="gallery-sub">A glimpse into recent collaborations and independent projects.</div>
+
+            <div class="gallery-collage">
+                <div class="gallery-item">
+                    <div class="gallery-placeholder">IMG 01</div>
+                    <div class="gallery-tag">Editorial</div>
+                </div>
+                <div class="gallery-item">
+                    <div class="gallery-placeholder">IMG 02</div>
+                    <div class="gallery-tag">Identity</div>
+                </div>
+                <div class="gallery-item">
+                    <div class="gallery-placeholder">IMG 03</div>
+                    <div class="gallery-tag">Motion</div>
+                </div>
+                <div class="gallery-item">
+                    <div class="gallery-placeholder">IMG 04</div>
+                    <div class="gallery-tag">Campaign</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SLIDE 10: CLOSING ==================== -->
+        <div class="slide slide-10" data-index="9">
+            <div class="closing-big">Thank You<br>Let Us Talk</div>
+            <div class="closing-sub">Questions, projects, or just a conversation about ideas.</div>
+
+            <div class="contact-block">
+                <div class="contact-line">hello@example.studio</div>
+                <div class="contact-line">+1 (555) 000 1234</div>
+                <div class="contact-line">www.example.studio</div>
+            </div>
+
+            <div class="doodle-circle doodle"></div>
+            <div class="doodle-rect doodle"></div>
+
+            <svg class="doodle" style="position:absolute; left:15%; bottom:20%; width:100px; height:50px;" viewBox="0 0 100 50">
+                <path class="scribble-line" d="M5,25 Q25,5 50,25 T95,25" />
+            </svg>
+        </div>
+
+    </div>
+
+    <div class="nav-controls">
+        <button class="nav-btn" id="prevBtn">&larr;</button>
+        <span class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">10</span></span>
+        <button class="nav-btn" id="nextBtn">&rarr;</button>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const currentSlideEl = document.getElementById('currentSlide');
+        const totalSlidesEl = document.getElementById('totalSlides');
+        const progressBar = document.getElementById('progressBar');
+
+        let current = 0;
+        const total = slides.length;
+
+        totalSlidesEl.textContent = total;
+
+        function updateSlide() {
+            slides.forEach((slide, index) => {
+                slide.classList.toggle('active', index === current);
+            });
+            currentSlideEl.textContent = current + 1;
+            progressBar.style.width = ((current + 1) / total * 100) + '%';
+        }
+
+        function next() {
+            if (current < total - 1) {
+                current++;
+                updateSlide();
+            }
+        }
+
+        function prev() {
+            if (current > 0) {
+                current--;
+                updateSlide();
+            }
+        }
+
+        nextBtn.addEventListener('click', next);
+        prevBtn.addEventListener('click', prev);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                next();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prev();
+            }
+        });
+
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            if (touchEndX < touchStartX - swipeThreshold) {
+                next();
+            } else if (touchEndX > touchStartX + swipeThreshold) {
+                prev();
+            }
+        }
+
+        updateSlide();
+    </script>
+
+</body>
+</html>

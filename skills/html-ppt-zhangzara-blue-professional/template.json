@@ -1,0 +1,44 @@
+{
+  "slug": "zhangzara-blue-professional",
+  "name": "Blue Professional",
+  "tagline": "Cream paper background with electric cobalt blue accents; clean modern professional.",
+  "mood": [
+    "professional",
+    "modern",
+    "calm",
+    "trustworthy"
+  ],
+  "occasion": [
+    "B2B SaaS pitch",
+    "consulting deliverable",
+    "internal review",
+    "advisory pitch",
+    "investor update"
+  ],
+  "tone": [
+    "clean",
+    "considered",
+    "polished",
+    "neutral"
+  ],
+  "formality": "medium-high",
+  "density": "medium",
+  "palette": {
+    "bg": "#FDFAE7",
+    "primary": "#1E2BFA",
+    "text": "#111111",
+    "text_muted": "#6B6B6B",
+    "description": "warm cream paper background with one electric cobalt blue accent; restrained ink black text and soft muted greys"
+  },
+  "typography": {
+    "display": "Space Grotesk",
+    "body": "Inter",
+    "style": "modern sans pairing; quiet, professional, no decorative flourishes"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel modern-considered and lightly authoritative: B2B SaaS pitches, consulting deliverables, advisory updates, investor reports. Also a clean, tasteful choice whenever you want to read as professional without going stiff — research synthesis, internal reviews, brand work for service businesses.",
+  "avoid_for": "Contexts where the deck should feel hot, playful, or intentionally informal — the cool electric-blue restraint will read as overly polished.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/blue-professional"
+}

@@ -1,0 +1,165 @@
+{
+  "brand_name": "ST. LUKES",
+  "greeting": "Hey Lukmon, glad to have you back! 🙌",
+  "search_placeholder": "Search doctors, patients, rooms…",
+  "search_shortcut": "⌘K",
+  "secondary_action_label": "Export CSV",
+  "primary_action_label": "Add new",
+
+  "user": {
+    "name": "Lukmon Olabode",
+    "role": "Admin",
+    "av_class": "av-orange",
+    "initial": "L"
+  },
+
+  "nav_main_label": "Main Menu",
+  "nav_main": [
+    { "label": "Dashboard",    "active_class": "active", "count": "" },
+    { "label": "Message",      "active_class": "",       "count": "10" },
+    { "label": "Schedule",     "active_class": "",       "count": "" },
+    { "label": "Notification", "active_class": "",       "count": "12" },
+    { "label": "Transaction",  "active_class": "",       "count": "" }
+  ],
+
+  "nav_management_label": "Management",
+  "nav_management": [
+    { "label": "Doctor",      "active_class": "", "count": "" },
+    { "label": "Medicine",    "active_class": "", "count": "" },
+    { "label": "Bedroom",     "active_class": "", "count": "" },
+    { "label": "Appointment", "active_class": "", "count": "" },
+    { "label": "Patient",     "active_class": "", "count": "" }
+  ],
+
+  "pro_card": {
+    "tag": "Pro",
+    "title": "Pssst!",
+    "body": "Your subscription expires in 9 days.",
+    "primary_label": "Renew",
+    "secondary_label": "Cancel"
+  },
+
+  "kpi_a": {
+    "label": "Total doctors",
+    "value": "1,089",
+    "trend_class": "down",
+    "trend_label": "↓ 4.2%",
+    "caption": "An increase of 20 doctors in the last 7 days.",
+    "strip_class": "stripe-amber"
+  },
+  "kpi_b": {
+    "label": "Total bookings",
+    "value": "17,610",
+    "trend_class": "up",
+    "trend_label": "↑ 5.5%",
+    "caption": "Last 7 days: 5,231 → 8,323 visitors.",
+    "strip_class": "stripe-blue",
+    "mini_stat": "1,635 today"
+  },
+  "kpi_c": {
+    "label": "Available rooms",
+    "value": "8,450",
+    "trend_class": "up",
+    "trend_label": "↑ 462",
+    "rows": [
+      { "label": "General room", "value": "100" },
+      { "label": "Private room", "value": "75" }
+    ]
+  },
+  "kpi_d": {
+    "label": "Total visitors",
+    "value": "29,709",
+    "trend_class": "up",
+    "trend_label": "↑ 3.5%",
+    "caption": "Top 3 in-demand clinics this month.",
+    "strip_class": "stripe-amber",
+    "mini_stat": "1,070 today"
+  },
+
+  "chart": {
+    "title": "Patient overview",
+    "dropdown_label": "Last 6 months",
+    "legend_a": "Total patients",
+    "legend_b": "Avg. hospitalized",
+    "legend_c": "Avg. outpatient care",
+    "bars": [
+      { "x": "34",  "y": "148", "h": "92"  },
+      { "x": "58",  "y": "108", "h": "132" },
+      { "x": "120", "y": "124", "h": "116" },
+      { "x": "144", "y": "92",  "h": "148" },
+      { "x": "206", "y": "96",  "h": "144" },
+      { "x": "230", "y": "56",  "h": "184" },
+      { "x": "292", "y": "156", "h": "84"  },
+      { "x": "316", "y": "116", "h": "124" },
+      { "x": "378", "y": "140", "h": "100" },
+      { "x": "402", "y": "100", "h": "140" },
+      { "x": "464", "y": "120", "h": "120" },
+      { "x": "488", "y": "80",  "h": "160" },
+      { "x": "550", "y": "160", "h": "80"  },
+      { "x": "574", "y": "128", "h": "112" }
+    ],
+    "x_labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"]
+  },
+
+  "calendar": {
+    "month_label": "March 2025",
+    "dow": ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
+    "days": [
+      { "label": "23", "modifier": "muted" }, { "label": "24", "modifier": "muted" }, { "label": "25", "modifier": "muted" }, { "label": "26", "modifier": "muted" }, { "label": "27", "modifier": "muted" }, { "label": "28", "modifier": "muted" }, { "label": "1",  "modifier": "" },
+      { "label": "2",  "modifier": "" },      { "label": "3",  "modifier": "" },      { "label": "4",  "modifier": "" },      { "label": "5",  "modifier": "" },      { "label": "6",  "modifier": "" },      { "label": "7",  "modifier": "" },      { "label": "8",  "modifier": "active" },
+      { "label": "9",  "modifier": "" },      { "label": "10", "modifier": "" },      { "label": "11", "modifier": "" },      { "label": "12", "modifier": "" },      { "label": "13", "modifier": "" },      { "label": "14", "modifier": "" },      { "label": "15", "modifier": "" },
+      { "label": "16", "modifier": "" },      { "label": "17", "modifier": "" },      { "label": "18", "modifier": "" },      { "label": "19", "modifier": "" },      { "label": "20", "modifier": "" },      { "label": "21", "modifier": "" },      { "label": "22", "modifier": "" },
+      { "label": "23", "modifier": "" },      { "label": "24", "modifier": "" },      { "label": "25", "modifier": "" },      { "label": "26", "modifier": "" },      { "label": "27", "modifier": "" },      { "label": "28", "modifier": "" },      { "label": "29", "modifier": "" }
+    ]
+  },
+
+  "activity": {
+    "title": "Activity Detail · Mar 8",
+    "events": [
+      { "av_class": "blue",   "name": "Dr. Sarah · post-op review", "time": "11:00 am" },
+      { "av_class": "pink",   "name": "Dental staff meetup",         "time": "3:00 pm"  },
+      { "av_class": "violet", "name": "Ola Muhammad intake",          "time": "4:00 pm"  }
+    ],
+    "add_label": "＋ Add item"
+  },
+
+  "donut": {
+    "title": "Top 3 most requested clinics",
+    "center_label": "Total patients",
+    "center_num": "534",
+    "segment_b": { "dasharray": "120 240", "dashoffset": "0" },
+    "segment_c": { "dasharray": "35 240",  "dashoffset": "-120" },
+    "legend": [
+      { "value": "120", "label": "Dental" },
+      { "value": "249", "label": "Cardiology" },
+      { "value": "165", "label": "Surgery" }
+    ]
+  },
+
+  "schedule": {
+    "title": "Doctors's schedule",
+    "stats": [
+      { "value": "51", "small": "Total", "label": "Available" },
+      { "value": "23", "small": "Total", "label": "Unavailable" },
+      { "value": "09", "small": "Total", "label": "Leave" }
+    ],
+    "list_header_label": "List of Doctor",
+    "doctors": [
+      { "av_class": "av-blue",   "initial": "P", "name": "Peter Bashir",    "role": "Anesthesiologist", "status_class": "avail", "status_label": "Available"   },
+      { "av_class": "av-violet", "initial": "D", "name": "Deborah Fagbemi", "role": "Cardiologist",     "status_class": "unav",  "status_label": "Unavailable" },
+      { "av_class": "av-rose",   "initial": "H", "name": "Hannah Diongoli", "role": "Dermatologist",    "status_class": "avail", "status_label": "Available"   },
+      { "av_class": "av-amber",  "initial": "A", "name": "Aisha Bello",     "role": "Pediatrician",     "status_class": "leave", "status_label": "Leave"       }
+    ]
+  },
+
+  "appointments": {
+    "title": "Today's appointments",
+    "list": [
+      { "av_class": "av-pink",   "initial": "R", "name": "Ruth Tubonimi",  "role": "Gastroenterology · room 204", "date": "Today", "time": "09:40" },
+      { "av_class": "av-amber",  "initial": "J", "name": "Joseph Obiano",  "role": "Psychiatry · video call",     "date": "Today", "time": "10:25" },
+      { "av_class": "av-mint",   "initial": "T", "name": "Timothy Jibrin", "role": "Hematology · room 117",        "date": "Today", "time": "11:00" },
+      { "av_class": "av-violet", "initial": "E", "name": "Elizabeth Kanu", "role": "Ophthalmology · room 09",      "date": "Today", "time": "02:15" },
+      { "av_class": "av-blue",   "initial": "S", "name": "Simon Garba",    "role": "Otolaryngology · room 21",     "date": "Today", "time": "03:40" }
+    ]
+  }
+}

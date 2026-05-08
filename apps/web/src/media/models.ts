@@ -44,6 +44,7 @@ export type MediaProviderId =
   | 'udio'
   | 'elevenlabs'
   | 'fishaudio'
+  | 'tavily'
   | 'stub';
 
 export interface MediaProvider {
@@ -193,6 +194,14 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.fish.audio',
     docsUrl: 'https://fish.audio',
+  },
+  {
+    id: 'tavily',
+    label: 'Tavily Search',
+    hint: 'Agent-callable web research',
+    integrated: true,
+    defaultBaseUrl: 'https://api.tavily.com',
+    docsUrl: 'https://app.tavily.com/home',
   },
   {
     id: 'stub',

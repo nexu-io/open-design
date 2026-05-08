@@ -14,7 +14,9 @@ import {
   renderCodexImagegenOverride,
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
+import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
+import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
@@ -27,8 +29,10 @@ import {
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
+import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import { findSkillById, listSkills } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
+import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
@@ -38,6 +42,8 @@ import { createClaudeStreamHandler } from './claude-stream.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
+import { createRunRegistry } from './critique/run-registry.js';
+import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
@@ -45,6 +51,11 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import {
+  testAgentConnection,
+  testProviderConnection,
+  validateBaseUrl,
+} from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
@@ -52,6 +63,8 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
+import { searchResearch, ResearchError } from './research/index.js';
+import { renderResearchCommandContract } from './prompts/research-contract.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -63,11 +76,14 @@ import {
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
+import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
+  detectEntryFile,
   ensureProject,
   listFiles,
   mimeFor,
@@ -132,16 +148,29 @@ import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore, readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import {
+  aggregateCloudflarePagesStatus,
   buildDeployFileSet,
   checkDeploymentUrl,
+  CLOUDFLARE_PAGES_PROVIDER_ID,
+  cloudflarePagesProjectNameForProject,
   DeployError,
+  deployToCloudflarePages,
   deployToVercel,
+  isDeployProviderId,
+  listCloudflarePagesZones,
   prepareDeployPreflight,
-  publicDeployConfig,
-  readVercelConfig,
+  publicDeployConfigForProvider,
+  readDeployConfig,
+  readCloudflarePagesDomain,
   VERCEL_PROVIDER_ID,
-  writeVercelConfig,
+  writeDeployConfig,
 } from './deploy.js';
+import {
+  allowedBrowserPorts,
+  configuredAllowedOrigins,
+  isAllowedBrowserOrigin,
+  isLocalSameOrigin,
+} from './origin-validation.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -154,6 +183,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
+const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export function resolveProjectRoot(moduleDir: string): string {
   const base = path.basename(moduleDir);
   const daemonDir =
@@ -161,7 +191,16 @@ export function resolveProjectRoot(moduleDir: string): string {
   return path.resolve(daemonDir, '../..');
 }
 
-export function resolveDaemonCliPath(): string {
+function cleanOptionalPath(value: string | undefined): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? path.resolve(value)
+    : null;
+}
+
+export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
+  if (configured) return configured;
+
   const packageJsonPath = require.resolve('@open-design/daemon/package.json');
   return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
@@ -191,6 +230,19 @@ export function composeLiveInstructionPrompt({
     parts.push(override);
   }
   return parts.join('\n\n---\n\n');
+}
+
+export function resolveResearchCommandContract(research, message) {
+  if (!research || !research.enabled) return '';
+  const researchQuery =
+    typeof research.query === 'string' && research.query.trim()
+      ? research.query
+      : message;
+  return renderResearchCommandContract({
+    query: researchQuery,
+    maxSources:
+      typeof research.maxSources === 'number' ? research.maxSources : undefined,
+  });
 }
 
 export function resolveCodexGeneratedImagesDir(
@@ -668,12 +720,15 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
 );
 export function resolveDataDir(raw, projectRoot) {
   if (!raw) return path.join(projectRoot, '.od');
-  const expanded = raw.startsWith('~/')
-    ? path.join(os.homedir(), raw.slice(2))
-    : raw;
-  const resolved = path.isAbsolute(expanded)
-    ? expanded
-    : path.resolve(projectRoot, expanded);
+  // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
+  // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
+  // Some launchers (systemd unit files, NixOS modules, certain Docker
+  // entrypoints, Windows scheduled tasks) pass OD_DATA_DIR with literal
+  // $HOME or ${HOME} because the variable is never expanded by a shell;
+  // expandHomePrefix turns those (and the ~ shorthand, with both / and \
+  // separators) into os.homedir() before path.resolve runs so launch
+  // surfaces stay consistent.
+  const resolved = resolveProjectRelativePath(raw, projectRoot);
   try {
     fs.mkdirSync(resolved, { recursive: true });
     fs.accessSync(resolved, fs.constants.W_OK);
@@ -686,9 +741,32 @@ export function resolveDataDir(raw, projectRoot) {
   return resolved;
 }
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+// Canonical (realpath-resolved) form of RUNTIME_DATA_DIR for the few callers
+// that compare it against a user-supplied realpath() result. On macOS, /var
+// is a symlink to /private/var, so an import realpath lands in /private/var
+// and would never start-with the raw RUNTIME_DATA_DIR. Keep RUNTIME_DATA_DIR
+// itself as the stable, user-shaped path so OD_DATA_DIR resolution stays
+// predictable; only this canonical alias is used for symlink-aware checks.
+const RUNTIME_DATA_DIR_CANONICAL = (() => {
+  try {
+    return fs.realpathSync(RUNTIME_DATA_DIR);
+  } catch {
+    return RUNTIME_DATA_DIR;
+  }
+})();
+// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
+// new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
+// across before SQLite opens. Synchronous on purpose: openDatabase below
+// would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
+// and https://github.com/nexu-io/open-design/issues/710.
+migrateLegacyDataDirSync({
+  legacyDir: process.env.OD_LEGACY_DATA_DIR,
+  dataDir: RUNTIME_DATA_DIR,
+});
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
@@ -759,6 +837,11 @@ const critiqueCfg = loadCritiqueConfigFromEnv();
 // Adapter denylist for orchestrator routing is implicit: anything that is
 // not the 'plain' streamFormat falls through to legacy single-pass.
 const critiqueWarnedAdapters = new Set<string>();
+
+// In-process registry of in-flight critique runs so the interrupt endpoint
+// can cascade an AbortController to the matching orchestrator invocation.
+// Created once per process; not persisted across daemon restarts.
+const critiqueRunRegistry = createRunRegistry();
 export const SSE_KEEPALIVE_INTERVAL_MS = 25_000;
 
 export function createAgentRuntimeEnv(
@@ -854,6 +937,129 @@ function sendApiError(res, status, code, message, init = {}) {
   return res
     .status(status)
     .json(createCompatApiErrorResponse(code, message, init));
+}
+
+const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
+
+function cloudflarePagesDeploymentMetadata(projectName) {
+  const normalized = typeof projectName === 'string' ? projectName.trim() : '';
+  return normalized
+    ? { [CLOUDFLARE_PAGES_PROJECT_METADATA_KEY]: normalized }
+    : undefined;
+}
+
+function cloudflarePagesProjectNameFromDeployment(deployment) {
+  const value = deployment?.providerMetadata?.[CLOUDFLARE_PAGES_PROJECT_METADATA_KEY];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return cloudflarePagesProjectNameFromUrl(deployment?.url);
+}
+
+function cloudflarePagesProjectNameFromUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return '';
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    if (!host.endsWith('.pages.dev')) return '';
+    const labels = host.slice(0, -'.pages.dev'.length).split('.').filter(Boolean);
+    return labels.at(-1) || '';
+  } catch {
+    return '';
+  }
+}
+
+function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
+  const priorName = cloudflarePagesProjectNameFromDeployment(prior);
+  if (priorName) return priorName;
+
+  for (const deployment of listDeployments(db, projectId)) {
+    if (deployment.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) continue;
+    const stableName = cloudflarePagesProjectNameFromDeployment(deployment);
+    if (stableName) return stableName;
+  }
+
+  return cloudflarePagesProjectNameForProject(projectId, projectName);
+}
+
+function publicDeployment(deployment) {
+  if (!deployment || typeof deployment !== 'object') return deployment;
+  const { providerMetadata: _providerMetadata, ...publicShape } = deployment;
+  return publicShape;
+}
+
+function publicDeployments(deployments) {
+  return (deployments || []).map(publicDeployment);
+}
+
+async function checkCloudflarePagesDeploymentLinks(existing) {
+  const current = existing.cloudflarePages || {};
+  const projectName = current.projectName || cloudflarePagesProjectNameFromDeployment(existing);
+  const config = await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID);
+  const pagesDevUrl = current.pagesDev?.url || existing.url;
+  const pagesDevResult = await checkDeploymentUrl(pagesDevUrl);
+  const pagesDev = {
+    ...(current.pagesDev || {}),
+    url: pagesDevUrl,
+    status: pagesDevResult.reachable ? 'ready' : pagesDevResult.status || 'link-delayed',
+    statusMessage: pagesDevResult.reachable
+      ? 'Public link is ready.'
+      : pagesDevResult.statusMessage || current.pagesDev?.statusMessage || 'Cloudflare Pages is still preparing the pages.dev link.',
+    reachableAt: pagesDevResult.reachable ? Date.now() : current.pagesDev?.reachableAt,
+  };
+  let customDomain = current.customDomain;
+  if (customDomain?.url && customDomain.status !== 'conflict') {
+    let pagesDomain = null;
+    if (config?.token && config?.accountId && projectName) {
+      try {
+        pagesDomain = await readCloudflarePagesDomain({ ...config, projectName }, customDomain.hostname);
+      } catch {
+        pagesDomain = null;
+      }
+    }
+    const customResult = await checkDeploymentUrl(customDomain.url);
+    const pagesDomainStatus = pagesDomain?.status || customDomain.pagesDomainStatus;
+    const failedByApi = ['error', 'blocked', 'deactivated'].includes(String(pagesDomainStatus || '').toLowerCase());
+    const activeByApi = String(pagesDomainStatus || '').toLowerCase() === 'active';
+    const readyByReachability = customResult.reachable && activeByApi;
+    customDomain = {
+      ...customDomain,
+      domainStatus: pagesDomain
+        ? pagesDomain.status === 'active'
+          ? 'active'
+          : failedByApi
+            ? 'failed'
+            : 'pending'
+        : customDomain.domainStatus,
+      pagesDomainStatus,
+      validationData: pagesDomain?.validation_data ?? customDomain.validationData,
+      verificationData: pagesDomain?.verification_data ?? customDomain.verificationData,
+      status: readyByReachability
+        ? 'ready'
+        : customDomain.status === 'failed' || failedByApi
+          ? 'failed'
+          : 'pending',
+      statusMessage: readyByReachability
+        ? 'Custom domain is ready.'
+        : failedByApi
+          ? 'Cloudflare Pages reported a custom-domain error.'
+        : customResult.statusMessage || customDomain.statusMessage || 'Custom domain is still being prepared.',
+    };
+  }
+  const cloudflarePages = {
+    ...current,
+    projectName,
+    pagesDev,
+    ...(customDomain ? { customDomain } : {}),
+  };
+  const aggregate = aggregateCloudflarePagesStatus(pagesDev, customDomain);
+  return {
+    url: pagesDev.url,
+    status: aggregate.status,
+    statusMessage: aggregate.statusMessage,
+    cloudflarePages,
+    providerMetadata: {
+      ...(existing.providerMetadata || {}),
+      cloudflarePages,
+    },
+  };
 }
 
 // Filename slug for the Content-Disposition header on archive downloads.
@@ -1077,11 +1283,9 @@ function openNativeFolderDialog() {
         },
       );
     } else if (platform === 'win32') {
-      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a code folder to link'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }";
-      execFile('powershell.exe', ['-NoProfile', '-Command', ps], { timeout: 120_000 }, (err, stdout) => {
-        if (err) return resolve(null);
-        const p = stdout.trim();
-        resolve(p || null);
+      const command = buildWindowsFolderDialogCommand();
+      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
+        resolve(parseFolderDialogStdout(err, stdout));
       });
     } else {
       resolve(null);
@@ -1136,11 +1340,25 @@ const importUpload = multer({
 // folder (flat — same shape FileWorkspace expects), so the composer's
 // pasted/dropped/picked images become referenceable filenames the agent
 // can Read or @-mention without any cross-folder gymnastics.
+// Bridge between the multer upload-storage destination (built at module
+// init) and the per-process project DB (instantiated inside startServer).
+// startServer() sets this so the upload destination can route attachments
+// into the right project root, including folder-imported projects whose
+// files live under metadata.baseDir.
+let projectMetadataLookup: ((id: string) => Record<string, unknown> | null) | null = null;
+
 const projectUpload = multer({
   storage: multer.diskStorage({
     destination: async (req, _file, cb) => {
       try {
-        const dir = await ensureProject(PROJECTS_DIR, req.params.id);
+        // Route uploads into the project's actual root: for folder-imported
+        // projects (metadata.baseDir set) attachments need to land alongside
+        // the user's files so the agent can read them via the same path
+        // it sees. projectMetadataLookup is populated at startServer() boot
+        // and keyed by project id; null fallback gives the standard
+        // .od/projects/<id>/ behavior for non-imported projects.
+        const meta = projectMetadataLookup?.(req.params.id) ?? null;
+        const dir = await ensureProject(PROJECTS_DIR, req.params.id, meta);
         cb(null, dir);
       } catch (err) {
         cb(err, '');
@@ -1309,30 +1527,23 @@ export function createSseResponse(
   };
 }
 
+function resolveChatRunInactivityTimeoutMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return 2 * 60 * 1000;
+  return Math.max(0, Math.floor(raw));
+}
+
 export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
   let resolvedPort = port;
+  const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
   app.use(express.json({ limit: '4mb' }));
 
-  // Build the set of allowed browser origins for the current bind config.
-  // Shared by the global origin middleware and isLocalSameOrigin() so
-  // both use the same policy (loopback + explicit bind host, HTTP + HTTPS,
-  // OD_WEB_PORT support).
-  function buildAllowedOrigins() {
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        // When bound to a specific non-loopback address (e.g. Tailscale,
-        // LAN IP, or 0.0.0.0), allow browser requests from that address
-        // too so the documented --host escape hatch remains usable.
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
+  // Chrome may strip the port from the Origin header on same-origin GET
+  // requests. Only use this as a fallback for safe, idempotent GET requests;
+  // mutating routes always require an exact origin/host match.
+  function isPortlessLoopbackOrigin(origin) {
+    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -1369,14 +1580,24 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'Server initializing' });
     }
 
-    if (!buildAllowedOrigins().has(String(origin))) {
-      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+    const ports = allowedBrowserPorts(resolvedPort);
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
+      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
+        return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+      }
     }
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  // Wire the upload-destination bridge to this db so multer can route
+  // file uploads into baseDir-rooted projects' actual folders.
+  projectMetadataLookup = (id) => {
+    try { return getProject(db, id)?.metadata ?? null; } catch { return null; }
+  };
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
+  composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
+  composioConnectorProvider.startCatalogRefreshLoop();
   let daemonUrl = `http://127.0.0.1:${port}`;
 
   // Boot reconcile: any critique_runs row left in 'running' state by a prior
@@ -1397,7 +1618,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
   void readAppConfig(RUNTIME_DATA_DIR)
-    .then((config) => detectAgents(config.agentCliEnv ?? {}))
+    .then((config) => {
+      orbitService.configure(config.orbit);
+      return detectAgents(config.agentCliEnv ?? {});
+    })
     .catch(() => detectAgents().catch(() => {}));
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
@@ -1507,16 +1731,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
   });
 
-  // Surfaces the absolute paths to `node` + `apps/daemon/dist/cli.js`
-  // so the Settings → MCP server panel can render snippets that work
-  // even when `od` isn't on the user's PATH (the common case for
-  // source clones - and macOS/Linux ship a /usr/bin/od octal-dump
-  // tool that shadows ours anyway). Computed from import.meta.url so
-  // both src/ (tsx dev) and dist/ (built) launches resolve to the
-  // same dist/cli.js path. Cached for 5s because the panel pings on
-  // every open and the path lookup + two existsSync calls are cheap
-  // but not free, and these paths cannot change without a daemon
-  // restart anyway.
+  // Surfaces the absolute paths to the daemon's Node-compatible runtime and
+  // CLI entry so the Settings → MCP server panel can render snippets that work
+  // even when `od` isn't on the user's PATH (the common case for source clones
+  // - and macOS/Linux ship a /usr/bin/od octal-dump tool that shadows ours
+  // anyway). Cached for 5s because the panel pings on every open and these
+  // paths cannot change without a daemon restart.
   const INSTALL_INFO_TTL_MS = 5000;
   let installInfoCache: { t: number; payload: object } | null = null;
 
@@ -1528,46 +1748,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
       return res.json(installInfoCache.payload);
     }
-    let cliPath;
-    try {
-      cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-    } catch (err) {
-      return sendApiError(res, 500, 'CLI_RESOLVE_FAILED', String(err));
+    // process.execPath is the absolute path to the Node-compatible
+    // runtime that is running the daemon RIGHT NOW. In packaged builds
+    // this may be Electron running with ELECTRON_RUN_AS_NODE=1 rather
+    // than a separate bundled Node binary; the helper surfaces that env
+    // requirement with the command so IDE-spawned MCP clients can
+    // reproduce the same mode from a minimal OS launcher environment.
+    const cliPath = OD_BIN;
+    // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
+    // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
+    // In sidecar mode the snippet omits --daemon-url and the spawned
+    // `od mcp` discovers the live URL via the IPC status socket on
+    // every spawn, so the client config survives ephemeral-port
+    // restarts. We also propagate OD_SIDECAR_NAMESPACE (and IPC_BASE
+    // when overridden) so a non-default namespace daemon stays
+    // reachable - the MCP client does not inherit the daemon's env,
+    // so without this the spawned `od mcp` would probe the default
+    // namespace socket and miss. For direct `od` / `od --port X`
+    // launches there is no IPC socket; the helper bakes --daemon-url
+    // so custom ports keep working.
+    const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
+    const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
+    const sidecarEnv: Record<string, string> = {};
+    if (isSidecarMode) {
+      const ns = process.env[SIDECAR_ENV.NAMESPACE];
+      if (ns != null && ns !== SIDECAR_DEFAULTS.namespace) {
+        sidecarEnv[SIDECAR_ENV.NAMESPACE] = ns;
+      }
+      const ipcBase = process.env[SIDECAR_ENV.IPC_BASE];
+      if (ipcBase != null && ipcBase.length > 0) {
+        sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
+      }
     }
-    const cliExists = fs.existsSync(cliPath);
-    // process.execPath is the absolute path to the node binary that
-    // is running the daemon RIGHT NOW. We prefer it over bare `node`
-    // because IDE-spawned MCP clients inherit a minimal PATH from the
-    // OS launcher (Spotlight, Dock, etc.) that often does not see
-    // user-level node installs (nvm, fnm, asdf). On rare occasions
-    // (uninstall mid-session, exotic embeds) the path may not exist
-    // by the time the user copies the snippet; catch that and warn.
-    const nodeExists = fs.existsSync(process.execPath);
-    const hints: string[] = [];
-    if (!cliExists) {
-      hints.push(
-        'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
-      );
-    }
-    if (!nodeExists) {
-      hints.push(
-        `Node binary at ${process.execPath} no longer exists. Reinstall Node and restart the daemon.`,
-      );
-    }
-    const payload = {
-      command: process.execPath,
-      args: [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`],
-      daemonUrl: `http://127.0.0.1:${resolvedPort}`,
-      // Surface platform so the install panel can localize path hints
-      // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
-      // (Cmd vs Ctrl). One of 'darwin' | 'linux' | 'win32' in
-      // practice; the panel falls back to POSIX wording for anything
-      // else.
+    const payload = buildMcpInstallPayload({
+      cliPath,
+      cliExists: fs.existsSync(cliPath),
+      execPath: process.execPath,
+      nodeExists: fs.existsSync(process.execPath),
+      port: resolvedPort,
       platform: process.platform,
-      cliExists,
-      nodeExists,
-      buildHint: hints.length ? hints.join(' ') : null,
-    };
+      dataDir: RUNTIME_DATA_DIR,
+      electronAsNode: process.env.ELECTRON_RUN_AS_NODE === '1',
+      isSidecarMode,
+      sidecarEnv,
+    });
     installInfoCache = { t: now, payload };
     res.json(payload);
   });
@@ -1627,6 +1851,22 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
+      }
+      // baseDir is privileged: it lets a project root directly inside the
+      // user's filesystem. The /api/import/folder endpoint is the only
+      // path that's allowed to set it, because that's where realpath() +
+      // RUNTIME_DATA_DIR reentry checks live. Block client-supplied
+      // metadata.baseDir on this generic create endpoint so an attacker
+      // can't smuggle e.g. /etc through here. Same rule for
+      // originalBaseDir / importedFrom='folder' — only the import path
+      // owns those state fields.
+      if (metadata && typeof metadata === 'object') {
+        if ('baseDir' in metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'baseDir can only be set via POST /api/import/folder',
+          );
+        }
       }
       const now = Date.now();
       const project = insertProject(db, {
@@ -1762,6 +2002,97 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     },
   );
 
+  // Import an existing local folder as a project. The user picks a folder
+  // and OD works inside it directly: every write goes to metadata.baseDir.
+  // No copy, no shadow tree — the user owns the workspace and is
+  // responsible for their own version control (git, time machine, etc.),
+  // mirroring how Cursor / Claude Code / Aider behave.
+  app.post('/api/import/folder', async (req, res) => {
+    try {
+      const { baseDir, name, skillId, designSystemId } = req.body || {};
+      if (typeof baseDir !== 'string' || !baseDir.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      const trimmedInput = baseDir.trim();
+      if (!path.isAbsolute(path.normalize(trimmedInput))) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+      }
+      // Resolve symlinks once at import and persist the canonical path.
+      // Without this, a user-controlled symlink (e.g. ~/sneaky → /etc) at
+      // baseDir would let writeProjectFile escape the project sandbox at
+      // every later call: resolveSafe checks the *literal* baseDir, but
+      // the OS follows the symlink at write time. realpath() collapses
+      // the chain so the stored baseDir == what the kernel will write to.
+      let normalizedPath: string;
+      try {
+        normalizedPath = await fs.promises.realpath(trimmedInput);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      // realpath resolved → lstat the canonical path to ensure it's a
+      // real directory, not another symlink (defense-in-depth).
+      let dirStat;
+      try {
+        dirStat = await fs.promises.lstat(normalizedPath);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      if (!dirStat.isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
+      }
+      // Prevent importing the data directory into itself (post-realpath so
+      // a symlink pointing into RUNTIME_DATA_DIR is also caught). Compare
+      // against the canonical alias because `normalizedPath` is the import
+      // folder's realpath; on macOS the data dir at /var/... resolves to
+      // /private/var/... and would never start-with the user-shaped path.
+      if (
+        normalizedPath === RUNTIME_DATA_DIR_CANONICAL ||
+        normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
+      }
+
+      const id = randomId();
+      const now = Date.now();
+      const projectName =
+        typeof name === 'string' && name.trim()
+          ? name.trim()
+          : path.basename(normalizedPath);
+      const entryFile = await detectEntryFile(normalizedPath);
+
+      const project = insertProject(db, {
+        id,
+        name: projectName,
+        skillId: skillId ?? null,
+        designSystemId: designSystemId ?? null,
+        pendingPrompt: null,
+        metadata: {
+          kind: 'prototype',
+          baseDir: normalizedPath,
+          importedFrom: 'folder',
+          entryFile,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const cid = randomId();
+      insertConversation(db, {
+        id: cid,
+        projectId: id,
+        title: `Imported from ${projectName}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (entryFile) setTabs(db, id, [entryFile], entryFile);
+      /** @type {import('@open-design/contracts').ImportFolderResponse} */
+      const body = { project, conversationId: cid, entryFile };
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
   app.get('/api/projects/:id', (req, res) => {
     const project = getProject(db, req.params.id);
     if (!project)
@@ -1774,6 +2105,45 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.patch('/api/projects/:id', (req, res) => {
     try {
       const patch = req.body || {};
+      // baseDir / folder-import state is privileged: it's set only by the
+      // import endpoint and otherwise immutable. Two failure modes to
+      // guard against here:
+      //   1. Explicit attempt to change baseDir → reject with 400.
+      //   2. A regular metadata patch that *omits* baseDir (e.g. a UI
+      //      that only edits linkedDirs sends `{ metadata: { kind, linkedDirs } }`).
+      //      updateProject() replaces metadata wholesale, so without
+      //      preservation the existing baseDir gets wiped and the project
+      //      detaches from the user's folder — subsequent reads/writes
+      //      silently fall back to .od/projects/<id>.
+      // For case 2 we re-stamp the immutable fields from the existing
+      // project record onto the incoming patch so the user can keep
+      // patching other metadata without ever losing their import root.
+      if (patch.metadata && typeof patch.metadata === 'object') {
+        const existing = getProject(db, req.params.id);
+        const existingMeta = existing?.metadata;
+        if (existingMeta?.baseDir) {
+          if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
+            return sendApiError(
+              res, 400, 'BAD_REQUEST',
+              'baseDir is immutable after import; use a new import to change it',
+            );
+          }
+          patch.metadata = {
+            ...patch.metadata,
+            baseDir: existingMeta.baseDir,
+            ...(existingMeta.importedFrom === 'folder'
+              ? { importedFrom: 'folder' }
+              : {}),
+          };
+        } else if ('baseDir' in patch.metadata) {
+          // Non-imported project trying to acquire a baseDir → reject (only
+          // /api/import/folder can set it).
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'baseDir can only be set via POST /api/import/folder',
+          );
+        }
+      }
       if (patch.metadata?.linkedDirs) {
         const validated = validateLinkedDirs(patch.metadata.linkedDirs);
         if (validated.error) {
@@ -1827,9 +2197,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         activeProjectEventSinks.set(req.params.id, sinks);
       }
       sinks.add(projectEventSink);
+      const watchProject = getProject(db, req.params.id);
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
-      });
+      }, { metadata: watchProject?.metadata });
       sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
       const cleanup = () => {
         if (sub) {
@@ -2047,13 +2418,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
-      if (!getProject(db, sourceProjectId)) {
+      const sourceProject = getProject(db, sourceProjectId);
+      if (!sourceProject) {
         return res.status(404).json({ error: 'source project not found' });
       }
       // Snapshot every HTML / sketch / text file in the source project.
       // We deliberately skip binary uploads — templates are about the
       // generated design, not the user's reference imagery.
-      const files = await listFiles(PROJECTS_DIR, sourceProjectId);
+      const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
+        metadata: sourceProject.metadata,
+      });
       const snapshot = [];
       for (const f of files) {
         if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
@@ -2062,6 +2436,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           PROJECTS_DIR,
           sourceProjectId,
           f.name,
+          sourceProject.metadata,
         );
         if (entry && Buffer.isBuffer(entry.buffer)) {
           snapshot.push({
@@ -2750,10 +3125,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   // ---- Deploy --------------------------------------------------------------
 
-  app.get('/api/deploy/config', async (_req, res) => {
+  app.get('/api/deploy/config', async (req, res) => {
     try {
+      const providerId =
+        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfig(await readVercelConfig());
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -2762,18 +3142,39 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.put('/api/deploy/config', async (req, res) => {
     try {
+      const input = req.body || {};
+      const providerId =
+        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeVercelConfig(req.body || {});
+      const body = await writeDeployConfig(providerId, input);
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
+  app.get('/api/deploy/cloudflare-pages/zones', async (_req, res) => {
+    try {
+      /** @type {import('@open-design/contracts').CloudflarePagesZonesResponse} */
+      const body = await listCloudflarePagesZones(await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID));
+      res.json(body);
+    } catch (err) {
+      const status = err instanceof DeployError ? err.status : 400;
+      const init =
+        err instanceof DeployError && err.details
+          ? { details: err.details }
+          : {};
+      sendApiError(res, status, 'BAD_REQUEST', String(err?.message || err), init);
+    }
+  });
+
   app.get('/api/projects/:id/deployments', (req, res) => {
     try {
       /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
-      const body = { deployments: listDeployments(db, req.params.id) };
+      const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
       res.json(body);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -2782,8 +3183,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages } = req.body || {};
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2796,16 +3197,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
+      const deployProject = getProject(db, req.params.id);
       const files = await buildDeployFileSet(
         PROJECTS_DIR,
         req.params.id,
         fileName,
+        { metadata: deployProject?.metadata },
       );
-      const result = await deployToVercel({
-        config: await readVercelConfig(),
-        files,
-        projectId: req.params.id,
-      });
+      const project = getProject(db, req.params.id);
+      const cloudflarePagesProjectName =
+        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
+          : '';
+      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? await deployToCloudflarePages({
+            config: {
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              projectName: cloudflarePagesProjectName,
+            },
+            files,
+            projectId: req.params.id,
+            cloudflarePages,
+            priorMetadata: prior?.providerMetadata,
+          })
+        : await deployToVercel({
+            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -2820,10 +3239,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
+        cloudflarePages: result.cloudflarePages,
+        providerMetadata:
+          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
+            : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
-      res.json(body);
+      res.json(publicDeployment(body));
     } catch (err) {
       const status = err instanceof DeployError ? err.status : 400;
       const init =
@@ -2843,7 +3267,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (providerId !== VERCEL_PROVIDER_ID) {
+      if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
           400,
@@ -2854,11 +3278,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const preflightProject = getProject(db, req.params.id);
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
         PROJECTS_DIR,
         req.params.id,
         fileName,
+        { metadata: preflightProject?.metadata, providerId },
       );
       res.json(body);
     } catch (err) {
@@ -2896,11 +3322,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             'deployment not found',
           );
         }
-        const result = await checkDeploymentUrl(existing.url);
+        const stableCloudflareProjectName =
+          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesProjectNameFromDeployment(existing)
+            : '';
+        if (existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID && existing.cloudflarePages?.pagesDev?.url) {
+          const checked = await checkCloudflarePagesDeploymentLinks(existing);
+          const now = Date.now();
+          /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
+        const checkUrl = stableCloudflareProjectName
+          ? `https://${stableCloudflareProjectName}.pages.dev`
+          : existing.url;
+        const result = await checkDeploymentUrl(checkUrl);
         const now = Date.now();
         /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
         const body = upsertDeployment(db, {
           ...existing,
+          url: checkUrl || existing.url,
           status: result.reachable ? 'ready' : result.status || 'link-delayed',
           statusMessage: result.reachable
             ? 'Public link is ready.'
@@ -2909,7 +3355,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });
-        res.json(body);
+        res.json(publicDeployment(body));
       } catch (err) {
         sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
       }
@@ -2929,8 +3375,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
       const since = Number(req.query?.since);
+      const project = getProject(db, req.params.id);
       const files = await listFiles(PROJECTS_DIR, req.params.id, {
         since: Number.isFinite(since) ? since : undefined,
+        metadata: project?.metadata,
       });
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
@@ -2949,9 +3397,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       }
       const pattern = req.query.pattern ? String(req.query.pattern) : null;
       const max = Math.min(Number(req.query.max) || 200, 1000);
+      const searchProject = getProject(db, req.params.id);
       const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
         pattern,
         max,
+        metadata: searchProject?.metadata,
       });
       res.json({ query, matches });
     } catch (err) {
@@ -2967,12 +3417,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/archive', async (req, res) => {
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      const project = getProject(db, req.params.id);
       const { buffer, baseName } = await buildProjectArchive(
         PROJECTS_DIR,
         req.params.id,
         root,
+        project?.metadata,
       );
-      const project = getProject(db, req.params.id);
       const fallbackName = project?.name || req.params.id;
       const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
       const filename = `${fileSlug}.zip`;
@@ -3008,12 +3459,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
         return;
       }
+      const project = getProject(db, req.params.id);
       const { buffer } = await buildBatchArchive(
         PROJECTS_DIR,
         req.params.id,
         files,
+        project?.metadata,
       );
-      const project = getProject(db, req.params.id);
       const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
       const filename = `${fileSlug}.zip`;
       const asciiFallback =
@@ -3051,7 +3503,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   app.get('/api/projects/:id/raw/*', async (req, res) => {
     try {
       const relPath = req.params[0];
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath);
+      const project = getProject(db, req.params.id);
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -3073,7 +3526,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.delete('/api/projects/:id/raw/*', async (req, res) => {
     try {
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0]);
+      const project = getProject(db, req.params.id);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0], project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -3090,10 +3544,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
+      const project = getProject(db, req.params.id);
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
         req.params.name,
+        project?.metadata,
       );
       const preview = await buildDocumentPreview(file);
       res.json(preview);
@@ -3115,10 +3571,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/projects/:id/files/*', async (req, res) => {
     try {
+      const project = getProject(db, req.params.id);
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
         req.params[0],
+        project?.metadata,
       );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
@@ -3145,7 +3603,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     },
     async (req, res) => {
       try {
-        await ensureProject(PROJECTS_DIR, req.params.id);
+        const uploadProject = getProject(db, req.params.id);
+        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
           const desiredName = sanitizeName(
@@ -3156,6 +3615,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             req.params.id,
             desiredName,
             buf,
+            {},
+            uploadProject?.metadata,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
@@ -3194,9 +3655,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           req.params.id,
           name,
           buf,
-          {
-            artifactManifest,
-          },
+          { artifactManifest },
+          uploadProject?.metadata,
         );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
@@ -3209,7 +3669,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      const delProject = getProject(db, req.params.id);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -3279,7 +3740,34 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
     try {
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
+      orbitService.configure(config.orbit);
       res.json({ config });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get('/api/orbit/status', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      res.json(await orbitService.status());
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.post('/api/orbit/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      res.json(await orbitService.start('manual'));
     } catch (err) {
       res
         .status(500)
@@ -3345,6 +3833,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             : undefined,
         voice: req.body?.voice,
         audioKind: req.body?.audioKind,
+        language: typeof req.body?.language === 'string' ? req.body.language : undefined,
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
         onProgress: (line) => appendTaskProgress(task, line),
@@ -3385,6 +3874,42 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const body = { error: String(err && err.message ? err.message : err) };
       if (code) body.code = code;
       res.status(status).json(body);
+    }
+  });
+
+  app.post('/api/research/search', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({
+        error:
+          'cross-origin request rejected: research search is restricted to the local UI / CLI',
+      });
+    }
+
+    try {
+      const result = await searchResearch({
+        projectRoot: PROJECT_ROOT,
+        query: req.body?.query,
+        maxSources:
+          typeof req.body?.maxSources === 'number'
+            ? req.body.maxSources
+            : undefined,
+        providers: Array.isArray(req.body?.providers)
+          ? req.body.providers
+          : undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      if (err instanceof ResearchError) {
+        return res.status(err.status).json({
+          error: { code: err.code, message: err.message },
+        });
+      }
+      res.status(500).json({
+        error: {
+          code: 'RESEARCH_FAILED',
+          message: String(err && err.message ? err.message : err),
+        },
+      });
     }
   });
 
@@ -3511,6 +4036,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     projectId,
     skillId,
     designSystemId,
+    streamFormat,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -3570,6 +4096,51 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
+    // Thread the critique config plus the active design-system / skill data
+    // into the composer when critique is enabled. Without this the spawned
+    // child receives the legacy single-pass prompt and the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit. The composer
+    // itself ignores these fields when cfg.enabled is false, so the legacy
+    // path stays untouched.
+    const critiqueBrand = critiqueCfg.enabled
+      && typeof designSystemTitle === 'string'
+      && typeof designSystemBody === 'string'
+      ? { name: designSystemTitle, design_md: designSystemBody }
+      : undefined;
+    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+      ? { id: effectiveSkillId }
+      : undefined;
+    // Single-source-of-truth eligibility check. The composer downstream
+    // appends <CRITIQUE_RUN> instructions only when this check passes, and
+    // the spawn path routes runs through runOrchestrator(...) only when the
+    // SAME flag is true, so prompt and orchestrator stay in lockstep.
+    //
+    // Non-plain adapters (claude-stream-json, copilot-stream-json,
+    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
+    // protocol; the v1 critique parser only understands plain stdout. The
+    // spawn path falls through to legacy generation for those, so the
+    // panel addendum has to be suppressed here too: otherwise the model
+    // is instructed to emit Critique Theater tags that no orchestrator
+    // consumes.
+    const isMediaSurface =
+      skillMode === 'image' ||
+      skillMode === 'video' ||
+      skillMode === 'audio' ||
+      metadata?.kind === 'image' ||
+      metadata?.kind === 'video' ||
+      metadata?.kind === 'audio';
+    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
+    const critiqueShouldRun = critiqueCfg.enabled
+      && critiqueBrand !== undefined
+      && critiqueSkill !== undefined
+      && !isMediaSurface
+      && isPlainAdapter;
+    // Only thread the critique fields when the run is actually eligible;
+    // otherwise the composer's own internal eligibility check (cfg.enabled
+    // && brand && skill && !isMediaSurface) might still fire on
+    // non-plain adapters and we'd emit the panel for a run the orchestrator
+    // skips. Gating the threading itself keeps composer + orchestrator in
+    // exact lockstep regardless of which side enforces eligibility.
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
@@ -3582,12 +4153,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       craftSections,
       metadata,
       template,
+      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
+      critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
-    // `listSkills()` scan in `startChatRun`.
-    return { prompt, activeSkillDir };
+    // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
+    // the same panel-eligibility decision down to the spawn-path
+    // orchestrator gate so prompt and orchestrator stay in lockstep.
+    return { prompt, activeSkillDir, critiqueShouldRun };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -3608,6 +4184,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       commentAttachments = [],
       model,
       reasoning,
+      research,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
@@ -3641,12 +4218,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
     // agent then runs in whatever inherited dir, which still lets API
     // mode work but loses file-tool addressability.
+    // For git-linked projects (metadata.baseDir), use that folder directly
+    // so the agent writes back to the user's original source tree.
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
       try {
-        cwd = await ensureProject(PROJECTS_DIR, projectId);
-        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        const chatProject = getProject(db, projectId);
+        const chatMeta = chatProject?.metadata;
+        if (chatMeta?.baseDir) {
+          cwd = path.normalize(chatMeta.baseDir);
+          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+        } else {
+          cwd = await ensureProject(PROJECTS_DIR, projectId);
+          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        }
       } catch {
         cwd = null;
       }
@@ -3731,12 +4317,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const { prompt: daemonSystemPrompt, activeSkillDir } =
+    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
       await composeDaemonSystemPrompt({
         agentId,
         projectId,
         skillId,
         designSystemId,
+        streamFormat: def?.streamFormat ?? 'plain',
       });
 
     // Make skill side files reachable through three layers, in order of
@@ -3812,10 +4399,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       codexGeneratedImagesDir,
       extraAllowedDirs,
     });
+    const researchCommandContract = resolveResearchCommandContract(
+      research,
+      message,
+    );
+    const clientInstructionPrompt = [researchCommandContract, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
     const instructionPrompt = composeLiveInstructionPrompt({
       daemonSystemPrompt,
       runtimeToolPrompt,
-      clientSystemPrompt: systemPrompt,
+      clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
     const composed = [
@@ -3874,7 +4469,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const resolvedBin = resolveAgentBin(agentId);
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
+
+    const resolvedBin = resolveAgentBin(agentId, configuredAgentEnv);
 
     const args = def.buildArgs(
       composed,
@@ -3940,12 +4543,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const send = (event, data) => design.runs.emit(run, event, data);
+    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const inactivityKillGraceMs = 3_000;
+    let inactivityTimer = null;
+    const clearInactivityWatchdog = () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+      }
+    };
+    const scheduleForcedChildShutdown = () => {
+      if (!child) return;
+      setTimeout(() => {
+        if (child && !child.killed) child.kill('SIGTERM');
+      }, inactivityKillGraceMs).unref?.();
+      setTimeout(() => {
+        if (child && !child.killed) child.kill('SIGKILL');
+      }, inactivityKillGraceMs * 2).unref?.();
+    };
+    const failForInactivity = () => {
+      if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+      const message =
+        `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
+        'The model or CLI likely hung while generating. Retry the turn or pick a different model.';
+      clearInactivityWatchdog();
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
+      design.runs.finish(run, 'failed', 1, null);
+      if (acpSession?.abort) {
+        acpSession.abort();
+      }
+      if (child && !child.killed) child.kill('SIGTERM');
+      scheduleForcedChildShutdown();
+    };
+    const noteAgentActivity = () => {
+      if (inactivityTimeoutMs <= 0) return;
+      clearInactivityWatchdog();
+      inactivityTimer = setTimeout(failForInactivity, inactivityTimeoutMs);
+      inactivityTimer.unref?.();
+    };
     const unregisterChatAgentEventSink = () => {
       activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
     };
     if (toolTokenGrant?.runId) {
       activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) =>
-        send('agent', payload),
+        (noteAgentActivity(), send('agent', payload)),
       );
     }
     // If detection can't find the binary, surface a friendly SSE error
@@ -3974,14 +4615,6 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -4001,9 +4634,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       reasoning: safeReasoning,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
+    noteAgentActivity();
 
     let child;
     let acpSession = null;
+    let writePromptToChildStdin = false;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -4054,7 +4689,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             );
           }
         });
-        child.stdin.end(composed, 'utf8');
+        writePromptToChildStdin = true;
       }
     } catch (err) {
       revokeToolToken('child_exit');
@@ -4075,7 +4710,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // through to the legacy single-pass code path below with a one-time
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
-    if (critiqueCfg.enabled) {
+    //
+    // Use critiqueShouldRun (computed in the prompt builder) instead of just
+    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
+    // panel addendum. Media surfaces and runs missing brand/skill context
+    // never get the panel prompt, so they must also skip the orchestrator
+    // and fall through to legacy generation; otherwise the parser waits for
+    // <CRITIQUE_RUN> tags the model was never told to emit.
+    if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
         if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
@@ -4092,7 +4734,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
-        const critiqueBus = { emit: (e) => send('agent', e) };
+        // Forward each CritiqueSseEvent on its own contract-defined channel
+        // (critique.run_started, critique.ship, critique.failed, ...) rather
+        // than wrapping the frame inside the legacy 'agent' channel. Clients
+        // that subscribe to the new event names see them directly with the
+        // contract payload as event.data.
+        const critiqueBus = { emit: (e) => send(e.event, e.data) };
+
+        // Register this run with the in-process registry so the interrupt
+        // endpoint can cascade an AbortController to the orchestrator. The
+        // register call must run BEFORE runOrchestrator is invoked, so a
+        // request that arrives between spawn and orchestrator-start cannot
+        // miss a runId that already has a live child process.
+        const critiqueAbort = new AbortController();
+        critiqueRunRegistry.register({
+          runId: critiqueRunId,
+          projectId: critiqueProjectKey,
+          abort: critiqueAbort,
+          startedAt: Date.now(),
+        });
 
         // Stderr forwarding and child.on('error') must be wired BEFORE the
         // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
@@ -4100,7 +4760,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         // an early child error fired before the orchestrator returns has no
         // listener. Both registrations are idempotent and the run lifecycle
         // is owned solely by the orchestrator's awaited result below.
-        child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+        child.stderr.on('data', (chunk) => {
+          noteAgentActivity();
+          send('stderr', { chunk });
+        });
         child.on('error', (err) => {
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
         });
@@ -4126,6 +4789,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             stdout: stdoutIterable,
             child,
             childExitPromise,
+            signal: critiqueAbort.signal,
           });
           // Map the critique terminal status to the chat run lifecycle.
           // 'shipped' and 'below_threshold' both ran to a ship decision and
@@ -4144,6 +4808,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         } catch (err) {
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
           design.runs.finish(run, 'failed', 1, null);
+        } finally {
+          critiqueRunRegistry.unregister(critiqueProjectKey, critiqueRunId);
         }
         return;
       }
@@ -4154,38 +4820,104 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
     let agentStreamError = null;
+    // Tracks whether any stream the run is using actually emitted user-
+    // visible content. Only the streams routed through `sendAgentEvent`
+    // contribute to this flag; ACP sessions and plain stdout streams are
+    // covered by their own success/failure paths and the empty-output
+    // guard below skips them via `trackingSubstantiveOutput`.
+    let agentProducedOutput = false;
+    let trackingSubstantiveOutput = false;
+    // Event types that count as "the agent actually produced something the
+    // user can see." Lifecycle markers (`status`) and meter readings
+    // (`usage`) deliberately do NOT count — a model can emit token-usage
+    // numbers for an empty completion (issue #691), and a `status:running`
+    // banner without any follow-up is exactly the silent-failure shape we
+    // want to surface as failed instead of succeeded.
+    const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
+      'text_delta',
+      'thinking_delta',
+      'tool_use',
+      'tool_result',
+      'artifact',
+    ]);
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
         agentStreamError = String(ev.message || 'Agent stream error');
+        clearInactivityWatchdog();
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
           details: ev.raw ? { raw: ev.raw } : undefined,
           retryable: false,
         }));
         return;
       }
+      noteAgentActivity();
+      if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
+        agentProducedOutput = true;
+      }
       send('agent', ev);
     };
 
     if (def.streamFormat === 'claude-stream-json') {
-      const claude = createClaudeStreamHandler((ev) => send('agent', ev));
+      const claude = createClaudeStreamHandler((ev) => {
+        noteAgentActivity();
+        send('agent', ev);
+      });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
+      trackingSubstantiveOutput = true;
       const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
-      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      const copilot = createCopilotStreamHandler((ev) => {
+        noteAgentActivity();
+        send('agent', ev);
+      });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
+      // Route through sendAgentEvent so that pi-rpc's error events
+      // (extension_error, auto_retry_end with success=false, and the
+      // message_update error delta) set agentStreamError and flip the
+      // run to `failed` on close — same path as qoder-stream-json and
+      // json-event-stream after issue #691. Also enables the
+      // substantive-output guard (agentProducedOutput) so a pi run
+      // that exits 0 without producing visible content is caught.
+      //
+      // attachPiRpcSession invokes its send callback with the two-arg
+      // channel/payload shape: send('agent', payload) for normal events
+      // and send('error', {message}) from fail(). sendAgentEvent
+      // expects a single event object, so we adapt at the call site:
+      //   - 'agent' channel → relay payload through sendAgentEvent
+      //   - 'error' channel → route through the daemon's error path
+      //     (createSseErrorPayload + send SSE + set agentStreamError)
+      trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        send,
+        send: (channel, payload) => {
+          if (channel === 'agent') {
+            sendAgentEvent(payload);
+          } else if (channel === 'error') {
+            if (agentStreamError) return;
+            agentStreamError = String(payload?.message || 'Pi session error');
+            clearInactivityWatchdog();
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              agentStreamError,
+              { retryable: false },
+            ));
+          } else {
+            noteAgentActivity();
+            send(channel, payload);
+          }
+        },
+        imagePaths: def.supportsImagePaths ? safeImages : [],
+        uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({
@@ -4194,30 +4926,47 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         cwd: effectiveCwd,
         model: safeModel,
         mcpServers,
-        send,
+        send: (event, data) => {
+          noteAgentActivity();
+          send(event, data);
+        },
       });
     } else if (def.streamFormat === 'json-event-stream') {
+      // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
+      // (now emitted as a real error event by json-event-stream.ts after
+      // #691) actually triggers `agentStreamError` instead of being
+      // forwarded as a no-op `agent` SSE event. This also wires the
+      // substantive-output tracking the close handler reads below.
+      trackingSubstantiveOutput = true;
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        (ev) => send('agent', ev),
+        sendAgentEvent,
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
     } else {
-      child.stdout.on('data', (chunk) => send('stdout', { chunk }));
+      child.stdout.on('data', (chunk) => {
+        noteAgentActivity();
+        send('stdout', { chunk });
+      });
     }
     // Wire the acpSession onto the run so cancel() can call abort()
     // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
     run.acpSession = acpSession;
-    child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+    child.stderr.on('data', (chunk) => {
+      noteAgentActivity();
+      send('stderr', { chunk });
+    });
 
     child.on('error', (err) => {
+      clearInactivityWatchdog();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
+      clearInactivityWatchdog();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
@@ -4226,6 +4975,28 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (agentStreamError) {
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
+      // Empty-output guard: a clean `code === 0` exit on a stream we are
+      // tracking, with no error frame and no substantive event, means the
+      // run silently finished without producing anything visible. That used
+      // to be marked `succeeded` and rendered as an empty assistant turn —
+      // see issue #691, where OpenCode runs were ending in ~3s with no
+      // chat content and no error banner. Surface an explicit failure
+      // instead so the chat shows a clear reason. ACP sessions and plain
+      // stdout streams are gated out via `trackingSubstantiveOutput`;
+      // their success/failure determination lives elsewhere.
+      if (
+        code === 0 &&
+        !run.cancelRequested &&
+        trackingSubstantiveOutput &&
+        !agentProducedOutput
+      ) {
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code, signal);
+      }
       const status = run.cancelRequested
         ? 'canceled'
         : code === 0
@@ -4233,7 +5004,159 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : 'failed';
       design.runs.finish(run, status, code, signal);
     });
+    if (writePromptToChildStdin && child.stdin) {
+      child.stdin.end(composed, 'utf8');
+    }
   };
+
+  orbitService.setRunHandler(async ({
+    trigger,
+    startedAt,
+    prompt,
+    systemPrompt,
+    template,
+  }) => {
+    // Each Orbit run gets its own project so the conversation, messages, and
+    // live artifact are isolated. The handler does the synchronous prep here
+    // (insert project/conversation/run rows, kick off the chat run) and
+    // returns immediately with the new project id; the daemon endpoint
+    // resolves the HTTP request with that id so the client can navigate to
+    // the new project before the agent has finished. Anything that depends
+    // on the agent's final status (live artifact discovery, lastRun summary
+    // metadata) lives inside the `completion` promise.
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    let agentId = typeof appConfig.agentId === 'string' && appConfig.agentId
+      ? appConfig.agentId
+      : null;
+    if (!agentId) {
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      agentId = agents.find((agent) => agent.available)?.id ?? null;
+    }
+    if (!agentId) throw new Error('No available agent is configured for Orbit. Choose an agent in Settings first.');
+
+    const now = Date.now();
+    const projectId = `orbit-${randomUUID()}`;
+    const conversationId = `orbit-conv-${randomUUID()}`;
+    const assistantMessageId = `orbit-assistant-${randomUUID()}`;
+    const projectName = `Orbit · ${formatLocalProjectTimestamp(startedAt)}`;
+
+    const orbitDesignSystemId = template?.designSystemRequired === false
+      ? null
+      : appConfig.designSystemId ?? null;
+
+    insertProject(db, {
+      id: projectId,
+      name: projectName,
+      skillId: 'live-artifact',
+      designSystemId: orbitDesignSystemId,
+      pendingPrompt: null,
+      metadata: { kind: 'orbit', trigger },
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: conversationId,
+      projectId,
+      title: projectName,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: `orbit-${trigger}-${randomUUID()}`,
+      agentId,
+    });
+    upsertMessage(db, conversationId, {
+      id: `orbit-user-${run.id}`,
+      role: 'user',
+      content: prompt,
+    });
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId,
+      agentName: getAgentDef(agentId)?.name ?? agentId,
+      runId: run.id,
+      runStatus: 'queued',
+      startedAt: now,
+    });
+
+    if (template?.dir) {
+      const cwd = await ensureProject(PROJECTS_DIR, projectId);
+      const result = await stageActiveSkill(
+        cwd,
+        path.basename(template.dir),
+        template.dir,
+        (msg) => console.warn(msg),
+      );
+      if (!result.staged) {
+        console.warn(
+          `[od] orbit template skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to prompt-embedded instructions`,
+        );
+      }
+    }
+
+    const modelPrefs = appConfig.agentModels?.[agentId] ?? {};
+    design.runs.start(run, () => startChatRun({
+      agentId,
+      projectId,
+      conversationId: run.conversationId,
+      assistantMessageId: run.assistantMessageId,
+      clientRequestId: run.clientRequestId,
+      skillId: 'live-artifact',
+      designSystemId: orbitDesignSystemId,
+      model: modelPrefs.model ?? null,
+      reasoning: modelPrefs.reasoning ?? null,
+      message: prompt,
+      systemPrompt: [
+        renderOrbitTemplateSystemPrompt(template),
+        systemPrompt,
+        'You are Orbit, an autonomous activity-summary agent inside Open Design.',
+        'You must discover connectors and connector tools yourself through the OD CLI; the daemon has not chosen tools for you.',
+        'You must create and register a Live Artifact as the final deliverable. Do not merely describe what you would do.',
+        'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
+        'Keep connector credentials and OD_TOOL_TOKEN private; never print or persist secrets.',
+      ].join('\n'),
+    }, run));
+
+    const completion = (async () => {
+      const finalStatus = await design.runs.wait(run);
+      db.prepare(
+        `UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`,
+      ).run(finalStatus.status, Date.now(), assistantMessageId);
+      const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId });
+      const artifact = artifacts.find((candidate) => candidate.createdByRunId === run.id);
+      const status = finalStatus.status === 'succeeded' && !artifact ? 'failed' : finalStatus.status;
+      return {
+        agentRunId: run.id,
+        status,
+        ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
+        summary: artifact?.id
+          ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
+          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+      };
+    })();
+
+    return { projectId, agentRunId: run.id, completion };
+  });
+
+  orbitService.setTemplateResolver(async (skillId) => {
+    const skills = await listSkills(SKILLS_DIR);
+    const skill = findSkillById(skills, skillId);
+    if (!skill || skill.scenario !== 'orbit') return null;
+    return {
+      id: skill.id,
+      name: skill.name,
+      examplePrompt: skill.examplePrompt,
+      dir: skill.dir,
+      body: skill.body,
+      designSystemRequired: skill.designSystemRequired !== false,
+    };
+  });
 
   app.post('/api/runs', (req, res) => {
     const run = design.runs.create(req.body || {});
@@ -4278,6 +5201,142 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
 
+  // ---- Connection tests (single-shot JSON; no SSE) ------------------------
+  // Settings dialog uses these to verify a config works without sending a
+  // real chat. Always return HTTP 200 with `ok: false` on upstream-caused
+  // failures so the web layer can render a categorized inline status without
+  // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
+  // request or daemon bug.
+  app.post('/api/test/connection', async (req, res) => {
+    const controller = new AbortController();
+    const abortIfRequestAborted = () => {
+      if ((req.aborted || !req.complete) && !res.writableEnded) {
+        controller.abort();
+      }
+    };
+    const abortIfResponseClosed = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    req.on('close', abortIfRequestAborted);
+    res.on('close', abortIfResponseClosed);
+    const body = req.body || {};
+    try {
+      if (body.mode === 'provider') {
+        const protocol = body.protocol;
+        if (
+          typeof protocol !== 'string' ||
+          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'protocol must be one of anthropic|openai|azure|google',
+          );
+        }
+        if (
+          typeof body.baseUrl !== 'string' ||
+          typeof body.apiKey !== 'string' ||
+          typeof body.model !== 'string' ||
+          !body.baseUrl.trim() ||
+          !body.apiKey.trim() ||
+          !body.model.trim()
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'baseUrl, apiKey, and model are required',
+          );
+        }
+        try {
+          const result = await testProviderConnection({
+            protocol,
+            baseUrl: body.baseUrl,
+            apiKey: body.apiKey,
+            model: body.model,
+            apiVersion:
+              typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:provider] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Connection test failed');
+        }
+      }
+
+      if (body.mode === 'agent') {
+        if (typeof body.agentId !== 'string' || !body.agentId.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'agentId is required');
+        }
+        try {
+          const def = getAgentDef(body.agentId);
+          const testStart = Date.now();
+          const safeModel =
+            def && typeof body.model === 'string'
+              ? isKnownModel(def, body.model)
+                ? body.model
+                : sanitizeCustomModel(body.model)
+              : undefined;
+          if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
+            return res.json({
+              ok: false,
+              kind: 'invalid_model_id',
+              latencyMs: Date.now() - testStart,
+              model: body.model.trim(),
+              agentName: def.name,
+              detail: 'Invalid custom model id. Use a model id that starts with a letter or number and contains no spaces.',
+            });
+          }
+          const safeReasoning =
+            def &&
+            typeof body.reasoning === 'string' &&
+            Array.isArray(def.reasoningOptions)
+              ? (def.reasoningOptions.find((r) => r.id === body.reasoning)?.id ?? undefined)
+              : undefined;
+          const result = await testAgentConnection({
+            agentId: body.agentId,
+            model: safeModel ?? undefined,
+            reasoning: safeReasoning,
+            agentCliEnv:
+              body.agentCliEnv && typeof body.agentCliEnv === 'object'
+                ? body.agentCliEnv
+                : undefined,
+            signal: controller.signal,
+          });
+          return res.json(result);
+        } catch (err) {
+          console.warn(
+            `[test:agent] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return sendApiError(res, 500, 'INTERNAL', 'Agent test failed');
+        }
+      }
+
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'mode must be one of provider|agent',
+      );
+    } finally {
+      req.off('close', abortIfRequestAborted);
+      res.off('close', abortIfResponseClosed);
+    }
+  });
+
+  // ---- Critique Theater endpoints (Phase 6) --------------------------------
+
+  // POST /api/projects/:projectId/critique/:runId/interrupt
+  // Cascades an AbortController to the in-flight orchestrator for the given run.
+  app.post(
+    '/api/projects/:projectId/critique/:runId/interrupt',
+    handleCritiqueInterrupt(db, critiqueRunRegistry),
+  );
+
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
@@ -4287,28 +5346,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
 
   const validateExternalApiBaseUrl = (baseUrl) => {
-    let parsed;
-    try {
-      parsed = new URL(baseUrl.replace(/\/+$/, ''));
-    } catch {
-      return { error: 'Invalid baseUrl' };
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return { error: 'Only http/https allowed' };
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    const isLoopback =
-      ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-    if (
-      !isLoopback &&
-      (hostname.startsWith('169.254.') ||
-        hostname.startsWith('10.') ||
-        /^192\.168\./.test(hostname) ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
-    ) {
-      return { error: 'Internal IPs blocked', forbidden: true };
-    }
-    return { parsed };
+    return validateBaseUrl(baseUrl);
   };
 
   const proxyErrorCode = (status) => {
@@ -4844,39 +5882,54 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    const server = app.listen(port, host, () => {
-      const address = server.address();
-      // `address()` can in theory return `string | AddressInfo | null`. For
-      // a TCP listener it's always `AddressInfo` with a `.port` — the guard
-      // is belt-and-braces so an unexpected null never silently produces a
-      // `http://127.0.0.1:0` URL that callers would then try to fetch.
-      const boundPort =
-        address && typeof address === 'object' ? address.port : null;
-      if (!boundPort) {
-        reject(
-          new Error(
-            `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
-          ),
-        );
-        return;
-      }
-      resolvedPort = boundPort;
-      // When binding to all interfaces report localhost for local callers;
-      // when binding to a specific address (e.g. a Tailscale IP) report that
-      // address so remote callers and the sidecar use the correct URL.
-      const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
-      const url = `http://${reportHost}:${resolvedPort}`;
-      if (!returnServer) {
-        console.log(`[od] daemon listening on ${url}`);
-      }
-      daemonUrl = url;
-      resolve(returnServer ? { url, server } : url);
-    });
+    const cleanupDaemonBackgroundWork = () => {
+      composioConnectorProvider.stopCatalogRefreshLoop();
+      orbitService.stop();
+    };
+    let server;
+    try {
+      server = app.listen(port, host, () => {
+        const address = server.address();
+        // `address()` can in theory return `string | AddressInfo | null`. For
+        // a TCP listener it's always `AddressInfo` with a `.port` — the guard
+        // is belt-and-braces so an unexpected null never silently produces a
+        // `http://127.0.0.1:0` URL that callers would then try to fetch.
+        const boundPort =
+          address && typeof address === 'object' ? address.port : null;
+        if (!boundPort) {
+          reject(
+            new Error(
+              `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
+            ),
+          );
+          return;
+        }
+        resolvedPort = boundPort;
+        // When binding to all interfaces report localhost for local callers;
+        // when binding to a specific address (e.g. a Tailscale IP) report that
+        // address so remote callers and the sidecar use the correct URL.
+        const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+        const url = `http://${reportHost}:${resolvedPort}`;
+        if (!returnServer) {
+          console.log(`[od] daemon listening on ${url}`);
+        }
+        daemonUrl = url;
+        resolve(returnServer ? { url, server } : url);
+      });
+    } catch (error) {
+      cleanupDaemonBackgroundWork();
+      reject(error);
+      return;
+    }
+    server.once('close', cleanupDaemonBackgroundWork);
     // `app.listen` throws synchronously when the port is already in use on
     // some Node versions, but emits an `error` event on others (and for
     // EACCES / EADDRNOTAVAIL even on the same Node). Wire the event so the
     // returned Promise always settles instead of hanging forever.
-    server.on('error', reject);
+    server.on('error', (error) => {
+      cleanupDaemonBackgroundWork();
+      reject(error);
+    });
   });
 }
 
@@ -4924,41 +5977,4 @@ export function rewriteSkillAssetUrls(html: string, skillId: string): string {
       return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
     },
   );
-}
-
-export function isLocalSameOrigin(req, port) {
-  // Accepts http + https, loopback hosts, OD_WEB_PORT, and the explicit
-  // bind host — matching the global origin middleware policy exactly.
-  const host = String(req.headers.host || '');
-  const origin = req.headers.origin;
-
-  // Build allowed set inline (same logic as buildAllowedOrigins in
-  // startServer, but self-contained so the exported helper works
-  // without closing over server-scoped variables).
-  const ports = [port];
-  const webPort = Number(process.env.OD_WEB_PORT);
-  if (webPort && webPort !== port) ports.push(webPort);
-  const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
-  const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-  const allowedHosts = new Set(
-    ports.flatMap((p) => [
-      ...loopbackHosts.map((h) => `${h}:${p}`),
-      `${bindHost}:${p}`,
-    ]),
-  );
-
-  // Reject unknown Host first (DNS rebinding / Host header attack)
-  if (!allowedHosts.has(host)) return false;
-
-  // Non-browser client with valid Host → allow
-  if (origin == null || origin === '') return true;
-
-  const schemes = ['http', 'https'];
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
-      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
-    ]),
-  );
-  return allowedOrigins.has(String(origin));
 }

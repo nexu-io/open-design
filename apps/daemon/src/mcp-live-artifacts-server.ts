@@ -25,6 +25,14 @@ const EMPTY_OBJECT_SCHEMA = {
   properties: {},
 } satisfies JsonObject;
 
+const CONNECTORS_LIST_INPUT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    useCase: { type: 'string', enum: ['personal_daily_digest'] },
+  },
+} satisfies JsonObject;
+
 const ARTIFACT_INPUT_SCHEMA = {
   type: 'object',
   additionalProperties: true,
@@ -81,8 +89,8 @@ export function createLiveArtifactsMcpTools(): McpTool[] {
     },
     {
       name: 'connectors_list',
-      description: 'List connector catalog and available read-only tools through the daemon tool endpoint. POSIX equivalent: `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`.',
-      inputSchema: EMPTY_OBJECT_SCHEMA,
+      description: 'List connector catalog and available read-only tools through the daemon tool endpoint. Use `{ "useCase": "personal_daily_digest" }` for curated daily-digest tools. POSIX equivalent: `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --use-case personal_daily_digest --format compact` or fallback `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`.',
+      inputSchema: CONNECTORS_LIST_INPUT_SCHEMA,
     },
     {
       name: 'connectors_execute',
@@ -119,7 +127,9 @@ function toolToken(): string {
 
 function endpoint(baseUrl: URL, pathname: string): string {
   const url = new URL(baseUrl.toString());
-  url.pathname = `${url.pathname}${pathname}`.replace(/\/+/gu, '/');
+  const [pathPart, searchPart] = pathname.split('?');
+  url.pathname = `${url.pathname}${pathPart ?? ''}`.replace(/\/+/gu, '/');
+  url.search = searchPart === undefined ? '' : `?${searchPart}`;
   return url.toString();
 }
 
@@ -179,7 +189,8 @@ async function callTool(name: string, args: JsonObject): Promise<unknown> {
     return await requestJson('/api/tools/live-artifacts/refresh', { method: 'POST', body: JSON.stringify({ artifactId: args.artifactId }) });
   }
   if (name === 'connectors_list') {
-    return await requestJson('/api/tools/connectors/list', { method: 'GET' });
+    const useCase = args.useCase === 'personal_daily_digest' ? '?useCase=personal_daily_digest' : '';
+    return await requestJson(`/api/tools/connectors/list${useCase}`, { method: 'GET' });
   }
   if (name === 'connectors_execute') {
     return await requestJson('/api/tools/connectors/execute', {

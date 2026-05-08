@@ -1,0 +1,50 @@
+{
+  "slug": "zhangzara-signal",
+  "name": "Signal",
+  "tagline": "Deep navy canvas with bone paper and a single muted-gold accent; institutional with quiet weight.",
+  "mood": [
+    "institutional",
+    "trustworthy",
+    "considered",
+    "weighty"
+  ],
+  "occasion": [
+    "investor deck",
+    "consulting deliverable",
+    "board presentation",
+    "legal / policy brief",
+    "academic deck",
+    "advisory pitch",
+    "bilingual EN/CN deck"
+  ],
+  "tone": [
+    "sober",
+    "polished",
+    "established",
+    "literary"
+  ],
+  "formality": "high",
+  "density": "high",
+  "palette": {
+    "bg": "#1c2644",
+    "bg_alt": "#232f55",
+    "fg": "#e2dcd0",
+    "accent": "#c8a870",
+    "bg_light": "#f0ece3",
+    "description": "deep navy primary with warm bone paper alternate and a single muted-gold accent; restrained, institutional, no decorative color"
+  },
+  "typography": {
+    "display": "Source Serif 4",
+    "body": "DM Sans",
+    "mono": "IBM Plex Mono",
+    "serif_cn": "Noto Serif SC",
+    "sans_cn": "Noto Sans SC",
+    "style": "transitional serif headlines + clean sans body + technical mono captions; full Chinese serif/sans support"
+  },
+  "scheme": "mixed",
+  "best_for": "Anything that should feel weighty, considered, and credibly institutional: investor decks, board presentations, consulting deliverables, legal / policy briefs, advisory pitches. Also a strong choice for tech, research, or brand work that wants to read as quietly authoritative rather than loud.",
+  "avoid_for": "Contexts that should feel hot, fast, or intentionally playful — the navy + gold restraint commits to a sober voice.",
+  "slide_count": 18,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/signal"
+}

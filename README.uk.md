@@ -27,7 +27,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <b>Українська</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <b>Українська</b> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -220,7 +220,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 
 ### 1 · Ми не постачаємо агента. Ваш — достатньо хороший.
 
-При запуску демон сканує ваш `PATH` на наявність [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/mariozechner/pi-ai), [`kiro-cli`](https://kiro.dev) та [`vibe-acp`](https://github.com/mistralai/mistral-vibe) на старті. Ті, що знайдені, стають кандидатами на роль "двигуна" дизайну — вони керуються через stdio з одним адаптером на CLI, який можна змінити у виборі моделі. Натхненно [`multica`](https://github.com/multica-ai/multica) та [`cc-switch`](https://github.com/farion1231/cc-switch). Немає встановленого CLI? Режим API використовує той самий конвеєр — виберіть Anthropic, OpenAI-сумісний, Azure OpenAI або Google Gemini, і демон передаватиме нормалізовані фрагменти SSE, з блокуванням внутрішніх мереж на краю.
+При запуску демон сканує ваш `PATH` на наявність [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev) та [`vibe-acp`](https://github.com/mistralai/mistral-vibe) на старті. Ті, що знайдені, стають кандидатами на роль "двигуна" дизайну — вони керуються через stdio з одним адаптером на CLI, який можна змінити у виборі моделі. Натхненно [`multica`](https://github.com/multica-ai/multica) та [`cc-switch`](https://github.com/farion1231/cc-switch). Немає встановленого CLI? Режим API використовує той самий конвеєр — виберіть Anthropic, OpenAI-сумісний, Azure OpenAI або Google Gemini, і демон передаватиме нормалізовані фрагменти SSE, з блокуванням внутрішніх мереж на краю.
 
 ### 2 · Навички — це файли, а не плагіни.
 
@@ -319,8 +319,6 @@ pnpm install
 pnpm tools-dev run web
 # відкрийте URL у браузері, який виведе tools-dev
 ```
-
-Лаунчер Windows: зберіть `OpenDesign.exe` самостійно за інструкцією в `tools/launcher/README.md` або завантажте його з GitHub Releases. Потім покладіть файл у корінь репозиторію й двічі клацніть його, щоб за потреби виконати `pnpm install` і запустити Open Design через `pnpm tools-dev`.
 
 Вимоги до середовища: Node `~24` та pnpm `10.33.x`. `nvm`/`fnm` є лише додатковими помічниками; якщо ви використовуєте один з них, запустіть `nvm install 24 && nvm use 24` або `fnm install 24 && fnm use 24` перед `pnpm install`.
 
@@ -625,7 +623,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -651,7 +649,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (промпт надсилається як RPC-команда `prompt`) |
 | **Багатопровайдерний BYOK** | н/д | Нормалізація SSE | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-сумісний / Azure OpenAI / Gemini; захист від SSRF проти loopback / link-local / RFC1918 |
 
 Додавання нового CLI — це один запис у [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Формат потоку — один із `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (з `eventParser` для кожного CLI), `acp-json-rpc`, `pi-rpc` або `plain`.
@@ -720,7 +718,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 Дякуємо всім, хто допоміг просувати Open Design — через код, документацію, зворотний зв'язок, нові навички, нові системи дизайну або навіть гостре питання. Кожен реальний внесок рахується, а стіна нижче — найпростіший спосіб сказати це вголос.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Контриб'ютори Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Контриб'ютори Open Design" />
 </a>
 
 Якщо ви злили свій перший PR — ласкаво просимо. Мітка [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) — це точка входу.
@@ -737,9 +735,9 @@ SVG вище перегенерується щодня [`.github/workflows/metri
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Історія зірок Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="Історія зірок Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 

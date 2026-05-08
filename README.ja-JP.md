@@ -28,7 +28,7 @@
   <a href="QUICKSTART.ja-JP.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -220,7 +220,7 @@ Skill の追加はフォルダ 1 つで完了します。拡張 frontmatter の�
 
 ### 1 · エージェントは同梱しない — あなたのもので十分
 
-Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/mariozechner/pi-ai) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
+Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
 
 ### 2 · Skill はファイルであり、プラグインではない
 
@@ -319,8 +319,6 @@ pnpm install
 pnpm tools-dev run web
 # tools-dev が出力した Web URL を開く
 ```
-
-Windows ランチャー: `tools/launcher/README.md` の手順で `OpenDesign.exe` を自分でビルドするか、GitHub Releases からダウンロードします。その後、リポジトリのルートに置いてダブルクリックすると、必要に応じて `pnpm install` を実行し、`pnpm tools-dev` で Open Design を起動します。
 
 環境要件：Node `~24`、pnpm `10.33.x`。`nvm` / `fnm` はあくまでオプションのヘルパーです。使用する場合は `pnpm install` の前に `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。
 
@@ -620,7 +618,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -642,7 +640,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型付きイベント） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
@@ -714,7 +712,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design コントリビューター" />
 </a>
 
 初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
@@ -731,9 +729,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 

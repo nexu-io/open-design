@@ -19,6 +19,7 @@ import type {
   ChatSseEvent,
   ChatSseStartPayload,
   DaemonAgentPayload,
+  ResearchOptions,
   SseErrorPayload,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
@@ -57,6 +58,7 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  research?: ResearchOptions;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
@@ -89,6 +91,7 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  research,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
@@ -113,6 +116,7 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    ...(research ? { research } : {}),
   };
   const body = JSON.stringify(request);
 
@@ -351,7 +355,9 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       kind: 'status',
       label: data.label,
       detail:
-        typeof data.model === 'string'
+        typeof data.detail === 'string'
+          ? data.detail
+          : typeof data.model === 'string'
           ? data.model
           : typeof data.ttftMs === 'number'
             ? `first token in ${Math.round((data.ttftMs as number) / 100) / 10}s`

@@ -26,7 +26,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <b>繁體中文</b> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <b>繁體中文</b> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -217,7 +217,7 @@ OD 站在四個開源專案的肩膀上：
 
 ### 1 · 我們不帶 agent，你的就夠好
 
-Daemon 啟動時掃 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/mariozechner/pi-ai)。能找到的都成為候選設計引擎 —— 走 stdio，每個 CLI 一個 adapter，model picker 一鍵切換。靈感來自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一個 CLI 都沒裝？`POST /api/proxy/stream` 就是同一條管線減去 spawn —— 填任意 OpenAI 相容 `baseUrl` + `apiKey`，daemon 把 SSE 轉發回瀏覽器，loopback / link-local / RFC1918 在邊界直接拒絕。
+Daemon 啟動時掃 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi` 和 [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)。能找到的都成為候選設計引擎 —— 走 stdio，每個 CLI 一個 adapter，model picker 一鍵切換。靈感來自 [`multica`](https://github.com/multica-ai/multica) 和 [`cc-switch`](https://github.com/farion1231/cc-switch)。一個 CLI 都沒裝？`POST /api/proxy/stream` 就是同一條管線減去 spawn —— 填任意 OpenAI 相容 `baseUrl` + `apiKey`，daemon 把 SSE 轉發回瀏覽器，loopback / link-local / RFC1918 在邊界直接拒絕。
 
 ### 2 · Skill 是檔案，不是外掛
 
@@ -316,8 +316,6 @@ pnpm install
 pnpm tools-dev run web
 # 開啟 tools-dev 輸出的 web URL
 ```
-
-Windows 啟動器：請依照 `tools/launcher/README.md` 的說明自行建置 `OpenDesign.exe`，或從 GitHub Releases 下載。接著將它放到 repo 根目錄並雙擊；它會在需要時執行 `pnpm install`，再用 `pnpm tools-dev` 啟動 Open Design。
 
 環境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可選輔助工具，不是專案必需步驟；如果使用它們，先執行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再執行 `pnpm install`。
 
@@ -686,7 +684,7 @@ Chat / artifact 迴圈最顯眼，但這套倉庫裡還有幾個能力被埋得�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -708,7 +706,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型別化事件） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（prompt 走 RPC `prompt` 命令） |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（prompt 走 RPC `prompt` 命令） |
 | [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
 | Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
@@ -780,7 +778,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 感謝每一位讓 Open Design 變得更好的朋友 —— 無論是寫程式碼、修文檔、提 issue、加 skill 還是加 design system，每一次真實貢獻都會被記住。下面這面牆是最直觀的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design 貢獻者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design 貢獻者" />
 </a>
 
 第一次提 PR？歡迎從 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 標籤起步。
@@ -797,9 +795,9 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 

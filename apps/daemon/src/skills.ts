@@ -122,16 +122,24 @@ function withSkillRootPreamble(body, dir) {
   const referencedFiles = collectReferencedSideFiles(body);
   const folder = path.basename(dir);
   const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
+  const exampleFile = referencedFiles[0];
+  const relativeGuidance = exampleFile
+    ? "> below references side files such as `" + exampleFile + "`, prefer the\n" +
+      "> relative form rooted at the first path above — e.g. open `" +
+      skillRootRel + "/" + exampleFile + "`."
+    : "> below references side files, prefer the relative form rooted at the\n" +
+      "> first path above.";
+  const absoluteGuidance = exampleFile
+    ? "> back to the absolute path: `" + path.join(dir, exampleFile) + "`."
+    : "> back to the absolute skill root above.";
   const preamble = [
     "> **Skill root (relative to project):** `" + skillRootRel + "/`",
     "> **Skill root (absolute fallback):** `" + dir + "`",
     ">",
     "> This skill ships side files alongside `SKILL.md`. When the workflow",
-    "> below references relative paths such as `assets/template.html` or",
-    "> `references/layouts.md`, prefer the relative form rooted at the",
-    "> first path above — e.g. open `" + skillRootRel + "/assets/template.html`.",
+    relativeGuidance,
     "> If that path is not reachable from your working directory, fall",
-    "> back to the absolute path: `" + dir + "/assets/template.html`.",
+    absoluteGuidance,
     "> Either form resolves to the same file; the relative form keeps you",
     "> inside the project working directory, which is preferred.",
     ...(referencedFiles.length > 0
@@ -152,6 +160,7 @@ function collectReferencedSideFiles(body) {
   const files = new Set();
   const matches = body.matchAll(/\b(?:assets|references)\/[A-Za-z0-9._-]+\b/g);
   for (const match of matches) files.add(match[0]);
+  if (/\bexample\.html\b/.test(body)) files.add("example.html");
   return Array.from(files).sort();
 }
 

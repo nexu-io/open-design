@@ -17,7 +17,14 @@
  * consumed to keep the protocol clean.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { createJsonLineStream } from './acp.js';
+
+// Image forwarding budgets to prevent large synchronous base64 work.
+const MAX_IMAGE_COUNT = 10;
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
 // sendCommand is scoped inside attachPiRpcSession to avoid sharing
 // the RPC id counter across concurrent sessions.
@@ -145,6 +152,21 @@ export function mapPiRpcEvent(raw, send, ctx) {
       return null;
     }
 
+    // pi's RPC protocol emits a message_update with error delta when
+    // the model returns an error (e.g. aborted, context overflow).
+    // Surface it so sendAgentEvent's error-handling path sets
+    // agentStreamError and the run flips to `failed` on close.
+    if (ev.type === 'error') {
+      const message =
+        typeof ev.reason === 'string' && ev.reason.length > 0
+          ? ev.reason
+          : typeof ev.delta === 'string' && ev.delta.length > 0
+            ? ev.delta
+            : 'Agent error';
+      send('agent', { type: 'error', message, raw });
+      return null;
+    }
+
     return null;
   }
 
@@ -184,12 +206,37 @@ export function mapPiRpcEvent(raw, send, ctx) {
     return null;
   }
 
+  // pi's RPC protocol can emit `extension_error` when an extension
+  // throws during a tool call or event handler. Surface it so the
+  // daemon's error-handling path (sendAgentEvent → agentStreamError)
+  // can flip the run to `failed` and forward a visible SSE error.
+  if (raw.type === 'extension_error') {
+    const message =
+      typeof raw.error === 'string' && raw.error.length > 0
+        ? raw.error
+        : 'Extension error';
+    send('agent', { type: 'error', message, raw });
+    return null;
+  }
+
   if (raw.type === 'compaction_start') {
     send('agent', { type: 'status', label: 'compacting' });
     return null;
   }
   if (raw.type === 'auto_retry_start') {
     send('agent', { type: 'status', label: 'retrying' });
+    return null;
+  }
+
+  if (raw.type === 'auto_retry_end' && raw.success === false) {
+    // Auto-retry exhausted — the agent is about to give up. Surface
+    // the final error so the daemon marks the run as failed rather
+    // than silently succeeding with empty output.
+    const message =
+      typeof raw.finalError === 'string' && raw.finalError.length > 0
+        ? raw.finalError
+        : 'Auto-retry exhausted';
+    send('agent', { type: 'error', message, raw });
     return null;
   }
 
@@ -213,10 +260,12 @@ export function mapPiRpcEvent(raw, send, ctx) {
  * @param {string} opts.prompt   - composed user message
  * @param {string} [opts.cwd]    - working directory
  * @param {string|null} [opts.model] - model id (null = default)
+ * @param {string[]} [opts.imagePaths] - absolute paths to image files for multimodal input
+ * @param {string} [opts.uploadRoot] - root directory that image paths must remain inside after symlink resolution
  * @param {function} opts.send   - SSE send function
  * @returns {{ hasFatalError(): boolean, abort(): void }}
  */
-export function attachPiRpcSession({ child, prompt, cwd, model, send }) {
+export function attachPiRpcSession({ child, prompt, cwd, model, send, imagePaths, uploadRoot }) {
   const runStartedAt = Date.now();
   let finished = false;
   let fatal = false;
@@ -265,7 +314,64 @@ export function attachPiRpcSession({ child, prompt, cwd, model, send }) {
     stdinOpen = false;
   });
 
-  promptRpcId = sendCommand(child.stdin, 'prompt', { message: prompt });
+  // Build the images array for pi's prompt command. pi's RPC protocol
+  // accepts `images` as an array of {type, data, mimeType} objects where
+  // `data` is base64-encoded file contents. The daemon's safeImages guard
+  // already validated that each path exists under UPLOAD_DIR.
+  //
+  // Security: realpath resolves symlinks so we re-check that the resolved
+  // path is still a regular file (no /proc/self/mem or symlink escape).
+  // We also enforce a count and total-byte budget to prevent large
+  // synchronous base64 reads from blocking the event loop.
+  const images = [];
+  if (Array.isArray(imagePaths) && imagePaths.length > 0) {
+    let totalBytes = 0;
+    for (const imgPath of imagePaths) {
+      if (images.length >= MAX_IMAGE_COUNT) break;
+      if (typeof imgPath !== 'string' || !imgPath.length) continue;
+      try {
+        // Resolve symlinks and verify it's a regular file.
+        const realPath = fs.realpathSync(imgPath);
+        const stat = fs.statSync(realPath);
+        if (!stat.isFile()) continue;
+
+        // Re-verify the resolved path stays inside the upload root.
+        // Without this, a path that passed server.ts's safeImages prefix
+        // check (under UPLOAD_DIR) could be a symlink pointing to a file
+        // outside UPLOAD_DIR, and we'd read/base64-forward it to pi.
+        if (uploadRoot) {
+          const resolvedRoot = fs.realpathSync(uploadRoot);
+          if (realPath !== resolvedRoot && !realPath.startsWith(resolvedRoot + path.sep)) continue;
+        }
+
+        const ext = path.extname(realPath).toLowerCase();
+        if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) continue;
+
+        // Enforce total byte budget.
+        if (totalBytes + stat.size > MAX_TOTAL_IMAGE_BYTES) continue;
+
+        const buf = fs.readFileSync(realPath);
+        const mimeType =
+          ext === '.png' ? 'image/png' :
+          ext === '.gif' ? 'image/gif' :
+          ext === '.webp' ? 'image/webp' :
+          'image/jpeg'; // .jpg, .jpeg, and unknown
+        images.push({
+          type: 'image',
+          data: buf.toString('base64'),
+          mimeType,
+        });
+        totalBytes += stat.size;
+      } catch {
+        // Skip unreadable images rather than failing the entire run.
+      }
+    }
+  }
+
+  promptRpcId = sendCommand(child.stdin, 'prompt', {
+    message: prompt,
+    ...(images.length > 0 ? { images } : {}),
+  });
 
   // ---- Inbound: parse stdout events ----
   const parser = createJsonLineStream((raw) => {

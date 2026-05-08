@@ -309,21 +309,66 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Editorial · Studio': 'Редакционная студия',
   'Retro & Nostalgic': 'Ретро и ностальгия',
   'Themed & Unique': 'Тематические и уникальные',
+  'Editorial / Personal / Publication': 'Редакционные / Персональные / Публикации',
   Uncategorized: 'Без категории',
 };
 
 export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
+  'dcf-valuation',
+  'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
+  // Vendored upstream English-language Zara templates (zarazhangrui/beautiful-html-templates).
+  // Localized copy is not maintained; fall back to the upstream English description.
+  'html-ppt-zhangzara-8-bit-orbit',
+  'html-ppt-zhangzara-biennale-yellow',
+  'html-ppt-zhangzara-block-frame',
+  'html-ppt-zhangzara-blue-professional',
+  'html-ppt-zhangzara-bold-poster',
+  'html-ppt-zhangzara-broadside',
+  'html-ppt-zhangzara-capsule',
+  'html-ppt-zhangzara-cartesian',
+  'html-ppt-zhangzara-cobalt-grid',
+  'html-ppt-zhangzara-coral',
+  'html-ppt-zhangzara-creative-mode',
+  'html-ppt-zhangzara-daisy-days',
+  'html-ppt-zhangzara-editorial-tri-tone',
+  'html-ppt-zhangzara-grove',
+  'html-ppt-zhangzara-long-table',
+  'html-ppt-zhangzara-mat',
+  'html-ppt-zhangzara-monochrome',
+  'html-ppt-zhangzara-neo-grid-bold',
+  'html-ppt-zhangzara-peoples-platform',
+  'html-ppt-zhangzara-pin-and-paper',
+  'html-ppt-zhangzara-pink-script',
+  'html-ppt-zhangzara-playful',
+  'html-ppt-zhangzara-raw-grid',
+  'html-ppt-zhangzara-retro-windows',
+  'html-ppt-zhangzara-retro-zine',
+  'html-ppt-zhangzara-sakura-chroma',
+  'html-ppt-zhangzara-scatterbrain',
+  'html-ppt-zhangzara-signal',
+  'html-ppt-zhangzara-soft-editorial',
+  'html-ppt-zhangzara-stencil-tablet',
+  'html-ppt-zhangzara-studio',
+  'html-ppt-zhangzara-vellum',
+  'last30days',
+  'live-dashboard',
   'orbit-general',
   'orbit-github',
   'orbit-gmail',
   'orbit-linear',
   'orbit-notion',
+  // TODO: add localized copy for social-media-dashboard (introduced in #678).
+  // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
+  'social-media-matrix-tracker-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
+  'waitlist-page',
+  'x-research',
+  'trading-analysis-dashboard-template',
 ] as const;
 
 export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
@@ -333,6 +378,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'arc',
   'artistic',
   'bento',
+  'bmw-m',
   'bold',
   'brutalism',
   'cafe',
@@ -368,6 +414,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'luxury',
   'material',
   'minimal',
+  'mission-control',
   'modern',
   'mono',
   'neobrutalism',
@@ -390,6 +437,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'storytelling',
   'totality-festival',
   'tetris',
+  'urdu',
   'vibrant',
   'vintage',
 ] as const;
@@ -415,9 +463,10 @@ export const RU_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Product: 'Продукт',
   'Short Form': 'Короткий формат',
   Travel: 'Путешествия',
+  'Live Artifact': 'Live-артефакт',
 };
 
-export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [] as const;
+export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = ['notion-team-dashboard-live-artifact'] as const;
 
 export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
@@ -474,6 +523,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'key-visual': 'Ключевой визуал',
   'kinetic-typography': 'Кинетическая типографика',
   'linear-style': 'Стиль Linear',
+  'live-artifact': 'Live-артефакт',
   logo: 'Логотип',
   lyubu: 'Люй Бу',
   map: 'Карта',

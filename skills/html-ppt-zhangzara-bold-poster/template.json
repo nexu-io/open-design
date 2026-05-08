@@ -1,0 +1,45 @@
+{
+  "slug": "zhangzara-bold-poster",
+  "name": "Bold Poster",
+  "tagline": "Editorial poster aesthetic with massive Shrikhand display and a single fire-engine red accent.",
+  "mood": [
+    "bold",
+    "editorial",
+    "loud",
+    "confident"
+  ],
+  "occasion": [
+    "brand manifesto",
+    "creative-led pitch",
+    "magazine / editorial",
+    "founder vision deck",
+    "art / culture"
+  ],
+  "tone": [
+    "dramatic",
+    "graphic",
+    "sharp",
+    "intentional"
+  ],
+  "formality": "medium",
+  "density": "low",
+  "palette": {
+    "bg": "#FFFFFF",
+    "dark": "#1C1410",
+    "red": "#D8000F",
+    "light": "#F5F2EF",
+    "description": "white and warm-cream paper with deep almost-black ink, lifted by a single saturated fire-engine red"
+  },
+  "typography": {
+    "display": "Shrikhand",
+    "serif": "Libre Baskerville",
+    "body": "Space Grotesk",
+    "style": "groovy display + editorial serif + grotesk body; very high typographic contrast"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should land like a magazine cover: brand manifestos, founder vision decks, editorial / cultural pitches, creative reviews. Excellent any time you want a few words to feel like a poster — including unexpected fits like a tech keynote or a finance manifesto that wants to be quotable.",
+  "avoid_for": "Decks that need to communicate dense information per slide — the layout is built around a few large statements, not paragraphs of detail.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/bold-poster"
+}

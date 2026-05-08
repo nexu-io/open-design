@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pin &amp; Paper — Slide Template</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/styles.css" />
+<script src="assets/deck-stage.js"></script>
+
+<!-- reusable safety pin svg, used via <use href="#pin"> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- closed safety pin: coil on right, shaft sweeping left, clasp cap on the left holding the point -->
+    <symbol id="pin" viewBox="0 0 360 110">
+      <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- coiled spring (one continuous loop) -->
+        <path d="M312 38 C 296 32, 290 50, 304 58 C 320 66, 340 60, 342 44 C 344 28, 322 18, 300 24"/>
+        <!-- top shaft running from coil to clasp -->
+        <path d="M300 24 C 240 14, 140 14, 70 30"/>
+        <!-- bottom shaft (the part holding the point) curving back under -->
+        <path d="M312 56 C 250 78, 150 82, 80 70"/>
+        <!-- clasp cap (oval) covering where the two shafts meet on the left -->
+        <ellipse cx="58" cy="50" rx="24" ry="14"/>
+      </g>
+    </symbol>
+
+    <!-- open safety pin: clasp lifted, sharp point exposed pointing left -->
+    <symbol id="pin-open" viewBox="0 0 360 130">
+      <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- coiled spring -->
+        <path d="M312 48 C 296 42, 290 60, 304 68 C 320 76, 340 70, 342 54 C 344 38, 322 28, 300 34"/>
+        <!-- top shaft -->
+        <path d="M300 34 C 240 24, 140 24, 70 40"/>
+        <!-- bottom shaft (the pointed one), now extending past where the clasp would be, into a sharp point -->
+        <path d="M312 66 C 250 90, 150 96, 80 86 L 24 78 L 38 70 M24 78 L 38 88"/>
+        <!-- clasp, lifted above where the point used to sit -->
+        <ellipse cx="82" cy="32" rx="22" ry="12" transform="rotate(-18 82 32)"/>
+      </g>
+    </symbol>
+
+    <!-- arrow for process flow -->
+    <symbol id="arr" viewBox="0 0 32 32">
+      <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 16 H26 M19 9 L26 16 L19 23"/>
+      </g>
+    </symbol>
+
+    <!-- small inline mark for the top-chrome lockup -->
+    <symbol id="mark" viewBox="0 0 32 16">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="26" cy="8" r="5"/>
+        <path d="M21 8 H 6 M6 5 L 3 8 L 6 11"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<script type="application/json" id="speaker-notes">[]</script>
+</head>
+<body>
+
+<deck-stage>
+
+  <!-- ============ 01 COVER ============ -->
+  <section class="slide s-cover" data-screen-label="01 Cover" data-om-validate="false">
+    <svg class="pin-1" viewBox="0 0 360 110"><use href="#pin"/></svg>
+    <svg class="pin-2" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+    <div class="stage">
+      <div class="super">A field guide · Vol. I</div>
+      <h1>Kept<br/><em>things.</em></h1>
+      <div class="row">
+        <div class="who">Presented by <span class="underline-thin">A. Speaker</span>
+          <small>Role · Team · Spring 2026</small>
+        </div>
+        <div class="date">29 · IV · 2026</div>
+      </div>
+    </div>
+    <div class="handwritten">
+      <span class="underline">For:</span> the room.<br/>
+      Two pages. One ask.
+    </div>
+  </section>
+
+  <!-- ============ 02 AGENDA ============ -->
+  <section class="slide s-agenda" data-screen-label="02 Agenda" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Pin &amp; Paper</span>
+      <span class="meta"><span>North Field Office</span><span>Phase I</span></span>
+    </div>
+    <h2>What's<br/><em>inside.</em></h2>
+    <div class="list">
+      <div class="row">
+        <span class="num">01</span>
+        <span class="lab">The trust gap</span>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="meta">Findings · 12 min</span>
+      </div>
+      <div class="row">
+        <span class="num">02</span>
+        <span class="lab">Three pilots, scored</span>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="meta">Evidence · 9 min</span>
+      </div>
+      <div class="row">
+        <span class="num">03</span>
+        <span class="lab">A way of working</span>
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <span class="meta">Method · 7 min</span>
+      </div>
+      <div class="row">
+        <span class="num">04</span>
+        <span class="lab">What we ship next</span>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="meta">Decisions · 8 min</span>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>02 / 11</span></div>
+  </section>
+
+  <!-- ============ 03 NOTECARDS ============ -->
+  <section class="slide s-notes" data-screen-label="03 Principles" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Principles</span>
+      <span class="meta"><span>North Field Office</span><span>Phase II</span></span>
+    </div>
+    <div class="head">
+      <h2>Three rules we're <em>keeping.</em></h2>
+      <div class="sub">Pinned to the wall above every desk. We refer back to them when a decision feels too big to make from the seat we're in.</div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="num">Rule · 01</span>
+        <h3>Write the<br/>real sentence.</h3>
+        <p>If a customer wouldn't read the email, the email is not the work. Plain words, signed by a person, sent on a Tuesday.</p>
+        <div class="scribble">— write it <span class="underline">by hand</span> first.</div>
+      </div>
+      <div class="card alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="num">Rule · 02</span>
+        <h3>Earn the<br/>second look.</h3>
+        <p>Every interaction in the first 72 hours is doing four times the work of one in week three. Spend accordingly.</p>
+        <div class="scribble">no autoresponder, ever.</div>
+      </div>
+      <div class="card alt2">
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <span class="num">Rule · 03</span>
+        <h3>Keep the<br/>handwriting.</h3>
+        <p>The system is allowed to grow, but the voice on the other end stays small enough to know who you wrote to last week.</p>
+        <div class="scribble">200 names, max.</div>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>03 / 11</span></div>
+  </section>
+
+  <!-- ============ 04 SECTION DIVIDER ============ -->
+  <section class="slide s-sec ink" data-screen-label="04 Section · Direction" data-om-validate="false">
+    <div class="marker">Section II</div>
+    <div class="label">Direction<br/>&amp; doctrine</div>
+    <svg class="pin-big" viewBox="0 0 360 110"><use href="#pin"/></svg>
+    <h2>Where we<br/>are going,<br/><em>and why.</em></h2>
+    <div class="scribble">— turn the page —</div>
+    <div class="footer"><span>North Field Office</span><span>04 / 11</span></div>
+  </section>
+
+  <!-- ============ 05 NOTICE ============ -->
+  <section class="slide s-notice" data-screen-label="05 Findings · Detail" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Findings · detail</span>
+      <span class="meta"><span>North Field Office</span><span>Phase III</span></span>
+    </div>
+    <div class="head">
+      <div class="pre">Notice · 05<br/>Action title</div>
+      <h2>The trust gap is built in the first 72 hours, <em>not</em> the first 7 days — and the cost compounds for the rest of the lifecycle.</h2>
+    </div>
+    <div class="grid">
+      <div class="col">
+        <h3>What we found</h3>
+        <p><strong>Three behavioural signals</strong> in the first 72 hours predict 18-month retention better than any feature-usage metric we tracked.</p>
+        <ul>
+          <li><strong>Email open #2</strong> — opening the second lifecycle email lifts D90 retention by 19 points.</li>
+          <li><strong>Personal salutation</strong> — accounts that received a written welcome retained 2.4× the cohort.</li>
+          <li><strong>Reply received</strong> — a single human reply within 24 hours is the single largest lever measured.</li>
+        </ul>
+        <div class="src">N = 14,200 · Q1 2026</div>
+      </div>
+      <div class="col b">
+        <h3>Why it matters</h3>
+        <div class="meta">$4.1M projected retained ARR — current cohort.</div>
+        <p>The first three days are the only window where customers are both paying attention and willing to write back. Every interaction here does the work of roughly four interactions in week three.</p>
+        <p>The cost of getting this wrong is not refunds — it is the long, quiet churn of an account that never returns to the inbox.</p>
+        <div class="src">Modelled on FY24 cohort behaviour</div>
+      </div>
+      <div class="col">
+        <h3>What to do</h3>
+        <ul>
+          <li><strong>Rewrite emails 1–3</strong> in human voice; ship behind a 50/50 holdout. Owner: lifecycle. Due: May 17.</li>
+          <li><strong>Route every signup</strong> to a named human for one personal reply within 24h, capped at the top 200 accounts/day. Owner: success. Due: May 24.</li>
+          <li><strong>Instrument the 72-hour window</strong> as a first-class metric in the weekly review. Owner: analytics. Due: June 1.</li>
+        </ul>
+        <div class="src">Pilot scope: top-decile signups</div>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>05 / 11</span></div>
+  </section>
+
+  <!-- ============ 06 CHART ============ -->
+  <section class="slide s-chart ink" data-screen-label="06 Retention Curve" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Retention, by cohort</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <svg class="pin-deco" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+    <div class="left">
+      <h2>Curve<br/>bends at<br/><em>day three.</em></h2>
+      <p>Cohorts that received a written welcome and a human reply within 24 hours retain at roughly 2× the rate of the templated cohort, and the gap holds steady for ninety days.</p>
+      <div class="legend">
+        <div class="li"><i style="background:rgba(239,229,106,.5)"></i> Templated welcome (control)</div>
+        <div class="li"><i style="background:#F5ECA0"></i> Written welcome</div>
+        <div class="li"><i style="background:#EFE56A"></i> Written + human reply</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="yhead">% of cohort active, by day</div>
+      <div class="plot">
+        <div class="yticks">
+          <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+        </div>
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="#1F3A8A" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2,1.5"
+            points="0,4 16,30 32,50 48,64 64,76 80,84 100,90" />
+          <polyline fill="none" stroke="#2D4FB8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,18 32,28 48,38 64,46 80,52 100,56" />
+          <polyline fill="none" stroke="#1F3A8A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,10 32,16 48,22 64,28 80,32 100,36" />
+        </svg>
+      </div>
+      <div class="xticks">
+        <span>D0</span><span>D7</span><span>D14</span><span>D30</span><span>D45</span><span>D60</span><span>D90</span>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>06 / 11</span></div>
+  </section>
+
+  <!-- ============ 07 PROCESS ============ -->
+  <section class="slide s-process" data-screen-label="07 Process" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> How we'll work</span>
+      <span class="meta"><span>North Field Office</span><span>Phase IV</span></span>
+    </div>
+    <div class="head">
+      <h2>From <em>insight</em><br/>to default,<br/>in five moves.</h2>
+      <div class="sub">A repeatable path each pilot follows, end to end, before it is allowed to graduate to the default experience for every customer.</div>
+    </div>
+    <div class="flow">
+      <div class="node">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">1</div>
+        <h3>Frame</h3>
+        <p>Translate the insight into a single behavioural hypothesis we can falsify in a sprint.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">2</div>
+        <h3>Design</h3>
+        <p>Smallest end-to-end change that lets the hypothesis be tested cleanly in one cycle.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node alt2">
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <div class="n">3</div>
+        <h3>Pilot</h3>
+        <p>Ship to a 50/50 holdout in one segment. Hold the line for two cycles before reading.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">4</div>
+        <h3>Read</h3>
+        <p>Pre-registered metrics only. Kill, scale, or extend — not three of three.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">5</div>
+        <h3>Default</h3>
+        <p>Promote to the default surface and retire the legacy path inside the same release.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>Week 1 · Frame</span>
+      <span>Week 2–3 · Design</span>
+      <span>Week 3–6 · Pilot</span>
+      <span>Week 7 · Read</span>
+      <span>Week 8 · Default</span>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>07 / 11</span></div>
+  </section>
+
+  <!-- ============ 08 LEDGER ============ -->
+  <section class="slide s-matrix" data-screen-label="08 Comparison" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Three pilots, side by side</span>
+      <span class="meta"><span>North Field Office</span><span>Phase IV</span></span>
+    </div>
+    <div class="head">
+      <h2>Where each<br/><em>pilot</em> earns<br/>its keep.</h2>
+      <div class="sub">Scored against the four levers that matter most this cycle. We will only carry forward bets that win on at least two.</div>
+    </div>
+    <div class="table">
+      <div class="cell head-row">Lever</div>
+      <div class="cell head-row">Rewrite welcome</div>
+      <div class="cell head-row">Quiet upgrades</div>
+      <div class="cell head-row">Inbox-as-search</div>
+
+      <div class="cell row-label">Time-to-impact</div>
+      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+      <div class="cell"><span class="pill part">6–8 weeks</span></div>
+      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+
+      <div class="cell row-label">Build cost</div>
+      <div class="cell"><span class="pill yes">low</span></div>
+      <div class="cell"><span class="pill part">medium</span></div>
+      <div class="cell"><span class="pill yes">low</span></div>
+
+      <div class="cell row-label">Retention lift (model)</div>
+      <div class="cell"><span class="pill yes">+19 pts D90</span></div>
+      <div class="cell"><span class="pill part">+7 pts D90</span></div>
+      <div class="cell"><span class="pill part">+5 pts D90</span></div>
+
+      <div class="cell row-label last">Risk to power users</div>
+      <div class="cell last"><span class="pill yes">none</span></div>
+      <div class="cell last"><span class="pill no">Material</span></div>
+      <div class="cell last"><span class="pill part">soft, reversible</span></div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>08 / 11</span></div>
+  </section>
+
+  <!-- ============ 09 STATS ============ -->
+  <section class="slide s-stats" data-screen-label="09 In Numbers" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> In numbers</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="head">
+      <h2>The case,<br/><em>by the numbers.</em></h2>
+      <div class="sub">Three figures we will report against every cycle. If one of these stops moving, the bet is over.</div>
+    </div>
+    <div class="grid">
+      <div class="stat">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="big">2.4<small>×</small></div>
+        <h3>Retention<br/>multiple</h3>
+        <p>Cohort with written welcome + human reply, vs. templated control. Sustained through D90.</p>
+      </div>
+      <div class="stat alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="big">$4.1<small>M</small></div>
+        <h3>Projected<br/>retained ARR</h3>
+        <p>Modelled on the current quarter's signup cohort, holding all other inputs constant.</p>
+      </div>
+      <div class="stat alt2">
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <div class="big">72<small>hr</small></div>
+        <h3>The window<br/>that matters</h3>
+        <p>Behaviour after the first 72 hours predicts 18-month retention better than any feature metric.</p>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>09 / 11</span></div>
+  </section>
+
+  <!-- ============ 10 QUOTE ============ -->
+  <section class="slide s-quote" data-screen-label="10 Voice" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Client voice</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="panel">
+      <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+      <div class="qmark">"</div>
+      <div>
+        <blockquote>Three days in, someone wrote me a <em>real sentence.</em> I'd been a customer of theirs for nine months before I noticed I'd never been a customer anywhere else again.</blockquote>
+        <div class="who">Margaux Lévêque
+          <small>CFO · mid-market retailer · 14 months in</small>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>10 / 11</span></div>
+  </section>
+
+  <!-- ============ 11 CTA ============ -->
+  <section class="slide s-cta" data-screen-label="11 Next" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> What's next</span>
+      <span class="meta"><span>North Field Office</span><span>Phase V</span></span>
+    </div>
+    <div class="stage">
+      <div class="pane l">
+        <div class="super">From here</div>
+        <h2>Pick the<br/>three<br/><em>bets.</em></h2>
+        <p>Three pilots in eight weeks. We'll bring back evidence the quarter after, and the question won't be whether to ship — it'll be which two to default.</p>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+      </div>
+      <div class="pane r">
+        <h3>How we move this week</h3>
+        <div class="step">
+          <div class="n">1</div>
+          <div>
+            <h4>Pick the pilots</h4>
+            <p>Confirm two of three by Friday. Owners named in the same conversation; calendars cleared.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <div>
+            <h4>Pre-register the read</h4>
+            <p>Lock the metric, the holdout, and the kill criteria before any code ships. Analytics writes it; both sides sign.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <div>
+            <h4>Stand a Friday review</h4>
+            <p>One slide each pilot, every Friday, until the bet defaults or dies. No exceptions, no makeup decks.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>North Field Office</span><span>11 / 11</span></div>
+  </section>
+
+</deck-stage>
+
+</body>
+</html>
