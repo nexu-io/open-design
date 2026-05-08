@@ -264,7 +264,7 @@ describe('sandboxed preview Blob exports', () => {
 
     exportAsPdf('<p>test</p>', 'Blocked');
 
-    expect(alert).toHaveBeenCalledWith('Popup blocked! Please allow popups for this site to export as PDF.');
+    expect(alert).toHaveBeenCalledWith('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     expect(revokeSpy).toHaveBeenCalledWith('blob:test');
   });
 });

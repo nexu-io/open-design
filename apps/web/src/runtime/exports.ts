@@ -228,6 +228,17 @@ export function exportAsPdf(
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
+
+  // Desktop native print bridge — uses Electron's webContents.print() API
+  // instead of window.open + window.print(). The bridge receives the content
+  // HTML directly and shows the native print dialog in the main process.
+  const desktopApi =
+    typeof window !== 'undefined' ? (window as Record<string, unknown>).__odDesktop as { printPdf?: (html: string) => void; isDesktop?: boolean } | undefined : undefined;
+  if (desktopApi?.printPdf) {
+    desktopApi.printPdf(doc);
+    return;
+  }
+
   doc = injectPrintScript(doc, title);
   if (sandboxedPreview) {
     // `allow-modals` is needed so the child can show the browser print dialog;
@@ -244,7 +255,7 @@ export function exportAsPdf(
 
   if (!win) {
     if (typeof alert !== 'undefined') {
-      alert('Popup blocked! Please allow popups for this site to export as PDF.');
+      alert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     }
     URL.revokeObjectURL(url); // Prevent memory leaks on early exit
     return;
