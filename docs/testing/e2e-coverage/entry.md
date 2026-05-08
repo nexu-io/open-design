@@ -4,6 +4,7 @@
 
 - 新建项目入口面板
 - 入口标签切换与草稿保持
+- Examples 示例库搜索、筛选、预览与导出
 - 提示词模板创建路径
 - 连接器入口与连接器 gate
 - 资源驱动的项目创建 happy path
@@ -13,6 +14,7 @@
 - `e2e/ui/entry-configuration-flows.test.ts`
 - `e2e/ui/entry-chrome-flows.test.ts`
 - `e2e/ui/app.test.ts`
+- `apps/web/tests/components/ExamplesTab.test.tsx`
 
 ## 已自动化
 
@@ -35,6 +37,11 @@
 | ENTRY-013 | 创建音频项目时，所选 `duration` 与修剪后的 `voice` 会正确写入创建 payload | `NewProjectPanel.test.tsx` |
 | ENTRY-014 | 顶部 settings menu 可以切换 pet rail 的显示/隐藏 | `entry-chrome-flows.test.ts` |
 | ENTRY-015 | 紧凑桌面宽度下，入口页 header 与整页不会出现明显横向溢出 | `entry-chrome-flows.test.ts` |
+| ENTRY-016 | Examples 示例库为空时展示 daemon/catalog 不可用提示 | `ExamplesTab.test.tsx` |
+| ENTRY-017 | Examples 搜索支持按名称、描述、prompt 命中，并在无匹配时展示空结果态 | `ExamplesTab.test.tsx` |
+| ENTRY-018 | Examples 支持按 Surface、Type、Scenario 筛选并正确收敛卡片列表 | `ExamplesTab.test.tsx` |
+| ENTRY-019 | 点击 Examples 卡片的 `Use this prompt` 会把选中的 skill 传给创建快路径 | `ExamplesTab.test.tsx` |
+| ENTRY-020 | Examples 预览按需加载后，Share 菜单可触发 PDF、ZIP、HTML 导出 | `ExamplesTab.test.tsx` |
 
 ### 资源驱动创建场景
 
