@@ -511,9 +511,16 @@ export function mergeDaemonMediaProviders(
   if (!hasAnyDaemonManagedMediaProvider(daemonProviders)) {
     return { ...localConfig };
   }
+
+  const mediaProviders = { ...(localConfig.mediaProviders ?? {}) };
+  for (const [providerId, daemonEntry] of Object.entries(daemonProviders ?? {})) {
+    if (!isStoredMediaProviderEntryPresent(daemonEntry)) continue;
+    mediaProviders[providerId] = { ...daemonEntry };
+  }
+
   return {
     ...localConfig,
-    mediaProviders: { ...(daemonProviders ?? {}) },
+    mediaProviders,
   };
 }
 

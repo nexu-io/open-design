@@ -190,6 +190,47 @@ describe('mergeDaemonMediaProviders', () => {
     });
   });
 
+  it('preserves local-only providers when daemon returns a partial provider set', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: 'sk-local-openai',
+            baseUrl: 'https://local-openai.example/v1',
+          },
+          fal: {
+            apiKey: 'sk-local-fal',
+            baseUrl: 'https://queue.fal.run',
+            model: 'fal-ai/imagen4/preview',
+          },
+        },
+      },
+      {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://daemon-openai.example/v1',
+        },
+      },
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: 'https://daemon-openai.example/v1',
+      },
+      fal: {
+        apiKey: 'sk-local-fal',
+        baseUrl: 'https://queue.fal.run',
+        model: 'fal-ai/imagen4/preview',
+      },
+    });
+  });
+
   it('keeps local media providers when daemon has no stored state yet', () => {
     const localConfig = {
       ...DEFAULT_CONFIG,
