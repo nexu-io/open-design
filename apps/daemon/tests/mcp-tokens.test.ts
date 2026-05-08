@@ -147,6 +147,31 @@ describe('mcp-tokens storage', () => {
     const parsed = JSON.parse(raw);
     expect(parsed.servers.higgsfield.accessToken).toBe('tok');
   });
+
+  it('persists OAuth client context fields with the token', async () => {
+    const tok: StoredMcpToken = {
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      tokenType: 'Bearer',
+      savedAt: Date.now(),
+      tokenEndpoint: 'https://auth.example.com/token',
+      clientId: 'client-xyz',
+      clientSecret: 'secret-xyz',
+      authServerIssuer: 'https://auth.example.com',
+      redirectUri: 'https://app.example.com/api/mcp/oauth/callback',
+      resourceUrl: 'https://mcp.example.com/mcp',
+    };
+    await setToken(dataDir, 'higgsfield', tok);
+    const got = await getToken(dataDir, 'higgsfield');
+    expect(got).toMatchObject({
+      tokenEndpoint: 'https://auth.example.com/token',
+      clientId: 'client-xyz',
+      clientSecret: 'secret-xyz',
+      authServerIssuer: 'https://auth.example.com',
+      redirectUri: 'https://app.example.com/api/mcp/oauth/callback',
+      resourceUrl: 'https://mcp.example.com/mcp',
+    });
+  });
 });
 
 describe('isTokenExpired', () => {

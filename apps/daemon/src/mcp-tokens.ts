@@ -16,7 +16,12 @@ import path from 'node:path';
 
 /**
  * Stored OAuth token for a single MCP server. Mirrors the relevant subset
- * of an OAuth 2.0 token-endpoint response (RFC 6749 §5.1).
+ * of an OAuth 2.0 token-endpoint response (RFC 6749 §5.1), plus the OAuth
+ * client context the original authorization-code exchange used. Refresh
+ * tokens are bound (RFC 6749 §6) to the client that received them, so we
+ * have to refresh against the same `client_id` / `redirect_uri` pair —
+ * persisting the context here is what lets us do that without re-running
+ * authorization.
  */
 export interface StoredMcpToken {
   /** The bearer token to send as `Authorization: Bearer …`. */
@@ -32,6 +37,18 @@ export interface StoredMcpToken {
   scope?: string;
   /** Wall-clock epoch ms when this record was first persisted. */
   savedAt: number;
+  /** Token endpoint that issued this token; reused verbatim for refresh. */
+  tokenEndpoint?: string;
+  /** Client id that obtained the refresh token. */
+  clientId?: string;
+  /** Confidential-client secret, if the upstream issued one. */
+  clientSecret?: string;
+  /** Authorization-server issuer, used to look the cached client back up. */
+  authServerIssuer?: string;
+  /** Redirect URI registered with the client at authorization time. */
+  redirectUri?: string;
+  /** RFC 8707 resource indicator the original token was scoped to. */
+  resourceUrl?: string;
 }
 
 export interface McpTokensFile {
@@ -91,10 +108,40 @@ function sanitizeToken(raw: unknown): StoredMcpToken | null {
     typeof raw.savedAt === 'number' && Number.isFinite(raw.savedAt)
       ? raw.savedAt
       : Date.now();
+  const tokenEndpoint =
+    typeof raw.tokenEndpoint === 'string' && raw.tokenEndpoint.trim()
+      ? raw.tokenEndpoint.trim()
+      : undefined;
+  const clientId =
+    typeof raw.clientId === 'string' && raw.clientId.trim()
+      ? raw.clientId.trim()
+      : undefined;
+  const clientSecret =
+    typeof raw.clientSecret === 'string' && raw.clientSecret.trim()
+      ? raw.clientSecret.trim()
+      : undefined;
+  const authServerIssuer =
+    typeof raw.authServerIssuer === 'string' && raw.authServerIssuer.trim()
+      ? raw.authServerIssuer.trim()
+      : undefined;
+  const redirectUri =
+    typeof raw.redirectUri === 'string' && raw.redirectUri.trim()
+      ? raw.redirectUri.trim()
+      : undefined;
+  const resourceUrl =
+    typeof raw.resourceUrl === 'string' && raw.resourceUrl.trim()
+      ? raw.resourceUrl.trim()
+      : undefined;
   const out: StoredMcpToken = { accessToken, tokenType, savedAt };
   if (refreshToken) out.refreshToken = refreshToken;
   if (scope) out.scope = scope;
   if (expiresAt !== undefined) out.expiresAt = expiresAt;
+  if (tokenEndpoint) out.tokenEndpoint = tokenEndpoint;
+  if (clientId) out.clientId = clientId;
+  if (clientSecret) out.clientSecret = clientSecret;
+  if (authServerIssuer) out.authServerIssuer = authServerIssuer;
+  if (redirectUri) out.redirectUri = redirectUri;
+  if (resourceUrl) out.resourceUrl = resourceUrl;
   return out;
 }
 

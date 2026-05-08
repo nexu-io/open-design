@@ -826,36 +826,25 @@ function mcpOAuthCallbackUrl(req) {
 }
 
 /**
- * Refresh an expired token using the auth server discovery + DCR bits we
- * cached during the original `beginAuth` flow. Persists the rotated token
- * back to disk on success and returns the new record. We re-discover on
- * each refresh because cheap-and-correct beats clever caching here:
- * provider configurations DO change, and the worst case is one extra
- * .well-known fetch per chat turn for an expired session.
+ * Refresh an expired token using the OAuth client context that the original
+ * authorization-code exchange persisted alongside the token. Refresh tokens
+ * are bound (RFC 6749 §6) to the client that received them, so we MUST
+ * refresh against the same `tokenEndpoint` / `clientId` / `clientSecret`
+ * pair — re-running discovery with a different redirect URI would risk
+ * registering a new client_id that the upstream then rejects the refresh
+ * for. Tokens persisted before that context was recorded can't be safely
+ * refreshed; the caller treats `null` as "needs reconnect".
  */
-async function refreshAndPersistToken(dataDir, serverId, enabledExternalMcp, current) {
+async function refreshAndPersistToken(dataDir, serverId, current) {
   if (!current.refreshToken) return null;
-  const server = enabledExternalMcp.find((s) => s.id === serverId);
-  if (!server || !server.url) return null;
-  // We need the token endpoint + a client_id. Run beginAuth purely to
-  // re-resolve those (the resulting authorize URL + state are discarded).
-  // This is heavier than necessary; if it ever shows up in profiles,
-  // cache the discovery output keyed by server URL.
-  const tmp = await beginAuth({
-    serverId,
-    serverUrl: server.url,
-    redirectUri: 'urn:ietf:wg:oauth:2.0:oob', // not used for refresh
-    dataDir,
-    fetchImpl: fetch,
-  }).catch(() => null);
-  if (!tmp) return null;
+  if (!current.tokenEndpoint || !current.clientId) return null;
   const tokenResp = await refreshAccessToken({
-    tokenEndpoint: tmp.pending.tokenEndpoint,
-    clientId: tmp.pending.clientId,
-    clientSecret: tmp.pending.clientSecret,
+    tokenEndpoint: current.tokenEndpoint,
+    clientId: current.clientId,
+    clientSecret: current.clientSecret,
     refreshToken: current.refreshToken,
     scope: current.scope,
-    resource: tmp.pending.resourceUrl,
+    resource: current.resourceUrl,
   });
   const next = {
     accessToken: tokenResp.access_token,
@@ -867,6 +856,12 @@ async function refreshAndPersistToken(dataDir, serverId, enabledExternalMcp, cur
         ? Date.now() + tokenResp.expires_in * 1000
         : undefined,
     savedAt: Date.now(),
+    tokenEndpoint: current.tokenEndpoint,
+    clientId: current.clientId,
+    clientSecret: current.clientSecret,
+    authServerIssuer: current.authServerIssuer,
+    redirectUri: current.redirectUri,
+    resourceUrl: current.resourceUrl,
   };
   await setToken(dataDir, serverId, next);
   return next;
@@ -2130,6 +2125,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             ? Date.now() + tokenResp.expires_in * 1000
             : undefined,
         savedAt: Date.now(),
+        // Persist the OAuth client context so refresh-token rotation can
+        // hit the same client_id / token endpoint the upstream issued the
+        // refresh_token to. Refresh tokens are client-bound (RFC 6749 §6).
+        tokenEndpoint: pending.tokenEndpoint,
+        clientId: pending.clientId,
+        clientSecret: pending.clientSecret,
+        authServerIssuer: pending.authServerIssuer,
+        redirectUri: pending.redirectUri,
+        resourceUrl: pending.resourceUrl,
       };
       await setToken(RUNTIME_DATA_DIR, pending.serverId, stored);
       res.type('html').send(renderOAuthResultPage({
@@ -4731,13 +4735,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       const stored = await readAllTokens(RUNTIME_DATA_DIR);
       for (const [serverId, tok] of Object.entries(stored)) {
         if (!enabledExternalMcp.find((s) => s.id === serverId)) continue;
-        let access = tok.accessToken;
+        // Default to the persisted access token; null it out if expired so
+        // we never inject a stale `Authorization: Bearer …` header. The
+        // model treats a server with a Bearer pinned as connected and
+        // discourages re-auth, which is the worst possible UX when the
+        // token is going to 401 every call.
+        let access = isTokenExpired(tok) ? null : tok.accessToken;
         if (isTokenExpired(tok) && tok.refreshToken) {
           try {
             const refreshed = await refreshAndPersistToken(
               RUNTIME_DATA_DIR,
               serverId,
-              enabledExternalMcp,
               tok,
             );
             if (refreshed) access = refreshed.accessToken;
@@ -4749,7 +4757,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             );
           }
         }
-        oauthTokensForSpawn[serverId] = access;
+        if (access) {
+          oauthTokensForSpawn[serverId] = access;
+        } else {
+          console.warn(
+            '[mcp-oauth] skipping expired token for',
+            serverId,
+            '— reconnect required',
+          );
+        }
       }
     } catch (err) {
       console.warn(
