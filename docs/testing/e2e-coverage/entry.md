@@ -43,6 +43,7 @@
 | ENTRY-019 | 点击 Examples 卡片的 `Use this prompt` 会把选中的 skill 传给创建快路径 | `ExamplesTab.test.tsx` |
 | ENTRY-020 | Examples 预览按需加载后，Share 菜单可触发 PDF、ZIP、HTML 导出 | `ExamplesTab.test.tsx` |
 | ENTRY-021 | Examples 全屏预览弹窗支持 Fullscreen/ESC 退出/Exit、Share 导出 PDF/ZIP/HTML、Open in new tab 和关闭 | `ExamplesTab.test.tsx` |
+| ENTRY-022 | Examples 点击 `Docs & templates` 筛选后只展示模板类 example，并可点击 `Use this prompt` 使用模板 prompt | `ExamplesTab.test.tsx` |
 
 ### 资源驱动创建场景
 

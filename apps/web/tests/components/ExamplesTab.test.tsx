@@ -116,6 +116,16 @@ const skills: SkillSummary[] = [
     platform: null,
     scenario: 'marketing',
   }),
+  skill({
+    id: 'brief-template',
+    name: 'brief-template',
+    description: 'Reusable project brief template',
+    examplePrompt: 'Create a reusable project brief from this template.',
+    mode: 'template',
+    surface: 'web',
+    platform: null,
+    scenario: 'operations',
+  }),
 ];
 
 function renderExamples(onUsePrompt = vi.fn()) {
@@ -158,17 +168,38 @@ describe('ExamplesTab', () => {
     expect(screen.getByTestId('example-card-hero-image')).toBeTruthy();
     expect(screen.queryByTestId('example-card-live-dashboard')).toBeNull();
 
-    fireEvent.click(within(filterRow('Surface')).getByRole('tab', { name: /All6/ }));
+    fireEvent.click(within(filterRow('Surface')).getByRole('tab', { name: /All7/ }));
     fireEvent.click(within(filterRow('Type')).getByRole('tab', { name: /Prototypes · Mobile1/ }));
     expect(screen.getByTestId('example-card-mobile-checkout')).toBeTruthy();
     expect(screen.queryByTestId('example-card-live-dashboard')).toBeNull();
 
-    fireEvent.click(within(filterRow('Type')).getByRole('tab', { name: /All6/ }));
+    fireEvent.click(within(filterRow('Type')).getByRole('tab', { name: /All7/ }));
     fireEvent.click(within(filterRow('Scenario')).getByRole('button', { name: /Marketing3/ }));
     expect(screen.getByTestId('example-card-open-design-landing')).toBeTruthy();
     expect(screen.getByTestId('example-card-brand-deck')).toBeTruthy();
     expect(screen.getByTestId('example-card-launch-video')).toBeTruthy();
     expect(screen.queryByTestId('example-card-live-dashboard')).toBeNull();
+  });
+
+  it('filters Docs & templates examples and uses the selected template prompt', () => {
+    const { onUsePrompt } = renderExamples();
+
+    fireEvent.click(within(filterRow('Type')).getByRole('tab', { name: /Docs & templates1/ }));
+
+    expect(screen.getByTestId('example-card-brief-template')).toBeTruthy();
+    expect(screen.getByText('Template')).toBeTruthy();
+    expect(screen.queryByTestId('example-card-live-dashboard')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('example-use-prompt-brief-template'));
+
+    expect(onUsePrompt).toHaveBeenCalledTimes(1);
+    expect(onUsePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'brief-template',
+        mode: 'template',
+        examplePrompt: 'Create a reusable project brief from this template.',
+      }),
+    );
   });
 
   it('passes the selected example to the Use this prompt callback', () => {
