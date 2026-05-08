@@ -17,7 +17,8 @@ describe('media task route recovery', () => {
   });
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {
-    const db = openDatabase(process.cwd(), { dataDir: process.env.OD_DATA_DIR });
+    const dataDir = process.env.OD_DATA_DIR;
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
     const now = Date.now() - 5_000;
