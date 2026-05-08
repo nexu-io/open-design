@@ -59,7 +59,7 @@ Update:
 - `<title>`
 - topnav logo text
 - topnav link labels (destinations are pre-wired to `#added`, `#fixed`, `#upgrade-note`)
-- topnav CTA label and `href` destination
+- topnav CTA label and `href` destination, or omit the topnav CTA entirely if no real destination exists
 - ensure the topnav link targets exist by adding matching section `id` attributes
 
 ### Step 2 — Build release-note structure
@@ -74,7 +74,7 @@ Inside `<main id="content">`, compose this section order:
 6. Upgrade note (short steps list or explicit no-action statement; section root must include `id="upgrade-note"`).
 7. Closing CTA strip (Layout 6).
 
-For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination. If no real destination is available, omit the closing CTA strip entirely rather than using a placeholder such as `href="#"` or a misleading page-anchor link. Replace all placeholder URLs (e.g., `REPLACE_WITH_REAL_URL`) with actual, safe destinations.
+For every CTA in the emitted HTML (topnav, hero, closing strip), replace both the visible label and the `href` destination. If no real destination is available, omit the topnav or closing CTA entirely rather than using a placeholder such as `href="#"` or a misleading page-anchor link. Replace all placeholder URLs (e.g., `REPLACE_WITH_REAL_URL`) with actual, safe destinations.
 
 ### Step 3 — Honesty rules for missing details
 
