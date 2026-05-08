@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { projectFileRenameTestHooks } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 
 describe('project file rename route', () => {
@@ -22,6 +23,7 @@ describe('project file rename route', () => {
   });
 
   afterEach(() => {
+    projectFileRenameTestHooks.beforeCommit = null;
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -112,6 +114,21 @@ describe('project file rename route', () => {
 
     const existing = await fetch(`${baseUrl}/api/projects/${projectId}/raw/b.txt`);
     expect(await existing.text()).toBe('second');
+  });
+
+  it('does not overwrite a target file created during rename', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'od-rename-race-'));
+    tempDirs.push(folder);
+    await writeFile(path.join(folder, 'source.txt'), 'source');
+    const projectId = await importFolder(folder);
+    projectFileRenameTestHooks.beforeCommit = async ({ target }) => {
+      await writeFile(target, 'concurrent');
+    };
+
+    const resp = await renameFile(projectId, 'source.txt', 'target.txt');
+    expect(resp.status).toBe(409);
+    expect(await readFile(path.join(folder, 'source.txt'), 'utf8')).toBe('source');
+    expect(await readFile(path.join(folder, 'target.txt'), 'utf8')).toBe('concurrent');
   });
 
   it('rejects invalid and escaping paths', async () => {

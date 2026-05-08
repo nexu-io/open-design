@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -18,6 +18,9 @@ import {
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
+export const projectFileRenameTestHooks = {
+  beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
+};
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
@@ -473,7 +476,8 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   const manifestRename = await prepareArtifactManifestRename(dir, oldName, newName);
 
   await mkdir(path.dirname(targetPath), { recursive: true });
-  await renameFilePath(source, targetPath);
+  await projectFileRenameTestHooks.beforeCommit?.({ source, target: targetPath });
+  await renameFilePath(source, targetPath, { noOverwrite: true });
   await commitArtifactManifestRename(manifestRename, newName);
 
   const st = await stat(targetPath);
@@ -494,12 +498,22 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   };
 }
 
-async function renameFilePath(source, target) {
+async function renameFilePath(source, target, opts = {}) {
+  const { noOverwrite = false } = opts;
   if (source === target) return;
   const temp = await uniqueRenameTempPath(source);
   await rename(source, temp);
   try {
-    await rename(temp, target);
+    if (noOverwrite) {
+      await link(temp, target);
+      try {
+        await unlink(temp);
+      } catch {
+        // Preserve the target file even if cleanup of the temp link fails.
+      }
+    } else {
+      await rename(temp, target);
+    }
   } catch (err) {
     try {
       await rename(temp, source);
@@ -571,11 +585,11 @@ async function commitArtifactManifestRename(manifestRename, newName) {
     const validated = validateArtifactManifestInput(parsed, newName);
     if (validated.ok && validated.value) {
       await writeFile(oldManifestPath, JSON.stringify(validated.value, null, 2));
-      await renameFilePath(oldManifestPath, newManifestPath);
+      await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
       return;
     }
   }
-  await renameFilePath(oldManifestPath, newManifestPath);
+  await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
 }
 
 export async function removeProjectDir(projectsRoot, projectId) {
