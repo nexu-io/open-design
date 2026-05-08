@@ -414,6 +414,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'luxury',
   'material',
   'minimal',
+  'mission-control',
   'modern',
   'mono',
   'neobrutalism',
