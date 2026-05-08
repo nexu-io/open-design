@@ -71,13 +71,19 @@ type DockerUserMapping = {
   gid: number;
 };
 
+function toDockerMountPath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
 export function buildDockerArgs(
   config: ToolPackConfig,
   user: DockerUserMapping,
 ): string[] {
-  const dockerHome = join(config.roots.toolPackRoot, ".docker-home");
-  const electronCache = join(config.roots.toolPackRoot, ".docker-cache", "electron");
-  const electronBuilderCache = join(config.roots.toolPackRoot, ".docker-cache", "electron-builder");
+  const workspaceRoot = toDockerMountPath(config.workspaceRoot);
+  const toolPackRoot = toDockerMountPath(config.roots.toolPackRoot);
+  const dockerHome = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-home"));
+  const electronCache = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-cache", "electron"));
+  const electronBuilderCache = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-cache", "electron-builder"));
 
   // The tool-pack root is mounted at a fixed container path so the inner build
   // can be told where to write output via `--dir /tools-pack`. Without this
@@ -127,9 +133,9 @@ export function buildDockerArgs(
     "--user",
     `${user.uid}:${user.gid}`,
     "-v",
-    `${config.workspaceRoot}:/project`,
+    `${workspaceRoot}:/project`,
     "-v",
-    `${config.roots.toolPackRoot}:/tools-pack`,
+    `${toolPackRoot}:/tools-pack`,
     "-v",
     `${dockerHome}:/home/builder`,
     "-v",
@@ -885,7 +891,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   // launches as `unmanaged`, which on uninstall would also remove the
   // AppImage/desktop/icon files out from under the still-running app.
   // Accept either TOOLS_PACK (CLI start) or PACKAGED (menu launch). Mirrors
-  // the dual-source acceptance pattern in mac.ts:709-714.
+  // the dual-source acceptance pattern in mac/lifecycle.ts.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -926,7 +932,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
     };
   }
 
-  // Try graceful shutdown via IPC first. mac.ts's pattern: best-effort SHUTDOWN
+  // Try graceful shutdown via IPC first. mac/lifecycle.ts's pattern: best-effort SHUTDOWN
   // request with a short timeout so Electron renderers + sidecars get a chance
   // to flush state (SQLite WAL, logs) before SIGTERM.
   let gracefulRequested = false;

@@ -112,7 +112,7 @@ test('prompt template retry preserves the edited body in project metadata', asyn
     });
   });
 
-  await page.goto('/');
+  await gotoEntryHome(page);
   await page.getByTestId('new-project-tab-image').click();
   await page.getByTestId('new-project-name').fill('Prompt template retry metadata');
 
@@ -144,7 +144,7 @@ test('prompt template retry preserves the edited body in project metadata', asyn
 test('live artifact empty connector CTA opens the gated connector setup path', async ({ page }) => {
   await routeConnectors(page, []);
 
-  await page.goto('/');
+  await gotoEntryHome(page);
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
 
@@ -162,7 +162,7 @@ test('live artifact empty connector CTA opens the gated connector setup path', a
 test('connectors search supports empty results and keyboard-closeable details', async ({ page }) => {
   await routeConnectors(page, CONNECTORS);
 
-  await page.goto('/');
+  await gotoEntryHome(page);
   await page.getByTestId('entry-tab-connectors').click();
   await expect(page.getByTestId('connector-grid-wrap')).toBeVisible();
 
@@ -183,6 +183,61 @@ test('connectors search supports empty results and keyboard-closeable details', 
   await expect(page.getByTestId('connector-drawer')).toContainText('List issues');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('connector-drawer')).toHaveCount(0);
+});
+
+test('saving a Composio key from Settings unlocks the connectors gate immediately', async ({ page }) => {
+  const { accountLabel: _unusedAccountLabel, ...slackConnector } = CONNECTORS[1]!;
+  await routeConnectors(page, [
+    {
+      ...CONNECTORS[0]!,
+      status: 'available',
+      auth: { provider: 'composio', configured: false },
+    },
+    {
+      ...slackConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: false },
+    },
+  ]);
+
+  let savedComposioBody: unknown = null;
+  await page.route('**/api/connectors/composio/config', async (route) => {
+    savedComposioBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, json: { config: null } });
+      return;
+    }
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('entry-tab-connectors').click();
+  await expect(page.getByTestId('connector-gate')).toBeVisible();
+  await expect(page.getByTestId('connectors-search-input')).toBeDisabled();
+
+  await page.getByTestId('connector-gate-action').click();
+  const settingsDialog = page.getByRole('dialog');
+  await expect(settingsDialog).toBeVisible();
+  await settingsDialog.getByPlaceholder('Paste Composio API key').fill('cmp-secret-1234');
+  await settingsDialog.getByRole('button', { name: 'Save', exact: true }).click();
+
+  expect(savedComposioBody).toEqual({ apiKey: 'cmp-secret-1234' });
+  await expect(page.getByTestId('connector-gate')).toHaveCount(0);
+  await expect(page.getByTestId('connectors-search-input')).toBeEnabled();
+  await expect(connectorCard(page, 'github')).toBeVisible();
+
+  const savedConfig = await page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, STORAGE_KEY);
+  expect(savedConfig?.composio).toMatchObject({
+    apiKey: '',
+    apiKeyConfigured: true,
+    apiKeyTail: '1234',
+  });
 });
 
 async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
@@ -209,6 +264,11 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
       },
     });
   });
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
 function connectorCard(page: Page, id: string) {

@@ -17,6 +17,10 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true })).toBe(false);
   });
 
+  it('falls back to srcDoc when inspect mode is active (selection bridge required)', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, inspectMode: true })).toBe(false);
+  });
+
   it('falls back to srcDoc when the user opts in via forceInline', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, forceInline: true })).toBe(false);
   });

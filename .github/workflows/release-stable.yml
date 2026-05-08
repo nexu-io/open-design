@@ -154,7 +154,7 @@ jobs:
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace release-stable \
             --portable \
-            --mac-compression normal \
+            --mac-compression maximum \
             --to all \
             --json \
             $signed_flag
@@ -237,6 +237,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            exit 0
+          }
+          choco install nsis -y --no-progress
+
       - name: Build stable windows artifacts
         shell: pwsh
         run: >-
@@ -254,19 +262,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
           $sourceInstaller = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-stable-win/builder/Open Design-release-stable-win-setup.exe"
-          $sourceBlockmap = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-stable-win/builder/Open Design-release-stable-win-setup.exe.blockmap"
           if (!(Test-Path $sourceInstaller)) {
             throw "expected installer not found at $sourceInstaller"
           }
-          if (!(Test-Path $sourceBlockmap)) {
-            throw "expected blockmap not found at $sourceBlockmap"
-          }
 
           $versionedInstaller = "open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe"
-          $versionedBlockmap = "open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe.blockmap"
           $checksumFile = "$versionedInstaller.sha256"
           Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
-          Copy-Item $sourceBlockmap (Join-Path $releaseDir $versionedBlockmap)
 
           $installerPath = Join-Path $releaseDir $versionedInstaller
           $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -477,7 +479,7 @@ jobs:
             echo "- mac signed/notarized: ${{ inputs.mac_signed }}"
             echo "- windows signed: false"
             echo "- mac assets: open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
-            echo "- win assets: open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe, open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe.blockmap"
+            echo "- win assets: open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe"
             echo "- linux assets: deferred from this stable release"
             echo "- Feeds: latest-mac.yml, latest.yml"
           } >> "$GITHUB_STEP_SUMMARY"

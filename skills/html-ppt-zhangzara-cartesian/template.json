@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-cartesian",
+  "name": "Cartesian",
+  "tagline": "Quiet warm-neutral palette with classical Playfair serifs; tasteful and unhurried.",
+  "mood": [
+    "quiet",
+    "considered",
+    "elegant",
+    "warm-minimal"
+  ],
+  "occasion": [
+    "investment thesis",
+    "white paper",
+    "advisory deliverable",
+    "research report",
+    "book / longform pitch",
+    "gallery / cultural"
+  ],
+  "tone": [
+    "classical",
+    "literary",
+    "restrained",
+    "confident-quiet"
+  ],
+  "formality": "high",
+  "density": "low",
+  "palette": {
+    "bg_primary": "#EDE8E0",
+    "bg_secondary": "#E2DBD1",
+    "text_primary": "#1A1A1A",
+    "text_secondary": "#5A5A5A",
+    "accent": "#8A8178",
+    "line": "#B8B0A4",
+    "description": "warm bone and stone neutrals only; no saturated color; the entire system runs on tonal contrast and typography"
+  },
+  "typography": {
+    "display": "Playfair Display",
+    "body": "Inter",
+    "style": "transitional serif headlines paired with a clean grotesk; reads like a Sunday newspaper essay"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel quiet, considered, and grown-up: investment theses, white papers, advisory work, longform research, gallery / cultural decks. Also a strong choice for editorial features, founder reflections, or any deck where restraint is the message — including across tech and finance.",
+  "avoid_for": "Decks that need visual heat, multiple accents, or a sense of urgency — the warm-neutral palette is intentionally low-energy.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page nav dots and slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/cartesian"
+}

@@ -28,7 +28,7 @@
   <a href="QUICKSTART.ja-JP.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -319,8 +319,6 @@ pnpm install
 pnpm tools-dev run web
 # tools-dev が出力した Web URL を開く
 ```
-
-Windows ランチャー: `tools/launcher/README.md` の手順で `OpenDesign.exe` を自分でビルドするか、GitHub Releases からダウンロードします。その後、リポジトリのルートに置いてダブルクリックすると、必要に応じて `pnpm install` を実行し、`pnpm tools-dev` で Open Design を起動します。
 
 環境要件：Node `~24`、pnpm `10.33.x`。`nvm` / `fnm` はあくまでオプションのヘルパーです。使用する場合は `pnpm install` の前に `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。
 
@@ -714,7 +712,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design コントリビューター" />
 </a>
 
 初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
@@ -731,9 +729,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 

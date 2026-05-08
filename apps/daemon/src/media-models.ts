@@ -25,6 +25,7 @@ export const MEDIA_PROVIDERS = [
   { id: 'udio', label: 'Udio', hint: 'Music generation', integrated: false },
   { id: 'elevenlabs', label: 'ElevenLabs', hint: 'Voice / SFX', integrated: false },
   { id: 'fishaudio', label: 'FishAudio', hint: 'Speech / voice clone', integrated: true, defaultBaseUrl: 'https://api.fish.audio' },
+  { id: 'tavily', label: 'Tavily Search', hint: 'Agent-callable web research', integrated: true, defaultBaseUrl: 'https://api.tavily.com' },
   { id: 'stub', label: 'Stub (placeholder)', hint: 'Deterministic local placeholder bytes', integrated: true },
 ];
 

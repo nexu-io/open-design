@@ -44,6 +44,9 @@ importers:
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0
+      blake3-wasm:
+        specifier: 2.1.5
+        version: 2.1.5
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -56,6 +59,9 @@ importers:
       multer:
         specifier: ^1.4.5-lts.1
         version: 1.4.5-lts.2
+      undici:
+        specifier: ^7.16.0
+        version: 7.25.0
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13
@@ -162,6 +168,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.0)
 
   apps/web:
     dependencies:
@@ -330,6 +339,9 @@ importers:
       '@electron/notarize':
         specifier: 3.1.0
         version: 3.1.0
+      '@electron/rebuild':
+        specifier: 4.0.4
+        version: 4.0.4
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -1839,6 +1851,9 @@ packages:
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
+
+  blake3-wasm@2.1.5:
+    resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
   body-parser@1.20.5:
     resolution: {integrity: sha512-3grm+/2tUOvu2cjJkvsIxrv/wVpfXQW4PsQHYm7yk4vfpu7Ekl6nEsYBoJUL6qDwZUx8wUhQ8tR2qz+ad9c9OA==}
@@ -5918,6 +5933,8 @@ snapshots:
       buffer: 5.7.1
       inherits: 2.0.4
       readable-stream: 3.6.2
+
+  blake3-wasm@2.1.5: {}
 
   body-parser@1.20.5:
     dependencies:

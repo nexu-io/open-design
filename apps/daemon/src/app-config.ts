@@ -48,7 +48,7 @@ const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
 
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['claude', new Set(['CLAUDE_CONFIG_DIR'])],
-  ['codex', new Set(['CODEX_HOME'])],
+  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN'])],
 ]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {
@@ -76,7 +76,7 @@ function validateAgentModels(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
+export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const result: AgentCliEnvPrefs = Object.create(null);

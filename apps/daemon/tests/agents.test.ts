@@ -138,6 +138,64 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', (
   assert.equal(args.includes('plugins'), false);
 });
 
+test('codex model picker includes current OpenAI choices in priority order', async () => {
+  const expectedModels = [
+    'default',
+    'gpt-5.5',
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.3-codex',
+    'gpt-5-codex',
+    'gpt-5',
+    'o3',
+    'o4-mini',
+  ];
+
+  assert.deepEqual(codex.fallbackModels.map((m) => m.id), expectedModels);
+  assert.deepEqual(codex.reasoningOptions.map((o) => o.id), [
+    'default',
+    'none',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+  ]);
+
+  const args = codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-5.5', reasoning: 'xhigh' },
+    { cwd: '/tmp/od-project' },
+  );
+  assert.ok(args.includes('--model'));
+  assert.ok(args.includes('gpt-5.5'));
+  assert.ok(args.includes('model_reasoning_effort="xhigh"'));
+
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
+  try {
+    const codexBin = join(dir, 'codex');
+    writeFileSync(
+      codexBin,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
+    );
+    chmodSync(codexBin, 0o755);
+    process.env.OD_AGENT_HOME = dir;
+    process.env.PATH = dir;
+
+    const agents = await detectAgents();
+    const detected = agents.find((agent) => agent.id === 'codex');
+
+    assert.ok(detected);
+    assert.equal(detected.available, true);
+    assert.equal(detected.version, 'codex 1.0.0');
+    assert.deepEqual(detected.models.map((m) => m.id), expectedModels);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Recent Codex CLI versions reject a bare `-` argv sentinel; passing it
 // alongside the stdin pipe causes `error: unexpected argument '-' found`
 // and exit code 2 before any prompt is read. We deliver the prompt via
@@ -342,26 +400,35 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
   ]);
 });
 
-// Copilot does NOT treat `-` as a stdin sentinel — it reads it as a
-// literal one-character prompt. The prompt must be passed directly as the
-// value of `-p`. Pin the argv shape so the regression can't drift back.
-// Also pin the order — Copilot expects `-p <prompt>` before any other
-// flag, including model / add-dir extensions.
-test('copilot args pass the prompt directly as the -p value (not via stdin sentinel)', () => {
+// Copilot reads the prompt from stdin when `-p` is omitted entirely
+// (upstream copilot-cli issue #1046, confirmed working as
+// `echo "..." | copilot --model <id>`). The earlier `-p -` attempt
+// was a dead end because Copilot takes `-` as a literal one-character
+// prompt; omitting `-p` is a separate code path that does delegate to
+// stdin under a non-TTY pipe. Pin `promptViaStdin: true` and the
+// stdin-only argv shape so a future refactor can't silently bring
+// `-p <prompt>` back and reintroduce the Windows ENAMETOOLONG
+// regression (issue #705).
+test('copilot delivers the prompt via stdin (no -p, no prompt body in argv)', () => {
   const prompt = 'design a landing page';
   const baseArgs = copilot.buildArgs(prompt, [], [], {});
-  assert.equal(baseArgs[0], '-p');
-  assert.equal(baseArgs[1], prompt);
+  assert.equal(copilot.promptViaStdin, true);
+  assert.ok(
+    !baseArgs.includes('-p'),
+    'copilot argv must not include -p; the prompt rides stdin',
+  );
+  assert.ok(
+    !baseArgs.includes(prompt),
+    'copilot argv must not include the prompt body; it rides stdin',
+  );
   assert.deepEqual(baseArgs, [
-    '-p',
-    prompt,
     '--allow-all-tools',
     '--output-format',
     'json',
   ]);
 });
 
-test('copilot args keep `-p <prompt>` at the front when model and extra dirs are added', () => {
+test('copilot args append model and extra dirs after the base flags without reintroducing -p', () => {
   const prompt = 'design a landing page';
   const args = copilot.buildArgs(
     prompt,
@@ -369,11 +436,9 @@ test('copilot args keep `-p <prompt>` at the front when model and extra dirs are
     ['/tmp/od-skills', '/tmp/od-design-systems'],
     { model: 'claude-sonnet-4.6' },
   );
-  assert.equal(args[0], '-p');
-  assert.equal(args[1], prompt);
+  assert.ok(!args.includes('-p'));
+  assert.ok(!args.includes(prompt));
   assert.deepEqual(args, [
-    '-p',
-    prompt,
     '--allow-all-tools',
     '--output-format',
     'json',
@@ -386,7 +451,7 @@ test('copilot args keep `-p <prompt>` at the front when model and extra dirs are
   ]);
 });
 
-test('copilot drops empty / non-string entries from extraAllowedDirs without breaking the `-p <prompt>` lead', () => {
+test('copilot drops empty / non-string entries from extraAllowedDirs without reintroducing -p', () => {
   const prompt = 'design a landing page';
   const args = copilot.buildArgs(
     prompt,
@@ -394,12 +459,36 @@ test('copilot drops empty / non-string entries from extraAllowedDirs without bre
     ['', null, '/tmp/od-skills', undefined],
     {},
   );
-  assert.equal(args[0], '-p');
-  assert.equal(args[1], prompt);
+  assert.ok(!args.includes('-p'));
   // Only the one valid path survives.
   const addDirIndex = args.indexOf('--add-dir');
   assert.equal(args[addDirIndex + 1], '/tmp/od-skills');
   assert.equal(args.filter((a) => a === '--add-dir').length, 1);
+});
+
+// Mirror of the Claude Code 200_000-char synthetic-prompt guard: even
+// when the composed prompt is large enough to blow the Windows
+// CreateProcess command-line cap (~32 KB direct, ~8 KB through a `.cmd`
+// shim), no argv entry must ever carry the prompt body. This is the
+// structural assertion that the issue #705 fix can't quietly regress.
+test('copilot flags promptViaStdin and never embeds the prompt in argv', () => {
+  assert.equal(copilot.promptViaStdin, true);
+
+  const longPrompt = 'x'.repeat(200_000);
+  const args = copilot.buildArgs(longPrompt, [], [], {});
+
+  assert.ok(Array.isArray(args), 'copilot.buildArgs must return argv');
+  assert.equal(
+    args.includes(longPrompt),
+    false,
+    'prompt must not appear in argv',
+  );
+  for (const arg of args) {
+    assert.ok(
+      typeof arg === 'string' && arg.length < 1000,
+      `no argv entry should carry the prompt body (saw length ${arg.length})`,
+    );
+  }
 });
 
 test('kiro args use acp subcommand for json-rpc streaming', () => {
@@ -429,6 +518,7 @@ test('pi args use rpc mode without --no-session and append model/thinking option
   assert.ok(!baseArgs.includes('--no-session'), 'pi must not pass --no-session');
   assert.equal(pi.promptViaStdin, true);
   assert.equal(pi.streamFormat, 'pi-rpc');
+  assert.equal(pi.supportsImagePaths, true);
 
   const withModel = pi.buildArgs('', [], [], { model: 'anthropic/claude-sonnet-4-5' }, {});
   assert.deepEqual(withModel, [
@@ -444,6 +534,66 @@ test('pi args use rpc mode without --no-session and append model/thinking option
     'rpc',
     '--thinking',
     'high',
+  ]);
+});
+
+test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
+  const args = pi.buildArgs(
+    '',
+    [],
+    ['/tmp/skills', '/tmp/design-systems'],
+    {},
+    {},
+  );
+
+  assert.deepEqual(args, [
+    '--mode',
+    'rpc',
+    '--append-system-prompt',
+    '/tmp/skills',
+    '--append-system-prompt',
+    '/tmp/design-systems',
+  ]);
+});
+
+test('pi args filter relative paths from extraAllowedDirs', () => {
+  const args = pi.buildArgs(
+    '',
+    [],
+    ['/tmp/skills', 'relative/path', '/tmp/design-systems'],
+    {},
+    {},
+  );
+
+  // Relative paths should be filtered out.
+  assert.deepEqual(args, [
+    '--mode',
+    'rpc',
+    '--append-system-prompt',
+    '/tmp/skills',
+    '--append-system-prompt',
+    '/tmp/design-systems',
+  ]);
+});
+
+test('pi args combine model, thinking, and extraAllowedDirs', () => {
+  const args = pi.buildArgs(
+    '',
+    [],
+    ['/tmp/skills'],
+    { model: 'openai/gpt-5', reasoning: 'medium' },
+    {},
+  );
+
+  assert.deepEqual(args, [
+    '--mode',
+    'rpc',
+    '--model',
+    'openai/gpt-5',
+    '--thinking',
+    'medium',
+    '--append-system-prompt',
+    '/tmp/skills',
   ]);
 });
 
@@ -1503,22 +1653,75 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   const base = { PATH: '/usr/bin' };
   const env = spawnEnvForAgent('codex', base, {
     CODEX_HOME: '/Users/test/.codex-alt',
+    CODEX_BIN: '/Users/test/bin/codex',
   });
 
   assert.equal(env.CODEX_HOME, '/Users/test/.codex-alt');
+  assert.equal(env.CODEX_BIN, '/Users/test/bin/codex');
   assert.equal(env.PATH, '/usr/bin');
   assert.equal('CODEX_HOME' in base, false);
+  assert.equal('CODEX_BIN' in base, false);
+});
+
+test('resolveAgentExecutable prefers a configured CODEX_BIN override over PATH resolution', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-'));
+  try {
+    const configured = join(dir, 'codex-custom');
+    writeFileSync(configured, '#!/bin/sh\nexit 0\n');
+    chmodSync(configured, 0o755);
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolved = resolveAgentExecutable(
+      { id: 'codex', bin: 'codex' },
+      { CODEX_BIN: configured },
+    );
+
+    assert.equal(resolved, configured);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable ignores relative CODEX_BIN overrides', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-rel-'));
+  const oldCwd = process.cwd();
+  try {
+    const configured = 'codex-custom';
+    writeFileSync(join(dir, configured), '#!/bin/sh\nexit 0\n');
+    chmodSync(join(dir, configured), 0o755);
+    process.chdir(dir);
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolved = resolveAgentExecutable(
+      { id: 'codex', bin: 'codex' },
+      { CODEX_BIN: configured },
+    );
+
+    assert.equal(resolved, null);
+  } finally {
+    process.chdir(oldCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('detectAgents applies configured env while probing the CLI', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agent-env-'));
   try {
-    const bin = join(dir, 'claude');
-    writeFileSync(
-      bin,
-      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "$CLAUDE_CONFIG_DIR"; exit 0; fi\nif [ "$1" = "-p" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n',
-    );
-    chmodSync(bin, 0o755);
+    const bin = join(dir, process.platform === 'win32' ? 'claude.cmd' : 'claude');
+    if (process.platform === 'win32') {
+      writeFileSync(
+        bin,
+        '@echo off\r\nif "%~1"=="--version" (\r\n  echo %CLAUDE_CONFIG_DIR%\r\n  exit /b 0\r\n)\r\nif "%~1"=="-p" (\r\n  echo --add-dir --include-partial-messages\r\n  exit /b 0\r\n)\r\nexit /b 0\r\n',
+      );
+    } else {
+      writeFileSync(
+        bin,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "$CLAUDE_CONFIG_DIR"; exit 0; fi\nif [ "$1" = "-p" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n',
+      );
+      chmodSync(bin, 0o755);
+    }
     process.env.PATH = dir;
     process.env.OD_AGENT_HOME = dir;
 

@@ -30,7 +30,8 @@ Run media generation through the dispatcher:
   [--length <seconds>] \\
   [--duration <seconds>] \\
   [--audio-kind music|speech|sfx] \\
-  [--voice <provider-voice-id>]
+  [--voice <provider-voice-id>] \\
+  [--language <lang>]
 \`\`\`
 
 Always quote the prompt value. Never splice unquoted user text into the

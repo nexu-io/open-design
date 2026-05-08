@@ -27,7 +27,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <b>Русский</b> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <b>Русский</b> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -319,8 +319,6 @@ pnpm install
 pnpm tools-dev run web
 # откройте web URL, который напечатает tools-dev
 ```
-
-Лаунчер Windows: соберите `OpenDesign.exe` самостоятельно по инструкции в `tools/launcher/README.md` или скачайте его из GitHub Releases. Затем поместите файл в корень репозитория и дважды щёлкните его, чтобы при необходимости выполнить `pnpm install` и запустить Open Design через `pnpm tools-dev`.
 
 Требования к окружению: Node `~24` и pnpm `10.33.x`. `nvm`/`fnm` — только вспомогательные инструменты; если вы ими пользуетесь, выполните `nvm install 24 && nvm use 24` или `fnm install 24 && fnm use 24` перед `pnpm install`.
 
@@ -720,7 +718,7 @@ Issues, PR, новые skills и новые design systems приветству�
 Спасибо всем, кто помогает двигать Open Design вперёд — кодом, документацией, обратной связью, новыми skills, новыми design systems или просто точным issue. Вклад любого реального масштаба здесь важен, а стена ниже — самый простой способ сказать это вслух.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Contributors Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Contributors Open Design" />
 </a>
 
 Если вы только что отправили свой первый PR — добро пожаловать. Метка [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) — хорошая точка входа.
@@ -737,9 +735,9 @@ SVG выше ежедневно пересобирается workflow [`.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="История звёзд Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="История звёзд Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 

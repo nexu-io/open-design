@@ -9,6 +9,12 @@ triggers:
   - "captions"
   - "tts video"
   - "kinetic typography"
+  - "html in canvas"
+  - "drawElementImage"
+  - "html shader"
+  - "vfx-iphone-device"
+  - "vfx-liquid-glass"
+  - "vfx-portal"
 od:
   mode: video
   surface: video
@@ -489,5 +495,6 @@ Skip on small edits (fixing a color, adjusting one duration). Run on new composi
 - **[references/transitions.md](references/transitions.md)** — Scene transitions: crossfades, wipes, reveals, shader transitions. Energy/mood selection, CSS vs WebGL guidance. **Always read for multi-scene compositions** — scenes without transitions feel like jump cuts.
   - [transitions/catalog.md](references/transitions/catalog.md) — Hard rules, scene template, and routing to per-type implementation code.
   - Shader transitions are in `@hyperframes/shader-transitions` (`packages/shader-transitions/`) — read package source, not skill files.
+- **[references/html-in-canvas.md](references/html-in-canvas.md)** — HTML-in-Canvas (`drawElementImage`) for rendering live DOM as WebGL textures: 3D device mockups, shader-warped UIs, liquid glass, portals. Read when the user asks for `vfx-iphone-device`, `vfx-liquid-glass`, `vfx-portal`, or any "HTML mapped onto 3D / shader" effect. The render path auto-enables the Chrome flag, but the texture must be re-captured every frame for animated content — that's the most common cause of "the screen renders dead" output.
 
 GSAP patterns and effects are in the `/gsap` skill.

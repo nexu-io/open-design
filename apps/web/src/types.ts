@@ -2,12 +2,17 @@ import type {
   AgentInfo,
   AgentCliEnvPrefs,
   AgentModelPrefs,
+  AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
   AudioKind,
   ChatAttachment,
   ChatCommentAttachment,
   ChatMessage,
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestRequest,
+  ConnectionTestResponse,
   Conversation,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -23,6 +28,7 @@ import type {
   LiveArtifactSummary,
   MediaAspect,
   ProjectDeploymentsResponse,
+  ProviderTestRequest,
   PersistedAgentEvent,
   Project,
   PreviewCommentMember,
@@ -46,7 +52,13 @@ import type {
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
 
-export type { PreviewCommentMember, PreviewCommentSelectionKind } from '@open-design/contracts';
+export type {
+  CloudflarePagesDeploySelection,
+  CloudflarePagesDeploymentInfo,
+  CloudflarePagesZonesResponse,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
+} from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
 export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
@@ -344,9 +356,14 @@ export interface PromptTemplateDetail extends PromptTemplateSummary {
 
 export type {
   AgentInfo,
+  AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
   AudioKind,
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestRequest,
+  ConnectionTestResponse,
   Conversation,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -372,6 +389,7 @@ export type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  ProviderTestRequest,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,

@@ -1,0 +1,50 @@
+{
+  "slug": "zhangzara-scatterbrain",
+  "name": "Scatterbrain",
+  "tagline": "Post-it inspired: pastel sticky notes, Caveat handwriting, Shrikhand and Zilla Slab type stack.",
+  "mood": [
+    "playful",
+    "creative",
+    "warm",
+    "messy-on-purpose",
+    "workshop"
+  ],
+  "occasion": [
+    "brainstorm / workshop",
+    "creative agency credentials",
+    "design-thinking session",
+    "ideation pitch",
+    "art-direction review"
+  ],
+  "tone": [
+    "informal",
+    "warm",
+    "expressive",
+    "human"
+  ],
+  "formality": "low",
+  "density": "high",
+  "palette": {
+    "yellow": "#FFE066",
+    "blue": "#A5D8FF",
+    "pink": "#FFC9C9",
+    "green": "#B2F2BB",
+    "orange": "#FFCC80",
+    "purple": "#D0BFFF",
+    "paper": "#F7F5F0",
+    "ink": "#2D2A26",
+    "description": "off-white paper with a full pastel sticky-note palette (yellow, blue, pink, green, orange, purple) and ink-brown text; soft drop shadows everywhere"
+  },
+  "typography": {
+    "display": "Shrikhand",
+    "script": "Caveat",
+    "body": "Zilla Slab",
+    "style": "groovy display + handwritten script + warm slab body; reads like a designer's whiteboard"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel like a designer's whiteboard: brainstorms, workshops, creative-agency credentials, design-thinking sessions, ideation pitches, art-direction reviews. Equally fun for any deck — including tech, research, or business — that wants to read as in-progress thinking rather than polished conclusions.",
+  "avoid_for": "Contexts that demand precision and institutional weight — the post-it sticky-note aesthetic intentionally reads as warm and unfinished.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler (arrows, space, PgUp/PgDn, Home/End) plus touch swipe and mouse-wheel",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/scatterbrain"
+}

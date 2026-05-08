@@ -236,14 +236,31 @@ export function exportAsPdf(
   }
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank', sandboxedPreview ? 'noopener,noreferrer' : undefined);
+
+  // Open an empty tab synchronously (without noopener) to reliably detect popup blocking.
+  // Since window.open with 'noopener' returns null on success by specification,
+  // this approach allows us to distinguish between a successful export and a blocked popup.
+  const win = window.open('', '_blank');
+
   if (!win) {
-    // Popup blocked — at least the tab navigation may have happened above.
-    // Nothing else we can do without a fresh user gesture.
+    if (typeof alert !== 'undefined') {
+      alert('Popup blocked! Please allow popups for this site to export as PDF.');
+    }
+    URL.revokeObjectURL(url); // Prevent memory leaks on early exit
+    return;
   }
-  // Revoke later — the loaded document keeps a reference until the tab
-  // closes; revoking the URL string only removes the lookup name.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  if (sandboxedPreview) {
+    try {
+      // Disassociate the opener reference to preserve sandboxing/noopener behavior
+      win.opener = null;
+    } catch (e) {
+      // Guard against potential context environment restrictions
+    }
+  }
+
+  // Navigate the verified window to the generated Blob URL
+  win.location.href = url;
 }
 
 function injectPrintScript(doc: string, title: string): string {

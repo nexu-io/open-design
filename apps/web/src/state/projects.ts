@@ -5,6 +5,7 @@
 // These helpers fail soft (returning null / [] on transport errors) so
 // the UI can stay rendered when the daemon is briefly unreachable.
 
+import type { ImportFolderRequest, ImportFolderResponse } from '@open-design/contracts';
 import type {
   ChatMessage,
   Conversation,
@@ -52,6 +53,22 @@ export async function createProject(input: {
     });
     if (!resp.ok) return null;
     return (await resp.json()) as { project: Project; conversationId: string };
+  } catch {
+    return null;
+  }
+}
+
+export async function importFolderProject(
+  input: ImportFolderRequest,
+): Promise<ImportFolderResponse | null> {
+  try {
+    const resp = await fetch('/api/import/folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ImportFolderResponse;
   } catch {
     return null;
   }

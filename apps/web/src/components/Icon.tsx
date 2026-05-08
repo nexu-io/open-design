@@ -17,6 +17,7 @@ type IconName =
   | 'edit'
   | 'external-link'
   | 'eye'
+  | 'eye-off'
   | 'file'
   | 'file-code'
   | 'folder'
@@ -173,6 +174,15 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
           <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    case 'eye-off':
+      return (
+        <svg {...common}>
+          <path d="m3 3 18 18" />
+          <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+          <path d="M9.9 4.2A9.9 9.9 0 0 1 12 4c6.5 0 10 8 10 8a17.8 17.8 0 0 1-2.1 3.1" />
+          <path d="M6.1 6.1C3.5 7.9 2 12 2 12s3.5 8 10 8a9.9 9.9 0 0 0 4.2-.9" />
         </svg>
       );
     case 'external-link':

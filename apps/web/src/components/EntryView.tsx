@@ -52,6 +52,7 @@ interface Props {
   loading?: boolean;
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -229,6 +230,7 @@ export function EntryView({
   loading = false,
   onCreateProject,
   onImportClaudeDesign,
+  onImportFolder,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
@@ -510,6 +512,7 @@ export function EntryView({
           promptTemplates={promptTemplates}
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
+          onImportFolder={onImportFolder}
           mediaProviders={config.mediaProviders}
           connectors={connectors}
           connectorsLoading={connectorsLoading}
@@ -558,6 +561,17 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
+          <a
+            className="foot-pill"
+            href="https://x.com/nexudotio"
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Follow @nexudotio on X for releases and milestones"
+            aria-label="Follow @nexudotio on X"
+          >
+            <Icon name="external-link" size={12} />
+            <span>Follow @nexudotio</span>
+          </a>
           <LanguageMenu />
         </div>
         <button
@@ -632,7 +646,11 @@ export function EntryView({
                   toolsLoaded={connectorDiscoveryLoaded}
                   composioConfigured={Boolean(config.composio?.apiKeyConfigured)}
                   onOpenSettings={onOpenSettings}
-                  onConnect={async (connectorId) => updateConnector(await connectConnector(connectorId))}
+                  onConnect={async (connectorId) => {
+                    const result = await connectConnector(connectorId);
+                    updateConnector(result.connector);
+                    return result;
+                  }}
                   onDisconnect={async (connectorId) => updateConnector(await disconnectConnector(connectorId))}
                 />
               ) : null}
@@ -696,7 +714,7 @@ function ConnectorsTab({
   toolsLoaded: boolean;
   composioConfigured: boolean;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'language' | 'about') => void;
-  onConnect: (connectorId: string) => Promise<void> | void;
+  onConnect: (connectorId: string) => Promise<{ error?: string } | void> | { error?: string } | void;
   onDisconnect: (connectorId: string) => Promise<void> | void;
 }) {
   const t = useT();
@@ -706,6 +724,7 @@ function ConnectorsTab({
   } | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Mask the grid whenever no Composio-backed connector has its auth
@@ -732,10 +751,14 @@ function ConnectorsTab({
 
   async function runConnectorAction(connectorId: string, action: 'connect' | 'disconnect') {
     if (pendingConnectorAction) return;
+    setActionError(null);
     setPendingConnectorAction({ connectorId, action });
     try {
       if (action === 'connect') {
-        await onConnect(connectorId);
+        const result = await onConnect(connectorId);
+        if (result && typeof result === 'object' && 'error' in result && result.error) {
+          setActionError(result.error);
+        }
       } else {
         await onDisconnect(connectorId);
       }
@@ -797,6 +820,11 @@ function ConnectorsTab({
           </div>
         </div>
       </div>
+      {actionError ? (
+        <p className="connector-inline-error" role="alert" data-testid="connectors-action-error">
+          {actionError}
+        </p>
+      ) : null}
       {loading ? (
         <CenteredLoader label={t('common.loading')} />
       ) : (

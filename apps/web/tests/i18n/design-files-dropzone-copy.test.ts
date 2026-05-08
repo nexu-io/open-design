@@ -5,6 +5,7 @@ import { en } from '../../src/i18n/locales/en';
 import { esES } from '../../src/i18n/locales/es-ES';
 import { fa } from '../../src/i18n/locales/fa';
 import { fr } from '../../src/i18n/locales/fr';
+import { id } from '../../src/i18n/locales/id';
 import { ja } from '../../src/i18n/locales/ja';
 import { ptBR } from '../../src/i18n/locales/pt-BR';
 import { ru } from '../../src/i18n/locales/ru';
@@ -17,6 +18,7 @@ const LOCALE_DICTS = {
   esES,
   fa,
   fr,
+  id,
   ja,
   ptBR,
   ru,

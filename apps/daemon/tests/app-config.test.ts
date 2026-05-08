@@ -14,7 +14,7 @@ import {
 } from 'vitest';
 
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
-import { isLocalSameOrigin } from '../src/server.js';
+import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 describe('app-config', () => {
   let dataDir: string;
@@ -186,6 +186,7 @@ describe('app-config', () => {
           },
           codex: {
             CODEX_HOME: '~/.codex-alt',
+            CODEX_BIN: '~/bin/codex-next',
             OPENAI_API_KEY: 'sk-should-not-persist',
           },
           gemini: {
@@ -201,7 +202,7 @@ describe('app-config', () => {
 
       expect(cfg.agentCliEnv).toEqual({
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-        codex: { CODEX_HOME: '~/.codex-alt' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       });
     });
 
@@ -417,6 +418,18 @@ describe('app-config origin guard', () => {
       headers: { Host: 'evil.com:9999' },
     });
     expect(res.status).toBe(403);
+  });
+
+  it('rejects no-Origin requests that only match configured deployment hosts', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await httpRequest(`${baseUrl}/api/app-config`, {
+        headers: { Host: 'od.example.com' },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
   });
 
   it('still rejects non-loopback Origin', async () => {

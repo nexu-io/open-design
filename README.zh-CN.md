@@ -27,7 +27,7 @@
   <a href="QUICKSTART.zh-CN.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -318,8 +318,6 @@ pnpm install
 pnpm tools-dev run web
 # 打开 tools-dev 输出的 web URL
 ```
-
-Windows 启动器：请按照 `tools/launcher/README.md` 中的说明自行构建 `OpenDesign.exe`，或从 GitHub Releases 下载。然后将它放到仓库根目录并双击；它会在需要时运行 `pnpm install`，再用 `pnpm tools-dev` 启动 Open Design。
 
 环境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可选辅助工具，不是项目必需步骤；如果使用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再运行 `pnpm install`。
 
@@ -713,7 +711,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 感谢每一位让 Open Design 变得更好的朋友 —— 无论是写代码、修文档、提 issue、加 skill 还是加 design system，每一次真实贡献都会被记住。下面这面墙是最直观的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design 贡献者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design 贡献者" />
 </a>
 
 第一次提 PR？欢迎从 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 标签起步。
@@ -730,9 +728,9 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 
