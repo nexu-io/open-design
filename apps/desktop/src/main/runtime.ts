@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
@@ -271,9 +271,6 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   });
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const preloadPath = dirname(__filename) + '/preload.js';
-
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
@@ -309,7 +306,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       nodeIntegration: false,
       preload: preloadPath,
       sandbox: true,
-      preload: preloadPath,
     },
     width: 1280,
   });
@@ -317,12 +313,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
 
+  ipcMain.removeHandler('od:print-pdf');
   ipcMain.handle('od:print-pdf', async (_event, html: unknown): Promise<void> => {
     if (typeof html !== 'string') {
       throw new Error('Invalid print payload: expected HTML string');
-    }
-    if (_event.sender !== window.webContents) {
-      throw new Error('Print request from unexpected frame');
     }
 
     const printWindow = new BrowserWindow({
