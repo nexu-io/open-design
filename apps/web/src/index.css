@@ -8281,6 +8281,12 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   align-items: center;
   justify-content: center;
   gap: 5px;
+  pointer-events: none;
+}
+
+.inspect-empty-hint-container button,
+.inspect-empty-hint-container .close-button {
+  pointer-events: auto;
 }
 
 .inspect-empty-hint code {
