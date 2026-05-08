@@ -525,7 +525,7 @@ export function DesignFilesPanel({
                               >
                                 <span className="df-row-name-wrap">
                                   <span className="df-row-name">{f.name}</span>
-                                  <span className="df-row-sub">{formatSize(f.size)}</span>
+                                  <span className="df-row-sub">{humanBytes(f.size)}</span>
                                 </span>
                               </button>
                             </td>
@@ -808,12 +808,6 @@ function kindLabel(kind: ProjectFileKind, t: TranslateFn): string {
   if (kind === 'presentation') return t('designFiles.kindPresentation');
   if (kind === 'spreadsheet') return t('designFiles.kindSpreadsheet');
   return t('designFiles.kindBinary');
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function relativeTime(ts: number, t: TranslateFn): string {
