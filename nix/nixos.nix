@@ -111,19 +111,21 @@
       OD_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
-    // lib.optionalAttrs cfg.webFrontend.enable (
-      {
-        # See nix/home-manager.nix — the daemon's /api origin allowlist
-        # needs to know about the caddy port or it will 403 SPA writes.
-        OD_WEB_PORT = toString cfg.webFrontend.port;
-      }
-      // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
-        # Operator-declared external origins for the LAN-exposure
-        # escape hatch. Comma-joined; parsed by parseAllowedWebOrigins()
-        # in apps/daemon/src/server.ts.
-        OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
-      }
-    )
+    // lib.optionalAttrs cfg.webFrontend.enable {
+      # See nix/home-manager.nix — the daemon's /api origin allowlist
+      # needs to know about the caddy port or it will 403 SPA writes.
+      OD_WEB_PORT = toString cfg.webFrontend.port;
+    }
+    // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
+      # Operator-declared external origins for the LAN-exposure escape
+      # hatch. Honored regardless of `webFrontend.enable` so operators
+      # exposing the daemon's `/api` directly (no bundled caddy in
+      # front) — the path documented under `openFirewall` — can still
+      # widen the daemon's same-origin allowlist via this option.
+      # Comma-joined; parsed by parseAllowedWebOrigins() in
+      # apps/daemon/src/server.ts.
+      OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+    }
     // cfg.extraEnv;
 
   webEnvironment = {

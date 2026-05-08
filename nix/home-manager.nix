@@ -133,21 +133,23 @@
       OD_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
-    // lib.optionalAttrs cfg.webFrontend.enable (
-      {
-        # Tell the daemon's same-origin allowlist about the caddy port,
-        # otherwise PUT/POST requests from the SPA served on
-        # `webFrontend.port` get 403'd by the /api middleware
-        # (apps/daemon/src/server.ts buildAllowedOrigins).
-        OD_WEB_PORT = toString cfg.webFrontend.port;
-      }
-      // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
-        # Operator-declared external origins for the LAN-exposure
-        # escape hatch (webFrontend.host non-loopback). Comma-joined;
-        # parsed by parseAllowedWebOrigins() in apps/daemon/src/server.ts.
-        OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
-      }
-    )
+    // lib.optionalAttrs cfg.webFrontend.enable {
+      # Tell the daemon's same-origin allowlist about the caddy port,
+      # otherwise PUT/POST requests from the SPA served on
+      # `webFrontend.port` get 403'd by the /api middleware
+      # (apps/daemon/src/server.ts buildAllowedOrigins).
+      OD_WEB_PORT = toString cfg.webFrontend.port;
+    }
+    // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
+      # Operator-declared external origins for the LAN-exposure escape
+      # hatch (webFrontend.host non-loopback). Honored regardless of
+      # `webFrontend.enable` so users who serve the SPA through their
+      # own reverse proxy (or expose the daemon's `/api` directly) can
+      # still widen the daemon's same-origin allowlist via this
+      # option. Comma-joined; parsed by parseAllowedWebOrigins() in
+      # apps/daemon/src/server.ts.
+      OD_WEB_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+    }
     // cfg.extraEnv;
 
   webEnv = {
