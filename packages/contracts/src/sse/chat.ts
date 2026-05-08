@@ -1,5 +1,5 @@
-import type { SseErrorPayload } from '../errors';
-import type { SseTransportEvent } from './common';
+import type { SseErrorPayload } from '../errors.js';
+import type { SseTransportEvent } from './common.js';
 
 export type LiveArtifactSseAction = 'created' | 'updated' | 'deleted';
 export type LiveArtifactRefreshSsePhase = 'started' | 'succeeded' | 'failed';

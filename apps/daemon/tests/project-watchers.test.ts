@@ -22,6 +22,8 @@ function fakeFactory() {
 
 let factoryCloses = 0;
 
+const FAST_WATCH_OPTIONS = { awaitWriteFinish: false };
+
 afterEach(async () => {
   await _resetForTests();
   factoryCloses = 0;
@@ -108,7 +110,7 @@ describe('project-watchers (real chokidar)', () => {
   it('emits file-changed events on add / change / unlink', async () => {
     const { root, projectId } = await makeProjectsRoot();
     const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -140,7 +142,7 @@ describe('project-watchers (real chokidar)', () => {
     await mkdir(path.join(projectsRoot, projectId, 'prototype'), { recursive: true });
 
     const events = [];
-    const sub = subscribe(projectsRoot, projectId, (e) => events.push(e));
+    const sub = subscribe(projectsRoot, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -159,7 +161,7 @@ describe('project-watchers (real chokidar)', () => {
   it('ignores files inside .od/ and node_modules/', async () => {
     const { root, projectId } = await makeProjectsRoot();
     const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -184,7 +186,7 @@ describe('project-watchers (real chokidar)', () => {
   it('ignores files inside Python venv and cache dirs', async () => {
     const { root, projectId } = await makeProjectsRoot();
     const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     const ignoredDirs = ['.venv', 'venv', '__pycache__', '.mypy_cache', '.pytest_cache', '.tox', '.ruff_cache'];
@@ -215,7 +217,7 @@ describe('project-watchers (real chokidar)', () => {
     const { _internalWatcherForTests } = await import('../src/project-watchers.js');
     const { root, projectId } = await makeProjectsRoot();
     const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -267,7 +269,7 @@ describe('project-watchers (chokidar options)', () => {
     }
 
     const events = [];
-    const sub = subscribe(dataRoot, projectId, (e) => events.push(e));
+    const sub = subscribe(dataRoot, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {

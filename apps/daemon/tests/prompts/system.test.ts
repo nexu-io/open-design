@@ -16,9 +16,8 @@ const liveArtifactSkillBody = [
   `> **Skill root (absolute):** \`${liveArtifactRoot}\``,
   '>',
   '> This skill ships side files alongside `SKILL.md`. When the workflow',
-  '> below references relative paths such as `assets/template.html` or',
-  '> `references/layouts.md`, resolve them against the skill root above and',
-  '> open them via their full absolute path.',
+  '> below references side files such as `references/artifact-schema.md`, resolve',
+  '> them against the skill root above and open them via their full absolute path.',
   '>',
   '> Known side files in this skill: `references/artifact-schema.md`, `references/connector-policy.md`, `references/refresh-contract.md`.',
   '',
@@ -40,7 +39,9 @@ describe('composeSystemPrompt', () => {
 
     expect(prompt).toContain('## Active skill — live-artifact');
     expect(prompt).toContain(`> **Skill root (absolute):** \`${liveArtifactRoot}\``);
-    expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
+    expect(prompt).not.toContain('**Pre-flight (do this before any other tool):** Read `assets/template.html`');
+    expect(prompt).not.toContain('live-artifact/references/layouts.md');
+    expect(prompt).not.toContain('live-artifact/assets/template.html');
     expect(prompt).toContain('`references/artifact-schema.md`');
     expect(prompt).toContain('`references/connector-policy.md`');
     expect(prompt).toContain('`references/refresh-contract.md`');

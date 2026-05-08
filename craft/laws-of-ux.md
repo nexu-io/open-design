@@ -294,4 +294,3 @@ them. The remainder are folklore not addressed in the body.
   24 × 24 CSS px (`accessibility-baseline.md`); iOS HIG suggests
   44 × 44 pt; Material 3 suggests 48 × 48 dp. Fitts plus the
   platform floor — never just Fitts.
-

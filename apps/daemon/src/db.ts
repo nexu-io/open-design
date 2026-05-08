@@ -250,6 +250,19 @@ export function upsertDeployment(db, deployment) {
     deployment.providerId,
   );
   const now = Date.now();
+  const inputProviderMetadata =
+    deployment.providerMetadata === undefined
+      ? existing?.providerMetadata
+      : deployment.providerMetadata;
+  const providerMetadata =
+    deployment.cloudflarePages && typeof deployment.cloudflarePages === 'object'
+      ? {
+          ...(inputProviderMetadata && typeof inputProviderMetadata === 'object' && !Array.isArray(inputProviderMetadata)
+            ? inputProviderMetadata
+            : {}),
+          cloudflarePages: deployment.cloudflarePages,
+        }
+      : inputProviderMetadata;
   const next = {
     id: existing?.id ?? deployment.id,
     projectId: deployment.projectId,
@@ -265,10 +278,7 @@ export function upsertDeployment(db, deployment) {
     status: deployment.status ?? existing?.status ?? 'ready',
     statusMessage: deployment.statusMessage ?? null,
     reachableAt: deployment.reachableAt ?? null,
-    providerMetadata:
-      deployment.providerMetadata === undefined
-        ? existing?.providerMetadata
-        : deployment.providerMetadata,
+    providerMetadata,
     createdAt: existing?.createdAt ?? deployment.createdAt ?? now,
     updatedAt: deployment.updatedAt ?? now,
   };
@@ -310,6 +320,10 @@ export function upsertDeployment(db, deployment) {
 
 function normalizeDeployment(row) {
   const providerMetadata = parseJsonOrUndef(row.providerMetadataJson);
+  const normalizedProviderMetadata =
+    providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
+      ? providerMetadata
+      : undefined;
   return {
     id: row.id,
     projectId: row.projectId,
@@ -322,10 +336,13 @@ function normalizeDeployment(row) {
     status: row.status || 'ready',
     statusMessage: row.statusMessage ?? undefined,
     reachableAt: row.reachableAt == null ? undefined : Number(row.reachableAt),
-    providerMetadata:
-      providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
-        ? providerMetadata
+    cloudflarePages:
+      normalizedProviderMetadata?.cloudflarePages &&
+      typeof normalizedProviderMetadata.cloudflarePages === 'object' &&
+      !Array.isArray(normalizedProviderMetadata.cloudflarePages)
+        ? normalizedProviderMetadata.cloudflarePages
         : undefined,
+    providerMetadata: normalizedProviderMetadata,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };

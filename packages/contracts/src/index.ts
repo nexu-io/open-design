@@ -13,6 +13,7 @@ export * from './api/mcp';
 export * from './api/projects';
 export * from './api/proxy';
 export * from './api/registry';
+export * from './api/research';
 export * from './api/version';
 export * from './examples';
 export * from './sse/common';

@@ -107,6 +107,12 @@ export async function runDesktopMain(
 
   attachParentMonitor(shutdown);
 
+  app.on("before-quit", (event) => {
+    if (shuttingDown) return;
+    event.preventDefault();
+    void shutdown().finally(() => process.exit(0));
+  });
+
   ipcServer = await createJsonIpcServer({
     socketPath: runtime.ipc,
     handler: async (message: unknown) => {

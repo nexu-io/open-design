@@ -1,0 +1,49 @@
+{
+  "slug": "zhangzara-studio",
+  "name": "Studio",
+  "tagline": "Black canvas with electric-yellow type; high-voltage design studio aesthetic.",
+  "mood": [
+    "electric",
+    "bold",
+    "graphic",
+    "design-led",
+    "high-contrast"
+  ],
+  "occasion": [
+    "design studio credentials",
+    "creative agency pitch",
+    "brand showcase",
+    "art-direction review",
+    "fashion / sneaker brand",
+    "bilingual EN/CN deck"
+  ],
+  "tone": [
+    "graphic",
+    "loud",
+    "modern",
+    "intentional"
+  ],
+  "formality": "medium",
+  "density": "medium",
+  "palette": {
+    "bg": "#1c1c1c",
+    "bg_alt": "#242422",
+    "fg": "#f5d200",
+    "accent": "#f5d200",
+    "bg_light": "#f5d200",
+    "description": "near-black canvas with one signature electric-yellow that doubles as foreground type AND accent; reverses to yellow-paper mode for breathing room"
+  },
+  "typography": {
+    "display": "Barlow",
+    "body": "Barlow",
+    "mono": "IBM Plex Mono",
+    "cn": "Noto Sans SC",
+    "style": "broadcast-grotesk display + technical mono captions; ultra-high-contrast typographic system"
+  },
+  "scheme": "dark",
+  "best_for": "Anything that should feel electric and design-led: studio credentials, creative agency pitches, brand showcases, art-direction reviews, fashion / sneaker brand work. Also a striking unexpected choice for tech, research, or business decks where the speaker wants the deck to *be* a brand statement.",
+  "avoid_for": "Contexts that should feel quiet or institutional — the black-and-electric-yellow palette is the loudest in the library.",
+  "slide_count": 12,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/studio"
+}
