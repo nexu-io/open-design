@@ -87,6 +87,15 @@ import { ChatPane } from './ChatPane';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 import { CenteredLoader } from './Loading';
+import { ProjectActionsToolbar } from './ProjectActionsToolbar';
+import { Toast } from './Toast';
+import { useDesignMdState } from '../hooks/useDesignMdState';
+import { useFinalizeProject } from '../hooks/useFinalizeProject';
+import { useProjectDetail } from '../hooks/useProjectDetail';
+import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
+import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { effectiveMaxTokens } from '../state/maxTokens';
 
 interface Props {
   project: Project;
@@ -252,6 +261,17 @@ export function ProjectView({
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  // ----- Continue in CLI / Finalize design package wiring (#451) -----
+  // The toast surface is shared between Finalize errors and the
+  // success/fallback toasts emitted from handleContinueInCli.
+  const projectDetail = useProjectDetail(project.id);
+  const designMdState = useDesignMdState(project.id);
+  const finalize = useFinalizeProject(project.id);
+  const terminalLauncher = useTerminalLaunch();
+  const [projectActionsToast, setProjectActionsToast] = useState<{
+    message: string;
+    details: string | null;
+  } | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
   const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
@@ -1766,6 +1786,104 @@ export function ProjectView({
     if (project.pendingPrompt) onClearPendingPrompt();
   }, [project.pendingPrompt, onClearPendingPrompt]);
 
+  // Continue in CLI / Finalize design package handlers + keyboard
+  // shortcut wiring. Close to the JSX so the data flow is easy to
+  // trace from the toolbar back to its sources.
+  const handleFinalize = useCallback(() => {
+    void finalize.trigger({
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      maxTokens: effectiveMaxTokens(config),
+    }).then((result) => {
+      if (result) void designMdState.refresh();
+    });
+  }, [finalize, config, designMdState]);
+
+  const handleCancelFinalize = useCallback(() => {
+    finalize.cancel();
+  }, [finalize]);
+
+  const handleContinueInCli = useCallback(async () => {
+    const projectDir = projectDetail.resolvedDir;
+    if (!projectDir) {
+      setProjectActionsToast({
+        message: 'Working directory unavailable. Update the daemon to enable Continue in CLI.',
+        details: null,
+      });
+      return;
+    }
+    const prompt = buildClipboardPrompt({
+      project: { id: project.id, name: project.name },
+      designMdState: {
+        generatedAt: designMdState.generatedAt,
+        transcriptMessageCount: designMdState.transcriptMessageCount,
+        designSystemId: designMdState.designSystemId,
+        currentArtifact: designMdState.currentArtifact,
+      },
+      projectDir,
+    });
+    await copyToClipboard(prompt);
+    const launched = await terminalLauncher.open(projectDir);
+    if (launched.kind === 'electron' && launched.ok) {
+      setProjectActionsToast({
+        message: 'Folder opened. Run `claude` in your terminal here and paste the prompt.',
+        details: null,
+      });
+    } else if (launched.kind === 'electron' && !launched.ok) {
+      setProjectActionsToast({
+        message: `Couldn't open the folder. Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
+        details: null,
+      });
+    } else {
+      setProjectActionsToast({
+        message: `Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
+        details: null,
+      });
+    }
+  }, [
+    project.id,
+    project.name,
+    projectDetail.resolvedDir,
+    designMdState.generatedAt,
+    designMdState.transcriptMessageCount,
+    designMdState.designSystemId,
+    designMdState.currentArtifact,
+    terminalLauncher,
+  ]);
+
+  // Lift finalize errors into the shared project-actions toast so the
+  // user sees both the daemon's category message and any upstream
+  // detail (per #450 verification commitment).
+  useEffect(() => {
+    if (finalize.error) {
+      setProjectActionsToast({
+        message: finalize.error.message,
+        details: finalize.error.details,
+      });
+    }
+  }, [finalize.error]);
+
+  // ⌘+Shift+K (mac) / Ctrl+Shift+K (others) → Continue in CLI. Mirrors
+  // the capture-phase, platform-gated pattern from FileWorkspace's
+  // Quick Switcher shortcut. ⌘+Shift+K is free (⌘+P is the only
+  // existing primary-modifier shortcut on this surface).
+  useEffect(() => {
+    const isMac =
+      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        if (e.isComposing) return;
+        if (!designMdState.exists) return;
+        e.preventDefault();
+        void handleContinueInCli();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [designMdState.exists, handleContinueInCli]);
+
   return (
     <div className="app">
       <AppChromeHeader
@@ -1806,6 +1924,14 @@ export function ProjectView({
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
         </div>
       </AppChromeHeader>
+      <ProjectActionsToolbar
+        designMdState={designMdState}
+        finalizeStatus={finalize.status}
+        onFinalize={handleFinalize}
+        onCancelFinalize={handleCancelFinalize}
+        onContinueInCli={handleContinueInCli}
+        hidden={workspaceFocused}
+      />
       <div
         ref={splitRef}
         className={[
@@ -1908,6 +2034,13 @@ export function ProjectView({
           onFocusModeChange={setWorkspaceFocused}
         />
       </div>
+      {projectActionsToast ? (
+        <Toast
+          message={projectActionsToast.message}
+          details={projectActionsToast.details}
+          onDismiss={() => setProjectActionsToast(null)}
+        />
+      ) : null}
     </div>
   );
 }
