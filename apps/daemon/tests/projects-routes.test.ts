@@ -112,4 +112,59 @@ describe('GET /api/projects/:id resolvedDir', () => {
     const body = (await resp.json()) as { error?: { code?: string } };
     expect(body.error?.code).toBe('PROJECT_NOT_FOUND');
   });
+
+  // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`
+  // is — only the HMAC-gated POST /api/import/folder may set it. POST
+  // /api/projects (the generic create endpoint) and PATCH
+  // /api/projects/:id must reject any client-supplied attempt to
+  // acquire or flip the marker, otherwise a compromised renderer could
+  // mark a previously-untrusted folder-imported project as trusted and
+  // re-open the openPath bypass.
+  it('rejects fromTrustedPicker on POST /api/projects', async () => {
+    const projectId = `proj-trusted-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Smuggled trust',
+        skillId: null,
+        designSystemId: null,
+        metadata: { kind: 'prototype', fromTrustedPicker: true },
+      }),
+    });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/fromTrustedPicker/i);
+  });
+
+  it('rejects fromTrustedPicker on PATCH /api/projects/:id', async () => {
+    // Create a vanilla native project, then try to PATCH the
+    // trusted-picker marker onto it. The handler must refuse —
+    // PATCHing privileged metadata fields is the same threat surface
+    // as setting them on creation.
+    const projectId = `proj-trusted-patch-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Native fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metadata: { kind: 'prototype', fromTrustedPicker: true } }),
+    });
+    expect(patchResp.status).toBe(400);
+    const body = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/fromTrustedPicker/i);
+  });
 });

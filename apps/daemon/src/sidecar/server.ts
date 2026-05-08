@@ -13,7 +13,7 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 
-import { startServer } from "../server.js";
+import { setDesktopAuthSecret, startServer } from "../server.js";
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -145,6 +145,14 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
           setImmediate(() => {
             void stop().finally(() => process.exit(0));
           });
+          return { accepted: true };
+        case SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH:
+          // PR #974: the desktop main process registers its per-process
+          // auth secret here at startup. From this point on the HTTP
+          // server's POST /api/import/folder middleware requires a valid
+          // HMAC token signed with this secret, closing the
+          // renderer→arbitrary-baseDir→shell.openPath bypass.
+          setDesktopAuthSecret(Buffer.from(request.input.secret, "base64"));
           return { accepted: true };
       }
     },

@@ -2,7 +2,7 @@
 import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -236,6 +236,128 @@ export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): stri
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+// Desktop-import auth state (PR #974 — closes the renderer→arbitrary
+// baseDir→shell.openPath bypass chain).
+//
+// When the desktop main process starts up it sends a fresh 32-byte secret
+// to the daemon over its sidecar IPC (REGISTER_DESKTOP_AUTH). The daemon
+// stores the secret in this module-scope buffer and from then on requires
+// every POST /api/import/folder request to carry an HMAC token bound to
+// the requested baseDir. The desktop main process is the only entity that
+// can mint such a token — it owns the picker dialog and the secret — so
+// renderer JS can no longer name an arbitrary baseDir even indirectly
+// through project creation. When no secret has been registered (web-only
+// deployments, daemon spawned alone), the gate is dormant and the route
+// behaves exactly as before.
+let desktopAuthSecret: Buffer | null = null;
+
+// Replay protection. Each successful import token consumes its nonce; the
+// nonce stays in this map until its expiry passes, at which point the next
+// successful verification prunes it. Bounded by token TTL × import rate.
+const consumedImportNonces = new Map<string, number>();
+
+const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
+const DESKTOP_IMPORT_TOKEN_HEADER = 'x-od-desktop-import-token';
+
+export function setDesktopAuthSecret(secret: Buffer | null): void {
+  desktopAuthSecret = secret;
+  consumedImportNonces.clear();
+}
+
+export function isDesktopAuthRegistered(): boolean {
+  return desktopAuthSecret != null;
+}
+
+function pruneExpiredImportNonces(now: number): void {
+  for (const [nonce, exp] of consumedImportNonces) {
+    if (exp <= now) consumedImportNonces.delete(nonce);
+  }
+}
+
+function timingSafeStringEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+// Token field separator. We deliberately avoid `.` because ISO 8601
+// expiry timestamps embed `.` (e.g. `2026-05-08T20:00:30.000Z`), which
+// would split into four parts and break a fixed-shape parser. `~` is
+// not part of base64url or ISO 8601 character sets, so the three
+// fields stay unambiguous and round-trip safe through the HTTP header.
+const DESKTOP_IMPORT_TOKEN_FIELD_SEP = '~';
+
+/**
+ * Pure-function HMAC mint helper. Exported for unit tests and for the
+ * desktop main process's `dialog:pick-and-import` IPC handler. The token
+ * shape is `${nonceB64url}~${expISO}~${signatureB64url}` so the daemon
+ * can split, parse the expiry, and verify the signature by recomputing
+ * `HMAC-SHA256(secret, baseDir + "\n" + nonce + "\n" + exp)`.
+ */
+export function signDesktopImportToken(
+  secret: Buffer,
+  baseDir: string,
+  options: { nonce: string; exp: string },
+): string {
+  const signature = createHmac('sha256', secret)
+    .update(`${baseDir}\n${options.nonce}\n${options.exp}`)
+    .digest('base64url');
+  return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+}
+
+type DesktopImportTokenVerification =
+  | { ok: true; nonce: string; exp: number }
+  | { ok: false; reason: string };
+
+/**
+ * Verify a desktop-minted import token against the registered secret.
+ * Returns `{ ok: false, reason }` on any structural, signature, expiry,
+ * or replay failure so the middleware can map them to a single 403 with
+ * the reason in `details`. Exported for unit tests.
+ */
+export function verifyDesktopImportToken(
+  secret: Buffer,
+  baseDir: string,
+  token: string,
+  now: number,
+  consumedNonces: Map<string, number>,
+): DesktopImportTokenVerification {
+  if (typeof token !== 'string' || token.length === 0) {
+    return { ok: false, reason: 'token missing' };
+  }
+  const parts = token.split(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+  if (parts.length !== 3) {
+    return { ok: false, reason: 'token shape invalid' };
+  }
+  const [nonce, expISO, signature] = parts;
+  if (nonce.length === 0 || expISO.length === 0 || signature.length === 0) {
+    return { ok: false, reason: 'token shape invalid' };
+  }
+  const expMs = Date.parse(expISO);
+  if (!Number.isFinite(expMs)) {
+    return { ok: false, reason: 'token expiry invalid' };
+  }
+  if (expMs <= now) {
+    return { ok: false, reason: 'token expired' };
+  }
+  // Reject obviously oversized expiry windows so a compromised desktop
+  // cannot mint long-lived tokens against a small TTL contract.
+  if (expMs - now > DESKTOP_IMPORT_TOKEN_TTL_MS * 2) {
+    return { ok: false, reason: 'token expiry exceeds permitted window' };
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${baseDir}\n${nonce}\n${expISO}`)
+    .digest('base64url');
+  if (!timingSafeStringEquals(expected, signature)) {
+    return { ok: false, reason: 'token signature invalid' };
+  }
+  if (consumedNonces.has(nonce)) {
+    return { ok: false, reason: 'token nonce already used' };
+  }
+  return { ok: true, nonce, exp: expMs };
+}
 
 export function composeLiveInstructionPrompt({
   daemonSystemPrompt,
@@ -2269,11 +2391,23 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       // can't smuggle e.g. /etc through here. Same rule for
       // originalBaseDir / importedFrom='folder' — only the import path
       // owns those state fields.
+      //
+      // PR #974: also block client-supplied `fromTrustedPicker` here.
+      // Only the desktop HMAC-gated import flow is allowed to stamp that
+      // marker; any other route attempting to set it would let a
+      // compromised renderer launder an attacker-controlled baseDir
+      // through a future codepath that trusted the flag.
       if (metadata && typeof metadata === 'object') {
         if ('baseDir' in metadata) {
           return sendApiError(
             res, 400, 'BAD_REQUEST',
             'baseDir can only be set via POST /api/import/folder',
+          );
+        }
+        if ('fromTrustedPicker' in metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
       }
@@ -2416,11 +2550,47 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // No copy, no shadow tree — the user owns the workspace and is
   // responsible for their own version control (git, time machine, etc.),
   // mirroring how Cursor / Claude Code / Aider behave.
+  //
+  // PR #974 trust boundary: when the desktop main process has registered
+  // an auth secret with the daemon (REGISTER_DESKTOP_AUTH sidecar IPC),
+  // every request here must carry an HMAC token in
+  // `X-OD-Desktop-Import-Token` that binds nonce + expiry + baseDir to
+  // the picker-originated path. Without that gate a compromised renderer
+  // could call this route directly with an arbitrary absolute path and
+  // then call `openPath(projectId)` on the resulting project to reveal
+  // attacker-chosen filesystem locations in Finder/Explorer.
   app.post('/api/import/folder', async (req, res) => {
     try {
       const { baseDir, name, skillId, designSystemId } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      // Token-gate is dormant when no desktop secret has been registered
+      // (web-only deployments and standalone daemon runs are unaffected).
+      let trustedPickerImport = false;
+      if (desktopAuthSecret != null) {
+        const headerValue = req.get(DESKTOP_IMPORT_TOKEN_HEADER);
+        const token = typeof headerValue === 'string' ? headerValue : '';
+        const now = Date.now();
+        pruneExpiredImportNonces(now);
+        const verification = verifyDesktopImportToken(
+          desktopAuthSecret,
+          baseDir.trim(),
+          token,
+          now,
+          consumedImportNonces,
+        );
+        if (!verification.ok) {
+          return sendApiError(
+            res,
+            403,
+            'FORBIDDEN',
+            'desktop import token rejected',
+            { details: { reason: verification.reason } },
+          );
+        }
+        consumedImportNonces.set(verification.nonce, verification.exp);
+        trustedPickerImport = true;
       }
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
@@ -2480,6 +2650,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           baseDir: normalizedPath,
           importedFrom: 'folder',
           entryFile,
+          // PR #974: stamp the project as trusted-picker-originated when
+          // the import passed the desktop HMAC gate. The desktop main
+          // process refuses to forward `shell.openPath` for folder-imported
+          // projects whose metadata lacks this flag, so renderer JS cannot
+          // turn an existing folder-imported project (or one created
+          // through some future bypass) into an arbitrary file-manager
+          // reveal. Web-only deployments (no secret registered) intentionally
+          // do not stamp this field — there is no `shell.openPath` surface
+          // on browser builds, so the marker only matters where the bridge
+          // exists.
+          ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
         },
         createdAt: now,
         updatedAt: now,
@@ -2531,6 +2712,15 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
+        // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`
+        // is. Reject any attempt to acquire or flip it through PATCH; the
+        // import-folder route is the single source of truth.
+        if ('fromTrustedPicker' in patch.metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'fromTrustedPicker can only be set via POST /api/import/folder',
+          );
+        }
         if (existingMeta?.baseDir) {
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
             return sendApiError(
@@ -2543,6 +2733,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             baseDir: existingMeta.baseDir,
             ...(existingMeta.importedFrom === 'folder'
               ? { importedFrom: 'folder' }
+              : {}),
+            // Preserve the trusted-picker marker when the existing project
+            // had it, so downstream PATCH calls that omit metadata fields
+            // do not silently strip the flag and re-open the bypass.
+            ...(existingMeta.fromTrustedPicker === true
+              ? { fromTrustedPicker: true as const }
               : {}),
           };
         } else if ('baseDir' in patch.metadata) {
