@@ -690,6 +690,9 @@ export const ru: Dict = {
   'fileViewer.shareLabel': 'Поделиться',
   'fileViewer.exportPdf': 'Экспорт в PDF',
   'fileViewer.exportPdfAllSlides': 'Экспорт в PDF (все слайды)',
+  'fileViewer.exportPdfServer': 'Экспорт PDF — высокое качество',
+  'fileViewer.exportPdfServerBusy': 'Экспорт PDF…',
+  'fileViewer.exportPdfServerError': 'Ошибка экспорта PDF',
   'fileViewer.exportPptxBusy': 'Дождитесь окончания текущего хода.',
   'fileViewer.exportPptxHint':
     'Отправьте запрос агенту для конвертации этого дизайна в PPTX.',

@@ -3923,6 +3923,64 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     res.on('close', wake);
   });
 
+  // Playwright-based PDF export: emits one vector PDF page per slide via
+  // headless Chromium's page.pdf() and merges them with pdf-lib. Text, SVG,
+  // and CSS borders stay vector (sharp at any print resolution); canvas/WebGL
+  // is rasterized by Chromium. Generation takes 30-60 s for large decks; the
+  // response streams the PDF bytes when done.
+  app.post('/api/projects/:id/export-pdf', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const project = getProject(db, req.params.id);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+
+    const filename = typeof req.body?.file === 'string' ? req.body.file.trim() : '';
+    if (!filename) return res.status(400).json({ error: 'file required' });
+
+    // Reject path traversal attempts
+    if (filename.includes('/') || filename.includes('\\') || filename.startsWith('.')) {
+      return res.status(400).json({ error: 'invalid filename' });
+    }
+
+    const htmlPath = path.join(PROJECTS_DIR, req.params.id, filename);
+    if (!fs.existsSync(htmlPath)) return res.status(404).json({ error: 'html file not found' });
+
+    const pdfPath = path.join(os.tmpdir(), `od-pdf-${randomUUID()}.pdf`);
+    const scriptPath = path.join(PROJECT_ROOT, 'scripts', 'export-slides-pdf.ts');
+
+    if (!fs.existsSync(scriptPath)) {
+      return res.status(501).json({ error: 'export script not found' });
+    }
+
+    try {
+      await new Promise((resolve, reject) => {
+        const child = spawn(
+          'node',
+          ['--experimental-strip-types', scriptPath, htmlPath, pdfPath],
+          { cwd: PROJECT_ROOT, env: { ...process.env, INIT_CWD: PROJECT_ROOT }, stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        child.on('close', (code) => (code === 0 ? resolve(null) : reject(new Error(`exit ${code}`))));
+      });
+
+      const stat = fs.statSync(pdfPath);
+      const pdfName = filename.replace(/\.html$/i, '') + '.pdf';
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encodeURIComponent(pdfName)}`,
+      );
+      const stream = fs.createReadStream(pdfPath);
+      stream.on('close', () => fs.unlink(pdfPath, () => {}));
+      stream.pipe(res);
+    } catch (err) {
+      fs.unlink(pdfPath, () => {});
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!res.headersSent) res.status(500).json({ error: `PDF export failed: ${msg}` });
+    }
+  });
+
   app.get('/api/projects/:id/media/tasks', (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });

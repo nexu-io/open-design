@@ -669,6 +669,9 @@ export const tr: Dict = {
   'fileViewer.shareLabel': 'Paylaş',
   'fileViewer.exportPdf': 'PDF olarak dışa aktar',
   'fileViewer.exportPdfAllSlides': 'PDF olarak dışa aktar (tüm slaytlar)',
+  'fileViewer.exportPdfServer': 'PDF dışa aktar — yüksek kalite',
+  'fileViewer.exportPdfServerBusy': 'PDF dışa aktarılıyor…',
+  'fileViewer.exportPdfServerError': 'PDF dışa aktarma başarısız',
   'fileViewer.exportPptxBusy': 'Güncel sıranın bitmesini bekleyin.',
   'fileViewer.exportPptxHint':
     'Bu tasarımı PPTX’e dönüştürmesi için ajana bir istek yollayın.',

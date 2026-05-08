@@ -678,6 +678,9 @@ export const pl: Dict = {
   'fileViewer.shareLabel': 'Udostępnij',
   'fileViewer.exportPdf': 'Eksportuj jako PDF',
   'fileViewer.exportPdfAllSlides': 'Eksportuj jako PDF (wszystkie slajdy)',
+  'fileViewer.exportPdfServer': 'Eksportuj PDF — wysoka jakość',
+  'fileViewer.exportPdfServerBusy': 'Eksportowanie PDF…',
+  'fileViewer.exportPdfServerError': 'Błąd eksportu PDF',
   'fileViewer.exportPptxBusy': 'Poczekaj, aż bieżąca tura zostanie zakończona.',
   'fileViewer.exportPptxHint':
       'Wyślij prośbę do agenta o przekonwertowanie tego projektu na PPTX.',

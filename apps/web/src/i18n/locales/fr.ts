@@ -678,6 +678,9 @@ export const fr: Dict = {
   'fileViewer.shareLabel': 'Partager',
   'fileViewer.exportPdf': 'Exporter en PDF',
   'fileViewer.exportPdfAllSlides': 'Exporter en PDF (toutes les diapos)',
+  'fileViewer.exportPdfServer': 'Exporter en PDF — haute qualité',
+  'fileViewer.exportPdfServerBusy': 'Exportation du PDF…',
+  'fileViewer.exportPdfServerError': 'Échec de l\'exportation PDF',
   'fileViewer.exportPptxBusy': 'Attendez la fin du tour en cours.',
   'fileViewer.exportPptxHint':
     'Envoyez une requête à l\'agent pour convertir ce design en PPTX.',

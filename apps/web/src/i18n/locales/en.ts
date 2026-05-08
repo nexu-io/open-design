@@ -691,6 +691,9 @@ export const en: Dict = {
   'fileViewer.shareLabel': 'Share',
   'fileViewer.exportPdf': 'Export as PDF',
   'fileViewer.exportPdfAllSlides': 'Export as PDF (all slides)',
+  'fileViewer.exportPdfServer': 'Export PDF — high quality',
+  'fileViewer.exportPdfServerBusy': 'Exporting PDF…',
+  'fileViewer.exportPdfServerError': 'PDF export failed',
   'fileViewer.exportPptxBusy': 'Wait for the current turn to finish.',
   'fileViewer.exportPptxHint':
     'Send a request to the agent to convert this design to PPTX.',

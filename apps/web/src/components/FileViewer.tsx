@@ -2829,6 +2829,7 @@ function HtmlViewer({
   const [zoom, setZoom] = useState(100);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [exportingServerPdf, setExportingServerPdf] = useState(false);
   // Template save UX. We surface a transient "Saved" pill in the share
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -4328,6 +4329,57 @@ function HtmlViewer({
                         : t('fileViewer.exportPdf')}
                     </span>
                   </button>
+                  {effectiveDeck ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      disabled={exportingServerPdf}
+                      onClick={async () => {
+                        setShareMenuOpen(false);
+                        setExportingServerPdf(true);
+                        try {
+                          const resp = await fetch(
+                            `/api/projects/${encodeURIComponent(projectId)}/export-pdf`,
+                            {
+                              method: 'POST',
+                              headers: { 'content-type': 'application/json' },
+                              body: JSON.stringify({ file: file.name }),
+                            },
+                          );
+                          if (!resp.ok) {
+                            const errJson = await resp.json().catch(() => ({ error: resp.statusText }));
+                            alert(`${t('fileViewer.exportPdfServerError')}: ${errJson.error ?? resp.statusText}`);
+                            return;
+                          }
+                          const blob = await resp.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = file.name.replace(/\.html$/i, '') + '.pdf';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                        } catch (err) {
+                          alert(`${t('fileViewer.exportPdfServerError')}: ${String(err)}`);
+                        } finally {
+                          setExportingServerPdf(false);
+                        }
+                      }}
+                    >
+                      <span className="share-menu-icon">
+                        {exportingServerPdf
+                          ? <Icon name="spinner" size={14} />
+                          : <Icon name="file" size={14} />}
+                      </span>
+                      <span>
+                        {exportingServerPdf
+                          ? t('fileViewer.exportPdfServerBusy')
+                          : t('fileViewer.exportPdfServer')}
+                      </span>
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="share-menu-item"

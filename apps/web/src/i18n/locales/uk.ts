@@ -709,6 +709,9 @@ export const uk: Dict = {
   'fileViewer.shareLabel': 'Поділитися',
   'fileViewer.exportPdf': 'Експортувати як PDF',
   'fileViewer.exportPdfAllSlides': 'Експортувати як PDF (усі слайди)',
+  'fileViewer.exportPdfServer': 'Експорт PDF — висока якість',
+  'fileViewer.exportPdfServerBusy': 'Експорт PDF…',
+  'fileViewer.exportPdfServerError': 'Помилка експорту PDF',
   'fileViewer.exportPptxBusy': 'Чекайте, поки поточна черга завершиться.',
   'fileViewer.exportPptxHint':
     'Надішліть запит агентові для перетворення цього дизайну на PPTX.',

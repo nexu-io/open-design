@@ -631,6 +631,9 @@ export const ja: Dict = {
   'fileViewer.shareLabel': '共有',
   'fileViewer.exportPdf': 'PDFとしてエクスポート',
   'fileViewer.exportPdfAllSlides': 'PDFとしてエクスポート（全スライド）',
+  'fileViewer.exportPdfServer': 'PDF出力 — 高品質',
+  'fileViewer.exportPdfServerBusy': 'PDF出力中…',
+  'fileViewer.exportPdfServerError': 'PDF出力に失敗しました',
   'fileViewer.exportPptxBusy': '現在のターンが終わるまでお待ちください。',
   'fileViewer.exportPptxHint':
     'エージェントにこのデザインを PPTX に変換するようリクエストを送信します。',

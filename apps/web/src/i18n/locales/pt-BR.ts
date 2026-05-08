@@ -690,6 +690,9 @@ export const ptBR: Dict = {
   'fileViewer.shareLabel': 'Compartilhar',
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todos os slides)',
+  'fileViewer.exportPdfServer': 'Exportar PDF — alta qualidade',
+  'fileViewer.exportPdfServerBusy': 'Exportando PDF…',
+  'fileViewer.exportPdfServerError': 'Falha ao exportar PDF',
   'fileViewer.exportPptxBusy': 'Aguarde o turno atual terminar.',
   'fileViewer.exportPptxHint':
     'Envie uma solicitação ao agente para converter este design em PPTX.',

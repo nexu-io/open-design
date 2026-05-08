@@ -678,6 +678,9 @@ export const hu: Dict = {
   'fileViewer.shareLabel': 'Megosztás',
   'fileViewer.exportPdf': 'Exportálás PDF-ként',
   'fileViewer.exportPdfAllSlides': 'Exportálás PDF-ként (minden dia)',
+  'fileViewer.exportPdfServer': 'PDF exportálása — magas minőség',
+  'fileViewer.exportPdfServerBusy': 'PDF exportálása…',
+  'fileViewer.exportPdfServerError': 'PDF exportálás sikertelen',
   'fileViewer.exportPptxBusy': 'Várj, amíg az aktuális kör befejeződik.',
   'fileViewer.exportPptxHint':
     'Küldj kérést az ügynöknek, hogy alakítsa át ezt a designt PPTX-szé.',

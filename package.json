@@ -23,7 +23,9 @@
   "devDependencies": {
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
+    "@playwright/test": "^1.59.1",
     "@types/node": "^20.17.10",
+    "pdf-lib": "^1.17.1",
     "tsx": "4.21.0",
     "typescript": "^5.6.3"
   },

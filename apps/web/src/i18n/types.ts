@@ -748,6 +748,9 @@ export interface Dict {
   'fileViewer.shareLabel': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;
+  'fileViewer.exportPdfServer': string;
+  'fileViewer.exportPdfServerBusy': string;
+  'fileViewer.exportPdfServerError': string;
   'fileViewer.exportPptxBusy': string;
   'fileViewer.exportPptxHint': string;
   'fileViewer.exportPptxNa': string;

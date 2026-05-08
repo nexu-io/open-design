@@ -678,6 +678,9 @@ export const ko: Dict = {
   'fileViewer.shareLabel': '공유',
   'fileViewer.exportPdf': 'PDF로 내보내기',
   'fileViewer.exportPdfAllSlides': 'PDF로 내보내기 (모든 슬라이드)',
+  'fileViewer.exportPdfServer': 'PDF 내보내기 — 고품질',
+  'fileViewer.exportPdfServerBusy': 'PDF 생성 중…',
+  'fileViewer.exportPdfServerError': 'PDF 내보내기 실패',
   'fileViewer.exportPptxBusy': '현재 작업이 끝날 때까지 기다려 주세요.',
   'fileViewer.exportPptxHint':
     '이 디자인을 PPTX로 변환하도록 에이전트에 요청합니다.',

@@ -678,6 +678,9 @@ export const ar: Dict = {
   'fileViewer.shareLabel': 'مشاركة',
   'fileViewer.exportPdf': 'تصدير كـ PDF',
   'fileViewer.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',
+  'fileViewer.exportPdfServer': 'تصدير PDF — جودة عالية',
+  'fileViewer.exportPdfServerBusy': 'جارٍ تصدير PDF…',
+  'fileViewer.exportPdfServerError': 'فشل تصدير PDF',
   'fileViewer.exportPptxBusy': 'انتظر انتهاء الدور الحالي.',
   'fileViewer.exportPptxHint':
     'أرسل طلباً للوكيل لتحويل هذا التصميم إلى PPTX.',

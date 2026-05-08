@@ -691,6 +691,9 @@ export const fa: Dict = {
   'fileViewer.shareLabel': 'اشتراک‌گذاری',
   'fileViewer.exportPdf': 'صادرکردن به PDF',
   'fileViewer.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
+  'fileViewer.exportPdfServer': 'صدور PDF — کیفیت بالا',
+  'fileViewer.exportPdfServerBusy': 'در حال صدور PDF…',
+  'fileViewer.exportPdfServerError': 'صدور PDF ناموفق بود',
   'fileViewer.exportPptxBusy': 'منتظر پایان نوبت فعلی باشید.',
   'fileViewer.exportPptxHint':
     'یک درخواست به عامل برای تبدیل این طرح به PPTX ارسال کنید.',
