@@ -5,7 +5,7 @@ import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design
 
 type PageSize = { height: number; width: number };
 
-const DECK_PAGE_SIZE: PageSize = { width: 20, height: 11.25 };
+const DECK_PAGE_SIZE: PageSize = { width: 13.333333, height: 7.5 };
 const MAX_PAGE_INCHES = 200;
 
 const DECK_PRINT_CSS = `
@@ -70,7 +70,7 @@ export async function exportPdfFromHtml(input: DesktopExportPdfInput): Promise<D
     await waitForPrintableContent(window);
     const pageSize = input.deck ? DECK_PAGE_SIZE : await inferPageSize(window);
     const pdf = await window.webContents.printToPDF({
-      margins: { marginType: "none" },
+      margins: { bottom: 0, left: 0, right: 0, top: 0 },
       pageSize,
       preferCSSPageSize: true,
       printBackground: true,
