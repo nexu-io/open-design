@@ -94,6 +94,9 @@ function parseConnectorLogoSlug(value: unknown): string | undefined {
 function sendComposioLogo(res: Response, logo: CachedComposioLogo): void {
   res.setHeader('Content-Type', logo.contentType);
   res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  if (logo.contentType === 'image/svg+xml') {
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'");
+  }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.send(logo.body);
 }
@@ -107,7 +110,6 @@ function sendMissingComposioLogo(res: Response): void {
 function normalizeImageContentType(value: string | null): string | null {
   const contentType = value?.split(';')[0]?.trim().toLowerCase();
   if (!contentType?.startsWith('image/')) return null;
-  if (contentType === 'image/svg+xml') return null;
   return contentType;
 }
 

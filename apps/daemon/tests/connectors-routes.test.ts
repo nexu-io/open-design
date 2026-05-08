@@ -699,36 +699,33 @@ describe('connector routes', () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   });
 
-  it('rejects SVG Composio logo responses without caching them', async () => {
+  it('serves SVG Composio logo responses with a restrictive CSP', async () => {
     let upstreamRequests = 0;
     const slug = 'svg_only_logo';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>';
     mockComposioFetch({
       logoFetch: async () => {
         upstreamRequests += 1;
-        if (upstreamRequests === 1) {
-          return new Response('<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>', {
-            status: 200,
-            headers: { 'content-type': 'image/svg+xml' },
-          });
-        }
-        return new Response(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), {
+        return new Response(svg, {
           status: 200,
-          headers: { 'content-type': 'image/png' },
+          headers: { 'content-type': 'image/svg+xml' },
         });
       },
     });
 
     const firstResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
 
-    expect(firstResponse.status).toBe(404);
-    expect(firstResponse.headers.get('cache-control')).toBe('no-store');
+    expect(firstResponse.status).toBe(200);
+    expect(firstResponse.headers.get('content-type')).toBe('image/svg+xml');
+    expect(firstResponse.headers.get('content-security-policy')).toBe("default-src 'none'; img-src data:; style-src 'unsafe-inline'");
+    expect(await firstResponse.text()).toBe(svg);
 
     const secondResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
 
     expect(secondResponse.status).toBe(200);
-    expect(secondResponse.headers.get('content-type')).toBe('image/png');
-    expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    expect(upstreamRequests).toBe(2);
+    expect(secondResponse.headers.get('content-type')).toBe('image/svg+xml');
+    expect(await secondResponse.text()).toBe(svg);
+    expect(upstreamRequests).toBe(1);
   });
 
   it('rejects non-image Composio logo responses without caching them', async () => {

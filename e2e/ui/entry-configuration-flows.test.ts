@@ -55,6 +55,13 @@ const IMAGE_TEMPLATE = {
   },
 };
 
+async function readSavedConfig(page: Page) {
+  return page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, STORAGE_KEY);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
@@ -248,22 +255,23 @@ test('saving a Composio key from Settings unlocks the connectors gate immediatel
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
   await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();
-  await expect(settingsDialog.getByTestId('connector-gate')).toBeVisible();
   await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();
 
-  await settingsDialog.getByTestId('connector-gate-action').click();
   await settingsDialog.getByPlaceholder('Paste Composio API key').fill('cmp-secret-1234');
-  await settingsDialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await settingsDialog.getByRole('button', { name: 'Save key', exact: true }).click();
 
   expect(savedComposioBody).toEqual({ apiKey: 'cmp-secret-1234' });
-  await expect(settingsDialog.getByTestId('connector-gate')).toHaveCount(0);
   await expect(settingsDialog.getByTestId('connectors-search-input')).toBeEnabled();
   await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
 
-  const savedConfig = await page.evaluate((key) => {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  }, STORAGE_KEY);
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    composio: {
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '1234',
+    },
+  });
+  const savedConfig = await readSavedConfig(page);
   expect(savedConfig?.composio).toMatchObject({
     apiKey: '',
     apiKeyConfigured: true,
