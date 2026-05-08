@@ -437,18 +437,32 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         extractText: extractOpenAIMessageText,
       };
     case 'azure': {
+      const url = new URL(baseUrl);
+      const basePath = url.pathname.replace(/\/+$/, '');
+      const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
       const apiVersion =
         typeof input.apiVersion === 'string' && input.apiVersion.trim()
           ? input.apiVersion.trim()
-          : '2024-10-21';
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
+          : usesVersionedOpenAIPath
+            ? ''
+            : '2024-10-21';
+      url.pathname = usesVersionedOpenAIPath
+        ? `${basePath}/chat/completions`
+        : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+      if (usesVersionedOpenAIPath && !apiVersion) {
+        url.searchParams.delete('api-version');
+      }
+      if (apiVersion) {
+        url.searchParams.set('api-version', apiVersion);
+      }
       return {
-        url: `${trimmedBase}/openai/deployments/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`,
+        url: url.toString(),
         headers: {
           'content-type': 'application/json',
           'api-key': apiKey,
         },
         body: {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
           max_tokens: PROVIDER_MAX_TOKENS,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,

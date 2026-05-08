@@ -6306,15 +6306,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
     }
 
+    const url = new URL(baseUrl);
+    const basePath = url.pathname.replace(/\/+$/, '');
+    const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
     const version =
       typeof apiVersion === 'string' && apiVersion.trim()
         ? apiVersion.trim()
-        : '2024-10-21';
-    const url = new URL(baseUrl);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
-    url.searchParams.set('api-version', version);
+        : usesVersionedOpenAIPath
+          ? ''
+          : '2024-10-21';
+    url.pathname = usesVersionedOpenAIPath
+      ? `${basePath}/chat/completions`
+      : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+    if (usesVersionedOpenAIPath && !version) {
+      url.searchParams.delete('api-version');
+    }
+    if (version) {
+      url.searchParams.set('api-version', version);
+    }
     console.log(
-      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version}`,
+      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version || 'omitted'}`,
     );
 
     const payloadMessages = Array.isArray(messages) ? [...messages] : [];
@@ -6323,6 +6334,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const payload = {
+      ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
       max_tokens:
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
