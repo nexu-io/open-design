@@ -34,14 +34,13 @@ import { createDesktopRuntime } from "./runtime.js";
 // pinning them is worth the small extra surface.
 export { isAllowedChildWindowUrl, isHttpUrl } from "./runtime.js";
 
-// Re-export the path-allowlist helpers for the same reason (#974).
+// Re-export the path-validation helpers for the same reason (#974).
 // shell.openPath is privileged main-process behaviour; pinning the
 // validation gate via tests is worth the extra surface.
 export {
   validateExistingDirectory,
-  createProjectRootGate,
+  fetchResolvedProjectDir,
   type PathValidationResult,
-  type ProjectRootGate,
 } from "./runtime.js";
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;

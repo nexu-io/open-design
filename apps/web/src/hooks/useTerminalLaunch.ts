@@ -1,11 +1,13 @@
 // Capability-detected wrapper around the Electron shell.openPath
 // bridge for the Continue in CLI button (#451). On desktop builds the
-// preload exposes window.electronAPI.openPath, which forwards to
-// shell.openPath — opening the OS file manager at the project's
-// working directory (per Electron's contract for directory paths;
-// it is NOT a terminal launcher). On the browser fallback, the hook
-// reports `web-fallback` so the caller can render a manual-instruction
-// toast naming the working directory.
+// preload exposes window.electronAPI.openPath; the renderer hands it
+// a *project ID* (not a path) and the desktop main process asks the
+// daemon for the canonical resolvedDir before forwarding to
+// shell.openPath. The bridge opens the OS file manager at the
+// project's working directory (per Electron's contract for directory
+// paths; it is NOT a terminal launcher). On the browser fallback,
+// the hook reports `web-fallback` so the caller can render a
+// manual-instruction toast naming the working directory.
 //
 // Note that shell.openPath resolves to the empty string on success and
 // to a non-empty error string on failure; we treat any non-empty
@@ -21,7 +23,7 @@ export interface TerminalLaunchResult {
 
 export interface TerminalLauncher {
   isElectron: boolean;
-  open: (dir: string) => Promise<TerminalLaunchResult>;
+  open: (projectId: string) => Promise<TerminalLaunchResult>;
 }
 
 export function useTerminalLaunch(): TerminalLauncher {
@@ -30,12 +32,12 @@ export function useTerminalLaunch(): TerminalLauncher {
       typeof window !== 'undefined' &&
       typeof window.electronAPI?.openPath === 'function';
 
-    async function open(dir: string): Promise<TerminalLaunchResult> {
+    async function open(projectId: string): Promise<TerminalLaunchResult> {
       if (!isElectron) {
         return { kind: 'web-fallback', ok: true };
       }
       try {
-        const out = await window.electronAPI!.openPath!(dir);
+        const out = await window.electronAPI!.openPath!(projectId);
         // Electron's shell.openPath resolves to '' on success.
         const ok = typeof out === 'string' ? out.length === 0 : true;
         return { kind: 'electron', ok };

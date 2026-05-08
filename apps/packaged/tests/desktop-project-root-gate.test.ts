@@ -1,30 +1,29 @@
 /**
- * Coverage for the path-allowlist gate that the new shell.openPath
- * IPC handler in `apps/desktop/src/main/runtime.ts` checks before
- * forwarding any renderer-supplied string to Electron's
- * `shell.openPath`. The packaged workspace hosts the test because
+ * Coverage for the path-validation primitives that the new
+ * shell.openPath IPC handler in `apps/desktop/src/main/runtime.ts`
+ * relies on. The packaged workspace hosts the test because
  * `apps/desktop` itself has no vitest setup yet — same reasoning as
  * the existing `desktop-url-allowlist.test.ts` next to this file.
  *
- * @see https://github.com/nexu-io/open-design/pull/974 (mrcfps's P1
- * review on runtime.ts:305 — shell:open-path must not accept
- * arbitrary renderer paths).
+ * @see https://github.com/nexu-io/open-design/pull/974 (mrcfps + lefarcen P1
+ * reviews on runtime.ts: the path-allowlist gate must be
+ * daemon-controlled and `.app` bundles must be rejected).
  */
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  createProjectRootGate,
   validateExistingDirectory,
+  fetchResolvedProjectDir,
 } from "@open-design/desktop/main";
 
 let tempRoot = "";
 
 beforeEach(() => {
-  tempRoot = mkdtempSync(path.join(tmpdir(), "od-desktop-gate-"));
+  tempRoot = mkdtempSync(path.join(tmpdir(), "od-desktop-validate-"));
 });
 
 afterEach(() => {
@@ -77,64 +76,113 @@ describe("validateExistingDirectory", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.resolved).toBe(realDir);
   });
+
+  it("rejects macOS .app bundles even though they are technically directories", async () => {
+    // Construct a fake .app bundle on disk; it's just a directory
+    // whose name ends in `.app`. shell.openPath would *launch* this
+    // as an application, so the path gate must short-circuit here
+    // regardless of platform (the suffix-based check is portable).
+    const bundle = path.join(tempRoot, "Foo.app");
+    await mkdir(bundle);
+    const result = await validateExistingDirectory(bundle);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/application bundles/i);
+  });
+
+  it("rejects symlinks whose realpath resolves to a .app bundle", async () => {
+    // Defense in depth: a renderer or malicious project metadata
+    // could try to launder a `.app` bundle via a symlink whose name
+    // doesn't end in `.app`. The realpath check before the suffix
+    // test catches that.
+    const realApp = path.join(tempRoot, "Real.app");
+    await mkdir(realApp);
+    const linkDir = path.join(tempRoot, "innocent-name");
+    symlinkSync(realApp, linkDir, "dir");
+    const result = await validateExistingDirectory(linkDir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/application bundles/i);
+  });
 });
 
-describe("ProjectRootGate", () => {
-  it("starts empty", () => {
-    const gate = createProjectRootGate();
-    expect(gate.size()).toBe(0);
+describe("fetchResolvedProjectDir", () => {
+  it("rejects empty project ids without sending a request", async () => {
+    const fetchImpl = vi.fn();
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "", fetchImpl);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/non-empty/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("rejects shell.openPath candidates that have not been registered", async () => {
-    const gate = createProjectRootGate();
-    expect(gate.isApproved(tempRoot)).toBe(false);
+  it("rejects project ids containing disallowed characters (path traversal guard)", async () => {
+    const fetchImpl = vi.fn();
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "../escape", fetchImpl);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/disallowed characters/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("accepts shell.openPath candidates that match a previously registered root", async () => {
-    const gate = createProjectRootGate();
-    const registered = await gate.register(tempRoot);
-    expect(registered).toBe(true);
-    expect(gate.isApproved(tempRoot)).toBe(true);
-    expect(gate.size()).toBe(1);
+  it("returns the daemon's resolvedDir when the project-detail endpoint succeeds", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          project: { id: "p1", name: "fixture" },
+          resolvedDir: "/tmp/projects/p1",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "p1", fetchImpl);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.resolvedDir).toBe("/tmp/projects/p1");
+    expect(fetchImpl).toHaveBeenCalledWith("http://localhost:1234/api/projects/p1");
   });
 
-  it("rejects registration of a non-existent path so the allowlist cannot be poisoned", async () => {
-    const gate = createProjectRootGate();
-    const ghost = path.join(tempRoot, "does-not-exist");
-    const ok = await gate.register(ghost);
-    expect(ok).toBe(false);
-    expect(gate.isApproved(ghost)).toBe(false);
-    expect(gate.size()).toBe(0);
+  it("strips trailing slashes from the web URL when constructing the request", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ project: {}, resolvedDir: "/x" }), { status: 200 }),
+    );
+    await fetchResolvedProjectDir("http://localhost:1234/", "p1", fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledWith("http://localhost:1234/api/projects/p1");
   });
 
-  it("rejects registration of files (only directories are project roots)", async () => {
-    const gate = createProjectRootGate();
-    const file = path.join(tempRoot, "not-a-dir.txt");
-    writeFileSync(file, "");
-    const ok = await gate.register(file);
-    expect(ok).toBe(false);
-    expect(gate.size()).toBe(0);
+  it("returns an error when the daemon responds non-2xx", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response("nope", { status: 404 }),
+    );
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "missing", fetchImpl);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/HTTP 404/);
   });
 
-  it("registers the realpath so a symlinked registration is matched against the real directory", async () => {
-    const gate = createProjectRootGate();
-    const realDir = path.join(tempRoot, "real");
-    await mkdir(realDir);
-    const linkDir = path.join(tempRoot, "link");
-    symlinkSync(realDir, linkDir, "dir");
-
-    expect(await gate.register(linkDir)).toBe(true);
-    // The resolved path is the real dir, not the symlink.
-    expect(gate.isApproved(realDir)).toBe(true);
-    expect(gate.isApproved(linkDir)).toBe(false);
+  it("returns an error when the daemon response is missing resolvedDir", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ project: { id: "p1" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "p1", fetchImpl);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/resolvedDir/);
   });
 
-  it("reset() empties the allowlist (test isolation hook)", async () => {
-    const gate = createProjectRootGate();
-    await gate.register(tempRoot);
-    expect(gate.size()).toBe(1);
-    gate.reset();
-    expect(gate.size()).toBe(0);
-    expect(gate.isApproved(tempRoot)).toBe(false);
+  it("returns an error when fetch itself rejects (network error)", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError("ECONNREFUSED");
+    });
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "p1", fetchImpl);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/daemon fetch failed/i);
+  });
+
+  it("encodes the project id in the URL so reserved characters round-trip safely", async () => {
+    // Project ids that pass the regex include alphanumerics, `_`, and
+    // `-`; encodeURIComponent is a no-op for those, but pin the
+    // contract anyway.
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ project: {}, resolvedDir: "/x" }), { status: 200 }),
+    );
+    await fetchResolvedProjectDir("http://localhost:1234", "abc-123_xyz", fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledWith("http://localhost:1234/api/projects/abc-123_xyz");
   });
 });

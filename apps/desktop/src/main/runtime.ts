@@ -13,13 +13,18 @@ export type PathValidationResult =
   | { ok: false; reason: string };
 
 /**
- * Validates that a renderer-supplied string points at an existing
- * absolute directory. Used as the floor check before consulting the
- * project-root allowlist below — anything that fails this check
- * (relative paths, files, apps, non-existent paths) is rejected
- * outright. Returns the realpath-resolved canonical path on success
- * so symlink games can't be used to register one path and reach
- * another.
+ * Validates that a path points at an existing absolute directory
+ * that is *not* a macOS application bundle. Returns the
+ * realpath-resolved canonical path on success so symlink games can't
+ * be used to escape into another location.
+ *
+ * The `.app` rejection is load-bearing on macOS: `.app` bundles are
+ * directories, so a plain "isDirectory" check would let the path
+ * gate forward `/Applications/Safari.app` (or any other installed
+ * app) into `shell.openPath`, which would *launch* the application
+ * rather than reveal it in Finder. Since the only legitimate use of
+ * the openPath bridge is "show the project folder," rejecting `.app`
+ * keeps the bridge limited to the actual feature surface.
  */
 export async function validateExistingDirectory(p: string): Promise<PathValidationResult> {
   if (typeof p !== "string" || p.length === 0) {
@@ -43,63 +48,65 @@ export async function validateExistingDirectory(p: string): Promise<PathValidati
   if (!st.isDirectory()) {
     return { ok: false, reason: "path is not a directory" };
   }
+  // macOS app bundles are directories; treat them as opaque files
+  // because shell.openPath on a `.app` *launches* the application.
+  if (resolvedReal.toLowerCase().endsWith(".app")) {
+    return { ok: false, reason: "application bundles are not project directories" };
+  }
   return { ok: true, resolved: resolvedReal };
 }
 
 /**
- * Allowlist gate around `shell.openPath`. The renderer calls
- * `register(absDir)` once per project mount, passing the daemon-
- * validated `resolvedDir` for the active project. Subsequent
- * `tryOpen(p)` calls only succeed when `p` resolves to a path that
- * was previously registered. Validating against the allowlist
- * (instead of only checking the path's existence) shrinks the
- * renderer→main trust boundary that the openPath bridge introduces:
- * without this, any XSS or compromised renderer dependency could
- * forward arbitrary local paths into `shell.openPath`.
+ * Resolves a project ID to its canonical working directory by asking
+ * the daemon. The web sidecar proxies `/api/*` to the daemon, so the
+ * desktop main process can reach the daemon's project-detail endpoint
+ * via the web URL we already discover for the BrowserWindow load.
  *
- * Threat-model caveat: an attacker that fully controls the renderer
- * can also call `register` directly with arbitrary paths. Closing
- * that gap fully requires a daemon-side round-trip to derive the
- * canonical `resolvedDir` from the daemon's project registry, which
- * is deferred here to keep the PR focused. Today's allowlist still
- * defends against accidental misuse, bugs, and common XSS payloads
- * that don't know to call `register` first.
+ * Used as the trust boundary for the `shell:open-path` IPC handler:
+ * the renderer hands the main process a project ID (something it knows
+ * the daemon registered), and the main process derives the path itself
+ * from the daemon's authoritative response. A compromised renderer
+ * cannot synthesize an arbitrary path because it never gets to name
+ * the path — it only names the project.
  */
-export interface ProjectRootGate {
-  register(p: string): Promise<boolean>;
-  isApproved(p: string): boolean;
-  size(): number;
-  /** Test-only: empty the in-memory allowlist between tests. */
-  reset(): void;
+export async function fetchResolvedProjectDir(
+  webUrl: string,
+  projectId: string,
+  fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+): Promise<{ ok: true; resolvedDir: string } | { ok: false; reason: string }> {
+  if (typeof projectId !== "string" || projectId.length === 0) {
+    return { ok: false, reason: "project id must be a non-empty string" };
+  }
+  // Reject obviously malformed ids before sending — the daemon enforces
+  // its own isSafeId check, but the floor here keeps URL construction
+  // honest and short-circuits trivial malicious input.
+  if (!/^[a-zA-Z0-9_-]+$/.test(projectId)) {
+    return { ok: false, reason: "project id contains disallowed characters" };
+  }
+  let resp: Response;
+  try {
+    resp = await fetchImpl(`${webUrl.replace(/\/+$/, "")}/api/projects/${encodeURIComponent(projectId)}`);
+  } catch (err) {
+    return { ok: false, reason: `daemon fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (!resp.ok) {
+    return { ok: false, reason: `daemon returned HTTP ${resp.status}` };
+  }
+  let body: unknown;
+  try {
+    body = await resp.json();
+  } catch {
+    return { ok: false, reason: "daemon response was not JSON" };
+  }
+  const resolvedDir =
+    body && typeof body === "object" && "resolvedDir" in body
+      ? (body as { resolvedDir: unknown }).resolvedDir
+      : undefined;
+  if (typeof resolvedDir !== "string" || resolvedDir.length === 0) {
+    return { ok: false, reason: "daemon response did not include resolvedDir" };
+  }
+  return { ok: true, resolvedDir };
 }
-
-export function createProjectRootGate(): ProjectRootGate {
-  const approved = new Set<string>();
-  return {
-    async register(p: string): Promise<boolean> {
-      const validated = await validateExistingDirectory(p);
-      if (!validated.ok) return false;
-      approved.add(validated.resolved);
-      return true;
-    },
-    isApproved(p: string): boolean {
-      return approved.has(p);
-    },
-    size(): number {
-      return approved.size;
-    },
-    reset(): void {
-      approved.clear();
-    },
-  };
-}
-
-/**
- * Singleton used by the live IPC handlers in `createDesktopRuntime`.
- * Tests use `createProjectRootGate()` directly to avoid sharing state
- * between cases.
- */
-const projectRootGate = createProjectRootGate();
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -375,7 +382,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
-  ipcMain.removeHandler("shell:register-project-root");
   ipcMain.handle("dialog:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
@@ -389,32 +395,29 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return false;
     }
   });
-  // Renderer registers a project working directory that it has
-  // received from the daemon's GET /api/projects/:id (resolvedDir).
-  // Only paths that pass through this registration are eligible for
-  // shell.openPath below.
-  ipcMain.handle("shell:register-project-root", async (_event, p: string) => {
-    return projectRootGate.register(p);
-  });
   // shell.openPath opens an absolute filesystem path in the OS file
   // manager (Finder / Explorer / Files). It resolves to '' on success
   // and to a non-empty error string on failure (per Electron's
   // contract). The web caller uses that empty/non-empty distinction
   // to decide between the success toast and the manual fallback toast.
   //
-  // Path is gated by:
-  //   1. Shape: non-empty string, absolute path, realpath-resolves,
-  //      points at an existing directory.
-  //   2. Allowlist: must be in the projectRootGate (registered by
-  //      the renderer with a daemon-validated resolvedDir).
-  // Any other input returns a non-empty error string so the renderer
-  // shows the fallback toast naming the path manually.
-  ipcMain.handle("shell:open-path", async (_event, p: string) => {
-    const validated = await validateExistingDirectory(p);
-    if (!validated.ok) return `open-path: ${validated.reason}`;
-    if (!projectRootGate.isApproved(validated.resolved)) {
-      return "open-path: path is not a registered project root";
+  // The renderer hands us a *project ID*, not a path. The main
+  // process then asks the daemon (via the web sidecar proxy) for the
+  // canonical resolvedDir, then validates it (absolute, exists,
+  // is-directory, not an .app bundle) before forwarding to
+  // shell.openPath. This makes the path allowlist daemon-controlled:
+  // a compromised renderer cannot synthesize an arbitrary path
+  // because it never names the path, only the project ID. The daemon
+  // is the single source of truth for what counts as a project root.
+  ipcMain.handle("shell:open-path", async (_event, projectId: string) => {
+    const webUrl = await options.discoverUrl();
+    if (!webUrl) {
+      return "open-path: web sidecar URL not available";
     }
+    const resolved = await fetchResolvedProjectDir(webUrl, projectId);
+    if (!resolved.ok) return `open-path: ${resolved.reason}`;
+    const validated = await validateExistingDirectory(resolved.resolvedDir);
+    if (!validated.ok) return `open-path: ${validated.reason}`;
     try {
       return await shell.openPath(validated.resolved);
     } catch (err) {

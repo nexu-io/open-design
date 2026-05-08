@@ -1838,7 +1838,7 @@ export function ProjectView({
       });
       return;
     }
-    const launched = await terminalLauncher.open(projectDir);
+    const launched = await terminalLauncher.open(project.id);
     if (launched.kind === 'electron' && launched.ok) {
       setProjectActionsToast({
         message: 'Folder opened. Run `claude` in your terminal here and paste the prompt.',
@@ -1877,18 +1877,6 @@ export function ProjectView({
       });
     }
   }, [finalize.error]);
-
-  // Register the daemon-validated project working directory with the
-  // Electron bridge's path allowlist so the upcoming shell.openPath
-  // call (Continue in CLI) is gated to known project roots. mrcfps
-  // PR #974 P1 review on apps/desktop/src/main/runtime.ts:305:
-  // shell.openPath must not accept arbitrary renderer-supplied paths.
-  useEffect(() => {
-    if (!projectDetail.resolvedDir) return;
-    const register = window.electronAPI?.registerProjectRoot;
-    if (typeof register !== 'function') return;
-    void register(projectDetail.resolvedDir);
-  }, [projectDetail.resolvedDir]);
 
   // ⌘+Shift+K (mac) / Ctrl+Shift+K (others) → Continue in CLI. Mirrors
   // the capture-phase, platform-gated pattern from FileWorkspace's

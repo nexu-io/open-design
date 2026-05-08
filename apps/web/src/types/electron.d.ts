@@ -12,15 +12,15 @@ declare global {
     electronAPI?: {
       openExternal?: (url: string) => Promise<boolean>;
       pickFolder?: () => Promise<string | null>;
-      openPath?: (path: string) => Promise<string>;
-      // Registers a project working directory as eligible for openPath.
-      // The renderer should call this once per project mount with the
-      // daemon-validated resolvedDir so the main process's allowlist
-      // gates shell.openPath against approved roots only. Returns true
-      // when registration succeeded, false when the path failed
-      // validation in the main process (not absolute, doesn't exist,
-      // not a directory).
-      registerProjectRoot?: (path: string) => Promise<boolean>;
+      // Reveals the project's working directory in the OS file
+      // manager. The argument is a project ID (not a filesystem
+      // path) — the desktop main process asks the daemon for the
+      // canonical resolvedDir and forwards that path to
+      // shell.openPath. Renderer never names the path directly so a
+      // compromised renderer cannot ask the bridge to open arbitrary
+      // local paths. Resolves to '' on success and a non-empty
+      // error string on failure (Electron's shell.openPath contract).
+      openPath?: (projectId: string) => Promise<string>;
     };
   }
 }
