@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage } from '../../src/types';
 
@@ -82,9 +82,14 @@ function getChatLog(): HTMLElement {
   return el as HTMLElement;
 }
 
-function flushFrame() {
-  return act(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+let rafCallbacks: FrameRequestCallback[] = [];
+
+async function flushFrame() {
+  await act(async () => {
+    const callbacks = rafCallbacks;
+    rafCallbacks = [];
+    callbacks.forEach((callback) => callback(performance.now()));
+    await Promise.resolve();
   });
 }
 
@@ -96,8 +101,18 @@ async function switchTab(name: 'Chat' | 'Comments') {
 }
 
 describe('chat scroll preservation across tab switches', () => {
+  beforeEach(() => {
+    rafCallbacks = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    });
+  });
+
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    rafCallbacks = [];
   });
 
   it('restores absolute scrollTop when user was scrolled up', async () => {
