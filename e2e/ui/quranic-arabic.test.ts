@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Quranic Arabic Learning App', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8765/index.html');
+    await page.goto('http://localhost:17573/index.html');
   });
 
   test('should load the app and display dashboard', async ({ page }) => {
