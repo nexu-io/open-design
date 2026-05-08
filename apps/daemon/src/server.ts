@@ -5550,6 +5550,12 @@ export async function startServer({
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
+    // Reset the inactivity watchdog on every raw stdout byte so that
+    // structured adapters that buffer partial lines (Codex item.completed,
+    // pi-rpc session/prompt, ACP agent messages) and models that spend a
+    // long time in non-streamed reasoning still keep the run alive.
+    child.stdout.on('data', () => noteAgentActivity());
+
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
     // Adapters that emit structured wrappers (claude-stream-json,
