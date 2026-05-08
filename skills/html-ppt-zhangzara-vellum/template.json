@@ -1,0 +1,50 @@
+{
+  "slug": "zhangzara-vellum",
+  "name": "Vellum",
+  "tagline": "Deep navy canvas with warm-yellow italic Cormorant serifs and a single dusty teal accent. A quiet, scholarly aesthetic.",
+  "mood": [
+    "scholarly",
+    "literary",
+    "considered",
+    "quiet",
+    "intellectual"
+  ],
+  "occasion": [
+    "research findings",
+    "white paper or longform report",
+    "academic or university deck",
+    "advisory deliverable",
+    "literary or editorial pitch",
+    "founder reflection / vision deck",
+    "bilingual EN/CN deck"
+  ],
+  "tone": [
+    "literary",
+    "considered",
+    "patient",
+    "intelligent"
+  ],
+  "formality": "high",
+  "density": "low",
+  "palette": {
+    "bg": "#2a3870",
+    "bg_alt": "#343f80",
+    "fg": "#E8D85C",
+    "accent": "#3a7878",
+    "description": "deep periwinkle navy canvas with warm yellow italic-serif type and one dusty-teal accent for quote marks; a single coherent palette across every slide, no inverted theme"
+  },
+  "typography": {
+    "display": "Cormorant Garamond Italic",
+    "body": "DM Sans",
+    "mono": "Courier Prime",
+    "serif_cn": "Noto Serif SC",
+    "sans_cn": "Noto Sans SC",
+    "style": "italic transitional serif as the structural display face, paired with clean DM Sans body and Courier Prime mono for attributions and labels; bilingual EN/CN support"
+  },
+  "scheme": "dark",
+  "best_for": "Anything that should feel scholarly, literary, and quietly intelligent: research synthesis, white papers, academic and policy briefs, advisory deliverables, longform editorial pieces, founder reflections. Equally strong for any deck — including tech, business, or creator work — that wants a calm, considered atmosphere instead of energetic visuals.",
+  "avoid_for": "Contexts that need visual heat or pop — the navy + warm-yellow italic-Cormorant aesthetic is intentionally low-tempo.",
+  "slide_count": 9,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/vellum"
+}

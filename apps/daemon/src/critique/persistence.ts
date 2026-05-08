@@ -310,6 +310,43 @@ export function deleteCritiqueRun(db: Database.Database, id: string): void {
 }
 
 /**
+ * Marks a single 'running' row as 'interrupted' with the supplied
+ * recoveryReason embedded in rounds_json. Mirror of the per-row write in
+ * reconcileStaleRuns(), kept as its own function so the interrupt endpoint
+ * can use it when a request arrives for a row that has no live
+ * AbortController in the registry (the post-daemon-restart window before
+ * reconcileStaleRuns considers the row old enough). Atomic on the
+ * status='running' guard so a row that just transitioned to a different
+ * terminal state is not overwritten.
+ *
+ * Returns true when a row was mutated, false when the id was missing or
+ * not in 'running' status.
+ */
+export function markRunInterruptedRecovery(
+  db: Database.Database,
+  id: string,
+  recoveryReason: string,
+  now: number = Date.now(),
+): boolean {
+  const existing = db
+    .prepare(`SELECT ${COLS} FROM critique_runs WHERE id = ? AND status = 'running'`)
+    .get(id) as RawCritiqueRunRow | undefined;
+  if (existing === undefined) return false;
+  const { rounds } = parseRoundsPayload(existing.roundsJson);
+  const newPayload = serializeRoundsPayload(rounds, recoveryReason);
+  const result = db
+    .prepare(
+      `UPDATE critique_runs
+          SET status = 'interrupted',
+              rounds_json = ?,
+              updated_at = ?
+        WHERE id = ? AND status = 'running'`,
+    )
+    .run(newPayload, now, id);
+  return result.changes > 0;
+}
+
+/**
  * Recovery scan called on daemon boot: any run still in a non-terminal status
  * older than staleAfterMs is marked 'interrupted' with rounds_json.recoveryReason
  * = 'daemon_restart'. Returns the count of rows mutated.

@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
+  fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchAppVersionInfo,
   fetchConnectorDiscovery,
@@ -132,6 +134,76 @@ describe('fetchConnectorDiscovery', () => {
   });
 });
 
+describe('connectConnector', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns a user-facing error when the OAuth popup is blocked', async () => {
+    const open = vi.fn(() => null);
+    vi.stubGlobal('window', { open } as unknown as Window & typeof globalThis);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+      }), { status: 200 })),
+    );
+
+    await expect(connectConnector('github')).resolves.toEqual({
+      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+      error: 'Popup blocked. Allow popups for Open Design and try again.',
+    });
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens connector auth in the system browser when Electron returns a success boolean', async () => {
+    const open = vi.fn();
+    const openExternal = vi.fn(async () => true);
+    vi.stubGlobal('window', {
+      open,
+      electronAPI: { openExternal },
+    } as unknown as Window & typeof globalThis);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+      }), { status: 200 })),
+    );
+
+    await expect(connectConnector('github')).resolves.toEqual({
+      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+    });
+    expect(open).not.toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
+  });
+
+  it('surfaces an error when Electron cannot confirm that the system browser opened', async () => {
+    const open = vi.fn();
+    const openExternal = vi.fn(async () => false);
+    vi.stubGlobal('window', {
+      open,
+      electronAPI: { openExternal },
+    } as unknown as Window & typeof globalThis);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+      }), { status: 200 })),
+    );
+
+    await expect(connectConnector('github')).resolves.toEqual({
+      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+      error: 'Popup blocked. Allow popups for Open Design and try again.',
+    });
+    expect(open).not.toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
+  });
+});
+
 describe('uploadProjectFiles', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -231,6 +303,21 @@ describe('deploy provider registry helpers', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/deploy/config?providerId=cloudflare-pages');
   });
 
+  it('fetches Cloudflare Pages zones from the deploy helper route', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      zones: [{ id: 'zone-1', name: 'example.com', status: 'active', type: 'full' }],
+      cloudflarePages: { lastZoneId: 'zone-1', lastDomainPrefix: 'demo' },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchCloudflarePagesZones()).resolves.toEqual({
+      zones: [{ id: 'zone-1', name: 'example.com', status: 'active', type: 'full' }],
+      cloudflarePages: { lastZoneId: 'zone-1', lastDomainPrefix: 'demo' },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/deploy/cloudflare-pages/zones');
+  });
+
   it('sends Cloudflare Pages config fields without dropping provider-specific metadata', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
@@ -265,7 +352,7 @@ describe('deploy provider registry helpers', () => {
     });
   });
 
-  it('passes the selected Cloudflare Pages provider id through deploy requests', async () => {
+  it('passes the selected Cloudflare Pages provider id and custom domain through deploy requests', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       id: 'deployment-row-1',
       projectId: 'project-1',
@@ -282,7 +369,11 @@ describe('deploy provider registry helpers', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      deployProjectFile('project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID),
+      deployProjectFile('project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID, {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'demo',
+      }),
     ).resolves.toMatchObject({
       providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
       deploymentId: 'cf-deployment-1',
@@ -295,6 +386,11 @@ describe('deploy provider registry helpers', () => {
       body: JSON.stringify({
         fileName: 'index.html',
         providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        cloudflarePages: {
+          zoneId: 'zone-1',
+          zoneName: 'example.com',
+          domainPrefix: 'demo',
+        },
       }),
     });
   });

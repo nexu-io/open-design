@@ -3,6 +3,7 @@ import { request as httpRequest } from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { COMPOSIO_LOGO_CACHE_MAX_ENTRIES } from '../src/connectors/routes.js';
 import { startServer } from '../src/server.js';
 import { ComposioConnectorProvider, composioConnectorProvider, getStaticComposioCatalogDefinitions } from '../src/connectors/composio.js';
 import { readComposioConfig, writeComposioConfig } from '../src/connectors/composio-config.js';
@@ -38,6 +39,7 @@ function mockComposioFetch(options = {}) {
     createAuthConfigResponse,
     delayFirstAuthConfigs,
     delayFirstToolkits,
+    logoFetch,
     linkResponse = { connected_account_id: 'ca_github', status: 'ACTIVE', account_label: 'octocat@example.com' },
   } = options;
   composioDiscoveryRequestCounts = { authConfigs: 0, createdAuthConfigs: 0, toolkits: 0, tools: 0 };
@@ -47,6 +49,13 @@ function mockComposioFetch(options = {}) {
       return originalFetch(input, init);
     }
     const parsed = new URL(url);
+    if (parsed.hostname === 'logos.composio.dev') {
+      if (logoFetch) return await logoFetch(parsed, init, input);
+      return new Response('<svg xmlns="http://www.w3.org/2000/svg"></svg>', {
+        status: 200,
+        headers: { 'content-type': 'image/svg+xml' },
+      });
+    }
     if (parsed.pathname === '/api/v3/auth_configs') {
       composioDiscoveryRequestCounts.authConfigs += 1;
       if (delayFirstAuthConfigs && composioDiscoveryRequestCounts.authConfigs === 1) {
@@ -354,10 +363,10 @@ describe('connector routes', () => {
 
     expect(connect.status).toBe(200);
     expect(connect.body.connector).toMatchObject({ id: 'slack', status: 'connected', auth: { configured: true } });
-    expect(connect.body.connector.tools).toEqual(expect.arrayContaining([
+    expect(connect.body.connector.tools).toEqual([
       expect.objectContaining({ name: 'slack.slack_list_channels' }),
       expect.objectContaining({ name: 'slack.slack_send_message' }),
-    ]));
+    ]);
     expect(lastComposioAuthConfigRequest).toEqual({
       toolkit: { slug: 'SLACK' },
       auth_config: { type: 'use_composio_managed_auth' },
@@ -485,6 +494,8 @@ describe('connector routes', () => {
     expect(html).toContain('GitHub connected');
     expect(html).toContain('Open Design');
     expect(html).toContain('open-design:connector-connected');
+    expect(html).toContain('function requestClose()');
+    expect(html).toContain('Your browser blocked automatic closing. You can close this tab and return to Open Design.');
     expect(html).not.toContain('<p>Connector connected. You can close this window.</p>');
   });
 
@@ -508,9 +519,251 @@ describe('connector routes', () => {
     expect(lastComposioLinkRequest.callback_url).toContain(`127.0.0.2:${url.port}/api/connectors/oauth/callback`);
   });
 
+  it('times out stalled Composio logo fetches and clears the inflight entry', async () => {
+    let upstreamRequests = 0;
+    let firstRequestAborted = false;
+    mockComposioFetch({
+      logoFetch: async (_parsed, init) => {
+        upstreamRequests += 1;
+        if (upstreamRequests === 1) {
+          await new Promise((_, reject) => {
+            if (!init?.signal) {
+              reject(new Error('expected fetch timeout signal'));
+              return;
+            }
+            const abort = () => {
+              firstRequestAborted = true;
+              reject(init.signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+            };
+            if (init.signal.aborted) {
+              abort();
+              return;
+            }
+            init.signal.addEventListener('abort', abort, { once: true });
+          });
+        }
+        return new Response(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    });
+
+    const firstRequestPromise = fetch(`${baseUrl}/api/connectors/logos/github?theme=dark`);
+    const firstResponse = await firstRequestPromise;
+
+    expect(firstRequestAborted).toBe(true);
+    expect(firstResponse.status).toBe(404);
+
+    const secondResponse = await fetch(`${baseUrl}/api/connectors/logos/github?theme=dark`);
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(upstreamRequests).toBe(2);
+  }, 15_000);
+
+  it('keeps the Composio logo timeout active while reading the response body', async () => {
+    let upstreamRequests = 0;
+    let firstBodyReadAborted = false;
+    const slug = 'body_timeout_logo';
+    mockComposioFetch({
+      logoFetch: async (_parsed, init) => {
+        upstreamRequests += 1;
+        if (upstreamRequests === 1) {
+          return {
+            ok: true,
+            headers: new Headers({ 'content-type': 'image/png' }),
+            arrayBuffer: async () => {
+              await new Promise((resolve) => setTimeout(resolve, 2_100));
+              if (!init?.signal) throw new Error('expected fetch timeout signal');
+              if (init.signal.aborted) {
+                firstBodyReadAborted = true;
+                throw (init.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+              }
+              return Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+            },
+          };
+        }
+        return new Response(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    });
+
+    const firstResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(firstBodyReadAborted).toBe(true);
+    expect(firstResponse.status).toBe(404);
+
+    const secondResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(upstreamRequests).toBe(2);
+  }, 15_000);
+
+  it('rejects oversized Composio logo payloads before buffering them', async () => {
+    let upstreamRequests = 0;
+    let arrayBufferCalled = false;
+    const slug = 'oversized_logo';
+    mockComposioFetch({
+      logoFetch: async () => {
+        upstreamRequests += 1;
+        if (upstreamRequests === 1) {
+          return {
+            ok: true,
+            headers: new Headers({
+              'content-type': 'image/png',
+              'content-length': '1048577',
+            }),
+            arrayBuffer: async () => {
+              arrayBufferCalled = true;
+              return Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+            },
+          };
+        }
+        return new Response(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    });
+
+    const firstResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(firstResponse.status).toBe(404);
+    expect(firstResponse.headers.get('cache-control')).toBe('no-store');
+    expect(arrayBufferCalled).toBe(false);
+
+    const secondResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(upstreamRequests).toBe(2);
+  });
+
+  it('evicts the least recently used Composio logo cache entry when the cache is full', async () => {
+    let upstreamRequests = 0;
+    mockComposioFetch({
+      logoFetch: async (parsed) => {
+        upstreamRequests += 1;
+        return new Response(Buffer.from(parsed.pathname), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    });
+
+    for (let index = 0; index < COMPOSIO_LOGO_CACHE_MAX_ENTRIES; index += 1) {
+      const response = await fetch(`${baseUrl}/api/connectors/logos/slug_${index}?theme=dark`);
+      expect(response.status).toBe(200);
+    }
+
+    const warmedCount = upstreamRequests;
+
+    const refreshedResponse = await fetch(`${baseUrl}/api/connectors/logos/slug_0?theme=dark`);
+    expect(refreshedResponse.status).toBe(200);
+    expect(upstreamRequests).toBe(warmedCount);
+
+    const overflowResponse = await fetch(`${baseUrl}/api/connectors/logos/slug_overflow?theme=dark`);
+    expect(overflowResponse.status).toBe(200);
+    expect(upstreamRequests).toBe(warmedCount + 1);
+
+    const stillCachedResponse = await fetch(`${baseUrl}/api/connectors/logos/slug_0?theme=dark`);
+    expect(stillCachedResponse.status).toBe(200);
+    expect(upstreamRequests).toBe(warmedCount + 1);
+
+    const evictedResponse = await fetch(`${baseUrl}/api/connectors/logos/slug_1?theme=dark`);
+    expect(evictedResponse.status).toBe(200);
+    expect(upstreamRequests).toBe(warmedCount + 2);
+  });
+
+  it('serves raster Composio logo responses', async () => {
+    mockComposioFetch({
+      logoFetch: async () => {
+        return new Response(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/connectors/logos/github?theme=dark`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  });
+
+  it('serves SVG Composio logo responses with a restrictive CSP', async () => {
+    let upstreamRequests = 0;
+    const slug = 'svg_only_logo';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>';
+    mockComposioFetch({
+      logoFetch: async () => {
+        upstreamRequests += 1;
+        return new Response(svg, {
+          status: 200,
+          headers: { 'content-type': 'image/svg+xml' },
+        });
+      },
+    });
+
+    const firstResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(firstResponse.status).toBe(200);
+    expect(firstResponse.headers.get('content-type')).toBe('image/svg+xml');
+    expect(firstResponse.headers.get('content-security-policy')).toBe("default-src 'none'; img-src data:; style-src 'unsafe-inline'");
+    expect(await firstResponse.text()).toBe(svg);
+
+    const secondResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.headers.get('content-type')).toBe('image/svg+xml');
+    expect(await secondResponse.text()).toBe(svg);
+    expect(upstreamRequests).toBe(1);
+  });
+
+  it('rejects non-image Composio logo responses without caching them', async () => {
+    let upstreamRequests = 0;
+    const slug = 'html_only_logo';
+    mockComposioFetch({
+      logoFetch: async () => {
+        upstreamRequests += 1;
+        if (upstreamRequests === 1) {
+          return new Response('<html><body>oops</body></html>', {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+          });
+        }
+        return new Response(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    });
+
+    const firstResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(firstResponse.status).toBe(404);
+    expect(firstResponse.headers.get('cache-control')).toBe('no-store');
+
+    const secondResponse = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(upstreamRequests).toBe(2);
+  });
+
   it('lists connected Composio tools through run-scoped tool auth', async () => {
     await jsonFetch(`${baseUrl}/api/connectors/github/connect`, { method: 'POST' });
     const token = mintConnectorToolToken();
+    composioDiscoveryRequestCounts = { authConfigs: 0, createdAuthConfigs: 0, toolkits: 0, tools: 0 };
 
     const response = await jsonFetch(`${baseUrl}/api/tools/connectors/list`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -521,6 +774,52 @@ describe('connector routes', () => {
     expect(response.body.connectors[0].tools).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'github.github_search_repositories', safety: expect.objectContaining({ sideEffect: 'read', approval: 'auto' }) }),
     ]));
+    expect(composioDiscoveryRequestCounts).toEqual({ authConfigs: 0, createdAuthConfigs: 0, toolkits: 0, tools: 0 });
+  });
+
+  it('filters connected connector tools by curated use case and returns curation metadata', async () => {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+    mockComposioFetch({
+      authConfigs: [{ id: 'ac_slack', status: 'ENABLED', toolkit: { slug: 'slack' } }],
+      linkResponse: { connected_account_id: 'ca_slack', status: 'ACTIVE', account_label: 'slack@example.com' },
+    });
+    composioConnectorProvider.clearDiscoveryCache();
+    const started = await startServer({ port: 0, returnServer: true });
+    server = started.server;
+    baseUrl = started.url;
+    await jsonFetch(`${baseUrl}/api/connectors/composio/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'cmp_test' }),
+    });
+    await jsonFetch(`${baseUrl}/api/connectors/slack/connect`, { method: 'POST' });
+    const token = mintConnectorToolToken();
+
+    const response = await jsonFetch(`${baseUrl}/api/tools/connectors/list?useCase=personal_daily_digest`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.connectors.map((connector) => connector.id)).toEqual(['slack']);
+    expect(response.body.connectors[0].tools).toEqual([
+      expect.objectContaining({
+        name: 'slack.slack_list_channels',
+        curation: expect.objectContaining({ useCases: ['personal_daily_digest'] }),
+      }),
+    ]);
+  });
+
+  it('rejects invalid connector tool useCase filters', async () => {
+    const token = mintConnectorToolToken();
+
+    const response = await jsonFetch(`${baseUrl}/api/tools/connectors/list?useCase=invalid`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('BAD_REQUEST');
   });
 
   it('executes connected Composio tools through run-scoped tool auth', async () => {

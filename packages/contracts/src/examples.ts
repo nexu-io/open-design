@@ -139,6 +139,10 @@ export const exampleConnectorDetail: ConnectorDetail = {
         reason: 'Tool name, scope, or description indicates explicit read-only behavior.',
       },
       refreshEligible: true,
+      curation: {
+        useCases: ['personal_daily_digest'],
+        reason: 'Curated for recent personal GitHub activity in a daily digest.',
+      },
     },
   ],
   auth: { provider: 'composio', configured: false },

@@ -2,15 +2,14 @@
 import http from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  allowedBrowserPorts,
+  configuredAllowedOrigins,
+  isAllowedBrowserOrigin,
+  isLocalSameOrigin,
+} from '../src/origin-validation.js';
 
-/**
- * Replicate the origin validation middleware from server.ts exactly
- * as it appears in the real daemon, so we test the actual logic
- * including OD_WEB_PORT, Origin: null scoping, and non-loopback host.
- */
 function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
-  // Routes that serve content to sandboxed iframes (Origin: null) for
-  // read-only purposes.
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
   return (req, res, next) => {
@@ -27,18 +26,9 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
     if (!resolvedPort) {
       return res.status(403).json({ error: 'Server initializing' });
     }
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    const allowedOrigins = new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
-    if (!allowedOrigins.has(String(origin))) {
+    const ports = allowedBrowserPorts(resolvedPort);
+    const extraAllowedOrigins = configuredAllowedOrigins();
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
@@ -51,6 +41,12 @@ function makeTestApp(port, host = '127.0.0.1') {
   app.use('/api', createOriginMiddleware(port, host));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/projects', (_req, res) => res.json({ projects: [] }));
+  app.post('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, port)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    res.json({ active: true });
+  });
   app.get('/api/projects/:id/raw/:name', (req, res) => {
     // Mimics the real raw-file route that sets CORS for Origin: null
     if (req.headers.origin === 'null') {
@@ -147,6 +143,116 @@ describe('daemon origin validation middleware', () => {
     expect(res.status).toBe(200);
   });
 
+  it('allows same-origin requests from a private LAN address', async () => {
+    const lanHost = `192.168.18.16:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    '10.0.5.12',
+    '172.16.0.1',
+    '172.31.255.254',
+    '169.254.10.20',
+  ])('allows same-origin requests from private LAN range %s', async (host) => {
+    const lanHost = `${host}:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    '172.15.255.255',
+    '172.32.0.1',
+    '192.168.1.256',
+  ])('blocks non-private or malformed LAN-like address %s', async (host) => {
+    const lanHost = `${host}:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows local guarded routes from a matching private LAN origin', async () => {
+    const lanHost = `192.168.18.16:${port}`;
+    const res = await request(port, 'POST', '/api/active', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks private LAN origins when the request host differs', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://192.168.18.16:${port}`,
+      headers: {
+        Host: `192.168.18.17:${port}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks local guarded routes when the private LAN host differs', async () => {
+    const res = await request(port, 'POST', '/api/active', {
+      origin: `http://192.168.18.16:${port}`,
+      headers: {
+        Host: `192.168.18.17:${port}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks local guarded routes without Origin when Host only matches a configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  it('allows local guarded routes from a matching configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        origin: 'https://od.example.com',
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
   // --- Origin: null (sandboxed iframe previews) ---
 
   it('allows Origin: null for GET raw-file preview routes', async () => {
@@ -186,6 +292,18 @@ describe('daemon origin validation middleware', () => {
       origin: 'null',
     });
     expect(res.status).toBe(403);
+  });
+
+  it('allows explicitly configured deployment origins', async () => {
+    process.env.OD_ALLOWED_ORIGINS = `https://od.example.com,http://203.0.113.10:${port}`;
+    try {
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: 'https://od.example.com',
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
   });
 
   // --- Cross-origin rejection ---

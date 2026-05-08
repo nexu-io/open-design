@@ -107,6 +107,16 @@ const MAC_WINDOW_CHROME_CSS = `
   .entry-header [role="button"],
   .entry-tabs,
   .entry-tabs *,
+  .viewer-toolbar,
+  .viewer-toolbar *,
+  .deck-nav,
+  .deck-nav *,
+  .ds-modal-header,
+  .ds-modal-header *,
+  .ds-modal-actions,
+  .ds-modal-actions *,
+  .share-menu-popover,
+  .share-menu-popover *,
   .entry-side-resizer,
   .avatar-popover,
   .avatar-popover * {
@@ -181,6 +191,15 @@ function isHttpUrl(url: string): boolean {
   }
 }
 
+function isAllowedChildWindowUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "blob:";
+  } catch {
+    return false;
+  }
+}
+
 function installWindowChromeCssHook(window: BrowserWindow): void {
   window.webContents.on("did-finish-load", () => {
     void applyWindowChromeCss(window).catch((error: unknown) => {
@@ -239,9 +258,19 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // a second handler" on the second createDesktopRuntime() call (e.g. dev
   // hot-reload). removeHandler is a no-op when nothing is registered.
   ipcMain.removeHandler("dialog:pick-folder");
+  ipcMain.removeHandler("shell:open-external");
   ipcMain.handle("dialog:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+  ipcMain.handle("shell:open-external", async (_event, url: string) => {
+    if (!isHttpUrl(url)) return false;
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
@@ -269,6 +298,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.on("blur", () => showWindowButtons(window));
 
   window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedChildWindowUrl(url)) return { action: "allow" };
     if (isHttpUrl(url)) void shell.openExternal(url);
     return { action: "deny" };
   });

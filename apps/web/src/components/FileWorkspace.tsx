@@ -631,7 +631,7 @@ function Tab({
   const iconName = kindIconName(kind);
   return (
     <div
-      className={`ws-tab ${active ? 'active' : ''}`}
+      className={`ws-tab${kind === 'live-artifact' ? ' live-artifact-tab' : ''} ${active ? 'active' : ''}`}
       onClick={onActivate}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

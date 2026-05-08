@@ -5,6 +5,7 @@ import type { Express, Request, RequestHandler, Response } from 'express';
 import type { ToolTokenGrant } from '../tool-tokens.js';
 import { validateBoundedJsonObject } from '../live-artifacts/schema.js';
 import { executeConnectorTool, listConnectorTools } from '../tools/connectors.js';
+import type { ConnectorToolUseCase } from './catalog.js';
 import { connectorService, ConnectorService, ConnectorServiceError } from './service.js';
 
 type ConnectorApiErrorCode =
@@ -20,6 +21,23 @@ type ConnectorApiErrorCode =
   | 'CONNECTOR_RATE_LIMITED'
   | 'CONNECTOR_OUTPUT_TOO_LARGE'
   | 'CONNECTOR_EXECUTION_FAILED';
+
+const COMPOSIO_LOGO_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const COMPOSIO_LOGO_FETCH_TIMEOUT_MS = 2_000;
+export const COMPOSIO_LOGO_CACHE_MAX_ENTRIES = 128;
+const COMPOSIO_LOGO_MAX_BYTES = 1024 * 1024;
+const COMPOSIO_LOGO_SLUG_ALIASES: Record<string, string> = {
+  zohobooks: 'zoho_books',
+};
+
+interface CachedComposioLogo {
+  body: Buffer;
+  contentType: string;
+  expiresAtMs: number;
+}
+
+const composioLogoCache = new Map<string, CachedComposioLogo>();
+const composioLogoInflight = new Map<string, Promise<CachedComposioLogo | null>>();
 
 export type ConnectorApiErrorSender = (
   res: Response,
@@ -54,6 +72,164 @@ function isLoopbackHostname(hostname: string): boolean {
   if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
   if (normalized.startsWith('::ffff:')) return isLoopbackHostname(normalized.slice('::ffff:'.length));
   return net.isIP(normalized) === 4 && (normalized === '127.0.0.1' || normalized.startsWith('127.'));
+}
+
+function parseConnectorToolUseCase(value: unknown): ConnectorToolUseCase | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'personal_daily_digest') return value;
+  return undefined;
+}
+
+function parseConnectorLogoTheme(value: unknown): 'light' | 'dark' {
+  return value === 'light' ? 'light' : 'dark';
+}
+
+function parseConnectorLogoSlug(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const slug = COMPOSIO_LOGO_SLUG_ALIASES[normalized] ?? normalized;
+  return slug.length > 0 ? slug : undefined;
+}
+
+function sendComposioLogo(res: Response, logo: CachedComposioLogo): void {
+  res.setHeader('Content-Type', logo.contentType);
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  if (logo.contentType === 'image/svg+xml') {
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'");
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(logo.body);
+}
+
+function sendMissingComposioLogo(res: Response): void {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.status(404).end();
+}
+
+function normalizeImageContentType(value: string | null): string | null {
+  const contentType = value?.split(';')[0]?.trim().toLowerCase();
+  if (!contentType?.startsWith('image/')) return null;
+  return contentType;
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
+}
+
+function parsePositiveIntegerHeader(value: string | null): number | null {
+  if (!value) return null;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function readComposioLogoBody(response: globalThis.Response): Promise<Buffer | null> {
+  const contentLength = parsePositiveIntegerHeader(response.headers.get('content-length'));
+  if (contentLength !== null && contentLength > COMPOSIO_LOGO_MAX_BYTES) return null;
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const body = Buffer.from(await response.arrayBuffer());
+    return body.byteLength <= COMPOSIO_LOGO_MAX_BYTES ? body : null;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    totalBytes += value.byteLength;
+    if (totalBytes > COMPOSIO_LOGO_MAX_BYTES) return null;
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), totalBytes);
+}
+
+function pruneExpiredComposioLogos(nowMs: number): void {
+  for (const [cacheKey, logo] of composioLogoCache) {
+    if (logo.expiresAtMs > nowMs) continue;
+    composioLogoCache.delete(cacheKey);
+  }
+}
+
+function promoteComposioLogoCacheEntry(cacheKey: string, logo: CachedComposioLogo): void {
+  composioLogoCache.delete(cacheKey);
+  composioLogoCache.set(cacheKey, logo);
+}
+
+function cacheComposioLogo(cacheKey: string, logo: CachedComposioLogo): void {
+  pruneExpiredComposioLogos(Date.now());
+  if (composioLogoCache.has(cacheKey)) composioLogoCache.delete(cacheKey);
+  while (composioLogoCache.size >= COMPOSIO_LOGO_CACHE_MAX_ENTRIES) {
+    const oldestCacheKey = composioLogoCache.keys().next().value;
+    if (oldestCacheKey === undefined) break;
+    composioLogoCache.delete(oldestCacheKey);
+  }
+  composioLogoCache.set(cacheKey, logo);
+}
+
+async function fetchComposioLogo(slug: string, theme: 'light' | 'dark'): Promise<CachedComposioLogo | null> {
+  const cacheKey = `${slug}:${theme}`;
+  const nowMs = Date.now();
+  const cached = composioLogoCache.get(cacheKey);
+  if (cached && cached.expiresAtMs > nowMs) {
+    promoteComposioLogoCacheEntry(cacheKey, cached);
+    return cached;
+  }
+  if (cached) composioLogoCache.delete(cacheKey);
+
+  const inflight = composioLogoInflight.get(cacheKey);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const upstream = `https://logos.composio.dev/api/${encodeURIComponent(slug)}?theme=${theme}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), COMPOSIO_LOGO_FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(upstream, {
+        headers: { accept: 'image/avif,image/webp,image/apng,image/png,image/jpeg' },
+        signal: controller.signal,
+      });
+      if (!response.ok) return null;
+      const body = await readComposioLogoBody(response);
+      if (!body) return null;
+      const contentType = normalizeImageContentType(response.headers.get('content-type'));
+      if (!contentType) return null;
+      const logo: CachedComposioLogo = {
+        body,
+        contentType,
+        expiresAtMs: Date.now() + COMPOSIO_LOGO_CACHE_TTL_MS,
+      };
+      cacheComposioLogo(cacheKey, logo);
+      return logo;
+    } catch (error) {
+      if (isAbortLikeError(error)) return null;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  })().finally(() => {
+    composioLogoInflight.delete(cacheKey);
+  });
+  composioLogoInflight.set(cacheKey, promise);
+  return promise;
+}
+
+async function proxyComposioLogo(req: Request, res: Response): Promise<void> {
+  const slug = parseConnectorLogoSlug(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: 'logo slug is required' });
+    return;
+  }
+  const theme = parseConnectorLogoTheme(req.query.theme);
+  const logo = await fetchComposioLogo(slug, theme);
+  if (!logo) {
+    sendMissingComposioLogo(res);
+    return;
+  }
+  sendComposioLogo(res, logo);
 }
 
 function connectorCallbackUrl(req: Request): string {
@@ -294,17 +470,32 @@ function renderConnectorConnectedHtml(connectorId: string): string {
         const connectorId = ${connectorIdJson};
         const connectorLabel = ${connectorLabelJson};
         const message = { type: 'open-design:connector-connected', connectorId, connectorLabel };
+        const closeButton = document.getElementById('close-window');
+        const hint = document.getElementById('auto-close-hint');
+        function showManualCloseHint() {
+          closeButton.textContent = 'Close this tab manually';
+          hint.textContent = 'Your browser blocked automatic closing. You can close this tab and return to Open Design.';
+        }
+        function requestClose() {
+          try {
+            window.close();
+          } finally {
+            window.setTimeout(() => {
+              if (document.visibilityState === 'visible') showManualCloseHint();
+            }, 250);
+          }
+        }
         try {
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage(message, '*');
-            window.setTimeout(() => window.close(), 900);
+            window.setTimeout(requestClose, 900);
           } else {
-            document.getElementById('auto-close-hint').textContent = 'You can close this tab and return to Open Design.';
+            hint.textContent = 'You can close this tab and return to Open Design.';
           }
         } catch {
-          document.getElementById('auto-close-hint').textContent = 'You can close this tab and return to Open Design.';
+          hint.textContent = 'You can close this tab and return to Open Design.';
         }
-        document.getElementById('close-window').addEventListener('click', () => window.close());
+        closeButton.addEventListener('click', requestClose);
       })();
     </script>
   </body>
@@ -337,6 +528,14 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
         ? ['1', 'true', 'yes'].includes(req.query.refresh.toLowerCase())
         : false;
       res.json(await service.listConnectorDiscovery({ refresh }));
+    } catch (err) {
+      sendConnectorRouteError(res, err, options.sendApiError);
+    }
+  });
+
+  app.get('/api/connectors/logos/:slug', async (req: Request, res: Response) => {
+    try {
+      await proxyComposioLogo(req, res);
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
     }
@@ -430,7 +629,13 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
         options.sendApiError(res, 500, 'CONNECTOR_EXECUTION_FAILED', 'connector tool routes are not configured');
         return;
       }
-      res.json({ connectors: await listConnectorTools({ grant, projectsRoot: options.projectsRoot, service }) });
+      const rawUseCase = typeof req.query.useCase === 'string' ? req.query.useCase : undefined;
+      const useCase = parseConnectorToolUseCase(rawUseCase);
+      if (rawUseCase !== undefined && useCase === undefined) {
+        options.sendApiError(res, 400, 'BAD_REQUEST', 'useCase must be personal_daily_digest');
+        return;
+      }
+      res.json({ connectors: await listConnectorTools({ grant, projectsRoot: options.projectsRoot, service, ...(useCase === undefined ? {} : { useCase }) }) });
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
     }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { PetOverlay } from './components/pet/PetOverlay';
@@ -51,6 +51,13 @@ import type {
   SkillSummary,
 } from './types';
 
+export function shouldSyncMediaProvidersOnSave(
+  mediaProviders: AppConfig['mediaProviders'],
+  options?: { force?: boolean },
+): boolean {
+  return Boolean(options?.force) || hasAnyConfiguredProvider(mediaProviders);
+}
+
 function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig['composio'] {
   const apiKey = config?.apiKey?.trim() ?? '';
   if (apiKey) {
@@ -64,8 +71,47 @@ function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig[
   return { ...(config ?? {}) };
 }
 
+export async function persistComposioConfigChange(
+  current: AppConfig,
+  composio: AppConfig['composio'],
+  sync: (config: AppConfig['composio']) => Promise<boolean> = syncComposioConfigToDaemon,
+): Promise<AppConfig> {
+  const saved = await sync(composio);
+  if (!saved) throw new Error('Composio config save failed');
+  return {
+    ...current,
+    composio: normalizeSavedComposioConfig(composio),
+  };
+}
+
+export function buildPersistedConfig(next: AppConfig, current: AppConfig): AppConfig {
+  return {
+    ...next,
+    onboardingCompleted: current.onboardingCompleted ? true : next.onboardingCompleted,
+    composio: next.composio
+      ? {
+          apiKey: '',
+          apiKeyConfigured: Boolean(next.composio.apiKeyConfigured),
+          apiKeyTail: next.composio.apiKeyTail ?? '',
+        }
+      : next.composio,
+  };
+}
+
+export function resolveSettingsCloseConfig(
+  rendered: AppConfig,
+  latestPersisted: AppConfig,
+): AppConfig {
+  const base = latestPersisted === rendered ? rendered : latestPersisted;
+  return base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
+}
+
 export function App() {
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
+  const configRef = useRef(config);
+  configRef.current = config;
+  const latestPersistedConfigRef = useRef(config);
+  latestPersistedConfigRef.current = config;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
@@ -85,6 +131,15 @@ export function App() {
   // fetches. The entry view uses this to show shimmer / skeleton states
   // instead of an "empty" page that flickers before data lands.
   const [bootstrapping, setBootstrapping] = useState(true);
+  // Narrower flag dedicated to the Composio API key hydration. The key is
+  // persisted by the daemon (and only reflected back via apiKeyConfigured
+  // + apiKeyTail), so after a dev-server restart there is a window where
+  // the dialog can render an empty Composio input even though a saved key
+  // exists. Settings → Connectors uses this to render a skeleton over the
+  // input + buttons instead of an empty input that the user might
+  // mistake for "no key saved" — and to disable Save/Clear so a misclick
+  // can't overwrite the saved state with `''` before hydration lands.
+  const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
 
   // Sync theme preference to the <html> element so CSS variables pick it up.
@@ -200,6 +255,12 @@ export function App() {
         return next;
       });
       setBootstrapping(false);
+      // Composio hydration is part of the same Promise.all above — by the
+      // time we land here either the daemon returned the saved-key shape
+      // (apiKeyConfigured + tail) or the daemon was offline and we kept
+      // whatever localStorage held. Either way it is safe to drop the
+      // skeleton: the input now reflects the source of truth.
+      setComposioConfigLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -244,30 +305,58 @@ export function App() {
     setTemplates(list);
   }, []);
 
-  const handleConfigSave = useCallback(async (next: AppConfig, closeModal: boolean = true) => {
-    // Only sync Composio key to the daemon when it actually changed,
-    // so unrelated saves (theme, model, etc.) are never blocked.
-    const composioChanged =
-      next.composio?.apiKey !== config.composio?.apiKey ||
-      next.composio?.apiKeyConfigured !== config.composio?.apiKeyConfigured;
-    if (composioChanged) {
-      const ok = await syncComposioConfigToDaemon(next.composio);
-      if (!ok) return { success: false };
-    }
-    const withOnboarding: AppConfig = {
-      ...next,
-      composio: normalizeSavedComposioConfig(next.composio),
-      onboardingCompleted: true,
-    };
-    saveConfig(withOnboarding);
-    void syncMediaProvidersToDaemon(withOnboarding.mediaProviders, {
-      force: true,
-    });
-    void syncConfigToDaemon(withOnboarding);
-    setConfig(withOnboarding);
-    if (closeModal) setSettingsOpen(false);
-    return { success: true };
-  }, [config]);
+  /**
+   * Autosave-driven persistence path. The settings dialog calls this on
+   * every committed edit (via a debounced effect) so localStorage and
+   * the daemon stay in lock-step with the user's draft. We deliberately
+   * do NOT touch the Composio secret here — it has its own gesture
+   * (handleConfigPersistComposioKey) so partial keys never leave the
+   * browser. Onboarding is also left alone; the dialog's close path
+   * is the canonical "I'm done" signal.
+   */
+  const handleConfigPersist = useCallback(async (
+    next: AppConfig,
+    options?: { forceMediaProviderSync?: boolean },
+  ) => {
+    // Strip the in-flight Composio secret before anything hits disk so
+    // a half-typed key can't survive in localStorage. If the dialog is
+    // closing, preserve any onboarding completion that the close gesture
+    // already committed so an unmount autosave cannot re-open the welcome flow.
+    const persisted = buildPersistedConfig(next, configRef.current);
+    latestPersistedConfigRef.current = persisted;
+    saveConfig(persisted);
+    setConfig(persisted);
+    await Promise.all([
+      shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
+        force: options?.forceMediaProviderSync,
+      })
+        ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
+            force: options?.forceMediaProviderSync,
+            throwOnError: options?.forceMediaProviderSync,
+          })
+        : Promise.resolve(),
+      syncConfigToDaemon(persisted),
+    ]);
+  }, []);
+
+  /**
+   * Explicit Composio API-key save. Called from the section-local
+   * "Save key" button so secrets never ride the autosave keystroke
+   * loop. Once the daemon confirms, we normalize the saved config
+   * (strip the secret, store apiKeyConfigured + apiKeyTail) and feed
+   * it back into local state so the saved-key badge appears.
+   */
+  const handleConfigPersistComposioKey = useCallback(
+    async (composio: AppConfig['composio']) => {
+      const next = await persistComposioConfigChange(config, composio);
+      setConfig((curr) => {
+        const merged: AppConfig = { ...curr, composio: next.composio };
+        saveConfig(merged);
+        return merged;
+      });
+    },
+    [config],
+  );
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
@@ -596,14 +685,18 @@ export function App() {
           appVersionInfo={appVersionInfo}
           welcome={settingsWelcome}
           initialSection={settingsInitialSection}
-          onSave={handleConfigSave}
+          composioConfigLoading={composioConfigLoading}
+          onPersist={handleConfigPersist}
+          onPersistComposioKey={handleConfigPersistComposioKey}
           onClose={() => {
-            // Dismissing the welcome modal (Skip for now / backdrop click)
-            // also counts as onboarding-done; we don't want to keep
-            // re-prompting on every refresh just because the user opted
-            // not to save.
-            if (settingsWelcome && !config.onboardingCompleted) {
-              const next: AppConfig = { ...config, onboardingCompleted: true };
+            // Closing the dialog is the canonical "I'm done" gesture
+            // now that there is no global Save button. We mark
+            // onboardingCompleted on close so the welcome modal stops
+            // re-prompting on every refresh, regardless of whether
+            // the user changed anything during the session.
+            const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
+            if (!next.onboardingCompleted || !config.onboardingCompleted) {
+              latestPersistedConfigRef.current = next;
               saveConfig(next);
               void syncConfigToDaemon(next);
               setConfig(next);
