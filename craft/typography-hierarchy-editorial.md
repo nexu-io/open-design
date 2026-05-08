@@ -51,7 +51,8 @@ Rules:
 - Pull quotes: full column margin on both sides, or break the grid entirely.
 - Section breaks: use space as the default hierarchy signal. Separators (rules, dingbats,
   folios, chapter marks) are allowed only when they reinforce publication identity or
-  distinguish unrelated content, not as a substitute for typographic hierarchy.
+  distinguish unrelated content. For RTL layouts, mirror or adapt separators using
+  logical directions (inline-start, inline-end) rather than physical (left, right).
 - Caption clusters: tighter internal spacing, larger gap from the body above.
 
 ### 3. Restrained bold
@@ -69,12 +70,13 @@ If everything important is bold, nothing is.
 
 Negative tracking at large sizes is mandatory for Latin display. At editorial display sizes
 (56 px+), tracking should be `-0.02em` to `-0.05em` (editorial override;
-see `typography.md` §display tracking for the default range). Light display
+see `typography.md` §letter-spacing for the default range). Light display
 weights may go tighter within this range.
 
-**Script-aware exception:** For Arabic, Hebrew, Persian, or other cursive/joining scripts,
-keep tracking at `0` and rely on scale and space for hierarchy. Negative letter-spacing
-breaks cursive joining (see `rtl-and-bidi`); hierarchy in these scripts is carried by size,
+**Script-aware exception:** For Arabic, Persian, and Urdu (cursive-joining scripts),
+keep tracking at `0` — negative letter-spacing breaks cursive joining (see `rtl-and-bidi`).
+Hebrew uses logical spacing rules but is not cursive-joining; consult `rtl-and-bidi`
+for right-to-left baseline adjustments. Hierarchy in these scripts is carried by size,
 weight, and whitespace, not tracking.
 
 ---
@@ -127,7 +129,7 @@ between compression and expansion:
 | Deck / standfirst | 18–24 px | Regular | `0` | `1.4`–`1.5` | Transitional — moderate gap below |
 | Byline / dateline | 12–14 px | Regular or medium | `0.02em`–`0.04em` | `1.5` | Recedes — tight gap below |
 | Body | 16–18 px | Regular | `0` | `1.6`–`1.7` | Baseline — rhythm carrier |
-| Pull quote | 28–40 px | Regular or light | `-0.01em` | `1.2`–`1.3` | Interrupt — large above/below |
+| Pull quote | 28–40 px | Regular or light | `-0.01em` (Latin only; 0 for joining scripts) | `1.2`–`1.3` | Interrupt — large above/below |
 | Image caption | 12–13 px | Regular | `0.01em` | `1.5` | Recedes — tight cluster |
 | Section label | 11–12 px | Medium | `0.06em`–`0.1em` (if caps) | `1.5` | Wayfinding only |
 
@@ -162,10 +164,11 @@ between compression and expansion:
 - [ ] Display headline is light or regular weight unless the design system
       specifies otherwise.
 - [ ] Display tracking is within `-0.02em` to `-0.05em` at 56 px+ (Latin only;
-      0 for cursive/joining scripts). (guidance)
+      0 for Arabic/Persian/Urdu joining scripts; see `rtl-and-bidi` for Hebrew). (guidance)
+- [ ] Pull-quote tracking: `-0.01em` (Latin only; 0 for joining scripts). (guidance)
 - [ ] Gap between display and deck: display/deck ratio ≥ 1.5× or absolute px delta
       ≥ 24 px to read as a scale event. (guidance)
-- [ ] Body line height is `1.6`–1.7`.
+- [ ] Body line height is `1.6`–`1.7`.
 - [ ] Body measure is 60–70 ch.
 - [ ] Pull quote, if present, breaks the body column (full width or offset).
 - [ ] No more than 2 pull quotes in a single article surface. (long-form only)

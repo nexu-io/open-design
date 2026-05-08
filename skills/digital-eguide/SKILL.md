@@ -36,8 +36,8 @@ od:
 
 # Digital E-Guide Skill
 
-Produce a two-page digital guide preview side-by-side. Cover on the left,
-inside spread on the right. Lifestyle creator tone, lots of negative space,
+Produce a two-page digital guide preview side-by-side. Cover on the inline-start,
+inside spread on the inline-end. Lifestyle creator tone, lots of negative space,
 serif display headings, careful column rhythm.
 
 ## Workflow
@@ -64,7 +64,7 @@ serif display headings, careful column rhythm.
      - Display sub-title ("Write like you talk — only sharper.").
      - 2-column body: opening paragraph + a numbered 4-step list ("01 Pick
        the rule", "02 Drop the filler"…).
-     - Pull-quote pinned right-side: large italic display, accent color, with
+     - Pull-quote pinned to inline-end: large italic display, accent color, with
        attribution.
      - Bottom strip with "EXERCISE" callout (mono label + 1 sentence prompt
        in italic).
