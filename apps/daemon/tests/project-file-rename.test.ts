@@ -1,0 +1,150 @@
+import type http from 'node:http';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+
+import { startServer } from '../src/server.js';
+
+describe('project file rename route', () => {
+  let server: http.Server;
+  let baseUrl: string;
+  const tempDirs: string[] = [];
+
+  beforeAll(async () => {
+    const started = (await startServer({ port: 0, returnServer: true })) as {
+      url: string;
+      server: http.Server;
+    };
+    baseUrl = started.url;
+    server = started.server;
+  });
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  async function createProject() {
+    const id = `rename-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name: id }),
+    });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project: { id: string } };
+    return body.project.id;
+  }
+
+  async function writeText(projectId: string, name: string, content = 'hello') {
+    const resp = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    });
+    expect(resp.status).toBe(200);
+  }
+
+  async function renameFile(projectId: string, from: string, to: string) {
+    return fetch(`${baseUrl}/api/projects/${projectId}/files/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to }),
+    });
+  }
+
+  it('renames a text file and preserves non-ASCII target names', async () => {
+    const projectId = await createProject();
+    await writeText(projectId, 'paste-1.txt', 'body');
+
+    const resp = await renameFile(projectId, 'paste-1.txt', '需求说明.txt');
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { oldName: string; newName: string; file: { name: string } };
+    expect(body.oldName).toBe('paste-1.txt');
+    expect(body.newName).toBe('需求说明.txt');
+    expect(body.file.name).toBe('需求说明.txt');
+
+    const renamed = await fetch(`${baseUrl}/api/projects/${projectId}/raw/${encodeURIComponent('需求说明.txt')}`);
+    expect(renamed.status).toBe(200);
+    expect(await renamed.text()).toBe('body');
+  });
+
+  it('rejects target file conflicts without overwriting', async () => {
+    const projectId = await createProject();
+    await writeText(projectId, 'a.txt', 'first');
+    await writeText(projectId, 'b.txt', 'second');
+
+    const resp = await renameFile(projectId, 'a.txt', 'b.txt');
+    expect(resp.status).toBe(409);
+
+    const existing = await fetch(`${baseUrl}/api/projects/${projectId}/raw/b.txt`);
+    expect(await existing.text()).toBe('second');
+  });
+
+  it('rejects invalid and escaping paths', async () => {
+    const projectId = await createProject();
+    await writeText(projectId, 'a.txt');
+
+    expect((await renameFile(projectId, 'a.txt', '../outside.txt')).status).toBe(400);
+    expect((await renameFile(projectId, 'a.txt', '/tmp/outside.txt')).status).toBe(400);
+    expect((await renameFile(projectId, 'a.txt', '.live-artifacts/x.txt')).status).toBe(400);
+  });
+
+  it('returns 404 when the source file is missing', async () => {
+    const projectId = await createProject();
+    const resp = await renameFile(projectId, 'missing.txt', 'next.txt');
+    expect(resp.status).toBe(404);
+  });
+
+  it('renames artifact manifests alongside their entry file', async () => {
+    const projectId = await createProject();
+    const resp = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'old.html',
+        content: '<!doctype html>',
+        artifactManifest: {
+          kind: 'html',
+          renderer: 'html',
+          exports: ['html'],
+          title: 'Old',
+        },
+      }),
+    });
+    expect(resp.status).toBe(200);
+
+    const renamed = await renameFile(projectId, 'old.html', 'new.html');
+    expect(renamed.status).toBe(200);
+
+    const filesResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    const filesBody = (await filesResp.json()) as {
+      files: Array<{ name: string; artifactManifest?: { entry?: string } }>;
+    };
+    expect(filesBody.files.find((file) => file.name === 'new.html')?.artifactManifest?.entry).toBe('new.html');
+  });
+
+  it('renames files in imported folders on disk', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'od-rename-import-'));
+    tempDirs.push(folder);
+    await writeFile(path.join(folder, 'note.txt'), 'imported');
+
+    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder }),
+    });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const renamed = await renameFile(project.id, 'note.txt', 'renamed-note.txt');
+    expect(renamed.status).toBe(200);
+    await expect(stat(path.join(folder, 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(path.join(folder, 'renamed-note.txt'), 'utf8')).toBe('imported');
+  });
+});

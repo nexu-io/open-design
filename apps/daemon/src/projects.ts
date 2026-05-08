@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -424,6 +424,116 @@ export async function deleteProjectFile(projectsRoot, projectId, name, metadata?
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
+}
+
+export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const oldName = sanitizePath(fromName);
+  const newName = sanitizePath(toName);
+  const source = await resolveSafeReal(dir, oldName);
+  const target = await resolveSafeReal(dir, newName);
+  const sourceStat = await stat(source);
+  if (!sourceStat.isFile()) {
+    const err = new Error('source is not a regular file');
+    err.code = 'EISDIR';
+    throw err;
+  }
+
+  if (source === target) {
+    const manifest = await readManifestForPath(dir, oldName);
+    return {
+      file: {
+        name: oldName,
+        path: oldName,
+        size: sourceStat.size,
+        mtime: sourceStat.mtimeMs,
+        kind: kindFor(oldName),
+        mime: mimeFor(oldName),
+        artifactKind: manifest?.kind,
+        artifactManifest: manifest,
+      },
+      oldName,
+      newName: oldName,
+    };
+  }
+
+  try {
+    await stat(target);
+    const err = new Error('target file already exists');
+    err.code = 'EEXIST';
+    throw err;
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
+  }
+
+  const manifestRename = await prepareArtifactManifestRename(dir, oldName, newName);
+
+  await mkdir(path.dirname(target), { recursive: true });
+  await rename(source, target);
+  await commitArtifactManifestRename(manifestRename, newName);
+
+  const st = await stat(target);
+  const manifest = await readManifestForPath(dir, newName);
+  return {
+    file: {
+      name: newName,
+      path: newName,
+      size: st.size,
+      mtime: st.mtimeMs,
+      kind: kindFor(newName),
+      mime: mimeFor(newName),
+      artifactKind: manifest?.kind,
+      artifactManifest: manifest,
+    },
+    oldName,
+    newName,
+  };
+}
+
+async function prepareArtifactManifestRename(dir, oldName, newName) {
+  const oldManifestName = artifactManifestNameFor(oldName);
+  const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch((err) => {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  });
+  if (!oldManifestPath) return null;
+
+  let raw = null;
+  try {
+    raw = await readFile(oldManifestPath, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+
+  const newManifestName = artifactManifestNameFor(newName);
+  const newManifestPath = await resolveSafeReal(dir, newManifestName);
+  try {
+    await stat(newManifestPath);
+    const err = new Error('target artifact manifest already exists');
+    err.code = 'EEXIST';
+    throw err;
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
+  }
+
+  return { oldManifestPath, newManifestPath, raw };
+}
+
+async function commitArtifactManifestRename(manifestRename, newName) {
+  if (!manifestRename) return;
+  const { oldManifestPath, newManifestPath, raw } = manifestRename;
+  await mkdir(path.dirname(newManifestPath), { recursive: true });
+  const parsed = parseManifest(raw);
+  if (parsed) {
+    const validated = validateArtifactManifestInput(parsed, newName);
+    if (validated.ok && validated.value) {
+      await writeFile(newManifestPath, JSON.stringify(validated.value, null, 2));
+      await unlink(oldManifestPath);
+      return;
+    }
+  }
+  await rename(oldManifestPath, newManifestPath);
 }
 
 export async function removeProjectDir(projectsRoot, projectId) {

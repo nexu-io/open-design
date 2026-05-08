@@ -134,6 +134,7 @@ import {
   mimeFor,
   projectDir,
   readProjectFile,
+  renameProjectFile,
   removeProjectDir,
   sanitizeName,
   searchProjectFiles,
@@ -4496,6 +4497,35 @@ export async function startServer({
       }
     },
   );
+
+  app.post('/api/projects/:id/files/rename', async (req, res) => {
+    try {
+      const { from, to } = req.body || {};
+      if (typeof from !== 'string' || typeof to !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
+      }
+      const project = getProject(db, req.params.id);
+      const result = await renameProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        from,
+        to,
+        project?.metadata,
+      );
+      /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
+      const body = result;
+      res.json(body);
+    } catch (err) {
+      const code = err && err.code;
+      if (code === 'ENOENT') {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+      }
+      if (code === 'EEXIST') {
+        return sendApiError(res, 409, 'FILE_EXISTS', 'target file already exists');
+      }
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
