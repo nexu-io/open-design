@@ -1,0 +1,169 @@
+// @vitest-environment jsdom
+
+import { renderHook, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { useDesignMdState, computeStale } from '../../src/hooks/useDesignMdState';
+
+const FRESH_DESIGN_MD = `# DESIGN.md
+
+## Provenance
+
+- Project ID: p1
+- Design system: alphatrace
+- Current artifact: deck.html
+- Transcript message count: 12
+- Generated UTC timestamp: 2026-05-08T12:00:00Z
+`;
+
+const FRESH_GENERATED_MS = Date.parse('2026-05-08T12:00:00Z');
+
+interface MockEndpoints {
+  files?: { ok?: boolean; body: unknown };
+  designMd?: { ok?: boolean; body: string };
+  conversations?: { ok?: boolean; body: unknown };
+}
+
+function installFetchMock(endpoints: MockEndpoints) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    if (url.endsWith('/files')) {
+      const m = endpoints.files;
+      return new Response(JSON.stringify(m?.body ?? { files: [] }), {
+        status: m?.ok === false ? 500 : 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.endsWith('/conversations')) {
+      const m = endpoints.conversations;
+      return new Response(JSON.stringify(m?.body ?? { conversations: [] }), {
+        status: m?.ok === false ? 500 : 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.includes('/files/DESIGN.md')) {
+      const m = endpoints.designMd;
+      return new Response(m?.body ?? FRESH_DESIGN_MD, {
+        status: m?.ok === false ? 500 : 200,
+        headers: { 'content-type': 'text/markdown' },
+      });
+    }
+    return new Response('not found', { status: 404 });
+  });
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('useDesignMdState', () => {
+  it('returns { exists: false, isStale: false } when DESIGN.md is absent', async () => {
+    installFetchMock({
+      files: { body: { files: [{ name: 'index.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' }] } },
+    });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.exists).toBe(false);
+    expect(result.current.isStale).toBe(false);
+    expect(result.current.staleReason).toBeNull();
+  });
+
+  it('returns { isStale: false } when DESIGN.md is present and nothing is newer', async () => {
+    const olderMs = FRESH_GENERATED_MS - 60_000;
+    installFetchMock({
+      files: {
+        body: {
+          files: [
+            { name: 'DESIGN.md', size: 100, mtime: FRESH_GENERATED_MS, kind: 'text', mime: 'text/markdown' },
+            { name: 'index.html', size: 10, mtime: olderMs, kind: 'html', mime: 'text/html' },
+          ],
+        },
+      },
+      conversations: {
+        body: {
+          conversations: [
+            { id: 'c1', projectId: 'p1', title: null, createdAt: olderMs, updatedAt: olderMs },
+          ],
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.exists).toBe(true);
+    expect(result.current.isStale).toBe(false);
+    expect(result.current.transcriptMessageCount).toBe(12);
+    expect(result.current.designSystemId).toBe('alphatrace');
+  });
+
+  it('marks stale with files-newer when a project file mtime exceeds generatedAt', async () => {
+    const newerMs = FRESH_GENERATED_MS + 60_000;
+    installFetchMock({
+      files: {
+        body: {
+          files: [
+            { name: 'DESIGN.md', size: 100, mtime: FRESH_GENERATED_MS, kind: 'text', mime: 'text/markdown' },
+            { name: 'index.html', size: 10, mtime: newerMs, kind: 'html', mime: 'text/html' },
+          ],
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isStale).toBe(true);
+    expect(result.current.staleReason).toBe('files-newer');
+  });
+
+  it('marks stale with conversations-newer when a conversation updatedAt exceeds generatedAt', async () => {
+    const olderMs = FRESH_GENERATED_MS - 60_000;
+    const newerMs = FRESH_GENERATED_MS + 60_000;
+    installFetchMock({
+      files: {
+        body: {
+          files: [
+            { name: 'DESIGN.md', size: 100, mtime: FRESH_GENERATED_MS, kind: 'text', mime: 'text/markdown' },
+            { name: 'index.html', size: 10, mtime: olderMs, kind: 'html', mime: 'text/html' },
+          ],
+        },
+      },
+      conversations: {
+        body: {
+          conversations: [
+            { id: 'c1', projectId: 'p1', title: null, createdAt: olderMs, updatedAt: newerMs },
+          ],
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isStale).toBe(true);
+    expect(result.current.staleReason).toBe('conversations-newer');
+  });
+});
+
+describe('computeStale', () => {
+  it('returns fresh when generatedMs is null (no usable timestamp parsed)', () => {
+    expect(
+      computeStale({ generatedMs: null, files: [], conversations: [] }),
+    ).toEqual({ isStale: false, staleReason: null });
+  });
+
+  it('ignores DESIGN.md mtime when comparing file ages', () => {
+    expect(
+      computeStale({
+        generatedMs: 1000,
+        files: [
+          { name: 'DESIGN.md', size: 0, mtime: 5000, kind: 'text', mime: 'text/markdown' },
+        ],
+        conversations: [],
+      }),
+    ).toEqual({ isStale: false, staleReason: null });
+  });
+});
