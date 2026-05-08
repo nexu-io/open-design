@@ -94,6 +94,12 @@ The following are explicitly allowed when the three core contracts are met:
 | No heading-level element visible | Hierarchy is emergent from layout/spacing alone |
 | Primary-level spacing applied to secondary element | Creates deliberate tension while maintaining information flow |
 
+**"Information flow remains intact" safeguards:**
+- DOM/reading order still matches content meaning (no layout inversion breaks narrative)
+- Proximity groups the inverted element with its parent/context
+- Only one primary exists in the visual region (no competing co-primaries)
+- A quick scan can identify entry point / support / incidental roles without rereading
+
 ---
 
 ## Spacing as hierarchy

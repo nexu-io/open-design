@@ -49,8 +49,9 @@ Rules:
 - Above-the-fold display element: minimum 2× the line-height in space above
   and below before body begins.
 - Pull quotes: full column margin on both sides, or break the grid entirely.
-- Section breaks: use space alone. Do not add a rule, a divider, or a
-  decorative element. Space is enough.
+- Section breaks: use space as the default hierarchy signal. Separators (rules, dingbats,
+  folios, chapter marks) are allowed only when they reinforce publication identity or
+  distinguish unrelated content, not as a substitute for typographic hierarchy.
 - Caption clusters: tighter internal spacing, larger gap from the body above.
 
 ### 3. Restrained bold
@@ -66,10 +67,15 @@ If everything important is bold, nothing is.
 
 ### 4. Display tracking
 
-Negative tracking at large sizes is mandatory. At editorial display sizes
+Negative tracking at large sizes is mandatory for Latin display. At editorial display sizes
 (56 px+), tracking should be `-0.02em` to `-0.05em` (editorial override;
 see `typography.md` §display tracking for the default range). Light display
 weights may go tighter within this range.
+
+**Script-aware exception:** For Arabic, Hebrew, Persian, or other cursive/joining scripts,
+keep tracking at `0` and rely on scale and space for hierarchy. Negative letter-spacing
+breaks cursive joining (see `rtl-and-bidi`); hierarchy in these scripts is carried by size,
+weight, and whitespace, not tracking.
 
 ---
 
@@ -144,9 +150,10 @@ between compression and expansion:
   work. (guidance)
 - **Positive tracking on display** — wide-tracked display headlines read as
   a branding exercise. Tighten them.
-- **UI chrome in the reading column** — buttons, tags, chip badges inside
-  the body text column. Keep the reading surface clean. UI elements live
-  outside the measure.
+- **UI chrome in the reading column** — buttons, tags, chip badges interrupting
+  prose flow inside the body text column. Functional controls (inline code-copy,
+  API anchors, callout toggles) may live inside code and API blocks, but decorative
+  badges and UI chrome should live outside the reading measure to keep prose focus clear.
 
 ---
 
@@ -154,16 +161,18 @@ between compression and expansion:
 
 - [ ] Display headline is light or regular weight unless the design system
       specifies otherwise.
-- [ ] Display tracking is within `-0.02em` to `-0.05em` at 56 px+.
-- [ ] Gap between display and deck is a visible jump. (guidance)
-- [ ] Body line height is `1.6`–`1.7`.
+- [ ] Display tracking is within `-0.02em` to `-0.05em` at 56 px+ (Latin only;
+      0 for cursive/joining scripts). (guidance)
+- [ ] Gap between display and deck: display/deck ratio ≥ 1.5× or absolute px delta
+      ≥ 24 px to read as a scale event. (guidance)
+- [ ] Body line height is `1.6`–1.7`.
 - [ ] Body measure is 60–70 ch.
 - [ ] Pull quote, if present, breaks the body column (full width or offset).
 - [ ] No more than 2 pull quotes in a single article surface. (long-form only)
-- [ ] Section spacing alternates — at least one gap is meaningfully larger
-      than the others. (long-form only — guidance)
+- [ ] Section spacing alternates — one gap ≥ 1.5× baseline rhythm while another
+      is ≤ 1.2×. (long-form only — guidance)
 - [ ] Bold used ≤ 2 times per 400 words in body copy. (long-form only)
 - [ ] `var(--accent)` used ≤ 2 times on the full editorial surface (see `color.md` §accent discipline).
-- [ ] No divider rules or decorative elements used as section breaks.
-      Space alone is sufficient.
+- [ ] Section separators (space, rules, dingbats) chosen to match publication identity,
+      not as hierarchy fallback. (guidance)
 - [ ] Pull quote has no background, border, or container treatment.
