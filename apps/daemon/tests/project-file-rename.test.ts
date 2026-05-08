@@ -164,4 +164,23 @@ describe('project file rename route', () => {
     await expect(stat(path.join(folder, 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(path.join(folder, 'renamed-note.txt'), 'utf8')).toBe('imported');
   });
+
+  it('renames imported folder files whose existing names contain spaces', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'od-rename-import-spaces-'));
+    tempDirs.push(folder);
+    await writeFile(path.join(folder, 'my note.txt'), 'imported');
+
+    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder }),
+    });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const renamed = await renameFile(project.id, 'my note.txt', 'renamed-note.txt');
+    expect(renamed.status).toBe(200);
+    await expect(stat(path.join(folder, 'my note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(path.join(folder, 'renamed-note.txt'), 'utf8')).toBe('imported');
+  });
 });

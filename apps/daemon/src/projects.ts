@@ -428,7 +428,7 @@ export async function deleteProjectFile(projectsRoot, projectId, name, metadata?
 
 export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
-  const oldName = sanitizePath(fromName);
+  const oldName = validateProjectPath(fromName);
   const newName = sanitizePath(toName);
   const source = await resolveSafeReal(dir, oldName);
   const sourceStat = await stat(source);
