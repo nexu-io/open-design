@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
@@ -8,14 +7,25 @@ const EOCD_SIG = 0x06054b50;
 const CENTRAL_SIG = 0x02014b50;
 const LOCAL_SIG = 0x04034b50;
 
-const MAX_FILES = 500;
+const MAX_FILES = 5000;
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
-export async function importClaudeDesignZip(zipPath, projectDir) {
+type ZipEntry = {
+  name: string;
+  method: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localOffset: number;
+  isDirectory: boolean;
+};
+
+type ImportedFile = { path: string; body: Buffer };
+
+export async function importClaudeDesignZip(zipPath: string, projectDir: string) {
   const zip = await readFile(zipPath);
   const entries = readCentralDirectory(zip);
-  const files = [];
+  const files: ImportedFile[] = [];
   let totalBytes = 0;
 
   for (const entry of entries) {
@@ -25,13 +35,21 @@ export async function importClaudeDesignZip(zipPath, projectDir) {
     if (entry.uncompressedSize > MAX_FILE_BYTES) {
       throw new Error(`zip file too large: ${relPath}`);
     }
-    totalBytes += entry.uncompressedSize;
-    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
 
+    // Decode first; the central directory's uncompressedSize is unreliable for
+    // streaming/data-descriptor zips (it can read 0 even when the payload
+    // carries real data). The inflate cap and the post-decode size checks below
+    // are authoritative.
     const body = readEntryBody(zip, entry);
-    if (body.length !== entry.uncompressedSize) {
+    if (body.length > MAX_FILE_BYTES) {
+      throw new Error(`zip file too large: ${relPath}`);
+    }
+    if (entry.uncompressedSize > 0 && body.length !== entry.uncompressedSize) {
       throw new Error(`zip entry size mismatch: ${relPath}`);
     }
+    totalBytes += body.length;
+    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
+
     files.push({ path: relPath, body });
   }
 
@@ -39,12 +57,22 @@ export async function importClaudeDesignZip(zipPath, projectDir) {
   const entryFile = chooseEntryFile(files.map((f) => f.path));
   if (!entryFile) throw new Error('zip does not contain an HTML file');
 
+  const dirCreates = new Map<string, Promise<string | undefined>>();
+  const ensureDir = (dir: string) => {
+    let pending = dirCreates.get(dir);
+    if (!pending) {
+      pending = mkdir(dir, { recursive: true });
+      dirCreates.set(dir, pending);
+    }
+    return pending;
+  };
+
   await mkdir(projectDir, { recursive: true });
-  for (const f of files) {
+  await Promise.all(files.map(async (f) => {
     const target = safeJoin(projectDir, f.path);
-    await mkdir(path.dirname(target), { recursive: true });
+    await ensureDir(path.dirname(target));
     await writeFile(target, f.body);
-  }
+  }));
 
   return {
     entryFile,
@@ -52,7 +80,7 @@ export async function importClaudeDesignZip(zipPath, projectDir) {
   };
 }
 
-function readCentralDirectory(zip) {
+function readCentralDirectory(zip: Buffer): ZipEntry[] {
   const eocdOffset = findEndOfCentralDirectory(zip);
   const entryCount = zip.readUInt16LE(eocdOffset + 10);
   const centralSize = zip.readUInt32LE(eocdOffset + 12);
@@ -61,7 +89,7 @@ function readCentralDirectory(zip) {
     throw new Error('invalid zip central directory');
   }
 
-  const entries = [];
+  const entries: ZipEntry[] = [];
   let offset = centralOffset;
   for (let i = 0; i < entryCount; i += 1) {
     if (zip.readUInt32LE(offset) !== CENTRAL_SIG) {
@@ -93,7 +121,7 @@ function readCentralDirectory(zip) {
   return entries;
 }
 
-function findEndOfCentralDirectory(zip) {
+function findEndOfCentralDirectory(zip: Buffer): number {
   const min = Math.max(0, zip.length - 0xffff - 22);
   for (let i = zip.length - 22; i >= min; i -= 1) {
     if (zip.readUInt32LE(i) === EOCD_SIG) return i;
@@ -101,7 +129,7 @@ function findEndOfCentralDirectory(zip) {
   throw new Error('invalid zip: missing central directory');
 }
 
-function readEntryBody(zip, entry) {
+function readEntryBody(zip: Buffer, entry: ZipEntry): Buffer {
   const offset = entry.localOffset;
   if (zip.readUInt32LE(offset) !== LOCAL_SIG) {
     throw new Error(`invalid zip local header: ${entry.name}`);
@@ -113,10 +141,19 @@ function readEntryBody(zip, entry) {
   if (bodyEnd > zip.length) throw new Error(`zip entry exceeds archive: ${entry.name}`);
   const compressed = zip.slice(bodyStart, bodyEnd);
   if (entry.method === 0) return Buffer.from(compressed);
-  return inflateRawSync(compressed, { maxOutputLength: entry.uncompressedSize });
+  // A genuinely empty deflate payload would still occupy at least the BFINAL
+  // marker; an entirely missing payload cannot be inflated, so treat it as
+  // empty rather than handing a zero-length buffer to zlib.
+  if (compressed.length === 0) return Buffer.alloc(0);
+  // When the central directory advertises 0 (streaming zips with data
+  // descriptors), fall back to the per-file ceiling so legitimate non-empty
+  // payloads decode instead of being silently truncated. The post-decode
+  // checks in the caller enforce MAX_FILE_BYTES and total-bytes limits.
+  const cap = entry.uncompressedSize > 0 ? entry.uncompressedSize : MAX_FILE_BYTES;
+  return inflateRawSync(compressed, { maxOutputLength: cap });
 }
 
-function sanitizeZipPath(name) {
+function sanitizeZipPath(name: string): string {
   if (name.includes('\0')) throw new Error('invalid zip file name');
   if (/^[A-Za-z]:/.test(name) || name.startsWith('/')) {
     throw new Error('absolute zip paths are not allowed');
@@ -124,7 +161,7 @@ function sanitizeZipPath(name) {
   return validateProjectPath(name);
 }
 
-function chooseEntryFile(paths) {
+function chooseEntryFile(paths: string[]): string | null {
   const html = paths.filter((p) => /\.html?$/i.test(p));
   if (html.length === 0) return null;
   const lower = new Map(html.map((p) => [p.toLowerCase(), p]));
@@ -136,7 +173,7 @@ function chooseEntryFile(paths) {
   );
 }
 
-function safeJoin(root, relPath) {
+function safeJoin(root: string, relPath: string): string {
   const target = path.resolve(root, relPath);
   if (!target.startsWith(root + path.sep) && target !== root) {
     throw new Error('path escapes project dir');

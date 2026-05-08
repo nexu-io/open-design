@@ -1,14 +1,20 @@
 import type { Server } from "node:http";
 
 import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
   type DaemonStatusSnapshot,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import {
   createJsonIpcServer,
+  requestJsonIpc,
+  resolveAppIpcPath,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
@@ -17,6 +23,12 @@ import { startServer } from "../server.js";
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
+
+type StartedDaemonServer = {
+  server: Server;
+  url: string;
+  shutdown?: () => Promise<void>;
+};
 
 export type DaemonSidecarHandle = {
   status(): Promise<DaemonStatusSnapshot>;
@@ -33,10 +45,39 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
-async function closeHttpServer(server: Server): Promise<void> {
+export async function closeHttpServer(
+  server: Server,
+  { closeTimeoutMs = 5_000, idleCloseMs = 1_000 } = {},
+): Promise<void> {
   if (!server.listening) return;
   await new Promise<void>((resolveClose, rejectClose) => {
-    server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
+    let resolved = false;
+    const resolveOnce = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(idleTimer);
+      clearTimeout(hardTimer);
+      resolveClose();
+    };
+    const rejectOnce = (error: Error) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(idleTimer);
+      clearTimeout(hardTimer);
+      rejectClose(error);
+    };
+    const idleTimer = setTimeout(() => {
+      server.closeIdleConnections?.();
+    }, Math.min(idleCloseMs, closeTimeoutMs));
+    const hardTimer = setTimeout(() => {
+      server.closeAllConnections?.();
+      resolveOnce();
+    }, closeTimeoutMs);
+    idleTimer.unref?.();
+    hardTimer.unref?.();
+    server.close((error) => (error == null ? resolveOnce() : rejectOnce(error)));
+  }).finally(() => {
+    server.closeIdleConnections?.();
   });
 }
 
@@ -62,9 +103,24 @@ function attachParentMonitor(stop: () => Promise<void>): void {
 }
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
-  const started = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true }) as
+  const started = await startServer({
+    desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
+      const desktopIpc = resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace: runtime.namespace,
+      });
+      return await requestJsonIpc<DesktopExportPdfResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.EXPORT_PDF },
+        { timeoutMs: 600_000 },
+      );
+    },
+    port: parsePort(process.env[DAEMON_PORT_ENV]),
+    returnServer: true,
+  }) as
     | string
-    | { server: Server; url: string };
+    | StartedDaemonServer;
   if (typeof started === "string") {
     throw new Error("daemon startServer did not return a server handle");
   }
@@ -88,8 +144,12 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
     stopped = true;
     state.state = "stopped";
     state.updatedAt = new Date().toISOString();
+    const closePromise = closeHttpServer(serverHandle.server).catch(() => undefined);
+    const shutdownPromise = serverHandle.shutdown?.().catch((error: unknown) => {
+      console.error("daemon shutdown cleanup failed", error);
+    }) ?? Promise.resolve();
     await ipcServer?.close().catch(() => undefined);
-    await closeHttpServer(serverHandle.server).catch(() => undefined);
+    await Promise.allSettled([closePromise, shutdownPromise]);
     resolveStopped();
   }
 

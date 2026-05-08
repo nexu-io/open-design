@@ -5,6 +5,7 @@ import {
   mergeDaemonConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
+  syncMediaProvidersToDaemon,
 } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
@@ -71,7 +72,7 @@ describe('syncConfigToDaemon', () => {
       ...DEFAULT_CONFIG,
       agentCliEnv: {
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-        codex: { CODEX_HOME: '~/.codex-alt' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       },
     });
 
@@ -91,9 +92,24 @@ describe('syncConfigToDaemon', () => {
       designSystemId: DEFAULT_CONFIG.designSystemId,
       agentCliEnv: {
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-        codex: { CODEX_HOME: '~/.codex-alt' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       },
     });
+  });
+});
+
+describe('syncMediaProvidersToDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('throws when a forced media sync fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })));
+
+    await expect(
+      syncMediaProvidersToDaemon({}, { force: true, throwOnError: true }),
+    ).rejects.toThrow('Media config save failed');
   });
 });
 
@@ -125,13 +141,13 @@ describe('mergeDaemonConfig', () => {
       },
       {
         agentCliEnv: {
-          codex: { CODEX_HOME: '~/.codex-new' },
+          codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
         },
       },
     );
 
     expect(merged.agentCliEnv).toEqual({
-      codex: { CODEX_HOME: '~/.codex-new' },
+      codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
     });
   });
 });
@@ -235,6 +251,41 @@ describe('loadConfig', () => {
     expect(config.baseUrl).toBe('https://[broken-ipv6');
     expect(config.model).toBe('custom-model');
     expect(config.apiProtocol).toBe('anthropic');
+  });
+
+  it('preserves a valid saved accent color', () => {
+    const savedConfig: Partial<AppConfig> = {
+      theme: 'dark',
+      accentColor: '#4F46E5',
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    const config = loadConfig();
+
+    expect(config.theme).toBe('dark');
+    expect(config.accentColor).toBe('#4f46e5');
+  });
+
+  it('falls back to the default accent color for malformed saved colors', () => {
+    const savedConfig: Partial<AppConfig> = {
+      accentColor: 'blue',
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    expect(loadConfig().accentColor).toBe(DEFAULT_CONFIG.accentColor);
+  });
+
+  it('falls back to the default Orbit time for out-of-range saved times', () => {
+    const savedConfig: Partial<AppConfig> = {
+      orbit: {
+        enabled: true,
+        time: '99:99',
+        templateSkillId: 'orbit-general',
+      },
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    expect(loadConfig().orbit?.time).toBe(DEFAULT_CONFIG.orbit?.time);
   });
 
   it('returns defaults for malformed localStorage JSON', () => {

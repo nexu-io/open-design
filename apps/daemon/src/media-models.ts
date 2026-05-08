@@ -1,14 +1,34 @@
-// @ts-nocheck
-// Daemon-side mirror of src/media/models.ts. We keep this in plain JS so
-// node imports are native and the daemon never needs a TS toolchain at
-// runtime. The two files are kept in sync by hand — any model added to
+// Daemon-side mirror of src/media/models.ts. The two files are kept in sync by hand — any model added to
 // src/media/models.ts must be added here too. Drift is enforced by
 // `node scripts/verify-media-models.mjs` (also exposed as
 // `npm run verify:media-models`); CI should call it before publish so
 // the moment one side adds a model and the other doesn't, the build
 // fails with a precise diff.
 
-export const MEDIA_PROVIDERS = [
+export type MediaSurface = 'image' | 'video' | 'audio';
+export type AudioKind = 'music' | 'speech' | 'sfx';
+
+export type MediaProvider = {
+  id: string;
+  label: string;
+  hint: string;
+  integrated: boolean;
+  defaultBaseUrl?: string;
+  credentialsRequired?: boolean;
+  settingsVisible?: boolean;
+  supportsCustomModel?: boolean;
+};
+
+export type MediaModel = {
+  id: string;
+  label: string;
+  hint: string;
+  provider: string;
+  caps: string[];
+  default?: boolean;
+};
+
+export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'openai', label: 'OpenAI', hint: 'gpt-image-2 / dall-e-3', integrated: true, defaultBaseUrl: 'https://api.openai.com/v1' },
   { id: 'volcengine', label: 'Volcengine Ark (Doubao)', hint: 'Seedance 2.0 / Seedream', integrated: true, defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'grok', label: 'xAI Grok Imagine', hint: 'grok-imagine — image + video with native audio', integrated: true, defaultBaseUrl: 'https://api.x.ai/v1' },
@@ -25,10 +45,11 @@ export const MEDIA_PROVIDERS = [
   { id: 'udio', label: 'Udio', hint: 'Music generation', integrated: false },
   { id: 'elevenlabs', label: 'ElevenLabs', hint: 'Voice / SFX', integrated: false },
   { id: 'fishaudio', label: 'FishAudio', hint: 'Speech / voice clone', integrated: true, defaultBaseUrl: 'https://api.fish.audio' },
+  { id: 'tavily', label: 'Tavily Search', hint: 'Agent-callable web research', integrated: true, defaultBaseUrl: 'https://api.tavily.com' },
   { id: 'stub', label: 'Stub (placeholder)', hint: 'Deterministic local placeholder bytes', integrated: true },
 ];
 
-export const IMAGE_MODELS = [
+export const IMAGE_MODELS: MediaModel[] = [
   { id: 'gpt-image-2', label: 'gpt-image-2', hint: 'OpenAI · 4K, native multimodal', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'], default: true },
   { id: 'gpt-image-1.5', label: 'gpt-image-1.5', hint: 'OpenAI · 4× faster than gpt-image-1', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'] },
   { id: 'gpt-image-1', label: 'gpt-image-1', hint: 'OpenAI · ChatGPT native', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'] },
@@ -60,7 +81,7 @@ export const IMAGE_MODELS = [
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
 ];
 
-export const VIDEO_MODELS = [
+export const VIDEO_MODELS: MediaModel[] = [
   { id: 'doubao-seedance-2-0-260128', label: 'seedance-2.0', hint: 'ByteDance · t2v + i2v + audio', provider: 'volcengine', caps: ['t2v', 'i2v', 'audio'], default: true },
   { id: 'doubao-seedance-2-0-fast-260128', label: 'seedance-2.0-fast', hint: 'ByteDance · faster, cheaper', provider: 'volcengine', caps: ['t2v', 'i2v', 'audio'] },
   { id: 'doubao-seedance-1-0-pro-250528', label: 'seedance-1.0-pro', hint: 'ByteDance · 1.0', provider: 'volcengine', caps: ['t2v', 'i2v'] },
@@ -83,7 +104,7 @@ export const VIDEO_MODELS = [
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },
 ];
 
-export const AUDIO_MODELS_BY_KIND = {
+export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
   music: [
     { id: 'suno-v5', label: 'suno-v5', hint: 'Suno · default', provider: 'suno', caps: ['music'], default: true },
     { id: 'suno-v4-5', label: 'suno-v4.5', hint: 'Suno', provider: 'suno', caps: ['music'] },
@@ -107,7 +128,7 @@ export const MEDIA_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 export const VIDEO_LENGTHS_SEC = [3, 5, 8, 10, 15, 30];
 export const AUDIO_DURATIONS_SEC = [5, 10, 15, 30, 60, 120];
 
-export function findMediaModel(id) {
+export function findMediaModel(id: string): MediaModel | null {
   const all = [
     ...IMAGE_MODELS,
     ...VIDEO_MODELS,
@@ -118,11 +139,11 @@ export function findMediaModel(id) {
   return all.find((m) => m.id === id) || null;
 }
 
-export function findProvider(id) {
+export function findProvider(id: string): MediaProvider | null {
   return MEDIA_PROVIDERS.find((p) => p.id === id) || null;
 }
 
-export function modelsForSurface(surface, audioKind) {
+export function modelsForSurface(surface: MediaSurface, audioKind?: AudioKind): MediaModel[] {
   if (surface === 'image') return IMAGE_MODELS;
   if (surface === 'video') return VIDEO_MODELS;
   if (surface === 'audio') {

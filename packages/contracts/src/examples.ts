@@ -126,6 +126,7 @@ export const exampleConnectorDetail: ConnectorDetail = {
   category: 'developer',
   description: 'Search repositories, issues, pull requests, commits, and releases from a connected GitHub account via Composio.',
   status: 'available',
+  toolCount: 1,
   tools: [
     {
       name: 'github.search_issues_and_pull_requests',
@@ -139,9 +140,15 @@ export const exampleConnectorDetail: ConnectorDetail = {
         reason: 'Tool name, scope, or description indicates explicit read-only behavior.',
       },
       refreshEligible: true,
+      curation: {
+        useCases: ['personal_daily_digest'],
+        reason: 'Curated for recent personal GitHub activity in a daily digest.',
+      },
     },
   ],
   auth: { provider: 'composio', configured: false },
+  allowedToolNames: ['github.search_issues_and_pull_requests'],
+  curatedToolNames: ['github.search_issues_and_pull_requests'],
   featuredToolNames: ['github.search_issues_and_pull_requests'],
   minimumApproval: 'auto',
 };

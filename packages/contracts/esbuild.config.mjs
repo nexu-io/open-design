@@ -2,9 +2,16 @@ import { build } from "esbuild";
 
 await build({
   bundle: true,
-  entryNames: "[name]",
-  entryPoints: ["./src/index.ts", "./src/critique.ts"],
+  entryNames: "[dir]/[name]",
+  entryPoints: [
+    "./src/index.ts",
+    "./src/critique.ts",
+    "./src/api/connectionTest.ts",
+    "./src/api/finalize.ts",
+    "./src/api/research.ts",
+  ],
   format: "esm",
+  outbase: "./src",
   outdir: "./dist",
   outExtension: { ".js": ".mjs" },
   packages: "external",

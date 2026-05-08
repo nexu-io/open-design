@@ -23,6 +23,15 @@ import {
 
 let tempDir: string | null = null;
 
+function tableColumnNames(rows: unknown[]): string[] {
+  return rows.map((row) => {
+    if (!row || typeof row !== 'object' || !('name' in row) || typeof row.name !== 'string') {
+      throw new Error('expected PRAGMA table_info row with string name');
+    }
+    return row.name;
+  });
+}
+
 afterEach(() => {
   closeDatabase();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -36,13 +45,12 @@ describe('preview comment persistence', () => {
 
     const previewColumns = db
       .prepare(`PRAGMA table_info(preview_comments)`)
-      .all()
-      .map((column: { name: string }) => column.name);
+      .all();
     const critiqueTable = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='critique_runs'`)
       .get() as { name?: string } | undefined;
 
-    expect(previewColumns).toEqual(
+    expect(tableColumnNames(previewColumns)).toEqual(
       expect.arrayContaining(['selection_kind', 'member_count', 'pod_members_json']),
     );
     expect(critiqueTable?.name).toBe('critique_runs');

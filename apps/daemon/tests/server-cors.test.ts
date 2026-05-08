@@ -1,4 +1,3 @@
-// @ts-nocheck
 import http from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

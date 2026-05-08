@@ -66,6 +66,36 @@ export function exportAsMd(source: string, title: string): void {
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.md`);
 }
 
+export type ProjectPdfExportResult = 'desktop' | 'fallback';
+
+export async function exportProjectAsPdf(opts: {
+  deck: boolean;
+  fallbackPdf: () => void;
+  filePath: string;
+  projectId: string;
+  title: string;
+}): Promise<ProjectPdfExportResult> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/pdf`, {
+      body: JSON.stringify({
+        deck: opts.deck,
+        fileName: opts.filePath,
+        title: opts.title,
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+    if (!resp.ok) throw new Error(`desktop PDF export unavailable (${resp.status})`);
+    const body = await resp.json().catch(() => ({}));
+    if (body && body.ok === false) throw new Error(body.error || 'desktop PDF export failed');
+    return 'desktop';
+  } catch (err) {
+    console.warn('[exportProjectAsPdf] falling back to browser print:', err);
+    opts.fallbackPdf();
+    return 'fallback';
+  }
+}
+
 type ReactSourceExtension = '.jsx' | '.tsx';
 
 export function exportAsJsx(

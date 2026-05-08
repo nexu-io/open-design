@@ -1,0 +1,2558 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signal Template</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Signal style uses four font families:
+        1. Source Serif 4     — editorial serif for headlines, mixed roman + italic
+        2. DM Sans            — clean grotesque for body, stats numbers
+        3. IBM Plex Mono      — condensed mono labels, chrome, kickers
+        4. Noto Serif SC / Noto Sans SC — Chinese fallbacks for every role
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,300;1,8..60,400;1,8..60,600;1,8..60,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Serif+SC:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE A · TOKENS  —  SIGNAL STYLE                                    ║
+   ║                                                                      ║
+   ║  Replace this block to change the visual style entirely.             ║
+   ║  Every color, font, and size in this file reads from these vars.     ║
+   ║  Never write raw hex values, font names, or px sizes outside here.   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+      :root {
+        /* ── Palette ──────────────────────────────────────────────────────── */
+        /* Dark navy: intelligence, authority, depth — the editorial tone */
+        --c-bg: #1c2644;
+        /* Slightly lighter navy for secondary dark surfaces */
+        --c-bg-alt: #232f55;
+        /* Warm cream: the light slide background, like aged paper */
+        --c-bg-light: #f0ece3;
+        /* Slightly cooler cream for secondary light surfaces */
+        --c-bg-light-alt: #e6e0d4;
+
+        /* Primary text on dark: warm off-white, never pure white */
+        --c-fg: #e2dcd0;
+        /* Secondary text on dark: muted blue-grey */
+        --c-fg-2: #8a96a8;
+        /* Tertiary / hint text on dark */
+        --c-fg-3: #4e5a6e;
+        /* Primary text on light: very dark navy near-black */
+        --c-fg-light: #1a2030;
+        /* Secondary text on light */
+        --c-fg-light-2: #5a6270;
+        /* Tertiary text on light */
+        --c-fg-light-3: #9aa0a8;
+
+        /* Accent: warm antique gold — the single hot colour; used for italic serif em */
+        --c-accent: #c8a870;
+        /* Dividers on dark: dark navy border */
+        --c-border: #2e3d5c;
+        /* Dividers on light: warm greige border */
+        --c-border-light: #cac4b4;
+
+        /* ── Typography ──────────────────────────────────────────────────── */
+        /* Display + Heading: Source Serif 4 — editorial, authoritative.
+           Mix roman and italic mid-sentence for the Signal look. */
+        --f-display: "Source Serif 4", "Noto Serif SC", Georgia, serif;
+        --f-heading: "Source Serif 4", "Noto Serif SC", Georgia, serif;
+        /* Body: DM Sans — clean grotesque, steps back so the serif leads */
+        --f-body: "DM Sans", "Noto Sans SC", system-ui, sans-serif;
+        /* Mono: IBM Plex Mono — the condensed editorial timestamp */
+        --f-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+
+        /* ── Type Scale ───────────────────────────────────────────────────── */
+        /* vw units keep all sizes proportional regardless of window width */
+        --sz-display: 9.5vw; /* hero cover title — very large, commanding */
+        --sz-h1: 5.2vw; /* chapter titles */
+        --sz-h2: 3vw; /* slide headlines */
+        --sz-h3: 1.9vw; /* sub-headlines, compare panel titles */
+        --sz-lead: 1.4vw; /* lead paragraph */
+        --sz-body: 1.05vw; /* body text, bullets */
+        --sz-caption: 0.82vw; /* captions, footnotes */
+        --sz-label: 0.7vw; /* chrome, kickers, tags, mono metadata */
+
+        /* ── Spacing ─────────────────────────────────────────────────────── */
+        --pad-x: 7.5vw; /* horizontal slide padding */
+        --pad-y: 5.5vh; /* vertical slide padding */
+        --gap-lg: 4vh; /* between major content sections */
+        --gap-md: 2.5vh; /* between related elements */
+        --gap-sm: 1.2vh; /* between tightly coupled elements */
+
+        /* ── Motion ──────────────────────────────────────────────────────── */
+        /* Slide pan: sharp in, sharp out — deliberate, not springy */
+        --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
+        --dur-slide: 0.85s;
+        /* Element entrance: spring-y ease-out for content reveals */
+        --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur-enter: 0.65s;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE B · ENGINE — DO NOT MODIFY                                     ║
+   ║                                                                      ║
+   ║  Layout engine, transitions, animation system, navigation.           ║
+   ║  Touching this breaks the mechanics.                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Deck container — all slides sit side by side in one horizontal strip */
+      #deck {
+        display: flex;
+        height: 100vh;
+        transition: transform var(--dur-slide) var(--ease-slide);
+        will-change: transform;
+      }
+
+      /* Slide base — each slide occupies exactly one full viewport */
+      .slide {
+        flex: 0 0 100vw;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        padding: var(--pad-y) var(--pad-x);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      .slide-body {
+        min-height: 0;
+      }
+
+      /* Slide themes */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+      }
+
+      /* ── Animation system ─────────────────────────────────────────────── */
+      /* Elements start invisible; become visible only when slide is active */
+      [data-anim] {
+        opacity: 0;
+      }
+      .slide.is-active [data-anim] {
+        animation-duration: var(--dur-enter);
+        animation-timing-function: var(--ease-enter);
+        animation-fill-mode: forwards;
+      }
+      .slide.is-active [data-anim="fade-up"] {
+        animation-name: kFadeUp;
+      }
+      .slide.is-active [data-anim="fade-in"] {
+        animation-name: kFadeIn;
+      }
+      .slide.is-active [data-anim="reveal-right"] {
+        animation-name: kRevealRight;
+      }
+      .slide.is-active [data-anim="reveal-left"] {
+        animation-name: kRevealLeft;
+      }
+      .slide.is-active [data-anim="scale-in"] {
+        animation-name: kScaleIn;
+      }
+
+      /* Staggered delays via data-delay attribute (0–6) */
+      [data-delay="0"] {
+        animation-delay: 0s;
+      }
+      [data-delay="1"] {
+        animation-delay: 0.08s;
+      }
+      [data-delay="2"] {
+        animation-delay: 0.18s;
+      }
+      [data-delay="3"] {
+        animation-delay: 0.3s;
+      }
+      [data-delay="4"] {
+        animation-delay: 0.44s;
+      }
+      [data-delay="5"] {
+        animation-delay: 0.6s;
+      }
+      [data-delay="6"] {
+        animation-delay: 0.78s;
+      }
+
+      @keyframes kFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(28px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes kFadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealRight {
+        from {
+          clip-path: inset(0 100% 0 0);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0% 0 0);
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealLeft {
+        from {
+          clip-path: inset(0 0 0 100%);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0 0 0%);
+          opacity: 1;
+        }
+      }
+      @keyframes kScaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── Navigation UI ───────────────────────────────────────────────── */
+      #nav-dots {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        z-index: 100;
+      }
+      .nav-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.22);
+        cursor: pointer;
+        transition:
+          background 0.3s,
+          transform 0.3s;
+        padding: 0;
+      }
+      .nav-dot.is-active {
+        background: rgba(255, 255, 255, 0.8);
+        transform: scale(1.4);
+      }
+
+      #slide-counter {
+        position: fixed;
+        bottom: 20px;
+        right: 28px;
+        font-family: var(--f-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: rgba(255, 255, 255, 0.25);
+        z-index: 100;
+        user-select: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE C · TYPOGRAPHY                                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      .display {
+        font-family: var(--f-display);
+        font-size: var(--sz-display);
+        font-weight: 700;
+        line-height: 0.96;
+        letter-spacing: -0.02em;
+      }
+      .h1 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h1);
+        font-weight: 600;
+        line-height: 1.08;
+        letter-spacing: -0.01em;
+      }
+      .h2 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 600;
+        line-height: 1.18;
+      }
+      .h3 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 500;
+        line-height: 1.3;
+      }
+      .lead {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 400;
+        line-height: 1.58;
+      }
+      .body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 400;
+        line-height: 1.65;
+      }
+      .caption {
+        font-family: var(--f-body);
+        font-size: var(--sz-caption);
+        font-weight: 400;
+        line-height: 1.5;
+      }
+      .label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 500;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      /* Signal signature: italic serif in accent gold for em tags inside headings */
+      .display em,
+      .h1 em,
+      .h2 em,
+      .h3 em {
+        font-style: italic;
+        color: var(--c-accent);
+      }
+      .lead em {
+        font-style: italic;
+        color: var(--c-accent);
+        font-family: var(--f-heading);
+      }
+
+      .dark .muted {
+        color: var(--c-fg-2);
+      }
+      .light .muted {
+        color: var(--c-fg-light-2);
+      }
+      .accent {
+        color: var(--c-accent);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE D · CHROME + GRID TEXTURE                                      ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Subtle grid overlay — the Signal visual fingerprint */
+      .slide.dark::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        background-size: 80px 80px;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .slide.dark > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* Chrome (top bar) and footer */
+      .slide-chrome,
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .slide-chrome {
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-md);
+      }
+      .slide-foot {
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        margin-top: var(--gap-md);
+      }
+      .light .slide-chrome,
+      .light .slide-foot {
+        border-color: var(--c-border-light);
+      }
+
+      /* Special layouts that don't use chrome/foot */
+      .slide--cover .slide-chrome,
+      .slide--cover .slide-foot,
+      .slide--chapter .slide-chrome,
+      .slide--chapter .slide-foot,
+      .slide--quote .slide-chrome,
+      .slide--quote .slide-foot,
+      .slide--end .slide-chrome,
+      .slide--end .slide-foot {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE E · LAYOUT PATTERNS                                            ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* 1. COVER ─────────────────────────────────────────────────────────── */
+      .slide--cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+      .cover-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        justify-content: flex-end;
+        gap: var(--gap-md);
+      }
+      .cover-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: var(--gap-lg);
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+      }
+      .light .cover-meta {
+        border-color: var(--c-border-light);
+      }
+
+      /* 2. CHAPTER ────────────────────────────────────────────────────────── */
+      .slide--chapter {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .chapter-num {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+      .chapter-rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+
+      /* 3. STATEMENT ──────────────────────────────────────────────────────── */
+      .slide--statement .statement-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* 4. SPLIT ──────────────────────────────────────────────────────────── */
+      .slide--split .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+      }
+      .split-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .split-image {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+      }
+      .split-image img {
+        width: 100%;
+        height: 55vh;
+        object-fit: cover;
+        display: block;
+      }
+
+      /* 5. STATS ───────────────────────────────────────────────────────────── */
+      .slide--stats .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+      }
+      .stats-grid.cols-4 {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .stat-card {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md) var(--gap-md) var(--gap-md) 0;
+        border-top: 1px solid var(--c-border);
+      }
+      .light .stat-card {
+        border-color: var(--c-border-light);
+      }
+      .stat-value {
+        font-family: var(--f-display);
+        font-size: 5.5vw;
+        font-weight: 600;
+        line-height: 1;
+        color: var(--c-accent);
+        letter-spacing: -0.02em;
+      }
+      .stat-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.5;
+      }
+      .stat-note {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.05em;
+        color: var(--c-fg-3);
+      }
+      .light .stat-note {
+        color: var(--c-fg-light-3);
+      }
+
+      /* 6. QUOTE ───────────────────────────────────────────────────────────── */
+      .slide--quote {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: calc(var(--pad-y) * 1.2) calc(var(--pad-x) * 1.1);
+      }
+      .quote-mark {
+        font-family: var(--f-display);
+        font-size: 8vw;
+        line-height: 0.6;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+        font-weight: 300;
+      }
+      .quote-text {
+        font-family: var(--f-display);
+        font-size: 3.6vw;
+        font-weight: 400;
+        line-height: 1.28;
+        letter-spacing: -0.01em;
+        max-width: 78%;
+        margin-bottom: var(--gap-lg);
+        font-style: italic;
+      }
+      .quote-attr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+      }
+
+      /* 7. LIST ────────────────────────────────────────────────────────────── */
+      .slide--list .slide-body {
+        display: grid;
+        grid-template-columns: 2fr 3fr;
+        gap: calc(var(--pad-x) * 0.8);
+        align-items: center;
+      }
+      .list-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-top: var(--gap-sm);
+      }
+      .bullet-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .bullet-list li {
+        display: grid;
+        grid-template-columns: 1.2em 1fr;
+        gap: 0.5em;
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        line-height: 1.5;
+      }
+      .bullet-list li::before {
+        content: "—";
+        color: var(--c-accent);
+        font-family: var(--f-mono);
+      }
+      .dark .bullet-list li {
+        color: var(--c-fg);
+      }
+      .light .bullet-list li {
+        color: var(--c-fg-light);
+      }
+
+      /* 8. COMPARE ─────────────────────────────────────────────────────────── */
+      .slide--compare .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+      }
+      .compare-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: var(--gap-md) 0;
+      }
+      .compare-panel.left {
+        padding-right: calc(var(--pad-x) * 0.55);
+        border-right: 1px solid var(--c-border);
+      }
+      .compare-panel.right {
+        padding-left: calc(var(--pad-x) * 0.55);
+      }
+      .light .compare-panel.left {
+        border-color: var(--c-border-light);
+      }
+      .compare-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .compare-label.after {
+        color: var(--c-accent);
+      }
+      .light .compare-label {
+        border-color: var(--c-border-light);
+      }
+
+      /* 9. END ─────────────────────────────────────────────────────────────── */
+      .slide--end {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* 10. EDITORIAL — Editorial newsletter style ─────────────────── */
+      .slide--editorial {
+        grid-template-rows: auto auto auto 1fr auto;
+      }
+      .editorial-stamp {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.22em;
+        color: var(--c-fg-3);
+      }
+      .editorial-stamp .accent {
+        color: var(--c-accent);
+      }
+      .editorial-hl {
+        font-family: var(--f-heading);
+        font-size: 2.75vw;
+        font-weight: 600;
+        line-height: 1.2;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .editorial-hl em {
+        font-style: italic;
+        color: var(--c-accent);
+      }
+      .light .editorial-hl {
+        border-color: var(--c-border-light);
+      }
+
+      /* Two-column layout */
+      .editorial-cols {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 0;
+        min-height: 0;
+      }
+      .editorial-col-left {
+        padding-right: calc(var(--pad-x) * 0.38);
+        border-right: 1px solid var(--c-border);
+        display: flex;
+        flex-direction: column;
+      }
+      .editorial-col-right {
+        padding-left: calc(var(--pad-x) * 0.38);
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .light .editorial-col-left {
+        border-color: var(--c-border-light);
+      }
+      .editorial-col-head {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.18em;
+        color: var(--c-fg-3);
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-sm);
+      }
+      .light .editorial-col-head {
+        border-color: var(--c-border-light);
+        color: var(--c-fg-light-3);
+      }
+
+      /* Date log in left column */
+      .log-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.4vh;
+        flex: 1;
+      }
+      .log-row {
+        display: grid;
+        grid-template-columns: 5em 1fr;
+        gap: 1em;
+        align-items: baseline;
+      }
+      .log-dt {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        white-space: nowrap;
+      }
+      .log-dd {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.52;
+      }
+      .log-dd em {
+        font-style: italic;
+        color: var(--c-accent);
+        font-family: var(--f-heading);
+      }
+
+      /* 2x2 mixed-font stat grid in right column */
+      .stat-4 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      .stat-4-cell {
+        border-top: 1px solid var(--c-border);
+        padding: 1.2vh 0 1.5vh 0;
+      }
+      .stat-4-cell:nth-child(even) {
+        border-left: 1px solid var(--c-border);
+        padding-left: 1.8vh;
+      }
+      .light .stat-4-cell {
+        border-color: var(--c-border-light);
+      }
+      /* Value: roman grotesque number (DM Sans 700) + italic serif suffix (Source Serif 4 italic) */
+      .stat-4-val {
+        font-family: var(--f-body);
+        font-size: 2.5vw;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--c-fg);
+        margin-bottom: 0.5vh;
+        letter-spacing: -0.02em;
+      }
+      .stat-4-val em {
+        font-family: var(--f-display);
+        font-style: italic;
+        color: var(--c-accent);
+        font-weight: 600;
+      }
+      .stat-4-label {
+        font-family: var(--f-mono);
+        font-size: 0.62vw;
+        letter-spacing: 0.07em;
+        color: var(--c-fg-3);
+        line-height: 1.4;
+        text-transform: uppercase;
+      }
+      .light .stat-4-label {
+        color: var(--c-fg-light-3);
+      }
+
+      /* Analysis line below columns */
+      .editorial-analysis {
+        font-family: var(--f-body);
+        font-size: 0.88vw;
+        line-height: 1.72;
+        color: var(--c-fg-2);
+        border-top: 1px solid var(--c-border);
+        padding-top: var(--gap-sm);
+      }
+      .light .editorial-analysis {
+        border-color: var(--c-border-light);
+        color: var(--c-fg-light-2);
+      }
+
+      /* 11. DENSE — Two-column editorial text ─────────────────────────────── */
+      .slide--dense {
+        grid-template-rows: auto auto 1fr auto;
+      }
+      .dense-hl {
+        font-family: var(--f-heading);
+        font-size: 2.4vw;
+        font-weight: 600;
+        line-height: 1.2;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border);
+        max-width: 88%;
+      }
+      .dense-hl em {
+        font-style: italic;
+        color: var(--c-accent);
+      }
+      .light .dense-hl {
+        border-color: var(--c-border-light);
+      }
+      .dense-cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.45);
+        padding-top: var(--gap-md);
+        min-height: 0;
+      }
+      .dense-col h4 {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        color: var(--c-fg-3);
+        margin-bottom: var(--gap-sm);
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .light .dense-col h4 {
+        border-color: var(--c-border-light);
+        color: var(--c-fg-light-3);
+      }
+      .dense-col p {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.72;
+        color: var(--c-fg-2);
+        margin-bottom: 1.4vh;
+      }
+      .light .dense-col p {
+        color: var(--c-fg-light-2);
+      }
+      .dense-col p:last-child {
+        margin-bottom: 0;
+      }
+      .dense-col p em {
+        font-style: italic;
+        color: var(--c-accent);
+        font-family: var(--f-heading);
+      }
+
+      /* 12. FULLBLEED ──────────────────────────────────────────────────────── */
+      .slide--fullbleed {
+        padding: 0;
+        display: block;
+        position: relative;
+      }
+      .slide--fullbleed::before {
+        display: none !important;
+      }
+      .fb-img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .fb-content {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: var(--pad-y) var(--pad-x);
+        background: linear-gradient(
+          to bottom,
+          transparent 0%,
+          rgba(15, 20, 36, 0.9) 35%
+        );
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE F · COMPONENTS                                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Decorative rule lines */
+      .rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+      }
+      .rule.full {
+        width: 100%;
+        background: var(--c-border);
+      }
+      .light .rule.full {
+        background: var(--c-border-light);
+      }
+
+      /* Kicker label (above headlines) */
+      .kicker {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+      }
+
+      /* Outlined tag */
+      .tag {
+        display: inline-block;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+        border: 1px solid var(--c-accent);
+        padding: 0.3em 0.8em;
+        line-height: 1;
+      }
+
+      /* Image caption */
+      .img-caption {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.04em;
+        opacity: 0.5;
+        margin-top: 0.8vh;
+      }
+      /* ── CHART ─────────────────────────────────────────────────────────── */
+      .slide--chart .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-shrink: 0;
+      }
+      .chart-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 0;
+      }
+      .bar-track {
+        height: 30vh;
+        display: flex;
+        align-items: flex-end;
+        gap: 4vw;
+        border-left: 1px solid var(--c-border);
+        padding-left: 0.5vw;
+      }
+      .light .bar-track {
+        border-color: var(--c-border-light);
+      }
+      .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 1vh;
+        height: 100%;
+      }
+      .bar-fill {
+        width: 100%;
+        background: var(--c-fg-3);
+      }
+      .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .light .bar-fill {
+        background: var(--c-fg-light-3);
+      }
+      .light .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .bar-x-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+      .light .bar-x-label {
+        color: var(--c-fg-light-3);
+      }
+      .bar-val {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 500;
+        color: var(--c-fg-2);
+      }
+      .bar-val.hi {
+        color: var(--c-accent);
+        font-weight: 600;
+      }
+      .light .bar-val {
+        color: var(--c-fg-light-2);
+      }
+      .chart-baseline {
+        height: 1px;
+        background: var(--c-border);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .light .chart-baseline {
+        background: var(--c-border-light);
+      }
+      .chart-source {
+        flex-shrink: 0;
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        color: var(--c-fg-3);
+        letter-spacing: 0.06em;
+        margin-top: var(--gap-sm);
+      }
+      .light .chart-source {
+        color: var(--c-fg-light-3);
+      }
+
+      /* ── DIAGRAM ────────────────────────────────────────────────────────── */
+      .slide--diagram .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+        min-height: 0;
+      }
+      .flow {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+      }
+      .flow-step {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding-right: calc(var(--pad-x) * 0.35);
+      }
+      .flow-num {
+        font-family: var(--f-display);
+        font-size: 4.5vw;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--c-accent);
+        letter-spacing: -0.02em;
+        font-style: italic;
+      }
+      .flow-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 600;
+        line-height: 1.15;
+        color: var(--c-fg);
+      }
+      .light .flow-title {
+        color: var(--c-fg-light);
+      }
+      .flow-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.62;
+      }
+      .light .flow-desc {
+        color: var(--c-fg-light-2);
+      }
+      .flow-arrow {
+        display: flex;
+        align-items: flex-start;
+        padding-top: 1em;
+        padding-right: calc(var(--pad-x) * 0.35);
+        font-size: 2vw;
+        color: var(--c-border);
+        flex-shrink: 0;
+      }
+      .light .flow-arrow {
+        color: var(--c-border-light);
+      }
+
+      /* ── PIE / DONUT CHART ──────────────────────────────────────────────── */
+      .slide--pie .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pie-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+        flex: 1;
+        min-height: 0;
+      }
+      .pie-donut {
+        width: min(26vw, 42vh);
+        height: min(26vw, 42vh);
+        border-radius: 50%;
+        position: relative;
+        flex-shrink: 0;
+        justify-self: center;
+      }
+      .pie-donut::after {
+        content: "";
+        position: absolute;
+        inset: 22%;
+        border-radius: 50%;
+        background: var(--c-bg);
+      }
+      .pie-legend {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .pie-item {
+        display: grid;
+        grid-template-columns: 0.8em 1fr auto;
+        gap: 1em;
+        align-items: center;
+      }
+      .pie-swatch {
+        width: 0.8em;
+        height: 0.8em;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .pie-item-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        line-height: 1.4;
+      }
+      .pie-item-val {
+        font-family: var(--f-mono);
+        font-size: var(--sz-body);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: var(--c-accent);
+      }
+      .pie-total {
+        margin-top: var(--gap-sm);
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+      }
+      .light .pie-donut::after {
+        background: var(--c-bg-light);
+      }
+      .light .pie-total {
+        border-color: var(--c-border-light);
+        color: var(--c-fg-light-3);
+      }
+
+      /* ── PYRAMID ─────────────────────────────────────────────────────────── */
+      .slide--pyramid .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pyramid {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+      }
+      .pyr-level {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.3vh 2.5vw;
+        border-left: 3px solid var(--c-accent);
+        transition: width 0.3s;
+      }
+      .pyr-level:nth-child(1) {
+        background: color-mix(in srgb, var(--c-accent) 70%, var(--c-bg));
+        width: 38%;
+      }
+      .pyr-level:nth-child(2) {
+        background: color-mix(in srgb, var(--c-accent) 45%, var(--c-bg));
+        width: 54%;
+      }
+      .pyr-level:nth-child(3) {
+        background: color-mix(in srgb, var(--c-accent) 27%, var(--c-bg));
+        width: 70%;
+      }
+      .pyr-level:nth-child(4) {
+        background: color-mix(in srgb, var(--c-accent) 15%, var(--c-bg));
+        width: 86%;
+      }
+      .pyr-level:nth-child(5) {
+        background: color-mix(in srgb, var(--c-accent) 8%, var(--c-bg));
+        width: 100%;
+      }
+      .pyr-name {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 500;
+        line-height: 1.2;
+      }
+      .pyr-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        text-align: right;
+        max-width: 55%;
+        line-height: 1.4;
+      }
+
+      /* ── VERTICAL TIMELINE ───────────────────────────────────────────────── */
+      .slide--vtimeline {
+        grid-template-rows: auto auto 1fr auto;
+      }
+      .vt-hl {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 600;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .light .vt-hl {
+        border-color: var(--c-border-light);
+      }
+      .vtimeline {
+        display: grid;
+        grid-template-columns: 8em 1px 1fr;
+        gap: 0;
+        min-height: 0;
+        padding-top: var(--gap-md);
+      }
+      .vt-date {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.08em;
+        color: var(--c-fg-3);
+        text-align: right;
+        padding: 0 1.5vw 3.5vh 0;
+        line-height: 1.4;
+      }
+      .light .vt-date {
+        color: var(--c-fg-light-3);
+      }
+      .vt-spine {
+        background: var(--c-border);
+        position: relative;
+      }
+      .light .vt-spine {
+        background: var(--c-border-light);
+      }
+      .vt-spine::before {
+        content: "";
+        position: absolute;
+        top: 0.25em;
+        left: -4px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--c-accent);
+      }
+      .vt-content {
+        padding: 0 0 3.5vh 1.5vw;
+      }
+      .vt-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 500;
+        margin-bottom: 0.6vh;
+        line-height: 1.25;
+      }
+      .vt-body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.65;
+      }
+      .light .vt-body {
+        color: var(--c-fg-light-2);
+      }
+      .vt-body em {
+        font-style: italic;
+        color: var(--c-accent);
+        font-family: var(--f-heading);
+      }
+
+      /* ── CYCLE PROCESS ───────────────────────────────────────────────────── */
+      .slide--cycle .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .cycle-grid {
+        display: grid;
+        grid-template-columns: 1fr 3em 1fr;
+        grid-template-rows: 1fr 3em 1fr;
+        gap: var(--gap-sm);
+        flex: 1;
+        min-height: 0;
+        align-items: center;
+      }
+      .cycle-step {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md);
+        border-top: 2px solid var(--c-accent);
+      }
+      .cycle-num {
+        font-family: var(--f-display);
+        font-size: 3.2vw;
+        font-weight: 700;
+        color: var(--c-accent);
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+      .cycle-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 500;
+        line-height: 1.2;
+      }
+      .cycle-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.6;
+      }
+      .light .cycle-desc {
+        color: var(--c-fg-light-2);
+      }
+      .cycle-arrow {
+        color: var(--c-fg-3);
+        font-size: 1.8vw;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .light .cycle-arrow {
+        color: var(--c-fg-light-3);
+      }
+      .cycle-corner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--c-fg-3);
+        font-size: 1.3vw;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- NAV DOTS: generated by JS -->
+    <nav id="nav-dots"></nav>
+    <!-- SLIDE COUNTER: generated by JS -->
+    <div id="slide-counter"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         DECK — all slides live here, side by side
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div id="deck">
+      <!-- ═══════ SLIDE 1 · COVER dark ══════════════════════════════════════ -->
+      <section class="slide dark slide--cover">
+        <div class="cover-body">
+          <!-- Session stamp: condensed mono label top-left -->
+          <div class="label muted" data-anim="fade-in" data-delay="0">
+            [Period] · [Audience] · [Deck Type]
+          </div>
+
+          <!-- Gold rule reveal -->
+          <div class="rule" data-anim="reveal-right" data-delay="1"></div>
+
+          <!-- Display title: roman + italic accent -->
+          <h1 class="display" data-anim="fade-up" data-delay="2">
+            [Presentation]<br /><em>Title</em>
+          </h1>
+
+          <!-- Subtitle: italic serif -->
+          <p
+            class="lead"
+            style="
+              font-style: italic;
+              font-family: var(--f-heading);
+              max-width: 52%;
+              color: var(--c-fg-2);
+            "
+            data-anim="fade-up"
+            data-delay="3"
+          >
+            A short description of the deck, its purpose, and the decision it
+            supports.
+          </p>
+
+          <!-- Meta bar: name left, version right -->
+          <div class="cover-meta" data-anim="fade-in" data-delay="4">
+            <span class="label muted">[Author Name] · [Role]</span>
+            <span class="label muted">[Version] · [Status] · [Period]</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 2 · CHAPTER dark ════════════════════════════════════ -->
+      <section class="slide dark slide--chapter">
+        <!-- Chapter number: mono label -->
+        <div class="chapter-num" data-anim="fade-in" data-delay="0">
+          01 · [Section]
+        </div>
+        <!-- Gold rule -->
+        <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
+        <!-- Chapter title -->
+        <h1
+          class="h1"
+          style="max-width: 62%; margin-bottom: var(--gap-md)"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          Section headline with one <em>emphasized</em> idea
+        </h1>
+        <!-- Description -->
+        <p
+          class="lead muted"
+          style="max-width: 50%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          A brief setup sentence that explains what this section covers and why
+          it matters.
+        </p>
+      </section>
+
+      <!-- ═══════ SLIDE 3 · STATEMENT dark ══════════════════════════════════ -->
+      <section class="slide dark slide--statement">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Slide Label]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">03</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="statement-body">
+            <!-- Kicker -->
+            <div class="kicker" data-anim="fade-in" data-delay="1">
+              [Kicker Label]
+            </div>
+            <!-- Gold rule -->
+            <div class="rule" data-anim="reveal-right" data-delay="2"></div>
+            <!-- Main statement -->
+            <h1
+              class="h1"
+              style="max-width: 68%"
+              data-anim="fade-up"
+              data-delay="3"
+            >
+              A concise statement that frames the main argument in one
+              <em>memorable</em> sentence.
+            </h1>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">03 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 4 · SPLIT light ═════════════════════════════════════ -->
+      <section class="slide light slide--split">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >[Category] · [Topic]</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >04</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left: text content -->
+          <div class="split-text" data-anim="fade-up" data-delay="1">
+            <div class="kicker">[Kicker Label]</div>
+            <h2 class="h2">
+              Main headline for a split-layout slide
+            </h2>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              Use this paragraph for the core explanation. Keep it short,
+              specific, and easy to scan.
+            </p>
+            <!-- Bullet list -->
+            <ul class="bullet-list" style="font-size: var(--sz-body)">
+              <li>First supporting point with concise context</li>
+              <li>Second supporting point with concise context</li>
+              <li>Third supporting point with concise context</li>
+            </ul>
+          </div>
+
+          <!-- Right: image placeholder -->
+          <div
+            class="split-image"
+            data-anim="fade-in"
+            data-delay="3"
+            style="display: flex; flex-direction: column; gap: var(--gap-sm)"
+          >
+            <div
+              style="
+                flex: 1;
+                background: var(--c-bg-light-alt);
+                border: 1px solid var(--c-border-light);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 28vh;
+              "
+            >
+              <span
+                style="
+                  font-family: var(--f-mono);
+                  font-size: var(--sz-label);
+                  color: var(--c-fg-light-3);
+                  letter-spacing: 0.12em;
+                  text-transform: uppercase;
+                "
+                >Image Placeholder</span
+              >
+            </div>
+            <p class="img-caption" style="color: var(--c-fg-light-3)">
+              [Caption for image]
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">04 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 5 · STATS dark ═══════════════════════════════════════ -->
+      <section class="slide dark slide--stats">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Category] · [Metrics]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">05</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Headline above stats -->
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            Three metrics that summarize the current state
+          </h2>
+
+          <!-- 3-column stat grid -->
+          <div class="stats-grid" data-anim="fade-up" data-delay="2">
+            <div class="stat-card">
+              <div class="stat-value">[X]%</div>
+              <div class="stat-label">
+                Short description of the first metric and its meaning
+              </div>
+              <div class="stat-note">[Source] · [Date]</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">[Y]×</div>
+              <div class="stat-label">
+                Short description of the second metric and its meaning
+              </div>
+              <div class="stat-note">[Method or source]</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">[Z]</div>
+              <div class="stat-label">
+                Short description of the third metric and its meaning
+              </div>
+              <div class="stat-note">[Benchmark]</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">05 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 6 · QUOTE dark ═══════════════════════════════════════ -->
+      <section class="slide dark slide--quote">
+        <!-- Opening quote mark in accent gold -->
+        <div class="quote-mark" data-anim="fade-in" data-delay="0">"</div>
+
+        <!-- Quote body: large italic serif -->
+        <p class="quote-text" data-anim="fade-up" data-delay="1">
+          A short pull quote or highlighted observation can sit here.
+        </p>
+
+        <!-- Attribution -->
+        <div class="quote-attr" data-anim="fade-up" data-delay="3">
+          <span class="label accent">[Source Name]</span>
+          <span class="label muted">[Source Role] · [Context]</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 7 · LIST light ═══════════════════════════════════════ -->
+      <section class="slide light slide--list">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >[Framework]</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >07</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left column: intro -->
+          <div class="list-head" data-anim="fade-up" data-delay="1">
+            <div class="kicker">[Kicker Label]</div>
+            <h2 class="h2">
+              Five principles that shape the <em>recommended</em> approach
+            </h2>
+            <p class="body" style="color: var(--c-fg-light-2)">
+              Use this sentence to introduce the list and clarify how the
+              points should be read.
+            </p>
+          </div>
+
+          <!-- Right column: bullets -->
+          <ul class="bullet-list" data-anim="fade-up" data-delay="2">
+            <li>
+              First principle written as a complete sentence
+            </li>
+            <li>
+              Second principle written as a complete sentence
+            </li>
+            <li>
+              Third principle written as a complete sentence
+            </li>
+            <li>Fourth principle written as a complete sentence</li>
+            <li>Fifth principle written as a complete sentence</li>
+          </ul>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">07 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 8 · COMPARE dark ════════════════════════════════════ -->
+      <section class="slide dark slide--compare">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Before] · [After]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">08</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Left panel: Before -->
+          <div class="compare-panel left" data-anim="fade-up" data-delay="1">
+            <div class="compare-label">[Current State]</div>
+            <h3 class="h3">
+              Headline describing the current state
+            </h3>
+            <p class="lead" style="color: var(--c-fg-2)">
+              Describe the current approach, the friction it creates, and why it
+              needs to change.
+            </p>
+            <ul class="bullet-list" style="font-size: var(--sz-body)">
+              <li>Current limitation or source of friction</li>
+              <li>Current limitation or source of friction</li>
+              <li>Current limitation or source of friction</li>
+            </ul>
+          </div>
+
+          <!-- Right panel: After -->
+          <div class="compare-panel right" data-anim="fade-up" data-delay="2">
+            <div class="compare-label after">[Proposed State]</div>
+            <h3 class="h3">
+              Headline describing the proposed <em>approach</em>
+            </h3>
+            <p class="lead" style="color: var(--c-fg-2)">
+              Describe the improved approach, the behavior it enables, and the
+              outcome it supports.
+            </p>
+            <ul class="bullet-list" style="font-size: var(--sz-body)">
+              <li>Expected improvement or capability</li>
+              <li>Expected improvement or capability</li>
+              <li>Expected improvement or capability</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">08 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 9 · EDITORIAL dark ══════════════════════════════════
+           The signature dense layout — editorial newsletter style
+           Chrome: condensed mono section marker
+           Headline: roman serif + italic gold word
+           Left col: date log with em-tagged italic entries
+           Right col: 2x2 mixed-font stat grid (DM Sans number + Source Serif italic suffix)
+           Bottom: analysis line + sources footer
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--editorial">
+        <!-- Chrome: section marker left, issue ID right -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >— § [Section]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Deck Name] · [Period] · <span class="accent">[Year]</span></span
+          >
+        </div>
+
+        <!-- Week stamp: condensed mono with accent number -->
+        <div class="editorial-stamp" data-anim="fade-in" data-delay="1">
+          [Issue] <span class="accent">[N]</span> · [Review Label]
+        </div>
+
+        <!-- Headline: roman serif + single italic gold word -->
+        <h2 class="editorial-hl" data-anim="fade-up" data-delay="2">
+          Editorial headline with one <em>accented</em> word for emphasis.
+        </h2>
+
+        <!-- Two-column body -->
+        <div class="editorial-cols" data-anim="fade-up" data-delay="3">
+          <!-- Left: date log -->
+          <div class="editorial-col-left">
+            <div class="editorial-col-head">[Sequence]</div>
+            <div class="log-list">
+              <div class="log-row">
+                <span class="log-dt">[Date]</span>
+                <span class="log-dd"
+                  >First event or observation appears.
+                  <em>Short implication.</em></span
+                >
+              </div>
+              <div class="log-row">
+                <span class="log-dt">[Date]</span>
+                <span class="log-dd"
+                  >Second event or observation appears.
+                  <em>Short implication.</em></span
+                >
+              </div>
+              <div class="log-row">
+                <span class="log-dt">[Date]</span>
+                <span class="log-dd"
+                  >Third event or observation appears.
+                  <em>Short implication.</em></span
+                >
+              </div>
+              <div class="log-row">
+                <span class="log-dt">[Date]</span>
+                <span class="log-dd"
+                  >Fourth event adds context. A key pattern <em>holds</em>
+                  across the data.</span
+                >
+              </div>
+              <div class="log-row">
+                <span class="log-dt">[Date]</span>
+                <span class="log-dd"
+                  >Fifth event confirms part of the hypothesis and challenges
+                  another <em>assumption.</em></span
+                >
+              </div>
+              <div class="log-row">
+                <span class="log-dt">[Date]</span>
+                <span class="log-dd"
+                  >Final event closes the sequence and <em>clarifies</em> the
+                  next question.</span
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: 2x2 mixed-font stat grid -->
+          <div class="editorial-col-right">
+            <div class="editorial-col-head">[Key Readings]</div>
+            <!-- 2x2 grid: roman grotesque number + italic serif suffix in gold -->
+            <div class="stat-4">
+              <div class="stat-4-cell">
+                <div class="stat-4-val">[A]<em>%</em></div>
+                <div class="stat-4-label">Metric label · [Segment] · [Period]</div>
+              </div>
+              <div class="stat-4-cell">
+                <div class="stat-4-val">[B]<em>x</em></div>
+                <div class="stat-4-label">
+                  Metric label vs. comparison period
+                </div>
+              </div>
+              <div class="stat-4-cell">
+                <div class="stat-4-val">[C]<em>pt</em></div>
+                <div class="stat-4-label">
+                  Metric label · [Segment]
+                </div>
+              </div>
+              <div class="stat-4-cell">
+                <div class="stat-4-val">+<em>[D]</em></div>
+                <div class="stat-4-label">
+                  Net change across selected group
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analysis line below the columns -->
+        <div class="editorial-analysis" data-anim="fade-in" data-delay="4">
+          Use this analysis line to synthesize the sequence above. Explain what
+          changed, why it matters, and what decision should follow.
+        </div>
+
+        <!-- Footer: sources left, page right -->
+        <div class="slide-foot">
+          <span class="label muted"
+            >Sources: [Source A] · [Source B] · [Source C] · [Source D]</span
+          >
+          <span class="label muted">09 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 10 · DENSE dark ══════════════════════════════════════ -->
+      <section class="slide dark slide--dense">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Deep Dive]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">10</span>
+        </div>
+
+        <!-- Headline with italic gold emphasis -->
+        <h2 class="dense-hl" data-anim="fade-up" data-delay="1">
+          Long-form headline that frames the <em>central</em> tradeoff
+        </h2>
+
+        <!-- Two-column analysis text -->
+        <div class="dense-cols slide-body" data-anim="fade-up" data-delay="2">
+          <!-- Left column -->
+          <div class="dense-col">
+            <h4>[Argument A]</h4>
+            <p>
+              Use this paragraph to explain the first side of the argument.
+              Include one <em>emphasized phrase</em> when a key idea needs
+              extra weight.
+            </p>
+            <p>
+              Add a second paragraph with supporting evidence, operational
+              detail, or a short example that strengthens the case.
+            </p>
+            <p>
+              Close the column with the implication. Make the logic clear
+              enough that the reader understands the recommended action.
+            </p>
+          </div>
+
+          <!-- Right column -->
+          <div class="dense-col">
+            <h4>[Argument B]</h4>
+            <p>
+              Use this paragraph to explain the second side of the argument.
+              Highlight the contrasting principle with an
+              <em>emphasized phrase.</em>
+            </p>
+            <p>
+              Add a second paragraph with supporting detail. This column should
+              feel like a deliberate counterweight to the first column.
+            </p>
+            <p>
+              Close with the practical takeaway, linking the argument back to
+              the decision the deck is meant to support.
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">[Analysis Label] · [Period]</span>
+          <span class="label muted">10 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 11 · STATEMENT dark (replaces broken fullbleed) ════════════════ -->
+      <section class="slide dark slide--statement">
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Perspective]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">11</span>
+        </div>
+        <div class="slide-body">
+          <div class="statement-body">
+            <div class="kicker" data-anim="fade-in" data-delay="1">
+              [Kicker Label]
+            </div>
+            <div class="rule" data-anim="reveal-right" data-delay="2"></div>
+            <h1
+              class="h1"
+              style="max-width: 68%"
+              data-anim="fade-up"
+              data-delay="3"
+            >
+              A second statement slide can reinforce the argument with a
+              sharper <em>closing</em> line.
+            </h1>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">11 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 12 · END dark ════════════════════════════════════════ -->
+      <section class="slide dark slide--end">
+        <!-- Kicker: organization placeholder -->
+        <div class="kicker" data-anim="fade-in" data-delay="0">
+          [Organization]
+        </div>
+
+        <!-- Gold rule -->
+        <div class="rule" data-anim="reveal-right" data-delay="1"></div>
+
+        <!-- Closing headline -->
+        <h1
+          class="h1"
+          style="max-width: 55%"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          Closing headline with one <em>emphasized</em> phrase.
+        </h1>
+
+        <!-- Contact line -->
+        <p
+          class="lead muted"
+          style="max-width: 42%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          [Author Name] · [email@example.com] · [website.example]
+        </p>
+      </section>
+
+      <!-- SLIDE 11 · CHART  (dark — bar chart with gold accent bar) -->
+      <section class="slide slide--chart dark">
+        <header class="slide-chrome">
+          <span class="label muted">§ [Metrics]</span>
+          <span class="label muted">13</span>
+        </header>
+        <div class="slide-body">
+          <div class="chart-header">
+            <h2 class="h2" data-anim="fade-up" data-delay="0">
+              Chart headline with <em>emphasis</em>
+            </h2>
+            <span class="caption muted" data-anim="fade-in" data-delay="1"
+              >[Unit] · [Scope] · [Period]</span
+            >
+          </div>
+          <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
+            <div class="bar-track">
+              <div class="bar-col">
+                <span class="bar-val">[A]</span>
+                <div class="bar-fill" style="height: 9vh"></div>
+                <span class="bar-x-label">[T1]</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">[B]</span>
+                <div class="bar-fill" style="height: 14vh"></div>
+                <span class="bar-x-label">[T2]</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">[C]</span>
+                <div class="bar-fill" style="height: 20vh"></div>
+                <span class="bar-x-label">[T3]</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">[D]</span>
+                <div class="bar-fill" style="height: 26vh"></div>
+                <span class="bar-x-label">[T4]</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val hi">[E]</span>
+                <div class="bar-fill accent" style="height: 30vh"></div>
+                <span class="bar-x-label">[T5]</span>
+              </div>
+            </div>
+            <div class="chart-baseline"></div>
+          </div>
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: [Source] · [Period]
+          </p>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">13 / 18</span>
+        </footer>
+      </section>
+
+      <!-- SLIDE 12 · DIAGRAM  (light cream — 4-step investment process) -->
+      <section class="slide slide--diagram light">
+        <header class="slide-chrome">
+          <span class="label muted">Process</span>
+          <span class="label muted">14</span>
+        </header>
+        <div class="slide-body">
+          <h2 class="h2" data-anim="fade-up" data-delay="0">
+            Four-step process with <em>emphasis</em>
+          </h2>
+          <div class="flow" data-anim="fade-up" data-delay="1">
+            <div class="flow-step">
+              <div class="flow-num">01</div>
+              <div class="flow-title">Step One</div>
+              <div class="flow-desc">
+                Briefly describe the first step in the workflow.
+              </div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+              <div class="flow-num">02</div>
+              <div class="flow-title">Step Two</div>
+              <div class="flow-desc">
+                Briefly describe the second step in the workflow.
+              </div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+              <div class="flow-num">03</div>
+              <div class="flow-title">Step Three</div>
+              <div class="flow-desc">
+                Briefly describe the third step in the workflow.
+              </div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+              <div class="flow-num">04</div>
+              <div class="flow-title">Step Four</div>
+              <div class="flow-desc">
+                Briefly describe the fourth step in the workflow.
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">14 / 18</span>
+        </footer>
+      </section>
+
+      <!-- ═══════ SLIDE 13 · PIE CHART dark ════════════════════════════════ -->
+      <section class="slide dark slide--pie">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Breakdown]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">15</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Headline -->
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            Breakdown by <em>category</em>
+          </h2>
+
+          <!-- Donut + legend row -->
+          <div class="pie-row" data-anim="fade-in" data-delay="2">
+            <!-- Donut chart: conic-gradient, 4 sectors -->
+            <div
+              class="pie-donut"
+              style="
+                background: conic-gradient(
+                  var(--c-accent) 0% 35%,
+                  #3d5475 35% 65%,
+                  #526880 65% 87%,
+                  #2d3f55 87% 100%
+                );
+              "
+            ></div>
+
+            <!-- Legend -->
+            <div class="pie-legend">
+              <div class="pie-item">
+                <div
+                  class="pie-swatch"
+                  style="background: var(--c-accent)"
+                ></div>
+                <span class="pie-item-label">Category A</span>
+                <span class="pie-item-val">35%</span>
+              </div>
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: #3d5475"></div>
+                <span class="pie-item-label">Category B</span>
+                <span class="pie-item-val">30%</span>
+              </div>
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: #526880"></div>
+                <span class="pie-item-label">Category C</span>
+                <span class="pie-item-val">22%</span>
+              </div>
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: #2d3f55"></div>
+                <span class="pie-item-label">Category D</span>
+                <span class="pie-item-val">13%</span>
+              </div>
+              <div class="pie-total">Total: [N] · As of [Period]</div>
+            </div>
+          </div>
+
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: [Source] · [Period]
+          </p>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">15 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 14 · PYRAMID dark ══════════════════════════════════ -->
+      <section class="slide dark slide--pyramid">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Hierarchy]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">16</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Headline -->
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            The priority <em>hierarchy</em>
+          </h2>
+
+          <!-- Pyramid levels, narrowest at top -->
+          <div class="pyramid" data-anim="fade-up" data-delay="2">
+            <div class="pyr-level">
+              <span class="pyr-name">Level One</span>
+              <span class="pyr-desc"
+                >Highest-order principle or decision criterion</span
+              >
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">Level Two</span>
+              <span class="pyr-desc"
+                >Second-order principle or decision criterion</span
+              >
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">Level Three</span>
+              <span class="pyr-desc">Third-order principle or decision criterion</span>
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">Level Four</span>
+              <span class="pyr-desc">Supporting layer or operating standard</span>
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">Level Five</span>
+              <span class="pyr-desc"
+                >Foundation layer or ongoing practice</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">16 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 15 · VERTICAL TIMELINE dark ═════════════════════════ -->
+      <section class="slide dark slide--vtimeline">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Timeline]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">17</span>
+        </div>
+
+        <!-- Section headline with italic em -->
+        <h2 class="vt-hl" data-anim="fade-up" data-delay="1">
+          From starting point to <em>current state</em>
+        </h2>
+
+        <!-- Timeline: 3-column grid: date | spine | content -->
+        <div class="vtimeline" data-anim="fade-up" data-delay="2">
+          <!-- Event 1 -->
+          <div class="vt-date">[Year 1]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">Milestone One</div>
+            <p class="vt-body">
+              Describe the first milestone and the outcome it produced.
+            </p>
+          </div>
+
+          <!-- Event 2 -->
+          <div class="vt-date">[Year 2]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">Milestone Two</div>
+            <p class="vt-body">
+              Describe the second milestone. Use <em>emphasis</em> for the key
+              implication.
+            </p>
+          </div>
+
+          <!-- Event 3 -->
+          <div class="vt-date">[Year 3]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">Milestone Three</div>
+            <p class="vt-body">
+              Describe the third milestone and how the scope changed.
+            </p>
+          </div>
+
+          <!-- Event 4 -->
+          <div class="vt-date">[Year 4]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">Milestone Four</div>
+            <p class="vt-body">
+              Describe the current milestone and the <em>focus area</em> it
+              represents.
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">17 / 18</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 16 · CYCLE PROCESS dark ════════════════════════════ -->
+      <section class="slide dark slide--cycle">
+        <!-- Chrome bar -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >[Process]</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">18</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Headline -->
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            The <em>operating</em> cycle
+          </h2>
+
+          <!-- 2×2 cycle grid -->
+          <div class="cycle-grid" data-anim="fade-up" data-delay="2">
+            <!-- Step 01: top-left -->
+            <div class="cycle-step">
+              <div class="cycle-num">01</div>
+              <div class="cycle-title">Step One</div>
+              <div class="cycle-desc">
+                Describe how the cycle begins and what input starts the work.
+              </div>
+            </div>
+
+            <!-- Arrow right: col 2 row 1 -->
+            <div class="cycle-arrow">→</div>
+
+            <!-- Step 02: top-right -->
+            <div class="cycle-step">
+              <div class="cycle-num">02</div>
+              <div class="cycle-title">Step Two</div>
+              <div class="cycle-desc">
+                Describe how the input is examined, refined, or validated.
+              </div>
+            </div>
+
+            <!-- Arrow down: col 1 row 2 -->
+            <div class="cycle-arrow">↓</div>
+
+            <!-- Empty center: col 2 row 2 -->
+            <div></div>
+
+            <!-- Arrow down: col 3 row 2 -->
+            <div class="cycle-arrow">↓</div>
+
+            <!-- Step 04: bottom-left -->
+            <div class="cycle-step">
+              <div class="cycle-num">04</div>
+              <div class="cycle-title">Step Four</div>
+              <div class="cycle-desc">
+                Describe how the result is implemented, supported, or improved.
+              </div>
+            </div>
+
+            <!-- Arrow left: col 2 row 3 -->
+            <div class="cycle-arrow">←</div>
+
+            <!-- Step 03: bottom-right -->
+            <div class="cycle-step">
+              <div class="cycle-num">03</div>
+              <div class="cycle-title">Step Three</div>
+              <div class="cycle-desc">
+                Describe the decision point and the criteria used to move
+                forward.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">18 / 18</span>
+        </div>
+      </section>
+    </div>
+    <!-- /deck -->
+
+    <script>
+      /* ══════════════════════════════════════════════════════════════════════
+         SIGNAL PRESENTATION ENGINE
+         Self-contained navigation: keyboard, touch, mouse-wheel, nav-dots.
+         No external dependencies.
+         ══════════════════════════════════════════════════════════════════════ */
+      (function () {
+        "use strict";
+
+        /* ── State ─────────────────────────────────────────────────────────── */
+        const deck = document.getElementById("deck");
+        const slides = Array.from(document.querySelectorAll(".slide"));
+        const dotsEl = document.getElementById("nav-dots");
+        const counter = document.getElementById("slide-counter");
+        const total = slides.length;
+        let current = 0;
+        let animating = false;
+
+        /* ── Bootstrap: set deck width, build nav dots ─────────────────────── */
+        function init() {
+          // The deck is one wide strip — width equals N full viewports
+          deck.style.width = total + "00vw";
+
+          // Build one dot per slide
+          slides.forEach(function (_, i) {
+            const btn = document.createElement("button");
+            btn.className = "nav-dot";
+            btn.setAttribute("aria-label", "Go to slide " + (i + 1));
+            btn.addEventListener("click", function () {
+              goTo(i);
+            });
+            dotsEl.appendChild(btn);
+          });
+
+          // Activate the first slide immediately
+          goTo(0, true); // true = skip transition on load
+        }
+
+        /* ── goTo: the single source of truth for navigation ───────────────── */
+        function goTo(index, instant) {
+          // Clamp to valid range
+          index = Math.max(0, Math.min(total - 1, index));
+          if (index === current && !instant) return;
+
+          // Mark animating to block rapid key/swipe spam
+          animating = true;
+
+          // Deactivate current slide: reset animations by toggling is-active
+          const prev = slides[current];
+          prev.classList.remove("is-active");
+          // Force a reflow so removing then re-adding is-active (on same slide)
+          // actually re-triggers the keyframe animations
+          void prev.offsetWidth; // eslint-disable-line no-void
+
+          // Translate the deck
+          if (instant) {
+            // Remove transition temporarily for the initial load snap
+            deck.style.transition = "none";
+            deck.style.transform = "translateX(-" + index + "00vw)";
+            void deck.offsetWidth; // force reflow
+            deck.style.transition = "";
+          } else {
+            deck.style.transform = "translateX(-" + index + "00vw)";
+          }
+
+          // Activate new slide
+          current = index;
+          const next = slides[current];
+          next.classList.add("is-active");
+
+          // Update nav dots
+          Array.from(dotsEl.children).forEach(function (dot, i) {
+            dot.classList.toggle("is-active", i === current);
+          });
+
+          // Update counter: "3 / 12"
+          counter.textContent = current + 1 + " / " + total;
+
+          // Unlock after transition completes
+          const delay = instant
+            ? 0
+            : parseFloat(getComputedStyle(deck).transitionDuration) * 1000;
+          setTimeout(function () {
+            animating = false;
+          }, delay);
+        }
+
+        /* ── Keyboard navigation ──────────────────────────────────────────── */
+        document.addEventListener("keydown", function (e) {
+          if (animating) return;
+          if (
+            e.key === "ArrowRight" ||
+            e.key === "ArrowDown" ||
+            e.key === " "
+          ) {
+            e.preventDefault();
+            goTo(current + 1);
+          } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            goTo(current - 1);
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            goTo(0);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            goTo(total - 1);
+          }
+        });
+
+        /* ── Mouse-wheel navigation ───────────────────────────────────────── */
+        let wheelCooldown = false;
+        document.addEventListener(
+          "wheel",
+          function (e) {
+            e.preventDefault();
+            if (animating || wheelCooldown) return;
+            wheelCooldown = true;
+            setTimeout(function () {
+              wheelCooldown = false;
+            }, 900);
+            if (e.deltaY > 0 || e.deltaX > 0) {
+              goTo(current + 1);
+            } else {
+              goTo(current - 1);
+            }
+          },
+          { passive: false },
+        );
+
+        /* ── Touch swipe navigation ───────────────────────────────────────── */
+        let touchStartX = null;
+        let touchStartY = null;
+
+        document.addEventListener(
+          "touchstart",
+          function (e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+          },
+          { passive: true },
+        );
+
+        document.addEventListener(
+          "touchend",
+          function (e) {
+            if (touchStartX === null) return;
+            const dx = touchStartX - e.changedTouches[0].clientX;
+            const dy = touchStartY - e.changedTouches[0].clientY;
+            // Only respond if horizontal swipe is dominant
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+              if (animating) return;
+              if (dx > 0) {
+                goTo(current + 1); // swipe left: next
+              } else {
+                goTo(current - 1); // swipe right: prev
+              }
+            }
+            touchStartX = null;
+            touchStartY = null;
+          },
+          { passive: true },
+        );
+
+        /* ── Boot ─────────────────────────────────────────────────────────── */
+        init();
+      })();
+    </script>
+  </body>
+</html>

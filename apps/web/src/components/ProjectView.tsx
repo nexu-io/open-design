@@ -30,7 +30,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
-import { composeSystemPrompt } from '@open-design/contracts';
+import { composeSystemPrompt, type ResearchOptions } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import {
@@ -38,6 +38,7 @@ import {
   apiProtocolModelLabel,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
+import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
@@ -103,6 +104,7 @@ interface Props {
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: () => void;
+  onOpenMcpSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
   onAdoptPetInline?: (petId: string) => void;
@@ -118,7 +120,7 @@ interface Props {
 let liveArtifactEventSequence = 0;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 320;
+const MIN_CHAT_PANEL_WIDTH = 345;
 const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_WORKSPACE_PANEL_WIDTH = 400;
 const SPLIT_RESIZE_HANDLE_WIDTH = 8;
@@ -223,6 +225,7 @@ export function ProjectView({
   onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
+  onOpenMcpSettings,
   onAdoptPetInline,
   onTogglePet,
   onOpenPetSettings,
@@ -376,13 +379,23 @@ export function ProjectView({
     return () => {
       sendTextBufferRef.current?.cancel();
       sendTextBufferRef.current = null;
+      // Unmounts / conversation switches should only detach local stream
+      // consumers. Aborting the daemon cancel controllers here turns routine
+      // cleanup into an explicit POST /api/runs/:id/cancel, which can mark a
+      // live run canceled even when the user never clicked Stop.
+      abortRef.current?.abort();
+      abortRef.current = null;
+      cancelRef.current = null;
       for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
       reattachTextBuffersRef.current.clear();
       for (const controller of reattachControllersRef.current.values()) {
+        if (abortRef.current === controller) abortRef.current = null;
         controller.abort();
       }
       for (const controller of reattachCancelControllersRef.current.values()) {
-        controller.abort();
+        // Route changes should only detach the browser-side SSE listener.
+        // Aborting this signal maps to POST /cancel, so leave the daemon run alive.
+        if (cancelRef.current === controller) cancelRef.current = null;
       }
       reattachControllersRef.current.clear();
       reattachCancelControllersRef.current.clear();
@@ -972,6 +985,7 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
+      meta?: { research?: ResearchOptions },
     ) => {
       if (!activeConversationId) return;
       if (streaming) return;
@@ -979,7 +993,7 @@ export function ProjectView({
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         role: 'user',
         content: prompt,
         createdAt: startedAt,
@@ -1006,7 +1020,7 @@ export function ProjectView({
               selectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const assistantId = crypto.randomUUID();
+      const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -1177,7 +1191,7 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
+            runStatus: resolveSucceededRunStatus(prev.runStatus),
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
@@ -1256,11 +1270,12 @@ export function ProjectView({
           projectId: project.id,
           conversationId: activeConversationId,
           assistantMessageId: assistantId,
-          clientRequestId: crypto.randomUUID(),
+          clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
+          research: meta?.research,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {
@@ -1838,10 +1853,12 @@ export function ProjectView({
               onDeleteConversation={handleDeleteConversation}
               onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
+              onOpenMcpSettings={onOpenMcpSettings}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}
               onOpenPetSettings={onOpenPetSettings}
+              researchAvailable={config.mode === 'daemon'}
               projectMetadata={project.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
@@ -1918,6 +1935,10 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+export function resolveSucceededRunStatus(status: ChatMessage['runStatus']): ChatMessage['runStatus'] {
+  return status === 'failed' || status === 'canceled' ? status : 'succeeded';
 }
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;

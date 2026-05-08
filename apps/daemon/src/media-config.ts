@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Per-provider credentials for the media dispatcher.
 //
 // The frontend Settings dialog pushes API keys here via PUT
@@ -18,10 +17,11 @@
 // apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
 // the Home Manager / NixOS modules) get media-config there too without
 // any extra plumbing. Both env values are resolved with the same
-// semantics as OD_DATA_DIR in server.ts:resolveDataDir() — `~/` expands
-// to the user's home, and relative paths anchor to <projectRoot> (NOT
-// process.cwd, which is unrelated to the workspace when systemd or
-// launchd starts the daemon).
+// semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared
+// expandHomePrefix() helper handles `~`, `$HOME`, and `${HOME}` (with
+// either `/` or `\` separator), then relative paths anchor to
+// <projectRoot> (NOT process.cwd, which is unrelated to the workspace
+// when systemd or launchd starts the daemon).
 //
 // Migration note: a workspace install that sets a custom OD_DATA_DIR
 // AND has a pre-existing `<projectRoot>/.od/media-config.json` will
@@ -36,13 +36,26 @@
 // echo secrets back into the DOM.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
+import { expandHomePrefix } from './home-expansion.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
+type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
+type ProviderMap = Record<string, ProviderEntry>;
+type JsonRecord = Record<string, unknown>;
+type OAuthCredential = { apiKey: string; source: string };
 
-const ENV_KEYS = {
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === 'object';
+}
+
+function errorCode(err: unknown): string | undefined {
+  return isRecord(err) && typeof err.code === 'string' ? err.code : undefined;
+}
+
+const ENV_KEYS: Record<string, string[]> = {
   // OPENAI_API_KEY is the canonical env for the standard OpenAI API.
   // AZURE_API_KEY / AZURE_OPENAI_API_KEY are the canonical envs Azure
   // OpenAI examples use — we share the openai provider slot so a user
@@ -72,34 +85,41 @@ const ENV_KEYS = {
   udio: ['OD_UDIO_API_KEY'],
   elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
+  tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
 };
 
 // Resolve an `OD_*_DIR` env override using the same semantics as
-// `resolveDataDir()` in server.ts: leading `~/` expands to the user's
-// home, and relative paths anchor to <projectRoot> (NOT process.cwd —
+// `resolveDataDir()` in server.ts: expandHomePrefix() handles the `~`,
+// `$HOME`, and `${HOME}` shorthands (with either `/` or `\` separator),
+// then relative paths anchor to <projectRoot>, not process.cwd, since
 // the daemon is often launched from a directory that has nothing to do
-// with the workspace, e.g. systemd's `/`). The writability check that
+// with the workspace, e.g. systemd's `/`. The writability check that
 // resolveDataDir does on startup is intentionally NOT replicated here:
 // configFile() is on the read path and a missing/unwritable directory
 // is a normal "no config yet" condition handled by readStored(); the
 // write path's mkdir(recursive) creates the directory on first use.
-function resolveOverrideDir(raw, projectRoot) {
-  const expanded = raw.startsWith('~/')
-    ? path.join(homedir(), raw.slice(2))
-    : raw;
+function resolveOverrideDir(raw: string, projectRoot: string): string {
+  // Share expandHomePrefix with resolveDataDir (server.ts) so OD_DATA_DIR
+  // and OD_MEDIA_CONFIG_DIR cannot split state under a $HOME-style value.
+  // A launcher passing OD_DATA_DIR=$HOME/.open-design without a shell to
+  // expand it would otherwise route SQLite/projects/artifacts to the
+  // expanded path while media-config.json stayed under
+  // <projectRoot>/$HOME/.open-design, leaving stored credentials
+  // unreachable on the next read.
+  const expanded = expandHomePrefix(raw);
   return path.isAbsolute(expanded)
     ? expanded
     : path.resolve(projectRoot, expanded);
 }
 
-function envOverrideDir(envName, projectRoot) {
+function envOverrideDir(envName: string, projectRoot: string): string | null {
   const raw = process.env[envName];
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   return trimmed ? resolveOverrideDir(trimmed, projectRoot) : null;
 }
 
-function configFile(projectRoot) {
+function configFile(projectRoot: string): string {
   // Precedence: explicit media-config override > general data dir > default.
   const dir =
     envOverrideDir('OD_MEDIA_CONFIG_DIR', projectRoot)
@@ -108,27 +128,27 @@ function configFile(projectRoot) {
   return path.join(dir, 'media-config.json');
 }
 
-async function readStored(projectRoot) {
+async function readStored(projectRoot: string): Promise<ProviderMap> {
   try {
     const raw = await readFile(configFile(projectRoot), 'utf8');
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed.providers) {
-      return parsed.providers;
+    if (isRecord(parsed) && isRecord(parsed.providers)) {
+      return parsed.providers as ProviderMap;
     }
     return {};
   } catch (err) {
-    if (err && err.code === 'ENOENT') return {};
+    if (errorCode(err) === 'ENOENT') return {};
     throw err;
   }
 }
 
-async function writeStored(projectRoot, providers) {
+async function writeStored(projectRoot: string, providers: ProviderMap): Promise<void> {
   const file = configFile(projectRoot);
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify({ providers }, null, 2), 'utf8');
 }
 
-function readEnvKey(providerId) {
+function readEnvKey(providerId: string): string | null {
   const keys = ENV_KEYS[providerId];
   if (!keys) return null;
   for (const k of keys) {
@@ -138,29 +158,29 @@ function readEnvKey(providerId) {
   return null;
 }
 
-function readNestedString(obj, keys) {
-  let cur = obj;
+function readNestedString(obj: unknown, keys: string[]): string {
+  let cur: unknown = obj;
   for (const key of keys) {
-    if (!cur || typeof cur !== 'object') return '';
+    if (!isRecord(cur)) return '';
     cur = cur[key];
   }
   return typeof cur === 'string' && cur.trim() ? cur.trim() : '';
 }
 
-async function readJsonIfPresent(file) {
+async function readJsonIfPresent(file: string): Promise<JsonRecord | null> {
   try {
     const raw = await readFile(file, 'utf8');
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    return isRecord(parsed) ? parsed : null;
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (errorCode(err) === 'ENOENT') return null;
     // Auth files are best-effort fallbacks. A malformed local auth cache
     // should not break the Settings page or hide stored provider config.
     return null;
   }
 }
 
-function tokenFromHermesAuth(data) {
+function tokenFromHermesAuth(data: unknown): string {
   const providerToken = readNestedString(data, [
     'providers',
     'openai-codex',
@@ -170,8 +190,8 @@ function tokenFromHermesAuth(data) {
   if (providerToken) return providerToken;
 
   const pool =
-    data && typeof data === 'object'
-      ? data.credential_pool && data.credential_pool['openai-codex']
+    isRecord(data) && isRecord(data.credential_pool)
+      ? data.credential_pool['openai-codex']
       : null;
   if (Array.isArray(pool)) {
     for (const item of pool) {
@@ -182,7 +202,7 @@ function tokenFromHermesAuth(data) {
   return '';
 }
 
-function tokenFromCodexAuth(data) {
+function tokenFromCodexAuth(data: unknown): { token: string; source: string } | null {
   const oauthToken = readNestedString(data, ['tokens', 'access_token']);
   if (oauthToken) return { token: oauthToken, source: 'oauth-codex' };
 
@@ -192,8 +212,8 @@ function tokenFromCodexAuth(data) {
   return null;
 }
 
-async function resolveOpenAIOAuthCredential() {
-  const home = homedir();
+async function resolveOpenAIOAuthCredential(): Promise<OAuthCredential | null> {
+  const home = os.homedir();
   const hermesAuth = await readJsonIfPresent(
     path.join(home, '.hermes', 'auth.json'),
   );
@@ -218,7 +238,7 @@ async function resolveOpenAIOAuthCredential() {
  * then OpenAI/Codex OAuth for the OpenAI media provider.
  * Returns { apiKey, baseUrl } where either may be empty string.
  */
-export async function resolveProviderConfig(projectRoot, providerId) {
+export async function resolveProviderConfig(projectRoot: string, providerId: string): Promise<ProviderEntry> {
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
@@ -240,9 +260,9 @@ export async function resolveProviderConfig(projectRoot, providerId) {
  * frontend can show "••••" + a "configured" indicator without leaking
  * the secret back into the DOM.
  */
-export async function readMaskedConfig(projectRoot) {
+export async function readMaskedConfig(projectRoot: string): Promise<{ providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }> }> {
   const stored = await readStored(projectRoot);
-  const providers = {};
+  const providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }> = {};
   for (const id of PROVIDER_IDS) {
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
@@ -257,7 +277,7 @@ export async function readMaskedConfig(projectRoot) {
       // Show last 4 chars only when stored locally; never echo env-var
       // or OAuth secrets so power users don't accidentally see them in
       // the DOM.
-      apiKeyTail: hasStoredKey ? entry.apiKey.slice(-4) : '',
+      apiKeyTail: hasStoredKey && entry.apiKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
       ...(typeof entry.model === 'string' && entry.model.trim()
         ? { model: entry.model.trim() }
@@ -279,13 +299,13 @@ export async function readMaskedConfig(projectRoot) {
  * pushing `{providers: {}}` onto a daemon that had keys from a
  * previous session) without silently destroying the user's data.
  */
-export async function writeConfig(projectRoot, body) {
-  const incoming = body && typeof body === 'object' ? body.providers || {} : {};
-  const force = Boolean(body && typeof body === 'object' && body.force === true);
-  const next = {};
+export async function writeConfig(projectRoot: string, body: unknown) {
+  const incoming = isRecord(body) && isRecord(body.providers) ? body.providers : {};
+  const force = Boolean(isRecord(body) && body.force === true);
+  const next: ProviderMap = {};
   for (const id of PROVIDER_IDS) {
     const entry = incoming[id];
-    if (!entry || typeof entry !== 'object') continue;
+    if (!isRecord(entry)) continue;
     const apiKey =
       typeof entry.apiKey === 'string' && entry.apiKey.trim()
         ? entry.apiKey.trim()
@@ -314,7 +334,7 @@ export async function writeConfig(projectRoot, body) {
       if (!force) {
         const err = new Error(
           `refusing to wipe ${priorIds.length} configured provider(s) without force=true: ${priorIds.join(', ')}`,
-        );
+        ) as Error & { status: number };
         err.status = 409;
         throw err;
       }

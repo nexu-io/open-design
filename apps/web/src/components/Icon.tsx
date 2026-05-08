@@ -17,6 +17,7 @@ type IconName =
   | 'edit'
   | 'external-link'
   | 'eye'
+  | 'eye-off'
   | 'file'
   | 'file-code'
   | 'folder'
@@ -29,6 +30,7 @@ type IconName =
   | 'link'
   | 'mic'
   | 'minus'
+  | 'orbit'
   | 'pencil'
   | 'plus'
   | 'play'
@@ -175,6 +177,15 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <circle cx="12" cy="12" r="3" />
         </svg>
       );
+    case 'eye-off':
+      return (
+        <svg {...common}>
+          <path d="m3 3 18 18" />
+          <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+          <path d="M9.9 4.2A9.9 9.9 0 0 1 12 4c6.5 0 10 8 10 8a17.8 17.8 0 0 1-2.1 3.1" />
+          <path d="M6.1 6.1C3.5 7.9 2 12 2 12s3.5 8 10 8a9.9 9.9 0 0 0 4.2-.9" />
+        </svg>
+      );
     case 'external-link':
       return (
         <svg {...common}>
@@ -276,6 +287,24 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common}>
           <path d="M5 12h14" />
+        </svg>
+      );
+    case 'orbit':
+      // Tilted elliptical orbit + central body + a small satellite riding the
+      // path. Reads unmistakably as "orbit/automation" rather than the
+      // generic refresh loop, and the rotated ellipse keeps the silhouette
+      // distinct from `refresh` and `reload` at small sizes.
+      return (
+        <svg {...common}>
+          <ellipse
+            cx="12"
+            cy="12"
+            rx="9"
+            ry="3.5"
+            transform="rotate(-25 12 12)"
+          />
+          <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
+          <circle cx="16" cy="6.8" r="1.5" fill="currentColor" stroke="none" />
         </svg>
       );
     case 'pencil':

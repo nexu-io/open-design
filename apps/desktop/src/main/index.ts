@@ -11,6 +11,7 @@ import {
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
   type DesktopEvalInput,
+  type DesktopExportPdfInput,
   type DesktopScreenshotInput,
   type SidecarStamp,
   type WebStatusSnapshot,
@@ -26,6 +27,13 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime } from "./runtime.js";
+
+// Re-export pure URL-policy helpers so the packaged workspace's
+// vitest can pin their behaviour without spinning up a full Electron
+// runtime. They are part of the security boundary for child-window
+// navigation (see `setWindowOpenHandler` in `runtime.ts`), so
+// pinning them is worth the small extra surface.
+export { isAllowedChildWindowUrl, isHttpUrl } from "./runtime.js";
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 
@@ -107,6 +115,12 @@ export async function runDesktopMain(
 
   attachParentMonitor(shutdown);
 
+  app.on("before-quit", (event) => {
+    if (shuttingDown) return;
+    event.preventDefault();
+    void shutdown().finally(() => process.exit(0));
+  });
+
   ipcServer = await createJsonIpcServer({
     socketPath: runtime.ipc,
     handler: async (message: unknown) => {
@@ -122,6 +136,8 @@ export async function runDesktopMain(
           return desktop.console();
         case SIDECAR_MESSAGES.CLICK:
           return await desktop.click(request.input as DesktopClickInput);
+        case SIDECAR_MESSAGES.EXPORT_PDF:
+          return await desktop.exportPdf(request.input as DesktopExportPdfInput);
         case SIDECAR_MESSAGES.SHUTDOWN:
           setImmediate(() => {
             shutdownAndExit();
