@@ -510,7 +510,8 @@ export function ConnectorsBrowser({
     setPendingConnectorAction({ connectorId, action });
     try {
       if (action === 'connect') {
-        updateConnector(await connectConnector(connectorId));
+        const result = await connectConnector(connectorId);
+        updateConnector(result.connector);
       } else {
         updateConnector(await disconnectConnector(connectorId));
       }

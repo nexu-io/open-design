@@ -52,7 +52,13 @@ import type {
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
 
-export type { PreviewCommentMember, PreviewCommentSelectionKind } from '@open-design/contracts';
+export type {
+  CloudflarePagesDeploySelection,
+  CloudflarePagesDeploymentInfo,
+  CloudflarePagesZonesResponse,
+  PreviewCommentMember,
+  PreviewCommentSelectionKind,
+} from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
 export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';

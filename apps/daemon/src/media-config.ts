@@ -74,6 +74,7 @@ const ENV_KEYS = {
   udio: ['OD_UDIO_API_KEY'],
   elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
+  tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
 };
 
 // Resolve an `OD_*_DIR` env override using the same semantics as

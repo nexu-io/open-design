@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Creative Mode — Deck Template</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root{
+    --cream:#EFE9D9;
+    --cream-2:#E4DCC4;
+    --green:#1F8A4C;
+    --green-dark:#136636;
+    --pink:#F06CA8;
+    --pink-dark:#D14E8B;
+    --orange:#E85A1F;
+    --yellow:#F5C518;
+    --ink:#0F0F0F;
+    --ink-2:#2A2A2A;
+    --rule:#0F0F0F;
+  }
+  html, body { margin:0; padding:0; background:#000; }
+  body { font-family:"Space Grotesk", system-ui, sans-serif; color:var(--ink); }
+
+  deck-stage > section{
+    width:1920px; height:1080px;
+    background:var(--cream);
+    color:var(--ink);
+    position:relative;
+    overflow:hidden;
+    box-sizing:border-box;
+  }
+
+  /* shared */
+  .display { font-family:"Archivo Black", sans-serif; letter-spacing:-.01em; line-height:.92; text-transform:uppercase; }
+  .mono { font-family:"JetBrains Mono", monospace; }
+  .body { font-family:"Space Grotesk", sans-serif; }
+
+  .slide-meta{
+    position:absolute; left:64px; right:64px; bottom:40px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink);
+  }
+  .slide-meta .dot{ width:10px; height:10px; background:var(--ink); border-radius:50%; display:inline-block; margin:0 14px; transform:translateY(-2px); }
+
+  .topbar{
+    position:absolute; left:64px; right:64px; top:48px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.08em; text-transform:uppercase;
+  }
+  .topbar .pill{
+    border:2px solid var(--ink); padding:6px 14px; border-radius:999px;
+  }
+
+  /* --- SLIDE 1: TITLE / POSTER --- */
+  .s1 .title{
+    position:absolute; left:96px; top:50%; transform:translateY(-50%);
+    font-size:160px; color:var(--ink); width:900px;
+  }
+  .s1 .title .row{ display:block; }
+  .s1 .poster{
+    position:absolute; right:96px; top:140px; bottom:140px;
+    width:760px;
+    background:var(--green);
+    border:4px solid var(--ink);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .s1 .poster .switch{
+    position:relative; width:380px; height:380px;
+    background:var(--pink); border:4px solid var(--ink);
+    box-shadow: 24px 24px 0 var(--orange), 24px 24px 0 4px var(--ink);
+  }
+  .s1 .poster .switch .lever{
+    position:absolute; top:64px; left:64px; width:240px; height:170px;
+    background:#FBD0E3; border:4px solid var(--ink);
+    transform: skewY(-8deg);
+  }
+  .s1 .poster .switch .lever:after{
+    content:""; position:absolute; left:0; right:0; bottom:-30px; height:30px;
+    background:var(--pink-dark); border:4px solid var(--ink); border-top:0;
+  }
+  .s1 .poster .switch .label-on{
+    position:absolute; top:78px; right:60px; font-family:"Archivo Black"; font-size:32px; color:var(--ink);
+  }
+  .s1 .poster .switch .label-off{
+    position:absolute; bottom:48px; left:0; right:0; text-align:center;
+    font-family:"Archivo Black"; font-size:32px; color:var(--ink);
+  }
+  .s1 .tagline{
+    position:absolute; left:96px; top:160px;
+    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink);
+  }
+  .s1 .tagline span{ display:inline-block; width:60px; height:3px; background:var(--ink); vertical-align:middle; margin-right:18px; transform:translateY(-3px);}
+  .s1 .footnote{
+    position:absolute; left:96px; bottom:140px;
+    font-family:"Space Grotesk", sans-serif; font-size:24px; color:var(--ink-2); max-width:640px; line-height:1.4;
+  }
+
+  /* --- SLIDE 2: SECTION INTRO / TWO COL --- */
+  .s2 .kicker{
+    position:absolute; left:96px; top:200px;
+    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.14em; text-transform:uppercase;
+    background:var(--ink); color:var(--cream); padding:8px 16px; display:inline-block; white-space:nowrap;
+  }
+  .s2 .h{
+    position:absolute; left:96px; top:300px; right:1000px;
+    font-size:140px; line-height:.92; color:var(--ink);
+  }
+  .s2 .body-col{
+    position:absolute; left:1020px; top:300px; right:480px;
+    font-size:28px; line-height:1.4; color:var(--ink-2);
+  }
+  .s2 .body-col p + p { margin-top:24px; }
+  .s2 .body-col p:first-child{ margin-top:0; }
+  .s2 .marker{
+    position:absolute; left:96px; bottom:160px;
+    width:560px; height:120px; background:var(--pink); border:4px solid var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    font-family:"Archivo Black"; font-size:46px;
+  }
+  .s2 .marker:after{
+    content:""; position:absolute; right:-24px; bottom:-24px; width:100%; height:100%;
+    background:var(--orange); border:4px solid var(--ink); z-index:-1;
+  }
+  .s2 .ix{
+    position:absolute; right:96px; top:300px;
+    width:340px; height:340px; background:var(--green); border:4px solid var(--ink);
+  }
+  .s2 .ix .circ{
+    position:absolute; left:50%; top:50%; width:180px; height:180px;
+    background:var(--yellow); border:4px solid var(--ink); border-radius:50%;
+    transform:translate(-50%,-50%);
+  }
+
+  /* --- SLIDE 3: STAT GRID 2x2 --- */
+  .s3 .h{
+    position:absolute; left:96px; top:130px; right:96px;
+    font-size:72px; line-height:.95; color:var(--ink);
+  }
+  .s3 .grid{
+    position:absolute; left:96px; right:96px; top:380px;
+    display:grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+    gap:28px; bottom:110px;
+  }
+  .s3 .cell{
+    border:4px solid var(--ink); padding:28px 32px; position:relative; overflow:hidden;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .s3 .cell .num-wrap{ padding-top:32px; }
+  .s3 .cell .num{ font-family:"Archivo Black"; font-size:96px; line-height:.9; }
+  .s3 .cell .lbl{ font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.12em; text-transform:uppercase; }
+  .s3 .cell .desc{ font-size:24px; line-height:1.3; max-width:520px; color:var(--ink-2); margin-top:6px;}
+  .s3 .c1{ background:var(--green); color:var(--cream); }
+  .s3 .c1 .desc{ color:var(--cream); }
+  .s3 .c2{ background:var(--pink); }
+  .s3 .c3{ background:var(--cream); }
+  .s3 .c4{ background:var(--orange); color:var(--cream);}
+  .s3 .c4 .desc{ color:var(--cream); }
+  .s3 .cell .corner{ position:absolute; top:24px; right:28px; font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.1em; }
+
+  /* --- SLIDE 4: ISOMETRIC DIAGRAM --- */
+  .s4 .h{
+    position:absolute; left:96px; top:96px; right:900px; font-size:100px; color:var(--ink);
+  }
+  .s4 .sub{
+    position:absolute; left:96px; top:460px; right:1000px;
+    font-size:24px; line-height:1.45; color:var(--ink-2);
+  }
+  .s4 .legend{
+    position:absolute; left:96px; bottom:140px; display:flex; flex-direction:column; gap:18px;
+  }
+  .s4 .legend .row{ display:flex; align-items:center; gap:16px; font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.06em; text-transform:uppercase; }
+  .s4 .legend .sw{ width:28px; height:28px; border:3px solid var(--ink); }
+  .s4 .iso{
+    position:absolute; right:80px; top:120px; width:920px; height:840px;
+    background:var(--green); border:4px solid var(--ink);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .s4 .stack{ position:relative; width:560px; height:560px; }
+  .s4 .blk{
+    position:absolute; width:300px; height:120px; border:4px solid var(--ink);
+    box-shadow: 18px 18px 0 var(--ink);
+  }
+  .s4 .b1{ background:var(--pink); top:60px; left:130px; }
+  .s4 .b2{ background:var(--yellow); top:200px; left:60px; width:380px; }
+  .s4 .b3{ background:var(--orange); top:340px; left:160px; }
+  .s4 .b4{ background:var(--cream); top:460px; left:80px; width:340px; }
+  .s4 .blk .tag{ position:absolute; left:14px; top:10px; font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.1em; text-transform:uppercase;}
+
+  /* --- SLIDE 5: BAR CHART --- */
+  .s5 .h{
+    position:absolute; left:96px; top:96px; right:600px; font-size:84px; color:var(--ink);
+  }
+  .s5 .axis-y{
+    position:absolute; left:96px; top:380px; width:64px; height:520px;
+    border-right:3px solid var(--ink);
+    display:flex; flex-direction:column-reverse; justify-content:space-between;
+    font-family:"JetBrains Mono"; font-size:24px;
+  }
+  .s5 .axis-y span{ transform:translate(-12px, 6px); text-align:right; width:60px; }
+  .s5 .chart{
+    position:absolute; left:160px; right:96px; top:380px; height:520px;
+    border-bottom:3px solid var(--ink);
+    display:flex; align-items:flex-end; justify-content:space-around; gap:36px;
+    padding:0 40px 0 40px; box-sizing:border-box;
+  }
+  .s5 .bar{
+    flex:1; border:3px solid var(--ink); position:relative; max-width:160px;
+  }
+  .s5 .bar .v{
+    position:absolute; left:0; right:0; top:-44px; text-align:center;
+    font-family:"Archivo Black"; font-size:30px;
+  }
+  .s5 .bar .x{
+    position:absolute; left:0; right:0; bottom:-50px; text-align:center;
+    font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.1em; text-transform:uppercase;
+  }
+  .s5 .legend2{
+    position:absolute; right:96px; top:130px; display:flex; flex-direction:column; gap:14px;
+    font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.08em; text-transform:uppercase;
+  }
+  .s5 .legend2 .row{ display:flex; align-items:center; gap:10px; }
+  .s5 .legend2 .sw{ width:22px; height:22px; border:3px solid var(--ink); }
+  .s5 .note{
+    position:absolute; left:160px; right:600px; bottom:90px;
+    font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.06em; color:var(--ink-2);
+  }
+
+  /* --- SLIDE 6: PROCESS / FLOW --- */
+  .s6 .h{
+    position:absolute; left:96px; top:96px; right:96px; font-size:96px; color:var(--ink);
+  }
+  .s6 .flow{
+    position:absolute; left:96px; right:96px; top:380px;
+    display:grid; grid-template-columns: repeat(4, 1fr); gap:28px;
+  }
+  .s6 .step{
+    border:4px solid var(--ink); padding:28px; height:420px; position:relative;
+    display:flex; flex-direction:column;
+  }
+  .s6 .step .n{ font-family:"Archivo Black"; font-size:140px; line-height:.85; }
+  .s6 .step .t{ font-family:"Archivo Black"; font-size:34px; margin-top:16px; line-height:1; text-transform:uppercase; }
+  .s6 .step .d{ font-size:24px; line-height:1.4; margin-top:14px; color:var(--ink-2); }
+  .s6 .step .arrow{
+    position:absolute; right:-22px; top:50%; transform:translateY(-50%);
+    width:0; height:0; border-top:18px solid transparent; border-bottom:18px solid transparent;
+    border-left:24px solid var(--ink); z-index:2;
+  }
+  .s6 .step:last-child .arrow{ display:none; }
+  .s6 .s-1{ background:var(--cream); }
+  .s6 .s-2{ background:var(--pink); }
+  .s6 .s-3{ background:var(--yellow); }
+  .s6 .s-4{ background:var(--green); color:var(--cream); }
+  .s6 .s-4 .d{ color:var(--cream); }
+  .s6 .header-line{
+    position:absolute; left:96px; right:96px; top:280px; height:0;
+    border-top:3px dashed var(--ink);
+  }
+
+  /* --- SLIDE 7: COMPARISON TABLE --- */
+  .s7 .h{
+    position:absolute; left:96px; top:130px; right:500px; font-size:84px; color:var(--ink);
+  }
+  .s7 .table{
+    position:absolute; left:96px; right:96px; top:380px; bottom:140px;
+    border:4px solid var(--ink);
+    display:grid; grid-template-rows: 110px repeat(4, 1fr);
+    background:var(--cream-2);
+  }
+  .s7 .table .row{
+    display:grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    border-bottom:3px solid var(--ink);
+  }
+  .s7 .table .row:last-child{ border-bottom:0; }
+  .s7 .table .row > div{
+    padding:18px 26px; border-right:3px solid var(--ink); display:flex; align-items:center;
+    font-size:24px;
+  }
+  .s7 .table .row > div:last-child{ border-right:0; }
+  .s7 .table .head{ background:var(--ink); color:var(--cream); }
+  .s7 .table .head > div{
+    font-family:"Archivo Black"; font-size:28px; text-transform:uppercase;
+    border-right:3px solid var(--cream);
+  }
+  .s7 .table .row .label{ font-family:"Archivo Black"; font-size:28px; text-transform:uppercase; background:var(--cream);}
+  .s7 .table .row .col-pink{ background:var(--pink); }
+  .s7 .table .row .col-green{ background:var(--green); color:var(--cream); }
+  .s7 .table .row .col-orange{ background:var(--orange); color:var(--cream); }
+  .s7 .badge{
+    position:absolute; right:120px; top:240px;
+    background:var(--yellow); border:4px solid var(--ink);
+    padding:14px 22px; font-family:"Archivo Black"; font-size:28px; text-transform:uppercase;
+    transform:rotate(-4deg);
+  }
+
+  /* --- SLIDE 8: CLOSING / BIG MARK --- */
+  .s8{ background:var(--green) !important; color:var(--cream); }
+  .s8 .topbar, .s8 .slide-meta{ color:var(--cream); }
+  .s8 .topbar .pill{ border-color:var(--cream); }
+  .s8 .slide-meta .dot{ background:var(--cream); }
+  .s8 .h{
+    position:absolute; left:96px; top:200px; right:700px;
+    font-size:220px; color:var(--cream);
+  }
+  .s8 .strap{
+    position:absolute; left:96px; top:740px; right:600px;
+    font-size:32px; line-height:1.4;
+  }
+  .s8 .stamp{
+    position:absolute; right:120px; bottom:160px;
+    width:340px; height:340px; background:var(--pink);
+    border:4px solid var(--cream);
+    display:flex; align-items:center; justify-content:center;
+    transform:rotate(-6deg);
+  }
+  .s8 .stamp .inner{
+    width:280px; height:280px; border:4px solid var(--cream); border-radius:50%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:20px; box-sizing:border-box;
+  }
+  .s8 .stamp .num{ font-family:"Archivo Black"; font-size:64px; line-height:.9; margin-bottom:10px; }
+  .s8 .stamp .lbl{ font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.12em; text-transform:uppercase; margin-top:6px;}
+
+</style>
+</head>
+<body>
+
+<deck-stage>
+
+  <!-- ============ 1: TITLE / POSTER ============ -->
+  <section class="s1" data-screen-label="01 Title">
+    <div class="tagline">
+      <span></span>VOL.&nbsp;01 &nbsp;/&nbsp; EDITION&nbsp;2026
+    </div>
+
+    <div class="title display">
+      <span class="row">CREATIVE</span>
+      <span class="row" style="color:var(--orange)">MODE</span>
+    </div>
+
+    <div class="footnote">
+      A presentation template — eight pages, eight layouts. Generic placeholder copy throughout. Replace freely.
+    </div>
+
+    <div class="poster" aria-hidden="true">
+      <div class="switch">
+        <div class="lever"></div>
+        <div class="label-on">
+</div>
+        <div class="label-off">
+</div>
+      </div>
+    </div>
+
+    <div class="slide-meta">
+      <div>A PRESENTATION TEMPLATE</div>
+      <div>01<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 2: SECTION INTRO / TWO COL ============ -->
+  <section class="s2" data-screen-label="02 Intro">
+    <div class="topbar">
+      <div>SECTION 01</div>
+      <div class="pill">CHAPTER&nbsp;OPENER</div>
+    </div>
+
+    <div class="kicker mono">A Note Before We Begin</div>
+    <h1 class="h display">FLIP THE<br/>SWITCH.</h1>
+
+    <div class="body-col body">
+      <p>Placeholder paragraph for an opening statement. Use this column to set up the chapter, introduce the speaker, or frame the question the deck is going to answer over the next several slides.</p>
+      <p>A second paragraph balances the page with a quieter beat — context, a thesis, or a small definition. Keep the rhythm short, declarative, and visual.</p>
+      <p>End with a third line that points forward to the rest of the deck. Generic placeholder text only — no real copy lives here yet.</p>
+    </div>
+
+    <div class="marker display">PRESS &nbsp; PLAY</div>
+    <div class="ix" aria-hidden="true"><div class="circ"></div></div>
+
+    <div class="slide-meta">
+      <div>CHAPTER&nbsp;OPENER</div>
+      <div>02<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 3: STAT GRID 2x2 ============ -->
+  <section class="s3" data-screen-label="03 Stats">
+    <div class="topbar">
+      <div>BY&nbsp;THE&nbsp;NUMBERS</div>
+      <div class="pill">FY&nbsp;PLACEHOLDER</div>
+    </div>
+
+    <h1 class="h display">FOUR FIGURES,
+ONE STORY.</h1>
+
+    <div class="grid">
+      <div class="cell c1">
+        <div class="corner mono">/01</div>
+        <div class="num-wrap"><div class="num">42%</div></div>
+        <div>
+          <div class="lbl">Lift In Engagement</div>
+          <div class="desc">Placeholder caption describing the metric — what it is, how it was measured, and why it matters.</div>
+        </div>
+      </div>
+      <div class="cell c2">
+        <div class="corner mono">/02</div>
+        <div class="num-wrap"><div class="num">2.7×</div></div>
+        <div>
+          <div class="lbl">Throughput Multiplier</div>
+          <div class="desc">A short generic explainer line. Replace with your figure later. Keep cadence punchy.</div>
+        </div>
+      </div>
+      <div class="cell c3">
+        <div class="corner mono">/03</div>
+        <div class="num-wrap"><div class="num">118</div></div>
+        <div>
+          <div class="lbl">Active Placeholders</div>
+          <div class="desc">Filler descriptor about the count. Two lines maximum so the cell breathes.</div>
+        </div>
+      </div>
+      <div class="cell c4">
+        <div class="corner mono">/04</div>
+        <div class="num-wrap"><div class="num">$9.4M</div></div>
+        <div>
+          <div class="lbl">Total Sample Value</div>
+          <div class="desc">Closing stat caption. Keep numbers oversized and language deliberately small.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-meta">
+      <div>METRICS&nbsp;OVERVIEW</div>
+      <div>03<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 4: ISOMETRIC DIAGRAM ============ -->
+  <section class="s4" data-screen-label="04 Diagram">
+    <div class="topbar">
+      <div>SYSTEM&nbsp;DIAGRAM</div>
+      <div class="pill">SCHEMATIC&nbsp;/&nbsp;A</div>
+    </div>
+
+    <h1 class="h display">A STACK OF<br/>MOVING<br/>PARTS.</h1>
+
+    <p class="sub body">
+      Generic placeholder description for the schematic to the right. The four blocks represent layers of a hypothetical system — drop in your own labels and short notes per layer when populating this template.
+    </p>
+
+    <div class="legend">
+      <div class="row"><span class="sw" style="background:var(--pink)"></span> Layer alpha — interface</div>
+      <div class="row"><span class="sw" style="background:var(--yellow)"></span> Layer beta — orchestration</div>
+      <div class="row"><span class="sw" style="background:var(--orange)"></span> Layer gamma — services</div>
+      <div class="row"><span class="sw" style="background:var(--cream-2)"></span> Layer delta — substrate</div>
+    </div>
+
+    <div class="iso" aria-hidden="true">
+      <div class="stack">
+        <div class="blk b1"><span class="tag">Layer / 01</span></div>
+        <div class="blk b2"><span class="tag">Layer / 02</span></div>
+        <div class="blk b3"><span class="tag">Layer / 03</span></div>
+        <div class="blk b4"><span class="tag">Layer / 04</span></div>
+      </div>
+    </div>
+
+    <div class="slide-meta">
+      <div>ARCHITECTURE</div>
+      <div>04<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 5: BAR CHART ============ -->
+  <section class="s5" data-screen-label="05 Chart">
+    <div class="topbar">
+      <div>QUARTERLY&nbsp;READOUT</div>
+      <div class="pill">CHART&nbsp;/&nbsp;BARS</div>
+    </div>
+
+    <h1 class="h display">PLACEHOLDER METRIC, BY QUARTER.</h1>
+
+    <div class="legend2">
+      <div class="row"><span class="sw" style="background:var(--green)"></span> Series A</div>
+      <div class="row"><span class="sw" style="background:var(--pink)"></span> Series B</div>
+      <div class="row"><span class="sw" style="background:var(--orange)"></span> Series C</div>
+    </div>
+
+    <div class="axis-y">
+      <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
+    </div>
+
+    <div class="chart">
+      <div class="bar" style="height:34%; background:var(--green);"><span class="v">34</span><span class="x">Q1 ’24</span></div>
+      <div class="bar" style="height:48%; background:var(--pink);"><span class="v">48</span><span class="x">Q2 ’24</span></div>
+      <div class="bar" style="height:61%; background:var(--orange);"><span class="v">61</span><span class="x">Q3 ’24</span></div>
+      <div class="bar" style="height:55%; background:var(--green);"><span class="v">55</span><span class="x">Q4 ’24</span></div>
+      <div class="bar" style="height:72%; background:var(--pink);"><span class="v">72</span><span class="x">Q1 ’25</span></div>
+      <div class="bar" style="height:84%; background:var(--orange);"><span class="v">84</span><span class="x">Q2 ’25</span></div>
+      <div class="bar" style="height:91%; background:var(--green);"><span class="v">91</span><span class="x">Q3 ’25</span></div>
+    </div>
+
+    <div class="note mono">FIG. 01 — VALUES ARE PLACEHOLDER. SOURCE: SAMPLE DATASET / INTERNAL.</div>
+
+    <div class="slide-meta">
+      <div>FIGURE&nbsp;ONE</div>
+      <div>05<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 6: PROCESS / FLOW ============ -->
+  <section class="s6" data-screen-label="06 Process">
+    <div class="topbar">
+      <div>HOW&nbsp;IT&nbsp;WORKS</div>
+      <div class="pill">FOUR&nbsp;STEPS</div>
+    </div>
+
+    <h1 class="h display">A FOUR-STEP PROCESS.</h1>
+
+    <div class="header-line"></div>
+
+    <div class="flow">
+      <div class="step s-1">
+        <div class="n">01</div>
+        <div class="t">Discover</div>
+        <div class="d">Generic placeholder description for the first step. Keep each description to two or three short lines so the row reads cleanly.</div>
+        <div class="arrow"></div>
+      </div>
+      <div class="step s-2">
+        <div class="n">02</div>
+        <div class="t">Define</div>
+        <div class="d">Filler text outlining the second step of the process. Replace with your own copy when populating the template.</div>
+        <div class="arrow"></div>
+      </div>
+      <div class="step s-3">
+        <div class="n">03</div>
+        <div class="t">Develop</div>
+        <div class="d">Third step placeholder. The cards alternate fill colors to keep the row visually rhythmic across the slide.</div>
+        <div class="arrow"></div>
+      </div>
+      <div class="step s-4">
+        <div class="n">04</div>
+        <div class="t">Deliver</div>
+        <div class="d">Closing step copy. The last card uses the deck’s primary color to anchor the eye at the end of the row.</div>
+      </div>
+    </div>
+
+    <div class="slide-meta">
+      <div>METHOD&nbsp;FLOW</div>
+      <div>06<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 7: COMPARISON TABLE ============ -->
+  <section class="s7" data-screen-label="07 Compare">
+    <div class="topbar">
+      <div>SIDE&nbsp;BY&nbsp;SIDE</div>
+      <div class="pill">COMPARISON</div>
+    </div>
+
+    <h1 class="h display">THREE OPTIONS, COMPARED.</h1>
+
+    <div class="badge">PICK&nbsp;ONE</div>
+
+    <div class="table">
+      <div class="row head">
+        <div>Attribute</div>
+        <div>Option A</div>
+        <div>Option B</div>
+        <div>Option C</div>
+      </div>
+      <div class="row">
+        <div class="label">Speed</div>
+        <div class="col-pink">Fast</div>
+        <div class="col-green">Faster</div>
+        <div class="col-orange">Fastest</div>
+      </div>
+      <div class="row">
+        <div class="label">Footprint</div>
+        <div class="col-pink">Light</div>
+        <div class="col-green">Medium</div>
+        <div class="col-orange">Heavy</div>
+      </div>
+      <div class="row">
+        <div class="label">Effort</div>
+        <div class="col-pink">Low</div>
+        <div class="col-green">Mid</div>
+        <div class="col-orange">High</div>
+      </div>
+      <div class="row">
+        <div class="label">Outcome</div>
+        <div class="col-pink">Sample</div>
+        <div class="col-green">Sample</div>
+        <div class="col-orange">Sample</div>
+      </div>
+    </div>
+
+    <div class="slide-meta">
+      <div>OPTIONS&nbsp;MATRIX</div>
+      <div>07<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+  <!-- ============ 8: CLOSING / BIG MARK ============ -->
+  <section class="s8" data-screen-label="08 Closing">
+    <div class="topbar">
+      <div>END&nbsp;OF&nbsp;DECK</div>
+      <div class="pill">FIN.</div>
+    </div>
+
+    <h1 class="h display">THANK<br/>YOU.</h1>
+
+    <p class="strap body">
+      Generic placeholder closing line for the final slide. Use this space for a sign-off, a contact handle, or a one-sentence summary of what the audience just saw.
+    </p>
+
+    <div class="stamp" aria-hidden="true">
+      <div class="inner">
+        <div class="num">08/08</div>
+        <div class="lbl">Template Set</div>
+      </div>
+    </div>
+
+    <div class="slide-meta">
+      <div>CLOSING&nbsp;CARD</div>
+      <div>08<span class="dot"></span>08</div>
+    </div>
+  </section>
+
+</deck-stage>
+
+</body>
+</html>

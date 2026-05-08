@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Block &amp; Bold — Presentation Template</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Archivo+Narrow:wght@400;500;600;700&family=Caveat+Brush&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root{
+    --blue:#2C2CDC;
+    --blue-deep:#1B1BB0;
+    --orange:#F2A03A;
+    --orange-deep:#E89321;
+    --red:#E83A2A;
+    --red-deep:#B7281C;
+    --cream:#F4E9D6;
+    --paper:#F5F2EA;
+    --ink:#0E0E14;
+  }
+
+  html,body{margin:0;background:#111;}
+  body{font-family:'Archivo Narrow', system-ui, sans-serif; color:var(--ink);}
+
+  deck-stage > section{
+    width:1920px; height:1080px;
+    position:relative; overflow:hidden;
+    background:var(--paper);
+  }
+
+  /* ——— atoms ——— */
+  .display{
+    font-family:'Alfa Slab One', serif;
+    letter-spacing:.005em; line-height:.88;
+    text-transform:uppercase;
+  }
+  .script{ font-family:'Caveat Brush', cursive; text-transform:lowercase;}
+  .mono{ font-family:'DM Mono', monospace;}
+
+  .stamp-orange{ color:var(--orange); text-shadow: 6px 6px 0 var(--red), 12px 12px 0 var(--red-deep);}
+  .stamp-blue{ color:var(--blue); text-shadow: 6px 6px 0 var(--red);}
+  .stamp-cream{ color:var(--cream); text-shadow: 6px 6px 0 var(--red);}
+
+  .grain::before{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background-image:
+      radial-gradient(rgba(0,0,0,.06) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size: 3px 3px, 5px 5px;
+    background-position: 0 0, 1px 2px;
+    mix-blend-mode:multiply;
+    opacity:.5;
+  }
+
+  /* ============ 01 — COVER ============ */
+  .s-cover{ background:var(--blue); color:var(--cream);}
+  .s-cover .frame{ position:absolute; inset:48px; border:6px solid var(--cream);}
+  .s-cover .meta-top{
+    position:absolute; top:90px; left:90px; right:90px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.18em; color:var(--cream);
+  }
+  .s-cover .meta-top .pill{ border:3px solid var(--cream); padding:8px 20px; border-radius:999px;}
+  .s-cover .center{
+    position:absolute; left:0; right:0; top:340px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  .s-cover .title{
+    font-family:'Alfa Slab One', serif; font-size:240px; line-height:.86;
+    color:var(--orange);
+    text-shadow: 10px 10px 0 var(--red), 20px 20px 0 var(--red-deep);
+  }
+  .s-cover .row2{ display:flex; align-items:center; gap:34px; margin-top:46px;}
+  .s-cover .for{ font-family:'Caveat Brush', cursive; font-size:96px; color:var(--cream); transform:rotate(-5deg);}
+  .s-cover .sub{
+    font-family:'Alfa Slab One', serif; font-size:72px; color:var(--cream);
+    letter-spacing:.01em; text-transform:uppercase;
+  }
+  .s-cover .footline{
+    position:absolute; bottom:140px; left:0; right:0;
+    display:flex; justify-content:center; gap:32px; align-items:center;
+    font-family:'DM Mono', monospace; font-size:26px; letter-spacing:.22em; color:var(--cream);
+  }
+  .s-cover .dot{width:10px; height:10px; background:var(--orange); border-radius:50%;}
+
+  /* ============ 02 — TABLE OF CONTENTS ============ */
+  .s-toc{ background:var(--paper);}
+  .s-toc .head{
+    padding:80px 90px 30px;
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:6px solid var(--ink);
+  }
+  .s-toc .head h2{
+    margin:0; font-family:'Alfa Slab One', serif; font-size:140px; line-height:.88;
+    color:var(--blue); text-shadow:6px 6px 0 var(--red); text-transform:uppercase;
+  }
+  .s-toc .head .meta{
+    font-family:'DM Mono', monospace; text-align:right; font-size:24px; letter-spacing:.16em; color:var(--ink);
+  }
+  .s-toc .head .meta .big{font-size:32px; color:var(--blue); font-weight:600; margin-bottom:6px;}
+  .s-toc .list{
+    padding:50px 90px 0;
+    display:grid; grid-template-columns: 1fr 1fr; column-gap:90px; row-gap:18px;
+  }
+  .s-toc .row{
+    display:grid; grid-template-columns:90px 1fr 100px; align-items:center;
+    padding:20px 0; border-bottom:3px solid var(--ink); gap:24px;
+  }
+  .s-toc .row .n{
+    font-family:'Alfa Slab One', serif; font-size:54px; line-height:1;
+    color:var(--orange); text-shadow:3px 3px 0 var(--red);
+  }
+  .s-toc .row .t{
+    font-family:'Alfa Slab One', serif; font-size:36px; line-height:1;
+    color:var(--blue); text-transform:uppercase;
+  }
+  .s-toc .row .pg{
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.18em; color:var(--ink); text-align:right;
+  }
+
+  /* ============ 03 — MANIFESTO / BIG IDEA ============ */
+  .s-manifesto{ background:var(--cream); color:var(--ink);}
+  .s-manifesto .topbar{
+    position:absolute; top:0; left:0; right:0; height:90px; background:var(--blue);
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 0 90px; color:var(--cream);
+    font-family:'DM Mono', monospace; letter-spacing:.18em; font-size:24px;
+  }
+  .s-manifesto .body{
+    position:absolute; left:120px; right:120px; top:240px;
+  }
+  .s-manifesto .kicker{
+    font-family:'DM Mono', monospace; letter-spacing:.22em; font-size:26px;
+    color:var(--red); margin-bottom:48px;
+  }
+  .s-manifesto h1{
+    margin:0; font-family:'Alfa Slab One', serif; line-height:1.04;
+    font-size:108px; letter-spacing:.005em; text-transform:uppercase;
+    color:var(--blue);
+  }
+  .s-manifesto h1 .y{ color:var(--orange); text-shadow: 5px 5px 0 var(--red);}
+  .s-manifesto h1 .scriptline{
+    display:inline-block; font-family:'Caveat Brush', cursive; color:var(--red);
+    font-size:104px; transform:rotate(-2deg); margin: 0 14px;
+    text-transform:lowercase;
+  }
+  .s-manifesto .underline{
+    margin-top:60px; height:14px; background:var(--ink); width:30%;
+  }
+  .s-manifesto .footrow{
+    position:absolute; bottom:80px; left:120px; right:120px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.18em; color:var(--ink);
+  }
+
+  /* ============ 04 — THREE COLUMNS ============ */
+  .s-pillars{ background:var(--paper);}
+  .s-pillars .head{
+    padding:70px 90px 30px;
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:6px solid var(--ink);
+  }
+  .s-pillars .head h2{
+    margin:0; font-family:'Alfa Slab One', serif; font-size:120px; line-height:.9;
+    color:var(--blue); text-shadow:5px 5px 0 var(--red); text-transform:uppercase;
+  }
+  .s-pillars .head .lede{
+    max-width:560px; padding-left:50px;
+    font-family:'Archivo Narrow', sans-serif; font-weight:500;
+    font-size:28px; line-height:1.35; color:var(--ink);
+    border-left:4px solid var(--ink);
+  }
+  .s-pillars .grid{
+    display:grid; grid-template-columns:repeat(3, 1fr);
+    height: calc(100% - 320px);
+  }
+  .s-pillars .col{
+    padding:60px 50px 60px;
+    border-right:6px solid var(--ink);
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  .s-pillars .col:last-child{border-right:none;}
+  .s-pillars .col .num{
+    font-family:'Alfa Slab One', serif; font-size:180px; line-height:.88;
+    color:var(--orange); text-shadow:5px 5px 0 var(--red);
+  }
+  .s-pillars .col .tag{
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.18em;
+    color:var(--ink); margin-top:14px; padding-top:18px;
+    border-top:3px solid var(--ink); align-self:flex-start;
+  }
+  .s-pillars .col h3{
+    margin:30px 0 20px; font-family:'Alfa Slab One', serif;
+    font-size:54px; line-height:1; color:var(--blue); text-transform:uppercase;
+  }
+  .s-pillars .col p{
+    margin:0; font-family:'Archivo Narrow', sans-serif; font-weight:500;
+    font-size:26px; line-height:1.4; color:var(--ink); max-width:430px;
+  }
+  .s-pillars .col.alt{ background:var(--blue);}
+  .s-pillars .col.alt .tag{color:var(--cream); border-top-color:var(--cream);}
+  .s-pillars .col.alt h3{color:var(--orange); text-shadow:4px 4px 0 var(--red);}
+  .s-pillars .col.alt p{color:var(--cream);}
+
+  /* ============ 05 — BIG STAT ============ */
+  .s-stat{ background:var(--blue); color:var(--cream);}
+  .s-stat .topbar{
+    position:absolute; top:0; left:0; right:0; height:90px;
+    border-bottom:6px solid var(--cream);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 90px; color:var(--cream);
+    font-family:'DM Mono', monospace; letter-spacing:.18em; font-size:24px;
+  }
+  .s-stat .stat{
+    position:absolute; left:90px; right:90px; top:200px;
+    display:grid; grid-template-columns: 1fr 1fr; gap:80px; align-items:center;
+  }
+  .s-stat .num{
+    font-family:'Alfa Slab One', serif; font-size:540px; line-height:.82;
+    color:var(--orange);
+    text-shadow: 12px 12px 0 var(--red), 24px 24px 0 var(--red-deep);
+    letter-spacing:-.02em;
+  }
+  .s-stat .num sup{
+    font-size:130px; vertical-align:top; line-height:1;
+    color:var(--cream); text-shadow: 6px 6px 0 var(--red);
+  }
+  .s-stat .desc h3{
+    margin:0 0 30px; font-family:'Alfa Slab One', serif;
+    font-size:64px; line-height:1; color:var(--cream); text-transform:uppercase;
+  }
+  .s-stat .desc h3 .accent{ color:var(--orange);}
+  .s-stat .desc p{
+    margin:0; font-size:30px; line-height:1.4; color:var(--cream);
+    font-family:'Archivo Narrow', sans-serif; font-weight:500; max-width:640px;
+  }
+  .s-stat .desc .source{
+    margin-top:36px; font-family:'DM Mono', monospace; font-size:24px;
+    letter-spacing:.18em; color:var(--orange); padding-top:18px;
+    border-top:3px solid var(--cream); display:inline-block;
+  }
+  .s-stat .ribbon{
+    position:absolute; bottom:0; left:0; right:0; height:60px;
+    background:var(--orange); display:flex; align-items:center; gap:50px;
+    overflow:hidden; padding-left:90px;
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.22em;
+    color:var(--blue); font-weight:600;
+    border-top:6px solid var(--ink);
+  }
+
+  /* ============ 06 — DENSE LIST ============ */
+  .s-platform{ background:var(--paper);}
+  .s-platform .head{
+    padding:70px 90px 0;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:60px;
+  }
+  .s-platform .head h2{
+    margin:0; font-family:'Alfa Slab One', serif; font-size:140px; line-height:.86;
+    color:var(--blue); text-shadow:6px 6px 0 var(--red); text-transform:uppercase;
+  }
+  .s-platform .head .lede{
+    max-width:560px; padding-top:24px;
+    font-family:'Archivo Narrow', sans-serif; font-weight:500;
+    font-size:28px; line-height:1.4; color:var(--ink);
+    border-top:6px solid var(--ink);
+  }
+  .s-platform .body{
+    padding:60px 90px 0;
+    display:grid; grid-template-columns: 1fr 1fr; column-gap:90px; row-gap:24px;
+  }
+  .s-platform .item{
+    display:grid; grid-template-columns:90px 1fr; gap:24px; align-items:start;
+    padding:20px 0; border-top:3px solid var(--ink);
+  }
+  .s-platform .item .n{
+    font-family:'Alfa Slab One', serif; font-size:60px; line-height:.9;
+    color:var(--orange); text-shadow:3px 3px 0 var(--red);
+  }
+  .s-platform .item h4{
+    margin:0 0 8px; font-family:'Alfa Slab One', serif;
+    font-size:30px; line-height:1; color:var(--blue); text-transform:uppercase;
+  }
+  .s-platform .item p{
+    margin:0; font-size:24px; line-height:1.4; color:var(--ink);
+    font-family:'Archivo Narrow', sans-serif; max-width:600px;
+  }
+
+  /* ============ 07 — QUOTE ============ */
+  .s-quote{ background:var(--orange); color:var(--blue);}
+  .s-quote .marks{
+    position:absolute; top:80px; left:120px;
+    font-family:'Alfa Slab One', serif; font-size:300px; line-height:.7;
+    color:var(--blue); text-shadow:8px 8px 0 var(--red);
+    opacity:.95;
+  }
+  .s-quote .quote{
+    position:absolute; left:120px; right:120px; top:380px;
+    font-family:'Alfa Slab One', serif; font-size:78px; line-height:1.08;
+    color:var(--blue); text-transform:uppercase;
+    text-wrap:pretty;
+  }
+  .s-quote .quote .em{ color:var(--cream); text-shadow:5px 5px 0 var(--red);}
+  .s-quote .attribution{
+    position:absolute; bottom:120px; left:120px; right:120px;
+    display:flex; justify-content:space-between; align-items:center; gap:40px;
+  }
+  .s-quote .who{ display:flex; align-items:center; gap:30px;}
+  .s-quote .avatar{
+    width:120px; height:120px; border-radius:50%;
+    background:var(--blue); border:6px solid var(--blue);
+    box-shadow:6px 6px 0 var(--red);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--orange); font-family:'Alfa Slab One', serif; font-size:60px;
+  }
+  .s-quote .who .name{font-family:'Alfa Slab One', serif; font-size:38px; color:var(--blue); text-transform:uppercase; line-height:1;}
+  .s-quote .who .role{font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.16em; color:var(--blue); margin-top:8px;}
+  .s-quote .stamp{
+    background:var(--blue); color:var(--orange);
+    padding:18px 32px; transform:rotate(-3deg);
+    border:5px solid var(--cream);
+    font-family:'Alfa Slab One', serif; font-size:28px; letter-spacing:.04em;
+    box-shadow:6px 6px 0 var(--red);
+    text-transform:uppercase;
+  }
+
+  /* ============ 08 — TIMELINE / ROADMAP ============ */
+  .s-timeline{ background:var(--cream);}
+  .s-timeline .head{ padding:70px 90px 30px;}
+  .s-timeline .head h2{
+    margin:0; font-family:'Alfa Slab One', serif; font-size:120px; line-height:.88;
+    color:var(--blue); text-shadow:5px 5px 0 var(--red); text-transform:uppercase;
+  }
+  .s-timeline .head .sub{
+    margin-top:18px; font-family:'Caveat Brush', cursive; color:var(--red);
+    font-size:64px; transform:rotate(-2deg); display:inline-block;
+  }
+  .s-timeline .track{
+    position:absolute; left:120px; right:120px; top:430px;
+    height:14px; background:var(--ink);
+  }
+  .s-timeline .nodes{
+    position:absolute; left:90px; right:90px; top:380px;
+    display:grid; grid-template-columns: repeat(4, 1fr); gap:30px;
+  }
+  .s-timeline .node{ position:relative; padding:0 30px;}
+  .s-timeline .node .dot{
+    width:60px; height:60px; border-radius:50%; background:var(--orange);
+    border:6px solid var(--ink); box-shadow:6px 6px 0 var(--red);
+    margin-bottom:36px;
+  }
+  .s-timeline .node.alt .dot{background:var(--blue);}
+  .s-timeline .node .when{
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.18em; color:var(--ink);
+  }
+  .s-timeline .node h4{
+    margin:8px 0 12px; font-family:'Alfa Slab One', serif;
+    font-size:38px; line-height:1; color:var(--blue); text-transform:uppercase;
+  }
+  .s-timeline .node p{
+    margin:0; font-size:24px; line-height:1.4; color:var(--ink);
+    font-family:'Archivo Narrow', sans-serif; max-width:340px;
+  }
+  .s-timeline .below{
+    position:absolute; left:120px; right:120px; top:780px;
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:30px;
+  }
+  .s-timeline .kpi{
+    border:5px solid var(--ink); padding:28px 30px; background:var(--paper);
+  }
+  .s-timeline .kpi .label{font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.18em; color:var(--ink);}
+  .s-timeline .kpi .v{
+    margin-top:10px; font-family:'Alfa Slab One', serif; font-size:88px; line-height:.9;
+    color:var(--orange); text-shadow:4px 4px 0 var(--red);
+  }
+  .s-timeline .kpi.alt{background:var(--blue);}
+  .s-timeline .kpi.alt .label{color:var(--cream);}
+  .s-timeline .kpi.alt .v{color:var(--orange);}
+
+  /* ============ 09 — TWO-COLUMN COMPARE ============ */
+  .s-compare{ background:var(--paper);}
+  .s-compare .head{
+    padding:70px 90px 30px;
+    border-bottom:6px solid var(--ink);
+  }
+  .s-compare .head h2{
+    margin:0; font-family:'Alfa Slab One', serif; font-size:120px; line-height:.88;
+    color:var(--blue); text-shadow:5px 5px 0 var(--red); text-transform:uppercase;
+  }
+  .s-compare .head .sub{
+    margin-top:14px; font-family:'Archivo Narrow', sans-serif; font-weight:500;
+    font-size:28px; color:var(--ink); max-width:900px; line-height:1.4;
+  }
+  .s-compare .grid{
+    display:grid; grid-template-columns:1fr 1fr;
+    height: calc(100% - 290px);
+  }
+  .s-compare .side{ padding:60px 70px; display:flex; flex-direction:column;}
+  .s-compare .side.left{ background:var(--paper); border-right:6px solid var(--ink);}
+  .s-compare .side.right{ background:var(--blue); color:var(--cream);}
+  .s-compare .side .label{
+    font-family:'DM Mono', monospace; font-size:24px; letter-spacing:.22em; color:var(--ink);
+    padding-bottom:14px; border-bottom:4px solid var(--ink); align-self:flex-start;
+  }
+  .s-compare .side.right .label{ color:var(--cream); border-bottom-color:var(--cream);}
+  .s-compare .side h3{
+    margin:30px 0 30px; font-family:'Alfa Slab One', serif;
+    font-size:78px; line-height:.95; text-transform:uppercase;
+    color:var(--blue);
+  }
+  .s-compare .side.right h3{ color:var(--orange); text-shadow:5px 5px 0 var(--red);}
+  .s-compare .side ul{
+    list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:18px;
+  }
+  .s-compare .side li{
+    font-family:'Archivo Narrow', sans-serif; font-size:28px; line-height:1.35;
+    padding-left:48px; position:relative; color:var(--ink);
+  }
+  .s-compare .side.right li{ color:var(--cream);}
+  .s-compare .side li::before{
+    content:""; position:absolute; left:0; top:14px;
+    width:24px; height:24px; background:var(--red); border-radius:4px;
+    transform:rotate(45deg);
+  }
+  .s-compare .side.right li::before{ background:var(--orange);}
+
+  /* ============ 10 — CLOSING / THANK YOU ============ */
+  .s-close{ background:var(--blue); color:var(--cream);}
+  .s-close .frame{ position:absolute; inset:50px; border:6px solid var(--cream);}
+  .s-close .top{
+    position:absolute; top:100px; left:100px; right:100px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'DM Mono', monospace; letter-spacing:.22em; color:var(--cream); font-size:24px;
+  }
+  .s-close .center{
+    position:absolute; left:100px; right:100px; top:260px;
+  }
+  .s-close .center .pre{
+    font-family:'Caveat Brush', cursive; color:var(--orange);
+    font-size:96px; transform:rotate(-3deg); display:inline-block;
+  }
+  .s-close .center h1{
+    margin:10px 0 0; font-family:'Alfa Slab One', serif;
+    font-size:260px; line-height:.86; color:var(--orange);
+    text-shadow: 10px 10px 0 var(--red), 20px 20px 0 var(--red-deep);
+    text-transform:uppercase;
+  }
+  .s-close .row{
+    margin-top:60px;
+    display:grid; grid-template-columns: auto 1fr; gap:40px; align-items:center;
+  }
+  .s-close .cta{
+    background:var(--orange); color:var(--blue);
+    padding:24px 44px; font-family:'Alfa Slab One', serif;
+    font-size:48px; text-transform:uppercase;
+    border:6px solid var(--cream);
+    box-shadow: 10px 10px 0 var(--red);
+    letter-spacing:.02em;
+  }
+  .s-close .url{
+    font-family:'Alfa Slab One', serif; font-size:46px; color:var(--cream);
+    text-transform:uppercase; letter-spacing:.02em;
+  }
+  .s-close .footrow{
+    position:absolute; bottom:120px; left:100px; right:100px;
+    display:flex; justify-content:space-between; align-items:flex-end;
+  }
+  .s-close .signoff{
+    font-family:'DM Mono', monospace; font-size:26px; letter-spacing:.2em; color:var(--cream);
+  }
+  .s-close .signoff .b{color:var(--orange);}
+  .s-close .stamp{
+    width:200px; height:200px; border-radius:50%;
+    background:var(--cream); color:var(--blue);
+    border:6px solid var(--orange);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    text-align:center; font-family:'Alfa Slab One', serif; line-height:1;
+    transform:rotate(-9deg);
+    box-shadow:8px 8px 0 var(--red);
+  }
+  .s-close .stamp .big{font-size:54px;}
+  .s-close .stamp .small{font-size:24px; letter-spacing:.18em; margin-top:8px; font-family:'DM Mono', monospace;}
+</style>
+</head>
+<body>
+
+<script type="application/json" id="speaker-notes">
+[
+  "Title slide. Use to open any deck — set the project name, the audience, and the date. The big stamped headline is the brand voice; the subtitle below it carries the descriptor.",
+  "Table of contents. Drop in the four to eight chapters of your deck. Page numbers on the right help in printed handouts.",
+  "Big idea slide. Use this for the one sentence you want the audience to leave the room remembering. One per deck — keep it short.",
+  "Three-column overview. Use to introduce three pillars, three workstreams, three offerings. The middle column is highlighted blue to anchor the eye.",
+  "Hero stat. Pair one giant number with a one-line headline and a single source. Don't crowd it — the number is the slide.",
+  "Detailed list. High information density: eight items in two columns. Use for a feature breakdown, an agenda, a launch checklist.",
+  "Pull quote. Use to break up data with a human voice — a customer testimonial, a research interview, a leadership quote.",
+  "Timeline / roadmap. Four phases on the track plus three KPI cards beneath. Edit dates and milestones to fit your plan.",
+  "Two-column compare. Use for before/after, current/proposed, problem/solution. The blue side is the recommendation.",
+  "Closing slide. Big thanks, a call to action, and contact details. Always end the deck here."
+]
+</script>
+
+<deck-stage>
+
+<!-- ============ 01 — COVER ============ -->
+<section class="s-cover grain" data-screen-label="01 Cover">
+  <div class="frame"></div>
+  <div class="meta-top">
+    <div class="pill">Q2 · 2026</div>
+    <div>STRATEGIC REVIEW · INTERNAL</div>
+    <div class="pill">VOL. 01</div>
+  </div>
+
+  <div class="center">
+    <div class="title">QUARTERLY<br/>REVIEW</div>
+    <div class="row2">
+      <div class="for">a</div>
+      <div class="sub">PRESENTATION TEMPLATE</div>
+    </div>
+  </div>
+
+  <div class="footline">
+    <span>PREPARED BY THE TEAM</span>
+    <span class="dot"></span>
+    <span>MAY 2026</span>
+    <span class="dot"></span>
+    <span>VERSION 01</span>
+  </div>
+</section>
+
+<!-- ============ 02 — TABLE OF CONTENTS ============ -->
+<section class="s-toc grain" data-screen-label="02 Contents">
+  <div class="head">
+    <h2>WHAT'S<br/>INSIDE.</h2>
+    <div class="meta">
+      <div class="big">CONTENTS</div>
+      <div>SECTION GUIDE</div>
+      <div>02 / 10</div>
+    </div>
+  </div>
+  <div class="list">
+    <div class="row"><div class="n">01</div><div class="t">The Big Idea</div><div class="pg">PG 03</div></div>
+    <div class="row"><div class="n">02</div><div class="t">Three Pillars</div><div class="pg">PG 04</div></div>
+    <div class="row"><div class="n">03</div><div class="t">By the Numbers</div><div class="pg">PG 05</div></div>
+    <div class="row"><div class="n">04</div><div class="t">The Full Plan</div><div class="pg">PG 06</div></div>
+    <div class="row"><div class="n">05</div><div class="t">Voice of the Customer</div><div class="pg">PG 07</div></div>
+    <div class="row"><div class="n">06</div><div class="t">Roadmap</div><div class="pg">PG 08</div></div>
+    <div class="row"><div class="n">07</div><div class="t">Where We Land</div><div class="pg">PG 09</div></div>
+    <div class="row"><div class="n">08</div><div class="t">Next Steps</div><div class="pg">PG 10</div></div>
+  </div>
+</section>
+
+<!-- ============ 03 — BIG IDEA ============ -->
+<section class="s-manifesto grain" data-screen-label="03 Big Idea">
+  <div class="topbar">
+    <div>— THE BIG IDEA —</div>
+    <div>03 / 10</div>
+    <div>ONE SENTENCE</div>
+  </div>
+  <div class="body">
+    <div class="kicker">★ ★ ★&nbsp;&nbsp;OUR THESIS&nbsp;&nbsp;★ ★ ★</div>
+    <h1>
+      The product gets <span class="scriptline">simpler</span><br/>
+      as the team gets <span class="y">braver</span> —<br/>
+      not the other way around.
+    </h1>
+    <div class="underline"></div>
+  </div>
+  <div class="footrow">
+    <div>— PARAGRAPH 01 —</div>
+    <div>SET IN ALFA SLAB</div>
+  </div>
+</section>
+
+<!-- ============ 04 — THREE COLUMNS ============ -->
+<section class="s-pillars grain" data-screen-label="04 Pillars">
+  <div class="head">
+    <h2>THREE<br/>PRIORITIES.</h2>
+    <div class="lede">The work falls into three buckets this quarter. Each has a clear owner, a clear deliverable, and a clear way to know we are done.</div>
+  </div>
+  <div class="grid">
+    <div class="col">
+      <div class="num">01</div>
+      <div class="tag">— FOCUS —</div>
+      <h3>Ship the<br/>core flow.</h3>
+      <p>Cut three legacy paths and double down on the one that drives ninety percent of activations.</p>
+    </div>
+    <div class="col alt">
+      <div class="num">02</div>
+      <div class="tag">— LEARN —</div>
+      <h3>Talk to<br/>ten teams.</h3>
+      <p>Standing weekly research with target customers. Findings briefed every Friday in a one-page memo.</p>
+    </div>
+    <div class="col">
+      <div class="num">03</div>
+      <div class="tag">— SHIP —</div>
+      <h3>One launch,<br/>not five.</h3>
+      <p>Combine the four small drops on the calendar into a single, well-told release with shared positioning.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 — BIG STAT ============ -->
+<section class="s-stat grain" data-screen-label="05 Stat">
+  <div class="topbar">
+    <div>— BY THE NUMBERS —</div>
+    <div>05 / 10</div>
+    <div>SECTION 02 / DATA</div>
+  </div>
+  <div class="stat">
+    <div class="num">63<sup>%</sup></div>
+    <div class="desc">
+      <h3>of customers<br/><span class="accent">recommend us</span> after onboarding.</h3>
+      <p>Net promoter scores climbed eighteen points after we shipped the redesigned first-run experience in March, the largest single-quarter jump on record for the product.</p>
+      <div class="source">SOURCE — INTERNAL NPS, Q1 2026</div>
+    </div>
+  </div>
+  <div class="ribbon">
+    <span>★ FOCUS</span>
+    <span>★ LEARN</span>
+    <span>★ SHIP</span>
+    <span>★ FOCUS</span>
+    <span>★ LEARN</span>
+    <span>★ SHIP</span>
+  </div>
+</section>
+
+<!-- ============ 06 — DENSE LIST ============ -->
+<section class="s-platform grain" data-screen-label="06 Plan">
+  <div class="head">
+    <h2>THE FULL<br/>PLAN.</h2>
+    <div class="lede">Eight workstreams, costed and owned. Each links to a longer brief in the appendix; team leads are listed in the back of the book.</div>
+  </div>
+  <div class="body">
+    <div class="item">
+      <div class="n">01</div>
+      <div>
+        <h4>Onboarding refresh</h4>
+        <p>Rebuild the first-run experience with progressive disclosure and a single primary action per screen.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">02</div>
+      <div>
+        <h4>Pricing simplification</h4>
+        <p>Collapse the seven plans into three. Move add-ons behind a clearer feature matrix.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">03</div>
+      <div>
+        <h4>Mobile parity</h4>
+        <p>Bring the four most-used desktop flows to mobile by end of quarter, including offline drafts.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">04</div>
+      <div>
+        <h4>Self-serve setup</h4>
+        <p>Reduce time-to-first-value from three days to thirty minutes for teams under fifty seats.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">05</div>
+      <div>
+        <h4>Trust &amp; security</h4>
+        <p>Ship audit logs, role-based access, and SSO for all paid tiers. SOC 2 Type II by year-end.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">06</div>
+      <div>
+        <h4>Performance budget</h4>
+        <p>Cut median page load by forty percent. Set a hard ceiling and wire it into the release pipeline.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">07</div>
+      <div>
+        <h4>Integrations push</h4>
+        <p>Native connectors for the top five tools customers ask for, plus a public API for the long tail.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="n">08</div>
+      <div>
+        <h4>Brand refresh</h4>
+        <p>New marketing site, sharper category positioning, and a unified visual system across surfaces.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 — QUOTE ============ -->
+<section class="s-quote grain" data-screen-label="07 Quote">
+  <div class="marks">"</div>
+  <div class="quote">
+    The new onboarding cut our setup time<br/>
+    from three days to thirty minutes —<br/>
+    <span class="em">we shipped the same week.</span>
+  </div>
+  <div class="attribution">
+    <div class="who">
+      <div class="avatar">M</div>
+      <div>
+        <div class="name">Maya Okonkwo</div>
+        <div class="role">— HEAD OF OPS, NORTH STAR LABS —</div>
+      </div>
+    </div>
+    <div class="stamp">★ Voice of the Customer ★</div>
+  </div>
+</section>
+
+<!-- ============ 08 — TIMELINE ============ -->
+<section class="s-timeline grain" data-screen-label="08 Roadmap">
+  <div class="head">
+    <h2>THE<br/>ROADMAP.</h2>
+    <div class="sub">— a plan, on a clock —</div>
+  </div>
+  <div class="track"></div>
+  <div class="nodes">
+    <div class="node">
+      <div class="dot"></div>
+      <div class="when">MAY</div>
+      <h4>Kickoff</h4>
+      <p>Charter the workstreams, lock owners, and publish the shared scorecard.</p>
+    </div>
+    <div class="node alt">
+      <div class="dot"></div>
+      <div class="when">JUNE</div>
+      <h4>Beta opens</h4>
+      <p>Onboard the first ten design partners on the new core flow.</p>
+    </div>
+    <div class="node">
+      <div class="dot"></div>
+      <div class="when">AUGUST</div>
+      <h4>Launch</h4>
+      <p>Public release, marketing site refresh, and sales enablement complete.</p>
+    </div>
+    <div class="node alt">
+      <div class="dot"></div>
+      <div class="when">OCTOBER</div>
+      <h4>Scale</h4>
+      <p>Roll the changes to the long tail and retire the legacy paths for good.</p>
+    </div>
+  </div>
+  <div class="below">
+    <div class="kpi">
+      <div class="label">— TIME-TO-VALUE —</div>
+      <div class="v">30m</div>
+    </div>
+    <div class="kpi alt">
+      <div class="label">— ACTIVATION RATE —</div>
+      <div class="v">+24%</div>
+    </div>
+    <div class="kpi">
+      <div class="label">— REVENUE LIFT —</div>
+      <div class="v">$1.4M</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 — TWO-COLUMN COMPARE ============ -->
+<section class="s-compare grain" data-screen-label="09 Compare">
+  <div class="head">
+    <h2>WHERE<br/>WE LAND.</h2>
+    <div class="sub">A side-by-side of where the product is today and where this plan takes us by the end of the year.</div>
+  </div>
+  <div class="grid">
+    <div class="side left">
+      <div class="label">— TODAY —</div>
+      <h3>Capable, but cluttered.</h3>
+      <ul>
+        <li>Three-day median time-to-value for new teams.</li>
+        <li>Seven pricing plans with overlapping feature sets.</li>
+        <li>Mobile parity at sixty percent of desktop flows.</li>
+        <li>Onboarding NPS sits at forty-five points.</li>
+      </ul>
+    </div>
+    <div class="side right">
+      <div class="label">— END OF YEAR —</div>
+      <h3>Sharper, faster, fewer.</h3>
+      <ul>
+        <li>Thirty-minute self-serve setup, no human required.</li>
+        <li>Three pricing plans with a clear feature matrix.</li>
+        <li>Full mobile parity, plus offline drafts.</li>
+        <li>Onboarding NPS targeted at sixty-three points.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 — CLOSE ============ -->
+<section class="s-close grain" data-screen-label="10 Close">
+  <div class="frame"></div>
+  <div class="top">
+    <div>— END OF DECK —</div>
+    <div>★ THANK YOU ★</div>
+    <div>10 / 10</div>
+  </div>
+  <div class="center">
+    <div class="pre">over to you —</div>
+    <h1 style="font-size: 230px">QUESTIONS?</h1>
+    <div class="row">
+      <div class="cta">LET'S TALK</div>
+      <div class="url">team@company.com</div>
+    </div>
+  </div>
+  <div class="footrow">
+    <div class="signoff">
+      PREPARED BY <span class="b">THE PRODUCT TEAM</span><br/>
+      ★ MAY 2026 ★ INTERNAL DRAFT
+    </div>
+    <div class="stamp">
+      <div class="big">END</div>
+      <div class="small">— V. 01 —</div>
+    </div>
+  </div>
+</section>
+
+</deck-stage>
+
+</body>
+</html>

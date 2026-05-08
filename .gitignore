@@ -51,3 +51,6 @@ tsconfig.tsbuildinfo
 task.md
 specs/change/active
 .ralph/
+
+# Local design assistant context
+.impeccable.md

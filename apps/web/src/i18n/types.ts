@@ -720,6 +720,9 @@ export interface Dict {
   'preview.fullscreen': string;
   'preview.closeTitle': string;
   'preview.loading': string;
+  'preview.errorTitle': string;
+  'preview.errorBody': string;
+  'preview.retry': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 
@@ -974,6 +977,20 @@ export interface Dict {
   'fileViewer.cloudflareAccountId': string;
   'fileViewer.cloudflareAccountIdHint': string;
   'fileViewer.cloudflareAccountIdRequired': string;
+  'fileViewer.cloudflareZoneLabel': string;
+  'fileViewer.cloudflareZonePlaceholder': string;
+  'fileViewer.cloudflareZoneRequired': string;
+  'fileViewer.cloudflareZonesLoading': string;
+  'fileViewer.cloudflareZonesRefresh': string;
+  'fileViewer.cloudflareZonesLoadFailed': string;
+  'fileViewer.cloudflareZonesEmpty': string;
+  'fileViewer.cloudflareDomainPrefixLabel': string;
+  'fileViewer.cloudflareDomainPrefixPlaceholder': string;
+  'fileViewer.cloudflareDomainPrefixInvalid': string;
+  'fileViewer.cloudflareHostnamePreview': string;
+  'fileViewer.cloudflareCustomDomainHint': string;
+  'fileViewer.cloudflarePagesDevLinkLabel': string;
+  'fileViewer.cloudflareCustomDomainLinkLabel': string;
   'fileViewer.optional': string;
   'fileViewer.vercelPreviewOnly': string;
   'fileViewer.cloudflarePagesPreviewHint': string;
@@ -983,8 +1000,10 @@ export interface Dict {
   'fileViewer.deployProviderConfigSaveFailed': string;
   'fileViewer.deployProviderFailed': string;
   'fileViewer.deployResultLabel': string;
+  'fileViewer.deployLinkReady': string;
   'fileViewer.deployLinkPreparingLabel': string;
   'fileViewer.deployLinkDelayed': string;
+  'fileViewer.deployLinkFailed': string;
   'fileViewer.deployLinkProtectedLabel': string;
   'fileViewer.deployLinkProtected': string;
   'fileViewer.retryLink': string;
@@ -1184,6 +1203,8 @@ export interface Dict {
   'pet.slashPetTuck': string;
   'pet.slashHatch': string;
   'pet.slashHatchArg': string;
+  'pet.slashSearch': string;
+  'pet.slashSearchArg': string;
   // Recently-hatched section in pet settings
   'pet.codexTitle': string;
   'pet.codexSubtitle': string;

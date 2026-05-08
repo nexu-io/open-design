@@ -1,4 +1,4 @@
-import type { ChatMessage } from './chat';
+import type { ChatMessage } from './chat.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -191,6 +191,92 @@ export type DeploymentStatus =
   | 'protected'
   | 'failed';
 
+export interface CloudflarePagesConfigHints {
+  lastZoneId?: string;
+  lastZoneName?: string;
+  lastDomainPrefix?: string;
+}
+
+export interface CloudflarePagesZoneInfo {
+  id: string;
+  name: string;
+  status?: string;
+  type?: string;
+}
+
+export interface CloudflarePagesZonesResponse {
+  zones: CloudflarePagesZoneInfo[];
+  cloudflarePages?: CloudflarePagesConfigHints;
+}
+
+export interface CloudflarePagesDeploySelection {
+  zoneId: string;
+  zoneName: string;
+  domainPrefix: string;
+}
+
+export type DeploymentLinkStatus =
+  | 'ready'
+  | 'link-delayed'
+  | 'protected'
+  | 'failed';
+
+export interface DeploymentLinkInfo {
+  url: string;
+  status: DeploymentLinkStatus;
+  statusMessage?: string;
+  reachableAt?: number;
+}
+
+export type CloudflarePagesDnsStatus =
+  | 'skipped'
+  | 'created'
+  | 'reused'
+  | 'unmarked'
+  | 'patched'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesDomainStatus =
+  | 'skipped'
+  | 'pending'
+  | 'active'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesCustomDomainStatus =
+  | 'pending'
+  | 'ready'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesDnsOwnership = 'marked' | 'unmarked' | 'external';
+
+export interface CloudflarePagesCustomDomainInfo {
+  hostname: string;
+  url: string;
+  zoneId: string;
+  zoneName: string;
+  domainPrefix: string;
+  status: CloudflarePagesCustomDomainStatus;
+  statusMessage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  dnsStatus?: CloudflarePagesDnsStatus;
+  dnsRecordId?: string;
+  dnsOwnership?: CloudflarePagesDnsOwnership;
+  domainStatus?: CloudflarePagesDomainStatus;
+  pagesDomainStatus?: string;
+  validationData?: unknown;
+  verificationData?: unknown;
+}
+
+export interface CloudflarePagesDeploymentInfo {
+  projectName: string;
+  pagesDev: DeploymentLinkInfo;
+  customDomain?: CloudflarePagesCustomDomainInfo;
+}
+
 export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
@@ -199,6 +285,7 @@ export interface DeployConfigResponse {
   teamSlug: string;
   accountId?: string;
   projectName?: string;
+  cloudflarePages?: CloudflarePagesConfigHints;
   target: 'preview';
 }
 
@@ -209,6 +296,7 @@ export interface UpdateDeployConfigRequest {
   teamSlug?: string;
   accountId?: string;
   projectName?: string;
+  cloudflarePages?: CloudflarePagesConfigHints;
 }
 
 export interface DeploymentInfo {
@@ -223,7 +311,7 @@ export interface DeploymentInfo {
   status: DeploymentStatus;
   statusMessage?: string;
   reachableAt?: number;
-  providerMetadata?: Record<string, unknown>;
+  cloudflarePages?: CloudflarePagesDeploymentInfo;
   createdAt: number;
   updatedAt: number;
 }
@@ -235,6 +323,7 @@ export interface ProjectDeploymentsResponse {
 export interface DeployProjectFileRequest {
   fileName: string;
   providerId?: DeployProviderId;
+  cloudflarePages?: CloudflarePagesDeploySelection;
 }
 
 export interface DeployProjectFileResponse extends DeploymentInfo {}

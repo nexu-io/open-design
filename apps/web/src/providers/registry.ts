@@ -18,6 +18,8 @@ import type {
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentUpsertRequest,
+  CloudflarePagesDeploySelection,
+  CloudflarePagesZonesResponse,
   DeployConfigResponse,
   DeployProjectFileResponse,
   DesignSystemDetail,
@@ -48,6 +50,8 @@ export type WebDeployConfigResponse = DeployConfigResponse;
 export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
+export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
+export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
 export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
   return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);
@@ -265,7 +269,25 @@ export async function fetchConnectorDiscovery(options: { refresh?: boolean } = {
   return promise;
 }
 
-export async function connectConnector(connectorId: string): Promise<ConnectorDetail | null> {
+export interface ConnectorActionResult {
+  connector: ConnectorDetail | null;
+  error?: string;
+}
+
+function popupBlockedMessage(): string {
+  return 'Popup blocked. Allow popups for Open Design and try again.';
+}
+
+async function decodeConnectorError(resp: Response): Promise<string> {
+  try {
+    const payload = (await resp.json()) as { error?: { message?: string } } | null;
+    return payload?.error?.message?.trim() || `Connector request failed (${resp.status})`;
+  } catch {
+    return `Connector request failed (${resp.status})`;
+  }
+}
+
+export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
   try {
     authWindow = window.open('about:blank', '_blank');
@@ -275,22 +297,28 @@ export async function connectConnector(connectorId: string): Promise<ConnectorDe
     });
     if (!resp.ok) {
       authWindow?.close();
-      return null;
+      return { connector: null, error: await decodeConnectorError(resp) };
     }
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (authWindow) {
         authWindow.location.href = json.auth.redirectUrl;
       } else {
-        window.open(json.auth.redirectUrl, '_blank');
+        const redirected = window.open(json.auth.redirectUrl, '_blank');
+        if (!redirected) {
+          return { connector: json.connector ?? null, error: popupBlockedMessage() };
+        }
       }
     } else {
       authWindow?.close();
     }
-    return json.connector ?? null;
-  } catch {
+    return { connector: json.connector ?? null };
+  } catch (err) {
     authWindow?.close();
-    return null;
+    return {
+      connector: null,
+      error: err instanceof Error && err.message ? err.message : 'Could not start connector authentication.',
+    };
   }
 }
 
@@ -349,13 +377,25 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
   }
 }
 
-export async function fetchSkillExample(id: string): Promise<string | null> {
+export type SkillExampleResult =
+  | { html: string }
+  | { error: string };
+
+// Returns a discriminated result so callers can distinguish a real
+// failure (network error, daemon unreachable, non-2xx) from a normal
+// load. Previously this collapsed every failure into `null`, which
+// left the example preview modal stuck at its loading state with no
+// recovery affordance. Issue #860.
+export async function fetchSkillExample(id: string): Promise<SkillExampleResult> {
   try {
     const resp = await fetch(`/api/skills/${encodeURIComponent(id)}/example`);
-    if (!resp.ok) return null;
-    return await resp.text();
-  } catch {
-    return null;
+    if (!resp.ok) {
+      return { error: `HTTP ${resp.status}` };
+    }
+    return { html: await resp.text() };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'network error';
+    return { error: message };
   }
 }
 
@@ -393,6 +433,22 @@ export async function updateDeployConfig(
   }
 }
 
+export async function fetchCloudflarePagesZones(): Promise<WebCloudflarePagesZonesResponse | null> {
+  try {
+    const resp = await fetch('/api/deploy/cloudflare-pages/zones');
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: { message?: string }; message?: string }
+        | null;
+      throw new Error(payload?.error?.message || payload?.message || `Could not load Cloudflare zones (${resp.status})`);
+    }
+    return (await resp.json()) as WebCloudflarePagesZonesResponse;
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    return null;
+  }
+}
+
 export async function fetchProjectDeployments(
   projectId: string,
 ): Promise<WebDeploymentInfo[]> {
@@ -410,11 +466,17 @@ export async function deployProjectFile(
   projectId: string,
   fileName: string,
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
+  cloudflarePages?: WebCloudflarePagesDeploySelection,
 ): Promise<WebDeployProjectFileResponse> {
+  const body = {
+    fileName,
+    providerId,
+    ...(cloudflarePages ? { cloudflarePages } : {}),
+  };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName, providerId }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as

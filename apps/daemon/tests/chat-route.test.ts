@@ -18,6 +18,7 @@ import {
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
+  resolveResearchCommandContract,
   startServer,
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
@@ -290,6 +291,17 @@ describe('chat prompt helpers', () => {
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
+  });
+
+  it('defaults enabled research without an explicit query to the current message', () => {
+    const prompt = resolveResearchCommandContract(
+      { enabled: true },
+      'EV market 2025 trends',
+    );
+
+    expect(prompt).toContain('Canonical query for this run:');
+    expect(prompt).toContain('EV market 2025 trends');
+    expect(prompt).toContain('the first tool action must be the research command');
   });
 
   it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {

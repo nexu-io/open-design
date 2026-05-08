@@ -729,6 +729,34 @@ describe('SettingsDialog media providers interactions', () => {
     );
   });
 
+  it('re-masks a replacement media provider API key until reveal is used again', () => {
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        mediaProviders: {
+          openai: { apiKey: 'sk-media', baseUrl: 'https://api.openai.com/v1' },
+        },
+      },
+      { initialSection: 'media' },
+    );
+
+    const apiKeyInput = screen.getByLabelText('OpenAI API key') as HTMLInputElement;
+    expect(apiKeyInput.type).toBe('password');
+
+    fireEvent.click(screen.getByRole('button', { name: 'OpenAI Show key' }));
+    expect(apiKeyInput.type).toBe('text');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[0]!);
+    expect(apiKeyInput.type).toBe('password');
+
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-replacement' } });
+    expect(apiKeyInput.type).toBe('password');
+
+    fireEvent.click(screen.getByRole('button', { name: 'OpenAI Show key' }));
+    expect(apiKeyInput.type).toBe('text');
+  });
+
   it('supports providers with a custom model override field', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },

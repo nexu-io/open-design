@@ -108,6 +108,16 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   const { locale, t } = useI18n();
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  // Track per-skill fetch failures separately so the preview modal can show
+  // an actionable error / retry state instead of staying stuck at "loading".
+  // Issue #860.
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
+  // Synchronous in-flight set: state updates are batched, so two parallel
+  // loadPreview calls (e.g. card hover firing simultaneously with modal
+  // open) could both pass the "is anything cached?" check before either
+  // setState landed. The ref check happens before any await so the second
+  // caller sees the first one already running and exits early.
+  const inFlightRef = useRef<Set<string>>(new Set());
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
@@ -119,12 +129,66 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
 
   const loadPreview = useCallback(
     async (id: string) => {
-      if (previews[id] !== undefined) return;
-      const html = await fetchSkillExample(id);
-      setPreviews((prev) => ({ ...prev, [id]: html }));
+      // Race guard: synchronous check before any state read so two parallel
+      // calls (hover + modal open) cannot both fall through.
+      if (inFlightRef.current.has(id)) return;
+      // Skip the fetch only when we already hold a successful html result.
+      // A prior error must not short-circuit a retry; a prior success can.
+      if (previews[id] !== undefined && previewErrors[id] === undefined) return;
+      inFlightRef.current.add(id);
+      try {
+        // Reset both branches before firing so a retry from the error UI
+        // immediately swaps to "loading" instead of flashing the old error.
+        setPreviewErrors((prev) => {
+          if (prev[id] === undefined) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setPreviews((prev) => ({ ...prev, [id]: null }));
+        const result = await fetchSkillExample(id);
+        if ('html' in result) {
+          setPreviews((prev) => ({ ...prev, [id]: result.html }));
+        } else {
+          setPreviewErrors((prev) => ({ ...prev, [id]: result.error }));
+          setPreviews((prev) => {
+            if (prev[id] === undefined) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }
+      } finally {
+        inFlightRef.current.delete(id);
+      }
     },
-    [previews],
+    [previews, previewErrors],
   );
+
+  // Keep a ref to the latest loadPreview so the onView handler passed to
+  // PreviewModal can have a stable identity. Without this, the inline
+  // `() => loadPreview(...)` arrow rebuilds on every state change and
+  // PreviewModal's `useEffect(() => onView?.(activeId), [activeId, onView])`
+  // re-fires on each render, turning a persistent fetch failure into an
+  // automatic retry loop that flashes past the error UI.
+  const loadPreviewRef = useRef(loadPreview);
+  useEffect(() => {
+    loadPreviewRef.current = loadPreview;
+  }, [loadPreview]);
+  // Mirror the active skill id into a ref so onPreviewView can fetch the
+  // selected skill instead of the modal's internal view id. PreviewModal
+  // calls onView(activeId), where activeId is the modal-local view id
+  // ('preview' in this component); forwarding that id straight into
+  // fetchSkillExample would request /api/skills/preview/example instead
+  // of the user's selected skill, leaving Retry unable to recover.
+  const activeSkillIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeSkillIdRef.current = previewSkillId;
+  }, [previewSkillId]);
+  const onPreviewView = useCallback(() => {
+    const skillId = activeSkillIdRef.current;
+    if (skillId !== null) void loadPreviewRef.current(skillId);
+  }, []);
 
   // Open the modal for a card. We always trigger a preview fetch even if
   // the card hasn't been hovered yet — the modal needs the HTML.
@@ -334,9 +398,15 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               id: 'preview',
               label: t('examples.previewLabel'),
               html: previews[previewSkill.id],
+              error: previewErrors[previewSkill.id] ?? null,
               deck: previewSkill.mode === 'deck',
             },
           ]}
+          // Stable identity (see onPreviewView definition) so PreviewModal's
+          // mount-time onView effect doesn't re-fire on every state update;
+          // the Retry button reaches loadPreview through the same handler.
+          // Issue #860.
+          onView={onPreviewView}
           exportTitleFor={() => previewSkill.name}
           onClose={() => setPreviewSkillId(null)}
         />

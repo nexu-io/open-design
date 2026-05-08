@@ -490,6 +490,78 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   };
 }
 
+/**
+ * Returns whether the modal's footer Save button should be enabled for the
+ * currently active sidebar section.
+ *
+ * The mode-completeness check (BYOK requires apiKey + model + valid baseUrl;
+ * Local CLI requires a selected available agent) is only meaningful on the
+ * execution-mode section, where the user is actively editing those fields.
+ * On every other sidebar section (language, appearance, composio, media,
+ * integrations, notifications, pet, library, about), partial state from a
+ * draft mode toggle (e.g. user clicked BYOK on the execution section without
+ * filling in fields, then navigated to language) must NOT block saving
+ * changes the user is making in those unrelated sections. Issue #739.
+ */
+export function shouldEnableSettingsSave(
+  cfg: AppConfig,
+  activeSection: SettingsSection,
+  agents: ReadonlyArray<{ id: string; available: boolean }>,
+  isBaseUrlValid: boolean,
+): boolean {
+  if (activeSection !== 'execution') return true;
+  if (cfg.mode === 'daemon') {
+    return Boolean(
+      cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available,
+    );
+  }
+  return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
+}
+
+/**
+ * Returns the config that should actually be persisted by `onSave`.
+ *
+ * Counterpart to {@link shouldEnableSettingsSave}: when Save is enabled on a
+ * non-execution sidebar section but the user's draft execution config is
+ * incomplete (e.g. they toggled BYOK on the execution section, never filled
+ * in apiKey, then navigated to Language and clicked Save), the raw `cfg`
+ * still carries that broken draft. Persisting it would leave the app in an
+ * unusable execution state after the modal closes. This helper reverts the
+ * execution-related fields to their `initial` values in that case, so saving
+ * an unrelated section change never silently commits an incomplete execution
+ * mode.
+ *
+ * Within the execution section, or when execution is already valid, the
+ * config passes through unchanged. Issue #739.
+ */
+export function sanitizeSettingsSavePayload(
+  cfg: AppConfig,
+  initial: AppConfig,
+  activeSection: SettingsSection,
+  agents: ReadonlyArray<{ id: string; available: boolean }>,
+  isBaseUrlValid: boolean,
+): AppConfig {
+  if (activeSection === 'execution') return cfg;
+  // Reuse the existing execution-section validity gate so the two helpers
+  // share one source of truth for "execution config is complete enough."
+  const executionValid = shouldEnableSettingsSave(cfg, 'execution', agents, isBaseUrlValid);
+  if (executionValid) return cfg;
+  return {
+    ...cfg,
+    mode: initial.mode,
+    apiKey: initial.apiKey,
+    apiProtocol: initial.apiProtocol,
+    apiVersion: initial.apiVersion,
+    apiProtocolConfigs: initial.apiProtocolConfigs,
+    apiProviderBaseUrl: initial.apiProviderBaseUrl,
+    baseUrl: initial.baseUrl,
+    model: initial.model,
+    agentId: initial.agentId,
+    agentCliEnv: initial.agentCliEnv,
+    maxTokens: initial.maxTokens,
+  };
+}
+
 export function switchApiProtocolConfig(
   config: AppConfig,
   protocol: ApiProtocol,
@@ -831,7 +903,6 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
-
   // Autosave loop. Every committed edit to `cfg` schedules a debounced
   // sync to localStorage + the daemon. We keep a 400ms debounce so rapid
   // typing in text fields doesn't flood the daemon with PUTs while still
@@ -3200,6 +3271,19 @@ function MediaProvidersSection({
   onChange: () => void;
 }) {
   const { t } = useI18n();
+  const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    setVisibleApiKeys((current) => {
+      const next = new Set<string>();
+      for (const providerId of current) {
+        const apiKey = cfg.mediaProviders?.[providerId]?.apiKey ?? '';
+        if (apiKey.trim()) next.add(providerId);
+      }
+      return next.size === current.size ? current : next;
+    });
+  }, [cfg.mediaProviders]);
   const providers = MEDIA_PROVIDERS
     .filter((p) => p.settingsVisible !== false)
     .slice()
@@ -3229,6 +3313,17 @@ function MediaProvidersSection({
       return { ...curr, mediaProviders: map };
     });
   };
+  const toggleApiKeyVisibility = (providerId: string) => {
+    setVisibleApiKeys((current) => {
+      const next = new Set(current);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
+  };
 
   return (
     <section className="settings-section">
@@ -3245,6 +3340,7 @@ function MediaProvidersSection({
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
           const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
+          const apiKeyVisible = visibleApiKeys.has(provider.id);
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
@@ -3264,14 +3360,30 @@ function MediaProvidersSection({
                 </div>
               </div>
               <div className="media-provider-body">
-                <input
-                  type="password"
-                  value={entry.apiKey}
-                  placeholder={t('settings.mediaProviderPlaceholder')}
-                  aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
-                  disabled={disabled}
-                  onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
-                />
+                <div className="media-provider-secret-field">
+                  <input
+                    type={apiKeyVisible ? 'text' : 'password'}
+                    value={entry.apiKey}
+                    placeholder={t('settings.mediaProviderPlaceholder')}
+                    aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
+                    disabled={disabled}
+                    onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="secret-visibility-button"
+                    disabled={disabled}
+                    aria-label={
+                      apiKeyVisible
+                        ? `${provider.label} ${t('settings.hideKey')}`
+                        : `${provider.label} ${t('settings.showKey')}`
+                    }
+                    aria-pressed={apiKeyVisible}
+                    onClick={() => toggleApiKeyVisibility(provider.id)}
+                  >
+                    <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                  </button>
+                </div>
                 <input
                   value={entry.baseUrl}
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -3792,7 +3904,15 @@ function IntegrationsSection() {
             style={{
               background: 'var(--surface-2, #11141a)',
               color: 'var(--fg-1, #e6e6e6)',
-              padding: '12px 14px',
+              // Reserve top clearance for the absolutely-positioned
+              // Copy button so the first line of the snippet does not
+              // sit underneath it, and reserve right clearance so a
+              // wrapped bash one-liner stops short of the button rather
+              // than scrolling behind it. The right padding is sized
+              // for the wider "Copied" post-click state (icon + text +
+              // button padding + the 8px right offset) with a few px
+              // of buffer for elevated font sizes / zoom. Issue #632.
+              padding: '40px 104px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
@@ -3816,7 +3936,7 @@ function IntegrationsSection() {
           </pre>
           <button
             type="button"
-            className="ghost"
+            className="ghost mcp-copy-btn"
             onClick={onCopy}
             disabled={!snippet}
             style={{
