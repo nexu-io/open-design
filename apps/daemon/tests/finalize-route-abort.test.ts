@@ -96,7 +96,11 @@ describe('POST /api/projects/:id/finalize/anthropic — request-lifecycle abort'
   });
 
   it("aborts the daemon-side controller when the client closes the connection", async () => {
-    let capturedSignal: AbortSignal | null = null;
+    // Use a ref-object so the outer test scope reads the
+    // mock-callback's mutation; bare `let` assignments inside vitest
+    // mockImplementation closures are narrowed by TS to their initial
+    // value because the type system can't prove the callback runs.
+    const capture: { signal: AbortSignal | null } = { signal: null };
     let abortReceived: ((value: void) => void) | null = null;
     const abortObserved = new Promise<void>((resolve) => {
       abortReceived = resolve;
@@ -111,21 +115,21 @@ describe('POST /api/projects/:id/finalize/anthropic — request-lifecycle abort'
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as Request).url;
       if (url.includes('api.anthropic.com')) {
-        capturedSignal = (init as RequestInit | undefined)?.signal as AbortSignal | null;
-        if (capturedSignal) {
-          capturedSignal.addEventListener('abort', () => abortReceived?.());
+        capture.signal = (init as RequestInit | undefined)?.signal ?? null;
+        if (capture.signal) {
+          capture.signal.addEventListener('abort', () => abortReceived?.());
         }
         // Never resolve under normal conditions — the abort is the
         // only way out. If the signal is already aborted (rare), reject
         // immediately to mirror real fetch's behavior.
         return new Promise((_resolve, reject) => {
-          if (capturedSignal?.aborted) {
+          if (capture.signal?.aborted) {
             const err = new Error('aborted');
             err.name = 'AbortError';
             reject(err);
             return;
           }
-          capturedSignal?.addEventListener('abort', () => {
+          capture.signal?.addEventListener('abort', () => {
             const err = new Error('aborted');
             err.name = 'AbortError';
             reject(err);
@@ -167,7 +171,7 @@ describe('POST /api/projects/:id/finalize/anthropic — request-lifecycle abort'
     // Wait until the daemon enters the Anthropic call so we know the
     // route's listeners are attached and the request body has been
     // fully read.
-    await waitFor(() => capturedSignal !== null, 5_000);
+    await waitFor(() => capture.signal !== null, 5_000);
 
     // Forcibly close the client connection. The server's `res.on('close')`
     // fires, the route aborts its server-side controller, and the
@@ -181,7 +185,7 @@ describe('POST /api/projects/:id/finalize/anthropic — request-lifecycle abort'
       ),
     ]);
 
-    expect(capturedSignal?.aborted).toBe(true);
+    expect(capture.signal?.aborted).toBe(true);
   });
 });
 
