@@ -431,7 +431,6 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   const oldName = sanitizePath(fromName);
   const newName = sanitizePath(toName);
   const source = await resolveSafeReal(dir, oldName);
-  const target = await resolveSafeReal(dir, newName);
   const sourceStat = await stat(source);
   if (!sourceStat.isFile()) {
     const err = new Error('source is not a regular file');
@@ -439,7 +438,7 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
     throw err;
   }
 
-  if (source === target) {
+  if (oldName === newName) {
     const manifest = await readManifestForPath(dir, oldName);
     return {
       file: {
@@ -457,22 +456,27 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
     };
   }
 
-  try {
-    await stat(target);
-    const err = new Error('target file already exists');
-    err.code = 'EEXIST';
-    throw err;
-  } catch (err) {
-    if (!err || err.code !== 'ENOENT') throw err;
+  const target = await resolveSafeReal(dir, newName);
+  const targetPath = source === target ? resolveSafe(dir, newName) : target;
+
+  if (source !== target) {
+    try {
+      await stat(target);
+      const err = new Error('target file already exists');
+      err.code = 'EEXIST';
+      throw err;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
   }
 
   const manifestRename = await prepareArtifactManifestRename(dir, oldName, newName);
 
-  await mkdir(path.dirname(target), { recursive: true });
-  await rename(source, target);
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await renameFilePath(source, targetPath);
   await commitArtifactManifestRename(manifestRename, newName);
 
-  const st = await stat(target);
+  const st = await stat(targetPath);
   const manifest = await readManifestForPath(dir, newName);
   return {
     file: {
@@ -488,6 +492,39 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
     oldName,
     newName,
   };
+}
+
+async function renameFilePath(source, target) {
+  if (source === target) return;
+  const temp = await uniqueRenameTempPath(source);
+  await rename(source, temp);
+  try {
+    await rename(temp, target);
+  } catch (err) {
+    try {
+      await rename(temp, source);
+    } catch {
+      // Preserve the original rename error even if restoring the source path fails.
+    }
+    throw err;
+  }
+}
+
+async function uniqueRenameTempPath(source) {
+  const dir = path.dirname(source);
+  const base = path.basename(source);
+  for (let i = 0; i < 10; i++) {
+    const temp = path.join(dir, `.od-rename-${process.pid}-${Date.now()}-${i}-${base}.tmp`);
+    try {
+      await stat(temp);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return temp;
+      throw err;
+    }
+  }
+  const err = new Error('could not allocate temporary rename path');
+  err.code = 'EEXIST';
+  throw err;
 }
 
 async function prepareArtifactManifestRename(dir, oldName, newName) {
@@ -508,16 +545,21 @@ async function prepareArtifactManifestRename(dir, oldName, newName) {
 
   const newManifestName = artifactManifestNameFor(newName);
   const newManifestPath = await resolveSafeReal(dir, newManifestName);
-  try {
-    await stat(newManifestPath);
-    const err = new Error('target artifact manifest already exists');
-    err.code = 'EEXIST';
-    throw err;
-  } catch (err) {
-    if (!err || err.code !== 'ENOENT') throw err;
+  const targetManifestPath = oldManifestPath === newManifestPath
+    ? resolveSafe(dir, newManifestName)
+    : newManifestPath;
+  if (oldManifestPath !== newManifestPath) {
+    try {
+      await stat(newManifestPath);
+      const err = new Error('target artifact manifest already exists');
+      err.code = 'EEXIST';
+      throw err;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
   }
 
-  return { oldManifestPath, newManifestPath, raw };
+  return { oldManifestPath, newManifestPath: targetManifestPath, raw };
 }
 
 async function commitArtifactManifestRename(manifestRename, newName) {
@@ -528,12 +570,12 @@ async function commitArtifactManifestRename(manifestRename, newName) {
   if (parsed) {
     const validated = validateArtifactManifestInput(parsed, newName);
     if (validated.ok && validated.value) {
-      await writeFile(newManifestPath, JSON.stringify(validated.value, null, 2));
-      await unlink(oldManifestPath);
+      await writeFile(oldManifestPath, JSON.stringify(validated.value, null, 2));
+      await renameFilePath(oldManifestPath, newManifestPath);
       return;
     }
   }
-  await rename(oldManifestPath, newManifestPath);
+  await renameFilePath(oldManifestPath, newManifestPath);
 }
 
 export async function removeProjectDir(projectsRoot, projectId) {

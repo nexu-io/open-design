@@ -74,6 +74,23 @@ describe('project file rename route', () => {
     expect(await renamed.text()).toBe('body');
   });
 
+  it('renames case-only filename changes instead of treating them as no-ops', async () => {
+    const projectId = await createProject();
+    await writeText(projectId, 'paste-1.txt', 'body');
+
+    const resp = await renameFile(projectId, 'paste-1.txt', 'Paste-1.txt');
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { oldName: string; newName: string; file: { name: string } };
+    expect(body.oldName).toBe('paste-1.txt');
+    expect(body.newName).toBe('Paste-1.txt');
+    expect(body.file.name).toBe('Paste-1.txt');
+
+    const filesResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    const filesBody = (await filesResp.json()) as { files: Array<{ name: string }> };
+    expect(filesBody.files.some((file) => file.name === 'Paste-1.txt')).toBe(true);
+    expect(filesBody.files.some((file) => file.name === 'paste-1.txt')).toBe(false);
+  });
+
   it('rejects target file conflicts without overwriting', async () => {
     const projectId = await createProject();
     await writeText(projectId, 'a.txt', 'first');
