@@ -20,7 +20,7 @@ Authoritative rules live in `AGENTS.md` and the directory-level `AGENTS.md` file
 
 ## What `pnpm guard` already checks
 
-Reviewers do not need to manually check rules that `pnpm guard` enforces. Currently guard catches:
+Reviewers do not need to manually check rules that `pnpm guard` enforces. The authoritative source for what guard catches is its implementation in `scripts/guard.ts`; the list below reflects that script at the time of writing and may drift — when in doubt, read the script.
 
 - TypeScript-first rule for project-owned entrypoints, modules, scripts, tests, reporters, and configs.
 - New `.js`, `.mjs`, or `.cjs` files outside the documented allowlist (generated output, vendored deps, explicit compatibility build artifacts).
@@ -42,6 +42,10 @@ A PR passes the relevance test when **all** of the following hold:
 - New scripts use the documented `pnpm tools-dev` or `pnpm tools-pack` control plane and belong to an existing owned package/tool. Ad hoc launchers that hard-code local paths or assume user-specific tools are out of scope.
 
 Domain-specific UI or content (a customer vertical, marketing experiment, unrelated rendering demo, arbitrary product page) is out of scope unless it is explicitly a first-party Open Design fixture and the PR explains which Open Design capability it validates.
+
+### Repository governance documentation
+
+Governance documents — `AGENTS.md` files, contribution guides, review guidelines, validation strategy, repository workflow rules, and similar meta-documentation — are in scope when they clarify how this repository already operates and do not conflict with the authoritative `AGENTS.md` chain. They satisfy the relevance test by naming the existing repository surface they document (a boundary, command, lifecycle rule, validation expectation, or workflow) instead of pointing at a feature/command/protocol/runtime path. A governance PR that introduces new repository rules — rather than describing existing ones — must update the authoritative `AGENTS.md` first and is reviewed under that lane.
 
 ### First-party fixture rule
 
@@ -222,12 +226,15 @@ For new or changed brand-agnostic craft references under `craft/`.
 
 ## 5. Review priorities and checklist
 
+Before leaving comments, build a quick map of the touched ownership area: changed files, public seams, callers/consumers, the relevant `AGENTS.md` files, and the validation loop that proves the change. For bug fixes, identify the reproduction or regression signal before judging the fix. This zoom-out step is especially important for multi-area PRs, contract/protocol changes, and sidecar/runtime changes — skip it and line comments tend to miss the boundary issue that actually matters.
+
 Review in this order. Each priority lists the concrete checks for it.
 
 ### 5.1 Correctness and user impact
 
 - Confirm the change solves the stated problem without introducing regressions.
 - Read the issue, task, or PR description first; identify intended behavior before inspecting the diff.
+- For bug fixes, confirm the author established a feedback loop before the fix: did they reproduce the failure, minimize it, add a regression test at the right seam (or explain why no test seam fits), and re-run the original failing scenario? A bugfix without a reproduction or regression signal is a candidate for blocking review.
 - For UI changes, check accessibility, loading/error/empty states, keyboard behavior, and responsive layout.
 
 ### 5.2 Repository boundaries
@@ -280,6 +287,16 @@ Approve only when **all** of the following hold:
 - Any skipped validation is explicitly justified in the PR.
 - New risk is proportionate to the change and covered by tests, types, guards, or clearly documented manual validation.
 - Follow-up work is unnecessary for correctness or explicitly tracked outside the review.
+
+### Documentation-only exception
+
+For pure documentation changes (Markdown only, no executable code, no package metadata, no generated entries, no resource files consumed by runtime), validation may be limited to:
+
+- Internal link checks and reference integrity.
+- Consistency with `AGENTS.md` and the relevant directory-level `AGENTS.md` files.
+- Reviewer inspection that the document does not conflict with directory-level rules.
+
+Run `pnpm guard` and `pnpm typecheck` when the documentation change touches executable rules, generated entries, package metadata, command surfaces, resource loading, or validation behavior — anything where doc text is also a contract enforced by tooling.
 
 ## Appendix: examples of failed product-relevance reviews
 
