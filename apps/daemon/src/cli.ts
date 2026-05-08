@@ -5,6 +5,7 @@ import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
+import { openBrowser } from './browser-open.js';
 
 const argv = process.argv.slice(2);
 
@@ -137,12 +138,7 @@ for (let i = 0; i < argv.length; i++) {
 startServer({ port, host }).then(url => {
   console.log(`[od] listening on ${url}`);
   if (open) {
-    const opener = process.platform === 'darwin' ? 'open'
-      : process.platform === 'win32' ? 'start'
-      : 'xdg-open';
-    import('node:child_process').then(({ spawn }) => {
-      spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
-    });
+    openBrowser(url);
   }
 });
 }
