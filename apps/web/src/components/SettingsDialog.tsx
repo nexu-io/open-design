@@ -843,6 +843,25 @@ export function SettingsDialog({
     ? CUSTOM_MODEL_SENTINEL
     : cfg.model;
 
+  // Header title/subtitle follow the active sidebar section so the dialog
+  // header always reflects what the user is looking at, instead of being
+  // pinned to "Execution & model" copy that only described one of the
+  // 11 sections this dialog now hosts.
+  const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
+    execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
+    media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
+    composio: { title: t('settings.connectorsTitle'), subtitle: t('settings.connectorsHint') },
+    integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
+    mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
+    language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
+    appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
+    notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
+    pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
+    library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
+    about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
+  };
+  const activeHeader = sectionHeader[activeSection];
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -881,8 +900,8 @@ export function SettingsDialog({
           ) : (
             <>
               <span className="kicker">{t('settings.kicker')}</span>
-              <h2>{t('settings.title')}</h2>
-              <p className="subtitle">{t('settings.subtitle')}</p>
+              <h2>{activeHeader.title}</h2>
+              <p className="subtitle">{activeHeader.subtitle}</p>
             </>
           )}
         </header>
@@ -918,8 +937,8 @@ export function SettingsDialog({
             >
               <Icon name="sliders" size={18} />
               <span>
-                <strong>Connectors</strong>
-                <small>External system connections</small>
+                <strong>{t('settings.connectorsTitle')}</strong>
+                <small>{t('settings.connectorsHint')}</small>
               </span>
             </button>
             <button
@@ -929,8 +948,8 @@ export function SettingsDialog({
             >
               <Icon name="link" size={18} />
               <span>
-                <strong>MCP server</strong>
-                <small>Connect your coding agent</small>
+                <strong>{t('settings.mcpServerTitle')}</strong>
+                <small>{t('settings.mcpServerHint')}</small>
               </span>
             </button>
             <button
@@ -940,8 +959,8 @@ export function SettingsDialog({
             >
               <Icon name="sparkles" size={18} />
               <span>
-                <strong>External MCP</strong>
-                <small>Add MCP tools (Higgsfield, GitHub…)</small>
+                <strong>{t('settings.externalMcpTitle')}</strong>
+                <small>{t('settings.externalMcpHint')}</small>
               </span>
             </button>
             <button

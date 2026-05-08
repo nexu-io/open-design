@@ -136,6 +136,12 @@ export const uk: Dict = {
   'settings.mediaProviders': 'Медіа-провайдери',
   'settings.mediaProvidersHint':
     'API-ключі для генерації зображень, відео та аудіо. Зберігаються локально та синхронізуються з локальним фоновим процесом.',
+  'settings.connectorsTitle': 'Конектори',
+  'settings.connectorsHint': 'Керуйте конекторами Composio та постачальниками інструментів на цьому пристрої.',
+  'settings.mcpServerTitle': 'MCP-сервер',
+  'settings.mcpServerHint': 'Відкрийте Open Design як MCP-сервер для вашого кодинг-агента.',
+  'settings.externalMcpTitle': 'Зовнішній MCP',
+  'settings.externalMcpHint': 'Додайте MCP-інструменти із зовнішніх сервісів (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-ключ',
   'settings.mediaProviderBaseUrl': 'Базовий URL',
   'settings.mediaProviderConfigured': 'Налаштовано',

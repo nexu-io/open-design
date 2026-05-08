@@ -137,6 +137,12 @@ export const de: Dict = {
   'settings.mediaProviders': 'Medienanbieter',
   'settings.mediaProvidersHint':
     'API-Keys für Bild-, Video- und Audiogenerierung. Lokal gespeichert und mit dem lokalen Daemon synchronisiert.',
+  'settings.connectorsTitle': 'Konnektoren',
+  'settings.connectorsHint': 'Composio-Konnektoren und Tool-Anbieter für dieses Gerät verwalten.',
+  'settings.mcpServerTitle': 'MCP-Server',
+  'settings.mcpServerHint': 'Stelle Open Design als MCP-Server für deinen Coding-Agent bereit.',
+  'settings.externalMcpTitle': 'Externes MCP',
+  'settings.externalMcpHint': 'MCP-Tools aus externen Diensten hinzufügen (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-Key',
   'settings.mediaProviderBaseUrl': 'Base URL',
   'settings.mediaProviderConfigured': 'Konfiguriert',

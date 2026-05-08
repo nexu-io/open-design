@@ -137,6 +137,12 @@ export const hu: Dict = {
   'settings.mediaProviders': 'Média-szolgáltatók',
   'settings.mediaProvidersHint':
     'API-kulcsok kép-, videó- és hanggeneráláshoz. Helyben tárolva, és a helyi daemonnal szinkronizálva.',
+  'settings.connectorsTitle': 'Csatlakozók',
+  'settings.connectorsHint': 'Composio-csatlakozók és eszközszolgáltatók kezelése ezen az eszközön.',
+  'settings.mcpServerTitle': 'MCP-szerver',
+  'settings.mcpServerHint': 'Tedd elérhetővé az Open Designt MCP-szerverként a kódügynököd számára.',
+  'settings.externalMcpTitle': 'Külső MCP',
+  'settings.externalMcpHint': 'Adj hozzá MCP-eszközöket külső szolgáltatásokból (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-kulcs',
   'settings.mediaProviderBaseUrl': 'Bázis URL',
   'settings.mediaProviderConfigured': 'Beállítva',
