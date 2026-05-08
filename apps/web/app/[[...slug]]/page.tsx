@@ -10,10 +10,8 @@ import { ClientApp } from './client-app';
 // apps/daemon/src/server.ts) serves it for any unknown non-API path so deep
 // links still hydrate to the right view.
 export function generateStaticParams() {
-  return [{ slug: undefined }];
+  return [{ slug: [] }];
 }
-
-export const dynamicParams = true;
 
 export default function Page() {
   return <ClientApp />;
