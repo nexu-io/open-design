@@ -6764,6 +6764,21 @@ button.connector-action.is-loading {
   max-width: 320px;
 }
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
+.ws-tab.draggable { cursor: grab; }
+.ws-tab.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+.ws-tab.drag-over-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.ws-tab.drag-over-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
 .ws-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
