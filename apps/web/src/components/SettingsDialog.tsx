@@ -16,6 +16,7 @@ import {
   isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
+  mergeDaemonMediaProviders,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -3343,7 +3344,7 @@ function MediaProvidersSection({
         setReloadNotice('Could not reload media provider settings from the local daemon.');
         return;
       }
-      setCfg((curr) => ({ ...curr, mediaProviders: next }));
+      setCfg((curr) => mergeDaemonMediaProviders(curr, next));
       setReloadNotice('Reloaded media provider settings from the local daemon.');
     } finally {
       setReloadRunning(false);

@@ -71,6 +71,54 @@ describe('SettingsDialog media providers', () => {
     );
   });
 
+  it('preserves local-only providers when daemon reload returns a partial provider set', async () => {
+    const reloadMock = vi.fn(async () => ({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '9876',
+        baseUrl: 'https://daemon.example/v1',
+      },
+    }));
+    renderDialog(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: 'sk-local-openai',
+            baseUrl: 'https://local-openai.example/v1',
+          },
+          fal: {
+            apiKey: 'sk-local-fal',
+            baseUrl: 'https://queue.fal.run',
+            model: 'fal-ai/imagen4/preview',
+          },
+        },
+      },
+      {
+        mediaProvidersNotice:
+          'Could not load media provider settings from the local daemon. Using browser-saved settings for now.',
+        onReloadMediaProviders: reloadMock,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reload from daemon' }));
+
+    await waitFor(() => {
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Saved · ••••9876')).toBeTruthy();
+      expect(screen.getByText('Reloaded media provider settings from the local daemon.')).toBeTruthy();
+    });
+
+    expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe(
+      'https://daemon.example/v1',
+    );
+    expect((screen.getByLabelText('Fal.ai Base URL') as HTMLInputElement).value).toBe(
+      'https://queue.fal.run',
+    );
+    expect((screen.getByLabelText('Fal.ai API key') as HTMLInputElement).value).toBe('sk-local-fal');
+  });
+
   it('preserves saved media keys when clearing only a non-secret field', async () => {
     const onPersist = vi.fn();
     renderDialog(
