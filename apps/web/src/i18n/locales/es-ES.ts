@@ -817,6 +817,7 @@ export const esES: Dict = {
   'sketch.undo': 'Deshacer',
   'sketch.clear': 'Limpiar',
   'sketch.close': 'Cerrar',
+  'sketch.closeConfirm': '¿Cerrar el boceto y descartar los cambios sin guardar?',
   'sketch.textPrompt': 'Texto:',
   'sketch.textModalTitle': 'Añadir texto',
 

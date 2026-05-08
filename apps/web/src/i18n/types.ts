@@ -1245,6 +1245,7 @@ export interface Dict {
   'sketch.undo': string;
   'sketch.clear': string;
   'sketch.close': string;
+  'sketch.closeConfirm': string;
   'sketch.textPrompt': string;
   'sketch.textModalTitle': string;
 }

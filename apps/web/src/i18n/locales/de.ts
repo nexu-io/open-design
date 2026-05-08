@@ -816,6 +816,7 @@ export const de: Dict = {
   'sketch.undo': 'Rückgängig',
   'sketch.clear': 'Leeren',
   'sketch.close': 'Schließen',
+  'sketch.closeConfirm': 'Skizze schließen und ungespeicherte Änderungen verwerfen?',
   'sketch.textPrompt': 'Text:',
   'sketch.textModalTitle': 'Text hinzufügen',
 

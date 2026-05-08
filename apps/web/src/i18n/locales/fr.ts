@@ -928,6 +928,7 @@ export const fr: Dict = {
   'sketch.undo': 'Annuler',
   'sketch.clear': 'Effacer',
   'sketch.close': 'Fermer',
+  'sketch.closeConfirm': 'Fermer le croquis et abandonner vos modifications non enregistrées ?',
   'sketch.textPrompt': 'Texte :',
   'sketch.textModalTitle': 'Ajouter du texte',
 

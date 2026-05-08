@@ -960,6 +960,7 @@ export const fa: Dict = {
   'sketch.undo': 'واگرد',
   'sketch.clear': 'پاک کردن',
   'sketch.close': 'بستن',
+  'sketch.closeConfirm': 'طرح را ببندم و تغییرات ذخیره‌نشده را نادیده بگیرم؟',
   'sketch.textPrompt': 'متن:',
   'sketch.textModalTitle': 'افزودن متن',
 

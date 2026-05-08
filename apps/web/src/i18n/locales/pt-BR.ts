@@ -958,6 +958,7 @@ export const ptBR: Dict = {
   'sketch.undo': 'Desfazer',
   'sketch.clear': 'Limpar',
   'sketch.close': 'Fechar',
+  'sketch.closeConfirm': 'Fechar o esboço e descartar as alterações não salvas?',
   'sketch.textPrompt': 'Texto:',
   'sketch.textModalTitle': 'Adicionar texto',
 

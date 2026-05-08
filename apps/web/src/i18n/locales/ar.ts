@@ -928,6 +928,7 @@ export const ar: Dict = {
   'sketch.undo': 'تراجع',
   'sketch.clear': 'مسح',
   'sketch.close': 'إغلاق',
+  'sketch.closeConfirm': 'إغلاق الرسم وتجاهل التغييرات غير المحفوظة؟',
   'sketch.textPrompt': 'النص:',
   'sketch.textModalTitle': 'إضافة نص',
 

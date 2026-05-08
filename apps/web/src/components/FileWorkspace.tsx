@@ -168,7 +168,10 @@ export function FileWorkspace({
   }
 
   function closeTab(name: string) {
-    const isPending = sketches[name] && !sketches[name]!.persisted;
+    const sketchEntry = sketches[name];
+    const isPending = sketchEntry && !sketchEntry.persisted;
+    const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
+    if (hasUnsavedStrokes && !confirm(t('sketch.closeConfirm'))) return;
     if (isPending) {
       setSketches((curr) => {
         const next = { ...curr };

@@ -943,6 +943,7 @@ export const zhTW: Dict = {
   'sketch.undo': '復原',
   'sketch.clear': '清除',
   'sketch.close': '關閉',
+  'sketch.closeConfirm': '關閉草圖並放棄未儲存的變更嗎？',
   'sketch.textPrompt': '請輸入文字：',
   'sketch.textModalTitle': '新增文字',
 

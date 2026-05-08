@@ -1062,6 +1062,7 @@ export const id: Dict = {
   'sketch.undo': 'Undo',
   'sketch.clear': 'Bersihkan',
   'sketch.close': 'Tutup',
+  'sketch.closeConfirm': 'Tutup sketsa dan buang perubahan yang belum disimpan?',
   'sketch.textPrompt': 'Teks',
   'sketch.textModalTitle': 'Tambah teks',
 

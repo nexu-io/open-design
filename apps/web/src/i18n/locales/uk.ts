@@ -959,6 +959,7 @@ export const uk: Dict = {
   'sketch.undo': 'Скасувати',
   'sketch.clear': 'Очистити',
   'sketch.close': 'Закрити',
+  'sketch.closeConfirm': 'Закрити ескіз і скасувати незбережені зміни?',
   'sketch.textPrompt': 'Текст:',
   'sketch.textModalTitle': 'Додати текст',
 

@@ -928,6 +928,7 @@ export const hu: Dict = {
   'sketch.undo': 'Visszavonás',
   'sketch.clear': 'Törlés',
   'sketch.close': 'Bezárás',
+  'sketch.closeConfirm': 'Bezárod a vázlatot, és elveted a nem mentett változtatásokat?',
   'sketch.textPrompt': 'Szöveg:',
   'sketch.textModalTitle': 'Szöveg hozzáadása',
 

@@ -928,6 +928,7 @@ export const ko: Dict = {
   'sketch.undo': '실행 취소',
   'sketch.clear': '모두 지우기',
   'sketch.close': '닫기',
+  'sketch.closeConfirm': '스케치를 닫고 저장되지 않은 변경사항을 버릴까요?',
   'sketch.textPrompt': '텍스트:',
   'sketch.textModalTitle': '텍스트 추가',
 

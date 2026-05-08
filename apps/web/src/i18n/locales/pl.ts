@@ -928,6 +928,7 @@ export const pl: Dict = {
   'sketch.undo': 'Cofnij',
   'sketch.clear': 'Wyczyść',
   'sketch.close': 'Zamknij',
+  'sketch.closeConfirm': 'Zamknąć szkic i odrzucić niezapisane zmiany?',
   'sketch.textPrompt': 'Tekst:',
   'sketch.textModalTitle': 'Dodaj tekst',
 

@@ -974,6 +974,7 @@ export const en: Dict = {
   'sketch.undo': 'Undo',
   'sketch.clear': 'Clear',
   'sketch.close': 'Close',
+  'sketch.closeConfirm': 'Close the sketch and discard your unsaved changes?',
   'sketch.textPrompt': 'Text:',
   'sketch.textModalTitle': 'Add text',
 

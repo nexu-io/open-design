@@ -919,6 +919,7 @@ export const tr: Dict = {
   'sketch.undo': 'Geri al',
   'sketch.clear': 'Temizle',
   'sketch.close': 'Kapat',
+  'sketch.closeConfirm': 'Eskizi kapatıp kaydedilmemiş değişiklikleri silelim mi?',
   'sketch.textPrompt': 'Metin:',
   'sketch.textModalTitle': 'Metin ekle',
 

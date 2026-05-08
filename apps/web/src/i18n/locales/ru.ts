@@ -958,6 +958,7 @@ export const ru: Dict = {
   'sketch.undo': 'Отменить',
   'sketch.clear': 'Очистить',
   'sketch.close': 'Закрыть',
+  'sketch.closeConfirm': 'Закрыть набросок и отменить несохранённые изменения?',
   'sketch.textPrompt': 'Текст:',
   'sketch.textModalTitle': 'Добавить текст',
 

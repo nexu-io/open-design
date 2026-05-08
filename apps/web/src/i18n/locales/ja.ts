@@ -815,6 +815,7 @@ export const ja: Dict = {
   'sketch.undo': '元に戻す',
   'sketch.clear': 'クリア',
   'sketch.close': '閉じる',
+  'sketch.closeConfirm': 'スケッチを閉じて未保存の変更を破棄しますか？',
   'sketch.textPrompt': 'テキスト:',
   'sketch.textModalTitle': 'テキストを追加',
 
