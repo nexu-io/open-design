@@ -30,6 +30,129 @@ corepack enable
 corepack pnpm --version   # should print 10.33.2
 ```
 
+## Docker Setup
+
+Run Open Design in a fully containerised environment without installing Node.js or pnpm locally.
+
+### Requirements
+
+* Docker Desktop
+* Docker Compose v2
+
+Verify Docker is installed correctly:
+
+```bash
+docker compose version
+```
+
+---
+
+## Start Open Design
+
+From the repository root:
+
+```bash
+cd deploy
+docker compose up -d
+```
+
+Open the app in your browser:
+
+```text
+http://localhost:7456
+```
+
+The first startup may take a few seconds while Docker pulls the latest image.
+
+---
+
+## Common Docker Commands
+
+### View logs
+
+```bash
+docker compose logs -f
+```
+
+### Restart containers
+
+```bash
+docker compose restart
+```
+
+### Stop containers
+
+```bash
+docker compose down
+```
+
+### Pull the latest image
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Remove all local app data
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Environment Configuration
+
+Create a `deploy/.env` file to override the default configuration:
+
+```env
+# Port exposed on the host
+OPEN_DESIGN_PORT=7456
+
+# Container memory limit
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# Allowed CORS origins
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker image tag
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+```
+
+---
+
+## Persistent Storage
+
+Open Design stores projects and SQLite data inside a Docker volume:
+
+```text
+open_design_data
+```
+
+The volume is mounted to:
+
+```text
+/app/.od
+```
+
+Data persists across container restarts and image updates.
+
+Inspect the volume:
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## Notes
+
+* Docker mode is ideal for contributors who do not want a local Node.js or pnpm setup.
+* The container exposes the production daemon build directly on port `7456`.
+* For development workflows and advanced local setup, see the rest of this Quickstart guide.
+
+---
+
 ## One-shot (dev mode)
 
 ```bash
