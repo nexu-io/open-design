@@ -27,6 +27,13 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime } from "./runtime.js";
 
+// Re-export pure URL-policy helpers so the packaged workspace's
+// vitest can pin their behaviour without spinning up a full Electron
+// runtime. They are part of the security boundary for child-window
+// navigation (see `setWindowOpenHandler` in `runtime.ts`), so
+// pinning them is worth the small extra surface.
+export { isAllowedChildWindowUrl, isHttpUrl } from "./runtime.js";
+
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 
 export type DesktopMainOptions = {

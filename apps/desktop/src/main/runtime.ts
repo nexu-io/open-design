@@ -182,7 +182,11 @@ async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
   await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
 }
 
-function isHttpUrl(url: string): boolean {
+// Exported for unit tests in `apps/packaged/tests/desktop-url-allowlist.test.ts`
+// — these are pure URL-policy helpers and `apps/desktop` itself has no
+// vitest setup, so the packaged workspace hosts the coverage. Keep them
+// pure and side-effect-free.
+export function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.protocol === "http:" || parsed.protocol === "https:";
@@ -191,10 +195,24 @@ function isHttpUrl(url: string): boolean {
   }
 }
 
-function isAllowedChildWindowUrl(url: string): boolean {
+export function isAllowedChildWindowUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "blob:";
+    // `blob:` covers in-renderer generated downloads / object URLs.
+    // `od:` is the packaged Electron entry's privileged scheme
+    // registered by `apps/packaged/src/protocol.ts` and proxied to the
+    // local web sidecar. Without this branch, any in-app
+    // `<a target="_blank" href="/api/...">` resolves to `od://app/...`
+    // in packaged builds, falls through `setWindowOpenHandler` to
+    // `{ action: "deny" }`, and the click is silently dropped — that
+    // was the Orbit "Open artifact" no-op reported in #911. Allowing
+    // `od:` here lets Electron open the link in a child BrowserWindow
+    // that inherits the same protocol registration + preload, so the
+    // live artifact preview renders normally. Dev mode is unaffected:
+    // its links resolve to `http://127.0.0.1:.../...`, which is gated
+    // by the separate `isHttpUrl` branch and continues to open in the
+    // user's external browser via `shell.openExternal`.
+    return parsed.protocol === "blob:" || parsed.protocol === "od:";
   } catch {
     return false;
   }
