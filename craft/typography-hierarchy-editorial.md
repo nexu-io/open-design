@@ -106,8 +106,8 @@ Line height: `1.6`–`1.7` for serif body. Slightly more generous than the
 universal rule because editorial bodies are set at a reading size, not a UI
 size.
 
-Do not justify. Ragged right is the correct setting for editorial body copy
-on screen.
+Do not justify. Use `text-align: start` with a ragged inline-end edge — the
+natural setting for editorial body copy on screen.
 
 ### 7. Asymmetrical rhythm
 
@@ -176,6 +176,7 @@ between compression and expansion:
       is ≤ 1.2×. (long-form only — guidance)
 - [ ] Bold used ≤ 2 times per 400 words in body copy. (long-form only)
 - [ ] `var(--accent)` used ≤ 2 times on the full editorial surface (see `color.md` §accent discipline).
-- [ ] Section separators (space, rules, dingbats) chosen to match publication identity,
-      not as hierarchy fallback. (guidance)
+- [ ] Section separators (space, rules, dingbats) are used only when they
+  reinforce publication identity or clearly mark unrelated-content boundaries;
+  they must not be used as a hierarchy fallback. (guidance)
 - [ ] Pull quote has no background, border, or container treatment.
