@@ -139,19 +139,36 @@ general `/api/*` same-origin gate — connector-credential and
 live-artifact preview/refresh routes stay strictly loopback-only by
 design.
 
-## (4) `OD_DAEMON_URL` and the static-export build
+## (4) Same-origin proxying contract
 
-The web package is built with `OD_DAEMON_URL = ""` so the static export
-does not block trying to reach a localhost daemon at build time. At
-runtime, the bundled SPA needs to know where the daemon is — both module
-implementations export `OD_DAEMON_URL=http://localhost:<cfg.port>` into
-the static-server unit's environment so the SPA can resolve it (via the
-config endpoint or the runtime injection point in `apps/web/src`).
+The web package is built with `OD_DAEMON_URL = ""` so the bundled JS
+issues **relative** requests — `/api/*`, `/artifacts/*`, `/frames/*` —
+instead of baking a daemon URL into the export. There is no runtime
+config endpoint; the SPA does not read `OD_DAEMON_URL` from the
+serving environment.
 
-If you serve the static bundle yourself, ensure your serving environment
-also makes the daemon URL available to the SPA — either via a runtime
-config endpoint, an injected `<meta>` tag, or a build-time rebuild with
-`OD_DAEMON_URL` set to your real value.
+The serving contract is therefore: **the static export must be served
+same-origin with a reverse proxy to the daemon**. The bundled caddy
+service does exactly this — `webFrontend` listens on
+`webFrontend.port` and reverse-proxies the three path prefixes above
+to `127.0.0.1:<cfg.port>`, with `flush_interval -1` and no `encode` on
+`/api/*` so SSE streams flush immediately (gzip would buffer chunked
+responses for ~80s and surface as `ERR_INCOMPLETE_CHUNKED_ENCODING`).
+
+If you serve the static bundle yourself, replicate that shape:
+
+- Document root → `${pkgs.open-design.web}` (or
+  `packages.<system>.web`).
+- Reverse-proxy `/api/*`, `/artifacts/*`, `/frames/*` to the daemon's
+  bind address; `/api/*` must stream chunks immediately and skip
+  response compression.
+- SPA fallback for unmatched paths → `index.html`.
+
+If your reverse proxy lives on a non-loopback origin (e.g.
+`http://laptop.local:5174`), set `OD_ALLOWED_ORIGINS` on the **daemon**
+to that origin so its same-origin gate accepts the proxied writes —
+see section (3). The static-server's environment does not need any
+Open Design env vars.
 
 ## (5) Secrets — DO NOT put them in your Nix config
 

@@ -127,10 +127,6 @@
       OD_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
     }
     // cfg.extraEnv;
-
-  webEnvironment = {
-    OD_DAEMON_URL = "http://localhost:${toString cfg.port}";
-  };
 in {
   options.services.open-design =
     commonOpts
@@ -254,8 +250,6 @@ in {
         wantedBy = ["multi-user.target"];
         after = ["network-online.target"];
         wants = ["network-online.target"];
-
-        environment = webEnvironment;
 
         serviceConfig =
           {

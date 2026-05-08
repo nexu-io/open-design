@@ -16,12 +16,12 @@
 # index.html plus _next/ and asset subdirectories). Drop $out into any
 # static file server.
 #
-# OD_DAEMON_URL is set to "" at build time so the static export does not
-# resolve a localhost daemon during static generation. The runtime
-# daemon URL is supplied by the serving environment (see
-# nix/home-manager.nix and nix/nixos.nix, which export
-# OD_DAEMON_URL=http://localhost:<cfg.port> into the static-server unit
-# so the SPA can read it via the runtime config endpoint).
+# OD_DAEMON_URL is set to "" at build time so the bundled JS issues
+# relative requests (`/api/*`, `/artifacts/*`, `/frames/*`) instead of
+# baking a build-time daemon URL into the export. The serving
+# environment is therefore expected to be same-origin with the daemon —
+# the bundled caddy in the modules reverse-proxies those paths to
+# `127.0.0.1:<cfg.port>`, and a custom nginx/caddy must do the same.
 let
   pname = "open-design-web";
   version = (lib.importJSON ../package.json).version;

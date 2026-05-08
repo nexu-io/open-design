@@ -152,10 +152,6 @@
     }
     // cfg.extraEnv;
 
-  webEnv = {
-    OD_DAEMON_URL = "http://localhost:${toString cfg.port}";
-  };
-
   envToList = e: lib.mapAttrsToList (k: v: "${k}=${v}") e;
 in {
   options.services.open-design = commonOpts;
@@ -233,7 +229,6 @@ in {
         Service = {
           Type = "simple";
           ExecStart = "${lib.getExe caddy} run --config ${caddyfile} --adapter caddyfile";
-          Environment = envToList webEnv;
           Restart = "on-failure";
           RestartSec = 3;
         };
@@ -287,7 +282,6 @@ in {
           ];
           RunAtLoad = true;
           KeepAlive = true;
-          EnvironmentVariables = webEnv;
         };
       };
     })
