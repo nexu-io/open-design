@@ -1574,7 +1574,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const ports = allowedBrowserPorts(resolvedPort);
     if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
-      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
+      if (!isPortlessLoopbackOrigin(String(origin))) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
       }
     }
