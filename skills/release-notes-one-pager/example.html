@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Release Notes v2.3.1 · Northstar</title>
+  <title>Release Notes v2.3.1</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -58,22 +58,22 @@
 <body>
   <header class="topnav" data-od-id="topnav">
     <div class="container topnav-inner">
-      <span class="logo">Northstar</span>
+      <span class="logo">Release notes</span>
       <nav>
         <a href="#added">Added</a>
         <a href="#fixed">Fixed</a>
         <a href="#upgrade-note">Upgrade note</a>
       </nav>
-      <a class="btn btn-primary" href="#content">Read full changelog</a>
+      <a class="btn btn-primary" href="#content">View details</a>
     </div>
   </header>
 
   <main id="content">
     <section class="section" data-od-id="hero">
       <div class="container hero">
-        <p class="eyebrow">Release notes · v2.3.1 · May 2026</p>
-        <h1>Faster filters, safer exports, cleaner upgrades.</h1>
-        <p class="lead">This release improves query speed, tightens export permissions, and clarifies migration behaviour for hosted workspaces.</p>
+        <p class="eyebrow">Release notes · v2.3.1</p>
+        <h1>v2.3.1</h1>
+        <p class="lead">No summary provided.</p>
       </div>
     </section>
 
@@ -81,31 +81,14 @@
       <div class="container">
         <div class="row-between" style="margin-bottom: 24px;">
           <h2>Added</h2>
-          <span class="meta">3 entries</span>
+          <span class="meta">—</span>
         </div>
         <article class="log-row">
-          <span class="meta num">2026-05-08</span>
+          <span class="meta num">—</span>
           <div>
-            <h3>Saved filter presets for dashboard views</h3>
-            <p>Users can now store and reuse named filters across sessions in workspace dashboards.</p>
+            <h3>No additions provided</h3>
           </div>
-          <span class="pull meta">Product</span>
-        </article>
-        <article class="log-row">
-          <span class="meta num">2026-05-08</span>
-          <div>
-            <h3>Export role audit metadata</h3>
-            <p>CSV exports now include actor role and policy scope fields for downstream compliance checks.</p>
-          </div>
-          <span class="pull meta">Security</span>
-        </article>
-        <article class="log-row">
-          <span class="meta num">2026-05-08</span>
-          <div>
-            <h3>Inline release banner in workspace home</h3>
-            <p>The latest release summary appears once per account and links directly to this notes page.</p>
-          </div>
-          <span class="pull meta">UX</span>
+          <span class="pull meta">—</span>
         </article>
       </div>
     </section>
@@ -114,53 +97,41 @@
       <div class="container">
         <div class="row-between" style="margin-bottom: 24px;">
           <h2>Fixed</h2>
-          <span class="meta">2 entries</span>
+          <span class="meta">—</span>
         </div>
         <article class="log-row">
-          <span class="meta num">2026-05-08</span>
+          <span class="meta num">—</span>
           <div>
-            <h3>Slow query response on wide date ranges</h3>
-            <p>Index usage was corrected for seven-day-plus filters, reducing query latency in production reports.</p>
+            <h3>No fixes provided</h3>
           </div>
-          <span class="pull meta">Backend</span>
-        </article>
-        <article class="log-row">
-          <span class="meta num">2026-05-08</span>
-          <div>
-            <h3>Download retry loop in low bandwidth sessions</h3>
-            <p>Retry behaviour now backs off correctly instead of spawning duplicate requests in quick succession.</p>
-          </div>
-          <span class="pull meta">Client</span>
+          <span class="pull meta">—</span>
         </article>
       </div>
     </section>
 
-    <section class="section" data-od-id="breaking-changes">
+    <section class="section" id="breaking-changes" data-od-id="breaking-changes">
       <div class="container">
         <div class="row-between" style="margin-bottom: 24px;">
           <h2>Breaking changes</h2>
-          <span class="meta">Required review</span>
+          <span class="meta">—</span>
         </div>
         <article class="log-row">
-          <span class="meta num">2026-05-08</span>
+          <span class="meta num">—</span>
           <div>
-            <h3>API token scope defaults tightened</h3>
-            <p>Tokens created before v2.1 may need explicit scope updates to continue accessing export endpoints.</p>
+            <h3>None</h3>
           </div>
-          <span class="pull meta">API</span>
+          <span class="pull meta">—</span>
         </article>
       </div>
     </section>
 
-    <section class="section" data-od-id="known-issues">
+    <section class="section" id="known-issues" data-od-id="known-issues">
       <div class="container">
         <div class="row-between" style="margin-bottom: 16px;">
           <h2>Known issues</h2>
-          <span class="meta">1 open issue</span>
+          <span class="meta">—</span>
         </div>
-        <ul class="list">
-          <li><strong>Safari 17:</strong> export modal focus may jump after keyboard close. Workaround: reopen modal once; fix planned in next patch.</li>
-        </ul>
+        <p class="meta">None reported</p>
       </div>
     </section>
 
@@ -168,29 +139,25 @@
       <div class="container">
         <div class="row-between" style="margin-bottom: 16px;">
           <h2>Upgrade note</h2>
-          <span class="meta">For self-hosted teams</span>
+          <span class="meta">—</span>
         </div>
-        <ol class="list">
-          <li>Rotate API tokens used by automation jobs and reassign export scopes.</li>
-          <li>Restart worker pods to load the updated query index plan.</li>
-          <li>Validate dashboard filters for date ranges above seven days.</li>
-        </ol>
+        <p class="meta">No upgrade actions required based on provided information.</p>
       </div>
     </section>
 
     <section class="section" data-od-id="cta-strip">
       <div class="container cta">
-        <h2>Want deeper technical detail?</h2>
-        <p>Review the engineering changelog for patch-level notes, rollout status, and follow-up commits.</p>
-        <a class="btn btn-primary" href="https://example.com/changelog/engineering">Open engineering changelog</a>
+        <h2>Need more details?</h2>
+        <p class="meta">Contact your team or check the full changelog.</p>
+        <a class="btn btn-primary" href="#">View full changelog</a>
       </div>
     </section>
   </main>
 
   <footer class="pagefoot" data-od-id="footer">
     <div class="container row-between">
-      <span>© Northstar · 2026</span>
-      <span class="meta">Release notes reference example</span>
+      <span>© —</span>
+      <span class="meta">Release notes · v2.3.1</span>
     </div>
   </footer>
 </body>
