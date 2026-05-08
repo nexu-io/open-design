@@ -16,7 +16,6 @@ export const MAC_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 export const MAC_PREBUNDLE_RUNTIME_DEPENDENCIES = {
   "blake3-wasm": "2.1.5",
   "better-sqlite3": "12.9.0",
-  "blake3-wasm": "2.1.5",
 } as const;
 
 export const MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
