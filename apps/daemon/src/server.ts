@@ -3828,13 +3828,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
 
-      const result = await finalizeDesignPackage(
-        db,
-        PROJECTS_DIR,
-        DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        { apiKey, baseUrl, model, maxTokens },
-      );
+      // Wire the request lifecycle into a server-side AbortController
+      // so that when the client cancels (browser fetch aborts) or
+      // disconnects, the in-flight Anthropic call inside
+      // finalizeDesignPackage is aborted instead of running to
+      // completion in the background and overwriting DESIGN.md after
+      // the UI has returned to idle. mrcfps PR #974 P1 review on
+      // server.ts:3831-3837. Note that an abort fired after the
+      // upstream response has been received but before the atomic
+      // write completes still allows the write to land — the SDK
+      // contract bounds the network round-trip, not the post-network
+      // disk handoff.
+      //
+      // We listen on `res.on('close')` because that is the canonical
+      // event that Express + Node's http server fires when the
+      // underlying socket is destroyed before the response is sent
+      // (undici fetch abort sends TCP RST). `req.on('close')` /
+      // `req.on('aborted')` are also wired as belt-and-braces but
+      // their behaviour varies by Node version when the request body
+      // has already been consumed.
+      const finalizeAbort = new AbortController();
+      const abortFromRequest = (): void => {
+        if (!finalizeAbort.signal.aborted) finalizeAbort.abort();
+      };
+      // `res.on('close')` fires when the response stream ends — either
+      // because `res.end()` was called by the success path or because
+      // the client disconnected before the response was sent. The
+      // alternative `req.on('close')` fires whenever the *request*
+      // stream finishes, which on POST routes happens as soon as
+      // Express body-parser drains the body — i.e. before the route
+      // does any work — so it cannot be used as a disconnect signal.
+      res.on('close', abortFromRequest);
+
+      let result;
+      try {
+        result = await finalizeDesignPackage(
+          db,
+          PROJECTS_DIR,
+          DESIGN_SYSTEMS_DIR,
+          req.params.id,
+          { apiKey, baseUrl, model, maxTokens, signal: finalizeAbort.signal },
+        );
+      } finally {
+        res.off('close', abortFromRequest);
+      }
       res.json(result);
     } catch (err) {
       // Concurrent finalize - the lockfile was already held by another
