@@ -350,8 +350,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     try {
       const url = await options.discoverUrl();
       if (url != null && url !== currentUrl) {
-        currentUrl = url;
         await window.loadURL(url);
+        currentUrl = url;
         showWindowButtons(window);
       }
       schedule(url == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
