@@ -58,7 +58,7 @@ Copy `assets/template.html` to project `index.html`.
 Update:
 - `<title>`
 - topnav logo text
-- topnav links
+- topnav link labels (destinations are pre-wired to `#added`, `#fixed`, `#upgrade-note`)
 - topnav CTA label and `href` destination
 
 ### Step 2 — Build release-note structure
