@@ -210,7 +210,7 @@ Use `.list` for itemized issue rows or step-by-step upgrade guidance. Keep the l
   </div>
 </section>
 
-<section class="section" data-od-id="upgrade-note">
+<section class="section" id="upgrade-note" data-od-id="upgrade-note">
   <div class="container">
     <div class="row-between" style="margin-bottom: 16px;">
       <h2>Upgrade note</h2>
