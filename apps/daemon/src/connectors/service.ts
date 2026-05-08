@@ -12,7 +12,7 @@ import {
   type ConnectorToolSafety,
   type ConnectorStatus,
 } from './catalog.js';
-import { composioConnectorProvider, getStaticComposioCatalogDefinitions, type ComposioConnectionStart } from './composio.js';
+import { composioConnectorProvider, getStaticComposioCatalogDefinitions, type ComposioAuthConfigPrepareResult, type ComposioConnectionStart } from './composio.js';
 
 export interface ConnectorExecuteRequest {
   connectorId: string;
@@ -37,6 +37,10 @@ export interface ConnectorConnectResult {
   auth?: Pick<ComposioConnectionStart, 'kind' | 'redirectUrl' | 'providerConnectionId' | 'expiresAt'>;
 }
 
+export interface ConnectorAuthConfigPrepareResponse {
+  results: Record<string, ComposioAuthConfigPrepareResult>;
+}
+
 type PublicComposioConnectionStart = Pick<ComposioConnectionStart, 'kind' | 'redirectUrl' | 'providerConnectionId' | 'expiresAt'>;
 
 function publicComposioAuthStart(auth: ComposioConnectionStart): PublicComposioConnectionStart {
@@ -46,6 +50,17 @@ function publicComposioAuthStart(auth: ComposioConnectionStart): PublicComposioC
     ...(auth.providerConnectionId === undefined ? {} : { providerConnectionId: auth.providerConnectionId }),
     ...(auth.expiresAt === undefined ? {} : { expiresAt: auth.expiresAt }),
   };
+}
+
+function isMissingOrExpiredComposioOAuthState(error: unknown): boolean {
+  return error instanceof ConnectorServiceError
+    && error.code === 'CONNECTOR_EXECUTION_FAILED'
+    && error.message === 'Composio OAuth state is missing or expired';
+}
+
+function hasStoredComposioConnection(credential: ConnectorCredentialRecord | undefined, providerConnectionId: string): boolean {
+  return credential?.credentials.provider === 'composio'
+    && credential.credentials.providerConnectionId === providerConnectionId;
 }
 
 export type ConnectorServiceErrorCode =
@@ -524,12 +539,29 @@ export class ConnectorService {
     return composioConnectorProvider.listDefinitions(signal);
   }
 
+  async listHydratedDefinitions(signal?: AbortSignal): Promise<ConnectorCatalogDefinition[]> {
+    return composioConnectorProvider.listDefinitions(signal, { hydrateTools: true });
+  }
+
   listFastDefinitions(): ConnectorCatalogDefinition[] {
-    return getStaticComposioCatalogDefinitions();
+    return composioConnectorProvider.getFastDefinitions();
+  }
+
+  getFastDefinition(connectorId: string): ConnectorCatalogDefinition | undefined {
+    return this.listFastDefinitions().find((definition) => definition.id === connectorId);
   }
 
   async getDefinition(connectorId: string, signal?: AbortSignal): Promise<ConnectorCatalogDefinition | undefined> {
     return composioConnectorProvider.getDefinition(connectorId, signal);
+  }
+
+  async getHydratedDefinition(connectorId: string, signal?: AbortSignal): Promise<ConnectorCatalogDefinition | undefined> {
+    return await composioConnectorProvider.getHydratedDefinition(connectorId, signal)
+      ?? await this.getDefinition(connectorId, signal);
+  }
+
+  async getPreviewDefinition(connectorId: string, options: { toolsLimit: number; toolsCursor?: string; signal?: AbortSignal }): Promise<ConnectorCatalogDefinition | undefined> {
+    return composioConnectorProvider.getPreviewDefinition(connectorId, options);
   }
 
   getStatus(definition: ConnectorCatalogDefinition): ConnectorConnectionStatus {
@@ -551,10 +583,15 @@ export class ConnectorService {
     };
   }
 
-  async listConnectorDiscovery(options: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<ConnectorDiscoveryResult> {
+  async listConnectorDiscovery(options: { refresh?: boolean; hydrateTools?: boolean; signal?: AbortSignal } = {}): Promise<ConnectorDiscoveryResult> {
     if (options.refresh) composioConnectorProvider.clearDiscoveryCache();
+    const definitions = options.refresh && !options.hydrateTools
+      ? await composioConnectorProvider.refreshCatalog(options.signal)
+      : options.hydrateTools
+        ? await this.listHydratedDefinitions(options.signal)
+        : await this.listDefinitions(options.signal);
     return {
-      connectors: (await this.listDefinitions(options.signal)).map((definition) => this.toDetail(definition)),
+      connectors: definitions.map((definition) => this.toDetail(definition)),
       meta: {
         provider: 'composio',
         ...(options.refresh ? { refreshRequested: true } : {}),
@@ -570,8 +607,44 @@ export class ConnectorService {
     return this.toDetail(definition);
   }
 
+  async getHydratedConnector(connectorId: string, signal?: AbortSignal): Promise<ConnectorDetail> {
+    const definition = await this.getHydratedDefinition(connectorId, signal);
+    if (!definition) {
+      throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
+    }
+    return this.toDetail(definition);
+  }
+
+  async getPreviewConnector(connectorId: string, options: { toolsLimit: number; toolsCursor?: string; signal?: AbortSignal }): Promise<ConnectorDetail> {
+    const definition = await this.getPreviewDefinition(connectorId, options);
+    if (!definition) {
+      throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
+    }
+    return this.toDetail(definition);
+  }
+
+  async prepareAuthConfigs(connectorIds: readonly string[], signal?: AbortSignal): Promise<ConnectorAuthConfigPrepareResponse> {
+    const results: Record<string, ComposioAuthConfigPrepareResult> = {};
+    const uniqueConnectorIds = [...new Set(connectorIds.map((id) => id.trim()).filter(Boolean))];
+
+    await Promise.all(uniqueConnectorIds.map(async (connectorId) => {
+      const definition = this.getFastDefinition(connectorId) ?? await this.getDefinition(connectorId, signal);
+      if (!definition) {
+        results[connectorId] = { status: 'error', message: 'connector not found' };
+        return;
+      }
+      if (definition.authentication !== 'composio') {
+        results[connectorId] = { status: 'error', message: 'connector is not backed by Composio' };
+        return;
+      }
+      results[connectorId] = await composioConnectorProvider.prepareAuthConfig(definition, signal);
+    }));
+
+    return { results };
+  }
+
   async connect(connectorId: string, options: { accountLabel?: string; credentials?: ConnectorCredentialMaterial; callbackUrl?: string; signal?: AbortSignal } = {}): Promise<ConnectorConnectResult> {
-    const definition = await this.getDefinition(connectorId, options.signal);
+    const definition = this.getFastDefinition(connectorId) ?? await this.getDefinition(connectorId, options.signal);
     if (!definition) {
       throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
     }
@@ -583,7 +656,6 @@ export class ConnectorService {
         throw new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'callbackUrl is required for Composio connectors', 400, { connectorId });
       }
       auth = await composioConnectorProvider.connect(definition, options.callbackUrl, options.signal);
-      detailDefinition = await this.getDefinition(connectorId, options.signal) ?? definition;
       if (auth.kind === 'redirect_required' || auth.kind === 'pending') {
         return { connector: this.toDetail(detailDefinition), auth: publicComposioAuthStart(auth) };
       }
@@ -600,7 +672,7 @@ export class ConnectorService {
   }
 
   async disconnect(connectorId: string): Promise<ConnectorDetail> {
-    const definition = await this.getDefinition(connectorId);
+    const definition = this.getFastDefinition(connectorId) ?? await this.getDefinition(connectorId);
     if (!definition) {
       throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
     }
@@ -608,6 +680,17 @@ export class ConnectorService {
       await composioConnectorProvider.disconnect(this.getCredential(connectorId)?.credentials);
     }
     this.statusService.disconnect(definition);
+    return this.toDetail(definition);
+  }
+
+  async cancelPendingAuthorization(connectorId: string): Promise<ConnectorDetail> {
+    const definition = this.getFastDefinition(connectorId) ?? await this.getDefinition(connectorId);
+    if (!definition) {
+      throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
+    }
+    if (definition.authentication === 'composio') {
+      composioConnectorProvider.cancelPendingConnections(connectorId);
+    }
     return this.toDetail(definition);
   }
 
@@ -619,13 +702,29 @@ export class ConnectorService {
     if (definition.authentication !== 'composio') {
       throw new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'connector is not backed by Composio', 400, { connectorId: input.connectorId });
     }
-    const completed = await composioConnectorProvider.completeConnection({ definition, state: input.state, ...(input.providerConnectionId === undefined ? {} : { providerConnectionId: input.providerConnectionId }), ...(input.status === undefined ? {} : { status: input.status }), ...(input.signal === undefined ? {} : { signal: input.signal }) });
-    this.statusService.connect(definition, completed.accountLabel, completed.credentials);
-    return this.toDetail(definition);
+    try {
+      const completed = await composioConnectorProvider.completeConnection({ definition, state: input.state, ...(input.providerConnectionId === undefined ? {} : { providerConnectionId: input.providerConnectionId }), ...(input.status === undefined ? {} : { status: input.status }), ...(input.signal === undefined ? {} : { signal: input.signal }) });
+      this.statusService.connect(definition, completed.accountLabel, completed.credentials);
+      return this.toDetail(definition);
+    } catch (error) {
+      if (
+        input.providerConnectionId !== undefined
+        && isMissingOrExpiredComposioOAuthState(error)
+        && hasStoredComposioConnection(this.getCredential(input.connectorId), input.providerConnectionId)
+      ) {
+        return this.toDetail(definition);
+      }
+      throw error;
+    }
   }
 
   async execute(request: ConnectorExecuteRequest, context: ConnectorExecutionContext): Promise<ConnectorExecuteResponse> {
-    const definition = await this.getDefinition(request.connectorId, context.signal);
+    const fastDefinition = this.listFastDefinitions().find((candidate) => (
+      candidate.id === request.connectorId &&
+      candidate.allowedToolNames.includes(request.toolName) &&
+      candidate.tools.some((tool) => tool.name === request.toolName)
+    ));
+    const definition = fastDefinition ?? await this.getHydratedDefinition(request.connectorId, context.signal);
     if (!definition) {
       throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
     }
@@ -677,7 +776,7 @@ export class ConnectorService {
 
     this.enforceRunLimits(context);
 
-    const providerOutput = await this.executeConnectorProviderTool(request, context);
+    const providerOutput = await this.executeConnectorProviderTool(request, context, definition, tool);
     const protectedOutput = protectConnectorOutput(providerOutput);
     const output = protectedOutput.output;
     const outputSummary = summarizeConnectorOutput(output);
@@ -701,9 +800,14 @@ export class ConnectorService {
     };
   }
 
-  protected async executeConnectorProviderTool(request: ConnectorExecuteRequest, context: ConnectorExecutionContext): Promise<BoundedJsonObject> {
-    const definition = await this.getDefinition(request.connectorId, context.signal);
-    const tool = definition?.tools.find((candidate) => candidate.name === request.toolName);
+  protected async executeConnectorProviderTool(
+    request: ConnectorExecuteRequest,
+    context: ConnectorExecutionContext,
+    resolvedDefinition?: ConnectorCatalogDefinition,
+    resolvedTool?: ConnectorCatalogToolDefinition,
+  ): Promise<BoundedJsonObject> {
+    const definition = resolvedDefinition ?? await this.getHydratedDefinition(request.connectorId, context.signal);
+    const tool = resolvedTool ?? definition?.tools.find((candidate) => candidate.name === request.toolName);
     if (definition?.authentication === 'composio' && tool) {
       return composioConnectorProvider.execute(definition, tool, request.input, this.getCredential(request.connectorId)?.credentials, context.signal);
     }

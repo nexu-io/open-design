@@ -1,4 +1,5 @@
 import type {
+  ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
   ConnectorDiscoveryResponse,
@@ -36,6 +37,15 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      openExternal?: (url: string) => Promise<boolean>;
+      pickFolder?: () => Promise<string | null>;
+    };
+  }
+}
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -269,8 +279,28 @@ export async function fetchConnectorDiscovery(options: { refresh?: boolean } = {
   return promise;
 }
 
+export async function fetchConnectorDetail(
+  connectorId: string,
+  options: { hydrateTools?: boolean; toolsLimit?: number; toolsCursor?: string } = {},
+): Promise<ConnectorDetail | null> {
+  try {
+    const params = new URLSearchParams();
+    if (options.hydrateTools) params.set('hydrateTools', 'true');
+    if (options.toolsLimit !== undefined) params.set('toolsLimit', String(options.toolsLimit));
+    if (options.toolsCursor) params.set('toolsCursor', options.toolsCursor);
+    const query = params.toString();
+    const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}${query ? `?${query}` : ''}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as ConnectorDetailResponse;
+    return json.connector ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ConnectorActionResult {
   connector: ConnectorDetail | null;
+  auth?: ConnectorConnectResponse['auth'];
   error?: string;
 }
 
@@ -289,32 +319,56 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
+  const openExternal = window.electronAPI?.openExternal;
+  const useExternalBrowser = typeof openExternal === 'function';
   try {
-    authWindow = window.open('about:blank', '_blank');
-    renderConnectorAuthLoading(authWindow);
+    if (!useExternalBrowser) {
+      authWindow = window.open('about:blank', '_blank');
+      renderConnectorAuthLoading(authWindow, {
+        title: 'Initializing auth config…',
+        body: 'Creating or reusing the Composio auth configuration for this app. This can take a moment the first time.',
+      });
+    }
+    const prepare = await prepareConnectorAuthConfig(connectorId);
+    if (prepare.status !== 'ready') {
+      renderConnectorAuthError(authWindow, prepare.message);
+      return { connector: null, error: prepare.message };
+    }
+    renderConnectorAuthLoading(authWindow, {
+      title: 'Opening authorization…',
+      body: 'The auth config is ready. Preparing the provider authorization page.',
+    });
     const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/connect`, {
       method: 'POST',
     });
     if (!resp.ok) {
-      authWindow?.close();
-      return { connector: null, error: await decodeConnectorError(resp) };
+      const error = await decodeConnectorError(resp);
+      renderConnectorAuthError(authWindow, error);
+      return { connector: null, error };
     }
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
-      if (authWindow) {
-        authWindow.location.href = json.auth.redirectUrl;
+      if (useExternalBrowser) {
+        const opened = await openExternal(json.auth.redirectUrl);
+        if (!opened) {
+          void cancelConnectorAuthorization(connectorId);
+          return { connector: json.connector ?? null, error: popupBlockedMessage() };
+        }
+      } else if (authWindow) {
+        openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
         const redirected = window.open(json.auth.redirectUrl, '_blank');
         if (!redirected) {
+          void cancelConnectorAuthorization(connectorId);
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       }
     } else {
       authWindow?.close();
     }
-    return { connector: json.connector ?? null };
+    return { connector: json.connector ?? null, ...(json.auth === undefined ? {} : { auth: json.auth }) };
   } catch (err) {
-    authWindow?.close();
+    renderConnectorAuthError(authWindow, err instanceof Error && err.message ? err.message : 'Could not start connector authentication.');
     return {
       connector: null,
       error: err instanceof Error && err.message ? err.message : 'Could not start connector authentication.',
@@ -322,7 +376,38 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
   }
 }
 
-function renderConnectorAuthLoading(authWindow: Window | null): void {
+async function prepareConnectorAuthConfig(connectorId: string): Promise<{ status: 'ready' } | { status: 'error'; message: string }> {
+  const resp = await fetch('/api/connectors/auth-configs/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectorIds: [connectorId] }),
+  });
+  if (!resp.ok) {
+    return { status: 'error', message: await decodeConnectorError(resp) };
+  }
+  const json = (await resp.json()) as ConnectorAuthConfigPrepareResponse;
+  const result = json.results?.[connectorId];
+  if (!result) return { status: 'error', message: 'Auth config initialization did not return a result.' };
+  if (result.status === 'ready') return { status: 'ready' };
+  return { status: 'error', message: result.message };
+}
+
+function openConnectorAuthRedirect(authWindow: Window | null, redirectUrl: string): void {
+  if (authWindow) {
+    renderConnectorAuthRedirect(authWindow, redirectUrl);
+    try {
+      authWindow.location.replace(redirectUrl);
+      return;
+    } catch {
+      // Some embedded browsers block async popup navigation. Leave the
+      // clickable fallback in the popup so the user can continue.
+    }
+  }
+  const opened = window.open(redirectUrl, '_blank');
+  if (!opened) window.location.assign(redirectUrl);
+}
+
+function renderConnectorAuthLoading(authWindow: Window | null, copy: { title: string; body: string }): void {
   if (!authWindow) return;
   try {
     authWindow.document.title = 'Connecting…';
@@ -330,8 +415,8 @@ function renderConnectorAuthLoading(authWindow: Window | null): void {
       <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
         <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
           <div aria-hidden="true" style="width:28px;height:28px;border-radius:999px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;animation:od-spin .8s linear infinite;"></div>
-          <div style="font-size:15px;font-weight:600;">Connecting…</div>
-          <div style="max-width:280px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">Preparing the authorization flow. This window will redirect when the provider is ready.</div>
+          <div style="font-size:15px;font-weight:600;">${escapeHtmlText(copy.title)}</div>
+          <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
         </div>
         <style>@keyframes od-spin{to{transform:rotate(360deg)}}</style>
       </main>
@@ -341,10 +426,100 @@ function renderConnectorAuthLoading(authWindow: Window | null): void {
   }
 }
 
+function renderConnectorAuthRedirect(authWindow: Window, redirectUrl: string): void {
+  try {
+    authWindow.document.title = 'Continue authorization';
+    authWindow.document.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
+          <div style="font-size:15px;font-weight:600;">Continue authorization</div>
+          <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">If this window does not redirect automatically, use the button below.</div>
+          <a href="${escapeHtmlAttribute(redirectUrl)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:164px;border-radius:8px;padding:9px 14px;background:#df7b56;color:#fff;text-decoration:none;font-size:13px;font-weight:600;">Open Composio</a>
+        </div>
+      </main>
+    `;
+  } catch {
+    /* Popup may already be cross-origin; navigation fallback still runs. */
+  }
+}
+
+async function readConnectorApiErrorMessage(resp: Response): Promise<string> {
+  try {
+    const payload = await resp.json() as { error?: { message?: string }; message?: string };
+    return payload.error?.message ?? payload.message ?? `Connection failed (${resp.status})`;
+  } catch {
+    return `Connection failed (${resp.status})`;
+  }
+}
+
+function renderConnectorAuthError(authWindow: Window | null, message: string): void {
+  if (!authWindow) return;
+  try {
+    authWindow.document.title = 'Connection failed';
+    authWindow.document.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
+          <div style="font-size:15px;font-weight:600;">Connection failed</div>
+          <div style="max-width:360px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(message)}</div>
+        </div>
+      </main>
+    `;
+  } catch {
+    /* Popup may be unavailable or already navigated; ignore. */
+  }
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>]/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      default:
+        return char;
+    }
+  });
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
+}
+
 export async function disconnectConnector(connectorId: string): Promise<ConnectorDetail | null> {
   try {
     const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/connection`, {
       method: 'DELETE',
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as ConnectorDetailResponse;
+    return json.connector ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function cancelConnectorAuthorization(connectorId: string): Promise<ConnectorDetail | null> {
+  try {
+    const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/authorization/cancel`, {
+      method: 'POST',
     });
     if (!resp.ok) return null;
     const json = (await resp.json()) as ConnectorDetailResponse;

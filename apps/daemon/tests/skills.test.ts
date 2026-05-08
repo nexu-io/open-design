@@ -63,7 +63,7 @@ describe('listSkills', () => {
     const skills = await listSkills(skillsRoot);
     const skill = skills.find((entry: { id: string }) => entry.id === 'live-artifact');
 
-    expect(skill).toBeTruthy();
+    if (!skill) throw new Error('live-artifact skill not found');
     expect(skill).toMatchObject({
       id: 'live-artifact',
       name: 'live-artifact',
@@ -76,6 +76,9 @@ describe('listSkills', () => {
     expect(skill.body).toContain('references/artifact-schema.md');
     expect(skill.body).toContain('references/connector-policy.md');
     expect(skill.body).toContain('references/refresh-contract.md');
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/live-artifact/references/artifact-schema.md`);
+    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/live-artifact/assets/template.html`);
+    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/live-artifact/references/layouts.md`);
     expect(skill.body).toContain('"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts create --input artifact.json');
     expect(skill.body).toContain('do not ask “where should the data come from?” before checking daemon connector tools');
     expect(skill.body).toContain('notion.notion_search');
@@ -151,7 +154,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('demo-skill not found');
 
     // The cwd-relative alias path is the primary one — that's what makes
     // the agent stay inside its working directory when reading skill
@@ -172,6 +176,24 @@ describe('listSkills preamble', () => {
     expect(skill.body).toMatch(/Skill root \(relative to project\)/);
   });
 
+  it('mentions root-level example.html side files in the preamble', async () => {
+    const root = fresh();
+    writeSkill(root, 'orbit-style', {
+      withAttachments: false,
+      body: 'Open and mirror the shipped `example.html` before writing output.',
+    });
+    writeFileSync(path.join(root, 'orbit-style', 'example.html'), '<main>example</main>');
+
+    const skills = await listSkills(root);
+    expect(skills).toHaveLength(1);
+    const skill = skills[0];
+    if (!skill) throw new Error('orbit-style skill not found');
+
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/`);
+    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/example.html`);
+    expect(skill.body).toContain('Known side files in this skill: `example.html`.');
+  });
+
   it('uses the on-disk folder name in the alias path even when `name` differs', async () => {
     const root = fresh();
     writeSkill(root, 'guizang-ppt', {
@@ -181,7 +203,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('magazine-web-ppt skill not found');
 
     // `id`/`name` reflect the frontmatter value (used elsewhere as a stable
     // public id), but the on-disk alias path must use the actual folder
@@ -200,7 +223,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('lone-skill not found');
 
     expect(skill.body).not.toContain(SKILLS_CWD_ALIAS);
     expect(skill.body).not.toContain('Skill root');

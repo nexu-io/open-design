@@ -120,6 +120,16 @@ export interface ComposeInput {
   // Skill identifier. Required when critique is enabled;
   // ignored when critique is disabled or omitted.
   critiqueSkill?: { id: string } | undefined;
+  // External MCP servers the daemon already holds a valid OAuth Bearer
+  // token for at spawn time. We surface the list to the model so it does
+  // NOT chase Claude Code's synthetic `*_authenticate` /
+  // `*_complete_authentication` tools that get injected when the HTTP
+  // transport's first connect transiently flips a server into
+  // needs-auth state — the Bearer is in `.mcp.json`, the real tools are
+  // available, and burning a turn on a redundant OAuth dance just
+  // confuses the user.
+  connectedExternalMcp?: ReadonlyArray<{ id: string; label?: string | undefined }>
+    | undefined;
 }
 
 export function composeSystemPrompt({
@@ -137,6 +147,7 @@ export function composeSystemPrompt({
   critique,
   critiqueBrand,
   critiqueSkill,
+  connectedExternalMcp,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -233,7 +244,57 @@ export function composeSystemPrompt({
     parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 
+  const mcpDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
+  if (mcpDirective) parts.push(mcpDirective);
+
   return parts.join('');
+}
+
+// Defense-in-depth against Claude Code's synthetic OAuth tools.
+//
+// When Claude Code's built-in HTTP MCP transport gets a 401 on its first
+// initialize (transient propagation lag, edge cache miss, header
+// re-canonicalization quirk, etc.), it injects two synthetic tools per
+// server — `mcp__<server>__authenticate` and
+// `mcp__<server>__complete_authentication` — that drive a per-process
+// OAuth dance with a `localhost:<random>/callback` redirect_uri. That
+// listener dies with the agent process, so the round-trip never
+// completes, and meanwhile the model burns a turn pasting an
+// unreachable URL into the chat. By the time the user is back, our
+// daemon-issued Bearer is already in `.mcp.json` and the real tools
+// (`generate_image`, `models_explore`, …) are reachable on the next
+// turn — but the model doesn't know that and keeps escalating the
+// fake auth flow.
+//
+// The fix is to tell the model up front: these specific servers are
+// already authenticated by the daemon, do NOT call any
+// `*_authenticate` / `*_complete_authentication` tool for them. If
+// the real tools really are missing, surface that as a separate
+// failure instead of pivoting to the synthetic flow.
+function renderConnectedExternalMcpDirective(
+  connectedExternalMcp:
+    | ReadonlyArray<{ id: string; label?: string | undefined }>
+    | undefined,
+): string {
+  if (!connectedExternalMcp || connectedExternalMcp.length === 0) return '';
+  const lines = connectedExternalMcp
+    .map((s) => {
+      const id = typeof s?.id === 'string' ? s.id.trim() : '';
+      if (!id) return null;
+      const label = typeof s?.label === 'string' && s.label.trim() ? s.label.trim() : id;
+      return `- \`${id}\`${label !== id ? ` (${label})` : ''}`;
+    })
+    .filter((line): line is string => typeof line === 'string');
+  if (lines.length === 0) return '';
+  return [
+    '\n\n---\n\n',
+    '## External MCP servers — already authenticated\n\n',
+    'The following external MCP servers are already authenticated for this run via an OAuth Bearer token the daemon injected into `.mcp.json`. You can call their real tools directly:\n\n',
+    lines.join('\n'),
+    '\n\n',
+    '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication` for the servers above.** Those are synthetic fallback tools Claude Code exposes when its first HTTP connect briefly flipped the server into a needs-auth state. The flow they drive (a `localhost:<random>/callback` redirect) cannot complete in this environment, and the real tools (e.g. `generate_image`, `models_explore`, `balance`, …) are already reachable.\n\n',
+    'If a real tool actually fails with an auth-related error, report the exact tool name and error text and stop — the user will reconnect the server in Settings → External MCP. Do not retry by invoking any `*_authenticate` tool.\n',
+  ].join('');
 }
 
 const CODEX_IMAGEGEN_MODEL_IDS = new Set(

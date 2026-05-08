@@ -1,6 +1,5 @@
-// @ts-nocheck
 import path from 'node:path';
-import chokidar from 'chokidar';
+import chokidar, { type FSWatcher } from 'chokidar';
 
 import { projectDir, resolveProjectDir } from './projects.js';
 
@@ -35,8 +34,26 @@ const IGNORE_NAMES = new Set([
   '.tox',
   '.ruff_cache',
 ]);
-export function makeIgnored(rootDir) {
-  return (absPath) => {
+export type ProjectWatchKind = 'add' | 'change' | 'unlink';
+export interface ProjectWatchEvent { type: 'file-changed'; path: string; kind: ProjectWatchKind }
+export type ProjectWatchCallback = (evt: ProjectWatchEvent) => void;
+export interface ProjectWatcherOptions {
+  ignored?: (absPath: string) => boolean;
+  awaitWriteFinish?: false | { stabilityThreshold: number; pollInterval: number };
+  metadata?: unknown;
+  _watcherFactory?: WatcherFactory;
+}
+interface WatcherEntry {
+  dir: string;
+  watcher: FSWatcher;
+  ready: Promise<void>;
+  subscribers: Set<ProjectWatchCallback>;
+  closing: Promise<void> | null;
+}
+type WatcherFactory = (dir: string, opts: Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>) => WatcherEntry;
+
+export function makeIgnored(rootDir: string): (absPath: string) => boolean {
+  return (absPath: string): boolean => {
     const rel = path.relative(rootDir, absPath);
     if (!rel || rel === '' || rel.startsWith('..')) return false; // never ignore root itself
     return rel.split(/[\\/]/).some((seg) => IGNORE_NAMES.has(seg));
@@ -48,9 +65,9 @@ export const DEFAULT_AWAIT_WRITE_FINISH = {
   pollInterval: 50,
 };
 
-const registry = new Map();
+const registry = new Map<string, WatcherEntry>();
 
-function makeEntry(dir, opts) {
+function makeEntry(dir: string, opts: Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>): WatcherEntry {
   const watcher = chokidar.watch(dir, {
     ignored: opts.ignored,
     ignoreInitial: true,
@@ -73,11 +90,11 @@ function makeEntry(dir, opts) {
     }
   });
 
-  let resolveReady;
-  const ready = new Promise((r) => { resolveReady = r; });
+  let resolveReady: () => void;
+  const ready = new Promise<void>((resolve) => { resolveReady = resolve; });
   watcher.once('ready', () => resolveReady());
 
-  const entry = {
+  const entry: WatcherEntry = {
     dir,
     watcher,
     ready,
@@ -85,10 +102,10 @@ function makeEntry(dir, opts) {
     closing: null,
   };
 
-  const broadcast = (kind) => (absPath) => {
+  const broadcast = (kind: ProjectWatchKind) => (absPath: string) => {
     const rel = path.relative(dir, absPath);
     if (!rel || rel.startsWith('..')) return;
-    const evt = { type: 'file-changed', path: rel.split(path.sep).join('/'), kind };
+    const evt: ProjectWatchEvent = { type: 'file-changed', path: rel.split(path.sep).join('/'), kind };
     for (const cb of entry.subscribers) {
       try {
         cb(evt);
@@ -120,7 +137,7 @@ function makeEntry(dir, opts) {
  *   `unsubscribe` releases the subscriber and closes the watcher if it was the
  *   last; `ready` resolves once chokidar has finished its initial scan.
  */
-export function subscribe(projectsRoot, projectId, onEvent, opts = {}) {
+export function subscribe(projectsRoot: string, projectId: string, onEvent: ProjectWatchCallback, opts: ProjectWatcherOptions = {}) {
   // Resolve to the project's actual root: for folder-imported projects
   // (metadata.baseDir set) we watch the user's folder so the live-reload
   // SSE stream actually fires when their files change. The registry is
@@ -158,19 +175,19 @@ export function subscribe(projectsRoot, projectId, onEvent, opts = {}) {
 }
 
 /** Test-only: drop all watchers. */
-export async function _resetForTests() {
+export async function _resetForTests(): Promise<void> {
   const entries = Array.from(registry.values());
   registry.clear();
   await Promise.allSettled(entries.map((e) => e.watcher.close()));
 }
 
 /** Test-only: number of active watchers. */
-export function _activeWatcherCount() {
+export function _activeWatcherCount(): number {
   return registry.size;
 }
 
 /** Test-only: return the chokidar FSWatcher for a given project's directory. */
-export function _internalWatcherForTests(projectsRoot, projectId) {
+export function _internalWatcherForTests(projectsRoot: string, projectId: string): FSWatcher | undefined {
   const dir = projectDir(projectsRoot, projectId);
   return registry.get(dir)?.watcher;
 }

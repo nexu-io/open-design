@@ -23,6 +23,13 @@ async function openExecutionSettings(
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
+async function readSavedConfig(page: Page) {
+  return page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, STORAGE_KEY);
+}
+
 async function openExecutionSettingsWithAgents(
   page: Page,
   config: Record<string, unknown>,
@@ -68,21 +75,22 @@ test('legacy known OpenAI provider switches to the matching Anthropic preset', a
     agentModels: {},
   });
 
-  const protocolTabs = page.getByRole('tablist', { name: 'API protocol' });
+  const dialog = page.getByRole('dialog');
+  const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
   const openAiTab = protocolTabs.getByRole('tab', { name: 'OpenAI', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
-  const baseUrlInput = page.getByLabel('Base URL');
-  const modelSelect = page.getByLabel('Model');
+  const baseUrlInput = dialog.getByLabel('Base URL');
+  const modelSelect = dialog.getByLabel('Model');
 
   await expect(openAiTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com');
   await expect(modelSelect).toHaveValue('deepseek-chat');
 
   await anthropicTab.click();
 
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com/anthropic');
   await expect(modelSelect).toHaveValue('deepseek-chat');
 });
@@ -101,21 +109,22 @@ test('legacy custom provider preserves custom baseUrl and model when switching p
     agentModels: {},
   });
 
-  const protocolTabs = page.getByRole('tablist', { name: 'API protocol' });
+  const dialog = page.getByRole('dialog');
+  const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
   const openAiTab = protocolTabs.getByRole('tab', { name: 'OpenAI', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
-  const baseUrlInput = page.getByLabel('Base URL');
-  const customModelInput = page.getByLabel(/Custom model id/i);
+  const baseUrlInput = dialog.getByLabel('Base URL');
+  const customModelInput = dialog.getByLabel(/Custom model id/i);
 
   await expect(openAiTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://my-proxy.example.com/v1');
   await expect(customModelInput).toHaveValue('my-custom-model');
 
   await anthropicTab.click();
 
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://my-proxy.example.com/v1');
   await expect(customModelInput).toHaveValue('my-custom-model');
 });
@@ -138,25 +147,33 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
     agentCliEnv: {},
   });
 
-  await page.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  await page.getByLabel('Quick fill provider').selectOption('1');
-  await expect(page.getByLabel('Model')).toHaveValue('deepseek-chat');
-  await expect(page.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
+  const dialog = page.getByRole('dialog');
 
-  await page.getByRole('button', { name: 'Show' }).click();
-  const apiKeyInput = page.getByLabel('API key');
+  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+  await dialog.getByLabel('Quick fill provider').selectOption('1');
+  await expect(dialog.getByLabel('Model')).toHaveValue('deepseek-chat');
+  await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
+
+  await dialog.getByRole('button', { name: 'Show' }).click();
+  const apiKeyInput = dialog.getByLabel('API key');
   await expect(apiKeyInput).toHaveAttribute('type', 'text');
   await apiKeyInput.fill('sk-openai-test');
 
-  const saveButton = page.getByRole('button', { name: 'Save', exact: true });
-  await expect(saveButton).toBeEnabled();
-  await saveButton.click();
+  await expect
+    .poll(async () => readSavedConfig(page))
+    .toMatchObject({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai-test',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      apiProviderBaseUrl: 'https://api.deepseek.com',
+    });
+
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const savedConfig = await page.evaluate((key) => {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  }, STORAGE_KEY);
+  const savedConfig = await readSavedConfig(page);
   expect(savedConfig).toMatchObject({
     mode: 'api',
     apiProtocol: 'openai',
@@ -168,11 +185,12 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
 
   await page.getByTitle('Configure execution mode').click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByLabel('Quick fill provider')).toHaveValue('1');
-  await expect(page.getByLabel('Model')).toHaveValue('deepseek-chat');
-  await expect(page.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
-  await expect(page.getByLabel('API key')).toHaveValue('sk-openai-test');
+  const reopenedDialog = page.getByRole('dialog');
+  await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue('1');
+  await expect(reopenedDialog.getByLabel('Model')).toHaveValue('deepseek-chat');
+  await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
+  await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
 });
 
 test('BYOK save stays disabled until required fields are valid', async ({ page }) => {
@@ -193,18 +211,21 @@ test('BYOK save stays disabled until required fields are valid', async ({ page }
     agentCliEnv: {},
   });
 
-  const saveButton = page.getByRole('button', { name: 'Save', exact: true });
-  await expect(saveButton).toBeDisabled();
+  const dialog = page.getByRole('dialog');
+  const closeButton = dialog.getByRole('button', { name: 'Close', exact: true });
+  await expect(closeButton).toBeEnabled();
 
-  await page.getByLabel('API key').fill('sk-ant-test');
-  await expect(saveButton).toBeEnabled();
+  await dialog.getByLabel('API key').fill('sk-ant-test');
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-ant-test' });
 
-  await page.getByLabel('Base URL').fill('http://10.0.0.5:11434/v1');
-  await expect(saveButton).toBeDisabled();
-  await expect(page.locator('#settings-base-url-error')).toContainText('valid public');
+  await dialog.getByLabel('Base URL').fill('http://10.0.0.5:11434/v1');
+  await expect(dialog.locator('#settings-base-url-error')).toContainText('valid public');
 
-  await page.getByLabel('Base URL').fill('http://localhost:11434/v1');
-  await expect(saveButton).toBeEnabled();
+  await dialog.getByLabel('Base URL').fill('http://localhost:11434/v1');
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiKey: 'sk-ant-test',
+    baseUrl: 'http://localhost:11434/v1',
+  });
 });
 
 test('saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
@@ -246,9 +267,15 @@ test('saving Local CLI updates the entry status pill with the selected agent', a
     ],
   );
 
-  await page.getByRole('tab', { name: /Local CLI.*1 installed/i }).click();
-  await page.getByRole('button', { name: /Codex CLI/i }).click();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+
+  await dialog.getByRole('tab', { name: /Local CLI.*1 installed/i }).click();
+  await dialog.getByRole('button', { name: /Codex CLI/i }).click();
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    mode: 'daemon',
+    agentId: 'codex',
+  });
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   const executionPill = page.getByTitle('Configure execution mode');

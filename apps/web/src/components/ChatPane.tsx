@@ -86,6 +86,9 @@ interface Props {
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: () => void;
+  // Same dialog, but landing on the External MCP tab. Forwarded to the
+  // composer's `/mcp` slash and MCP picker button.
+  onOpenMcpSettings?: () => void;
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -125,6 +128,7 @@ export function ChatPane({
   onDeleteConversation,
   onRenameConversation,
   onOpenSettings,
+  onOpenMcpSettings,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -506,6 +510,7 @@ export function ChatPane({
             onSend={onSend}
             onStop={onStop}
             onOpenSettings={onOpenSettings}
+            onOpenMcpSettings={onOpenMcpSettings}
             petConfig={petConfig}
             onAdoptPet={onAdoptPet}
             onTogglePet={onTogglePet}

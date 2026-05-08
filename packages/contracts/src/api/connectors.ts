@@ -6,10 +6,17 @@ export type ConnectorToolSideEffect = 'read' | 'write' | 'destructive' | 'unknow
 
 export type ConnectorToolApproval = 'auto' | 'confirm' | 'disabled';
 
+export type ConnectorToolUseCase = 'personal_daily_digest';
+
 export interface ConnectorToolSafety {
   sideEffect: ConnectorToolSideEffect;
   approval: ConnectorToolApproval;
   reason: string;
+}
+
+export interface ConnectorToolCuration {
+  useCases?: ConnectorToolUseCase[];
+  reason?: string;
 }
 
 export interface ConnectorToolDetail {
@@ -20,6 +27,7 @@ export interface ConnectorToolDetail {
   outputSchemaJson?: BoundedJsonObject;
   safety: ConnectorToolSafety;
   refreshEligible: boolean;
+  curation?: ConnectorToolCuration;
 }
 
 export interface ConnectorDetail {
@@ -31,6 +39,9 @@ export interface ConnectorDetail {
   status: ConnectorStatus;
   accountLabel?: string;
   tools: ConnectorToolDetail[];
+  toolCount?: number;
+  toolsNextCursor?: string;
+  toolsHasMore?: boolean;
   featuredToolNames?: string[];
   minimumApproval?: ConnectorToolApproval;
   lastError?: string;
@@ -76,6 +87,19 @@ export interface ConnectorConnectResponse extends ConnectorDetailResponse {
     providerConnectionId?: string;
     expiresAt?: string;
   };
+}
+
+export interface ConnectorAuthConfigPrepareRequest {
+  connectorIds: string[];
+}
+
+export type ConnectorAuthConfigPrepareResult =
+  | { status: 'ready'; authConfigId: string }
+  | { status: 'custom_required'; message: string }
+  | { status: 'error'; message: string };
+
+export interface ConnectorAuthConfigPrepareResponse {
+  results: Record<string, ConnectorAuthConfigPrepareResult>;
 }
 
 export interface ConnectorExecuteRequest {

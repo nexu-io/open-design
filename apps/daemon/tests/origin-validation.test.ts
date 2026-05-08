@@ -1,6 +1,7 @@
-// @ts-nocheck
 import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import express from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   allowedBrowserPorts,
@@ -9,10 +10,41 @@ import {
   isLocalSameOrigin,
 } from '../src/origin-validation.js';
 
-function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
+type TestRequestOptions = {
+  origin?: string;
+  headers?: http.OutgoingHttpHeaders;
+};
+
+type TestResponse = {
+  status: number | undefined;
+  body: string;
+  headers: http.IncomingHttpHeaders;
+};
+
+function getListeningPort(server: http.Server): number {
+  const address = server.address();
+  if (address == null || typeof address === 'string') {
+    throw new Error('Expected HTTP server to listen on a TCP port');
+  }
+  return (address as AddressInfo).port;
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error != null) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function createOriginMiddleware(resolvedPort: number, host = '127.0.0.1') {
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
-  return (req, res, next) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers.origin;
     if (origin == null || origin === '') return next();
     if (origin === 'null') {
@@ -35,7 +67,7 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
   };
 }
 
-function makeTestApp(port, host = '127.0.0.1') {
+function makeTestApp(port: number, host = '127.0.0.1') {
   const app = express();
   app.use(express.json());
   app.use('/api', createOriginMiddleware(port, host));
@@ -66,9 +98,14 @@ function makeTestApp(port, host = '127.0.0.1') {
   return app;
 }
 
-function request(port, method, path, { origin, headers = {} } = {}) {
-  return new Promise((resolve) => {
-    const opts = {
+function request(
+  port: number,
+  method: string,
+  path: string,
+  { origin, headers = {} }: TestRequestOptions = {},
+): Promise<TestResponse> {
+  return new Promise((resolve, reject) => {
+    const opts: http.RequestOptions = {
       hostname: '127.0.0.1',
       port,
       path,
@@ -80,37 +117,36 @@ function request(port, method, path, { origin, headers = {} } = {}) {
     };
     const req = http.request(opts, (res) => {
       let body = '';
-      res.on('data', (chunk) => (body += chunk));
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => (body += chunk));
       res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
     });
+    req.on('error', reject);
     req.end();
   });
 }
 
 describe('daemon origin validation middleware', () => {
-  let server;
-  let port;
+  let server: http.Server;
+  let port: number;
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         // Start on port 0 to get a dynamic port, then rebuild with real port
         const tempApp = makeTestApp(0);
         const tempServer = tempApp.listen(0, '127.0.0.1', () => {
-          port = tempServer.address().port;
+          port = getListeningPort(tempServer);
           tempServer.close(() => {
             const realApp = makeTestApp(port);
-            server = realApp.listen(port, '127.0.0.1', () => resolve());
+            server = realApp.listen(port, '127.0.0.1', resolve);
           });
         });
       }),
   );
 
   afterAll(
-    () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-      }),
+    () => closeServer(server),
   );
 
   // --- Non-browser clients (no Origin) ---
@@ -358,25 +394,22 @@ describe('daemon origin validation middleware', () => {
 });
 
 describe('origin validation: fail-closed before port resolution', () => {
-  let server;
-  let port;
+  let server: http.Server;
+  let port: number;
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         const app = makeTestApp(0); // port=0 → not resolved
         server = app.listen(0, '127.0.0.1', () => {
-          port = server.address().port;
+          port = getListeningPort(server);
           resolve();
         });
       }),
   );
 
   afterAll(
-    () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-      }),
+    () => closeServer(server),
   );
 
   it('blocks browser origins when port is not resolved (fail-closed)', async () => {
@@ -393,30 +426,27 @@ describe('origin validation: fail-closed before port resolution', () => {
 });
 
 describe('origin validation: non-loopback bind host', () => {
-  let server;
-  let port;
+  let server: http.Server;
+  let port: number;
   const nonLoopbackHost = '100.64.1.2'; // Tailscale-like address
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         // Start on port 0 to get a dynamic port, then rebuild with real port
         const tempApp = makeTestApp(0, nonLoopbackHost);
         const tempServer = tempApp.listen(0, '127.0.0.1', () => {
-          port = tempServer.address().port;
+          port = getListeningPort(tempServer);
           tempServer.close(() => {
             const realApp = makeTestApp(port, nonLoopbackHost);
-            server = realApp.listen(port, '127.0.0.1', () => resolve());
+            server = realApp.listen(port, '127.0.0.1', resolve);
           });
         });
       }),
   );
 
   afterAll(
-    () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-      }),
+    () => closeServer(server),
   );
 
   it('allows browser requests from the non-loopback bind host', async () => {

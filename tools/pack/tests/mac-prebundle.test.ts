@@ -63,11 +63,14 @@ describe("mac standalone prebundle policy", () => {
   it("documents the explicit code-level bundle boundaries", () => {
     expect(MAC_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
     expect(MAC_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
-    expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3"]);
-    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3"]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
-    expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({ "better-sqlite3": "12.9.0" });
+    expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
+      "better-sqlite3": "12.9.0",
+      "blake3-wasm": "2.1.5",
+    });
     expect(MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");
     expect(MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-sidecar.mjs");
     expect(MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/web-sidecar.mjs");

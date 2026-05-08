@@ -1,11 +1,3 @@
-// @ts-nocheck
-// TypeScript is suppressed because @modelcontextprotocol/sdk@1.x expects
-// Zod schemas for tool definitions, but we pass plain JSON Schema objects.
-// The runtime contract is identical; there is no type-safety regression -
-// the nocheck just avoids a blanket of incorrect Zod-vs-object type errors
-// that would obscure real mistakes. Remove once the SDK adds a JSON Schema
-// overload or we migrate to a Zod-based schema builder.
-//
 // `od mcp` - stdio MCP server that proxies read-only tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
 // (Claude Code, Cursor, Zed) pull files from a local Open Design
@@ -28,6 +20,23 @@ import {
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
+
+type JsonObject = Record<string, unknown>;
+interface RunMcpOptions { daemonUrl: string | URL }
+interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
+interface SkillsPayload { skills?: CatalogItem[] }
+interface DesignSystemsPayload { designSystems?: CatalogItem[] }
+interface ResourcePayload { skill?: { body?: string; content?: string }; designSystem?: { body?: string; content?: string }; body?: string; content?: string }
+interface ProjectSummary { id: string; name: string; metadata?: JsonObject }
+interface ProjectsPayload { projects?: ProjectSummary[] }
+interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string; metadata?: JsonObject }
+interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
+type ResolvedProject = { id: string; name: string; source: 'uuid' | 'exact' | 'slug' | 'substring' };
+interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown }
+interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
+interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
+interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
 
 // Mimes whose body we surface as MCP `text` content. Everything else
 // returns a clear error directing the caller at list_files for
@@ -195,7 +204,7 @@ const TOOL_DEFS = [
   // tokens on every turn.
 ];
 
-export async function runMcpStdio({ daemonUrl }) {
+export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
 
   const server = new Server(
@@ -257,8 +266,8 @@ export async function runMcpStdio({ daemonUrl }) {
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const [skillsData, dsData] = await Promise.all([
-      getJson(`${baseUrl}/api/skills`).catch(() => ({ skills: [] })),
-      getJson(`${baseUrl}/api/design-systems`).catch(() => ({ designSystems: [] })),
+      getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
+      getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
     ]);
     const resources = [
       {
@@ -272,7 +281,7 @@ export async function runMcpStdio({ daemonUrl }) {
       resources.push({
         uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
         name: `Skill: ${s.name || s.id}`,
-        description: oneLine(s.description),
+        description: oneLine(s.description) ?? '',
         mimeType: 'text/markdown',
       });
     }
@@ -280,7 +289,7 @@ export async function runMcpStdio({ daemonUrl }) {
       resources.push({
         uri: `od://design-systems/${encodeURIComponent(d.id)}/DESIGN.md`,
         name: `Design system: ${d.title || d.name || d.id}`,
-        description: oneLine(d.summary),
+        description: oneLine(d.summary) ?? '',
         mimeType: 'text/markdown',
       });
     }
@@ -290,7 +299,7 @@ export async function runMcpStdio({ daemonUrl }) {
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
-      const data = await getJson(`${baseUrl}/api/active`);
+      const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
       return {
         contents: [
           {
@@ -305,9 +314,9 @@ export async function runMcpStdio({ daemonUrl }) {
     if (!m) {
       throw new Error(`unsupported resource URI: ${uri}`);
     }
-    const [, kind, id] = m;
+    const [, kind, id] = m as [string, 'skills' | 'design-systems', string, string];
     const route = kind === 'skills' ? 'skills' : 'design-systems';
-    const data = await getJson(
+    const data = await getJson<ResourcePayload>(
       `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
     );
     const text =
@@ -331,13 +340,13 @@ export async function runMcpStdio({ daemonUrl }) {
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params?.name;
-    const args = req.params?.arguments ?? {};
+    const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
     try {
       switch (name) {
         case 'list_projects':
-          return ok(await getJson(`${baseUrl}/api/projects`));
+          return ok(await getJson<ProjectsPayload>(`${baseUrl}/api/projects`));
         case 'get_active_context': {
-          const data = await getJson(`${baseUrl}/api/active`);
+          const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
           if (!data || data.active === false) {
             return ok({
               active: false,
@@ -348,7 +357,7 @@ export async function runMcpStdio({ daemonUrl }) {
         }
         case 'get_project': {
           const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-          const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+          const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
           const project = data?.project ?? data;
           return ok(
             withActiveEcho(
@@ -365,7 +374,7 @@ export async function runMcpStdio({ daemonUrl }) {
         case 'list_files': {
           const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
           const params = new URLSearchParams();
-          if (Number.isFinite(args.since)) params.set('since', String(args.since));
+          if (typeof args.since === 'number' && Number.isFinite(args.since)) params.set('since', String(args.since));
           const qs = params.toString();
           const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
           return ok(withActiveEcho(await getJson(url), active, resolved));
@@ -380,8 +389,8 @@ export async function runMcpStdio({ daemonUrl }) {
             path = active.fileName;
           }
           requireString(path, 'path');
-          const offset = Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
-          const limit = Number.isFinite(args.limit) ? Math.max(1, Math.floor(args.limit)) : 2000;
+          const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
+          const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.max(1, Math.floor(args.limit)) : 2000;
           return await getFile(baseUrl, id, path, active, resolved, offset, limit);
         }
         case 'get_artifact':
@@ -431,17 +440,17 @@ export async function runMcpStdio({ daemonUrl }) {
   });
 }
 
-function ok(payload) {
+function ok(payload: unknown) {
   const text =
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
   return { content: [{ type: 'text', text }] };
 }
 
-function errorResult(message) {
+function errorResult(message: string) {
   return { isError: true, content: [{ type: 'text', text: message }] };
 }
 
-function requireString(v, name) {
+function requireString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string' || v.length === 0) {
     throw new Error(`${name} is required (string).`);
   }
@@ -450,7 +459,7 @@ function requireString(v, name) {
 // Resource description renderers in some MCP UIs collapse whitespace
 // poorly; keep our descriptions on a single line so they don't break
 // the catalog list layout.
-function oneLine(s) {
+function oneLine(s: unknown): string | undefined {
   if (typeof s !== 'string') return undefined;
   return s.replace(/\s+/g, ' ').trim().slice(0, 200) || undefined;
 }
@@ -462,9 +471,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // each one re-fetches /api/projects. The TTL is short so a project
 // renamed in the Open Design UI shows up within a few seconds.
 const PROJECT_LIST_TTL_MS = 5000;
-let projectListCache = null;
+let projectListCache: ProjectListCache | null = null;
 
-async function fetchProjectList(baseUrl) {
+async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
   const now = Date.now();
   if (
     projectListCache &&
@@ -473,7 +482,7 @@ async function fetchProjectList(baseUrl) {
   ) {
     return projectListCache.list;
   }
-  const data = await getJson(`${baseUrl}/api/projects`);
+  const data = await getJson<ProjectsPayload>(`${baseUrl}/api/projects`);
   const list = Array.isArray(data?.projects) ? data.projects : [];
   projectListCache = { baseUrl, t: now, list };
   return list;
@@ -484,17 +493,17 @@ async function fetchProjectList(baseUrl) {
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
-async function resolveProjectArg(baseUrl, arg) {
+async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
   if (typeof arg === 'string' && arg.length > 0) {
     const resolved = await resolveProjectId(baseUrl, arg);
     return { id: resolved.id, resolved, active: null };
   }
-  let active;
+  let active: ActiveContext;
   try {
-    active = await getJson(`${baseUrl}/api/active`);
+    active = await getJson<ActiveContext>(`${baseUrl}/api/active`);
   } catch (err) {
     throw new Error(
-      `project arg omitted and active context lookup failed: ${err && err.message ? err.message : err}. Pass project="<id-or-name>".`,
+      `project arg omitted and active context lookup failed: ${errorMessage(err)}. Pass project="<id-or-name>".`,
     );
   }
   if (!active || active.active === false || !active.projectId) {
@@ -505,7 +514,7 @@ async function resolveProjectArg(baseUrl, arg) {
   return { id: active.projectId, resolved: null, active };
 }
 
-async function resolveProjectId(baseUrl, arg) {
+async function resolveProjectId(baseUrl: string, arg: unknown): Promise<ResolvedProject> {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
   }
@@ -517,7 +526,7 @@ async function resolveProjectId(baseUrl, arg) {
   }
 
   const lower = arg.toLowerCase();
-  const norm = (s) =>
+  const norm = (s: unknown): string =>
     String(s || '')
       .toLowerCase()
       .replace(/\s*\(\d+\)\s*$/, '')
@@ -525,15 +534,15 @@ async function resolveProjectId(baseUrl, arg) {
   const target = norm(arg);
 
   const exact = list.filter((p) => String(p.name || '').toLowerCase() === lower);
-  if (exact.length === 1) return { id: exact[0].id, name: exact[0].name, source: 'exact' as const };
+  if (exact.length === 1) { const p = exact[0]!; return { id: p.id, name: p.name, source: 'exact' as const }; }
 
   const slugged = list.filter((p) => norm(p.name) === target);
-  if (slugged.length === 1) return { id: slugged[0].id, name: slugged[0].name, source: 'slug' as const };
+  if (slugged.length === 1) { const p = slugged[0]!; return { id: p.id, name: p.name, source: 'slug' as const }; }
 
   const subs = list.filter((p) =>
     String(p.name || '').toLowerCase().includes(lower),
   );
-  if (subs.length === 1) return { id: subs[0].id, name: subs[0].name, source: 'substring' as const };
+  if (subs.length === 1) { const p = subs[0]!; return { id: p.id, name: p.name, source: 'substring' as const }; }
   if (subs.length > 1) {
     const opts = subs.map((p) => `${p.name} (${p.id})`).join(', ');
     throw new Error(
@@ -543,16 +552,16 @@ async function resolveProjectId(baseUrl, arg) {
   throw new Error(`no project matches "${arg}"`);
 }
 
-async function getJson(url) {
+async function getJson<T>(url: string): Promise<T> {
   const resp = await fetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
   }
-  return await resp.json();
+  return (await resp.json()) as T;
 }
 
-async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0, limit = 2000) {
+async function getFile(baseUrl: string, project: string, relPath: string, active: ActiveContext | null, resolved?: ResolvedProject | null, offset = 0, limit = 2000) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -565,9 +574,7 @@ async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0,
       `daemon ${resp.status} on ${url}: ${body || resp.statusText}`,
     );
   }
-  const mime = (resp.headers.get('content-type') || 'application/octet-stream')
-    .split(';')[0]
-    .trim();
+  const mime = ((resp.headers.get('content-type') || 'application/octet-stream').split(';')[0] ?? 'application/octet-stream').trim();
   if (!isTextualMime(mime)) {
     return errorResult(
       `file at "${relPath}" has mime "${mime}"; binary content is not yet supported by od mcp. Use list_files to inspect its metadata.`,
@@ -605,7 +612,7 @@ async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0,
 // project came from /api/active. Plain pass-through when the caller
 // supplied project explicitly - keeps token overhead at zero for the
 // explicit path.
-function withActiveEcho(payload, active, resolved?) {
+function withActiveEcho<T extends JsonObject>(payload: T, active: ActiveContext | null, resolved?: ResolvedProject | null): T & JsonObject {
   const result = active ? { ...payload, usedActiveContext: activeEchoPayload(active) } : payload;
   if (resolved && (resolved.source === 'slug' || resolved.source === 'substring')) {
     return { ...result, resolvedProject: { id: resolved.id, name: resolved.name } };
@@ -613,7 +620,7 @@ function withActiveEcho(payload, active, resolved?) {
   return result;
 }
 
-function activeEchoPayload(active) {
+function activeEchoPayload(active: ActiveContext) {
   return {
     projectId: active.projectId,
     projectName: active.projectName ?? null,
@@ -622,7 +629,7 @@ function activeEchoPayload(active) {
   };
 }
 
-function formatActiveEchoLine(active, resolvedPath) {
+function formatActiveEchoLine(active: ActiveContext, resolvedPath: string): string {
   const proj = active.projectName || active.projectId;
   const note = `[od:active-context project="${proj}" file="${resolvedPath}"]`;
   return active.fileName === resolvedPath
@@ -637,7 +644,7 @@ const MAX_FILES = 200;
 // Tracks total textual content bytes accumulated; binary stubs don't
 // count (their content is null). Once we cross the cap the caller
 // stops fetching and stamps `truncated: true` on the bundle.
-function totalTextBytes(files) {
+function totalTextBytes(files: ProjectFileBundleEntry[]): number {
   let n = 0;
   for (const f of files) {
     if (!f.binary && typeof f.content === 'string') n += f.content.length;
@@ -645,27 +652,28 @@ function totalTextBytes(files) {
   return n;
 }
 
-async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesArg) {
+async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unknown, includeMode: unknown, maxBytesArg: unknown) {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
-  if (!VALID_INCLUDE_MODES.has(include)) {
+  if (typeof include !== 'string' || !VALID_INCLUDE_MODES.has(include)) {
     return errorResult(
       `invalid include "${includeMode}"; expected one of: auto, all, shallow`,
     );
   }
   const maxBytes =
-    Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? Number(maxBytesArg) : DEFAULT_MAX_BYTES;
+    typeof maxBytesArg === 'number' && Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? maxBytesArg : DEFAULT_MAX_BYTES;
 
   const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg);
-  const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
-  const project = data?.project ?? data;
+  const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+  const project = (data.project ?? data) as ProjectSummary;
   // Active-file beats project default entry when project also came
   // from active context - if the user is on landing.html and asks
   // "bundle this", they mean landing.html, not whatever
   // metadata.entryFile happens to be.
   const explicitEntry = typeof entryArg === 'string' && entryArg.length > 0;
-  const entry = explicitEntry
-    ? entryArg
-    : (active && active.fileName) || project?.metadata?.entryFile;
+  const metadataEntry = typeof project.metadata?.entryFile === 'string' ? project.metadata.entryFile : undefined;
+  const entry: string | undefined = explicitEntry
+    ? String(entryArg)
+    : (active && active.fileName) || metadataEntry;
   if (!entry) {
     return errorResult(
       `no entry file: pass entry="..." or set the project's metadata.entryFile`,
@@ -677,15 +685,15 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     try {
       file = await fetchProjectFile(baseUrl, id, entry);
     } catch (err) {
-      return errorResult(err && err.message ? err.message : String(err));
+      return errorResult(errorMessage(err));
     }
     return okBundle({ project, entry, files: [file], truncated: false, active, resolved });
   }
 
   if (include === 'all') {
-    const meta = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
+    const meta = await getJson<{ files?: Array<{ name: string }> }>(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
-    const fetched = [];
+    const fetched: ProjectFileBundleEntry[] = [];
     let truncated = false;
     for (const f of allFiles) {
       if (fetched.length >= MAX_FILES || totalTextBytes(fetched) >= maxBytes) {
@@ -710,20 +718,20 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   try {
     entryFile = await fetchProjectFile(baseUrl, id, entry);
   } catch (err) {
-    return errorResult(err && err.message ? err.message : String(err));
+    return errorResult(errorMessage(err));
   }
   const MAX_DEPTH = 3;
   const visited = new Set([entry]);
   const fetched = [entryFile];
   let truncated = false;
-  let frontier = [];
+  let frontier: string[] = [];
   if (isTextualMime(entryFile.mime)) {
     frontier = extractRelativeRefs(entryFile.content || '', entry, entryFile.mime).filter(
       (r) => !visited.has(r),
     );
   }
   outer: for (let depth = 1; depth < MAX_DEPTH && frontier.length > 0; depth++) {
-    const next = [];
+    const next: string[] = [];
     for (const refPath of frontier) {
       if (visited.has(refPath)) continue;
       visited.add(refPath);
@@ -757,7 +765,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
 // failure of the whole bundle.
 class BudgetExceededError extends Error {}
 
-async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = Infinity) {
+async function fetchProjectFile(baseUrl: string, projectId: string, relPath: string, remainingBytes = Infinity): Promise<ProjectFileBundleEntry> {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -768,9 +776,7 @@ async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = In
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
   }
-  const mime = (resp.headers.get('content-type') || 'application/octet-stream')
-    .split(';')[0]
-    .trim();
+  const mime = ((resp.headers.get('content-type') || 'application/octet-stream').split(';')[0] ?? 'application/octet-stream').trim();
   const headerSize = Number(resp.headers.get('content-length'));
   const size = Number.isFinite(headerSize) && headerSize >= 0 ? headerSize : null;
   if (!isTextualMime(mime)) {
@@ -813,25 +819,25 @@ const JS_REF_PATTERNS = [
 // `srcset` can list multiple comma-separated candidates.
 const SRCSET_PATTERN = /\bsrcset=["']([^"']+)["']/gi;
 
-function isJsLike(mime, fromPath) {
+function isJsLike(mime: string | undefined, fromPath: string): boolean {
   if (mime && /javascript|typescript/i.test(mime)) return true;
   return /\.(?:m?jsx?|tsx?|cjs)$/i.test(fromPath);
 }
 
-function isCssLike(mime, fromPath) {
+function isCssLike(mime: string | undefined, fromPath: string): boolean {
   if (mime && /^text\/css\b/i.test(mime)) return true;
   return /\.css$/i.test(fromPath);
 }
 
-function isHtmlLike(mime, fromPath) {
+function isHtmlLike(mime: string | undefined, fromPath: string): boolean {
   if (mime && /^text\/html\b/i.test(mime)) return true;
   return /\.html?$/i.test(fromPath);
 }
 
-function extractRelativeRefs(text, fromPath, fromMime) {
+function extractRelativeRefs(text: string, fromPath: string, fromMime: string): string[] {
   if (!text) return [];
-  const refs = new Set();
-  const runPatterns = [];
+  const refs = new Set<string>();
+  const runPatterns: RegExp[] = [];
   if (isHtmlLike(fromMime, fromPath)) {
     runPatterns.push(...HTML_REF_PATTERNS, ...CSS_REF_PATTERNS);
   }
@@ -847,7 +853,7 @@ function extractRelativeRefs(text, fromPath, fromMime) {
     runPatterns.push(...CSS_REF_PATTERNS);
   }
 
-  const candidates = [];
+  const candidates: string[] = [];
   for (const re of runPatterns) {
     for (const m of text.matchAll(re)) {
       const ref = (m[1] || '').trim();
@@ -890,7 +896,7 @@ function extractRelativeRefs(text, fromPath, fromMime) {
   return [...refs];
 }
 
-function okBundle(bundle) {
+function okBundle(bundle: BundleInput) {
   const payload = {
     entryFile: bundle.entry,
     projectId: bundle.project?.id,
@@ -908,12 +914,12 @@ function okBundle(bundle) {
   return ok(withActiveEcho(payload, bundle.active, bundle.resolved));
 }
 
-function isTextualMime(mime) {
+function isTextualMime(mime: string | undefined): boolean {
   if (!mime) return false;
   return TEXTUAL_MIME_PATTERNS.some((re) => re.test(mime));
 }
 
-async function safeText(resp) {
+async function safeText(resp: Response): Promise<string> {
   try {
     return await resp.text();
   } catch {
@@ -921,13 +927,18 @@ async function safeText(resp) {
   }
 }
 
-function formatError(err, daemonUrl) {
-  const code = err && (err.cause?.code || err.code);
-  const msg = err && err.message ? err.message : String(err);
+function formatError(err: unknown, daemonUrl: string): string {
+  const e = err as ErrorWithCode | null | undefined;
+  const code = e && (e.cause?.code || e.code);
+  const msg = errorMessage(err);
   if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
     return `cannot reach the Open Design daemon at ${daemonUrl}. Is it running? Start it with \`pnpm tools-dev\`.`;
   }
   return msg;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // Exported for unit tests only.

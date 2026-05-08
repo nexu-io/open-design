@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Anti-slop linter for generated HTML artifacts.
  *
@@ -18,14 +17,23 @@
  * surface badges next to each saved artifact.
  */
 
-/**
- * @typedef {Object} LintFinding
- * @property {'P0'|'P1'|'P2'} severity
- * @property {string} id           short stable id (e.g. 'purple-gradient')
- * @property {string} message      one-line explanation
- * @property {string} fix          one-line corrective suggestion (for the agent)
- * @property {string} [snippet]    matched text (≤ 200 chars), if any
- */
+type LintSeverity = 'P0' | 'P1' | 'P2';
+
+export type LintFinding = {
+  severity: LintSeverity;
+  id: string;
+  message: string;
+  fix: string;
+  snippet?: string;
+};
+
+type CssDeclaration = { prop: string; value: string };
+type CssTokenScope = {
+  selectors: string[];
+  tokens: Map<string, string>;
+  isDefault: boolean;
+  themeKeys: Set<string>;
+};
 
 const PURPLE_HEXES = [
   // Tailwind violet / purple — the original AI-slop palette.
@@ -109,9 +117,8 @@ const DISPLAY_SANS_RE =
  * @param {string} html
  * @returns {LintFinding[]}
  */
-export function lintArtifact(rawHtml) {
-  /** @type {LintFinding[]} */
-  const out = [];
+export function lintArtifact(rawHtml: unknown): LintFinding[] {
+  const out: LintFinding[] = [];
   if (typeof rawHtml !== 'string' || rawHtml.length === 0) return out;
 
   // Strip HTML comments before any pattern matching — comments often contain
@@ -482,8 +489,8 @@ export function lintArtifact(rawHtml) {
       .filter((t) => t !== '?');
     for (let i = 0; i < themeSeq.length - 2; i++) {
       const a = themeSeq[i];
-      const isLight = (t) => t === 'L' || t === 'HL';
-      const isDark = (t) => t === 'D' || t === 'HD';
+      const isLight = (t: string | undefined) => t === 'L' || t === 'HL';
+      const isDark = (t: string | undefined) => t === 'D' || t === 'HD';
       if (
         (isLight(a) && isLight(themeSeq[i + 1]) && isLight(themeSeq[i + 2])) ||
         (isDark(a) && isDark(themeSeq[i + 1]) && isDark(themeSeq[i + 2]))
@@ -509,7 +516,7 @@ export function lintArtifact(rawHtml) {
  * @param {LintFinding[]} findings
  * @returns {string}
  */
-export function renderFindingsForAgent(findings) {
+export function renderFindingsForAgent(findings: LintFinding[]): string {
   if (findings.length === 0) return '';
   const sorted = [...findings].sort((a, b) => severity(a) - severity(b));
   const lines = [
@@ -529,17 +536,17 @@ export function renderFindingsForAgent(findings) {
   return lines.join('\n');
 }
 
-function severity(f) {
+function severity(f: LintFinding): number {
   return f.severity === 'P0' ? 0 : f.severity === 'P1' ? 1 : 2;
 }
 
-function clip(s) {
+function clip(s: string): string {
   if (!s) return '';
   const trimmed = s.replace(/\s+/g, ' ').trim();
   return trimmed.length > 200 ? trimmed.slice(0, 197) + '…' : trimmed;
 }
 
-function escapeRe(s) {
+function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -549,7 +556,7 @@ function escapeRe(s) {
 // literal `blue`/`cyan` keywords, so both
 // `linear-gradient(90deg, #3b82f6, #06b6d4)` and
 // `linear-gradient(90deg, blue, cyan)` fire P0.
-function detectBlueCyanTrustGradient(html) {
+function detectBlueCyanTrustGradient(html: string): string | null {
   const re = /linear-gradient\([^)]*\)/gi;
   let m;
   while ((m = re.exec(html)) !== null) {
@@ -627,7 +634,7 @@ function detectBlueCyanTrustGradient(html) {
 // pairing (48px, 1px) that an independent per-token cartesian would
 // emit.
 const ROOT_FONT_PX = 16;
-function hasAdequateUppercaseTracking(body, scopes) {
+function hasAdequateUppercaseTracking(body: string, scopes?: CssTokenScope[]): boolean {
   const themes = buildResolvedThemes(scopes ?? []);
   for (const themeMap of themes) {
     const resolved = resolveCssVars(body, themeMap);
@@ -643,14 +650,17 @@ function hasAdequateUppercaseTracking(body, scopes) {
 // CSS source-order cascade — `.eyebrow { letter-spacing: 0.08em;
 // letter-spacing: 0.02em }` renders the noncompliant `0.02em` value,
 // so the lint must judge against the last declaration, not the first.
-function isResolvedTrackingAdequate(body) {
+function isResolvedTrackingAdequate(body: string): boolean {
   const decls = parseDeclarations(body);
   const ls = findLastDecl(decls, 'letter-spacing');
   if (!ls) return false;
   const lsMatch = /^(-?\d*\.?\d+)\s*(em|px|rem)\b/i.exec(ls.value);
   if (!lsMatch) return false;
-  const v = parseFloat(lsMatch[1]);
-  const unit = lsMatch[2].toLowerCase();
+  const valueText = lsMatch[1];
+  const unitText = lsMatch[2];
+  if (valueText == null || unitText == null) return false;
+  const v = parseFloat(valueText);
+  const unit = unitText.toLowerCase();
   if (unit === 'em') return v >= 0.06;
   const trackingPx = unit === 'rem' ? v * ROOT_FONT_PX : v;
   const fsPx = resolveFontSizePx(decls);
@@ -682,12 +692,12 @@ function isResolvedTrackingAdequate(body) {
 // per-token cartesian product, which generated impossible cross-theme
 // pairings such as `(default-size, dark-track)` and emitted false
 // positives on legitimate light/dark theme variants.
-function buildResolvedThemes(scopes) {
+function buildResolvedThemes(scopes: CssTokenScope[]): Map<string, string>[] {
   const themeKeys = new Set(['default']);
   for (const scope of scopes) {
     for (const k of scope.themeKeys) themeKeys.add(k);
   }
-  const themes = new Map();
+  const themes = new Map<string, Map<string, string>>();
   for (const k of themeKeys) themes.set(k, new Map());
   for (const scope of scopes) {
     if (scope.isDefault) {
@@ -706,13 +716,14 @@ function buildResolvedThemes(scopes) {
   return Array.from(themes.values());
 }
 
-function isBareGlobalSelector(s) {
+function isBareGlobalSelector(s: string): boolean {
   return /^(?::root|html|body)$/.test(s);
 }
 
-function findLastDecl(decls, prop) {
+function findLastDecl(decls: CssDeclaration[], prop: string): CssDeclaration | undefined {
   for (let i = decls.length - 1; i >= 0; i--) {
-    if (decls[i].prop === prop) return decls[i];
+    const decl = decls[i];
+    if (decl && decl.prop === prop) return decl;
   }
   return undefined;
 }
@@ -721,8 +732,8 @@ function findLastDecl(decls, prop) {
 // the property name and skipping custom properties (`--name`). Used by
 // the uppercase-tracking lint so substring matches on `letter-spacing`
 // or `font-size` cannot collide with token-name declarations.
-function parseDeclarations(body) {
-  const out = [];
+function parseDeclarations(body: string): CssDeclaration[] {
+  const out: CssDeclaration[] = [];
   for (const raw of body.split(';')) {
     const idx = raw.indexOf(':');
     if (idx < 0) continue;
@@ -748,13 +759,16 @@ function parseDeclarations(body) {
 // against the noncompliant `1em` the browser actually renders, not the
 // stale earlier `48px`. CSS cascade is last-write-wins on conflicting
 // declarations within a single rule body.
-function resolveFontSizePx(decls) {
+function resolveFontSizePx(decls: CssDeclaration[]): number | null {
   const fs = findLastDecl(decls, 'font-size');
   if (!fs) return null;
   const m = /^(-?\d*\.?\d+)\s*(px|rem)\b/i.exec(fs.value);
   if (!m) return null;
-  const v = parseFloat(m[1]);
-  const unit = m[2].toLowerCase();
+  const valueText = m[1];
+  const unitText = m[2];
+  if (valueText == null || unitText == null) return null;
+  const v = parseFloat(valueText);
+  const unit = unitText.toLowerCase();
   return unit === 'rem' ? v * ROOT_FONT_PX : v;
 }
 
@@ -788,8 +802,8 @@ function resolveFontSizePx(decls) {
 // name; cross-scope merging happens later in `buildResolvedThemes`,
 // where the same source-order cascade is applied between scopes that
 // target the same theme.
-function extractCssTokens(html) {
-  const scopes = [];
+function extractCssTokens(html: string): CssTokenScope[] {
+  const scopes: CssTokenScope[] = [];
   for (const styleBlock of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
     const css = (styleBlock[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '');
     const ruleRe = /([^{}]*)\{([^{}]*)\}/g;
@@ -807,7 +821,9 @@ function extractCssTokens(html) {
       for (const decl of body.split(';').map((d) => d.trim()).filter(Boolean)) {
         const dm = /^(--[\w-]+)\s*:\s*(.+)$/.exec(decl);
         if (dm) {
-          tokens.set(dm[1], dm[2].trim());
+          const tokenName = dm[1];
+          const tokenValue = dm[2];
+          if (tokenName != null && tokenValue != null) tokens.set(tokenName, tokenValue.trim());
         }
       }
       if (tokens.size === 0) continue;
@@ -826,12 +842,12 @@ function extractCssTokens(html) {
 // for the typography pattern this lint cares about, and keeps the
 // regex linear-time on artifact-sized inputs.
 const VAR_RESOLVE_MAX_DEPTH = 4;
-function resolveCssVars(body, tokens) {
+function resolveCssVars(body: string, tokens: Map<string, string>): string {
   let out = body;
   for (let i = 0; i < VAR_RESOLVE_MAX_DEPTH; i++) {
     const next = out.replace(
       /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
-      (full, name, fallback) => {
+      (full: string, name: string, fallback: string | undefined) => {
         const v = tokens.get(name);
         if (v != null) return v;
         if (fallback != null) return fallback.trim();
@@ -874,14 +890,14 @@ function resolveCssVars(body, tokens) {
 //      `:root { --button-bg: #4f46e5 }`) is still the LLM-default
 //      color hidden behind an arbitrary token name and must stay in
 //      scope of the indigo scan.
-function stripTokenBlocks(input) {
+function stripTokenBlocks(input: string): string {
   return input.replace(
     /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_m, open, css, close) => `${open}${stripTokenBlocksFromCss(css)}${close}`,
+    (_m: string, open: string, css: string, close: string) => `${open}${stripTokenBlocksFromCss(css)}${close}`,
   );
 }
 
-function stripTokenBlocksFromCss(css) {
+function stripTokenBlocksFromCss(css: string): string {
   // Strip CSS comments before any structural matching: a block like
   // `:root { /* brand accent */ --accent: #6366f1; }` would otherwise
   // produce a declaration fragment that begins with the comment,
@@ -896,12 +912,12 @@ function stripTokenBlocksFromCss(css) {
   // `@media` wrapper is preserved with the inner token block stripped,
   // so the indigo scan no longer fires on legitimate responsive theme
   // declarations.
-  return cleaned.replace(/([^{}]*)\{([^{}]*)\}/g, (full, selector, body) => {
+  return cleaned.replace(/([^{}]*)\{([^{}]*)\}/g, (full: string, selector: string, body: string) => {
     const sel = (selector || '').trim();
     if (!selectorListIsGlobalThemeScope(sel)) return full;
     const decls = (body || '')
       .split(';')
-      .map((d) => d.trim())
+      .map((d: string) => d.trim())
       .filter(Boolean);
     if (decls.length === 0) return full;
     const tokenShaped = decls.every(isTokenShapedDeclaration);
@@ -916,18 +932,21 @@ function stripTokenBlocksFromCss(css) {
   });
 }
 
-function declarationLaundersIndigo(decl) {
+function declarationLaundersIndigo(decl: string): boolean {
   const m = /^(--[\w-]+)\s*:\s*(.+)$/.exec(decl);
   if (!m) return false;
-  if (m[1].toLowerCase() === '--accent') return false;
-  const value = m[2].toLowerCase();
+  const tokenName = m[1];
+  const tokenValue = m[2];
+  if (tokenName == null || tokenValue == null) return false;
+  if (tokenName.toLowerCase() === '--accent') return false;
+  const value = tokenValue.toLowerCase();
   for (const hex of AI_DEFAULT_INDIGO) {
     if (value.includes(hex.toLowerCase())) return true;
   }
   return false;
 }
 
-function isTokenShapedDeclaration(decl) {
+function isTokenShapedDeclaration(decl: string): boolean {
   // CSS custom property — the canonical token shape.
   if (/^--[\w-]+\s*:/.test(decl)) return true;
   // Global-theme metadata that legitimately accompanies tokens in
@@ -937,8 +956,8 @@ function isTokenShapedDeclaration(decl) {
   return false;
 }
 
-function selectorListIsGlobalThemeScope(selector) {
-  const parts = selector.split(',').map((s) => s.trim()).filter(Boolean);
+function selectorListIsGlobalThemeScope(selector: string): boolean {
+  const parts = selector.split(',').map((s: string) => s.trim()).filter(Boolean);
   if (parts.length === 0) return false;
   return parts.every(isGlobalThemeScopeSelector);
 }
@@ -958,7 +977,7 @@ const GLOBAL_THEME_ATTRIBUTES = new Set([
   'data-mode',
 ]);
 
-function isGlobalThemeScopeSelector(s) {
+function isGlobalThemeScopeSelector(s: string): boolean {
   // :root / html / body, optionally suffixed with a single attribute
   // selector. The bare form (no attribute) is always a global theme
   // scope; the prefixed form is only a theme scope when the attribute
@@ -973,7 +992,8 @@ function isGlobalThemeScopeSelector(s) {
   }
   // Bare attribute selector restricted to known global-theme switches.
   const bareAttr = /^\[([a-zA-Z-]+)(?:[*^$|~]?=[^\]]*)?\]$/.exec(s);
-  if (bareAttr && GLOBAL_THEME_ATTRIBUTES.has(bareAttr[1].toLowerCase())) {
+  const bareAttrName = bareAttr?.[1];
+  if (bareAttrName && GLOBAL_THEME_ATTRIBUTES.has(bareAttrName.toLowerCase())) {
     return true;
   }
   return false;

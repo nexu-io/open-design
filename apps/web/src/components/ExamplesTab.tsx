@@ -19,7 +19,14 @@ interface Props {
   onUsePrompt: (skill: SkillSummary) => void;
 }
 
-type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document' | 'orbit';
+type ModeFilter =
+  | 'all'
+  | 'prototype-desktop'
+  | 'prototype-mobile'
+  | 'deck'
+  | 'document'
+  | 'orbit'
+  | 'live';
 type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
 
@@ -38,6 +45,7 @@ const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'deck', labelKey: 'examples.modeDeck' },
   { value: 'document', labelKey: 'examples.modeDocument' },
   { value: 'orbit', labelKey: 'examples.modeOrbit' },
+  { value: 'live', labelKey: 'examples.modeLive' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {
@@ -87,6 +95,12 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
     return skill.mode === 'prototype' && skill.platform === 'mobile';
   if (filter === 'document') return skill.mode === 'template';
   if (filter === 'orbit') return skill.scenario === 'orbit';
+  // Live artifacts ride on the prototype mode but want their own bucket so
+  // refreshable / connector-backed samples are easy to find without
+  // scrolling through every desktop prototype. The parent live-artifact
+  // skill and every derived `live-artifact:<example>` card share the
+  // `live` scenario, so they all light up here together.
+  if (filter === 'live') return skill.scenario === 'live';
   return true;
 }
 
@@ -104,8 +118,18 @@ function quotePrompt(locale: string, text: string): string {
   return locale === 'de' ? `„${text}“` : `“${text}”`;
 }
 
-export function ExamplesTab({ skills, onUsePrompt }: Props) {
+export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
   const { locale, t } = useI18n();
+  // Skills tagged `aggregatesExamples: true` are containers whose preview
+  // would just duplicate one of their derived `<parent>:<child>` cards
+  // (e.g. live-artifact ships a sample gallery under `examples/`). Drop
+  // them up front so every count, filter, and rendered card downstream
+  // sees only the user-facing entries. The full listing is still passed
+  // through for `findSkillById` lookups elsewhere in the app.
+  const skills = useMemo(
+    () => rawSkills.filter((s) => !s.aggregatesExamples),
+    [rawSkills],
+  );
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   // Track per-skill fetch failures separately so the preview modal can show
@@ -214,6 +238,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       deck: 0,
       document: 0,
       orbit: 0,
+      live: 0,
     };
     for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
@@ -221,6 +246,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
       if (matchesMode(s, 'orbit')) c.orbit++;
+      if (matchesMode(s, 'live')) c.live++;
     }
     return c;
   }, [skills, surfaceFilter]);
@@ -248,6 +274,11 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
     for (const k of [...have].sort()) if (!ordered.includes(k)) ordered.push(k);
     return ordered;
   }, [scenarioCounts]);
+
+  const scenarioAllCount = useMemo(
+    () => [...scenarioCounts.values()].reduce((total, count) => total + count, 0),
+    [scenarioCounts],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -355,7 +386,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               onClick={() => setScenarioFilter('all')}
             >
               {t('examples.modeAll')}
-              <span className="filter-pill-count">{filtered.length}</span>
+              <span className="filter-pill-count">{scenarioAllCount}</span>
             </button>
             {scenarioOptions.map((tag) => (
               <button
@@ -644,6 +675,9 @@ function ExampleCard({
 }
 
 function tagForSkill(skill: SkillSummary, t: TranslateFn): string {
+  if (skill.mode === 'image' || skill.surface === 'image') return t('examples.tagImage');
+  if (skill.mode === 'video' || skill.surface === 'video') return t('examples.tagVideo');
+  if (skill.mode === 'audio' || skill.surface === 'audio') return t('examples.tagAudio');
   if (skill.mode === 'deck') return t('examples.tagSlideDeck');
   if (skill.mode === 'template') return t('examples.tagTemplate');
   if (skill.mode === 'design-system') return t('examples.tagDesignSystem');

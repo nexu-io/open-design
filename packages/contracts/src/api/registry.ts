@@ -45,6 +45,14 @@ export interface SkillSummary {
   craftRequires?: string[];
   hasBody: boolean;
   examplePrompt: string;
+  // True when this skill exists only to group derived `<parent>:<child>`
+  // example cards. The Examples gallery hides such cards because their
+  // preview would duplicate one of the derived cards and add no extra
+  // information, but the entry stays in the listing so `findSkillById`
+  // resolves the parent for system-prompt composition and "Use this
+  // prompt" fast-create on a derived card still composes the parent's
+  // SKILL.md body.
+  aggregatesExamples: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {

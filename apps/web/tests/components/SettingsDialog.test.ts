@@ -1,18 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
+  configForManualOrbitRun,
+  isOrbitRunDisabled,
   isValidApiBaseUrl,
   sanitizeSettingsSavePayload,
   shouldEnableSettingsSave,
   shouldShowCustomModelInput,
+  persistConfigAndRunOrbit,
   switchApiProtocolConfig,
   testStatusVariant,
   updateAgentCliEnvValue,
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
 import type { AppConfig, ConnectionTestResponse } from '../../src/types';
+
+const originalFetch = globalThis.fetch;
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -25,6 +30,12 @@ const baseConfig: AppConfig = {
   skillId: null,
   designSystemId: null,
 };
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('SettingsDialog API protocol switching', () => {
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
@@ -223,10 +234,14 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('ftp://api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('http:api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('https://')).toBe(false);
+    expect(isValidApiBaseUrl('http://0.0.0.0:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://10.0.0.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://100.64.0.1:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://224.0.0.1:11434/v1')).toBe(false);
+    expect(isValidApiBaseUrl('http://[::]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
@@ -375,6 +390,240 @@ describe('deriveComposioCredentialState', () => {
     expect(
       deriveComposioCredentialState({ apiKey: '   \t\n', apiKeyConfigured: true }),
     ).toBe('saved');
+  });
+});
+
+describe('SettingsDialog Orbit run behavior', () => {
+  it('keeps manual Orbit runs disabled while connector availability is still loading', () => {
+    expect(isOrbitRunDisabled(false, null)).toBe(true);
+  });
+
+  it('allows manual Orbit runs once loading finishes and a connector is available', () => {
+    expect(isOrbitRunDisabled(false, 1)).toBe(false);
+  });
+
+  it('persists the current orbit template config before starting the run', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-1' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit({
+        ...baseConfig,
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          templateSkillId: 'orbit-template-1',
+        },
+      }),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-1' });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      url: '/api/app-config',
+      method: 'PUT',
+    });
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({
+      orbit: {
+        enabled: true,
+        time: '09:30',
+        templateSkillId: 'orbit-template-1',
+      },
+    });
+    expect(calls[1]).toMatchObject({
+      url: '/api/orbit/run',
+      method: 'POST',
+    });
+  });
+
+  it('does not sync an unsaved Composio draft before starting a manual Orbit run', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/media/config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-3' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit({
+        ...baseConfig,
+        composio: { apiKey: 'cmp_new_key', apiKeyConfigured: false },
+        mediaProviders: {
+          openai: { apiKey: 'media-key', baseUrl: '' },
+        },
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          templateSkillId: 'orbit-template-1',
+        },
+      }),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-3' });
+
+    expect(calls.map((call) => call.url)).toEqual([
+      '/api/media/config',
+      '/api/app-config',
+      '/api/orbit/run',
+    ]);
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({ force: false });
+  });
+
+  it('does not force an explicit empty media provider map before starting a manual Orbit run', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/media/config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-4' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit({
+        ...baseConfig,
+        mediaProviders: {},
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          templateSkillId: 'orbit-template-1',
+        },
+      }),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-4' });
+
+    expect(calls.map((call) => call.url)).toEqual(['/api/media/config', '/api/app-config', '/api/orbit/run']);
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({
+      providers: {},
+      force: false,
+    });
+  });
+
+  it('does not start a manual Orbit run when saving app config fails', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push(url);
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 500 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit({
+        ...baseConfig,
+        composio: { apiKey: 'cmp_new_key', apiKeyConfigured: false },
+      }),
+    ).rejects.toThrow('Failed to sync app config (500)');
+
+    expect(calls).toEqual(['/api/app-config']);
+  });
+
+  it('still starts a manual Orbit run when saving media credentials fails', async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push({ url, method: init?.method ?? 'GET' });
+      if (url === '/api/media/config') {
+        return new Response(null, { status: 500 });
+      }
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-media-failed' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit({
+        ...baseConfig,
+        mediaProviders: {
+          openai: { apiKey: 'media-key', baseUrl: '' },
+        },
+      }),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-media-failed' });
+
+    expect(calls).toEqual([
+      { url: '/api/media/config', method: 'PUT' },
+      { url: '/api/app-config', method: 'PUT' },
+      { url: '/api/orbit/run', method: 'POST' },
+    ]);
+  });
+
+  it('persists the displayed default template before starting a legacy null-template run', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-2' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit(configForManualOrbitRun({
+        ...baseConfig,
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          templateSkillId: null,
+        },
+      })),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-2' });
+
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({
+      orbit: {
+        enabled: true,
+        time: '09:30',
+        templateSkillId: 'orbit-general',
+      },
+    });
+    expect(calls[1]).toMatchObject({
+      url: '/api/orbit/run',
+      method: 'POST',
+    });
   });
 });
 

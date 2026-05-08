@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { en } from '../../src/i18n/locales/en';
+import { id } from '../../src/i18n/locales/id';
 import { LOCALES, LOCALE_LABEL, type Dict, type Locale } from '../../src/i18n/types';
 
 const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr'];
@@ -25,6 +27,11 @@ async function loadDict(locale: Locale): Promise<Dict> {
   return dict;
 }
 
+function explicitLocaleKeys(locale: Locale): string[] {
+  const source = readFileSync(new URL(`../../src/i18n/locales/${locale}.ts`, import.meta.url), 'utf8');
+  return Array.from(source.matchAll(/'([^']+)':/g), (match) => match[1] ?? '').filter(Boolean);
+}
+
 describe('i18n locales', () => {
   it('registers every supported locale in the language menu', () => {
     expect(LOCALES).toEqual(EXPECTED_LOCALES);
@@ -47,5 +54,77 @@ describe('i18n locales', () => {
         );
       }
     }
+  });
+
+  it('keeps Indonesian connector settings copy translated instead of falling back to English', () => {
+    const translatedKeys: Array<keyof Dict> = [
+      'settings.connectorsNavHint',
+      'settings.connectorsHint',
+      'settings.connectorsComposioApiKey',
+      'settings.connectorsSavedTitle',
+      'settings.connectorsSaved',
+      'settings.connectorsGetApiKey',
+      'settings.connectorsApiKeyPlaceholder',
+      'settings.connectorsClear',
+      'settings.connectorsSaveKey',
+      'settings.connectorsKeyError',
+      'settings.connectorsHelpEmpty',
+      'settings.connectorsLoadingSavedKey',
+      'settings.autosaveSaving',
+      'settings.autosaveSaved',
+      'settings.autosaveError',
+      'settings.orbit.eyebrow',
+      'settings.orbit.navHint',
+      'settings.orbit.lede',
+      'settings.orbit.statusOnTitle',
+      'settings.orbit.statusOffTitle',
+      'settings.orbit.runTitle',
+      'settings.orbit.running',
+      'settings.orbit.runOpen',
+      'settings.orbit.dailySummaryTitle',
+      'settings.orbit.dailySummarySub',
+      'settings.orbit.runTimeTitle',
+      'settings.orbit.runTimeSub',
+      'settings.orbit.nextRun',
+      'settings.orbit.nextRunScheduledAfterSave',
+      'settings.orbit.schedule',
+      'settings.orbit.pausedManualOnly',
+      'settings.orbit.templateTitle',
+      'settings.orbit.templateMissing',
+      'settings.orbit.templateMissingOption',
+      'settings.orbit.templateMissingInstall',
+      'settings.orbit.templateMissingPickAnother',
+      'settings.orbit.templateResetTitle',
+      'settings.orbit.templateReset',
+      'settings.orbit.templateHelp',
+      'settings.orbit.templatesLoading',
+      'settings.orbit.templatesOptgroup',
+      'settings.orbit.lastRun',
+      'settings.orbit.countChecked',
+      'settings.orbit.countSucceeded',
+      'settings.orbit.countSkipped',
+      'settings.orbit.countFailed',
+      'settings.orbit.runError',
+      'settings.orbit.artifactKickerLive',
+    ];
+
+    for (const key of translatedKeys) {
+      expect(id[key], key).not.toBe(en[key]);
+    }
+  });
+
+  it('declares CI-sensitive Indonesian fallback keys explicitly', () => {
+    const explicitKeys = new Set(explicitLocaleKeys('id'));
+    const requiredExplicitKeys = Object.keys(en).filter((key) => {
+      return key.startsWith('connectors.category.') || key.startsWith('liveArtifact.viewer.');
+    });
+
+    expect(requiredExplicitKeys.filter((key) => !explicitKeys.has(key))).toEqual([]);
+  });
+
+  it('avoids brittle per-key English lookups in the Indonesian locale source', () => {
+    const source = readFileSync(new URL('../../src/i18n/locales/id.ts', import.meta.url), 'utf8');
+
+    expect(source).not.toMatch(/en\['(?:connectors\.category\.|liveArtifact\.viewer\.)/);
   });
 });
