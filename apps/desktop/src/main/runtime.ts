@@ -341,7 +341,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       await new Promise<void>((resolve, reject) => {
         printWindow.webContents.print({ printBackground: true }, (success: boolean, failureReason?: string) => {
           if (success) resolve();
-          else reject(new Error(failureReason ?? 'Print dialog was cancelled or failed'));
+          else if (failureReason === 'Print job canceled') resolve();
+          else reject(new Error(failureReason ?? 'Print failed'));
         });
       });
     } finally {
