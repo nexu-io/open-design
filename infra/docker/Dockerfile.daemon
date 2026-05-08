@@ -74,6 +74,17 @@ USER node
 
 # Daemon listens on $OD_PORT (default 8080 in container; the daemon CLI also
 # honours OD_PORT). Caddy reverse-proxies to 127.0.0.1:<DAEMON_PORT>.
+#
+# Spec 112 — required env at runtime for the multi-tenant REST API:
+#   OPENDESIGN_API_KEYS    JSON map {tenant_slug: api_key}, e.g.
+#                          {"ceremonia":"od_<32hex>","lumina":"od_<32hex>","ericedmeades":"od_<32hex>"}
+#                          When unset, /api/projects rejects all calls (fail-safe).
+#   OPENDESIGN_HOST_SUFFIX (optional) Defaults to ".opendesign.holalumina.com"
+#                          inside the route's middleware, but the tenant-resolver
+#                          ALSO uses ".opendesign.holalumina.com" — keep these
+#                          aligned for staging/canary deployments.
+#   OPENDESIGN_CREATE_LIMIT_PER_MIN  (optional, default 10)
+#   OPENDESIGN_PUBLISH_LIMIT_PER_MIN (optional, default 30)
 ENV NODE_ENV=production \
     OD_PORT=8080 \
     OD_HOST=0.0.0.0 \
