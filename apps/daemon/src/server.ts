@@ -74,6 +74,7 @@ import {
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
+import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -1746,33 +1747,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
       return res.json(installInfoCache.payload);
     }
+    // process.execPath is the absolute path to the Node-compatible
+    // runtime that is running the daemon RIGHT NOW. In packaged builds
+    // this may be Electron running with ELECTRON_RUN_AS_NODE=1 rather
+    // than a separate bundled Node binary; the helper surfaces that env
+    // requirement with the command so IDE-spawned MCP clients can
+    // reproduce the same mode from a minimal OS launcher environment.
     const cliPath = OD_BIN;
-    const cliExists = fs.existsSync(cliPath);
-    // process.execPath is the absolute path to the Node-compatible runtime
-    // that is running the daemon RIGHT NOW. In packaged builds this may be
-    // Electron running with ELECTRON_RUN_AS_NODE=1 rather than a separate
-    // bundled Node binary; surface the env requirement with the command so
-    // IDE-spawned MCP clients can reproduce the same mode from a minimal OS
-    // launcher environment.
-    const nodeExists = fs.existsSync(process.execPath);
-    const hints: string[] = [];
-    if (!cliExists) {
-      hints.push(
-        `Open Design CLI entry is missing at ${cliPath}. Rebuild the daemon or packaged app and refresh.`,
-      );
-    }
-    if (!nodeExists) {
-      hints.push(
-        `Node-compatible runtime at ${process.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
-      );
-    }
-    // Pin OD_DATA_DIR to the daemon's resolved data root so the spawned
-    // MCP process writes to the same directory as the running daemon
-    // even when the IDE that launched it (Antigravity, VS Code, etc.)
-    // does not inherit the packaged app's environment. Without this,
-    // `od mcp` falls back to `<cwd>/.od/...` which is the read-only
-    // macOS app bundle for packaged installs and trips EPERM. Issue #848.
-    //
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
     // In sidecar mode the snippet omits --daemon-url and the spawned
@@ -1782,10 +1763,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // when overridden) so a non-default namespace daemon stays
     // reachable - the MCP client does not inherit the daemon's env,
     // so without this the spawned `od mcp` would probe the default
-    // namespace socket and miss.
-    //
-    // For direct `od` / `od --port X` launches there is no IPC
-    // socket; bake --daemon-url so custom ports keep working.
+    // namespace socket and miss. For direct `od` / `od --port X`
+    // launches there is no IPC socket; the helper bakes --daemon-url
+    // so custom ports keep working.
     const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
@@ -1799,32 +1779,18 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
       }
     }
-    const electronEnv = process.env.ELECTRON_RUN_AS_NODE === '1'
-      ? { ELECTRON_RUN_AS_NODE: '1' }
-      : null;
-    const env: Record<string, string> = {
-      OD_DATA_DIR: RUNTIME_DATA_DIR,
-      ...sidecarEnv,
-      ...(electronEnv ?? {}),
-    };
-    const args = isSidecarMode
-      ? [cliPath, 'mcp']
-      : [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${resolvedPort}`];
-    const payload = {
-      command: process.execPath,
-      args,
-      env,
-      daemonUrl: `http://127.0.0.1:${resolvedPort}`,
-      // Surface platform so the install panel can localize path hints
-      // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
-      // (Cmd vs Ctrl). One of 'darwin' | 'linux' | 'win32' in
-      // practice; the panel falls back to POSIX wording for anything
-      // else.
+    const payload = buildMcpInstallPayload({
+      cliPath,
+      cliExists: fs.existsSync(cliPath),
+      execPath: process.execPath,
+      nodeExists: fs.existsSync(process.execPath),
+      port: resolvedPort,
       platform: process.platform,
-      cliExists,
-      nodeExists,
-      buildHint: hints.length ? hints.join(' ') : null,
-    };
+      dataDir: RUNTIME_DATA_DIR,
+      electronAsNode: process.env.ELECTRON_RUN_AS_NODE === '1',
+      isSidecarMode,
+      sidecarEnv,
+    });
     installInfoCache = { t: now, payload };
     res.json(payload);
   });

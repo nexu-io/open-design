@@ -7,12 +7,15 @@ import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { isLocalSameOrigin } from '../src/server.js';
+import { buildMcpInstallPayload } from '../src/mcp-install-info.js';
 
 // The install-info endpoint is a self-contained handler that resolves
 // absolute paths to node + cli.js so the Settings → MCP server panel
 // can render snippets that work regardless of PATH. We re-build a
-// minimal Express app with the same handler shape rather than booting
-// the full daemon (which needs SQLite, sidecar, fs scaffolding).
+// minimal Express app rather than booting the full daemon (which needs
+// SQLite, sidecar, fs scaffolding), but the payload itself is built by
+// the same exported helper the production handler uses, so any shape
+// divergence (env, args, buildHint) would fail this test.
 
 interface InstallInfoOpts {
   cliPath: string;
@@ -43,19 +46,10 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
       return res.json(cache.payload);
     }
     resolveCalls += 1;
-    const cliExists = fs.existsSync(cliPath);
-    const nodeExists = fs.existsSync(process.execPath);
-    const hints: string[] = [];
-    if (!cliExists) hints.push('cli missing');
-    if (!nodeExists) hints.push('node missing');
 
-    // Mirror the production handler in apps/daemon/src/server.ts:
-    // sidecar-bootstrapped daemons rely on IPC discovery in `od mcp`
-    // and propagate namespace / IPC base through the snippet env;
-    // non-sidecar (direct `od --port X`) launches bake the URL.
-    // OD_DATA_DIR is pinned unconditionally so the spawned process
-    // does not fall back to <cwd>/.od and EPERM inside a packaged
-    // app bundle. Issue #848.
+    // Mirror the production handler's sidecar detection so this test
+    // exercises the same path; the helper below is the same one
+    // server.ts calls.
     const sidecarIpcPath = env[SIDECAR_ENV.IPC_PATH];
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
@@ -69,27 +63,18 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
         sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
       }
     }
-    const electronEnv = env.ELECTRON_RUN_AS_NODE === '1'
-      ? { ELECTRON_RUN_AS_NODE: '1' }
-      : null;
-    const snippetEnv: Record<string, string> = {
-      OD_DATA_DIR: dataDir,
-      ...sidecarEnv,
-      ...(electronEnv ?? {}),
-    };
-    const args = isSidecarMode
-      ? [cliPath, 'mcp']
-      : [cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`];
-    const payload = {
-      command: process.execPath,
-      args,
-      env: snippetEnv,
-      daemonUrl: `http://127.0.0.1:${port}`,
+    const payload = buildMcpInstallPayload({
+      cliPath,
+      cliExists: fs.existsSync(cliPath),
+      execPath: process.execPath,
+      nodeExists: fs.existsSync(process.execPath),
+      port,
       platform: process.platform,
-      cliExists,
-      nodeExists,
-      buildHint: hints.length ? hints.join(' ') : null,
-    };
+      dataDir,
+      electronAsNode: env.ELECTRON_RUN_AS_NODE === '1',
+      isSidecarMode,
+      sidecarEnv,
+    });
     cache = { t: now, payload };
     res.json(payload);
   });
