@@ -510,6 +510,9 @@ export const fa: Dict = {
   'preview.fullscreen': '⤢ تمام صفحه',
   'preview.closeTitle': 'بستن (Esc)',
   'preview.loading': 'در حال بارگذاری {label}…',
+  'preview.errorTitle': 'بارگیری این نمونه ممکن نشد.',
+  'preview.errorBody': 'دریافت HTML نمونه با خطا مواجه شد. مطمئن شوید Open Design در حال اجراست و دوباره تلاش کنید.',
+  'preview.retry': 'تلاش دوباره',
   'preview.showSidebar': 'نمایش {label}',
   'preview.hideSidebar': 'پنهان کردن {label}',
 

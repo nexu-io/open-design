@@ -501,6 +501,9 @@ export const zhTW: Dict = {
   'preview.fullscreen': '⤢ 全螢幕',
   'preview.closeTitle': '關閉（Esc）',
   'preview.loading': '正在載入{label}…',
+  'preview.errorTitle': '無法載入此範例。',
+  'preview.errorBody': '範例 HTML 載入失敗。請確認 Open Design 正在執行後重試。',
+  'preview.retry': '重試',
   'preview.showSidebar': '展開{label}',
   'preview.hideSidebar': '收合{label}',
 

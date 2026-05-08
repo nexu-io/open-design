@@ -492,6 +492,9 @@ export const tr: Dict = {
   'preview.fullscreen': '⤢ Tam ekran',
   'preview.closeTitle': 'Kapat (Esc)',
   'preview.loading': '{label} yükleniyor…',
+  'preview.errorTitle': 'Bu örnek yüklenemedi.',
+  'preview.errorBody': 'Örnek HTML\'i alınamadı. Open Design\'ın çalıştığından emin olup tekrar deneyin.',
+  'preview.retry': 'Tekrar dene',
   'preview.showSidebar': '{label} göster',
   'preview.hideSidebar': '{label} gizle',
 

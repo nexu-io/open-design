@@ -509,6 +509,9 @@ export const ptBR: Dict = {
   'preview.fullscreen': '⤢ Tela cheia',
   'preview.closeTitle': 'Fechar (Esc)',
   'preview.loading': 'Carregando {label}…',
+  'preview.errorTitle': 'Não foi possível carregar este exemplo.',
+  'preview.errorBody': 'A obtenção do HTML do exemplo falhou. Verifique se o Open Design está em execução e tente novamente.',
+  'preview.retry': 'Tentar novamente',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 

@@ -499,6 +499,9 @@ export const ar: Dict = {
   'preview.fullscreen': '⤢ ملء الشاشة',
   'preview.closeTitle': 'إغلاق (Esc)',
   'preview.loading': 'جاري تحميل {label}...',
+  'preview.errorTitle': 'تعذّر تحميل هذا المثال.',
+  'preview.errorBody': 'فشل جلب HTML الخاص بالمثال. تأكد من تشغيل Open Design ثم أعد المحاولة.',
+  'preview.retry': 'إعادة المحاولة',
   'preview.showSidebar': 'إظهار {label}',
   'preview.hideSidebar': 'إخفاء {label}',
 

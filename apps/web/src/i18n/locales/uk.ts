@@ -510,6 +510,9 @@ export const uk: Dict = {
   'preview.fullscreen': '⤢ Повноекранний режим',
   'preview.closeTitle': 'Закрити (Esc)',
   'preview.loading': 'Завантаження {label}…',
+  'preview.errorTitle': 'Не вдалося завантажити цей приклад.',
+  'preview.errorBody': 'Не вдалося отримати HTML прикладу. Переконайтеся, що Open Design запущено, і повторіть спробу.',
+  'preview.retry': 'Повторити',
   'preview.showSidebar': 'Показати {label}',
   'preview.hideSidebar': 'Приховати {label}',
 

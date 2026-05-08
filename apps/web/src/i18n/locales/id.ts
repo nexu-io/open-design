@@ -499,6 +499,9 @@ export const id: Dict = {
   'preview.fullscreen': 'Layar penuh',
   'preview.closeTitle': 'Tutup pratinjau',
   'preview.loading': 'Memuat {label}...',
+  'preview.errorTitle': 'Tidak dapat memuat contoh ini.',
+  'preview.errorBody': 'Pengambilan HTML contoh gagal. Pastikan Open Design berjalan, lalu coba lagi.',
+  'preview.retry': 'Coba lagi',
   'preview.showSidebar': 'Tampilkan {label}',
   'preview.hideSidebar': 'Sembunyikan {label}',
 

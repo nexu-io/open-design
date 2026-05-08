@@ -499,6 +499,9 @@ export const ko: Dict = {
   'preview.fullscreen': '⤢ 전체 화면',
   'preview.closeTitle': '닫기 (Esc)',
   'preview.loading': '{label} 불러오는 중…',
+  'preview.errorTitle': '이 예제를 불러오지 못했습니다.',
+  'preview.errorBody': '예제 HTML을 가져오지 못했습니다. Open Design이 실행 중인지 확인하고 다시 시도하세요.',
+  'preview.retry': '다시 시도',
   'preview.showSidebar': '{label} 표시',
   'preview.hideSidebar': '{label} 숨기기',
 

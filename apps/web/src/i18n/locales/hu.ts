@@ -499,6 +499,9 @@ export const hu: Dict = {
   'preview.fullscreen': '⤢ Teljes képernyő',
   'preview.closeTitle': 'Bezárás (Esc)',
   'preview.loading': '{label} betöltése…',
+  'preview.errorTitle': 'A példa betöltése nem sikerült.',
+  'preview.errorBody': 'A példa HTML-jének letöltése meghiúsult. Győződj meg róla, hogy az Open Design fut, majd próbáld újra.',
+  'preview.retry': 'Újra',
   'preview.showSidebar': '{label} megjelenítése',
   'preview.hideSidebar': '{label} elrejtése',
 

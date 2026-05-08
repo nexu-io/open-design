@@ -501,6 +501,9 @@ export const zhCN: Dict = {
   'preview.fullscreen': '⤢ 全屏',
   'preview.closeTitle': '关闭（Esc）',
   'preview.loading': '正在加载{label}…',
+  'preview.errorTitle': '无法加载此示例。',
+  'preview.errorBody': '示例 HTML 加载失败。请确认 Open Design 正在运行后重试。',
+  'preview.retry': '重试',
   'preview.showSidebar': '展开{label}',
   'preview.hideSidebar': '收起{label}',
 

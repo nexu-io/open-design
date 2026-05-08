@@ -568,6 +568,9 @@ export interface Dict {
   'preview.fullscreen': string;
   'preview.closeTitle': string;
   'preview.loading': string;
+  'preview.errorTitle': string;
+  'preview.errorBody': string;
+  'preview.retry': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 

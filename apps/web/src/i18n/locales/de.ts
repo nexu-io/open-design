@@ -453,6 +453,9 @@ export const de: Dict = {
   'preview.fullscreen': '⤢ Vollbild',
   'preview.closeTitle': 'Schließen (Esc)',
   'preview.loading': '{label} wird geladen…',
+  'preview.errorTitle': 'Beispiel konnte nicht geladen werden.',
+  'preview.errorBody': 'Das Beispiel-HTML konnte nicht abgerufen werden. Stelle sicher, dass Open Design läuft, und versuche es erneut.',
+  'preview.retry': 'Erneut versuchen',
   'preview.showSidebar': '{label} einblenden',
   'preview.hideSidebar': '{label} ausblenden',
 

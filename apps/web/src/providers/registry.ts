@@ -349,13 +349,25 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
   }
 }
 
-export async function fetchSkillExample(id: string): Promise<string | null> {
+export type SkillExampleResult =
+  | { html: string }
+  | { error: string };
+
+// Returns a discriminated result so callers can distinguish a real
+// failure (network error, daemon unreachable, non-2xx) from a normal
+// load. Previously this collapsed every failure into `null`, which
+// left the example preview modal stuck at its loading state with no
+// recovery affordance. Issue #860.
+export async function fetchSkillExample(id: string): Promise<SkillExampleResult> {
   try {
     const resp = await fetch(`/api/skills/${encodeURIComponent(id)}/example`);
-    if (!resp.ok) return null;
-    return await resp.text();
-  } catch {
-    return null;
+    if (!resp.ok) {
+      return { error: `HTTP ${resp.status}` };
+    }
+    return { html: await resp.text() };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'network error';
+    return { error: message };
   }
 }
 

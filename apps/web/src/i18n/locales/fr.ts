@@ -499,6 +499,9 @@ export const fr: Dict = {
   'preview.fullscreen': '⤢ Plein écran',
   'preview.closeTitle': 'Fermer (Échap)',
   'preview.loading': 'Chargement de {label}…',
+  'preview.errorTitle': 'Impossible de charger cet exemple.',
+  'preview.errorBody': 'Le chargement du HTML de l\'exemple a échoué. Vérifiez qu\'Open Design est en cours d\'exécution et réessayez.',
+  'preview.retry': 'Réessayer',
   'preview.showSidebar': 'Afficher {label}',
   'preview.hideSidebar': 'Masquer {label}',
 

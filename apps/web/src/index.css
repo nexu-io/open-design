@@ -7988,6 +7988,27 @@ button.connector-action.is-loading {
   color: var(--text-muted);
   font-size: 13px;
 }
+/* Error state extends .ds-modal-empty: stacks a title, body, and Retry
+   button instead of a single line, so a fetch failure no longer leaves
+   the modal stuck at "Loading…" with disabled toolbar buttons and no
+   recovery path. Issue #860. */
+.ds-modal-error {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+}
+.ds-modal-error-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-modal-error-body {
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 48ch;
+  line-height: 1.5;
+}
 .ds-modal-actions .ghost.is-active {
   background: var(--accent-tint);
   color: var(--accent);

@@ -452,6 +452,9 @@ export const ja: Dict = {
   'preview.fullscreen': '⤢ フルスクリーン',
   'preview.closeTitle': '閉じる (Esc)',
   'preview.loading': '{label} を読み込み中…',
+  'preview.errorTitle': 'この例を読み込めませんでした。',
+  'preview.errorBody': '例の HTML を取得できませんでした。Open Design が起動していることを確認して再試行してください。',
+  'preview.retry': '再試行',
   'preview.showSidebar': '{label} を表示',
   'preview.hideSidebar': '{label} を非表示',
 

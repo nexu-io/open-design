@@ -108,6 +108,10 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
   const { locale, t } = useI18n();
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  // Track per-skill fetch failures separately so the preview modal can show
+  // an actionable error / retry state instead of staying stuck at "loading".
+  // Issue #860.
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
@@ -119,11 +123,32 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
 
   const loadPreview = useCallback(
     async (id: string) => {
-      if (previews[id] !== undefined) return;
-      const html = await fetchSkillExample(id);
-      setPreviews((prev) => ({ ...prev, [id]: html }));
+      // Skip the fetch only when we already hold a successful html result.
+      // A prior error must not short-circuit a retry; a prior success can.
+      if (previews[id] !== undefined && previewErrors[id] === undefined) return;
+      // Reset both branches before firing so a retry from the error UI
+      // immediately swaps to "loading" instead of flashing the old error.
+      setPreviewErrors((prev) => {
+        if (prev[id] === undefined) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setPreviews((prev) => ({ ...prev, [id]: null }));
+      const result = await fetchSkillExample(id);
+      if ('html' in result) {
+        setPreviews((prev) => ({ ...prev, [id]: result.html }));
+      } else {
+        setPreviewErrors((prev) => ({ ...prev, [id]: result.error }));
+        setPreviews((prev) => {
+          if (prev[id] === undefined) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
     },
-    [previews],
+    [previews, previewErrors],
   );
 
   // Open the modal for a card. We always trigger a preview fetch even if
@@ -334,9 +359,13 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               id: 'preview',
               label: t('examples.previewLabel'),
               html: previews[previewSkill.id],
+              error: previewErrors[previewSkill.id] ?? null,
               deck: previewSkill.mode === 'deck',
             },
           ]}
+          // Wire the modal's Retry button back into loadPreview so a
+          // failure followed by a click re-fires the fetch. Issue #860.
+          onView={() => void loadPreview(previewSkill.id)}
           exportTitleFor={() => previewSkill.name}
           onClose={() => setPreviewSkillId(null)}
         />

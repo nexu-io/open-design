@@ -509,6 +509,9 @@ export const ru: Dict = {
   'preview.fullscreen': '⤢ Полноэкранный',
   'preview.closeTitle': 'Закрыть (Esc)',
   'preview.loading': 'Загрузка {label}…',
+  'preview.errorTitle': 'Не удалось загрузить этот пример.',
+  'preview.errorBody': 'Не удалось получить HTML примера. Убедитесь, что Open Design запущен, и повторите попытку.',
+  'preview.retry': 'Повторить',
   'preview.showSidebar': 'Показать {label}',
   'preview.hideSidebar': 'Скрыть {label}',
 

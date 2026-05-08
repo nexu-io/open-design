@@ -454,6 +454,9 @@ export const esES: Dict = {
   'preview.fullscreen': '⤢ Pantalla completa',
   'preview.closeTitle': 'Cerrar (Esc)',
   'preview.loading': 'Cargando {label}…',
+  'preview.errorTitle': 'No se pudo cargar este ejemplo.',
+  'preview.errorBody': 'No se pudo obtener el HTML del ejemplo. Asegúrate de que Open Design esté en ejecución e inténtalo de nuevo.',
+  'preview.retry': 'Reintentar',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 
