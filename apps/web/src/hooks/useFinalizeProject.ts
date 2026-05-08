@@ -79,6 +79,14 @@ export function useFinalizeProject(projectId: string): FinalizeProjectState {
       setError(null);
       setResult(null);
 
+      // Every state-write site below first checks `isCurrent()` so a
+      // superseded trigger cannot leak its outcome into a replacement
+      // trigger's lifecycle. Without these guards, a quick double-click
+      // would let the first request's late AbortError catch run
+      // setStatus('idle') while the second request is still pending,
+      // clearing the spinner and re-enabling the buttons mid-flight.
+      const isCurrent = () => abortRef.current === controller;
+
       try {
         const resp = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/finalize/anthropic`,
@@ -92,6 +100,7 @@ export function useFinalizeProject(projectId: string): FinalizeProjectState {
 
         if (!resp.ok) {
           const envelope = (await resp.json().catch(() => ({}))) as DaemonErrorEnvelope;
+          if (!isCurrent()) return null;
           const code = envelope.error?.code ?? 'INTERNAL_ERROR';
           const detailsRaw = envelope.error?.details;
           const details = typeof detailsRaw === 'string' ? detailsRaw : null;
@@ -106,10 +115,12 @@ export function useFinalizeProject(projectId: string): FinalizeProjectState {
         }
 
         const body = (await resp.json()) as FinalizeAnthropicResponse;
+        if (!isCurrent()) return null;
         setResult(body);
         setStatus('success');
         return body;
       } catch (err) {
+        if (!isCurrent()) return null;
         const aborted =
           (err instanceof DOMException && err.name === 'AbortError') ||
           (err instanceof Error && err.name === 'AbortError');

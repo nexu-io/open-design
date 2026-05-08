@@ -167,6 +167,58 @@ describe('useFinalizeProject', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('does not let a superseded trigger leak idle state into a replacement that is still pending', async () => {
+    // First trigger never resolves on its own — only the cancel from
+    // trigger 2 will end it. Second trigger also stays pending so we
+    // can observe that trigger 1's late AbortError catch did NOT
+    // reset status to 'idle' under us.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined;
+      return new Promise((_resolve, reject) => {
+        sig?.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+    });
+
+    const { result } = renderHook(() => useFinalizeProject('p1'));
+
+    let firstTrigger!: Promise<unknown>;
+    let secondTrigger!: Promise<unknown>;
+
+    act(() => {
+      firstTrigger = result.current.trigger(REQUEST);
+    });
+    await waitFor(() => expect(result.current.status).toBe('pending'));
+
+    act(() => {
+      secondTrigger = result.current.trigger(REQUEST);
+    });
+    // Trigger 2 swapped abortRef + aborted trigger 1's controller.
+    // Wait for trigger 1's rejection to be flushed through the catch.
+    await act(async () => {
+      await firstTrigger;
+    });
+
+    // The replacement is still in flight — status MUST stay
+    // 'pending'. If trigger 1's late catch had leaked through, status
+    // would have flipped to 'idle' here.
+    expect(result.current.status).toBe('pending');
+    expect(result.current.error).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    // Cleanup: abort trigger 2 so the never-resolving promise is
+    // settled before the test exits.
+    act(() => {
+      result.current.cancel();
+    });
+    await act(async () => {
+      await secondTrigger;
+    });
+  });
+
   it('surfaces a TIMEOUT error when the 130 s timeout aborts the in-flight request', async () => {
     vi.useFakeTimers();
     try {
