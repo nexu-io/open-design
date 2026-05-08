@@ -118,6 +118,7 @@ import {
   projectDir,
   readProjectFile,
   removeProjectDir,
+  resolveProjectDir,
   sanitizeName,
   searchProjectFiles,
   writeProjectFile,
@@ -2505,8 +2506,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const project = getProject(db, req.params.id);
     if (!project)
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    /** @type {import('@open-design/contracts').ProjectResponse} */
-    const body = { project };
+    const resolvedDir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    /** @type {import('@open-design/contracts').ProjectDetailResponse} */
+    const body = { project, resolvedDir };
     res.json(body);
   });
 

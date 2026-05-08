@@ -141,6 +141,17 @@ export interface ProjectResponse {
   project: Project;
 }
 
+// Response body for `GET /api/projects/:id`. Carries the same `project`
+// payload as `ProjectResponse` plus a derived `resolvedDir` so the web
+// client can address the on-disk working directory directly (e.g. for
+// `shell.openPath` from the desktop bridge). For folder-imported projects
+// `resolvedDir === metadata.baseDir`; for native projects it is
+// `path.join(<daemon projects root>, project.id)`. Computed server-side via
+// `resolveProjectDir(...)` so the web client never reconstructs the path.
+export interface ProjectDetailResponse extends ProjectResponse {
+  resolvedDir: string;
+}
+
 export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
 }
