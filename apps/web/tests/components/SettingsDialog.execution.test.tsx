@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { en } from '../../src/i18n/locales/en';
 
 const {
   playSoundMock,
@@ -513,11 +514,17 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
     const geminiGroup = screen.getByRole('group', { name: /Gemini CLI/i });
     expect(
-      (within(geminiGroup).getByRole('link', { name: 'Install' }) as HTMLAnchorElement).getAttribute('href'),
+      (within(geminiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
     ).toBe(
       'https://github.com/google-gemini/gemini-cli',
     );
-    expect(screen.getByText(/QUICKSTART\.md/)).toBeTruthy();
+    expect(
+      screen.getByText(en['settings.agentInstall.stepAuth']),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(en['settings.agentInstall.stepSelect']),
+    ).toBeTruthy();
+    expect(screen.getByText(en['settings.agentInstall.pathHint'])).toBeTruthy();
 
     fireEvent.click(codexCard);
     await waitForPersist(
@@ -609,7 +616,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    fireEvent.change(screen.getByLabelText('Claude Code config dir'), {
+    fireEvent.change(screen.getByLabelText('Claude Code config directory'), {
       target: { value: '  ~/.claude-qa  ' },
     });
     fireEvent.change(screen.getByLabelText('Codex home'), {

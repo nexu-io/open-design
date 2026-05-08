@@ -85,6 +85,15 @@ export const tr: Dict = {
   'settings.testAgentMissing': '{agentName} yüklü değil veya PATH\'te yok.',
   'settings.testAgentSpawn': '{agentName} başlatılamadı: {detail}.',
   'settings.testUnknown': 'Test başarısız: {detail}',
+  'settings.agentInstall.install': 'Yükle',
+  'settings.agentInstall.docs': 'Dokümanlar',
+  'settings.agentInstall.pathHint':
+    'Bir CLI\'yi npm veya Homebrew ile kurduysan ancak hâlâ kurulu değil olarak görünüyorsa, aracın bin dizininin Open Design daemon\'unun devraldığı PATH içinde olduğundan emin ol (macOS\'te Terminal ve GUI uygulamalarının PATH\'i farklı olabilir). QUICKSTART.md içindeki "Local agent CLI and PATH" bölümüne bak.',
+  'settings.agentInstall.stepOpenLinks': 'Tercih ettiğin ajan için Yükle veya Dokümanlar bağlantısını aç.',
+  'settings.agentInstall.stepAuth':
+    'Open Design\'a dönmeden önce sağlayıcı CLI\'sinde kimlik doğrulaması yap (oturum aç veya API kimlik bilgileri ekle).',
+  'settings.agentInstall.stepRescan': 'Bu bölümde Yeniden tara\'ya tıkla.',
+  'settings.agentInstall.stepSelect': 'Ajan yüklü olarak göründüğünde kartını seç.',
   'settings.noAgentsDetected':
     'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
   'settings.apiSection': 'Anthropic API',

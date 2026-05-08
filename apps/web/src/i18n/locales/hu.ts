@@ -85,6 +85,15 @@ export const hu: Dict = {
   'settings.testAgentMissing': 'A(z) {agentName} nincs telepítve vagy nincs a PATH-ban.',
   'settings.testAgentSpawn': 'Nem sikerült elindítani: {agentName} — {detail}.',
   'settings.testUnknown': 'Sikertelen teszt: {detail}',
+  'settings.agentInstall.install': 'Telepítés',
+  'settings.agentInstall.docs': 'Dokumentáció',
+  'settings.agentInstall.pathHint':
+    'Ha npm-mel vagy Homebrew-val telepítettél egy CLI-t, de továbbra is nincs telepítve állapotban látszik, ellenőrizd, hogy az eszköz bin könyvtára benne van-e abban a PATH-ban, amit az Open Design daemon örököl (macOS-en a Terminal és a GUI appok PATH-ja eltérhet). Lásd a QUICKSTART.md "Local agent CLI and PATH" szakaszát.',
+  'settings.agentInstall.stepOpenLinks': 'Nyisd meg a Telepítés vagy Dokumentáció hivatkozást a kívánt ügynöknél.',
+  'settings.agentInstall.stepAuth':
+    'Hitelesíts a szolgáltató CLI-jében (bejelentkezés vagy API hitelesítő adatok megadása), mielőtt visszatérsz az Open Designhoz.',
+  'settings.agentInstall.stepRescan': 'Kattints az Újraellenőrzés gombra ebben a szakaszban.',
+  'settings.agentInstall.stepSelect': 'Válaszd ki az ügynök kártyáját, amint telepítettként jelenik meg.',
   'settings.noAgentsDetected':
     'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
   'settings.apiSection': 'Anthropic API',
@@ -128,7 +137,7 @@ export const hu: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'Egyedi (gépeld be alább)…',

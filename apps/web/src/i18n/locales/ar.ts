@@ -85,6 +85,15 @@ export const ar: Dict = {
   'settings.testAgentMissing': '{agentName} غير مثبت أو ليس في PATH.',
   'settings.testAgentSpawn': 'تعذّر تشغيل {agentName}: {detail}.',
   'settings.testUnknown': 'فشل الاختبار: {detail}',
+  'settings.agentInstall.install': 'تثبيت',
+  'settings.agentInstall.docs': 'الوثائق',
+  'settings.agentInstall.pathHint':
+    'إذا ثبّتّ CLI باستخدام npm أو Homebrew وما زال يظهر كغير مثبت، فتأكد من أن مجلد bin للأداة موجود في PATH الذي يرثه daemon الخاص بـ Open Design (قد يختلف PATH بين Terminal وتطبيقات GUI على macOS). راجع QUICKSTART.md (قسم "Local agent CLI and PATH").',
+  'settings.agentInstall.stepOpenLinks': 'افتح رابط التثبيت أو الوثائق للوكيل الذي تفضله.',
+  'settings.agentInstall.stepAuth':
+    'أكمِل المصادقة في CLI الخاص بالمزوّد (تسجيل الدخول أو إضافة بيانات اعتماد API) قبل العودة إلى Open Design.',
+  'settings.agentInstall.stepRescan': 'انقر إعادة المسح في هذا القسم.',
+  'settings.agentInstall.stepSelect': 'اختر بطاقة الوكيل عندما يظهر كأنه مثبت.',
   'settings.noAgentsDetected':
     'لم يتم اكتشاف أي وكلاء بعد. قم بتثبيت Claude Code أو Codex أو Devin أو Gemini CLI أو OpenCode أو Cursor Agent أو Qwen أو GitHub Copilot CLI، ثم اضغط على إعادة المسح.',
   'settings.apiSection': 'Anthropic API',
@@ -128,7 +137,7 @@ export const ar: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'مخصص (اكتب أدناه)...',

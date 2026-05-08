@@ -3217,6 +3217,19 @@ code {
   margin-top: 10px;
   margin-bottom: 0;
 }
+.agent-install-guide {
+  margin-top: 10px;
+}
+.agent-install-steps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.agent-install-steps li + li {
+  margin-top: 4px;
+}
 .agent-card-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .agent-card-name {
   font-size: 13px; font-weight: 600; color: var(--text);

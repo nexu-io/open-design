@@ -82,6 +82,15 @@ export const zhTW: Dict = {
   'settings.testAgentMissing': '{agentName} 未安裝，或不在 PATH 中。',
   'settings.testAgentSpawn': '無法啟動 {agentName}：{detail}。',
   'settings.testUnknown': '測試失敗：{detail}',
+  'settings.agentInstall.install': '安裝',
+  'settings.agentInstall.docs': '文件',
+  'settings.agentInstall.pathHint':
+    '如果你透過 npm 或 Homebrew 安裝了 CLI，但仍顯示為未安裝，請確認該工具的 bin 目錄已加入 Open Design daemon 繼承的 PATH（在 macOS 上，Terminal 與 GUI 應用的 PATH 可能不同）。請參閱 QUICKSTART.md（「Local agent CLI and PATH」章節）。',
+  'settings.agentInstall.stepOpenLinks': '在目標代理卡片上開啟「安裝」或「文件」連結。',
+  'settings.agentInstall.stepAuth':
+    '返回 Open Design 前，請先在對應 CLI 完成驗證（登入或新增 API 憑證）。',
+  'settings.agentInstall.stepRescan': '在此區域點擊「重新掃描」。',
+  'settings.agentInstall.stepSelect': '當代理顯示為已安裝後，選擇該代理卡片。',
   'settings.noAgentsDetected':
     '尚未偵測到任何代理。請安裝 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent 或 Qwen 其中之一，然後點擊「重新掃描」。',
   'settings.apiSection': 'API 設定',

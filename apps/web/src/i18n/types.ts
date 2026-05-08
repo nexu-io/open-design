@@ -111,6 +111,13 @@ export interface Dict {
   'settings.testAgentMissing': string;
   'settings.testAgentSpawn': string;
   'settings.testUnknown': string;
+  'settings.agentInstall.install': string;
+  'settings.agentInstall.docs': string;
+  'settings.agentInstall.pathHint': string;
+  'settings.agentInstall.stepOpenLinks': string;
+  'settings.agentInstall.stepAuth': string;
+  'settings.agentInstall.stepRescan': string;
+  'settings.agentInstall.stepSelect': string;
   'settings.noAgentsDetected': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;

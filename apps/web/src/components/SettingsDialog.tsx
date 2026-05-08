@@ -180,6 +180,16 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
 };
 
+function sanitizeHttpsUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   anthropic: 'sk-ant-...',
   openai: 'sk-...',
@@ -1441,7 +1451,9 @@ export function SettingsDialog({
                           </button>
                         );
                       }
-                      const hasLinks = Boolean(a.installUrl || a.docsUrl);
+                      const installUrl = sanitizeHttpsUrl(a.installUrl);
+                      const docsUrl = sanitizeHttpsUrl(a.docsUrl);
+                      const hasLinks = Boolean(installUrl || docsUrl);
                       const cardLabel = `${a.name} · ${t('common.notInstalled')}`;
                       return (
                         <div
@@ -1460,24 +1472,24 @@ export function SettingsDialog({
                             </div>
                             {hasLinks ? (
                               <div className="agent-card-actions">
-                                {a.installUrl ? (
+                                {installUrl ? (
                                   <a
-                                    href={a.installUrl}
+                                    href={installUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="agent-card-link"
                                   >
-                                    Install
+                                    {t('settings.agentInstall.install')}
                                   </a>
                                 ) : null}
-                                {a.docsUrl ? (
+                                {docsUrl ? (
                                   <a
-                                    href={a.docsUrl}
+                                    href={docsUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="agent-card-link"
                                   >
-                                    Docs
+                                    {t('settings.agentInstall.docs')}
                                   </a>
                                 ) : null}
                               </div>
@@ -1488,14 +1500,17 @@ export function SettingsDialog({
                     })}
                   </div>
                   {agents.some((x) => !x.available) ? (
-                    <p className="hint agent-install-path-hint">
-                      If you installed a CLI with npm or Homebrew and it
-                      still shows as not installed, ensure the tool's bin
-                      directory is on the PATH the Open Design daemon
-                      inherits (Terminal vs GUI apps can differ on macOS).
-                      See QUICKSTART.md (section "Local agent CLI and PATH").
-                      After installing, click Rescan.
-                    </p>
+                    <div className="agent-install-guide">
+                      <p className="hint agent-install-path-hint">
+                        {t('settings.agentInstall.pathHint')}
+                      </p>
+                      <ol className="agent-install-steps">
+                        <li>{t('settings.agentInstall.stepOpenLinks')}</li>
+                        <li>{t('settings.agentInstall.stepAuth')}</li>
+                        <li>{t('settings.agentInstall.stepRescan')}</li>
+                        <li>{t('settings.agentInstall.stepSelect')}</li>
+                      </ol>
+                    </div>
                   ) : null}
                 </>
               )}

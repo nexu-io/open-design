@@ -109,7 +109,10 @@ const AGENT_BIN_ENV_KEYS = new Map([
 ]);
 
 /** HTTPS links for the web UI when `available` is false. Keys must match `AGENT_DEFS[].id`. */
-const AGENT_INSTALL_LINKS = {
+const AGENT_INSTALL_LINKS: Record<
+  string,
+  { installUrl?: string; docsUrl?: string }
+> = {
   claude: {
     installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
     docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
@@ -132,15 +135,19 @@ const AGENT_INSTALL_LINKS = {
   },
   hermes: {
     installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
+    docsUrl: 'https://hermes-agent.nousresearch.com/docs/',
   },
   kimi: {
     installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+    docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html',
   },
   'cursor-agent': {
     installUrl: 'https://cursor.com/docs/cli/overview',
+    docsUrl: 'https://docs.cursor.com/en/cli/overview',
   },
   qwen: {
     installUrl: 'https://github.com/QwenLM/qwen-code',
+    docsUrl: 'https://qwenlm.github.io/qwen-code-docs/en/index',
   },
   qoder: {
     installUrl: 'https://qoder.com/download',
@@ -152,12 +159,15 @@ const AGENT_INSTALL_LINKS = {
   },
   pi: {
     installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
+    docsUrl: 'https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md',
   },
   kiro: {
     installUrl: 'https://kiro.dev',
+    docsUrl: 'https://kiro.dev/docs/cli/',
   },
   kilo: {
     installUrl: 'https://kilo.ai',
+    docsUrl: 'https://kilo.ai/docs/cli',
   },
   vibe: {
     installUrl: 'https://docs.mistral.ai',
@@ -169,10 +179,26 @@ const AGENT_INSTALL_LINKS = {
   },
 };
 
-function installMetaForAgent(agentId) {
+function installMetaForAgent(
+  agentId: string,
+): { installUrl?: string; docsUrl?: string } {
   const meta = AGENT_INSTALL_LINKS[agentId];
   if (!meta) return {};
-  return { ...meta };
+  const sanitize = (value: string | undefined): string | undefined => {
+    if (!value) return undefined;
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const installUrl = sanitize(meta.installUrl);
+  const docsUrl = sanitize(meta.docsUrl);
+  return {
+    ...(installUrl ? { installUrl } : {}),
+    ...(docsUrl ? { docsUrl } : {}),
+  };
 }
 
 // Map a user-picked reasoning effort to one the chosen model will accept.

@@ -82,6 +82,15 @@ export const zhCN: Dict = {
   'settings.testAgentMissing': '{agentName} 未安装，或不在 PATH 中。',
   'settings.testAgentSpawn': '无法启动 {agentName}：{detail}。',
   'settings.testUnknown': '测试失败：{detail}',
+  'settings.agentInstall.install': '安装',
+  'settings.agentInstall.docs': '文档',
+  'settings.agentInstall.pathHint':
+    '如果你通过 npm 或 Homebrew 安装了 CLI，但仍显示为未安装，请确认该工具的 bin 目录已加入 Open Design daemon 继承的 PATH（在 macOS 上，Terminal 与 GUI 应用的 PATH 可能不同）。请参阅 QUICKSTART.md（“Local agent CLI and PATH” 章节）。',
+  'settings.agentInstall.stepOpenLinks': '在目标代理卡片上打开“安装”或“文档”链接。',
+  'settings.agentInstall.stepAuth':
+    '返回 Open Design 之前，请先在对应 CLI 中完成认证（登录或添加 API 凭据）。',
+  'settings.agentInstall.stepRescan': '在此区域点击“重新扫描”。',
+  'settings.agentInstall.stepSelect': '当代理显示为已安装后，选择该代理卡片。',
   'settings.noAgentsDetected':
     '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen 或 GitHub Copilot CLI 中的一个，然后点击「重新扫描」。',
   'settings.apiSection': 'Anthropic API',
