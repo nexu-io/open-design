@@ -38,3 +38,14 @@ export interface ProjectFileResponse {
 export interface UploadProjectFilesResponse extends ProjectFilesResponse {}
 
 export interface DeleteProjectFileResponse extends OkResponse {}
+
+export interface RenameProjectFileRequest {
+  from: string;
+  to: string;
+}
+
+export interface RenameProjectFileResponse {
+  file: ProjectFile;
+  oldName: string;
+  newName: string;
+}
