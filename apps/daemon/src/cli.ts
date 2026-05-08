@@ -44,6 +44,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'composition-dir',
   'image',
   'daemon-url',
+  'language',
 ]);
 const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'help',
@@ -333,6 +334,7 @@ async function runMediaGenerate(rawArgs) {
     audioKind: flags['audio-kind'],
     compositionDir: flags['composition-dir'],
     image: flags.image,
+    language: flags.language,
   };
   if (flags.length != null) body.length = Number(flags.length);
   if (flags.duration != null) body.duration = Number(flags.duration);
@@ -567,6 +569,7 @@ Common options:
   --length <seconds>        Video length.
   --duration <seconds>      Audio duration.
   --voice <voice-id>        Speech / TTS voice.
+  --language <lang>         Language boost for TTS (e.g. Chinese,Yue for Cantonese).
   --audio-kind music|speech|sfx
   --composition-dir <path>  hyperframes-html only — project-relative path
                             to the dir containing hyperframes.json /
