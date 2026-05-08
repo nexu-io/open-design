@@ -525,6 +525,7 @@ describe('MCP_TEMPLATES', () => {
       'figma-context',
       'design-token-bridge',
       'design-system-extractor',
+      'figma-use',
       'aesthetics-wiki',
     ]);
   });
@@ -736,6 +737,19 @@ describe('MCP_TEMPLATES', () => {
     const url = tpl?.envFields?.find((f) => f.key === 'STORYBOOK_URL');
     expect(url).toBeDefined();
     expect(url?.required ?? false).toBe(false);
+  });
+
+  it('includes the figma-use HTTP template (writes to Figma, localhost endpoint)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'figma-use');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('design-systems');
+    // figma-use only ships an HTTP server (no stdio mode in serve.ts), so the
+    // template wires the daemon to its default localhost endpoint and lets
+    // the user run `npx figma-use mcp serve` themselves alongside Figma's
+    // remote-debugging port.
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('http://localhost:38451/mcp');
+    expect(tpl?.headerFields ?? []).toEqual([]);
   });
 
   it('includes the Aesthetics Wiki uvx template (no auth, moodboard MCP)', () => {

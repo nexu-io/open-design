@@ -744,6 +744,18 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     ],
   },
   {
+    id: 'figma-use',
+    label: 'figma-use (write designs from chat)',
+    description:
+      'Companion to Figma-Context: where Framelink reads, figma-use *writes* — 90+ tools to create frames, text, components, variants, set layouts, render JSX into the canvas, export PNG/SVG, query nodes via XPath, lint for WCAG / auto-layout / hardcoded colors, and analyze design systems. Runs as a local HTTP MCP server on port 38451; no API key. Two prerequisites the user owns: (1) start Figma with remote debugging — macOS: `open -a Figma --args --remote-debugging-port=9222` (Figma 126+ needs `figma-use daemon start --pipe` instead), and (2) leave `npx figma-use mcp serve` running in a terminal. Then this template wires the daemon to that endpoint.',
+    transport: 'http',
+    category: 'design-systems',
+    homepage: 'https://github.com/dannote/figma-use',
+    example:
+      'Render this JSX into the Figma file at (100, 200): <Frame style={{p: 24, bg: "#3B82F6", rounded: 12}}><Text style={{size: 18, color: "#FFF"}}>Hello</Text></Frame>',
+    url: 'http://localhost:38451/mcp',
+  },
+  {
     id: 'aesthetics-wiki',
     label: 'Aesthetics Wiki (moodboard / inspiration)',
     description:
