@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExamplesTab } from '../../src/components/ExamplesTab';
 import { fetchSkillExample } from '../../src/providers/registry';
-import { exportAsHtml, exportAsPdf, exportAsZip } from '../../src/runtime/exports';
+import {
+  exportAsHtml,
+  exportAsPdf,
+  exportAsZip,
+  openSandboxedPreviewInNewTab,
+} from '../../src/runtime/exports';
 import type { SkillSummary } from '../../src/types';
 
 vi.mock('../../src/providers/registry', () => ({
@@ -16,6 +21,7 @@ vi.mock('../../src/runtime/exports', () => ({
   exportAsHtml: vi.fn(),
   exportAsPdf: vi.fn(),
   exportAsZip: vi.fn(),
+  openSandboxedPreviewInNewTab: vi.fn(),
 }));
 
 const originalIntersectionObserver = globalThis.IntersectionObserver;
@@ -214,5 +220,57 @@ describe('ExamplesTab', () => {
       '<main><h1>live-dashboard preview</h1></main>',
       'live-dashboard',
     );
+  });
+
+  it('opens the full preview modal and exercises its toolbar actions', async () => {
+    renderExamples();
+
+    const card = screen.getByTestId('example-card-live-dashboard');
+    fireEvent.click(within(card).getByRole('button', { name: /Open preview/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'live-dashboard preview' });
+    await waitFor(() => {
+      expect(screen.getByTitle('live-dashboard Preview')).toBeTruthy();
+    });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Fullscreen/i }));
+    expect(within(dialog).getByRole('button', { name: /Exit/i })).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Exit/i }));
+    expect(within(dialog).getByRole('button', { name: /Fullscreen/i })).toBeTruthy();
+
+    const shareButton = within(dialog).getByRole('button', { name: 'Share ▾' });
+    fireEvent.click(shareButton);
+    fireEvent.click(within(dialog).getByRole('menuitem', { name: /Export as PDF/i }));
+    expect(exportAsPdf).toHaveBeenCalledWith(
+      '<main><h1>live-dashboard preview</h1></main>',
+      'live-dashboard',
+      { deck: false },
+    );
+
+    fireEvent.click(shareButton);
+    fireEvent.click(within(dialog).getByRole('menuitem', { name: /Download as \.zip/i }));
+    expect(exportAsZip).toHaveBeenCalledWith(
+      '<main><h1>live-dashboard preview</h1></main>',
+      'live-dashboard',
+    );
+
+    fireEvent.click(shareButton);
+    fireEvent.click(within(dialog).getByRole('menuitem', { name: /Export as standalone HTML/i }));
+    expect(exportAsHtml).toHaveBeenCalledWith(
+      '<main><h1>live-dashboard preview</h1></main>',
+      'live-dashboard',
+    );
+
+    fireEvent.click(shareButton);
+    fireEvent.click(within(dialog).getByRole('menuitem', { name: /Open in new tab/i }));
+    expect(openSandboxedPreviewInNewTab).toHaveBeenCalledWith(
+      '<main><h1>live-dashboard preview</h1></main>',
+      'live-dashboard',
+      { deck: false },
+    );
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'live-dashboard preview' })).toBeNull();
   });
 });

@@ -42,6 +42,7 @@
 | ENTRY-018 | Examples 支持按 Surface、Type、Scenario 筛选并正确收敛卡片列表 | `ExamplesTab.test.tsx` |
 | ENTRY-019 | 点击 Examples 卡片的 `Use this prompt` 会把选中的 skill 传给创建快路径 | `ExamplesTab.test.tsx` |
 | ENTRY-020 | Examples 预览按需加载后，Share 菜单可触发 PDF、ZIP、HTML 导出 | `ExamplesTab.test.tsx` |
+| ENTRY-021 | Examples 全屏预览弹窗支持 Fullscreen/Exit、Share 导出 PDF/ZIP/HTML、Open in new tab 和关闭 | `ExamplesTab.test.tsx` |
 
 ### 资源驱动创建场景
 
