@@ -258,11 +258,16 @@ export async function exportAsPdf(
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
+  doc = injectPrintReadyHandshake(doc);
+
+  if (sandboxedPreview) {
+    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+  }
 
   // Desktop native print bridge — uses Electron's webContents.print() API
-  // instead of window.open + window.print(). The bridge receives the raw
-  // compiled document directly (no iframe wrapper) because the print window
-  // is already secured with navigation/popup guards in the main process.
+  // instead of window.open + window.print(). The bridge receives the
+  // sandboxed-wrapped document with an embedded readiness handshake that
+  // posts 'OD_PRINT_READY' to the parent once fonts and images are loaded.
   const desktopApi =
     typeof window !== 'undefined'
       ? (window as unknown as Record<string, unknown>).__odDesktop as
@@ -280,12 +285,7 @@ export async function exportAsPdf(
     return;
   }
 
-  // Browser fallback: wrap in sandboxed iframe, then inject the self-printing
-  // script before navigating the popup. The desktop path omits both because
-  // Electron calls webContents.print() natively.
-  if (sandboxedPreview) {
-    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-  }
+  // Browser fallback: inject the self-printing script, then open a popup.
   doc = injectPrintScript(doc, title);
 
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
@@ -324,6 +324,13 @@ function injectPrintScript(doc: string, title: string): string {
   // print dialog measures the page; without it some print previews come
   // out blank in Chrome.
   const script = `<script>try{document.title=${safeTitle}}catch(e){}window.addEventListener('load',function(){setTimeout(function(){try{window.focus();window.print()}catch(e){}},300)})</script>`;
+  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
+  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
+  return doc + script;
+}
+
+function injectPrintReadyHandshake(doc: string): string {
+  const script = `<script data-od-print-ready>(function(){Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){window.parent.postMessage('OD_PRINT_READY','*')})})();<\/script>`;
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;

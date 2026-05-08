@@ -114,17 +114,18 @@ function injectPrintStylesheet(doc: string, css: string): string {
 }
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
+  // Wait for the inner sandboxed document to post 'OD_PRINT_READY' once it
+  // has finished loading fonts and images (see injectPrintReadyHandshake in
+  // apps/web/src/runtime/exports.ts).
   await window.webContents.executeJavaScript(
-    `Promise.all([
-      document.fonts && document.fonts.ready ? document.fonts.ready.catch(function(){}) : Promise.resolve(),
-      Promise.all(Array.from(document.images || []).map(function(img) {
-        if (img.complete) return Promise.resolve();
-        return new Promise(function(resolve) {
-          img.addEventListener('load', resolve, { once: true });
-          img.addEventListener('error', resolve, { once: true });
-        });
-      }))
-    ]).then(function(){ return true; })`,
+    `new Promise(function(resolve) {
+      window.addEventListener('message', function handler(event) {
+        if (event.data === 'OD_PRINT_READY') {
+          window.removeEventListener('message', handler);
+          resolve(true);
+        }
+      });
+    })`,
     true,
   );
 }

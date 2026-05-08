@@ -332,10 +332,12 @@ describe('sandboxed preview Blob exports', () => {
     expect(openCalls).toEqual([]);
 
     const htmlArg = printPdfMock.mock.calls[0]![0];
-    // Desktop bridge receives the raw document without the sandboxed iframe
-    // wrapper, so the user script is present in plain text, not escaped.
-    expect(htmlArg).toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
-    expect(htmlArg).not.toContain('sandbox="allow-scripts allow-modals"');
+    expect(htmlArg).toContain('sandbox="allow-scripts allow-modals"');
+    expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
+    // Verify the readiness handshake is present — the sandboxed iframe posts
+    // 'OD_PRINT_READY' to the parent once fonts and images are loaded.
+    expect(htmlArg).toContain('OD_PRINT_READY');
     // Verify the print script is NOT injected — Electron calls
     // webContents.print() natively, so a self-printing document would
     // trigger a second print dialog.
