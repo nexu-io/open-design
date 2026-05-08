@@ -30,7 +30,7 @@ od:
     requires: true
     sections: [color, typography, layout, components]
   craft:
-    requires: [typography-hierarchy, typography-hierarchy-editorial, rtl-and-bidi]
+    requires: [typography, typography-hierarchy, typography-hierarchy-editorial, rtl-and-bidi]
   example_prompt: "Design 'The Creator's Style & Format Guide' — cover page and one inside spread, lifestyle creator brand."
 ---
 
