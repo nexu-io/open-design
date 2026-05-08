@@ -29,6 +29,7 @@ import { testAgent, testApiProvider } from '../providers/connection-test';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
+import { McpClientSection, type McpClientSectionHandle } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
 import {
   applyAppearanceToDocument,
@@ -48,6 +49,7 @@ export type SettingsSection =
   | 'media'
   | 'composio'
   | 'integrations'
+  | 'mcpClient'
   | 'language'
   | 'appearance'
   | 'notifications'
@@ -526,6 +528,11 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const languageRef = useRef<HTMLDivElement | null>(null);
+  // Imperative handle for the External MCP section. The dialog footer Save
+  // routes through this when the MCP tab is active so the user can press the
+  // single Save button at the bottom instead of hunting for the inner one.
+  const mcpClientRef = useRef<McpClientSectionHandle | null>(null);
+  const [mcpDirty, setMcpDirty] = useState(false);
 
   useEffect(() => {
     setActiveSection(initialSection);
@@ -791,7 +798,7 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
-  const canSave =
+  const canSaveGlobalConfig =
     cfg.mode === 'daemon'
       ? Boolean(cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available)
       : Boolean(
@@ -799,6 +806,13 @@ export function SettingsDialog({
           cfg.model.trim() &&
           baseUrlValid,
         );
+  // The footer Save button is shared across sections. Sections that own
+  // their own persistence (MCP, Composio) gate it on their own dirty flag
+  // so the button is enabled even when the global API config is empty.
+  const canSave =
+    activeSection === 'mcpClient'
+      ? mcpDirty
+      : canSaveGlobalConfig;
 
   const protocolProviders = useMemo(
     () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
@@ -917,6 +931,17 @@ export function SettingsDialog({
               <span>
                 <strong>MCP server</strong>
                 <small>Connect your coding agent</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
+              onClick={() => setActiveSection('mcpClient')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>External MCP</strong>
+                <small>Add MCP tools (Higgsfield, GitHub…)</small>
               </span>
             </button>
             <button
@@ -1538,6 +1563,13 @@ export function SettingsDialog({
           {activeSection === 'media' ? <MediaProvidersSection cfg={cfg} setCfg={setCfg} /> : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
+          {activeSection === 'mcpClient' ? (
+            <McpClientSection
+              ref={mcpClientRef}
+              onDirtyChange={setMcpDirty}
+            />
+          ) : null}
+
           {activeSection === 'composio' ? <ComposioSection cfg={cfg} setCfg={setCfg} /> : null}
 
           {activeSection === 'language' ? (
@@ -1686,7 +1718,13 @@ export function SettingsDialog({
             type="button"
             className="primary"
             disabled={!canSave}
-            onClick={() => onSave(cfg, activeSection !== 'composio')}
+            onClick={() => {
+              if (activeSection === 'mcpClient') {
+                void mcpClientRef.current?.save();
+                return;
+              }
+              onSave(cfg, activeSection !== 'composio');
+            }}
           >
             {welcome ? t('settings.getStarted') : t('common.save')}
           </button>

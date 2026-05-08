@@ -6625,7 +6625,19 @@ button.connector-action.is-loading {
   line-height: 1.5;
 }
 .prose-block .md-code code { font-family: var(--mono); }
-.prose-block .md-link { color: var(--accent); text-decoration: underline; }
+.prose-block .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.prose-block .md-link-bare {
+  /* Long bare URLs (OAuth flows etc.) need to wrap mid-string so they
+     don't escape the chat column. break-word is enough for most agents,
+     but `anywhere` covers query strings with no spaces. */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
 .prose-block .md-hr {
   border: none;
   border-top: 1px solid var(--border);
@@ -10004,6 +10016,231 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ============================================================
+   Composer — consolidated Tools popover
+   ------------------------------------------------------------
+   The leading sliders icon now opens a single tabbed popover
+   containing MCP / Import / Pet quick actions plus a shortcut
+   to the full Settings dialog. Replaces three standalone row
+   buttons that were overflowing in narrow chats.
+   ============================================================ */
+.composer-tools-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.composer-tools-trigger {
+  position: relative;
+}
+.composer-tools-trigger.active {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-tools-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.composer-tools-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.composer-tools-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+}
+.composer-tools-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+  font-size: 11.5px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 0;
+}
+.composer-tools-tab:hover { color: var(--text); }
+.composer-tools-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+.composer-tools-tab-count {
+  font-size: 10px;
+  background: var(--accent);
+  color: white;
+  border-radius: 7px;
+  padding: 0 4px;
+  min-width: 14px;
+  height: 14px;
+  line-height: 14px;
+  text-align: center;
+}
+.composer-tools-tab-glyph {
+  font-size: 13px;
+  line-height: 1;
+}
+.composer-tools-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.composer-tools-empty {
+  padding: 14px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+}
+.composer-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.composer-tools-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  width: 100%;
+}
+.composer-tools-row:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-tools-row-body {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.composer-tools-row-body strong {
+  font-weight: 500;
+  font-size: 12px;
+}
+.composer-tools-row-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-transform: lowercase;
+}
+.composer-tools-row-action {
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0;
+  margin-top: 4px;
+  padding-top: 8px;
+  color: var(--text-muted);
+}
+.composer-tools-row-action:hover { color: var(--text); }
+.composer-tools-row-toggle {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.composer-tools-pet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.composer-tools-pet-head {
+  padding: 0 4px 4px;
+}
+.composer-tools-pet-head .hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.composer-tools-pet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 0 2px;
+}
+.composer-tools-pet-item {
+  --pet-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.composer-tools-pet-item:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.composer-tools-pet-item.active {
+  border-color: var(--pet-accent);
+  background: color-mix(in srgb, var(--pet-accent) 12%, transparent);
+  color: var(--text);
+}
+.composer-tools-pet-item span:first-child {
+  font-size: 18px;
+  line-height: 1;
+}
+.composer-tools-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  width: 100%;
+}
+.composer-tools-settings:hover {
+  background: var(--bg-subtle);
+}
+
+/* ============================================================
    Pet — uploaded image / spritesheet rendering
    ------------------------------------------------------------
    The face element switches between an emoji glyph and an
@@ -11274,4 +11511,589 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   font-size: 11px;
   white-space: pre-wrap;
+}
+
+/* ============================================================
+   External MCP servers — Settings panel
+   ------------------------------------------------------------
+   Compact card-per-server layout. Inputs stack vertically inside
+   each card so the narrow settings column (~440px after sidebar)
+   doesn't crush the inner grid.
+   ============================================================ */
+.mcp-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mcp-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--bg-subtle);
+}
+.mcp-picker-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.mcp-picker-head strong { font-size: 12.5px; }
+.mcp-picker-grid {
+  display: grid;
+  gap: 6px;
+}
+.mcp-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.mcp-picker-item:hover {
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+/* The clickable region of a template card. Split out from the wrapper so a
+   sibling homepage `<a>` can sit next to it without nesting interactives. */
+.mcp-picker-item-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  color: inherit;
+}
+.mcp-picker-item-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  width: 100%;
+}
+.mcp-picker-transport {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  margin-left: auto;
+}
+.mcp-picker-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.mcp-picker-example {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.mcp-picker-example-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  align-self: center;
+}
+.mcp-picker-example-text {
+  font-style: italic;
+  color: var(--text);
+}
+.mcp-picker-homepage {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+}
+.mcp-picker-homepage:hover {
+  color: var(--accent, var(--text));
+  text-decoration: underline;
+}
+
+/* ── Picker grouping (added when the catalog crossed ~12 templates) ─── */
+
+/* Sticky-header row inside `.mcp-picker-head` so the close affordance is
+   always visible even after the user scrolls into a long category. */
+.mcp-picker-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mcp-picker-close {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+.mcp-picker-search {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.mcp-picker-search:focus {
+  outline: none;
+  border-color: var(--border-strong, var(--text-faint));
+}
+
+/* Cap the group region so 17+ templates do not push the picker into a
+   2000px tall block. The footer (custom-server card) sits OUTSIDE this
+   scroll region so it is always reachable. */
+.mcp-picker-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.mcp-picker-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.mcp-picker-group[open] {
+  background: var(--bg);
+}
+.mcp-picker-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  user-select: none;
+  list-style: none;
+}
+.mcp-picker-group-summary::-webkit-details-marker { display: none; }
+.mcp-picker-group-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  transition: transform 120ms ease;
+}
+.mcp-picker-group[open] > .mcp-picker-group-summary::before {
+  transform: rotate(90deg);
+}
+.mcp-picker-group-summary:hover {
+  background: var(--bg-subtle);
+}
+.mcp-picker-group-summary-title {
+  font-weight: 600;
+}
+.mcp-picker-group-summary-count {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+.mcp-picker-group-summary-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  text-align: right;
+  /* Hide the per-group hint on narrow widths so the count + title stay
+     readable. The hint is supplementary so dropping it is acceptable. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+@media (max-width: 480px) {
+  .mcp-picker-group-summary-hint { display: none; }
+}
+.mcp-picker-group .mcp-picker-grid {
+  padding: 4px 8px 10px;
+}
+
+.mcp-picker-empty {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 12px;
+}
+
+.mcp-picker-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.mcp-picker-custom {
+  /* Visual nudge so the custom-server card reads as a footer affordance,
+     not just another template card. */
+  border-style: dashed !important;
+}
+
+.mcp-error {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #d54) 50%, transparent);
+  background: color-mix(in srgb, var(--danger, #d54) 10%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--danger, #d54);
+}
+
+.mcp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mcp-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.mcp-row-disabled { opacity: 0.55; }
+/* Template-derived hint shown on saved rows that came from a built-in
+   preset (filesystem, github, fetch, higgsfield…). Default-collapsed
+   `<details>`; the summary line is the only thing visible until the user
+   clicks. Keeps long descriptions out of the way but still discoverable. */
+.mcp-row-info {
+  border-left: 2px solid var(--border-strong, var(--border));
+  background: var(--bg-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.mcp-row-info-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  user-select: none;
+  list-style: none;
+}
+.mcp-row-info-summary::-webkit-details-marker { display: none; }
+.mcp-row-info-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.mcp-row-info[open] > .mcp-row-info-summary::before {
+  transform: rotate(90deg);
+}
+.mcp-row-info-summary:hover {
+  color: var(--text);
+}
+.mcp-row-info-summary-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-row-info-body {
+  padding: 0 8px 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mcp-row-info-desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.mcp-row-info-example {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.mcp-row-info-example-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mcp-row-info-example-text {
+  font-style: italic;
+  color: var(--text);
+}
+.mcp-row-info-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.mcp-row-info-link:hover {
+  color: var(--accent, var(--text));
+  text-decoration: underline;
+}
+.mcp-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mcp-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.mcp-row-toggle input { width: auto; }
+.mcp-row-label {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.mcp-row-counter {
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.mcp-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.mcp-row-actions .icon-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.mcp-row-actions .icon-btn:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+}
+/* The expand/collapse chevron at the end of the row header. Uses a single
+   `chevron-down` icon and rotates it 180° when the row is open so the
+   element stays visually anchored to the same DOM node. */
+.mcp-row-toggle-btn svg {
+  transition: transform 120ms ease;
+}
+.mcp-row-expanded .mcp-row-toggle-btn svg {
+  transform: rotate(180deg);
+}
+
+/* Read-only "title bar" shown when a row is collapsed. Acts as a click
+   target that expands the row, so the user doesn't have to aim for the
+   tiny chevron at the end of the row. */
+.mcp-row-summary-title {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.mcp-row-summary-title:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.mcp-row-summary-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+.mcp-row-summary-transport {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+
+.mcp-row-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 8px;
+}
+@media (max-width: 720px) {
+  .mcp-row-grid { grid-template-columns: 1fr; }
+}
+.mcp-row-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.mcp-row-field-label {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mcp-row-field input,
+.mcp-row-field select,
+.mcp-row-field textarea {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+}
+.mcp-row-field textarea {
+  font-family: var(--mono);
+  resize: vertical;
+  min-height: 38px;
+}
+.mcp-row-field-stack { width: 100%; }
+
+.mcp-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.mcp-foot-spacer { flex: 1; }
+.mcp-saved-msg { color: var(--success, #6c6); }
+
+/* Per-row OAuth Connect/Disconnect control. Sits between the row header
+ * and the field grid so the connection state is the FIRST thing the user
+ * sees on a row that needs auth. */
+.mcp-oauth-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.mcp-oauth-control.connected {
+  border-color: color-mix(in srgb, var(--success, #2da44e) 60%, var(--border));
+  background: color-mix(in srgb, var(--success, #2da44e) 8%, var(--bg-subtle));
+}
+.mcp-oauth-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.mcp-oauth-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.mcp-oauth-dot-ok {
+  background: var(--success, #2da44e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #2da44e) 25%, transparent);
+}
+.mcp-oauth-dot-pending {
+  background: var(--accent);
+  animation: mcp-oauth-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mcp-oauth-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.mcp-oauth-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+.mcp-oauth-actions button {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.mcp-oauth-error {
+  font-size: 11.5px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger, #d54) 14%, transparent);
+  color: var(--danger, #d54);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mcp-oauth-hint {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 11.5px;
+}
+.mcp-oauth-fallback {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.mcp-oauth-fallback .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mcp-oauth-fallback .md-link:hover {
+  text-decoration-thickness: 2px;
 }

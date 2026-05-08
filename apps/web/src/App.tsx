@@ -466,6 +466,12 @@ export function App() {
     setSettingsOpen(true);
   }, []);
 
+  const openMcpSettings = useCallback(() => {
+    setSettingsWelcome(false);
+    setSettingsInitialSection('mcpClient');
+    setSettingsOpen(true);
+  }, []);
+
   // Explicit enabled toggle — true = wake, false = tuck. Persists to
   // localStorage so the overlay state survives across reloads. We keep
   // `adopted` untouched so the entry-view CTA does not regress to
@@ -550,6 +556,7 @@ export function App() {
           onAgentModelChange={handleAgentModelChange}
           onRefreshAgents={refreshAgents}
           onOpenSettings={openSettings}
+          onOpenMcpSettings={openMcpSettings}
           onAdoptPetInline={handleAdoptPet}
           onTogglePet={handleTogglePet}
           onOpenPetSettings={openPetSettings}
