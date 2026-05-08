@@ -79,7 +79,7 @@ If the user does not provide details, do not invent them. Write explicit placeho
 
 - Breaking changes: `None`
 - Known issues: `None reported`
-- Upgrade note: `No migration steps provided` or `No upgrade actions required based on provided information`
+- Upgrade note: `No upgrade actions required based on provided information`
 
 If release version or date is missing, use `—` and label the field rather than guessing.
 

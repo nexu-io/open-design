@@ -100,6 +100,10 @@
     .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: var(--gap-xl); align-items: start; }
     @media (max-width: 920px) {
       .grid-2, .grid-3, .grid-4, .grid-2-1, .grid-1-2 { grid-template-columns: 1fr; }
+      .topnav-inner { flex-wrap: wrap; }
+      .topnav nav { display: none; }
+      .log-row { grid-template-columns: 1fr; }
+      .log-row .pull { text-align: left; }
     }
 
     /* ─── type ──────────────────────────────────────────────────────── */
